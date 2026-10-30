@@ -31,6 +31,8 @@ export const FORM_HELP =
   'least 24 hours. Manual stages wait for you.';
 
 export const START_HELP = 'Leave blank to start as soon as the stages before it are complete.';
+/** The edit form's close button while a stage has unsaved changes ("Done" otherwise). */
+export const DISCARD_AND_CLOSE = 'Discard unsaved changes and close';
 export const TARGET_RANGE = 'Enter a whole number from 0 to 100.';
 export const SCHEDULE_NAME_REQUIRED = 'Give the schedule a name.';
 
@@ -390,7 +392,7 @@ function StageFields({ idPrefix, position, draft, invalid, disabled, onChange, z
       </div>
       <div>
         <label htmlFor={targetId} className="block text-sm font-medium text-slate-700">
-          Target (% of users)
+          Stage {position} target (% of users)
         </label>
         <input
           id={targetId}
@@ -415,7 +417,7 @@ function StageFields({ idPrefix, position, draft, invalid, disabled, onChange, z
       </div>
       <div>
         <label htmlFor={triggerId} className="block text-sm font-medium text-slate-700">
-          Starts
+          Stage {position} starts
         </label>
         <select
           id={triggerId}
@@ -435,7 +437,7 @@ function StageFields({ idPrefix, position, draft, invalid, disabled, onChange, z
       {draft.trigger === 'time_based' && (
         <div>
           <label htmlFor={startId} className="block text-sm font-medium text-slate-700">
-            Start time (optional)
+            Stage {position} start time (optional)
           </label>
           <input
             id={startId}
@@ -501,6 +503,12 @@ export interface RolloutScheduleManagerProps {
   schedule: RolloutSchedule | null;
   /** `canChangeFeatureFlags`: false gives the read-only view and sends nothing. */
   canChange: boolean;
+  /**
+   * The section's heading (focusable, `tabIndex={-1}`). Focus goes there once
+   * Activate, Resume, Pause, Cancel schedule, Start stage or Complete stage has
+   * landed, because the button that asked for it unmounts or changes.
+   */
+  headingRef?: React.RefObject<HTMLElement | null>;
   /** Reload after a change; `flagMoved` when the flag's percentage may have changed. */
   onChanged: (change: { flagMoved: boolean }) => Promise<void> | void;
 }
@@ -529,6 +537,7 @@ export function RolloutScheduleManager({
   flagPercentage,
   schedule,
   canChange,
+  headingRef,
   onChanged,
 }: RolloutScheduleManagerProps) {
   const uid = useId().replace(/[^A-Za-z0-9_-]/g, '');
@@ -545,11 +554,13 @@ export function RolloutScheduleManager({
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [returnFocus, setReturnFocus] = useState<'create' | 'edit' | ConfirmKind | null>(null);
+  /** Where focus goes next: a button that is still there, or `section` (the heading) after a change landed. */
+  const [returnFocus, setReturnFocus] = useState<'create' | 'edit' | 'pause' | 'section' | ConfirmKind | null>(null);
 
   const createButton = useRef<HTMLButtonElement>(null);
   const editButton = useRef<HTMLButtonElement>(null);
   const activateButton = useRef<HTMLButtonElement>(null);
+  const pauseButton = useRef<HTMLButtonElement>(null);
   const cancelButton = useRef<HTMLButtonElement>(null);
   const advanceButton = useRef<HTMLButtonElement>(null);
   const confirmRegion = useRef<HTMLDivElement>(null);
@@ -587,18 +598,20 @@ export function RolloutScheduleManager({
 
   useEffect(() => {
     if (returnFocus === null || busy) return;
-    const target: Record<string, React.RefObject<HTMLButtonElement | null>> = {
+    const target: Record<string, React.RefObject<HTMLElement | null> | undefined> = {
       create: createButton,
       edit: editButton,
       activate: activateButton,
       resume: activateButton,
+      pause: pauseButton,
       cancel: cancelButton,
       start: advanceButton,
       complete: advanceButton,
+      section: headingRef,
     };
     target[returnFocus]?.current?.focus();
     setReturnFocus(null);
-  }, [returnFocus, busy]);
+  }, [returnFocus, busy, headingRef]);
 
   const run = async (key: string, request: () => Promise<unknown>, flagMoved = false): Promise<boolean> => {
     setError(null);
@@ -678,6 +691,11 @@ export function RolloutScheduleManager({
   const stored = schedule ? sortedStages(schedule) : [];
   const draftOf = (stage: RolloutStage) => editDrafts[stage.id] ?? draftFromStage(stage);
   const storedAsChecked = stored.map((s) => ({ name: s.name, target: String(s.target_percentage) }));
+  // What closing the edit form would drop: a stage changed but not saved, or
+  // a stage being added. The close button says so instead of "Done".
+  const unsaved =
+    newStage !== null ||
+    stored.some((s) => isEditable(s) && s.id in editDrafts && Object.keys(stageChanges(s, editDrafts[s.id])).length > 0);
 
   /** Problems of the whole list with one change applied; stored stages map to their inputs. */
   const editProblems = (list: Array<{ name: string; target: string }>, newIndex: number | null) =>
@@ -750,13 +768,24 @@ export function RolloutScheduleManager({
     if (!schedule || !confirm) return;
     const kind = confirm;
     setConfirm(null);
+    let ok = false;
     if (kind === 'activate' || kind === 'resume') {
-      await run(kind, () => RolloutSchedulesService.activate(schedule.id));
+      ok = await run(kind, () => RolloutSchedulesService.activate(schedule.id));
     } else if (kind === 'cancel') {
-      await run(kind, () => RolloutSchedulesService.cancel(schedule.id));
+      ok = await run(kind, () => RolloutSchedulesService.cancel(schedule.id));
     } else if (advance) {
-      await run(kind, () => RolloutSchedulesService.advance(advance.stage.id), true);
+      ok = await run(kind, () => RolloutSchedulesService.advance(advance.stage.id), true);
     }
+    // Landed: the button that asked is gone or changed, so the heading. Refused:
+    // nothing changed, so the button that asked, beside the error.
+    setReturnFocus(ok ? 'section' : kind);
+  };
+
+  const pause = async () => {
+    if (!schedule) return;
+    const ok = await run('pause', () => RolloutSchedulesService.pause(schedule.id));
+    // Pause becomes Resume once it lands.
+    setReturnFocus(ok ? 'section' : 'pause');
   };
 
   const confirmText = (): string => {
@@ -881,8 +910,9 @@ export function RolloutScheduleManager({
           )}
           {status === 'active' && (
             <button
+              ref={pauseButton}
               type="button"
-              onClick={() => void run('pause', () => RolloutSchedulesService.pause(schedule.id))}
+              onClick={() => void pause()}
               disabled={busy || confirm !== null}
               className={SECONDARY}
               data-testid="rollout-schedule-pause"
@@ -1240,7 +1270,7 @@ export function RolloutScheduleManager({
                 className={SECONDARY}
                 data-testid="rollout-schedule-form-done"
               >
-                Done
+                {unsaved ? DISCARD_AND_CLOSE : 'Done'}
               </button>
             )}
           </div>

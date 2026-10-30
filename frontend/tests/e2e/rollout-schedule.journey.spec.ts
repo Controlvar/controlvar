@@ -100,11 +100,11 @@ test.describe("Journey: a rollout schedule on the flag's page", () => {
     await expect(form).toBeVisible();
     await page.getByTestId("rollout-schedule-name-input").fill("E2E gradual rollout");
     const stages = form.getByTestId("rollout-stage-fields");
-    await stages.nth(0).getByLabel("Stage 1 name").fill("Canary");
-    await stages.nth(0).getByLabel("Target (% of users)").fill("10");
+    await stages.nth(0).getByLabel("Stage 1 name", { exact: true }).fill("Canary");
+    await stages.nth(0).getByLabel("Stage 1 target (% of users)", { exact: true }).fill("10");
     await page.getByTestId("rollout-stage-add").click();
-    await stages.nth(1).getByLabel("Stage 2 name").fill("Everyone");
-    await stages.nth(1).getByLabel("Target (% of users)").fill("100");
+    await stages.nth(1).getByLabel("Stage 2 name", { exact: true }).fill("Everyone");
+    await stages.nth(1).getByLabel("Stage 2 target (% of users)", { exact: true }).fill("100");
     await expectNoSeriousViolations(page, "the create form");
     await page.getByTestId("rollout-schedule-submit").click();
 
@@ -121,6 +121,8 @@ test.describe("Journey: a rollout schedule on the flag's page", () => {
     await page.getByTestId("rollout-schedule-confirm-yes").click();
     await expect(page.getByTestId("rollout-schedule-status")).toHaveText("Active", { timeout: 15_000 });
     await expect(page.getByTestId("rollout-value")).toHaveText("0%");
+    // Activate is gone once the schedule is active: focus is on the section's heading.
+    await expect(page.getByRole("heading", { name: "Rollout schedule", exact: true })).toBeFocused();
 
     await page.getByTestId("rollout-stage-start").click();
     await expect(page.getByTestId("rollout-schedule-confirm-text")).toHaveText(
@@ -130,6 +132,7 @@ test.describe("Journey: a rollout schedule on the flag's page", () => {
     await expect(page.getByTestId("rollout-value")).toHaveText("10%", { timeout: 15_000 });
     await expect(page.getByTestId("rollout-stage").first()).toContainText("In progress");
     await expect(page.getByTestId("rollout-stage-complete")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Rollout schedule", exact: true })).toBeFocused();
 
     // What the server holds, read back.
     const flag = await page.request.get(`${API_URL}/api/v1/feature-flags/${flagId}`, {

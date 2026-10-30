@@ -169,6 +169,10 @@ export default function FeatureFlagDetailPage() {
   // Rollout schedule
   const [schedules, setSchedules] = useState<RolloutSchedule[] | null>(null);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
+  // Where focus goes once a schedule change lands: the button that asked for
+  // it unmounts or changes (Activate becomes Pause, Start stage becomes
+  // Complete stage), so the section's heading is the stable place.
+  const scheduleHeading = useRef<HTMLHeadingElement>(null);
 
   // Safety
   const [safety, setSafety] = useState<SafetyCheckResponse | null>(null);
@@ -425,7 +429,13 @@ export default function FeatureFlagDetailPage() {
           {/* Rollout schedule */}
           <section className="bg-white rounded-lg border border-slate-200 p-6" data-testid="rollout-schedule-section">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-base font-semibold text-slate-800">Rollout schedule</h2>
+              <h2
+                ref={scheduleHeading}
+                tabIndex={-1}
+                className="text-base font-semibold text-slate-800 focus:outline-none"
+              >
+                Rollout schedule
+              </h2>
               {schedule && (
                 <span
                   className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -467,6 +477,7 @@ export default function FeatureFlagDetailPage() {
                 flagPercentage={flag.rollout_percentage ?? 0}
                 schedule={schedule}
                 canChange={canChange}
+                headingRef={scheduleHeading}
                 onChanged={(change) => afterRolloutChange(flag.id, change)}
               />
             )}

@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import FeatureFlagDetailPage, { SCHEDULES_LOAD_ERROR, SLIDER_SCHEDULE_NOTE } from '@/pages/feature-flags/[id]';
 import {
   CREATED,
+  DISCARD_AND_CLOSE,
   ROLLOUT_ERROR_COPY,
   SCHEDULE_NAME_REQUIRED,
   TARGET_RANGE,
@@ -405,6 +406,57 @@ describe('creating a schedule', () => {
     expect(notes.querySelector('p')?.className).toContain('text-amber-800');
   });
 
+  it('a stage switched from time-based back to manual after a time was picked is sent with no start_date', async () => {
+    const state = { schedules: [] as RolloutSchedule[] };
+    installCreate(state);
+    await renderPage();
+    fireEvent.click(screen.getByTestId('rollout-schedule-create'));
+    change(screen.getByTestId('rollout-schedule-name-input'), 'Gradual rollout');
+    fillStage(0, { name: 'Canary', target: '10', trigger: 'time_based', start: '2026-11-02T09:00' });
+    expect(screen.getByTestId('rollout-stage-readback')).toBeInTheDocument();
+    // Back to manual: the picked time stays in the form's state, hidden, and
+    // must not be sent.
+    fillStage(0, { trigger: 'manual' });
+    expect(screen.queryByTestId('rollout-stage-start-input')).toBeNull();
+    fireEvent.click(screen.getByTestId('rollout-schedule-submit'));
+
+    expect(await screen.findByTestId('rollout-schedule-notice')).toHaveTextContent(CREATED);
+    expect(writes()).toEqual([
+      [
+        'POST',
+        '/api/v1/rollout-schedules/',
+        {
+          name: 'Gradual rollout',
+          feature_flag_id: 'flag-1',
+          max_percentage: 100,
+          stages: [{ name: 'Canary', stage_order: 1, target_percentage: 10, trigger_type: 'manual' }],
+        },
+      ],
+    ]);
+  });
+
+  it("each stage's fields carry the stage number in their names", async () => {
+    install({ schedules: [] });
+    await renderPage();
+    fireEvent.click(screen.getByTestId('rollout-schedule-create'));
+    fireEvent.click(screen.getByTestId('rollout-stage-add'));
+    fillStage(1, { trigger: 'time_based' });
+    const [first, second] = screen.getAllByTestId('rollout-stage-fields');
+    expect(screen.getByLabelText('Stage 1 name')).toBe(within(first).getByTestId('rollout-stage-name-input'));
+    expect(screen.getByLabelText('Stage 1 target (% of users)')).toBe(
+      within(first).getByTestId('rollout-stage-target-input'),
+    );
+    expect(screen.getByLabelText('Stage 1 starts')).toBe(within(first).getByTestId('rollout-stage-trigger-input'));
+    expect(screen.getByLabelText('Stage 2 name')).toBe(within(second).getByTestId('rollout-stage-name-input'));
+    expect(screen.getByLabelText('Stage 2 target (% of users)')).toBe(
+      within(second).getByTestId('rollout-stage-target-input'),
+    );
+    expect(screen.getByLabelText('Stage 2 starts')).toBe(within(second).getByTestId('rollout-stage-trigger-input'));
+    expect(screen.getByLabelText('Stage 2 start time (optional)')).toBe(
+      within(second).getByTestId('rollout-stage-start-input'),
+    );
+  });
+
   const REFUSALS: Array<[string, Array<{ name?: string; target?: string }>, string, string]> = [
     ['a decrease', [{ name: 'A', target: '50' }, { name: 'B', target: '10' }], "Stage 2's target must be at least 50%, stage 1's target.", '1-target'],
     ['above 100', [{ name: 'A', target: '101' }], TARGET_RANGE, '0-target'],
@@ -639,6 +691,73 @@ describe('editing the stages of a draft or paused schedule', () => {
     await wroteOnce();
     expect(writes()).toEqual([['DELETE', '/api/v1/rollout-schedules/stages/s-3', undefined]]);
   });
+
+  it('adds a stage after the highest stage_order when the orders have a gap: 1, 2, 5 gives 6', async () => {
+    // A gap is what a removed stage leaves behind: three stages, so the
+    // count plus one would be 4, which is not after stage_order 5.
+    const gapped = schedule({
+      status: 'paused',
+      stages: [
+        stage('s-1', 1, { name: 'Canary', target_percentage: 10, status: 'completed' }),
+        stage('s-2', 2, { name: 'Expanded', target_percentage: 50 }),
+        stage('s-5', 5, { name: 'Most', target_percentage: 80 }),
+      ],
+    });
+    install({ schedules: [gapped] }, [
+      { method: 'POST', path: '/api/v1/rollout-schedules/sched-1/stages', handler: () => stage('s-6', 6) },
+    ]);
+    await renderPage();
+    fireEvent.click(screen.getByTestId('rollout-schedule-edit'));
+    fireEvent.click(screen.getByTestId('rollout-stage-add'));
+    const fresh = screen.getByTestId('rollout-stage-new');
+    change(within(fresh).getByLabelText('Stage 4 name'), 'Everyone');
+    change(within(fresh).getByLabelText('Stage 4 target (% of users)'), '100');
+    fireEvent.click(screen.getByTestId('rollout-stage-add-save'));
+    await wroteOnce();
+    expect(writes()).toEqual([
+      [
+        'POST',
+        '/api/v1/rollout-schedules/sched-1/stages',
+        { name: 'Everyone', stage_order: 6, target_percentage: 100, trigger_type: 'manual' },
+      ],
+    ]);
+  });
+
+  it('closing with a stage changed but not saved says it discards it, and sends nothing', async () => {
+    await openEdit();
+    const close = screen.getByTestId('rollout-schedule-form-done');
+    expect(close).toHaveTextContent(/^Done$/);
+    fillStage(0, { target: '90' });
+    expect(close).toHaveTextContent(DISCARD_AND_CLOSE);
+    // Put back as stored: nothing would be lost.
+    fillStage(0, { target: '100' });
+    expect(close).toHaveTextContent(/^Done$/);
+    fillStage(0, { name: 'All users' });
+    expect(close).toHaveTextContent(DISCARD_AND_CLOSE);
+    fireEvent.click(close);
+    expect(screen.queryByTestId('rollout-schedule-form')).toBeNull();
+    await waitFor(() => expect(screen.getByTestId('rollout-schedule-edit')).toHaveFocus());
+    expect(writes()).toEqual([]);
+  });
+
+  it('closing with a stage being added says it discards it', async () => {
+    await openEdit();
+    fireEvent.click(screen.getByTestId('rollout-stage-add'));
+    expect(screen.getByTestId('rollout-schedule-form-done')).toHaveTextContent(DISCARD_AND_CLOSE);
+    fireEvent.click(screen.getByTestId('rollout-stage-add-cancel'));
+    expect(screen.getByTestId('rollout-schedule-form-done')).toHaveTextContent(/^Done$/);
+  });
+
+  it('after a save the close button reads Done again', async () => {
+    await openEdit([
+      { method: 'PUT', path: '/api/v1/rollout-schedules/stages/s-3', handler: () => paused().stages[0] },
+    ]);
+    fillStage(0, { target: '90' });
+    expect(screen.getByTestId('rollout-schedule-form-done')).toHaveTextContent(DISCARD_AND_CLOSE);
+    fireEvent.click(screen.getByTestId('rollout-stage-save'));
+    await wroteOnce();
+    expect(screen.getByTestId('rollout-schedule-form-done')).toHaveTextContent(/^Done$/);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -860,6 +979,100 @@ describe('a paused schedule and the other confirmations', () => {
     fireEvent.click(screen.getByTestId('rollout-schedule-confirm-yes'));
     expect(await screen.findByTestId('rollout-schedule-create')).toBeInTheDocument();
     expect(writes()).toEqual([['POST', '/api/v1/rollout-schedules/sched-1/cancel', undefined]]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Focus once a change lands: the button that asked is gone or changed
+// ---------------------------------------------------------------------------
+describe('focus after a change', () => {
+  beforeEach(() => signIn('ADMIN'));
+
+  const heading = () => screen.getByRole('heading', { level: 2, name: 'Rollout schedule' });
+  const API = '/api/v1/rollout-schedules';
+
+  // [action, schedule before, the button, whether it asks first, the request's path, schedule after]
+  const ACTIONS: Array<[string, RolloutSchedule, string, boolean, string, RolloutSchedule]> = [
+    ['Activate', schedule(), 'rollout-schedule-activate', true, `${API}/sched-1/activate`, schedule({ status: 'active' })],
+    [
+      'Resume',
+      schedule({ status: 'paused' }),
+      'rollout-schedule-resume',
+      true,
+      `${API}/sched-1/activate`,
+      schedule({ status: 'active' }),
+    ],
+    ['Pause', schedule({ status: 'active' }), 'rollout-schedule-pause', false, `${API}/sched-1/pause`, schedule({ status: 'paused' })],
+    [
+      'Cancel schedule',
+      schedule({ status: 'active' }),
+      'rollout-schedule-cancel',
+      true,
+      `${API}/sched-1/cancel`,
+      schedule({ status: 'cancelled' }),
+    ],
+    [
+      'Start stage',
+      schedule({ status: 'active', stages: [stage('s-1', 1), stage('s-2', 2)] }),
+      'rollout-stage-start',
+      true,
+      `${API}/stages/s-1/advance`,
+      schedule({ status: 'active', stages: [stage('s-1', 1, { status: 'in_progress' }), stage('s-2', 2)] }),
+    ],
+    [
+      'Complete stage',
+      schedule({ status: 'active', stages: [stage('s-1', 1, { status: 'in_progress' }), stage('s-2', 2)] }),
+      'rollout-stage-complete',
+      true,
+      `${API}/stages/s-1/advance`,
+      schedule({
+        status: 'active',
+        stages: [stage('s-1', 1, { status: 'completed' }), stage('s-2', 2, { status: 'in_progress' })],
+      }),
+    ],
+  ];
+
+  it.each(ACTIONS)('%s: once it lands, focus is on the section heading', async (_action, before, button, asks, path, after) => {
+    const state = { schedules: [before] };
+    install(state, [
+      {
+        method: 'POST',
+        path,
+        handler: () => {
+          state.schedules = [after];
+          return after;
+        },
+      },
+    ]);
+    await renderPage();
+    const opener = screen.getByTestId(button);
+    opener.focus();
+    fireEvent.click(opener);
+    if (asks) fireEvent.click(screen.getByTestId('rollout-schedule-confirm-yes'));
+    await wroteOnce();
+    expect(writes()).toEqual([['POST', path, undefined]]);
+    // The page shows the schedule as it is after the change.
+    const shown: Record<string, string> = { active: 'Active', paused: 'Paused', cancelled: 'Cancelled' };
+    await waitFor(() => expect(screen.getByTestId('rollout-schedule-status')).toHaveTextContent(shown[after.status]));
+    await waitFor(() => expect(heading()).toHaveFocus());
+  });
+
+  it('a refused confirmation returns focus to the button that asked, beside the error', async () => {
+    install({ schedules: [schedule()] }, [
+      {
+        method: 'POST',
+        path: `${API}/sched-1/activate`,
+        handler: () => {
+          throw apiError(400, PLANTED);
+        },
+      },
+    ]);
+    await renderPage();
+    fireEvent.click(screen.getByTestId('rollout-schedule-activate'));
+    fireEvent.click(screen.getByTestId('rollout-schedule-confirm-yes'));
+    expect(await screen.findByTestId('rollout-schedule-action-error')).toHaveTextContent(ROLLOUT_ERROR_COPY[400]);
+    await waitFor(() => expect(screen.getByTestId('rollout-schedule-activate')).toHaveFocus());
+    expect(heading()).not.toHaveFocus();
   });
 });
 
