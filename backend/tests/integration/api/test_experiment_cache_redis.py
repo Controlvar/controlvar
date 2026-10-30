@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
@@ -568,23 +569,61 @@ def _due_to_end(client: TestClient, db_session) -> dict:
     return exp
 
 
+#: An experiment id inside a cache key, whatever comes before it.
+ID_IN_KEY = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+INVALIDATION_FAILED = "Experiment cache invalidation failed"
+
+
+@pytest.fixture
+def seen_at_drop(db_session, monkeypatch):
+    """What each dropped detail's row held when its drop was sent.
+
+    A spy on the client's ``delete`` reads the row of every experiment whose
+    key it is given, through a session of its own, so it sees only what has
+    been committed. A drop sent before the commit sees the old row, and a read
+    between the two would cache the old state again for an hour. Maps the
+    experiment id to its (status, group id) at its latest drop.
+    """
+    seen = {}
+    real_delete = async_redis.Redis.delete
+
+    async def spied_delete(self, *names):
+        session = _session_factory(db_session)()
+        try:
+            for name in names:
+                for found in ID_IN_KEY.findall(name):
+                    row = session.get(Experiment, uuid.UUID(found))
+                    if row is not None:
+                        group = row.mutual_exclusion_group_id
+                        seen[found] = (row.status.value, group and str(group))
+        finally:
+            session.close()
+        return await real_delete(self, *names)
+
+    monkeypatch.setattr(async_redis.Redis, "delete", spied_delete)
+    return seen
+
+
 def test_adding_an_experiment_to_a_group_is_read_back_at_once(
-    cached_superuser_client, redis_server, detail_key_prefix
+    cached_superuser_client, redis_server, detail_key_prefix, seen_at_drop, caplog
 ):
     client = cached_superuser_client
     exp = _create(client)
     group = _create_group(client)
     warm = _warm(client, redis_server, exp["id"], detail_key_prefix)
     assert warm["mutual_exclusion_group_id"] is None
+    seen_at_drop.clear()
 
     added = _add(client, group["id"], exp["id"])
     assert added.status_code == 200, added.text
 
+    assert seen_at_drop.get(exp["id"]) == ("draft", group["id"])
     assert _detail(client, exp["id"])["mutual_exclusion_group_id"] == group["id"]
+    assert INVALIDATION_FAILED not in caplog.text
 
 
 def test_removing_an_experiment_from_a_group_is_read_back_at_once(
-    cached_superuser_client, redis_server, detail_key_prefix
+    cached_superuser_client, redis_server, detail_key_prefix, seen_at_drop, caplog
 ):
     client = cached_superuser_client
     exp = _create(client)
@@ -592,39 +631,98 @@ def test_removing_an_experiment_from_a_group_is_read_back_at_once(
     assert _add(client, group["id"], exp["id"]).status_code == 200
     warm = _warm(client, redis_server, exp["id"], detail_key_prefix)
     assert warm["mutual_exclusion_group_id"] == group["id"]
+    seen_at_drop.clear()
 
     removed = _remove(client, group["id"], exp["id"])
     assert removed.status_code == 200, removed.text
 
+    assert seen_at_drop.get(exp["id"]) == ("draft", None)
     assert _detail(client, exp["id"])["mutual_exclusion_group_id"] is None
+    assert INVALIDATION_FAILED not in caplog.text
 
 
 @pytest.mark.parametrize("due", ["start", "resume"])
 def test_a_scheduled_start_or_resume_is_read_back_at_once(
-    cached_superuser_client, redis_server, db_session, detail_key_prefix, due
+    cached_superuser_client,
+    redis_server,
+    db_session,
+    detail_key_prefix,
+    seen_at_drop,
+    caplog,
+    due,
 ):
     client = cached_superuser_client
     exp = _due_to_start(client) if due == "start" else _due_to_resume(client)
     warm = _warm(client, redis_server, exp["id"], detail_key_prefix)
     assert warm["status"] == ("draft" if due == "start" else "paused")
+    seen_at_drop.clear()
 
     _tick(client, db_session)
 
+    assert seen_at_drop.get(exp["id"]) == ("active", None)
     assert _detail(client, exp["id"])["status"] == "active"
+    assert INVALIDATION_FAILED not in caplog.text
 
 
 def test_a_scheduled_end_is_read_back_at_once(
-    cached_superuser_client, redis_server, db_session, detail_key_prefix
+    cached_superuser_client,
+    redis_server,
+    db_session,
+    detail_key_prefix,
+    seen_at_drop,
+    caplog,
 ):
     client = cached_superuser_client
     exp = _due_to_end(client, db_session)
     assert (
         _warm(client, redis_server, exp["id"], detail_key_prefix)["status"] == "active"
     )
+    seen_at_drop.clear()
 
     _tick(client, db_session)
 
+    assert seen_at_drop.get(exp["id"]) == ("completed", None)
     assert _detail(client, exp["id"])["status"] == "completed"
+    assert INVALIDATION_FAILED not in caplog.text
+
+
+def test_one_tick_reads_back_every_experiment_it_changed(
+    cached_superuser_client, redis_server, db_session, seen_at_drop, caplog
+):
+    """Two experiments started and two completed in one tick: every one of the
+    four is dropped after its commit, not only the first or the last."""
+    client = cached_superuser_client
+    starts = [_due_to_start(client)["id"] for _ in range(2)]
+    ends = [_due_to_end(client, db_session)["id"] for _ in range(2)]
+    for experiment_id in starts + ends:
+        _warm(client, redis_server, experiment_id, "")
+    seen_at_drop.clear()
+
+    _tick(client, db_session)
+
+    expected = dict.fromkeys(starts, ("active", None))
+    expected.update(dict.fromkeys(ends, ("completed", None)))
+    assert {i: seen_at_drop.get(i) for i in expected} == expected
+    read_back = {i: _detail(client, i)["status"] for i in expected}
+    assert read_back == {i: state for i, (state, _) in expected.items()}
+    assert INVALIDATION_FAILED not in caplog.text
+
+
+def test_a_change_through_the_experiment_routes_is_read_back_at_once(
+    cached_superuser_client, redis_server, detail_key_prefix, caplog
+):
+    """The experiment routes' own invalidation builds the key with the same
+    builder: in the "renamed" run, one that typed the key would drop a name
+    nobody reads."""
+    client = cached_superuser_client
+    exp = _create(client)
+    _warm(client, redis_server, exp["id"], detail_key_prefix)
+
+    changed = client.put(f"{BASE}/{exp['id']}", json={"description": "changed"})
+    assert changed.status_code == 200, changed.text
+
+    assert _detail(client, exp["id"])["description"] == "changed"
+    assert INVALIDATION_FAILED not in caplog.text
 
 
 @pytest.fixture
@@ -636,10 +734,12 @@ def uncached_superuser_client(db_session, admin_user, monkeypatch):
 
 
 def test_with_the_cache_off_no_writer_calls_redis(
-    uncached_superuser_client, db_session, monkeypatch
+    uncached_superuser_client, db_session, monkeypatch, caplog
 ):
     """No Redis is asked for and no command is sent: not by the group routes,
-    not by a tick that starts one experiment and completes another."""
+    not by a tick that starts one experiment and completes another. Nor is a
+    failed invalidation logged, which is all a writer that went on past the
+    cache-off check would show."""
     client = uncached_superuser_client
     calls = []
     real_pool = deps.get_redis_pool
@@ -665,6 +765,7 @@ def test_with_the_cache_off_no_writer_calls_redis(
     assert _detail(client, starts["id"])["status"] == "active"
     assert _detail(client, ends["id"])["status"] == "completed"
     assert calls == []
+    assert INVALIDATION_FAILED not in caplog.text
 
 
 @pytest.fixture
