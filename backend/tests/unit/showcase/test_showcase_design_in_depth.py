@@ -132,6 +132,36 @@ def test_the_retired_api_part_is_refused_at_load(change, words):
         storyboard.parse(data)
 
 
+def kinds_of(beat: Any) -> List[Tuple[str, str]]:
+    """``(step kind, test id)`` for each on-camera step of *beat*, in order."""
+    found = []
+    for step in beat.steps:
+        (locator,) = storyboard._locators(step) or [None]
+        found.append((type(step).__name__, locator.testid if locator else ""))
+    return found
+
+
+def test_the_size_is_shown_locked_by_opening_the_q4_rows_edit_form():
+    """Narration review condition 2: while "its size is fixed" is said, beat
+    16 CLICKS the Q4 row's Edit (a look would leave the form shut, and the
+    capture would wait for the locked size in vain), then looks at the locked
+    size; the Activate click before it ends beat 15."""
+    beats = board().scenes[0].beats
+    assert beats[15].say == ["It's active now, and its size is fixed."]
+    steps = kinds_of(beats[15])
+    assert ("Click", "holdout-edit") in steps
+    assert ("Look", "holdout-size-locked") in steps
+    assert steps.index(("Click", "holdout-edit")) < steps.index(
+        ("Look", "holdout-size-locked")
+    )
+    exit_ = [
+        (type(s).__name__, s.click.testid)
+        for s in beats[14].exit
+        if isinstance(s, storyboard.Click)
+    ]
+    assert exit_ == [("Click", "holdout-confirm-yes")]
+
+
 def test_video_9_never_shows_a_guardrail_or_the_sdk_hint():
     made = board()
     assert "guardrail" in made.never_show

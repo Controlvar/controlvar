@@ -435,6 +435,7 @@ CLAIMS: Dict[str, Claim] = {
         16,
         (
             Drawn("testid", "holdout-active-card"),
+            Drawn("testid", "holdout-edit"),
             Drawn("testid", "holdout-size-locked"),
             Drawn("copy", "Fixed once a holdout has been active.", HOLDOUTS),
         ),
