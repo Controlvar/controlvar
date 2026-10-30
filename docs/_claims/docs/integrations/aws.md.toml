@@ -157,7 +157,13 @@ by = [
 
 [[unit]]
 text = "A change to the experiment clears its cached detail; its cached daily and segmented results stay until they expire."
-by = ["test:backend/tests/unit/api/test_experiment_cache_scope.py::test_a_change_clears_the_detail_and_leaves_the_daily_and_segmented_results"]
+by = [
+    "test:backend/tests/unit/api/test_experiment_cache_scope.py::test_a_change_clears_the_detail_and_leaves_the_daily_and_segmented_results",
+    "test:backend/tests/integration/api/test_experiment_cache_redis.py::test_adding_an_experiment_to_a_group_is_read_back_at_once",
+    "test:backend/tests/integration/api/test_experiment_cache_redis.py::test_removing_an_experiment_from_a_group_is_read_back_at_once",
+    "test:backend/tests/integration/api/test_experiment_cache_redis.py::test_a_scheduled_start_or_resume_is_read_back_at_once",
+    "test:backend/tests/integration/api/test_experiment_cache_redis.py::test_a_scheduled_end_is_read_back_at_once",
+]
 
 [[unit]]
 text = "GET /api/v1/results/{experiment_id} and GET /api/v1/experiments/{experiment_id}/results are cached in Redis whenever it is reachable, CACHE_ENABLED or not: for 5 minutes while the experiment is running, and for 24 hours otherwise."

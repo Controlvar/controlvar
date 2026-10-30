@@ -25,6 +25,12 @@ The Redis is ``REDIS_HOST``/``REDIS_PORT`` (the integration-tests job's
 ``redis`` service). Database 15 is used and flushed, never the default one.
 Without a reachable Redis this skips -- core-build and the nightly run have
 none -- unless ``EXPERIMENTLY_REQUIRE_REDIS=1``, which makes it a failure.
+
+The writers outside the experiment routes are at the end: adding an experiment
+to an exclusion group or removing it, and the experiment scheduler starting,
+resuming or completing one. They left the cached detail behind, so with the
+cache on the experiment page showed the old group or the old status for an
+hour.
 """
 
 from __future__ import annotations
@@ -33,10 +39,14 @@ import json
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
 import pytest
 import redis as sync_redis
+import redis.asyncio as async_redis
 from fastapi.testclient import TestClient
+from sqlalchemy import text
+from sqlalchemy.orm import sessionmaker
 
 from backend.app.api import deps
 from backend.app.api.v1.endpoints import experiments as experiments_endpoint
@@ -44,6 +54,7 @@ from backend.app.core.config import settings
 from backend.app.core.permissions import Action, ResourceType
 from backend.app.main import app
 from backend.app.models.experiment import Experiment
+from backend.app.models.mutual_exclusion_group import MutualExclusionGroup
 from backend.app.schemas.experiment import ExperimentResponse
 from backend.app.services.experiment_service import ExperimentService
 from backend.tests.integration.conftest import make_client_for_user
@@ -81,9 +92,10 @@ def redis_server(monkeypatch):
     handle.close()
 
 
-def _cached_client_for(db_session, user, monkeypatch):
-    """``user``'s client with the real ``get_cache_control`` and the cache on."""
-    monkeypatch.setattr(settings, "CACHE_ENABLED", True)
+def _cached_client_for(db_session, user, monkeypatch, cache_enabled=True):
+    """``user``'s client with the real ``get_cache_control`` and the cache on
+    (or, with ``cache_enabled=False``, off as it is by default)."""
+    monkeypatch.setattr(settings, "CACHE_ENABLED", cache_enabled)
     monkeypatch.setattr(deps, "_redis_pool", None)  # built on this client's loop
     make_client_for_user(db_session, user)
     app.dependency_overrides.pop(deps.get_cache_control)
@@ -113,6 +125,10 @@ def _remove_the_experiments_created(db_session):
     db_session.rollback()
     for row in db_session.query(Experiment).filter(Experiment.name.like(f"%{PREFIX}%")):
         db_session.delete(row)  # the ORM cascades to variants and metrics
+    db_session.commit()
+    groups = db_session.query(MutualExclusionGroup)
+    for row in groups.filter(MutualExclusionGroup.name.like(f"{PREFIX}%")):
+        db_session.delete(row)
     db_session.commit()
 
 
@@ -411,4 +427,300 @@ def test_a_redis_error_after_the_change_is_logged_not_raised(
     resp = cached_client.put(f"{BASE}/{exp['id']}", json={"description": "changed"})
     assert resp.status_code == 200, resp.text
     assert resp.json()["description"] == "changed"
+    assert "Experiment cache invalidation failed" in caplog.text
+
+
+# --- the writers outside the experiment routes --------------------------------
+#
+# Adding an experiment to an exclusion group or removing it, and the experiment
+# scheduler starting, resuming or completing one, change what the detail shows.
+# Each drops the cached detail once its change is committed, through
+# ``backend.app.api.experiment_cache``, which also builds the key the detail
+# route reads and writes.
+
+GROUPS = "/api/v1/mutual-exclusion-groups"
+#: What the "renamed" run of ``detail_key_prefix`` puts before the detail's key.
+RENAMED = "renamed-by-the-test:"
+
+
+@pytest.fixture(params=["as-built", "renamed"])
+def detail_key_prefix(request, monkeypatch):
+    """What the detail's cache key starts with in this run ("" as built).
+
+    The "renamed" run puts ``RENAMED`` before what
+    ``experiment_cache.experiment_detail_cache_key`` returns. The detail route
+    and every writer build the key with it, so they all follow; a site that
+    typed the key out itself reads or drops the old name, and the run fails.
+    """
+    if request.param == "as-built":
+        return ""
+    from backend.app.api import experiment_cache
+
+    built = experiment_cache.experiment_detail_cache_key
+    monkeypatch.setattr(
+        experiment_cache,
+        "experiment_detail_cache_key",
+        lambda experiment_id: RENAMED + built(experiment_id),
+    )
+    return RENAMED
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _warm(client: TestClient, redis_server, experiment_id: str, key_prefix: str):
+    """Read the detail once, so that the next read can come from the cache."""
+    resp = client.get(f"{BASE}/{experiment_id}")
+    assert resp.status_code == 200, resp.text
+    keys = [key for key in redis_server.scan_iter() if experiment_id in key]
+    assert len(keys) == 1 and keys[0].startswith(key_prefix), (
+        f"the detail was not cached under the builder's key: {keys}"
+    )
+    return resp.json()
+
+
+def _detail(client: TestClient, experiment_id: str) -> dict:
+    resp = client.get(f"{BASE}/{experiment_id}")
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def _create_group(client: TestClient) -> dict:
+    resp = client.post(GROUPS, json={"name": f"{PREFIX}{uuid.uuid4().hex[:8]}"})
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def _add(client: TestClient, group_id: str, experiment_id: str):
+    return client.post(
+        f"{GROUPS}/{group_id}/experiments", json={"experiment_id": experiment_id}
+    )
+
+
+def _remove(client: TestClient, group_id: str, experiment_id: str):
+    return client.delete(f"{GROUPS}/{group_id}/experiments/{experiment_id}")
+
+
+def _session_factory(db_session):
+    """Sessions on the test database, for the scheduler's ``SessionLocal``."""
+    factory = sessionmaker(bind=db_session.get_bind())
+
+    def session():
+        s = factory()
+        s.execute(text("SET search_path TO test_experimentation"))
+        return s
+
+    return session
+
+
+def _tick(client: TestClient, db_session) -> dict:
+    """One experiment scheduler tick against the test database; its counts.
+
+    It runs on the client's event loop: the scheduler uses the API's shared
+    Redis pool, which was built on that loop, as in production the scheduler
+    runs on the server's. The database is shared, so the tick also acts on any
+    other experiment that is due.
+    """
+    from backend.app.core.scheduler import ExperimentScheduler
+
+    scheduler = ExperimentScheduler()
+    scheduler._notification_service = MagicMock()
+    with patch("backend.app.core.scheduler.SessionLocal", _session_factory(db_session)):
+        return client.portal.call(scheduler.process_scheduled_experiments)
+
+
+def _schedule_a_minute_ago(client: TestClient, experiment_id: str) -> dict:
+    resp = client.put(
+        f"{BASE}/{experiment_id}/schedule",
+        json={"start_date": (_now() - timedelta(minutes=1)).isoformat()},
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def _due_to_start(client: TestClient) -> dict:
+    """A draft whose scheduled start was a minute ago."""
+    return _schedule_a_minute_ago(client, _create(client)["id"])
+
+
+def _due_to_resume(client: TestClient) -> dict:
+    """A paused experiment whose scheduled resume was a minute ago."""
+    exp = _started(client)
+    paused = client.post(f"{BASE}/{exp['id']}/pause")
+    assert paused.status_code == 200, paused.text
+    scheduled = _schedule_a_minute_ago(client, exp["id"])
+    assert scheduled["status"] == "paused"
+    return scheduled
+
+
+def _due_to_end(client: TestClient, db_session) -> dict:
+    """A running experiment whose end date has passed, written to its row."""
+    exp = _started(client)
+    session = _session_factory(db_session)()
+    try:
+        row = session.get(Experiment, uuid.UUID(exp["id"]))
+        row.start_date = _now() - timedelta(hours=2)
+        row.end_date = _now() - timedelta(hours=1)
+        session.commit()
+    finally:
+        session.close()
+    return exp
+
+
+def test_adding_an_experiment_to_a_group_is_read_back_at_once(
+    cached_superuser_client, redis_server, detail_key_prefix
+):
+    client = cached_superuser_client
+    exp = _create(client)
+    group = _create_group(client)
+    warm = _warm(client, redis_server, exp["id"], detail_key_prefix)
+    assert warm["mutual_exclusion_group_id"] is None
+
+    added = _add(client, group["id"], exp["id"])
+    assert added.status_code == 200, added.text
+
+    assert _detail(client, exp["id"])["mutual_exclusion_group_id"] == group["id"]
+
+
+def test_removing_an_experiment_from_a_group_is_read_back_at_once(
+    cached_superuser_client, redis_server, detail_key_prefix
+):
+    client = cached_superuser_client
+    exp = _create(client)
+    group = _create_group(client)
+    assert _add(client, group["id"], exp["id"]).status_code == 200
+    warm = _warm(client, redis_server, exp["id"], detail_key_prefix)
+    assert warm["mutual_exclusion_group_id"] == group["id"]
+
+    removed = _remove(client, group["id"], exp["id"])
+    assert removed.status_code == 200, removed.text
+
+    assert _detail(client, exp["id"])["mutual_exclusion_group_id"] is None
+
+
+@pytest.mark.parametrize("due", ["start", "resume"])
+def test_a_scheduled_start_or_resume_is_read_back_at_once(
+    cached_superuser_client, redis_server, db_session, detail_key_prefix, due
+):
+    client = cached_superuser_client
+    exp = _due_to_start(client) if due == "start" else _due_to_resume(client)
+    warm = _warm(client, redis_server, exp["id"], detail_key_prefix)
+    assert warm["status"] == ("draft" if due == "start" else "paused")
+
+    _tick(client, db_session)
+
+    assert _detail(client, exp["id"])["status"] == "active"
+
+
+def test_a_scheduled_end_is_read_back_at_once(
+    cached_superuser_client, redis_server, db_session, detail_key_prefix
+):
+    client = cached_superuser_client
+    exp = _due_to_end(client, db_session)
+    assert (
+        _warm(client, redis_server, exp["id"], detail_key_prefix)["status"] == "active"
+    )
+
+    _tick(client, db_session)
+
+    assert _detail(client, exp["id"])["status"] == "completed"
+
+
+@pytest.fixture
+def uncached_superuser_client(db_session, admin_user, monkeypatch):
+    """The real ``get_cache_control`` with ``CACHE_ENABLED`` off, the default."""
+    yield from _cached_client_for(
+        db_session, admin_user, monkeypatch, cache_enabled=False
+    )
+
+
+def test_with_the_cache_off_no_writer_calls_redis(
+    uncached_superuser_client, db_session, monkeypatch
+):
+    """No Redis is asked for and no command is sent: not by the group routes,
+    not by a tick that starts one experiment and completes another."""
+    client = uncached_superuser_client
+    calls = []
+    real_pool = deps.get_redis_pool
+
+    async def spied_pool():
+        calls.append("get_redis_pool")
+        return await real_pool()
+
+    async def spied_command(self, *args, **options):
+        calls.append(args)
+
+    monkeypatch.setattr(deps, "get_redis_pool", spied_pool)
+    monkeypatch.setattr(async_redis.Redis, "execute_command", spied_command)
+
+    exp = _create(client)
+    group = _create_group(client)
+    assert _add(client, group["id"], exp["id"]).status_code == 200
+    assert _remove(client, group["id"], exp["id"]).status_code == 200
+    starts = _due_to_start(client)
+    ends = _due_to_end(client, db_session)
+    _tick(client, db_session)
+
+    assert _detail(client, starts["id"])["status"] == "active"
+    assert _detail(client, ends["id"])["status"] == "completed"
+    assert calls == []
+
+
+@pytest.fixture
+def failing_redis_client(redis_server, db_session, admin_user, monkeypatch):
+    """A superuser's client with the cache on and a Redis that goes away after
+    answering the ping: every delete then raises, which is what reaches the
+    writers' own error handling. (A Redis that never answers is the dependency's
+    own path: its ping fails and the cache is treated as off.)"""
+
+    def broken_delete(*args, **kwargs):
+        raise sync_redis.ConnectionError("redis went away")
+
+    for client in _cached_client_for(db_session, admin_user, monkeypatch):
+        control = client.portal.call(deps.get_cache_control)
+        assert control.enabled, "the cache is off: this would test nothing"
+        monkeypatch.setattr(type(control.redis), "delete", broken_delete)
+        yield client
+
+
+@pytest.mark.parametrize("change", ["add", "remove"])
+def test_a_group_change_is_made_when_redis_fails(failing_redis_client, caplog, change):
+    """The change is committed before the cache is touched: a Redis failure
+    then must not turn a change that was made into an error."""
+    client = failing_redis_client
+    exp = _create(client)
+    group = _create_group(client)
+    if change == "remove":
+        assert _add(client, group["id"], exp["id"]).status_code == 200
+    caplog.clear()
+
+    if change == "add":
+        resp = _add(client, group["id"], exp["id"])
+    else:
+        resp = _remove(client, group["id"], exp["id"])
+
+    assert resp.status_code == 200, resp.text
+    expected = group["id"] if change == "add" else None
+    assert _detail(client, exp["id"])["mutual_exclusion_group_id"] == expected
+    assert "Experiment cache invalidation failed" in caplog.text
+
+
+def test_a_tick_makes_every_change_when_redis_fails(
+    failing_redis_client, db_session, caplog
+):
+    """A tick drops the started experiments' details before it completes any:
+    a Redis failure there must not stop the completions, or count as a
+    failed item."""
+    client = failing_redis_client
+    before = _tick(client, db_session)
+    starts = _due_to_start(client)
+    ends = _due_to_end(client, db_session)
+    caplog.clear()
+
+    after = _tick(client, db_session)
+
+    assert _detail(client, starts["id"])["status"] == "active"
+    assert _detail(client, ends["id"])["status"] == "completed"
+    assert after["items_failed"] == before["items_failed"]
     assert "Experiment cache invalidation failed" in caplog.text

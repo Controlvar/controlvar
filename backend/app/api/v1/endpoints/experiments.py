@@ -27,7 +27,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
-from backend.app.api import deps
+from backend.app.api import deps, experiment_cache
 from backend.app.api.segment_rules import (
     refuse_clone_with_unusable_segments,
     refuse_unusable_segments,
@@ -189,7 +189,9 @@ async def _invalidate_experiment_cache(
         return
     try:
         if experiment_id is not None:
-            await cache_control.redis.delete(f"experiment:{experiment_id}")
+            await cache_control.redis.delete(
+                experiment_cache.experiment_detail_cache_key(experiment_id)
+            )
         keys = [
             key async for key in cache_control.redis.scan_iter(match="experiments:*")
         ]
@@ -574,7 +576,8 @@ async def get_experiment(
         # The cached detail is returned only after the same checks as an
         # uncached read. The owner's name is not in the cache: it is looked
         # up on every read, cached or not, so a rename shows on the next one.
-        cached_data = await _cache_get(cache_control, f"experiment:{experiment_id}")
+        detail_key = experiment_cache.experiment_detail_cache_key(experiment_id)
+        cached_data = await _cache_get(cache_control, detail_key)
         if cached_data:
             detail = ExperimentDetailResponse.model_validate_json(cached_data)
             detail.owner_name = _owner_name(db, detail.owner_id)
@@ -631,11 +634,7 @@ async def get_experiment(
                 else:
                     raise
 
-        await _cache_set(
-            cache_control,
-            f"experiment:{experiment_id}",
-            response.model_dump(mode="json"),
-        )
+        await _cache_set(cache_control, detail_key, response.model_dump(mode="json"))
 
         detail = ExperimentDetailResponse.model_validate(response.model_dump())
         detail.owner_name = _owner_name(db, detail.owner_id)

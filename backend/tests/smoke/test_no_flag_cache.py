@@ -10,7 +10,9 @@ comes from the database. This pins that, across the core and the modules:
   with either prefix -- f-strings and ``scan_iter`` patterns included);
 * ``deps.get_cache_control`` -- the dependency that hands out the Redis
   client -- is referenced only by the files that still cache (the experiment
-  routes and the admin cache routes) and by ``deps.py``, which defines it;
+  routes, ``experiment_cache.py`` that drops an experiment's cached detail
+  for the writers outside them, and the admin cache routes) and by
+  ``deps.py``, which defines it;
 * no route under ``/api/v1/feature-flags`` depends on it.
 
 No exception: ``admin.py``'s ``CACHE_NAMESPACES`` has no flag entry.
@@ -47,6 +49,7 @@ CACHE_CONTROL_USERS = frozenset(
     {
         "backend/app/api/deps.py",  # defines it
         "backend/app/api/v1/endpoints/experiments.py",  # the experiment cache
+        "backend/app/api/experiment_cache.py",  # drops an experiment's detail
         "backend/app/api/v1/endpoints/admin.py",  # /admin/stats, /cache/clear
     }
 )

@@ -12,6 +12,7 @@ from typing import Dict, Optional
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
+from backend.app.api import experiment_cache
 from backend.app.core.logging import get_logger
 from backend.app.core.metrics import update_active_experiments
 from backend.app.core.scheduler_tick import run_locked_tick
@@ -115,6 +116,11 @@ class ExperimentScheduler:
            a DRAFT, is logged once per tick, and is not counted as failed
         2. Experiments in ACTIVE status that should be completed (time-based)
 
+        After each commit, the cached detail of every experiment it started,
+        resumed or completed is dropped (with ``CACHE_ENABLED`` on), so the
+        experiment page shows the new status at once; a Redis failure there is
+        logged and does not stop the tick.
+
         An experiment's ``bayesian_decision`` is a recommendation only: nothing
         here stops an experiment on it (see docs/api/bayesian.md).
 
@@ -125,6 +131,8 @@ class ExperimentScheduler:
         activated_count = 0
         completed_count = 0
         failed_count = 0
+        activated_ids = []
+        completed_ids = []
 
         # Use a new database session for this task
         db = SessionLocal()
@@ -198,6 +206,7 @@ class ExperimentScheduler:
                     logger.exception("Error activating experiment %s", experiment_id)
                     continue
                 activated_count += 1
+                activated_ids.append(experiment_id)
                 logger.info(
                     f"Activating experiment: {experiment_id} - {experiment.name} "
                     f"({'scheduled resume' if resumed else 'scheduled start'}: "
@@ -215,6 +224,7 @@ class ExperimentScheduler:
             # Commit all activation changes before checking for experiments to complete
             if activated_count > 0:
                 db.commit()
+                await experiment_cache.drop_cached_experiment_details(activated_ids)
 
             # Find experiments to complete (end_date has passed)
             experiments_to_complete = (
@@ -253,6 +263,7 @@ class ExperimentScheduler:
                     logger.exception("Error completing experiment %s", experiment_id)
                     continue
                 completed_count += 1
+                completed_ids.append(experiment_id)
                 logger.info(
                     f"Completing experiment: {experiment_id} - {experiment.name} "
                     f"(scheduled end: {experiment.end_date})"
@@ -268,6 +279,7 @@ class ExperimentScheduler:
             # Commit completion changes
             if completed_count > 0:
                 db.commit()
+                await experiment_cache.drop_cached_experiment_details(completed_ids)
 
             # Log the results
             if activated_count > 0 or completed_count > 0:
