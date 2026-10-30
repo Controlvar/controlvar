@@ -21,6 +21,7 @@ export interface HoldoutFormProps {
   idPrefix: string;
   heading: string;
   submitLabel: string;
+  /** Where the fields start; while `sizeLocked`, also the size shown. */
   initial: HoldoutDraft;
   holdouts: readonly { id: string; name: string }[];
   selfId?: string;
@@ -149,7 +150,9 @@ export function HoldoutForm({
       {sizeLocked ? (
         <div data-testid="holdout-size-locked">
           <p className="text-sm font-medium text-slate-700">Size (% of new users)</p>
-          <p className="mt-1 text-sm text-slate-900">{draft.size}%</p>
+          {/* The stored size, not the draft's: a holdout that became active
+              while this form was open keeps the size it had, whatever was typed. */}
+          <p className="mt-1 text-sm text-slate-900">{initial.size}%</p>
           <p className="mt-1 text-xs text-slate-600">{HOLDOUT_COPY.sizeFixed}</p>
         </div>
       ) : (

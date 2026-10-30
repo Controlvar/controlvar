@@ -449,24 +449,37 @@ describe('New holdout', () => {
   });
 
   it.each([
-    [false, 409, HOLDOUT_COPY.nameTaken],
-    [true, 409, HOLDOUT_COPY.conflict],
-    [false, 403, HOLDOUT_COPY.adminOnly],
-    [false, 500, HOLDOUT_COPY.saveFailed],
-  ])('a create (activate now: %s) answered %i shows fixed copy, never the detail', async (activate, status, copy) => {
-    serve({
-      create: () => {
-        throw apiError(status, 'PLANTED-7f3 duplicate key value violates unique constraint');
-      },
-    });
-    await openForm();
-    fireEvent.change(screen.getByTestId('holdout-name'), { target: { value: 'Q2 holdout' } });
-    if (activate) fireEvent.click(screen.getByTestId('holdout-activate-now'));
-    fireEvent.click(screen.getByTestId('holdout-submit'));
-    if (activate) fireEvent.click(screen.getByTestId('holdout-confirm-yes'));
-    expect(await screen.findByTestId('holdout-form-error')).toHaveTextContent(copy);
-    expect(document.body.textContent).not.toContain('PLANTED');
-  });
+    [false, 409, HOLDOUT_COPY.nameTaken, true],
+    [true, 409, HOLDOUT_COPY.conflict, true],
+    [false, 403, HOLDOUT_COPY.adminOnly, false],
+    [false, 500, HOLDOUT_COPY.saveFailed, false],
+  ])(
+    'a create (activate now: %s) answered %i shows fixed copy, never the detail; only a 409 reads the list again (%s)',
+    async (activate, status, copy, rereads) => {
+      serve({
+        create: () => {
+          // Another ADMIN got there first: the server now holds a holdout this page has not read.
+          server = [...server, holdout('h-other', 'Q2 holdout')];
+          throw apiError(status, 'PLANTED-7f3 duplicate key value violates unique constraint');
+        },
+      });
+      await openForm();
+      fireEvent.change(screen.getByTestId('holdout-name'), { target: { value: 'Q2 holdout' } });
+      if (activate) fireEvent.click(screen.getByTestId('holdout-activate-now'));
+      fireEvent.click(screen.getByTestId('holdout-submit'));
+      if (activate) fireEvent.click(screen.getByTestId('holdout-confirm-yes'));
+      expect(await screen.findByTestId('holdout-form-error')).toHaveTextContent(copy);
+      expect(document.body.textContent).not.toContain('PLANTED');
+      // The form is no longer busy once the error shows unless it reads again; wait for that either way.
+      await waitFor(() => expect(screen.getByTestId('holdout-submit')).not.toBeDisabled());
+      expect(reads(ALL)).toHaveLength(rereads ? 2 : 1);
+      // A 409 means something moved: the page shows what the server now holds.
+      expect(statuses()).toHaveLength(rereads ? 4 : 3);
+      expect(screen.queryAllByTestId('holdout-row').some((tr) => tr.textContent?.startsWith('Q2 holdout'))).toBe(
+        rereads,
+      );
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -547,6 +560,75 @@ describe('activating and ending', () => {
     expect(statuses()).toEqual(['Ended', 'Not activated', 'Ended']);
   });
 
+  const activeHeading = () => screen.getByRole('heading', { name: 'Active holdout' });
+
+  it.each([
+    [
+      'Activate, from its row',
+      () => fireEvent.click(screen.getByRole('button', { name: 'Activate Q1 holdout' })),
+      ['/api/v1/holdout/h-q1', { method: 'PUT', json: { is_active: true } }],
+      'Q1 holdout: keeps 3% of new users out of every experiment',
+    ],
+    [
+      'End holdout, on the active card',
+      () => fireEvent.click(screen.getByTestId('holdout-end')),
+      ['/api/v1/holdout/h-q4', { method: 'PUT', json: { is_active: false } }],
+      HOLDOUT_COPY.none,
+    ],
+    [
+      'End, from its row',
+      () => fireEvent.click(screen.getByRole('button', { name: 'End Q4 holdout' })),
+      ['/api/v1/holdout/h-q4', { method: 'PUT', json: { is_active: false } }],
+      HOLDOUT_COPY.none,
+    ],
+    [
+      'Activate now, on a new holdout',
+      () => {
+        fireEvent.click(screen.getByTestId('new-holdout-btn'));
+        fireEvent.change(screen.getByTestId('holdout-name'), { target: { value: 'Q2 holdout' } });
+        fireEvent.click(screen.getByTestId('holdout-activate-now'));
+        fireEvent.click(screen.getByTestId('holdout-submit'));
+      },
+      [ACTIVE, { method: 'POST', json: { name: 'Q2 holdout', holdout_percentage: 5, is_active: true } }],
+      'Q2 holdout: keeps 5% of new users out of every experiment',
+    ],
+  ] as [string, () => void, unknown[], string][])(
+    '%s: once it lands, focus is on the active holdout heading',
+    async (_, ask, write, shown) => {
+      serve();
+      await openAdmin();
+      ask();
+      fireEvent.click(screen.getByTestId('holdout-confirm-yes'));
+      // The confirmation has gone; focus does not fall to the page.
+      await waitFor(() => expect(activeHeading()).toHaveFocus());
+      expect(writes()).toEqual([write]);
+      expect(reads(ALL)).toHaveLength(2);
+      // The heading leads the section that now shows the change.
+      expect(activeHeading().parentElement).toHaveTextContent(shown);
+      expect(activeHeading()).toHaveAttribute('tabindex', '-1');
+    },
+  );
+
+  it('a refused activation leaves focus on the error, never the heading', async () => {
+    serve({
+      // The list takes a real tick, as over a network, so the error has been
+      // shown and focused before the re-read answers.
+      all: () => new Promise((resolve) => setTimeout(() => resolve({ items: server, total: server.length }), 5)),
+      update: () => {
+        throw apiError(409, 'PLANTED-7f3');
+      },
+    });
+    await openAdmin();
+    fireEvent.click(screen.getByRole('button', { name: 'Activate Q1 holdout' }));
+    fireEvent.click(screen.getByTestId('holdout-confirm-yes'));
+    await screen.findByTestId('holdout-action-error');
+    // Wait until the re-read is done and the buttons are back, then look.
+    await waitFor(() => expect(reads(ALL)).toHaveLength(2));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Activate Q1 holdout' })).not.toBeDisabled());
+    expect(screen.getByTestId('holdout-action-error')).toHaveFocus();
+    expect(activeHeading()).not.toHaveFocus();
+  });
+
   it('Cancel and Escape send nothing, and return focus to the button that asked', async () => {
     serve();
     await openAdmin();
@@ -618,9 +700,11 @@ describe('editing', () => {
   it.each([
     [409, HOLDOUT_COPY.nameTaken],
     [422, HOLDOUT_COPY.changed],
-  ])('a rename answered %i shows fixed copy, never the detail', async (status, copy) => {
+  ])('a rename answered %i shows fixed copy, never the detail, and reads the list again', async (status, copy) => {
     serve({
       update: () => {
+        // Another ADMIN took the name first: the server now holds a holdout this page has not read.
+        server = [...server, holdout('h-other', 'Brand new')];
         throw apiError(status, 'PLANTED-7f3');
       },
     });
@@ -630,6 +714,58 @@ describe('editing', () => {
     fireEvent.click(screen.getByTestId('holdout-submit'));
     expect(await screen.findByTestId('holdout-form-error')).toHaveTextContent(copy);
     expect(document.body.textContent).not.toContain('PLANTED');
+    await waitFor(() => expect(reads(ALL)).toHaveLength(2));
+    await waitFor(() => expect(statuses()).toHaveLength(4));
+    // The form stays open with what was typed, and the name it now knows is taken is refused before any request.
+    await waitFor(() => expect(screen.getByTestId('holdout-submit')).not.toBeDisabled());
+    expect(screen.getByTestId('holdout-name')).toHaveValue('Brand new');
+    fireEvent.click(screen.getByTestId('holdout-submit'));
+    expect(screen.getByTestId('holdout-name-error')).toHaveTextContent(HOLDOUT_COPY.nameTaken);
+    expect(writes()).toHaveLength(1);
+  });
+
+  it('a holdout activated while its form was open: after the 422 its size is fixed text at the stored size, and is never sent', async () => {
+    let raced = false;
+    serve({
+      update: (path, options) => {
+        if (!raced) {
+          raced = true;
+          // Another ADMIN activated Q1 after this page loaded, so its size is now locked.
+          server = server.map((h) =>
+            h.id === 'h-q1'
+              ? { ...h, is_active: true, activated_at: '2026-10-30T08:00:00' }
+              : h.is_active
+                ? { ...h, is_active: false, deactivated_at: '2026-10-30T08:00:00' }
+                : h,
+          );
+          throw apiError(422, 'PLANTED-7f3 The percentage of a holdout that has been active cannot change.');
+        }
+        const body = options.json as Partial<Holdout>;
+        server = server.map((h) => (h.id === 'h-q1' ? { ...h, ...body } : h));
+        return server.find((h) => h.id === path.split('/').pop());
+      },
+    });
+    await openAdmin();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Q1 holdout' }));
+    fireEvent.change(screen.getByTestId('holdout-name'), { target: { value: 'Q1 renamed' } });
+    fireEvent.change(screen.getByTestId('holdout-size'), { target: { value: '2' } });
+    fireEvent.click(screen.getByTestId('holdout-submit'));
+    expect(await screen.findByTestId('holdout-form-error')).toHaveTextContent(HOLDOUT_COPY.changed);
+    await waitFor(() => expect(reads(ALL)).toHaveLength(2));
+    // The form now edits what the server holds: the size is no longer a field, and reads 3%, not the 2 typed.
+    await waitFor(() => expect(screen.queryByTestId('holdout-size')).toBeNull());
+    expect(screen.getByTestId('holdout-size-locked')).toHaveTextContent(
+      /^Size \(% of new users\)3%Fixed once a holdout has been active\. Create a new holdout to change it\.$/,
+    );
+    expect(screen.getByTestId('holdout-name')).toHaveValue('Q1 renamed');
+    expect(document.body.textContent).not.toContain('PLANTED');
+    await waitFor(() => expect(screen.getByTestId('holdout-submit')).not.toBeDisabled());
+    fireEvent.click(screen.getByTestId('holdout-submit'));
+    await waitFor(() => expect(screen.queryByTestId('holdout-form')).toBeNull());
+    expect(writes()).toEqual([
+      ['/api/v1/holdout/h-q1', { method: 'PUT', json: { name: 'Q1 renamed', holdout_percentage: 2 } }],
+      ['/api/v1/holdout/h-q1', { method: 'PUT', json: { name: 'Q1 renamed' } }],
+    ]);
   });
 });
 

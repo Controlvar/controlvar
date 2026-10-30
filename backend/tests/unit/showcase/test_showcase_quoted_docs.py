@@ -99,13 +99,12 @@ API_SCENES = ("api-intro", "api")
 #: captions, sentences, notes and card), so no dashboard beat names what the
 #: dashboard lacks.
 API_WORDS = ("holdout", "exclusion", "sequential", "schedule", "cuped")
-#: No guide row is held "API only" any more: scheduling a draft, exclusion
-#: groups and the global holdout each have a dashboard screen (#1454, #1455).
-#: Video 9's API part is withdrawn (D182) and is no longer checked against
-#: those rows; video 9's re-plan retires it (EM-2). The holdout row's "(beta)"
-#: is still held below.
 
 
+# Video 9's API part is withdrawn (D182) and video 9's re-plan retires it
+# (EM-2), so a row that has gained a dashboard screen is no longer checked as
+# "API only" here. The global-holdout row's "(beta)" still is, in
+# api_part_problems.
 def guide_rows(text: str) -> List[List[str]]:
     """The guide's table rows as cells."""
     return [

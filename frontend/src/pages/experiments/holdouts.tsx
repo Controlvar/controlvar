@@ -86,6 +86,10 @@ export default function HoldoutsPage() {
   const errorRef = useRef<HTMLDivElement>(null);
   // The control that opened the confirmation: Cancel and Escape return focus to it.
   const opener = useRef<HTMLElement | null>(null);
+  // The active holdout's heading (focusable, tabIndex -1). Focus goes there once
+  // a confirmed Activate or End has landed: the confirmation has gone, and so,
+  // often, has the button that asked (#1465's pattern).
+  const activeHeading = useRef<HTMLHeadingElement>(null);
 
   const ask = (next: Confirm, from: HTMLElement | null) => {
     opener.current = from;
@@ -101,7 +105,11 @@ export default function HoldoutsPage() {
     try {
       if (admin) {
         const list = await HoldoutsService.listAll();
-        setState({ kind: 'loaded', admin: true, holdouts: Array.isArray(list?.items) ? list.items : [] });
+        const items = Array.isArray(list?.items) ? list.items : [];
+        setState({ kind: 'loaded', admin: true, holdouts: items });
+        // An open edit form edits what the server now holds: a holdout that
+        // became active since the form opened shows its size as fixed text.
+        setEditing((open) => (open ? (items.find((h) => h.id === open.id) ?? open) : open));
         return;
       }
       const answer = holdoutAnswer(await EligibilityService.activeHoldout());
@@ -132,18 +140,24 @@ export default function HoldoutsPage() {
   const active =
     state.kind === 'loaded' ? (state.admin ? (state.holdouts.find((h) => h.is_active) ?? null) : state.active) : null;
 
-  /** Send one change, then read the list again whatever the answer (a 409 or 422 means it moved). */
-  const change = async (send: () => Promise<unknown>, activates: boolean, onDone?: () => void) => {
+  /**
+   * Send one change, then read the list again whatever the answer (a 409 or
+   * 422 means it moved). Once it has landed, focus goes to the active
+   * holdout's heading; a refusal keeps it on the error.
+   */
+  const change = async (send: () => Promise<unknown>, activates: boolean) => {
     setBusy(true);
     setError(null);
+    let landed = false;
     try {
       await send();
-      onDone?.();
+      landed = true;
     } catch (err) {
       setError(holdoutErrorCopy(err, { activates }));
     }
     await load(true);
     setBusy(false);
+    if (landed) activeHeading.current?.focus();
   };
 
   const create = (draft: HoldoutDraft, activateNow: boolean) => {
@@ -158,6 +172,8 @@ export default function HoldoutsPage() {
         setCreating(false);
         await load(true);
         setBusy(false);
+        // "Activate now" was a confirmed Activate: focus as after one.
+        if (activateNow) activeHeading.current?.focus();
       },
       async (err: unknown) => {
         setFormError(holdoutErrorCopy(err, { activates: activateNow }));
@@ -271,7 +287,12 @@ export default function HoldoutsPage() {
               aria-labelledby="holdout-active-heading"
               className="rounded-lg border border-slate-200 bg-white p-6 space-y-3"
             >
-              <h2 id="holdout-active-heading" className="text-lg font-semibold text-slate-900">
+              <h2
+                ref={activeHeading}
+                id="holdout-active-heading"
+                tabIndex={-1}
+                className="text-lg font-semibold text-slate-900 focus:outline-none"
+              >
                 Active holdout
               </h2>
               {active ? (
