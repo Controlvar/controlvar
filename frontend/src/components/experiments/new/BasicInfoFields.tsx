@@ -42,7 +42,7 @@ export function BasicInfoFields({ state, dispatch }: BasicInfoFieldsProps) {
           className={`${inputClass} font-mono`}
           data-testid="experiment-key"
         />
-        <p className="text-xs text-slate-400 mt-1">
+        <p className="text-xs text-slate-500 mt-1">
           Auto-generated from the name. SDKs use it in <code className="font-mono">experiment_key</code>.
         </p>
       </div>

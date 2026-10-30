@@ -352,7 +352,7 @@ export default function ExperimentDetailPage() {
       <div className="flex-1 bg-slate-50 flex items-center justify-center">
         <PageTitle title={notFound ? 'Experiment not found' : 'Experiment'} />
         <div className="text-center max-w-md px-4" data-testid={notFound ? 'experiment-not-found' : 'experiment-error'}>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 mb-2">
             {notFound ? '404' : 'Error'}
           </p>
           <p className="text-slate-800 text-lg mb-2">
@@ -570,7 +570,7 @@ export default function ExperimentDetailPage() {
                 </Link>
               ) : (
                 <span
-                  className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-100 text-slate-400 cursor-not-allowed"
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 cursor-not-allowed"
                   title="Results are available once the experiment has started"
                   data-testid="view-results-disabled"
                 >
@@ -642,7 +642,7 @@ export default function ExperimentDetailPage() {
             <div className="mt-5 pt-5 border-t border-slate-100 grid gap-4 sm:grid-cols-2">
               {experiment.description && (
                 <div>
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
                     Description
                   </h2>
                   <p className="text-sm text-slate-700 whitespace-pre-line" data-testid="experiment-description">
@@ -652,7 +652,7 @@ export default function ExperimentDetailPage() {
               )}
               {experiment.hypothesis && (
                 <div>
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
                     Hypothesis
                   </h2>
                   <p className="text-sm text-slate-700 whitespace-pre-line" data-testid="experiment-hypothesis">
@@ -692,7 +692,7 @@ export default function ExperimentDetailPage() {
                           <td className="px-5 py-3">
                             <div className="font-medium text-slate-800">{variant.name}</div>
                             {variant.description && (
-                              <div className="text-xs text-slate-400 mt-0.5">{variant.description}</div>
+                              <div className="text-xs text-slate-500 mt-0.5">{variant.description}</div>
                             )}
                           </td>
                           <td className="px-5 py-3 text-right text-slate-700 tabular-nums">
@@ -704,12 +704,12 @@ export default function ExperimentDetailPage() {
                                 Control
                               </span>
                             ) : (
-                              <span className="text-xs text-slate-400">Treatment</span>
+                              <span className="text-xs text-slate-500">Treatment</span>
                             )}
                           </td>
                           <td className="px-5 py-3 align-top">
                             {configuration === null ? (
-                              <span className="text-slate-400" data-testid={`variant-configuration-none-${index}`}>
+                              <span className="text-slate-500" data-testid={`variant-configuration-none-${index}`}>
                                 <span aria-hidden="true">—</span>
                                 <span className="sr-only">None</span>
                               </span>
