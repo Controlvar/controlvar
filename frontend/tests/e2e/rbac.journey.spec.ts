@@ -1,4 +1,5 @@
 import { test, expect, TEST_USERS, type UserRole } from "./fixtures/auth.fixture";
+import { API_URL, TOKEN_STORAGE_KEY } from "./env";
 import { ExperimentsPage } from "./pages/experiments.page";
 import { FeatureFlagsPage } from "./pages/feature-flags.page";
 
@@ -180,6 +181,10 @@ test.describe("Journey: RBAC", () => {
   // An analyst or viewer opening a running experiment is offered none of
   // them, is told why, and reads its results -- and no request they make on
   // the way is refused by the experiments or results API.
+  //
+  // The page's group and holdout rows (#1449) read routes these two roles are
+  // refused (EXPERIMENT CREATE), so the page does not ask: it says who can see
+  // them, and sends neither request.
   for (const role of ["analyst", "viewer"] as const) {
     test(`${role} sees no lifecycle action on a running experiment and reads its results`, async ({
       sessions,
@@ -187,10 +192,17 @@ test.describe("Journey: RBAC", () => {
       const page = await (await sessions(role)).newPage();
       const experiments = new ExperimentsPage(page);
       const refused: string[] = [];
+      const eligibilityRequests: string[] = [];
+      page.on("request", (request) => {
+        const { pathname } = new URL(request.url());
+        if (/^\/api\/v1\/(holdout|mutual-exclusion-groups)(\/|$)/.test(pathname)) {
+          eligibilityRequests.push(`${request.method()} ${pathname}`);
+        }
+      });
       page.on("response", (response) => {
         const { pathname } = new URL(response.url());
         if (
-          /^\/api\/v1\/(experiments|results)\//.test(pathname) &&
+          /^\/api\/v1\/(experiments|results|holdout|mutual-exclusion-groups)(\/|$)/.test(pathname) &&
           (response.status() === 401 || response.status() === 403)
         ) {
           refused.push(`${response.status()} ${response.request().method()} ${pathname}`);
@@ -220,10 +232,19 @@ test.describe("Journey: RBAC", () => {
         await expect(note).toContainText("requires the ADMIN or DEVELOPER role");
         await expect(note).toContainText(`you are ${TEST_USERS[role].role}.`);
 
+        // The seeded experiment is in no group, which the experiment itself
+        // says; the holdout needs the role.
+        await expect(page.getByTestId("experiment-exclusion-group")).toHaveText("None");
+        await expect(page.getByTestId("experiment-holdout-refused")).toHaveText(
+          "Seeing this requires the ADMIN or DEVELOPER role.",
+        );
+        await expect(page.getByTestId("experiment-holdout")).toHaveCount(0);
+
         await experiments.viewResults();
         await expect(page.getByTestId("results-dashboard")).toBeVisible({ timeout: 20_000 });
         await page.waitForLoadState("networkidle");
-        expect(refused, "no experiments/results request is refused").toEqual([]);
+        expect(refused, "no experiments/results/holdout/group request is refused").toEqual([]);
+        expect(eligibilityRequests, "no holdout or group request is sent").toEqual([]);
       } finally {
         await page.close();
       }
@@ -372,6 +393,81 @@ test.describe("Journey: RBAC", () => {
       // And again from a cold load, not only straight after the redirect.
       await page.reload();
       await expect(experiments.detail).toBeVisible({ timeout: 15_000 });
+    } finally {
+      await page.close();
+    }
+  });
+
+  // #1449 (plan-1449 #14): the experiment page's read-only settings against
+  // the real API, as an ordinary DEVELOPER (the seeded admin is a superuser,
+  // so its cell would prove nothing about the role). The journey database is
+  // shared, so the only experiment it schedules is a draft it creates, and the
+  // seeded one it opens is only read.
+  test("developer reads an experiment's sequential testing, holdout, group and scheduled start", async ({
+    sessions,
+  }) => {
+    const page = await (await sessions("developer")).newPage();
+    const experiments = new ExperimentsPage(page);
+    const stamp = Date.now();
+    const holdoutAnswer = () =>
+      page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === "/api/v1/holdout" && response.request().method() === "GET",
+        { timeout: 20_000 },
+      );
+    try {
+      await experiments.goto();
+      await expect(experiments.experimentList).toBeVisible({ timeout: 15_000 });
+      const token = await page.evaluate((key) => window.localStorage.getItem(key), TOKEN_STORAGE_KEY);
+      expect(token, "the developer session has a token").toBeTruthy();
+      const headers = { Authorization: `Bearer ${token}` };
+
+      // The seeded msprt experiment (seed_demo_data.py: sequential testing on),
+      // opened by id: a clone of it would also match its name in the list.
+      const list = await page.request.get(`${API_URL}/api/v1/experiments/?limit=100`, { headers });
+      expect(list.status()).toBe(200);
+      const seeded = ((await list.json()) as { items: { id: string; name: string }[] }).items.find(
+        (item) => item.name === "Homepage Hero Copy Test",
+      );
+      expect(seeded, "the seeded msprt experiment").toBeTruthy();
+      const first = holdoutAnswer();
+      await page.goto(`/experiments/${seeded!.id}`);
+      await expect(experiments.detail).toBeVisible({ timeout: 15_000 });
+      const answer = await first;
+      expect(answer.status(), "a DEVELOPER may read the holdout").toBe(200);
+      // The journey seed activates no holdout, and no journey makes one.
+      expect(await answer.json()).toBeNull();
+      await expect(page.getByTestId("experiment-sequential")).toHaveText("On");
+      await expect(page.getByTestId("experiment-holdout")).toHaveText("None active");
+      await expect(page.getByTestId("experiment-exclusion-group")).toHaveText("None");
+
+      // A draft of its own, scheduled two days ahead: "Starts", nothing due.
+      const id = await experiments.createExperiment(`E2E Scheduled ${stamp}`, `e2e_scheduled_${stamp}`);
+      const day = 24 * 60 * 60 * 1000;
+      const schedule = await page.request.put(`${API_URL}/api/v1/experiments/${id}/schedule`, {
+        headers,
+        data: {
+          start_date: new Date(Date.now() + 2 * day).toISOString(),
+          end_date: new Date(Date.now() + 3 * day).toISOString(),
+        },
+      });
+      expect(schedule.status(), await schedule.text()).toBe(200);
+      const second = holdoutAnswer();
+      await page.reload();
+      await expect(experiments.detail).toBeVisible({ timeout: 15_000 });
+      expect((await second).status()).toBe(200);
+      await experiments.expectStatus("draft");
+      const start = page.getByTestId("experiment-start-date");
+      await expect(start).toBeVisible();
+      await expect(start.locator("xpath=preceding-sibling::dt")).toHaveText("Starts");
+      await expect(start).not.toContainText("(due");
+      await expect(page.getByTestId("experiment-end-date").locator("xpath=preceding-sibling::dt")).toHaveText("Ends");
+      await expect(page.getByTestId("experiment-exclusion-group")).toHaveText("None");
+      await expect(page.getByTestId("experiment-holdout")).toHaveText("None active");
+
+      await page.getByTestId("experiment-delete").click();
+      await page.getByTestId("manage-delete-yes").click();
+      await page.waitForURL(/\/experiments$/, { timeout: 15_000 });
     } finally {
       await page.close();
     }

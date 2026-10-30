@@ -444,6 +444,15 @@ text = "Dates are stored in UTC."
 by = ["exempt:baseline"]
 
 [[unit]]
+text = "The experiment's page shows these dates in your browser's time zone, as \"Starts\" and \"Ends\" until the experiment has started or ended, then as \"Started\" and \"Ended\", and as \"Start date\" and \"End date\" once it is archived."
+by = [
+    "test:frontend/src/tests/pages/experiment-detail-times.test.tsx::shows Started, Ended and Created as UTC converted to local time",
+    "test:frontend/src/tests/pages/experiment-detail-times.test.tsx::a draft scheduled ahead reads Starts and Ends, never Started or Ended (#1443)",
+    "test:frontend/src/tests/pages/experiment-detail-times.test.tsx::a completed experiment reads Started and Ended, with nothing due",
+    "test:frontend/src/tests/pages/experiment-detail-times.test.tsx::an archived experiment with its dates %s reads Start date and End date",
+]
+
+[[unit]]
 text = "Clicking Start before the scheduled start starts the experiment right away: its start date becomes the time you clicked, and a scheduled end date is kept."
 by = ["test:backend/tests/integration/api/test_complete_after_early_start.py::test_a_draft_started_before_its_scheduled_start_records_the_actual_start"]
 
@@ -1272,6 +1281,10 @@ by = [
     "test:frontend/src/tests/components/ResultsDashboard.test.tsx::is asked for from the dedicated route when the experiment says it is on and the results carry no block",
     "test:frontend/src/tests/components/ResultsDashboard.test.tsx::is not asked for from the dedicated route when the experiment says sequential testing is off",
 ]
+
+[[unit]]
+text = "The experiment's own page says whether sequential testing is on."
+by = ["test:frontend/src/tests/pages/experiment-detail-configuration.test.tsx::sequential_testing_enabled %s (Bayesian %s) reads %s"]
 
 [[unit]]
 text = "The API route is:"

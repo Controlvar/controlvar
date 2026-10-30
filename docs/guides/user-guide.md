@@ -159,6 +159,9 @@ on a `DRAFT` experiment, with an ADMIN or DEVELOPER token. The experiment activa
 leave out of the request is left as it is, and `null` clears it. A date written without a
 UTC offset is read in `time_zone`, an IANA name such as `America/Los_Angeles` (default
 `UTC`); a date with an offset, like the ones below, keeps it. Dates are stored in UTC.
+The experiment's page shows these dates in your browser's time zone, as "Starts" and "Ends"
+until the experiment has started or ended, then as "Started" and "Ended", and as "Start date"
+and "End date" once it is archived.
 Clicking **Start** before the scheduled start starts the experiment right away: its start date
 becomes the time you clicked, and a scheduled end date is kept.
 
@@ -475,6 +478,7 @@ Export results through the API:
 Standard A/B tests require a fixed sample size decided upfront. Sequential testing lets you monitor results continuously and stop as soon as you have enough evidence — without inflating your false positive rate.
 
 When sequential testing is on for an experiment, its results page has a **Sequential** tab.
+The experiment's own page says whether sequential testing is on.
 The API route is:
 ```text
 GET /api/v1/results/{experiment_id}/sequential
