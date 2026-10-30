@@ -248,7 +248,14 @@ describe('who is offered Edit variants and metrics', () => {
     const ids = Array.from(
       within(screen.getByTestId('experiment-manage')).getAllByRole('button'),
     ).map((b) => b.dataset.testid);
-    expect(ids).toEqual(['experiment-clone', 'experiment-edit-details', 'experiment-edit-variants', 'experiment-delete']);
+    // Schedule (#1454) sits before Edit details.
+    expect(ids).toEqual([
+      'experiment-clone',
+      'experiment-schedule',
+      'experiment-edit-details',
+      'experiment-edit-variants',
+      'experiment-delete',
+    ]);
   });
 
   it.each(['ANALYST', 'VIEWER'])('%s is offered nothing, and the page sends no change', async (role) => {

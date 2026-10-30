@@ -640,6 +640,30 @@ describe('the form among the other controls', () => {
     expect(screen.getByTestId('experiment-schedule-form')).toBeInTheDocument();
   });
 
+  it('the variants and metrics form closes it, and Schedule closes the variants form', async () => {
+    await openSchedule();
+    fireEvent.click(screen.getByTestId('experiment-edit-variants'));
+    expect(screen.queryByTestId('experiment-schedule-form')).toBeNull();
+    expect(screen.getByTestId('design-form')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('experiment-schedule'));
+    expect(screen.queryByTestId('design-form')).toBeNull();
+    expect(screen.getByTestId('experiment-schedule-form')).toBeInTheDocument();
+    // The page's read-only cards come back once the variants form has gone (#1453).
+    expect(screen.getByTestId('variants-table')).toBeInTheDocument();
+    expect(puts()).toEqual([]);
+  });
+
+  it('"Dates saved." goes when the variants and metrics form opens', async () => {
+    jest.useFakeTimers({ now: NOW });
+    await openSchedule();
+    pick('start', '2026-11-02T09:00');
+    save();
+    await screen.findByTestId('schedule-saved');
+    fireEvent.click(screen.getByTestId('experiment-edit-variants'));
+    expect(screen.queryByTestId('schedule-saved')).toBeNull();
+    expect(screen.getByTestId('design-form')).toBeInTheDocument();
+  });
+
   it('Delete draft closes it', async () => {
     await openSchedule();
     fireEvent.click(screen.getByTestId('experiment-delete'));

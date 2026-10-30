@@ -274,6 +274,7 @@ export function ExperimentManageSection({
     setConfirmingDelete(false);
     setDraft(null);
     setNameError(false);
+    resetSchedule();
     setDesign(true);
   };
 
@@ -324,10 +325,11 @@ export function ExperimentManageSection({
 
   const openSchedule = () => {
     setError(null);
-    setSaved(false);
+    setSaved(null);
     setDraft(null);
     setNameError(false);
     setConfirmingDelete(false);
+    setDesign(false);
     setScheduleSaved(false);
     setScheduleOpen(true);
   };

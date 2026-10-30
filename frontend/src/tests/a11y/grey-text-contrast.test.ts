@@ -159,4 +159,16 @@ describe("the experiment page's schedule form", () => {
     expect(shades.length).toBeGreaterThanOrEqual(3);
     expect(shades.filter((shade) => shade < 600)).toEqual([]);
   });
+
+  // "Dates saved." is small text on white, outside the panel: green-700
+  // (#15803d, 5.0:1) or darker; green-600 is 3.3:1.
+  it('"Dates saved." is green-700 or darker', () => {
+    const source = fs.readFileSync(path.join(SRC, 'components/experiments/ExperimentManageSection.tsx'), 'utf8');
+    const tags = Array.from(source.matchAll(/<p\b[^>]*data-testid="schedule-saved"[^>]*>/g));
+    expect(tags).toHaveLength(1);
+    const shades = Array.from(tags[0][0].matchAll(/\btext-([a-z]+)-(\d+)\b/g)).map((m) => [m[1], Number(m[2])]);
+    expect(shades).toHaveLength(1);
+    expect(shades[0][0]).toBe('green');
+    expect(shades[0][1]).toBeGreaterThanOrEqual(700);
+  });
 });
