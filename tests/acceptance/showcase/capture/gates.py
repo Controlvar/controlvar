@@ -934,6 +934,38 @@ def typed_as_shown(
     )
 
 
+#: A ``datetime-local`` input's value, to the minute, as the page computes it.
+LOCAL_MINUTE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T([0-9]{2}:[0-9]{2})$")
+
+
+def date_as_set(at: str, value: str, read: str, read_back: str) -> Verdict:
+    """Gate 12 for a ``date`` step: the page computed a day at the storyboard's
+    time of day *at* (*value*, local, to the minute), the field reads exactly
+    *value* after it was filled (*read*), and the page reads that local time
+    back as itself (*read_back*: ``new Date(value)`` formatted the same way).
+
+    A time a change of daylight saving time skips is moved by the browser, so
+    it never reads back as itself: refused, never filmed as another hour."""
+    numbers = {"at": at, "value": value, "read": read, "read_back": read_back}
+    shaped = LOCAL_MINUTE.match(value or "")
+    if shaped is None or shaped.group(1) != at:
+        return (
+            False,
+            numbers,
+            f"the page computed {value!r}, which is not a day at {at}",
+        )
+    if read != value:
+        return False, numbers, f"the field reads {read!r} after {value!r} was filled"
+    if read_back != value:
+        return (
+            False,
+            numbers,
+            f"the page reads {value!r} back as {read_back!r}: that local time does"
+            " not exist in the browser's zone",
+        )
+    return True, numbers, ""
+
+
 #: How the audit log page names the actions a flag's end state checks
 #: (frontend/src/components/admin/audit/actionLabels.ts; a unit test keeps
 #: them equal).

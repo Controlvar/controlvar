@@ -911,6 +911,19 @@ def make_stack(
     )
 
 
+def context_zone(board: storyboard.Storyboard) -> Dict[str, Any]:
+    """What the capture's browser context is given beyond its fixed arguments:
+    the storyboard's ``time_zone`` and ``locale`` when it pins them, and
+    nothing when it does not (the browser then takes the machine's, as it
+    always has)."""
+    zone: Dict[str, Any] = {}
+    if board.time_zone is not None:
+        zone["timezone_id"] = board.time_zone
+    if board.locale is not None:
+        zone["locale"] = board.locale
+    return zone
+
+
 #: Gate 10/1's question to the API, asked from the page with the page's own token.
 WHO_JS = """async () => {
   const token = localStorage.getItem('experimently.token');
@@ -958,6 +971,7 @@ def record(
                 viewport=dict(config.VIEWPORT),
                 device_scale_factor=1,
                 service_workers="block",
+                **context_zone(board),
             )
             page = context.new_page()
             counted = board.end_state.experiment
@@ -1083,6 +1097,8 @@ def record(
                 storyboard=[s.id for s in board.scenes],
                 # Typed as shown: each type step's field, read back (lengths).
                 typed=director.tally.typed,
+                # Each date step's field, read back, on a storyboard that has one.
+                **({"dated": director.tally.dates} if director.tally.dates else {}),
             )
             # Gate 10: the end state, through the API.
             who = page.evaluate(WHO_JS)

@@ -627,10 +627,16 @@ ENTERED_IN_A_CUT = {
     "type": {"type": {"testid": "search-input"}, "text": "purchase"},
     "choose": {"choose": {"testid": "search-input"}, "option": "purchase"},
     "slide": {"slide": {"testid": "search-input"}, "value": 5},
+    "date": {
+        "date": {"testid": "search-input"},
+        "days_ahead": 2,
+        "at": "09:00",
+        "record": "start",
+    },
 }
 
 
-def test_the_steps_that_enter_data_are_type_choose_and_slide():
+def test_the_steps_that_enter_data_are_type_choose_slide_and_date():
     assert sorted(ENTERED_IN_A_CUT) == sorted(
         step.__name__.lower() for step in storyboard.ENTERS_DATA
     )

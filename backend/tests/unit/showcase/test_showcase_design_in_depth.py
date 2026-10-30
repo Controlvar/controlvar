@@ -12,9 +12,9 @@ claims it makes that no frame can prove.
   ``config.STATIC_NEEDLES`` read at run time; a finding names a value by its
   index only).
 * A correct API answer passes gate 10's ``design`` end state for this board.
-* Its clips: each sentence's clip key (the 13 the design part has always
-  had, all in the voice cache), and no sentence saying a date, a clock time
-  or what the global holdout is not.
+* Its clips: each sentence's clip key (24 already in the voice cache, and the
+  2 new ones the founder's voice sitting makes), and no sentence saying a
+  date, a clock time or what the global holdout is not.
 
 If a product change makes one of these fail, re-verify what the video says
 before changing the test: the narration makes the claim.
@@ -76,12 +76,16 @@ def test_video_9_narrates_by_the_rules_and_states_its_departures():
     assert storyboard.departure_problems(made) == []
     first = made.scenes[0]
     assert first.signed_in
-    assert [d.says for d in first.departures] == ["Signed in off camera"]
+    assert [d.says for d in first.departures] == [
+        "Signed in off camera",
+        "made off camera",
+    ]
     assert first.beats[0].cue.startswith("Signed in off camera.")
     assert [s.id for s in made.scenes] == ["design"]
-    # The setup's group is made before this first scene: its off-camera setup
-    # is the first scene's, stated by the sign-in's caption.
     assert storyboard.required_departures(made) == [("design", "off-camera setup")]
+    # The group made off camera is said in ONE caption, on its own beat (D188).
+    captions = [beat.cue for beat in first.beats if "made off camera" in beat.cue]
+    assert captions == ["Checkout tests, made off camera with Checkout Button Color."]
 
 
 def _console_scene(data: Dict[str, Any]) -> None:
@@ -357,9 +361,9 @@ def screened(lines: List[str]) -> List[Tuple[int, str]]:
 
 def test_no_line_of_video_9_reads_like_a_kept_value():
     lines = drawn_and_said(board())
-    # 11 captions, 13 sentences and 10 typed strings: every one is screened.
-    assert len(lines) == 34
-    assert "Delivery promise" in lines and "US, CA" in lines
+    # 19 captions, 26 sentences and 11 typed strings: every one is screened.
+    assert len(lines) == 56
+    assert "Delivery promise" in lines and "Q4 holdout" in lines
     assert screened(lines) == []
 
 
@@ -386,8 +390,9 @@ def test_the_screen_fires_on_a_line_made_from_a_kept_value(index):
 # The clips it needs
 # ---------------------------------------------------------------------------
 
-#: The design part's sentences and their clip keys, in the voice cache since
-#: the 10-29 sitting: byte for byte the same, so no new clip is made for them.
+#: The sentences already in the voice cache, and their clip keys: the design
+#: part's 13 and 11 of the API part's (both 10-29 sittings), byte for byte the
+#: same, so no new clip is made for them.
 KEPT_KEYS: Dict[str, str] = {
     "Choose New Experiment.": (
         "3eaa033a60ed7bb342de251eabae586c6d99581b47cc80922cb401d4c327dea2"
@@ -427,6 +432,50 @@ KEPT_KEYS: Dict[str, str] = {
     "It's saved as a draft, with its versions, metrics and analysis.": (
         "75bf554a773f9a3fe7d49671ff7d66e487afa21e74c9da6f0cda58394f009f62"
     ),
+    "Turn on sequential testing, in beta.": (
+        "3afe3df24150d13ca09dbe841139df1345414f6d12a9f3e7712082b67a424633"
+    ),
+    "Check results whenever you like, and stop once the evidence is strong.": (
+        "db3290140562d00a66fd16f1b9b865e481194c77b566a5d450cba377eb4eb531"
+    ),
+    "Give it a start date, and it starts on its own.": (
+        "2904aaaad2279f32415070e917ad61452bf4b1b6374307b29ed81c57b31acbc6"
+    ),
+    "Until then, it stays a draft.": (
+        "04ebdbfce7946bc64c376035e18356d92326e7d297b5972c336c85e8f9c6b981"
+    ),
+    "A global holdout keeps 5% of new users out of every experiment.": (
+        "7e3bcb9d20bf752e7b36375445564f1a24a5713672b4943977189ecfeae51be7"
+    ),
+    "That includes this one.": (
+        "ccfac8f7a6db8706d17cba0f96816cde433bc53c5602a9264854b4a8510863d6"
+    ),
+    "Experiments in the same exclusion group never share a user.": (
+        "4ce7f7653f2738a92213f2a1d5b84176631d59837565f0a9634031dd73028898"
+    ),
+    "Add this draft to the group with Checkout Button Color.": (
+        "3e15d81bb92ef3fdc1d8da90b362629fa49eb9a55126818cfe8b1c0dddb7f1b3"
+    ),
+    "Read it back: it's still a draft, in its group.": (
+        "0869e3343b5d8e67ebf1c6136ce56f85cf8f7808e418b66332a3a15a8adccca6"
+    ),
+    "It has its start date, and sequential testing is on.": (
+        "4900ee378ba1f0648c60dce4e3a834636f6688c2d1e4136c4ea1d14ff612281a"
+    ),
+    "And the holdout is active.": (
+        "1bdf8720af6d78bd305e29e9c8b1292cc663d9e73756d850b03c997badafd6aa"
+    ),
+}
+#: The two new sentences, each a new clip, in the order they are said: the
+#: lines of the founder's voice sitting (QA 7a; founder-voice-v9-ui.sh refuses
+#: unless its approved lines are exactly these).
+NEW_KEYS: Dict[str, str] = {
+    "A holdout covers all your experiments, so it has its own page.": (
+        "774b3446c56e3babca5df35e8152306d48d32774a7294129651d482b9f6110b3"
+    ),
+    "It's active now, and its size is fixed.": (
+        "e968c1417b3adb613f3b8e370900733a121d2c6d5f07b6c4278b07cc99177ebf"
+    ),
 }
 #: The old closing card's sentence, and its key: never said again.
 API_ONLY_LINE = (
@@ -448,12 +497,22 @@ def clip_keys(made: storyboard.Storyboard) -> Dict[str, str]:
     }
 
 
-def test_video_9s_clips_are_its_13_kept():
+#: The cached sentences the API part said and this video no longer does.
+DROPPED = (
+    "Guided setup ends here: you do the rest through the API.",
+    "The answer also carries the group's id and the start date.",
+)
+
+
+def test_video_9s_clips_are_the_24_kept_and_the_2_new():
     keys = clip_keys(board())
-    assert len(KEPT_KEYS) == 13
-    assert keys == KEPT_KEYS
-    assert list(keys) == list(KEPT_KEYS)
+    assert (len(KEPT_KEYS), len(NEW_KEYS)) == (24, 2)
+    assert keys == {**KEPT_KEYS, **NEW_KEYS}
+    assert [text for text in keys if text in NEW_KEYS] == list(NEW_KEYS)
     assert API_ONLY_LINE not in keys and API_ONLY_KEY not in keys.values()
+    assert not [text for text in DROPPED if text in keys]
+    # The voice step's own count: 2 new clips, 101 billable characters.
+    assert sum(len(contract.polly_text(text)) for text in NEW_KEYS) == 101
 
 
 def test_one_character_changed_in_a_kept_sentence_moves_its_key():
@@ -462,7 +521,7 @@ def test_one_character_changed_in_a_kept_sentence_moves_its_key():
     data = raw_board()
     data["scenes"][0]["beats"][0]["say"] = ["Choose New experiment."]
     keys = clip_keys(storyboard.parse(data))
-    assert keys != KEPT_KEYS
+    assert keys != {**KEPT_KEYS, **NEW_KEYS}
     assert sorted(set(KEPT_KEYS.values()) - set(keys.values())) == [
         KEPT_KEYS["Choose New Experiment."]
     ]
