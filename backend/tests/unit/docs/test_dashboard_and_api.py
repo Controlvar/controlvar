@@ -703,6 +703,11 @@ STALE: Tuple[Tuple[str, str], ...] = (
         "a headline that does not say which of the two the dashboard shows",
     ),
     (
+        r"delete (this|the|a) draft and (create|make) it again",
+        "the experiment page's Edit variants and metrics changes a draft's "
+        "variants and metrics in place (#1453)",
+    ),
+    (
         r"shows the schedule[^.]{0,80}read-only",
         "the flag's page creates and runs a rollout schedule (#1456)",
     ),
@@ -789,6 +794,8 @@ def test_no_page_repeats_a_removed_dashboard_claim():
         "Classic A/B test, sequential testing (mSPRT), Bayesian results (API only), variant",
         "(frequentist + sequential in the dashboard, Bayesian in the API)",
         "Statistical rigor with Bayesian and Frequentist analysis",
+        "Variants and metrics cannot; to change them, delete this draft and\n"
+        "create it again.",
         # #1456: rollouts.md, user-guide.md and the flag page's own empty state.
         "In the dashboard, the flag's page shows the schedule read-only under **Rollout schedule**: its",
         "`POST /api/v1/rollout-schedules/{schedule_id}/activate`. The flag's page in the dashboard\n"

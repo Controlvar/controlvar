@@ -136,7 +136,7 @@ text = "Edit a draft experiment's name, description and hypothesis | Dashboard |
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Change a draft experiment's variants or metrics | API only | API endpoints"
+text = "Change a draft experiment's variants or metrics | Dashboard | API endpoints"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]

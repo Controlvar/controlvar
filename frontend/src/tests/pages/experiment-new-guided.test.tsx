@@ -1196,6 +1196,59 @@ describe('how results will be judged', () => {
   });
 });
 
+/**
+ * The variant and metric editors take two props from the experiment page's
+ * "Edit variants and metrics" form (#1453): the field a refusal is about, and
+ * that refusal's element id. Guided setup and the single-page form pass
+ * neither, so with nothing refused no field there is marked invalid or
+ * described by anything. (The configuration textarea has its own help text,
+ * so it is not among these fields.)
+ */
+describe('guided setup marks no variant or metric field', () => {
+  const VARIANT_FIELDS = ['variant-name', 'variant-allocation', 'variant-control'];
+  const METRIC_FIELDS = ['metric-name', 'metric-event', 'metric-primary'];
+
+  /** Every row's field of each kind, with any aria-invalid or aria-describedby it carries. */
+  function marks(fields: string[], rows: number): string[] {
+    const found: string[] = [];
+    for (const field of fields) {
+      const elements = Array.from(document.querySelectorAll<HTMLElement>(`[data-testid^="${field}-"]`));
+      expect(elements.map((e) => e.dataset.testid)).toEqual(Array.from({ length: rows }, (_, i) => `${field}-${i}`));
+      for (const element of elements) {
+        for (const attr of ['aria-invalid', 'aria-describedby']) {
+          if (element.hasAttribute(attr)) found.push(`${element.dataset.testid} ${attr}="${element.getAttribute(attr)}"`);
+        }
+      }
+    }
+    return found;
+  }
+
+  it('on the Details and Variants steps', () => {
+    render(<NewExperimentPage />);
+    next();
+    expect(heading()).toHaveTextContent(STEP_HEADINGS.details);
+    setValue('experiment-name', 'Nothing refused');
+    fireEvent.click(screen.getByTestId('add-metric'));
+    setValue('metric-name-1', 'Revenue');
+    setValue('metric-event-1', 'purchase');
+    expect(marks(METRIC_FIELDS, 2)).toEqual([]);
+
+    next();
+    expect(heading()).toHaveTextContent(STEP_HEADINGS.variants);
+    fireEvent.click(screen.getByTestId('add-variant'));
+    expect(marks(VARIANT_FIELDS, 3)).toEqual([]);
+  });
+
+  it('on the single-page form', () => {
+    routerAt({ advanced: '' });
+    render(<NewExperimentPage />);
+    fireEvent.click(screen.getByTestId('add-variant'));
+    fireEvent.click(screen.getByTestId('add-metric'));
+    expect(marks(VARIANT_FIELDS, 3)).toEqual([]);
+    expect(marks(METRIC_FIELDS, 2)).toEqual([]);
+  });
+});
+
 describe('accessibility of /experiments/new (axe-core in jsdom; colour contrast is not computable here)', () => {
   const axeOptions: axe.RunOptions = { rules: { 'color-contrast': { enabled: false } } };
 
