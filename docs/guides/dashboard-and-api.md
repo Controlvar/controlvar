@@ -50,4 +50,5 @@ The table lists each capability and where you do it today:
 | The effect size in the metric comparison table | API only | [Running experiments](user-guide.md) |
 | Each variant's confidence interval on the results page | API only | [Running experiments](user-guide.md) |
 | Bayesian priors, loss threshold and credible level | API only | [Bayesian analysis](../api/bayesian.md) |
-| Turn on sequential testing (beta) | API only | [Sequential testing](../api/sequential-testing.md#turning-it-on) |
+| Turn on sequential testing (beta) when creating an experiment | Dashboard | [Sequential testing](../api/sequential-testing.md#turning-it-on) |
+| Turn sequential testing (beta) on or off for an existing draft, and set its alpha | API only | [Sequential testing](../api/sequential-testing.md#turning-it-on) |

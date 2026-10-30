@@ -196,5 +196,9 @@ text = "Bayesian priors, loss threshold and credible level | API only | Bayesian
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Turn on sequential testing (beta) | API only | Sequential testing"
+text = "Turn on sequential testing (beta) when creating an experiment | Dashboard | Sequential testing"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Turn sequential testing (beta) on or off for an existing draft, and set its alpha | API only | Sequential testing"
 by = ["mechanism:dashboard-and-api"]

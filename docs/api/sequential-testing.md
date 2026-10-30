@@ -80,6 +80,11 @@ The sequential analysis uses its own `alpha`. It does not follow the experiment'
 stored `confidence_level` or `correction_method`, which judge the fixed-horizon results
 ([How results are judged](endpoints.md#how-results-are-judged)).
 
+In the dashboard, tick **Also test the primary metric sequentially (beta)** when you create
+the experiment: it is on guided setup's Estimate step and in the single-page form's
+**Analysis settings**. The dashboard then sends `sequential_testing_enabled: true` and no
+`sequential_testing_config`.
+
 Run the commands on this page in one terminal, in order, against the stack from the
 [Quick Start](../getting-started/quick-start.md). Each uses the shell variables set by the
 ones before it. Log in first:

@@ -416,6 +416,7 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
                 dispatch={dispatch}
                 variantCount={state.variants.length}
                 bayesianEnabled={state.bayesianEnabled}
+                sequentialEnabled={state.sequentialEnabled}
               />
               {/* Saved settings above; the estimate below, whose effect is saved. */}
               <section
@@ -516,6 +517,7 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
                     payload.correction_method ?? state.correctionMethod,
                   )}
                   {payload.bayesian_enabled ? ' · Bayesian analysis on' : ''}
+                  {payload.sequential_testing_enabled ? ' · Sequential testing (beta) on' : ''}
                 </p>
               </ReviewRow>
               <ReviewRow title="Sample size" onEdit={() => goTo(3)} editLabel="Edit sample size">

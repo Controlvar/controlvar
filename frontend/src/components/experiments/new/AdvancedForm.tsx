@@ -91,6 +91,7 @@ export function AdvancedForm({
             ? 'no correction'
             : `${correctionName(state.correctionMethod)} correction`}
           {state.bayesianEnabled && ', Bayesian analysis on'}
+          {state.sequentialEnabled && ', Sequential testing (beta) on'}
         </summary>
         <div className="mt-4">
           <AnalysisSettingsFields
@@ -99,6 +100,7 @@ export function AdvancedForm({
             dispatch={dispatch}
             variantCount={state.variants.length}
             bayesianEnabled={state.bayesianEnabled}
+            sequentialEnabled={state.sequentialEnabled}
           />
         </div>
       </details>
