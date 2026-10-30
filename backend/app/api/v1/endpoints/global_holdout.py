@@ -12,8 +12,8 @@ Routes:
 
 Activating a holdout (``is_active: true`` on POST or PUT) deactivates the
 active one.  Refused: a different ``holdout_percentage`` once the holdout has
-been active (422), restarting an ended holdout (422), and an activation that
-races another one (409).
+been active (422), restarting an ended holdout (422), an activation that
+races another one (409), and a name another holdout has (409, #1019).
     GET    /api/v1/holdout/check/{uid} — check if user is in holdout
     GET    /api/v1/holdout/{id}/results — holdout vs everyone else (beta)
 
@@ -51,6 +51,7 @@ from backend.app.services.global_holdout_service import (
     GlobalHoldoutService,
     HoldoutActivationConflict,
     HoldoutEnded,
+    HoldoutNameTaken,
     HoldoutPercentageLocked,
 )
 from backend.app.services.holdout_results import holdout_results
@@ -89,8 +90,8 @@ def _require_admin(user: User) -> None:
 
 
 def _refusal(error: Exception) -> HTTPException:
-    """The HTTP answer for a lifecycle refusal raised by the service."""
-    if isinstance(error, HoldoutActivationConflict):
+    """The HTTP answer for a refusal raised by the service."""
+    if isinstance(error, (HoldoutActivationConflict, HoldoutNameTaken)):
         return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error))
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)
@@ -193,9 +194,18 @@ def list_all_holdouts(
         "Create a new global holdout configuration. Requires ADMIN role. "
         "With is_active true it becomes the active holdout and the one that "
         "was active is deactivated; 409 when another activation happened at "
-        "the same time."
+        "the same time. 409 when another holdout has the name (compared "
+        "exactly, case included)."
     ),
     tags=["Global Holdout"],
+    responses={
+        409: {
+            "description": (
+                "Another holdout has this name, or another activation happened "
+                "at the same time"
+            )
+        }
+    },
 )
 def create_holdout(
     data: GlobalHoldoutCreate,
@@ -213,7 +223,7 @@ def create_holdout(
             is_active=data.is_active,
             owner_id=current_user.id,
         )
-    except HoldoutActivationConflict as error:
+    except (HoldoutActivationConflict, HoldoutNameTaken) as error:
         raise _refusal(error)
     response = GlobalHoldoutResponse.model_validate(holdout)
     _record(
@@ -242,9 +252,18 @@ def create_holdout(
         "is_active true deactivates the active holdout. Refused with 422: a "
         "different holdout_percentage once the holdout has been active (the "
         "same value is accepted), and is_active true on a holdout that has "
-        "ended. 409 when another activation happened at the same time."
+        "ended. 409 when another activation happened at the same time. 409 "
+        "when another holdout has the name (compared exactly, case included)."
     ),
     tags=["Global Holdout"],
+    responses={
+        409: {
+            "description": (
+                "Another holdout has this name, or another activation happened "
+                "at the same time"
+            )
+        }
+    },
 )
 def update_holdout(
     holdout_id: UUID,
@@ -269,6 +288,7 @@ def update_holdout(
         HoldoutPercentageLocked,
         HoldoutEnded,
         HoldoutActivationConflict,
+        HoldoutNameTaken,
     ) as error:
         raise _refusal(error)
     if not holdout:
