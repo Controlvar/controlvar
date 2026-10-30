@@ -262,5 +262,9 @@ describe('_app routeKind', () => {
     expect(routeKind('/admin/users')).toBe('protected');
     expect(routeKind('/results/[id]')).toBe('protected');
     expect(routeKind('/workspaces/[id]/members')).toBe('protected');
+    // #1455: the exclusion-group and global-holdout pages need a session (RequireAuth).
+    expect(routeKind('/experiments/exclusion-groups')).toBe('protected');
+    expect(routeKind('/experiments/exclusion-groups/[id]')).toBe('protected');
+    expect(routeKind('/experiments/holdouts')).toBe('protected');
   });
 });

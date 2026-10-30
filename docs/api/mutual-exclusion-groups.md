@@ -21,6 +21,12 @@ It prints `"ADMIN"`.
 
 ## Mutual Exclusion Groups
 
+In the dashboard, an ADMIN or DEVELOPER opens Exclusion groups from the Experiments page: it lists
+the groups and creates one. A group's page adds and removes its experiments, renames the group and
+changes its share of traffic, shown as a percent: 50% is a `traffic_allocation` of 0.5. It offers
+draft, active and paused experiments that are in no group, and none for an archived group.
+Archiving and unarchiving a group there needs the ADMIN role.
+
 ### How It Works
 
 Traffic is partitioned using consistent hashing on user ID. Each group has a `traffic_allocation` (0.0–1.0) that defines the fraction of users eligible for experiments within the group. Users are assigned to at most one experiment within the group.
@@ -173,6 +179,12 @@ experiment is kept.
 ---
 
 ## Global Holdout
+
+In the dashboard, Global holdouts on the Experiments page shows the active holdout to an ADMIN or
+DEVELOPER, and reads a holdout's results (beta) for one event name. An ADMIN also sees every
+holdout there, and creates, edits, activates and ends them; a new holdout's size starts at 5% in
+the dashboard. The page does not offer a new size once a holdout has been active, nor Activate for
+one that has ended.
 
 A global holdout keeps a percentage of new users out of **all** experiments platform-wide. New users in the holdout are not assigned to any experiment: `POST /api/v1/tracking/assign` answers with the control variant. Users who already had an assignment when the holdout was activated keep it.
 

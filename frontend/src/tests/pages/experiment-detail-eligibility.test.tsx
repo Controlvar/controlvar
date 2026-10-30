@@ -188,6 +188,77 @@ describe('a role that may read them (ADMIN, DEVELOPER, a superuser)', () => {
     );
   });
 
+  // #1455 (PLAN C5): membership is changed on the group's page, so the row
+  // links there, by the experiment's own group id, underlined (not by colour).
+  it.each(['active', 'archived'])("the %s group's name links to the group's page", async (status) => {
+    serve({}, { group: () => ({ ...GROUP, status }) });
+    await open();
+    const row = await screen.findByTestId('experiment-exclusion-group');
+    const links = Array.from(row.querySelectorAll('a'));
+    expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+      [row.textContent, '/experiments/exclusion-groups/grp-1'],
+    ]);
+    expect(Array.from(links[0].classList)).toContain('underline');
+  });
+
+  // #1455: the holdout row, answered, links to the global-holdout page,
+  // whether a holdout is active or none is.
+  it.each([
+    ['an active holdout', () => HOLDOUT, HOLDOUT_SENTENCE],
+    ['none active', () => null, 'None active'],
+  ] as [string, Reply, string][])('the holdout row for %s links to the global-holdout page', async (_, holdout, text) => {
+    serve({}, { holdout });
+    await open();
+    const row = await screen.findByTestId('experiment-holdout');
+    const links = Array.from(row.querySelectorAll('a'));
+    expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([[text, '/experiments/holdouts']]);
+    expect(Array.from(links[0].classList)).toContain('underline');
+  });
+
+  it.each([
+    ['loading', 'ADMIN', { holdout: pending }, 'experiment-holdout-loading'],
+    [
+      'error',
+      'ADMIN',
+      {
+        holdout: () => {
+          throw apiError(500, 'x');
+        },
+      },
+      'experiment-holdout-error',
+    ],
+    ['refused', 'VIEWER', {}, 'experiment-holdout-refused'],
+  ] as [string, string, { holdout?: Reply }, string][])('the holdout row %s links nowhere', async (_, role, replies, id) => {
+    signIn(role);
+    serve({}, replies);
+    await open();
+    const row = await screen.findByTestId(id);
+    expect(row.querySelectorAll('a')).toHaveLength(0);
+  });
+
+  it.each([
+    ['None', { mutual_exclusion_group_id: null }, {}, 'experiment-exclusion-group'],
+    ['loading', {}, { group: pending }, 'experiment-exclusion-group-loading'],
+    [
+      'error',
+      {},
+      {
+        group: () => {
+          throw apiError(500, 'x');
+        },
+      },
+      'experiment-exclusion-group-error',
+    ],
+  ] as [string, Partial<Experiment>, { group?: Reply }, string][])(
+    'the %s state links nowhere',
+    async (_, experiment, replies, id) => {
+      serve(experiment, replies);
+      await open();
+      const row = await screen.findByTestId(id);
+      expect(row.querySelectorAll('a')).toHaveLength(0);
+    },
+  );
+
   it('a group id the API leaves out reads "None", and is not asked for', async () => {
     const { mutual_exclusion_group_id: _omitted, ...rest } = EXPERIMENT;
     mockedApiFetch.mockImplementation(
@@ -497,16 +568,19 @@ describe('the note under the header', () => {
     serve();
     await open();
     const note = screen.getByTestId('experiment-api-settings-note');
-    expect(note).toHaveTextContent(
-      /^Set through the API, not on this page: exclusion groups, the global holdout, a paused experiment's resume, sequential testing\.$/,
+    // Exclusion groups and the global holdout are no longer named (#1455):
+    // their own pages change them, and their rows link there. Guided setup
+    // turns sequential testing on (#1463); only changing it afterwards is
+    // API-only. The sentence is fixed word for word (EM-3), and video 9 pins
+    // the same string.
+    expect(note.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      "Set through the API, not on this page: a paused experiment's resume, turning sequential testing on or off after creation.",
     );
     const links = Array.from(note.querySelectorAll('a'));
     expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
-      ['exclusion groups', docsUrl('api/mutual-exclusion-groups', 'mutual-exclusion-groups')],
-      ['the global holdout', docsUrl('api/mutual-exclusion-groups', 'global-holdout')],
       // A draft's dates are set on this page (#1454); a paused one's resume is not.
       ["a paused experiment's resume", docsUrl('guides/user-guide', 'pausing-and-stopping')],
-      ['sequential testing', docsUrl('api/sequential-testing', 'turning-it-on')],
+      ['turning sequential testing on or off after creation', docsUrl('api/sequential-testing', 'turning-it-on')],
     ]);
     for (const a of links) {
       // Blue on slate is 1.09:1, so colour alone cannot mark a link (WCAG 1.4.1).

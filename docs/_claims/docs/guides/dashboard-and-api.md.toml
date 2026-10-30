@@ -176,11 +176,11 @@ text = "Set a bandit's weights by hand | API only | Multi-armed bandits"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Global holdouts: create and activate; read their results (beta) | API only | Mutual exclusion groups and global holdout"
+text = "Global holdouts: create and activate; read their results (beta) | Dashboard | Mutual exclusion groups and global holdout"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Mutual exclusion groups | API only | Mutual exclusion groups and global holdout"
+text = "Mutual exclusion groups | Dashboard | Mutual exclusion groups and global holdout"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]

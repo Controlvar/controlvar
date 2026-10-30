@@ -213,6 +213,37 @@ describe('ExperimentsPage — create button by role', () => {
     expect(screen.queryByTestId('new-experiment-btn')).not.toBeInTheDocument();
   });
 
+  // #1455: a secondary link beside it, to the roles the group routes admit.
+  it.each(['ADMIN', 'DEVELOPER'])('offers %s the "Exclusion groups" link, underlined', async (role) => {
+    renderAs(role);
+    const link = await screen.findByTestId('exclusion-groups-link');
+    expect(link).toHaveTextContent(/^Exclusion groups$/);
+    expect(link).toHaveAttribute('href', '/experiments/exclusion-groups');
+    expect(Array.from(link.classList)).toContain('underline');
+  });
+
+  it.each(['ANALYST', 'VIEWER'])('shows %s no "Exclusion groups" link', async (role) => {
+    renderAs(role);
+    await screen.findByTestId('status-filter');
+    expect(screen.queryByTestId('exclusion-groups-link')).not.toBeInTheDocument();
+  });
+
+  it.each(['ADMIN', 'DEVELOPER'])('offers %s the "Global holdouts" link, underlined, after "Exclusion groups"', async (role) => {
+    renderAs(role);
+    const link = await screen.findByTestId('holdouts-link');
+    expect(link).toHaveTextContent(/^Global holdouts$/);
+    expect(link).toHaveAttribute('href', '/experiments/holdouts');
+    expect(Array.from(link.classList)).toContain('underline');
+    const order = Array.from(link.parentElement!.children).map((el) => el.getAttribute('data-testid'));
+    expect(order).toEqual(['exclusion-groups-link', 'holdouts-link', 'new-experiment-btn']);
+  });
+
+  it.each(['ANALYST', 'VIEWER'])('shows %s no "Global holdouts" link', async (role) => {
+    renderAs(role);
+    await screen.findByTestId('status-filter');
+    expect(screen.queryByTestId('holdouts-link')).not.toBeInTheDocument();
+  });
+
   it('offers it to a superuser whatever their role says', async () => {
     // check_permission lets a superuser through before it reads the role
     // table, so hiding the button from them would be stricter than the API.
@@ -232,6 +263,7 @@ describe('ExperimentsPage — create button by role', () => {
     });
     render(<ExperimentsPage />);
     expect(await screen.findByTestId('new-experiment-btn')).toBeInTheDocument();
+    expect(screen.getByTestId('exclusion-groups-link')).toBeInTheDocument();
   });
 });
 

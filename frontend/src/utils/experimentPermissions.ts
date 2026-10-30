@@ -42,6 +42,31 @@ export function canReadEligibility(
 }
 
 /**
+ * Whether the API would let this user archive or unarchive an exclusion group
+ * (#1455), and, from #1455's second half, list, create, edit, activate and
+ * end global holdouts.
+ *
+ * Mirrors `_require_admin` in both `mutual_exclusion_groups.py` and
+ * `global_holdout.py`: a superuser, or the ADMIN role itself. It checks the
+ * role, not a permission from the role table (no permission there is held by
+ * ADMIN alone), so `test_dashboard_experiment_roles.py` calls both
+ * `_require_admin` functions for every role and holds the set they admit
+ * equal to this list.
+ *
+ * Unlike the helpers above, a null user (no session yet) answers FALSE: these
+ * controls appear only once the user is known to be an ADMIN or a superuser.
+ */
+const ROLES_THAT_ADMINISTER_ELIGIBILITY = ['ADMIN'] as const;
+
+export function canAdministerEligibility(
+  user: { role?: string | null; is_superuser?: boolean } | null | undefined,
+): boolean {
+  if (!user) return false;
+  if (user.is_superuser) return true;
+  return ROLES_THAT_ADMINISTER_ELIGIBILITY.includes(user.role as 'ADMIN');
+}
+
+/**
  * Whether the API would accept a lifecycle change (start, pause, complete,
  * archive) from this user.
  *

@@ -36,6 +36,39 @@ text = "Mutual Exclusion Groups"
 by = ["exempt:baseline"]
 
 [[unit]]
+text = "In the dashboard, an ADMIN or DEVELOPER opens Exclusion groups from the Experiments page: it lists the groups and creates one."
+by = [
+    "test:frontend/src/tests/pages/experiments-index.test.tsx::offers %s the \"Exclusion groups\" link, underlined",
+    "test:frontend/src/tests/pages/exclusion-groups.test.tsx::sees each group, its share as a percent, its count and its status as a word, after one read",
+    "test:frontend/src/tests/pages/exclusion-groups.test.tsx::sends exactly the name and the share as a fraction: 50% is 0.5",
+]
+
+[[unit]]
+text = "A group's page adds and removes its experiments, renames the group and changes its share of traffic, shown as a percent: 50% is a traffic_allocation of 0.5."
+by = [
+    "test:frontend/src/tests/pages/exclusion-group-detail.test.tsx::sends POST {experiment_id} for the chosen one, then shows it as a member",
+    "test:frontend/src/tests/pages/exclusion-group-detail.test.tsx::asks first, naming it, then sends DELETE on its own path and re-reads",
+    "test:frontend/src/tests/pages/exclusion-group-detail.test.tsx::sends a name that differs only in case, and only the name",
+    "test:frontend/src/tests/pages/exclusion-group-detail.test.tsx::sends a new share as a fraction, and nothing else: 25% is 0.25",
+    "test:frontend/src/tests/pages/exclusion-groups.test.tsx::sends exactly the name and the share as a fraction: 50% is 0.5",
+]
+
+[[unit]]
+text = "It offers draft, active and paused experiments that are in no group, and none for an archived group."
+by = [
+    "test:frontend/src/tests/pages/exclusion-group-detail.test.tsx::the picker offers draft, active and paused experiments that are in no group, and nothing else",
+    "test:frontend/src/tests/pages/exclusion-group-detail.test.tsx::is not offered for an archived group, and its experiments are not read; Remove stays",
+]
+
+[[unit]]
+text = "Archiving and unarchiving a group there needs the ADMIN role."
+by = [
+    "test:frontend/src/tests/pages/exclusion-group-detail.test.tsx::a DEVELOPER is told it needs the ADMIN role, and has no control for it",
+    "test:frontend/src/tests/pages/exclusion-group-detail.test.tsx::an ADMIN unarchives with PUT {status: \"active\"}, and the picker returns",
+    "test:backend/tests/unit/core/test_dashboard_experiment_roles.py::test_administer_eligibility_roles_match_require_admin",
+]
+
+[[unit]]
 text = "How It Works"
 by = ["exempt:baseline"]
 
@@ -278,6 +311,32 @@ by = ["exempt:baseline"]
 [[unit]]
 text = "Global Holdout"
 by = ["exempt:baseline"]
+
+[[unit]]
+text = "In the dashboard, Global holdouts on the Experiments page shows the active holdout to an ADMIN or DEVELOPER, and reads a holdout's results (beta) for one event name."
+by = [
+    "test:frontend/src/tests/pages/experiments-index.test.tsx::offers %s the \"Global holdouts\" link, underlined, after \"Exclusion groups\"",
+    "test:frontend/src/tests/pages/holdouts.test.tsx::a DEVELOPER reads the active holdout only, never /holdout/all, and is told who changes it",
+    "test:frontend/src/tests/pages/holdouts.test.tsx::sends query {metric}, then shows each group, the difference, its interval, p and the verdict as a word",
+]
+
+[[unit]]
+text = "An ADMIN also sees every holdout there, and creates, edits, activates and ends them; a new holdout's size starts at 5% in the dashboard."
+by = [
+    "test:frontend/src/tests/pages/holdouts.test.tsx::reads /holdout/all once, and sees every holdout and the active one",
+    "test:frontend/src/tests/pages/holdouts.test.tsx::defaults to 5% and not activated, says what the size means, and sends exactly that",
+    "test:frontend/src/tests/pages/holdouts.test.tsx::activating asks first, naming the holdout it ends; then PUT is_active: true, a re-read, and one Active",
+    "test:frontend/src/tests/pages/holdouts.test.tsx::ending asks first, then PUT is_active: false, and none is active",
+    "test:frontend/src/tests/pages/holdouts.test.tsx::a holdout never activated: its size can change, and only what changed is sent",
+    "test:backend/tests/unit/core/test_dashboard_experiment_roles.py::test_administer_eligibility_roles_match_require_admin",
+]
+
+[[unit]]
+text = "The page does not offer a new size once a holdout has been active, nor Activate for one that has ended."
+by = [
+    "test:frontend/src/tests/pages/holdouts.test.tsx::has been active: its size is text, never a field, and is never sent",
+    "test:frontend/src/tests/pages/holdouts.test.tsx::Activate is offered only on a holdout never activated; End only on the active one",
+]
 
 [[unit]]
 text = "A global holdout keeps a percentage of new users out of all experiments platform-wide."
