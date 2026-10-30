@@ -98,6 +98,7 @@ export default function HomePage() {
                 </Link>
               )}
             </div>
+            <div style={{ width: 600 }}>TAMPER: a 600 px element on a 390 px phone</div>
             <p className="mt-6 text-sm text-slate-500">
               Apache-2.0. Both build profiles are the same licence and the same price: none.
             </p>
