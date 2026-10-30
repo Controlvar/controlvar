@@ -1,0 +1,45 @@
+{
+  "captured_at": "v0.39.0",
+  "screens": [
+    {
+      "id": "results",
+      "file": "results-989157c0734b.webp",
+      "bytes": 40530,
+      "sha256": "989157c0734b195d85655dd9df45082c9fea8948f3e30f147f4a5a38cad00412",
+      "width": 1440,
+      "height": 698,
+      "alt": "The results page of a ShopLab demo experiment in the Controlvar dashboard: its users, the planned sample reached, the change on each metric with its p-value, the winning variant and the sample ratio check.",
+      "caption": "An experiment's results in the dashboard (Controlvar v0.39.0), with data from the ShopLab demo storefront."
+    },
+    {
+      "id": "flag-rollout",
+      "file": "flag-rollout-6c9096d83401.webp",
+      "bytes": 28372,
+      "sha256": "6c9096d834011be2e395dbd766817394a31ff86d0c6a6e402926d4b5d8536c42",
+      "width": 1280,
+      "height": 620,
+      "alt": "A feature flag's page in the dashboard: its rollout schedule in stages, with the current stage, beside its safety check on the error rate.",
+      "caption": null
+    },
+    {
+      "id": "power-calculator",
+      "file": "power-calculator-3e0fd4e58efc.webp",
+      "bytes": 49134,
+      "sha256": "3e0fd4e58efcab378d7aac4ded6cb3db2b05b2c19ae2258fd64338cfce4cc2ef",
+      "width": 1280,
+      "height": 800,
+      "alt": "The power calculator: the baseline conversion rate, the minimum detectable effect, the sample size each variant needs, and a power curve.",
+      "caption": null
+    },
+    {
+      "id": "audit-log",
+      "file": "audit-log-95d6d1bed7d4.webp",
+      "bytes": 43362,
+      "sha256": "95d6d1bed7d450cb168b20f07dc0ceebd1f8a7a9c0bce9b3aade1f02daeffa7f",
+      "width": 1280,
+      "height": 620,
+      "alt": "The audit log, filtered to feature flags: each change with its time, user, action and flag.",
+      "caption": null
+    }
+  ]
+}
