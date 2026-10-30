@@ -10,6 +10,31 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.39.0](https://github.com/Controlvar/controlvar/compare/v0.38.0...v0.39.0) (2026-10-30)
+
+
+### Features
+
+* **dashboard:** create and run a feature flag's rollout schedule ([#1465](https://github.com/Controlvar/controlvar/issues/1465)) ([ab3c128](https://github.com/Controlvar/controlvar/commit/ab3c128a2c33a92d7d1cb6c80c69d2c63a8187f3))
+* **dashboard:** create, activate and end the global holdout, and read its results (beta) ([#1475](https://github.com/Controlvar/controlvar/issues/1475)) ([ba7dbf7](https://github.com/Controlvar/controlvar/commit/ba7dbf7fa7021e727a5224de5c9405c14b402454))
+* **dashboard:** edit a draft experiment's variants and metrics ([#1468](https://github.com/Controlvar/controlvar/issues/1468)) ([7140c71](https://github.com/Controlvar/controlvar/commit/7140c71e58c125c6246a7be3841a79105490f2ab))
+* **dashboard:** guided setup turns on sequential testing (beta) ([#1463](https://github.com/Controlvar/controlvar/issues/1463)) ([b3fc517](https://github.com/Controlvar/controlvar/commit/b3fc5172ca87e3489102560e4b12de65058fc0d3))
+* **dashboard:** manage exclusion groups, and add an experiment to one ([#1473](https://github.com/Controlvar/controlvar/issues/1473)) ([9f21fa8](https://github.com/Controlvar/controlvar/commit/9f21fa85b38734363015e7af3a5c962765bf207a))
+* **dashboard:** schedule a draft experiment's start and end dates ([#1471](https://github.com/Controlvar/controlvar/issues/1471)) ([2d19351](https://github.com/Controlvar/controlvar/commit/2d19351aa2189019be4b84e8787e3d771c3b3f22))
+
+
+### Bug Fixes
+
+* **api:** a duplicate exclusion group or holdout name answers 409 ([#1467](https://github.com/Controlvar/controlvar/issues/1467)) ([4bb6bcd](https://github.com/Controlvar/controlvar/commit/4bb6bcde6c57498af4071fdccb8946f43ecbb99d))
+* **api:** the experiment page shows a group change or a scheduled start at once when caching is on ([#1474](https://github.com/Controlvar/controlvar/issues/1474)) ([55b2909](https://github.com/Controlvar/controlvar/commit/55b290982a3d8e15edcecab9c2b931713330afc0))
+* **dashboard:** no light-grey text on the experiment form and page ([#1477](https://github.com/Controlvar/controlvar/issues/1477)) ([f50190f](https://github.com/Controlvar/controlvar/commit/f50190f8e044f796a8180d4880ea2cc73a590e0a))
+* **dashboard:** the experiment page says "Starts" for a start still ahead, and shows whether sequential testing is on ([#1450](https://github.com/Controlvar/controlvar/issues/1450)) ([c27a304](https://github.com/Controlvar/controlvar/commit/c27a304612799c316b955c6352b3c74d0d405d5e))
+* **dashboard:** the experiment page shows its exclusion group and the global holdout, read-only ([#1452](https://github.com/Controlvar/controlvar/issues/1452)) ([982041c](https://github.com/Controlvar/controlvar/commit/982041c2e9681f5983260b3a3a61c6391bf45fb3))
+* **deps:** joserfc 1.7.6, for GHSA-9pg5-8c7x-5hfx ([#1476](https://github.com/Controlvar/controlvar/issues/1476)) ([314bd3e](https://github.com/Controlvar/controlvar/commit/314bd3e75f068ac3ef727ec0fcb6a6a812174ca9))
+* **scheduler:** a scheduled draft that cannot start stays a draft ([#1464](https://github.com/Controlvar/controlvar/issues/1464)) ([522fdc9](https://github.com/Controlvar/controlvar/commit/522fdc9916a6f9f81dca263b9a4a469e052dba40))
+* **site:** one header on every page, with a phone menu ([#1472](https://github.com/Controlvar/controlvar/issues/1472)) ([fd26ece](https://github.com/Controlvar/controlvar/commit/fd26ece15a67f9c4eed5ca44489a88c5bb121e4a))
+* **site:** shared links show a preview card (Open Graph and Twitter tags, /og.png) ([#1470](https://github.com/Controlvar/controlvar/issues/1470)) ([d18d32f](https://github.com/Controlvar/controlvar/commit/d18d32f7d1635c1ed67e52bc0401e5b1e241d928))
+
 ## [0.38.0](https://github.com/Controlvar/controlvar/compare/v0.37.0...v0.38.0) (2026-10-29)
 
 
