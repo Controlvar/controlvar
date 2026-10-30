@@ -10,8 +10,8 @@ You'll need an account with one of the following roles:
 
 | Role | What You Can Do |
 |------|----------------|
-| **ADMIN** | Create, change, schedule and delete any experiment (scheduling is through the API; [which actions have a screen](dashboard-and-api.md)); create and manage any feature flag |
-| **DEVELOPER** | Create, change, schedule and delete any experiment (scheduling is through the API; [which actions have a screen](dashboard-and-api.md)); create and manage any feature flag |
+| **ADMIN** | Create, change, schedule and delete any experiment ([which actions have a screen](dashboard-and-api.md)); create and manage any feature flag |
+| **DEVELOPER** | Create, change, schedule and delete any experiment ([which actions have a screen](dashboard-and-api.md)); create and manage any feature flag |
 | **ANALYST** | View all experiments, results, and reports, and every feature flag, and change no experiment or flag; like every role, create an API key, which writes tracking data |
 | **VIEWER** | View every experiment and its results, and every feature flag, and change no experiment or flag; like every role, create an API key, which writes tracking data |
 
@@ -152,10 +152,16 @@ The experiment is created as a draft and you land on its page.
 
 Click **Start** on the experiment's page. The status changes to `ACTIVE`.
 
-You can also schedule automatic start and end dates. The dashboard has no schedule
-screen yet, so this is an API call: `PUT /api/v1/experiments/{experiment_id}/schedule`,
+You can also schedule automatic start and end dates. On a draft's page, **Schedule** opens a
+**Start** and an **End (optional)** picker in your browser's time zone, and shows under each
+the time it will be saved as, in your zone and in UTC. **Save dates** sends only the dates you
+changed, and **Remove** clears one. The page refuses a start or an end in the past, and an end
+less than an hour after the start, before it sends anything. Through the API, this is
+`PUT /api/v1/experiments/{experiment_id}/schedule`,
 on a `DRAFT` experiment, with an ADMIN or DEVELOPER token. The experiment activates at
-`start_date` and completes at `end_date`, which must be at least an hour later. A draft that
+`start_date` and completes at `end_date`, which must be at least an hour later. The scheduler
+checks every 15 minutes by default (`EXPERIMENT_SCHEDULER_INTERVAL_MINUTES`), so it can start
+or complete up to that much later. A draft that
 is not ready to start (it needs two variants, a control and a metric) stays a draft until it
 is. A date you leave out of the request is left as it is, and `null` clears it. A date written without a
 UTC offset is read in `time_zone`, an IANA name such as `America/Los_Angeles` (default
@@ -413,11 +419,12 @@ read-only. Saving other changes, such as the rollout percentage, leaves them as 
 
 For gradual rollouts on a schedule:
 
-Create a rollout schedule through the API with `POST /api/v1/rollout-schedules/` (the stages
-go in its `stages` list; see [Rollouts](../feature-flags/rollouts.md) for the full contract),
-then start it with
-`POST /api/v1/rollout-schedules/{schedule_id}/activate`. The flag's page in the dashboard
-shows the schedule, its status and its stages, read-only. A schedule like this one:
+On the flag's page, **Create a rollout schedule** under **Rollout schedule** takes a name and
+the stages, in order, and **Activate** starts it (see
+[Rollouts](../feature-flags/rollouts.md#in-the-dashboard)). Through the API, create one with
+`POST /api/v1/rollout-schedules/` (the stages go in its `stages` list; see
+[Rollouts](../feature-flags/rollouts.md) for the full contract), then start it with
+`POST /api/v1/rollout-schedules/{schedule_id}/activate`. A schedule like this one:
 
 | Stage | Target % | Trigger Type | Start Date |
 |-------|----------|-------------|-----------|
@@ -426,7 +433,8 @@ shows the schedule, its status and its stages, read-only. A schedule like this o
 | Stage 3 | 100% | Manual | — |
 
 The platform automatically advances time-based stages. A manual stage waits until you
-advance it with `POST /api/v1/rollout-schedules/stages/{stage_id}/advance`.
+advance it: **Start stage** or **Complete stage** on the flag's page, or
+`POST /api/v1/rollout-schedules/stages/{stage_id}/advance`.
 
 [Guided examples](guided-examples.md#rollout) points to a staged rollout with an automatic rollback that runs on the demo stack.
 

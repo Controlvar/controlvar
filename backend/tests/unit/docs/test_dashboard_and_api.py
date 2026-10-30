@@ -115,9 +115,19 @@ WITNESSES: Dict[str, str] = {
     ),
     # After launch (#442's checklist).
     "Change a draft experiment's variants or metrics": "experiment-edit-variants",
-    "Schedule an experiment's start and end dates": "experiment-schedule-form",
+    # #1454: a draft's schedule on the experiment page. A paused experiment's
+    # resume goes through the same route, which the page does not offer:
+    # reserved; no screen planned.
+    "Schedule a draft experiment's start and end dates": "experiment-schedule-form",
+    "Schedule a paused experiment's resume": "experiment-schedule-resume",
+    # #1456: the flag page's rollout schedule controls.
     "Create or edit a rollout schedule and its stages": "rollout-schedule-form",
-    "Activate, pause or advance a rollout schedule": "rollout-schedule-actions",
+    "Activate, pause, resume or cancel a rollout schedule, and advance a manual "
+    "stage": "rollout-schedule-actions",
+    # #1456 leaves these to the API: the dashboard sends no schedule dates and
+    # no minimum duration, and always the default maximum, 100.
+    "Set a rollout schedule's own start and end dates, maximum percentage and "
+    "minimum stage duration": "rollout-schedule-settings",
     "Delete a feature flag": "flag-delete",
     "Archive and unarchive a feature flag": "flag-archive",
     "Create a bandit experiment": "bandit-create",
@@ -138,7 +148,8 @@ WITNESSES: Dict[str, str] = {
     "Turn on sequential testing (beta) when creating an experiment": (
         "analysis-sequential"
     ),
-    # #1454 (C13): an existing draft's switch and its alpha, when it comes.
+    # #1454 (C13): an existing draft's switch and its alpha: reserved; no
+    # screen planned.
     "Turn sequential testing (beta) on or off for an existing draft, and set its "
     "alpha": "experiment-sequential-settings",
 }
@@ -698,6 +709,29 @@ STALE: Tuple[Tuple[str, str], ...] = (
         r"bayesian and frequentist analysis",
         "a headline that does not say which of the two the dashboard shows",
     ),
+    (
+        r"delete (this|the|a) draft and (create|make) it again",
+        "the experiment page's Edit variants and metrics changes a draft's "
+        "variants and metrics in place (#1453)",
+    ),
+    (
+        r"shows the schedule[^.]{0,80}read-only",
+        "the flag's page creates and runs a rollout schedule (#1456)",
+    ),
+    (
+        r"schedules (?:can be|are) (?:created|made) (?:only )?through "
+        r"(?:the api\b|/api/v1/rollout-schedules)",
+        "the flag's page creates a rollout schedule (#1456); the API is the other way",
+    ),
+    (
+        r"scheduling is through the api",
+        "the experiment page's Schedule sets a draft's start and end (#1454); "
+        "only a paused experiment's resume is API only",
+    ),
+    (
+        r"(dashboard|page) has no schedule screen",
+        "the experiment page's Schedule sets a draft's start and end (#1454)",
+    ),
 )
 
 _DROP = frozenset("*`")
@@ -776,6 +810,20 @@ def test_no_page_repeats_a_removed_dashboard_claim():
         "Classic A/B test, sequential testing (mSPRT), Bayesian results (API only), variant",
         "(frequentist + sequential in the dashboard, Bayesian in the API)",
         "Statistical rigor with Bayesian and Frequentist analysis",
+        "Variants and metrics cannot; to change them, delete this draft and\n"
+        "create it again.",
+        # #1456: rollouts.md, user-guide.md and the flag page's own empty state.
+        "In the dashboard, the flag's page shows the schedule read-only under **Rollout schedule**: its",
+        "`POST /api/v1/rollout-schedules/{schedule_id}/activate`. The flag's page in the dashboard\n"
+        "shows the schedule, its status and its stages, read-only. A schedule like this one:",
+        "No rollout schedule. The rollout percentage below applies immediately; schedules\n"
+        "can be created through `/api/v1/rollout-schedules`.",
+        "Rollout schedules are made through the API (/api/v1/rollout-schedules);",
+        # #1454: user-guide.md's role table and its scheduling paragraph.
+        "Create, change, schedule and delete any experiment (scheduling is through the API; "
+        "[which actions have a screen](dashboard-and-api.md))",
+        "You can also schedule automatic start and end dates. The dashboard has no schedule\n"
+        "screen yet, so this is an API call:",
     ],
 )
 def test_the_sweep_catches_the_removed_wording(removed):

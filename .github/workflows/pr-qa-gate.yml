@@ -436,6 +436,7 @@ jobs:
           rm -rf .next out
           npm run build:marketing
           node scripts/check-site-media.mjs out
+          node --test scripts/site-head.test.mjs
 
   # Each SDK's OWN exported hash function against golden-vectors.json: the
   # Python SDK's source, the JS and edge packages as built, the React Native

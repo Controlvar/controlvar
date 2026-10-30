@@ -68,6 +68,25 @@ def test_the_default_is_15_minutes():
 
 
 @pytest.mark.regression
+def test_the_schedule_form_quotes_the_default():
+    """The experiment page's schedule form (#1454) tells the user how late a
+    scheduled draft can start: the default interval, in minutes. Reads the
+    component's source, not docs/."""
+    import re
+    from pathlib import Path
+
+    form = (
+        Path(__file__).resolve().parents[4]
+        / "frontend/src/components/experiments/ExperimentScheduleSection.tsx"
+    )
+    quoted = re.findall(r"every (\d+) minutes by default", form.read_text("utf-8"))
+    assert quoted, f"{form.name} no longer says how often the scheduler checks"
+    assert {int(n) for n in quoted} == {
+        Settings.model_fields["EXPERIMENT_SCHEDULER_INTERVAL_MINUTES"].default
+    }
+
+
+@pytest.mark.regression
 def test_the_environment_variable_sets_it(monkeypatch):
     monkeypatch.setenv("EXPERIMENT_SCHEDULER_INTERVAL_MINUTES", "2")
     assert Settings(_env_file=None).EXPERIMENT_SCHEDULER_INTERVAL_MINUTES == 2

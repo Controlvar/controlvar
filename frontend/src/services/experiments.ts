@@ -1,5 +1,6 @@
 import {
   Experiment,
+  ExperimentDesignUpdate,
   ExperimentListResponse,
   CreateExperimentRequest,
   ExperimentStatus,
@@ -65,6 +66,18 @@ export interface CreateOptions {
   redirectOn401?: boolean;
 }
 
+/**
+ * The body of a draft's schedule change (#1454): only the dates that changed.
+ * Each is an instant with a `Z` (`Date.toISOString()`), or null to clear it.
+ * A date the body leaves out is kept as stored. `time_zone` is never sent:
+ * an instant with an offset does not need it, and the API refuses a zone
+ * name it does not know.
+ */
+export interface ExperimentScheduleUpdate {
+  start_date?: string | null;
+  end_date?: string | null;
+}
+
 const BASE = '/api/v1/experiments';
 
 export const ExperimentsService = {
@@ -128,6 +141,16 @@ export const ExperimentsService = {
   },
 
   /**
+   * `PUT /api/v1/experiments/{id}` with exactly `{variants, metrics}`, both
+   * complete. The API replaces both lists in one commit, on a DRAFT
+   * experiment only (400 otherwise, for every role); `buildDesignPayload`
+   * builds the body.
+   */
+  async updateDesign(id: string, body: ExperimentDesignUpdate): Promise<Experiment> {
+    return apiFetch<Experiment>(`${BASE}/${id}`, { method: 'PUT', json: body });
+  },
+
+  /**
    * `POST /api/v1/experiments/{id}/clone`, with no body. The answer is the new
    * experiment: a DRAFT named "Copy of …", with a key of its own, owned by the
    * caller. It needs READ on the source and CREATE (ADMIN or DEVELOPER).
@@ -163,5 +186,16 @@ export const ExperimentsService = {
 
   async archive(id: string): Promise<Experiment> {
     return apiFetch<Experiment>(`${BASE}/${id}/archive`, { method: 'POST' });
+  },
+
+  /**
+   * `PUT /api/v1/experiments/{id}/schedule`. On a DRAFT, `start_date` and
+   * `end_date` are when the scheduler starts and completes it; a date the
+   * body leaves out is kept, and null clears it. The answer is the
+   * experiment. On a PAUSED experiment the API reads `start_date` as a
+   * resume time instead; the dashboard offers this on a draft only.
+   */
+  async schedule(id: string, body: ExperimentScheduleUpdate): Promise<Experiment> {
+    return apiFetch<Experiment>(`${BASE}/${id}/schedule`, { method: 'PUT', json: body });
   },
 };

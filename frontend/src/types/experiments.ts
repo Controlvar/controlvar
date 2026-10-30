@@ -108,6 +108,47 @@ export interface MetricInput {
   lower_is_better?: boolean;
 }
 
+/**
+ * `VariantBase` as the dashboard's design edit sends it: all five fields,
+ * every time. An Optional field with no value is sent as null.
+ */
+export interface DesignVariant {
+  name: string;
+  description: string | null;
+  is_control: boolean;
+  traffic_allocation: number;
+  configuration: Record<string, unknown> | null;
+}
+
+/**
+ * `MetricBase` as the dashboard's design edit sends it. The Optional fields
+ * (`description`, `expected_effect`, `event_value_path`) are sent as null when
+ * they have no value; `aggregation_method` and `minimum_sample_size` have
+ * non-null defaults and are left out instead, because null is refused there.
+ */
+export interface DesignMetric {
+  name: string;
+  description: string | null;
+  event_name: string;
+  metric_type: MetricType;
+  is_primary: boolean;
+  aggregation_method?: string;
+  minimum_sample_size?: number;
+  expected_effect: number | null;
+  event_value_path: string | null;
+  lower_is_better: boolean;
+}
+
+/**
+ * The body of a design edit (`PUT /api/v1/experiments/{id}`): exactly the two
+ * lists, both complete. The update replaces both lists wholesale, so a
+ * variant, a metric or a field left out would be deleted or reset.
+ */
+export interface ExperimentDesignUpdate {
+  variants: DesignVariant[];
+  metrics: DesignMetric[];
+}
+
 /** `ExperimentCreate` */
 export interface CreateExperimentRequest {
   name: string;

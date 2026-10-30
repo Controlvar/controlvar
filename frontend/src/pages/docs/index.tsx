@@ -168,6 +168,7 @@ export default function DocsIndex() {
     <>
       <PageTitle
         title="Documentation"
+        path="/docs"
         description="Controlvar documentation: quick start, a guide for every SDK, API reference, integrations, HIPAA controls and self-hosting."
       />
 

@@ -24,14 +24,14 @@ text = "Role | What You Can Do"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "ADMIN | Create, change, schedule and delete any experiment (scheduling is through the API; which actions have a screen); create and manage any feature flag"
+text = "ADMIN | Create, change, schedule and delete any experiment (which actions have a screen); create and manage any feature flag"
 by = [
     "test:backend/tests/integration/api/test_experiment_access_by_role.py",
     "test:backend/tests/integration/api/test_flag_change_routes_access.py",
 ]
 
 [[unit]]
-text = "DEVELOPER | Create, change, schedule and delete any experiment (scheduling is through the API; which actions have a screen); create and manage any feature flag"
+text = "DEVELOPER | Create, change, schedule and delete any experiment (which actions have a screen); create and manage any feature flag"
 by = [
     "test:backend/tests/integration/api/test_experiment_access_by_role.py",
     "test:backend/tests/integration/api/test_flag_change_routes_access.py",
@@ -409,7 +409,30 @@ text = "You can also schedule automatic start and end dates."
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "The dashboard has no schedule screen yet, so this is an API call: PUT /api/v1/experiments/{experiment_id}/schedule, on a DRAFT experiment, with an ADMIN or DEVELOPER token."
+text = "On a draft's page, Schedule opens a Start and an End (optional) picker in your browser's time zone, and shows under each the time it will be saved as, in your zone and in UTC."
+by = [
+    "test:frontend/src/tests/pages/experiment-detail-schedule.test.tsx::a start picked at %s local is sent as %s, and nothing else",
+    "test:frontend/src/tests/pages/experiment-detail-schedule.test.tsx::the read-back names the UTC day when it is not the local one",
+    "test:frontend/src/tests/pages/experiment-detail-schedule.test.tsx::each picker has a visible label, and its help, zone line and read-back describe it",
+]
+
+[[unit]]
+text = "Save dates sends only the dates you changed, and Remove clears one."
+by = [
+    "test:frontend/src/tests/pages/experiment-detail-schedule.test.tsx::only the end is sent when only the end changed; the stored start is not resent",
+    "test:frontend/src/tests/pages/experiment-detail-schedule.test.tsx::Remove on the %s sends null for it alone",
+]
+
+[[unit]]
+text = "The page refuses a start or an end in the past, and an end less than an hour after the start, before it sends anything."
+by = [
+    "test:frontend/src/tests/pages/experiment-detail-schedule.test.tsx::a start one minute in the past",
+    "test:frontend/src/tests/pages/experiment-detail-schedule.test.tsx::an end in the past",
+    "test:frontend/src/tests/pages/experiment-detail-schedule.test.tsx::an end less than an hour after the STORED start, the end alone changed",
+]
+
+[[unit]]
+text = "Through the API, this is PUT /api/v1/experiments/{experiment_id}/schedule, on a DRAFT experiment, with an ADMIN or DEVELOPER token."
 by = [
     "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestUpdateExperimentSchedule::test_admin_can_schedule_draft_experiment",
     "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestUpdateExperimentSchedule::test_schedule_active_experiment_returns_400",
@@ -422,6 +445,13 @@ by = [
     "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p6_due_draft_activates",
     "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_draft_refusal_from_the_stored_start_date_writes_nothing",
     "test:backend/tests/integration/services/test_audit_service_sites.py::test_scheduled_end_is_recorded_by_the_experiment_scheduler",
+]
+
+[[unit]]
+text = "The scheduler checks every 15 minutes by default (EXPERIMENT_SCHEDULER_INTERVAL_MINUTES), so it can start or complete up to that much later."
+by = [
+    "test:backend/tests/unit/core/test_documented_defaults.py::test_the_scheduler_cycles",
+    "test:backend/tests/unit/core/test_experiment_scheduler_interval.py",
 ]
 
 [[unit]]
@@ -1123,15 +1153,18 @@ text = "For gradual rollouts on a schedule:"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Create a rollout schedule through the API with POST /api/v1/rollout-schedules/ (the stages go in its stages list; see Rollouts for the full contract), then start it with POST /api/v1/rollout-schedules/{schedule_id}/activate."
+text = "On the flag's page, Create a rollout schedule under Rollout schedule takes a name and the stages, in order, and Activate starts it (see Rollouts)."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::sends one POST with the stages numbered from 1 in list order, and shows the draft",
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::Activate, confirmed, POSTs /activate and the schedule reads Active",
+]
+
+[[unit]]
+text = "Through the API, create one with POST /api/v1/rollout-schedules/ (the stages go in its stages list; see Rollouts for the full contract), then start it with POST /api/v1/rollout-schedules/{schedule_id}/activate."
 by = [
     "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestCreateRolloutSchedule::test_created_schedule_stores_stages_and_owner",
     "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestRolloutScheduleLifecycle::test_activate_draft_schedule",
 ]
-
-[[unit]]
-text = "The flag's page in the dashboard shows the schedule, its status and its stages, read-only."
-by = ["test:frontend/src/tests/pages/feature-flag-detail.test.tsx"]
 
 [[unit]]
 text = "A schedule like this one:"
@@ -1158,8 +1191,12 @@ text = "The platform automatically advances time-based stages."
 by = ["test:backend/tests/unit/core/test_rollout_scheduler.py"]
 
 [[unit]]
-text = "A manual stage waits until you advance it with POST /api/v1/rollout-schedules/stages/{stage_id}/advance."
-by = ["test:backend/tests/integration/api/test_rollout_schedules_api.py::TestRolloutStages::test_advance_manual_stage_on_active_schedule"]
+text = "A manual stage waits until you advance it: Start stage or Complete stage on the flag's page, or POST /api/v1/rollout-schedules/stages/{stage_id}/advance."
+by = [
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestRolloutStages::test_advance_manual_stage_on_active_schedule",
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::offers exactly one control: Complete on the manual stage in progress, naming the next stage",
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::offers Start on the first pending stage only when it is manual and nothing is in progress",
+]
 
 [[unit]]
 text = "Guided examples points to a staged rollout with an automatic rollback that runs on the demo stack."
