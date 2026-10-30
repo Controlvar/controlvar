@@ -569,15 +569,18 @@ describe('the note under the header', () => {
     await open();
     const note = screen.getByTestId('experiment-api-settings-note');
     // Exclusion groups and the global holdout are no longer named (#1455):
-    // their own pages change them, and their rows link there.
-    expect(note).toHaveTextContent(
-      /^Set through the API, not on this page: a paused experiment's resume, sequential testing\.$/,
+    // their own pages change them, and their rows link there. Guided setup
+    // turns sequential testing on (#1463); only changing it afterwards is
+    // API-only. The sentence is fixed word for word (EM-3), and video 9 pins
+    // the same string.
+    expect(note.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      "Set through the API, not on this page: a paused experiment's resume, turning sequential testing on or off after creation.",
     );
     const links = Array.from(note.querySelectorAll('a'));
     expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
       // A draft's dates are set on this page (#1454); a paused one's resume is not.
       ["a paused experiment's resume", docsUrl('guides/user-guide', 'pausing-and-stopping')],
-      ['sequential testing', docsUrl('api/sequential-testing', 'turning-it-on')],
+      ['turning sequential testing on or off after creation', docsUrl('api/sequential-testing', 'turning-it-on')],
     ]);
     for (const a of links) {
       // Blue on slate is 1.09:1, so colour alone cannot mark a link (WCAG 1.4.1).

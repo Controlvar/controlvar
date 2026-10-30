@@ -536,7 +536,7 @@ export default function ExperimentDetailPage() {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  sequential testing
+                  turning sequential testing on or off after creation
                 </a>
                 .
               </p>
