@@ -209,13 +209,12 @@ class Pacing:
     def hold_ms(beat: storyboard.Beat, voice: Optional[BeatVoice]) -> int:
         """How long the cue is held before its payoff and exit, from its start.
 
-        Silent: the headline's reading time and margin, and a console call's
-        least hold (``min_hold_ms``). Narrated: at least the sentences' slots
-        and the margin; on a payoff beat all of it before the still hold (the
-        payoff is silent), otherwise less the exit's floor, since the narration
-        may run on over the exit.
+        Silent: the headline's reading time and margin (``min_cue_ms``). Narrated:
+        at least the sentences' slots and the margin; on a payoff beat all of it
+        before the still hold (the payoff is silent), otherwise less the exit's
+        floor, since the narration may run on over the exit.
         """
-        minimum = storyboard.min_hold_ms(beat)
+        minimum = storyboard.min_cue_ms(beat.cue)
         if voice is None:
             return minimum
         spoken = voice.ms + config.CUE_MARGIN_MS

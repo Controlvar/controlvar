@@ -243,16 +243,6 @@ PAYOFF_MS = 2500
 SCROLL_MS = 750
 #: A slider's thumb travels for this long, eased, whatever the distance.
 SLIDE_MS = 1200
-#: A console beat's send, past the paint: the call to the take's own stack,
-#: the answer drawn and read back (an allowance for the estimate).
-SEND_MS = 500
-#: A console beat that makes a call keeps its request and answer up at least
-#: this long, so the answer can be read whatever the narration.
-EXCHANGE_MIN_MS = 6000
-#: A console's request and answer together: at most this many lines, each at
-#: most this many characters (left-out fields are one muted line a run).
-CONSOLE_MAX_LINES = 12
-CONSOLE_LINE_CHARS = 86
 #: Chromium's range thumb is about this wide (CSS px, before the zoom): the
 #: drawn cursor rides its centre.
 RANGE_THUMB_CSS_PX = 16
