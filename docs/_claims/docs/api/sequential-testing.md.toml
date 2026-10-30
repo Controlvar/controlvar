@@ -221,6 +221,17 @@ text = "It does not follow the experiment's stored confidence_level or correctio
 by = ["test:backend/tests/unit/api/test_sequential_decisions.py::test_the_stored_confidence_level_and_correction_do_not_set_the_boundary"]
 
 [[unit]]
+text = "In the dashboard, tick Also test the primary metric sequentially (beta) when you create the experiment: it is on guided setup's Estimate step and in the single-page form's Analysis settings."
+by = ["test:frontend/src/tests/pages/experiment-new-sequential.test.tsx::is off by default, labelled, explains itself, and links to how it works"]
+
+[[unit]]
+text = "The dashboard then sends sequential_testing_enabled: true and no sequential_testing_config."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-sequential.test.tsx::guided setup sends a twelfth key, sequential_testing_enabled: true, only when it is ticked, and no config",
+    "test:frontend/src/tests/pages/experiment-new-sequential.test.tsx::the single-page form sends sequential_testing_enabled: true when it is ticked, and no config",
+]
+
+[[unit]]
 text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
 by = ["exempt:baseline"]
 

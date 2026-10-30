@@ -106,6 +106,20 @@ text = "The Review step shows them in its Analysis row."
 by = ["journey:experiment-wizard#estimate-next"]
 
 [[unit]]
+text = "Below them, Also test the primary metric sequentially (beta) turns on sequential testing for the new experiment; it is off by default."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-sequential.test.tsx::is off by default, labelled, explains itself, and links to how it works",
+    "test:frontend/src/tests/pages/experiment-new-sequential.test.tsx::guided setup sends a twelfth key, sequential_testing_enabled: true, only when it is ticked, and no config",
+]
+
+[[unit]]
+text = "The Review step's Analysis row then ends Sequential testing (beta) on, as does the single-page form's Analysis settings summary."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-sequential.test.tsx::Review: the Analysis row ends \"Sequential testing (beta) on\"",
+    "test:frontend/src/tests/pages/experiment-new-sequential.test.tsx::the single-page form: the collapsed summary says \"Sequential testing (beta) on\" when it is on",
+]
+
+[[unit]]
 text = "The rest of the step is the estimate."
 by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx::says on the Estimate step what is saved and what is not"]
 
