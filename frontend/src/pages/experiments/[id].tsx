@@ -80,6 +80,56 @@ export function algorithmLabel(optimizationType: string | null | undefined): str
   return OPTIMIZATION_TYPE_LABELS[optimizationType as OptimizationType] ?? optimizationType;
 }
 
+/** The header's term for an experiment's start or end date. */
+export type ScheduleTerm = 'Starts' | 'Started' | 'Start date' | 'Ends' | 'Ended' | 'End date';
+
+/**
+ * How the header names an experiment's start or end date (#1443), and whether
+ * that date has come without the experiment starting or ending ("due").
+ *
+ * The status decides first, never the browser's clock, so a clock that is
+ * wrong can never write "Started" or "Ended":
+ *
+ * - start: active, paused or completed → "Started"; archived → "Start date";
+ *   anything else (a draft) → "Starts".
+ * - end: completed → "Ended"; archived → "End date"; anything else → "Ends".
+ *
+ * An archived experiment gets the neutral terms because the API archives a
+ * draft too, so archived does not mean it ever started (plan-1449 C1). Only
+ * "Starts" and "Ends" can be due: the date is at or before `nowMs`, the
+ * scheduler's own `<=`, which starts a draft and ends an active experiment on
+ * its next pass and never ends a paused one. A value that is not a time is
+ * never due. The value is the API's, so it is read with `parseApiTimestamp`:
+ * one without a zone is UTC (#1134).
+ *
+ * The caller passes the clock. Nothing re-renders the page on a timer; any
+ * re-render reads the clock again.
+ */
+export function scheduleLabel(
+  which: 'start' | 'end',
+  value: string,
+  status: string,
+  nowMs: number,
+): { term: ScheduleTerm; due: boolean } {
+  if (status === 'archived') {
+    return { term: which === 'start' ? 'Start date' : 'End date', due: false };
+  }
+  const happened =
+    which === 'start'
+      ? status === 'active' || status === 'paused' || status === 'completed'
+      : status === 'completed';
+  if (happened) return { term: which === 'start' ? 'Started' : 'Ended', due: false };
+  return {
+    term: which === 'start' ? 'Starts' : 'Ends',
+    due: parseApiTimestamp(value).getTime() <= nowMs,
+  };
+}
+
+const DUE_NOTE: Record<'start' | 'end', string> = {
+  start: ' (due, not started yet)',
+  end: ' (due, not ended yet)',
+};
+
 /**
  * A variant's configuration as the page shows it: indented JSON, rendered as
  * text (never as markup), or null when the variant has none.
@@ -242,6 +292,14 @@ export default function ExperimentDetailPage() {
   const showRoleNote = !mayChange && statusActions.length > 0;
   const primaryMetric = experiment.metrics.find((m) => m.is_primary) ?? experiment.metrics[0];
   const algorithm = algorithmLabel(experiment.optimization_type);
+  // Read at render, after the experiment has loaded in the browser (#1443).
+  const nowMs = Date.now();
+  const startLabel = experiment.start_date
+    ? scheduleLabel('start', experiment.start_date, status, nowMs)
+    : null;
+  const endLabel = experiment.end_date
+    ? scheduleLabel('end', experiment.end_date, status, nowMs)
+    : null;
 
   return (
     <div className="flex-1 bg-slate-50" data-testid="experiment-detail">
@@ -269,9 +327,10 @@ export default function ExperimentDetailPage() {
                   {experimentStatusLabel(status)}
                 </span>
               </div>
+              {/* Every dt is slate-500 (4.76:1 on white), never slate-400 (2.56:1): a11y/grey-text-contrast.test.ts. */}
               <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-600">
                 <div className="flex items-center gap-1.5">
-                  <dt className="text-slate-400">Key</dt>
+                  <dt className="text-slate-500">Key</dt>
                   {/* The Copy button sits inside the dd: a dl may hold only dt and dd groups. */}
                   <dd className="flex items-center gap-1.5">
                     <span className="font-mono text-slate-800" data-testid="experiment-key">
@@ -290,12 +349,12 @@ export default function ExperimentDetailPage() {
                   </dd>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <dt className="text-slate-400">Type</dt>
+                  <dt className="text-slate-500">Type</dt>
                   <dd data-testid="experiment-type">{experimentTypeLabel(experiment.experiment_type)}</dd>
                 </div>
                 {experiment.correction_method && typeof experiment.confidence_level === 'number' && (
                   <div className="flex items-center gap-1.5">
-                    <dt className="text-slate-400">Analysis</dt>
+                    <dt className="text-slate-500">Analysis</dt>
                     <dd data-testid="experiment-analysis">
                       {formatConfidence(experiment.confidence_level)} confidence ·{' '}
                       {experiment.correction_method === 'none'
@@ -306,18 +365,26 @@ export default function ExperimentDetailPage() {
                 )}
                 {typeof experiment.bayesian_enabled === 'boolean' && (
                   <div className="flex items-center gap-1.5">
-                    <dt className="text-slate-400">Bayesian analysis</dt>
+                    <dt className="text-slate-500">Bayesian analysis</dt>
                     <dd data-testid="experiment-bayesian">{experiment.bayesian_enabled ? 'On' : 'Off'}</dd>
+                  </div>
+                )}
+                {typeof experiment.sequential_testing_enabled === 'boolean' && (
+                  <div className="flex items-center gap-1.5">
+                    <dt className="text-slate-500">Sequential testing (beta)</dt>
+                    <dd data-testid="experiment-sequential">
+                      {experiment.sequential_testing_enabled ? 'On' : 'Off'}
+                    </dd>
                   </div>
                 )}
                 {algorithm && (
                   <div className="flex items-center gap-1.5">
-                    <dt className="text-slate-400">Traffic algorithm</dt>
+                    <dt className="text-slate-500">Traffic algorithm</dt>
                     <dd data-testid="experiment-algorithm">{algorithm}</dd>
                   </div>
                 )}
                 <div className="flex items-center gap-1.5">
-                  <dt className="text-slate-400">Owner</dt>
+                  <dt className="text-slate-500">Owner</dt>
                   <dd data-testid="experiment-owner" title={experiment.owner_id ?? undefined}>
                     {isOwner
                       ? `You (${user?.email ?? user?.username})`
@@ -326,19 +393,25 @@ export default function ExperimentDetailPage() {
                   </dd>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <dt className="text-slate-400">Created</dt>
+                  <dt className="text-slate-500">Created</dt>
                   <dd>{formatDate(experiment.created_at)}</dd>
                 </div>
-                {experiment.start_date && (
+                {startLabel && (
                   <div className="flex items-center gap-1.5">
-                    <dt className="text-slate-400">Started</dt>
-                    <dd>{formatDate(experiment.start_date)}</dd>
+                    <dt className="text-slate-500">{startLabel.term}</dt>
+                    <dd data-testid="experiment-start-date">
+                      {formatDate(experiment.start_date)}
+                      {startLabel.due && DUE_NOTE.start}
+                    </dd>
                   </div>
                 )}
-                {experiment.end_date && (
+                {endLabel && (
                   <div className="flex items-center gap-1.5">
-                    <dt className="text-slate-400">Ended</dt>
-                    <dd>{formatDate(experiment.end_date)}</dd>
+                    <dt className="text-slate-500">{endLabel.term}</dt>
+                    <dd data-testid="experiment-end-date">
+                      {formatDate(experiment.end_date)}
+                      {endLabel.due && DUE_NOTE.end}
+                    </dd>
                   </div>
                 )}
               </dl>

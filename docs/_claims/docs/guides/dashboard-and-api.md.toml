@@ -88,6 +88,14 @@ text = "See on the experiment page whether Bayesian analysis is on | Dashboard |
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
+text = "See on the experiment page whether sequential testing (beta) is on | Dashboard | Sequential testing"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "See on the experiment page its start and end dates | Dashboard | Running experiments"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
 text = "Segments: list, create, and upload a list of user ids | Dashboard | Segments"
 by = ["mechanism:dashboard-and-api"]
 
@@ -97,6 +105,10 @@ by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
 text = "Bayesian results: chance to be best, expected loss and credible intervals | Dashboard | Bayesian analysis"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Sequential results (beta): whether to stop, and the confidence sequence | Dashboard | Sequential testing"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
@@ -148,7 +160,7 @@ text = "Set a bandit's weights by hand | API only | Multi-armed bandits"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Global holdouts: create, activate, and read their results (beta) | API only | Mutual exclusion groups and global holdout"
+text = "Global holdouts: create and activate; read their results (beta) | API only | Mutual exclusion groups and global holdout"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
@@ -181,4 +193,8 @@ by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
 text = "Bayesian priors, loss threshold and credible level | API only | Bayesian analysis"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Turn on sequential testing (beta) | API only | Sequential testing"
 by = ["mechanism:dashboard-and-api"]

@@ -427,8 +427,9 @@ describe('the operations this region calls', () => {
 });
 
 // ---------------------------------------------------------------------------
-// a11y (QA group G). Scoped to the region: the page's header <dl> on main
-// fails axe's definition-list rule by itself, which this PR does not touch.
+// a11y (QA group G). Scoped to the region this file owns. The header <dl> has
+// no axe violations (experiment-detail-configuration.test.tsx scans the whole
+// page, and pins each of its items as one dt followed by one dd).
 // ---------------------------------------------------------------------------
 
 describe('accessibility', () => {
