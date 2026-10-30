@@ -65,3 +65,24 @@ describe("the experiment page's header terms", () => {
     expect(shades[0]).toBeGreaterThanOrEqual(500);
   });
 });
+
+/**
+ * The experiment page's schedule form (#1454). Its panel is slate-50, where
+ * slate-500 is 4.55:1, too close to 4.5, so every grey in the file is
+ * slate-600 (7.58:1) or darker. The nightly audit never opens the form, and
+ * jsdom cannot measure contrast, so nothing else checks it.
+ */
+describe("the experiment page's schedule form", () => {
+  const FORM = 'components/experiments/ExperimentScheduleSection.tsx';
+
+  it('the panel is slate-50 and no text in the file is lighter than slate-600', () => {
+    const source = fs.readFileSync(path.join(SRC, FORM), 'utf8');
+    const forms = Array.from(source.matchAll(/<form\b[\s\S]*?data-testid="experiment-schedule-form"/g));
+    expect(forms).toHaveLength(1);
+    expect(forms[0][0]).toMatch(/className="[^"]*\bbg-slate-50\b/);
+    const shades = Array.from(source.matchAll(/(?<!placeholder:)\btext-slate-(\d+)\b/g)).map((m) => Number(m[1]));
+    // The pattern reads the file's greys: the hints, the labels, the heading.
+    expect(shades.length).toBeGreaterThanOrEqual(3);
+    expect(shades.filter((shade) => shade < 600)).toEqual([]);
+  });
+});

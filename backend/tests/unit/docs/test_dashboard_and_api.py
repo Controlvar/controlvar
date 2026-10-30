@@ -115,7 +115,11 @@ WITNESSES: Dict[str, str] = {
     ),
     # After launch (#442's checklist).
     "Change a draft experiment's variants or metrics": "experiment-edit-variants",
-    "Schedule an experiment's start and end dates": "experiment-schedule-form",
+    # #1454: a draft's schedule on the experiment page. A paused experiment's
+    # resume goes through the same route, which the page does not offer:
+    # reserved; no screen planned.
+    "Schedule a draft experiment's start and end dates": "experiment-schedule-form",
+    "Schedule a paused experiment's resume": "experiment-schedule-resume",
     "Create or edit a rollout schedule and its stages": "rollout-schedule-form",
     "Activate, pause or advance a rollout schedule": "rollout-schedule-actions",
     "Delete a feature flag": "flag-delete",
@@ -136,7 +140,8 @@ WITNESSES: Dict[str, str] = {
     "Turn on sequential testing (beta) when creating an experiment": (
         "analysis-sequential"
     ),
-    # #1454 (C13): an existing draft's switch and its alpha, when it comes.
+    # #1454 (C13): an existing draft's switch and its alpha: reserved; no
+    # screen planned.
     "Turn sequential testing (beta) on or off for an existing draft, and set its "
     "alpha": "experiment-sequential-settings",
 }
@@ -696,6 +701,15 @@ STALE: Tuple[Tuple[str, str], ...] = (
         r"bayesian and frequentist analysis",
         "a headline that does not say which of the two the dashboard shows",
     ),
+    (
+        r"scheduling is through the api",
+        "the experiment page's Schedule sets a draft's start and end (#1454); "
+        "only a paused experiment's resume is API only",
+    ),
+    (
+        r"(dashboard|page) has no schedule screen",
+        "the experiment page's Schedule sets a draft's start and end (#1454)",
+    ),
 )
 
 _DROP = frozenset("*`")
@@ -774,6 +788,10 @@ def test_no_page_repeats_a_removed_dashboard_claim():
         "Classic A/B test, sequential testing (mSPRT), Bayesian results (API only), variant",
         "(frequentist + sequential in the dashboard, Bayesian in the API)",
         "Statistical rigor with Bayesian and Frequentist analysis",
+        "Create, change, schedule and delete any experiment (scheduling is through the API; "
+        "[which actions have a screen](dashboard-and-api.md))",
+        "You can also schedule automatic start and end dates. The dashboard has no schedule\n"
+        "screen yet, so this is an API call:",
     ],
 )
 def test_the_sweep_catches_the_removed_wording(removed):

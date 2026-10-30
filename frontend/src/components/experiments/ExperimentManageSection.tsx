@@ -1,5 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
+import {
+  ExperimentScheduleSection,
+  SCHEDULE_HEADING,
+  SCHEDULE_SAVED,
+} from '@/components/experiments/ExperimentScheduleSection';
 import { isApiError } from '@/services/api';
 import { ExperimentDetailsUpdate, ExperimentsService } from '@/services/experiments';
 import { Experiment } from '@/types/experiments';
@@ -130,6 +135,14 @@ export function ExperimentManageSection({ experiment, user, onSaved }: Experimen
   const nameInput = useRef<HTMLInputElement>(null);
   const confirmRegion = useRef<HTMLDivElement>(null);
 
+  // The schedule form (#1454): a DRAFT only, so it goes once the experiment
+  // starts. Focus returns to its button when it closes.
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleSaved, setScheduleSaved] = useState(false);
+  const [scheduleFocus, setScheduleFocus] = useState(false);
+  const scheduleButton = useRef<HTMLButtonElement>(null);
+  const scheduling = scheduleOpen && mayChangeDraft;
+
   const editing = draft !== null;
 
   useEffect(() => {
@@ -139,6 +152,12 @@ export function ExperimentManageSection({ experiment, user, onSaved }: Experimen
   useEffect(() => {
     if (confirmingDelete) confirmRegion.current?.focus();
   }, [confirmingDelete]);
+
+  useEffect(() => {
+    if (!scheduleFocus || scheduling) return;
+    scheduleButton.current?.focus();
+    setScheduleFocus(false);
+  }, [scheduleFocus, scheduling]);
 
   useEffect(() => {
     if (returnFocus === null || pending !== null) return;
@@ -166,6 +185,7 @@ export function ExperimentManageSection({ experiment, user, onSaved }: Experimen
     setError(null);
     setSaved(false);
     setNameError(false);
+    resetSchedule();
     setConfirmingDelete(false);
     setDraft({
       name: experiment.name,
@@ -214,6 +234,7 @@ export function ExperimentManageSection({ experiment, user, onSaved }: Experimen
     setSaved(false);
     setDraft(null);
     setConfirmingDelete(true);
+    resetSchedule();
   };
 
   const cancelDelete = () => {
@@ -232,6 +253,34 @@ export function ExperimentManageSection({ experiment, user, onSaved }: Experimen
       setError(errorCopy('delete', err));
       setPending(null);
     }
+  };
+
+  // Schedule (#1454). Opening it closes the other forms, as they close it.
+  const resetSchedule = () => {
+    setScheduleOpen(false);
+    setScheduleSaved(false);
+  };
+
+  const openSchedule = () => {
+    setError(null);
+    setSaved(false);
+    setDraft(null);
+    setNameError(false);
+    setConfirmingDelete(false);
+    setScheduleSaved(false);
+    setScheduleOpen(true);
+  };
+
+  const closeSchedule = () => {
+    setScheduleOpen(false);
+    setScheduleFocus(true);
+  };
+
+  const scheduleDone = (updated: Experiment) => {
+    onSaved(updated);
+    setScheduleOpen(false);
+    setScheduleSaved(true);
+    setScheduleFocus(true);
   };
 
   const busy = pending !== null;
@@ -253,6 +302,17 @@ export function ExperimentManageSection({ experiment, user, onSaved }: Experimen
         )}
         {mayChangeDraft && (
           <>
+            {/* A draft only: on a PAUSED experiment the route schedules a resume, which stays in the API. */}
+            <button
+              ref={scheduleButton}
+              type="button"
+              onClick={openSchedule}
+              disabled={busy || scheduling}
+              className={SECONDARY}
+              data-testid="experiment-schedule"
+            >
+              {SCHEDULE_HEADING}
+            </button>
             <button
               ref={editButton}
               type="button"
@@ -399,6 +459,16 @@ export function ExperimentManageSection({ experiment, user, onSaved }: Experimen
             </button>
           </div>
         </form>
+      )}
+
+      {scheduleSaved && (
+        <p role="status" className="mt-3 text-sm text-green-700" data-testid="schedule-saved">
+          {SCHEDULE_SAVED}
+        </p>
+      )}
+
+      {scheduling && (
+        <ExperimentScheduleSection experiment={experiment} onSaved={scheduleDone} onClose={closeSchedule} />
       )}
 
       {error && (

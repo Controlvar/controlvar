@@ -36,7 +36,8 @@ The table lists each capability and where you do it today:
 | Delete a draft experiment | Dashboard | [API endpoints](../api/endpoints.md) |
 | Edit a draft experiment's name, description and hypothesis | Dashboard | [API endpoints](../api/endpoints.md) |
 | Change a draft experiment's variants or metrics | API only | [API endpoints](../api/endpoints.md) |
-| Schedule an experiment's start and end dates | API only | [Running experiments](user-guide.md) |
+| Schedule a draft experiment's start and end dates | Dashboard | [Running experiments](user-guide.md) |
+| Schedule a paused experiment's resume | API only | [Running experiments](user-guide.md#pausing-and-stopping) |
 | Create or edit a rollout schedule and its stages | API only | [Gradual rollouts](../feature-flags/rollouts.md) |
 | Activate, pause or advance a rollout schedule | API only | [Gradual rollouts](../feature-flags/rollouts.md) |
 | Delete a feature flag | API only | [API endpoints](../api/endpoints.md) |
