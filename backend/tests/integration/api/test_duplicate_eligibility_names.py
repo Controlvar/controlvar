@@ -17,9 +17,16 @@ Any other ``IntegrityError`` keeps today's answer, a 500, and is never a 409.
 The comparison is the constraint's: exact and case-sensitive, so "Checkout" and
 "checkout" are two names.
 
+A holdout written with ``is_active: true`` flushes before it commits, so the
+"-active" cases send a taken name together with an activation, with another
+holdout active: the answer is still the name 409, never the activation 409 and
+never a 500, and the holdout that was active stays the one active.
+
 Every request is a real one as a non-superuser ADMIN (the holdout routes need
 ADMIN; the group routes DEVELOPER). The database is shared, so every name
-carries a random suffix and no holdout is activated.
+carries a random suffix. Only the "-active" cases activate a holdout, through
+``holdout_slot``, which parks whatever holdout was active and restores it, and
+deletes the holdouts the test made (as ``test_holdout_lifecycle.py`` does).
 """
 
 from __future__ import annotations
@@ -28,7 +35,7 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import text, update
 from sqlalchemy.exc import PendingRollbackError
 from sqlalchemy.orm import sessionmaker
 
@@ -56,6 +63,36 @@ def _local_auth(monkeypatch):
     monkeypatch.setattr(settings, "AUTH_PROVIDER", "local")
     monkeypatch.setattr(settings, "ENVIRONMENT", "test")
     monkeypatch.setattr(settings, "CACHE_ENABLED", False)
+
+
+@pytest.fixture
+def holdout_slot(db_session):
+    """Park any active holdout for the test, and delete the ones it creates.
+
+    Parked with a plain UPDATE, so nothing stamps them as ended, and restored
+    the same way afterwards, whatever the test did: the same pattern as
+    ``test_holdout_lifecycle.py``. Yields the list the test adds its names to.
+    """
+    parked = [
+        row.id
+        for row in db_session.query(GlobalHoldout).filter(GlobalHoldout.is_active)
+    ]
+    db_session.execute(
+        update(GlobalHoldout)
+        .where(GlobalHoldout.id.in_(parked))
+        .values(is_active=False)
+    )
+    db_session.commit()
+    created: list[str] = []
+    yield created
+    db_session.rollback()
+    db_session.query(GlobalHoldout).filter(GlobalHoldout.name.in_(created)).delete(
+        synchronize_session=False
+    )
+    db_session.execute(
+        update(GlobalHoldout).where(GlobalHoldout.id.in_(parked)).values(is_active=True)
+    )
+    db_session.commit()
 
 
 def _factory(db_session):
@@ -329,5 +366,91 @@ def test_the_refused_write_is_rolled_back_before_the_409(
             assert session.query(model).filter(model.name == name).count() == 1
         except PendingRollbackError as error:  # pragma: no cover - the defect
             pytest.fail(f"the session was left in a failed transaction: {error}")
+    finally:
+        session.close()
+
+
+# --- a taken name sent with is_active: true -------------------------------------
+
+
+def _holdout(client, admin, slot, label, **body):
+    """A holdout made through the API, recorded in ``slot`` for its teardown."""
+    name = _name(label)
+    slot.append(name)
+    response = client.post(
+        HOLDOUT,
+        json={"name": name, "holdout_percentage": 5, **body},
+        headers=_auth(admin),
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["id"], name
+
+
+def _active_holdout_ids(db_session):
+    session = _factory(db_session)()
+    try:
+        return [
+            str(row.id)
+            for row in session.query(GlobalHoldout).filter(GlobalHoldout.is_active)
+        ]
+    finally:
+        session.close()
+
+
+@pytest.mark.parametrize("bypass", (False, True), ids=("pre-check", "race"))
+@pytest.mark.parametrize("which", ("holdout-create-active", "holdout-rename-active"))
+def test_a_taken_name_sent_with_is_active_answers_the_name_409(
+    client, db_session, admin, holdout_slot, which, bypass, monkeypatch
+):
+    """``is_active: true`` makes the write flush before it commits (and, on a
+    rename, deactivate the active holdout first); the name's refusal there is
+    still the name 409, and the refused write activates and ends nothing."""
+    if bypass:
+        _bypass_the_pre_check(monkeypatch)
+    incumbent, _ = _holdout(client, admin, holdout_slot, "incumbent", is_active=True)
+    _, name = _holdout(client, admin, holdout_slot, "taken")
+    if which == "holdout-create-active":
+        other = None
+        response = client.post(
+            HOLDOUT,
+            json={"name": name, "holdout_percentage": 5, "is_active": True},
+            headers=_auth(admin),
+        )
+    else:
+        other, other_name = _holdout(client, admin, holdout_slot, "other")
+        response = client.put(
+            f"{HOLDOUT}/{other}",
+            json={"name": name, "is_active": True},
+            headers=_auth(admin),
+        )
+
+    assert response.status_code == 409, response.text
+    assert response.json() == {"detail": _taken_detail(which, name)}
+    assert _active_holdout_ids(db_session) == [incumbent]
+    assert _names_stored(db_session, which, name) == 1
+    if other is not None:
+        assert _stored_name(db_session, which, other) == other_name
+
+
+# --- the pre-check and the row being renamed ------------------------------------
+
+
+@pytest.mark.parametrize("which", ("group-rename", "holdout-rename"))
+def test_the_pre_check_does_not_count_the_row_being_renamed(
+    client, db_session, admin, which
+):
+    """``_name_taken(name, exclude_id)`` leaves the row itself out, so the
+    check is right on its own, not only behind the routes' ``name !=``."""
+    name = _name()
+    row_id = uuid.UUID(_created(client, admin, which, name))
+    session = _factory(db_session)()
+    try:
+        if which == "group-rename":
+            service = mutual_exclusion_service.MutualExclusionService(session)
+        else:
+            service = global_holdout_service.GlobalHoldoutService(session)
+        assert service._name_taken(name) is True
+        assert service._name_taken(name, row_id) is False
+        assert service._name_taken(name, uuid.uuid4()) is True
     finally:
         session.close()
