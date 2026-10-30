@@ -42,6 +42,12 @@ export const BAYESIAN_HELP =
   'best, using default priors. The frequentist results and the recommendation are unchanged. ' +
   'Priors can be changed through the API.';
 
+export const SEQUENTIAL_LABEL = 'Also test the primary metric sequentially (beta)';
+export const SEQUENTIAL_HELP =
+  'Check results as often as you like, and stop early once the evidence is strong. It compares ' +
+  'the control with the first treatment only, on the primary metric, at its own 5% significance ' +
+  'level, not the confidence level above. Saved with the experiment.';
+
 /** The hint shown when None is chosen with three or more variants. */
 export function noCorrectionHint(variantCount: number, confidenceLevel: number): string {
   const alpha = Number(((1 - confidenceLevel) * 100).toFixed(1));
@@ -57,12 +63,16 @@ interface AnalysisSettingsFieldsProps {
   dispatch: React.Dispatch<ExperimentFormAction>;
   variantCount: number;
   bayesianEnabled: boolean;
+  sequentialEnabled: boolean;
 }
 
 /**
  * The confidence level and the correction a new experiment is saved with
  * (#580), as a fieldset. Both views of the new-experiment form use it: guided
  * setup on its Estimate step, the single-page form inside "Analysis settings".
+ *
+ * The sequential switch (#1454) is its own block after the Bayesian one, which
+ * is left exactly as it was: video 9 frames `div:has(> #analysis-bayesian)`.
  */
 export function AnalysisSettingsFields({
   confidenceLevel,
@@ -70,6 +80,7 @@ export function AnalysisSettingsFields({
   dispatch,
   variantCount,
   bayesianEnabled,
+  sequentialEnabled,
 }: AnalysisSettingsFieldsProps) {
   const showHint = correctionMethod === 'none' && variantCount >= 3;
   return (
@@ -160,6 +171,33 @@ export function AnalysisSettingsFields({
             {BAYESIAN_HELP}{' '}
             <a href={docsUrl('api/bayesian')} className="text-blue-700 underline hover:text-blue-900">
               How Bayesian analysis works
+            </a>
+          </p>
+        </div>
+      </div>
+      <div className="flex items-start gap-2">
+        <input
+          id="analysis-sequential"
+          type="checkbox"
+          checked={sequentialEnabled}
+          onChange={(e) =>
+            dispatch({ type: 'setSequentialEnabled', sequentialEnabled: e.target.checked })
+          }
+          aria-describedby="analysis-sequential-help"
+          className="mt-1"
+          data-testid="analysis-sequential"
+        />
+        <div>
+          <label htmlFor="analysis-sequential" className="text-sm font-medium text-slate-700">
+            {SEQUENTIAL_LABEL}
+          </label>
+          <p id="analysis-sequential-help" className="text-xs text-slate-600 mt-1">
+            {SEQUENTIAL_HELP}{' '}
+            <a
+              href={docsUrl('api/sequential-testing', 'turning-it-on')}
+              className="text-blue-700 underline hover:text-blue-900"
+            >
+              How sequential testing works
             </a>
           </p>
         </div>

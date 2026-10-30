@@ -44,6 +44,7 @@ describe('INITIAL_FORM_STATE', () => {
       confidenceLevel: 0.95,
       correctionMethod: 'benjamini_hochberg',
       bayesianEnabled: false,
+      sequentialEnabled: false,
       plannedEffectPct: '',
     });
   });
@@ -566,5 +567,20 @@ describe('variant configuration in validation and the payload', () => {
     const on = buildCreatePayload(apply([{ type: 'setBayesianEnabled', bayesianEnabled: true }]));
     expect(on.bayesian_enabled).toBe(true);
     expect('bayesian_config' in on).toBe(false);
+  });
+
+  it('sends sequential_testing_enabled: true only when it is turned on, and never a config', () => {
+    const off = buildCreatePayload(createInitialFormState());
+    expect('sequential_testing_enabled' in off).toBe(false);
+    const on = buildCreatePayload(apply([{ type: 'setSequentialEnabled', sequentialEnabled: true }]));
+    expect(on.sequential_testing_enabled).toBe(true);
+    expect('sequential_testing_config' in on).toBe(false);
+    const offAgain = buildCreatePayload(
+      apply([
+        { type: 'setSequentialEnabled', sequentialEnabled: true },
+        { type: 'setSequentialEnabled', sequentialEnabled: false },
+      ]),
+    );
+    expect('sequential_testing_enabled' in offAgain).toBe(false);
   });
 });

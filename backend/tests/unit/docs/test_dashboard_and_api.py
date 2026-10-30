@@ -132,9 +132,13 @@ WITNESSES: Dict[str, str] = {
     "The effect size in the metric comparison table": "effect-size-column",
     "Each variant's confidence interval on the results page": "variant-interval-column",
     "Bayesian priors, loss threshold and credible level": "bayesian-config-fields",
-    # #1445: the guided setup's control, when it comes; the twin of
-    # analysis-bayesian.
-    "Turn on sequential testing (beta)": "analysis-sequential",
+    # #1454: the guided setup's control, the twin of analysis-bayesian.
+    "Turn on sequential testing (beta) when creating an experiment": (
+        "analysis-sequential"
+    ),
+    # #1454 (C13): an existing draft's switch and its alpha, when it comes.
+    "Turn sequential testing (beta) on or off for an existing draft, and set its "
+    "alpha": "experiment-sequential-settings",
 }
 
 #: Files the scans must have read. A scan rooted in the wrong place, or a
