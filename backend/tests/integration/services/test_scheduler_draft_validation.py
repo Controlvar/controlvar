@@ -12,15 +12,20 @@ Now the scheduler runs that same check before a draft's scheduled first start:
       no audit row, and the scheduler logs ONE warning naming it, per tick. Once
       it has two variants, the next tick starts it;
 * D2  a draft whose metrics were removed after scheduling stays DRAFT;
-* D3  a valid draft due in the same tick as an invalid one still starts;
+* D3  a valid draft due in the same tick as an invalid one still starts, and
+      the invalid one, in a tick that commits, gets no audit row either;
 * D4  a PAUSED experiment's scheduled resume is unchanged: it is not checked,
-      so one with no metrics (older data) still resumes.
+      so one with no metrics (older data) still resumes;
+* D5  a skipped draft is not counted in the tick's ``items_failed``;
+* D6  a check that raises keeps today's handling: that row's savepoint is rolled
+      back, it is counted as failed and logged, and the tick goes on.
 
 The fixtures follow ``test_scheduler_pause_semantics.py``: real users and
 tokens, ``deps.get_db`` the only override, and the scheduler run against the
 same database with its ``SessionLocal`` patched. The database is shared, so the
-tick's counts are not asserted; what it did to each experiment is read from the
-row, the notifications it sent, the audit log and its own warnings.
+tick's counts are only compared with a tick run just before (a delta), never
+asserted outright; what it did to each experiment is read from the row, the
+notifications it sent, the audit log and its own log lines.
 """
 
 from __future__ import annotations
@@ -43,6 +48,7 @@ from backend.app.main import app
 from backend.app.models.audit_log import ActionType, AuditLog
 from backend.app.models.experiment import Experiment, ExperimentStatus, Metric
 from backend.app.models.user import User, UserRole
+from backend.app.services.experiment_service import ExperimentService
 from backend.app.services.notification_service import NotificationService
 
 pytestmark = [pytest.mark.integration, pytest.mark.regression]
@@ -210,6 +216,11 @@ def _not_ready_warnings(caplog, experiment_id):
 def _tick(db_session):
     """One scheduler tick against the test database. Returns the
     notifications it sent, as {experiment_id: message}."""
+    return _tick_with_counts(db_session)[0]
+
+
+def _tick_with_counts(db_session):
+    """One tick: (the notifications it sent, the counts it returned)."""
     from backend.app.core.scheduler import ExperimentScheduler
 
     sent = {}
@@ -227,8 +238,8 @@ def _tick(db_session):
     scheduler = ExperimentScheduler()
     scheduler._notification_service = notifications
     with patch("backend.app.core.scheduler.SessionLocal", _factory(db_session)):
-        asyncio.run(scheduler.process_scheduled_experiments())
-    return sent
+        counts = asyncio.run(scheduler.process_scheduled_experiments())
+    return sent, counts
 
 
 # --- D1: one variant -----------------------------------------------------------
@@ -320,6 +331,9 @@ def test_d3_a_valid_draft_starts_in_the_same_tick_as_one_that_cannot(
     assert _not_ready_warnings(caplog, valid) == []
     assert _row(db_session, invalid) == (ExperimentStatus.DRAFT, invalid_start)
     assert invalid not in sent
+    # This tick commits (the valid draft started), so a row written for the
+    # skipped draft would be stored: none is.
+    assert _starts_audited(db_session, invalid) == 0
 
 
 # --- D4: a scheduled resume is not checked -------------------------------------
@@ -359,3 +373,62 @@ def test_d4_a_paused_experiment_with_a_due_resume_still_resumes(
     assert _row(db_session, experiment_id) == (ExperimentStatus.ACTIVE, started)
     assert sent[experiment_id].endswith("has been resumed automatically.")
     assert _not_ready_warnings(caplog, experiment_id) == []
+
+
+# --- D5: a skipped draft is not a failure ---------------------------------------
+
+
+def test_d5_a_skipped_draft_is_not_counted_as_failed(client, db_session, developer):
+    """A draft nobody has fixed yet is not a failed item: a tick that skips it
+    reports as many failures as the tick before it, when it was not due."""
+    _, before = _tick_with_counts(db_session)
+    experiment_id = _create(client, developer, variants=ONE_VARIANT)
+    start = _schedule_due(client, developer, experiment_id)
+
+    _, after = _tick_with_counts(db_session)
+
+    assert _row(db_session, experiment_id) == (ExperimentStatus.DRAFT, start)
+    assert after["items_failed"] == before["items_failed"]
+
+
+# --- D6: a check that raises -----------------------------------------------------
+
+
+def test_d6_a_check_that_raises_keeps_todays_handling(
+    client, db_session, developer, caplog, monkeypatch
+):
+    """The check runs inside the row's own savepoint: when it raises, that row
+    is rolled back, counted as failed and logged, and the rest of the tick
+    still runs (the valid draft due with it starts)."""
+    caplog.set_level(logging.WARNING, logger=SCHEDULER_LOGGER)
+    raising = _create(client, developer)
+    original = ExperimentService._validate_experiment_for_start
+
+    def check(self, experiment):
+        if str(experiment.id) == raising:
+            raise RuntimeError("planted: the check itself failed")
+        return original(self, experiment)
+
+    monkeypatch.setattr(ExperimentService, "_validate_experiment_for_start", check)
+    _, before = _tick_with_counts(db_session)
+    raising_start = _schedule_due(client, developer, raising)
+    valid = _create(client, developer)
+    valid_start = _schedule_due(client, developer, valid)
+
+    sent, after = _tick_with_counts(db_session)
+
+    assert _row(db_session, valid) == (ExperimentStatus.ACTIVE, valid_start)
+    assert sent[valid].endswith("has been started automatically.")
+    assert _row(db_session, raising) == (ExperimentStatus.DRAFT, raising_start)
+    assert raising not in sent
+    assert _starts_audited(db_session, raising) == 0
+    assert after["items_failed"] == before["items_failed"] + 1
+    errors = [
+        r.getMessage()
+        for r in caplog.records
+        if r.name == SCHEDULER_LOGGER
+        and r.levelno == logging.ERROR
+        and raising in r.getMessage()
+    ]
+    assert errors == [f"Error activating experiment {raising}"]
+    assert _not_ready_warnings(caplog, raising) == []
