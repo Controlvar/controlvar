@@ -59,6 +59,24 @@ describe("the experiment page's variants and metrics form", () => {
     expect(forms[0][0]).toMatch(/className="[^"]*\bbg-white\b/);
     expect(forms[0][0]).not.toMatch(/\bbg-slate-50\b/);
   });
+
+  // The refusal is small text on `red-50` (#fef2f2): `red-700` (#b91c1c) is
+  // 5.91:1 there, `red-600` (#dc2626) 4.41:1, under the 4.5:1 it needs. So one
+  // text colour, red and 700 or darker, on that one background.
+  it('the refusal is red-700 or darker on red-50', () => {
+    const source = fs.readFileSync(path.join(SRC, DESIGN_FILES[0]), 'utf8');
+    const tags = Array.from(source.matchAll(/<div\b[^>]*data-testid="design-error"[^>]*>/g));
+    expect(tags).toHaveLength(1);
+    const texts = Array.from(tags[0][0].matchAll(/\btext-([a-z]+)-(\d+)\b/g)).map((m) => ({
+      colour: m[1],
+      shade: Number(m[2]),
+    }));
+    expect(texts).toHaveLength(1);
+    expect(texts[0].colour).toBe('red');
+    expect(texts[0].shade).toBeGreaterThanOrEqual(700);
+    const backgrounds = Array.from(tags[0][0].matchAll(/\bbg-([a-z]+-\d+|white)\b/g)).map((m) => m[1]);
+    expect(backgrounds).toEqual(['red-50']);
+  });
 });
 
 /**

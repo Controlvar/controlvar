@@ -15,6 +15,8 @@ that body meets on a real database:
   builds them, GET again, and every field of every item is what was created.
   The ids, ``experiment_id`` and the two timestamps are the server's own and
   change, because every save deletes the rows and inserts new ones.
+* the variants come back in the order of the list sent, so "the first
+  treatment in this list" is the same arm after a save.
 
 Every request is real: real ``User`` rows and a local JWT, with only
 ``deps.get_db`` overridden.
@@ -325,6 +327,40 @@ def test_a_round_trip_keeps_every_field_of_every_item(client, people):
         assert {i["id"] for i in after.json()[items]}.isdisjoint(
             {i["id"] for i in before.json()[items]}
         )
+
+
+@pytest.mark.parametrize(
+    "order", [(0, 1, 2), (2, 0, 1)], ids=["as-created", "reordered"]
+)
+def test_the_variants_come_back_in_the_order_sent(client, people, order):
+    """The page shows the variants in the API's order and sends them back in
+    it; with sequential testing on it says the control is compared with "the
+    first treatment in this list". That holds after a save only if the save
+    keeps the order of the list it was sent: read in creation order, the rows
+    re-created in list order. The rows one request inserts are microseconds
+    apart in ``created_at``; were two equal, the random id would order them,
+    and this would fail."""
+    experiment_id = _create(client, people)
+    headers = _auth(people["developer"])
+    before = client.get(f"{EXPERIMENTS}/{experiment_id}", headers=headers)
+    assert before.status_code == 200, before.text
+    # Read in the order created, which is not the names' sorted order.
+    assert [v["name"] for v in before.json()["variants"]] == [
+        "Control",
+        "Blue CTA",
+        "Green CTA",
+    ]
+
+    body = _design_body(before.json())
+    body["variants"] = [body["variants"][i] for i in order]
+    sent = [v["name"] for v in body["variants"]]
+    response = client.put(f"{EXPERIMENTS}/{experiment_id}", headers=headers, json=body)
+    assert response.status_code == 200, response.text
+
+    assert [v["name"] for v in response.json()["variants"]] == sent
+    after = client.get(f"{EXPERIMENTS}/{experiment_id}", headers=headers)
+    assert after.status_code == 200, after.text
+    assert [v["name"] for v in after.json()["variants"]] == sent
 
 
 def test_a_moved_primary_takes_the_planned_effect(client, people):

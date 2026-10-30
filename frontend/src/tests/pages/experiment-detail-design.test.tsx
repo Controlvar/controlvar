@@ -698,6 +698,44 @@ describe('accessibility', () => {
     expect(radio).not.toHaveAttribute('aria-invalid');
   });
 
+  /** Every variant field the refusal marks, other than `except`, carries neither attribute. */
+  function noOtherVariantMarked(except: string) {
+    for (const field of ['variant-name', 'variant-allocation', 'variant-control']) {
+      for (const i of [0, 1, 2]) {
+        const id = `${field}-${i}`;
+        if (id === except) continue;
+        expect(screen.getByTestId(id)).not.toHaveAttribute('aria-invalid');
+        expect(screen.getByTestId(id)).not.toHaveAttribute('aria-describedby');
+      }
+    }
+  }
+
+  it.each<[string, () => void]>([
+    ['variant-name-2', () => type('variant-name-2', ' ')],
+    ['variant-allocation-0', () => type('variant-allocation-2', '30')],
+  ])('a refused variant text field, %s, is invalid and described by the alert', async (id, refuse) => {
+    await openDesign();
+    refuse();
+    save();
+    const alert = await screen.findByTestId('design-error');
+    const field = screen.getByTestId(id);
+    expect(field).toHaveAttribute('aria-invalid', 'true');
+    expect(field.getAttribute('aria-describedby')?.split(' ')).toContain(alert.id);
+    expect(alert.id).not.toBe('');
+    noOtherVariantMarked(id);
+  });
+
+  it('a refused control radio is described by the alert, and is not marked invalid', async () => {
+    await openDesign(experiment({ variants: FULL.variants.map((v) => ({ ...v, is_control: false })) }));
+    save();
+    const alert = await screen.findByTestId('design-error');
+    const radio = screen.getByTestId('variant-control-0');
+    expect(radio.getAttribute('aria-describedby')).toBe(alert.id);
+    expect(radio).not.toHaveAttribute('aria-invalid');
+    expect(alert.id).not.toBe('');
+    noOtherVariantMarked('variant-control-0');
+  });
+
   it('the control and the primary radios sit in a fieldset with a legend', async () => {
     await openDesign();
     const legendOf = (id: string) => screen.getByTestId(id).closest('fieldset')?.querySelector('legend')?.textContent;
