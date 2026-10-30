@@ -10,7 +10,7 @@
  * superusers.
  */
 import React from 'react';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import axe from 'axe-core';
 import HoldoutsPage from '@/pages/experiments/holdouts';
 import { ApiError, ApiFetchOptions, apiFetch } from '@/services/api';
@@ -610,10 +610,18 @@ describe('activating and ending', () => {
   );
 
   it('a refused activation leaves focus on the error, never the heading', async () => {
+    // The re-read after the refusal answers only when the test says so, as a
+    // network answers after the page has drawn the error: no timer decides
+    // which comes first.
+    let answerReread: () => void = () => undefined;
     serve({
-      // The list takes a real tick, as over a network, so the error has been
-      // shown and focused before the re-read answers.
-      all: () => new Promise((resolve) => setTimeout(() => resolve({ items: server, total: server.length }), 5)),
+      all: () => {
+        const list = { items: server, total: server.length };
+        if (reads(ALL).length === 1) return list;
+        return new Promise((resolve) => {
+          answerReread = () => resolve(list);
+        });
+      },
       update: () => {
         throw apiError(409, 'PLANTED-7f3');
       },
@@ -621,9 +629,11 @@ describe('activating and ending', () => {
     await openAdmin();
     fireEvent.click(screen.getByRole('button', { name: 'Activate Q1 holdout' }));
     fireEvent.click(screen.getByTestId('holdout-confirm-yes'));
-    await screen.findByTestId('holdout-action-error');
-    // Wait until the re-read is done and the buttons are back, then look.
-    await waitFor(() => expect(reads(ALL)).toHaveLength(2));
+    // The error is shown and focused while the re-read is still out.
+    await waitFor(() => expect(screen.getByTestId('holdout-action-error')).toHaveFocus());
+    expect(reads(ALL)).toHaveLength(2);
+    await act(async () => answerReread());
+    // The re-read is done and the buttons are back: focus stayed on the error.
     await waitFor(() => expect(screen.getByRole('button', { name: 'Activate Q1 holdout' })).not.toBeDisabled());
     expect(screen.getByTestId('holdout-action-error')).toHaveFocus();
     expect(activeHeading()).not.toHaveFocus();
