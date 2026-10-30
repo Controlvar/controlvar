@@ -6,9 +6,9 @@
  *
  * `Frontend Tests` runs it in the marketing step, after check-site-media.mjs,
  * over the export that step just built. It reads only that export: out/index.html,
- * out/docs.html, out/power-calculator.html and out/og.png. A missing directory
- * or file is a failure, never a skip, so it cannot pass on a build that did
- * not happen.
+ * out/docs.html, out/power-calculator.html, out/privacy.html and out/og.png.
+ * A missing directory or file is a failure, never a skip, so it cannot pass
+ * on a build that did not happen.
  *
  * Per page, in <head>: og:type, og:title, og:description, og:url, og:image
  * (with its width and height), twitter:card, twitter:title,
@@ -30,6 +30,7 @@ const PAGES = [
   { file: 'index.html', url: `${ORIGIN}/` },
   { file: 'docs.html', url: `${ORIGIN}/docs` },
   { file: 'power-calculator.html', url: `${ORIGIN}/power-calculator` },
+  { file: 'privacy.html', url: `${ORIGIN}/privacy` },
 ];
 
 const KEYS = [

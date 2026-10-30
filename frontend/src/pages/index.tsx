@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageTitle } from '@/components/PageTitle';
-import { Wordmark } from '@/components/Wordmark';
+import { SiteHeader } from '@/components/SiteHeader';
 import { LOGIN_PATH } from '@/services/api';
 import { CONTACT_EMAIL, isMarketingSite } from '@/utils/site-mode';
 import { docsUrl } from '@/services/docs';
@@ -63,32 +63,7 @@ export default function HomePage() {
         description="Open-source A/B testing and feature flags you run on your own infrastructure. Experiments, targeting rules, frequentist and Bayesian statistics, and MIT-licensed SDKs for web, mobile and server. Apache-2.0."
       />
       <div data-testid="public-home" className="min-h-screen bg-white text-slate-900">
-        <header className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
-          <Wordmark href={null} />
-          <nav className="flex items-center gap-6 text-sm">
-            <Link href="/docs" className="text-slate-600 hover:text-slate-900">
-              Docs
-            </Link>
-            <Link href="/power-calculator" className="text-slate-600 hover:text-slate-900">
-              Power calculator
-            </Link>
-            {marketing ? (
-              <a
-                href="https://github.com/Controlvar/controlvar"
-                className="rounded-md bg-blue-600 px-3.5 py-1.5 font-medium text-white hover:bg-blue-700"
-              >
-                Source
-              </a>
-            ) : (
-              <Link
-                href={LOGIN_PATH}
-                className="rounded-md bg-blue-600 px-3.5 py-1.5 font-medium text-white hover:bg-blue-700"
-              >
-                Sign in
-              </Link>
-            )}
-          </nav>
-        </header>
+        <SiteHeader />
 
         <main>
           <section className="mx-auto max-w-5xl px-6 pb-16 pt-10">
