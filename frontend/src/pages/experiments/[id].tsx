@@ -254,6 +254,9 @@ export default function ExperimentDetailPage() {
   const [confirming, setConfirming] = useState<LifecycleAction | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // While "Edit variants and metrics" is open its form stands in for the
+  // read-only Variants and Metrics cards. The form exists on a draft only.
+  const [designOpen, setDesignOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -632,7 +635,12 @@ export default function ExperimentDetailPage() {
             </div>
           )}
 
-          <ExperimentManageSection experiment={experiment} user={user} onSaved={onSaved} />
+          <ExperimentManageSection
+            experiment={experiment}
+            user={user}
+            onSaved={onSaved}
+            onDesignOpenChange={setDesignOpen}
+          />
 
           {(experiment.description || experiment.hypothesis) && (
             <div className="mt-5 pt-5 border-t border-slate-100 grid gap-4 sm:grid-cols-2">
@@ -660,107 +668,109 @@ export default function ExperimentDetailPage() {
           )}
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-5">
-          {/* Variants */}
-          <section className="lg:col-span-3 bg-white rounded-lg border border-slate-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-slate-800">Variants</h2>
-              <span className="text-xs text-slate-500">{experiment.variants.length} total</span>
-            </div>
-            {experiment.variants.length === 0 ? (
-              <p className="px-5 py-6 text-sm text-slate-500">No variants defined.</p>
-            ) : (
-              <table className="w-full text-sm" data-testid="variants-table">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th scope="col" className="text-left px-5 py-2.5 text-slate-600 font-medium">Name</th>
-                    <th scope="col" className="text-right px-5 py-2.5 text-slate-600 font-medium">Allocation</th>
-                    <th scope="col" className="text-left px-5 py-2.5 text-slate-600 font-medium">Role</th>
-                    <th scope="col" className="text-left px-5 py-2.5 text-slate-600 font-medium">Configuration</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {experiment.variants.map((variant, index) => {
-                    const configuration = formatConfiguration(variant.configuration);
-                    return (
-                      <tr key={variant.id} data-testid="variant-row">
-                        <td className="px-5 py-3">
-                          <div className="font-medium text-slate-800">{variant.name}</div>
-                          {variant.description && (
-                            <div className="text-xs text-slate-400 mt-0.5">{variant.description}</div>
-                          )}
-                        </td>
-                        <td className="px-5 py-3 text-right text-slate-700 tabular-nums">
-                          {variant.traffic_allocation}%
-                        </td>
-                        <td className="px-5 py-3">
-                          {variant.is_control ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                              Control
-                            </span>
-                          ) : (
-                            <span className="text-xs text-slate-400">Treatment</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-3 align-top">
-                          {configuration === null ? (
-                            <span className="text-slate-400" data-testid={`variant-configuration-none-${index}`}>
-                              <span aria-hidden="true">—</span>
-                              <span className="sr-only">None</span>
-                            </span>
-                          ) : (
-                            // Text only: React escapes it, so a configuration holding markup shows as written.
-                            <pre
-                              tabIndex={0}
-                              className="max-h-40 max-w-xs overflow-auto whitespace-pre-wrap break-all rounded bg-slate-50 p-2 font-mono text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                              data-testid={`variant-configuration-view-${index}`}
-                            >
-                              {configuration}
-                            </pre>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </section>
+        {!(designOpen && status === 'draft') && (
+          <div className="grid gap-6 lg:grid-cols-5" data-testid="experiment-design-cards">
+            {/* Variants */}
+            <section className="lg:col-span-3 bg-white rounded-lg border border-slate-200 overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+                <h2 className="text-base font-semibold text-slate-800">Variants</h2>
+                <span className="text-xs text-slate-500">{experiment.variants.length} total</span>
+              </div>
+              {experiment.variants.length === 0 ? (
+                <p className="px-5 py-6 text-sm text-slate-500">No variants defined.</p>
+              ) : (
+                <table className="w-full text-sm" data-testid="variants-table">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th scope="col" className="text-left px-5 py-2.5 text-slate-600 font-medium">Name</th>
+                      <th scope="col" className="text-right px-5 py-2.5 text-slate-600 font-medium">Allocation</th>
+                      <th scope="col" className="text-left px-5 py-2.5 text-slate-600 font-medium">Role</th>
+                      <th scope="col" className="text-left px-5 py-2.5 text-slate-600 font-medium">Configuration</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {experiment.variants.map((variant, index) => {
+                      const configuration = formatConfiguration(variant.configuration);
+                      return (
+                        <tr key={variant.id} data-testid="variant-row">
+                          <td className="px-5 py-3">
+                            <div className="font-medium text-slate-800">{variant.name}</div>
+                            {variant.description && (
+                              <div className="text-xs text-slate-400 mt-0.5">{variant.description}</div>
+                            )}
+                          </td>
+                          <td className="px-5 py-3 text-right text-slate-700 tabular-nums">
+                            {variant.traffic_allocation}%
+                          </td>
+                          <td className="px-5 py-3">
+                            {variant.is_control ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                Control
+                              </span>
+                            ) : (
+                              <span className="text-xs text-slate-400">Treatment</span>
+                            )}
+                          </td>
+                          <td className="px-5 py-3 align-top">
+                            {configuration === null ? (
+                              <span className="text-slate-400" data-testid={`variant-configuration-none-${index}`}>
+                                <span aria-hidden="true">—</span>
+                                <span className="sr-only">None</span>
+                              </span>
+                            ) : (
+                              // Text only: React escapes it, so a configuration holding markup shows as written.
+                              <pre
+                                tabIndex={0}
+                                className="max-h-40 max-w-xs overflow-auto whitespace-pre-wrap break-all rounded bg-slate-50 p-2 font-mono text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                                data-testid={`variant-configuration-view-${index}`}
+                              >
+                                {configuration}
+                              </pre>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </section>
 
-          {/* Metrics */}
-          <section className="lg:col-span-2 bg-white rounded-lg border border-slate-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-slate-800">Metrics</h2>
-              <span className="text-xs text-slate-500">{experiment.metrics.length} total</span>
-            </div>
-            {experiment.metrics.length === 0 ? (
-              <p className="px-5 py-6 text-sm text-slate-500" data-testid="metrics-empty">
-                No metrics defined. Results need at least one metric.
-              </p>
-            ) : (
-              <ul className="divide-y divide-slate-100" data-testid="metrics-list">
-                {experiment.metrics.map((metric) => (
-                  <li key={metric.id} className="px-5 py-3" data-testid="metric-row">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium text-slate-800">{metric.name}</span>
-                      {metric.is_primary && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          Primary
+            {/* Metrics */}
+            <section className="lg:col-span-2 bg-white rounded-lg border border-slate-200 overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+                <h2 className="text-base font-semibold text-slate-800">Metrics</h2>
+                <span className="text-xs text-slate-500">{experiment.metrics.length} total</span>
+              </div>
+              {experiment.metrics.length === 0 ? (
+                <p className="px-5 py-6 text-sm text-slate-500" data-testid="metrics-empty">
+                  No metrics defined. Results need at least one metric.
+                </p>
+              ) : (
+                <ul className="divide-y divide-slate-100" data-testid="metrics-list">
+                  {experiment.metrics.map((metric) => (
+                    <li key={metric.id} className="px-5 py-3" data-testid="metric-row">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-slate-800">{metric.name}</span>
+                        {metric.is_primary && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            Primary
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-x-3">
+                        <span>
+                          event <code className="font-mono text-slate-700">{metric.event_name}</code>
                         </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-x-3">
-                      <span>
-                        event <code className="font-mono text-slate-700">{metric.event_name}</code>
-                      </span>
-                      <span>{METRIC_TYPE_LABELS[metric.metric_type as MetricType] ?? metric.metric_type}</span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </div>
+                        <span>{METRIC_TYPE_LABELS[metric.metric_type as MetricType] ?? metric.metric_type}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
+        )}
 
         <TargetingSection
           experiment={experiment}

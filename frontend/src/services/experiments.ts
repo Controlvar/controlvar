@@ -1,5 +1,6 @@
 import {
   Experiment,
+  ExperimentDesignUpdate,
   ExperimentListResponse,
   CreateExperimentRequest,
   ExperimentStatus,
@@ -136,6 +137,16 @@ export const ExperimentsService = {
    * to everyone but a superuser.
    */
   async updateDetails(id: string, body: ExperimentDetailsUpdate): Promise<Experiment> {
+    return apiFetch<Experiment>(`${BASE}/${id}`, { method: 'PUT', json: body });
+  },
+
+  /**
+   * `PUT /api/v1/experiments/{id}` with exactly `{variants, metrics}`, both
+   * complete. The API replaces both lists in one commit, on a DRAFT
+   * experiment only (400 otherwise, for every role); `buildDesignPayload`
+   * builds the body.
+   */
+  async updateDesign(id: string, body: ExperimentDesignUpdate): Promise<Experiment> {
     return apiFetch<Experiment>(`${BASE}/${id}`, { method: 'PUT', json: body });
   },
 

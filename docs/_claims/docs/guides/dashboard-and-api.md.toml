@@ -136,7 +136,7 @@ text = "Edit a draft experiment's name, description and hypothesis | Dashboard |
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Change a draft experiment's variants or metrics | API only | API endpoints"
+text = "Change a draft experiment's variants or metrics | Dashboard | API endpoints"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
@@ -148,11 +148,15 @@ text = "Schedule a paused experiment's resume | API only | Running experiments"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Create or edit a rollout schedule and its stages | API only | Gradual rollouts"
+text = "Create or edit a rollout schedule and its stages | Dashboard | Gradual rollouts"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Activate, pause or advance a rollout schedule | API only | Gradual rollouts"
+text = "Activate, pause, resume or cancel a rollout schedule, and advance a manual stage | Dashboard | Gradual rollouts"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "Set a rollout schedule's own start and end dates, maximum percentage and minimum stage duration | API only | Gradual rollouts"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]

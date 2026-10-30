@@ -11,6 +11,7 @@ import struct
 from typing import List, Optional
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.models.assignment import Assignment
@@ -21,6 +22,43 @@ from backend.app.models.mutual_exclusion_group import (
 )
 
 logger = logging.getLogger(__name__)
+
+#: SQLSTATE ``unique_violation``.
+_UNIQUE_VIOLATION = "23505"
+
+#: The unique constraint on ``mutual_exclusion_groups.name``. It is unnamed in
+#: the model and the migration, so PostgreSQL names it ``<table>_<column>_key``,
+#: the same in every schema. It compares names exactly: "Checkout" and
+#: "checkout" are two names.
+NAME_UNIQUE_CONSTRAINT = "mutual_exclusion_groups_name_key"
+
+
+def group_name_taken_detail(name: str) -> str:
+    """The 409 detail for a name another group has (#1019)."""
+    return f"A mutual exclusion group with the name '{name}' already exists."
+
+
+class GroupNameTaken(Exception):
+    """Another group already has this name (#1019)."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(group_name_taken_detail(name))
+
+
+def _is_name_violation(error: IntegrityError) -> bool:
+    """True when *error* is the unique constraint on the name refusing a write.
+
+    Decided from the driver's diagnostics (SQLSTATE, table, constraint), never
+    from the message text; any other integrity error is not this one.
+    """
+    orig = getattr(error, "orig", None)
+    if getattr(orig, "pgcode", None) != _UNIQUE_VIOLATION:
+        return False
+    diag = getattr(orig, "diag", None)
+    return (
+        getattr(diag, "table_name", None) == MutualExclusionGroup.__tablename__
+        and getattr(diag, "constraint_name", None) == NAME_UNIQUE_CONSTRAINT
+    )
 
 
 class MutualExclusionService:
@@ -42,7 +80,12 @@ class MutualExclusionService:
         traffic_allocation: float = 1.0,
         owner_id: Optional[UUID] = None,
     ) -> MutualExclusionGroup:
-        """Create a new mutual exclusion group."""
+        """Create a new mutual exclusion group.
+
+        Raises ``GroupNameTaken`` when another group has ``name``.
+        """
+        if self._name_taken(name):
+            raise GroupNameTaken(name)
         group = MutualExclusionGroup(
             name=name,
             description=description,
@@ -51,7 +94,7 @@ class MutualExclusionService:
             owner_id=owner_id,
         )
         self.db.add(group)
-        self.db.commit()
+        self._commit(name)
         self.db.refresh(group)
         return group
 
@@ -91,11 +134,17 @@ class MutualExclusionService:
         traffic_allocation: Optional[float] = None,
         status: Optional[str] = None,
     ) -> Optional[MutualExclusionGroup]:
-        """Update a mutual exclusion group."""
+        """Update a mutual exclusion group.
+
+        Raises ``GroupNameTaken`` when ``name`` is another group's; nothing is
+        changed then.
+        """
         group = self.get_group(group_id)
         if not group:
             return None
 
+        if name is not None and name != group.name and self._name_taken(name, group.id):
+            raise GroupNameTaken(name)
         if name is not None:
             group.name = name
         if description is not None:
@@ -105,9 +154,35 @@ class MutualExclusionService:
         if status is not None:
             group.status = MutualExclusionGroupStatus(status)
 
-        self.db.commit()
+        self._commit(name)
         self.db.refresh(group)
         return group
+
+    def _name_taken(self, name: str, exclude_id: Optional[UUID] = None) -> bool:
+        """Whether a group other than ``exclude_id`` has ``name``, compared as the
+        unique constraint compares it (exactly). A check before the write; the
+        constraint itself is the guarantee (``_commit``)."""
+        query = self.db.query(MutualExclusionGroup.id).filter(
+            MutualExclusionGroup.name == name
+        )
+        if exclude_id is not None:
+            query = query.filter(MutualExclusionGroup.id != exclude_id)
+        return query.first() is not None
+
+    def _commit(self, name: Optional[str]) -> None:
+        """Commit; the name's unique constraint refusing it is ``GroupNameTaken``.
+
+        A request that wrote the same name after this one's ``_name_taken``
+        reaches here. The session is rolled back first, so it stays usable;
+        any other integrity error is raised as it was.
+        """
+        try:
+            self.db.commit()
+        except IntegrityError as error:
+            self.db.rollback()
+            if name is not None and _is_name_violation(error):
+                raise GroupNameTaken(name) from error
+            raise
 
     def archive_group(self, group_id: UUID) -> Optional[MutualExclusionGroup]:
         """Archive (soft-delete) a mutual exclusion group."""

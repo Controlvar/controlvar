@@ -419,11 +419,12 @@ read-only. Saving other changes, such as the rollout percentage, leaves them as 
 
 For gradual rollouts on a schedule:
 
-Create a rollout schedule through the API with `POST /api/v1/rollout-schedules/` (the stages
-go in its `stages` list; see [Rollouts](../feature-flags/rollouts.md) for the full contract),
-then start it with
-`POST /api/v1/rollout-schedules/{schedule_id}/activate`. The flag's page in the dashboard
-shows the schedule, its status and its stages, read-only. A schedule like this one:
+On the flag's page, **Create a rollout schedule** under **Rollout schedule** takes a name and
+the stages, in order, and **Activate** starts it (see
+[Rollouts](../feature-flags/rollouts.md#in-the-dashboard)). Through the API, create one with
+`POST /api/v1/rollout-schedules/` (the stages go in its `stages` list; see
+[Rollouts](../feature-flags/rollouts.md) for the full contract), then start it with
+`POST /api/v1/rollout-schedules/{schedule_id}/activate`. A schedule like this one:
 
 | Stage | Target % | Trigger Type | Start Date |
 |-------|----------|-------------|-----------|
@@ -432,7 +433,8 @@ shows the schedule, its status and its stages, read-only. A schedule like this o
 | Stage 3 | 100% | Manual | — |
 
 The platform automatically advances time-based stages. A manual stage waits until you
-advance it with `POST /api/v1/rollout-schedules/stages/{stage_id}/advance`.
+advance it: **Start stage** or **Complete stage** on the flag's page, or
+`POST /api/v1/rollout-schedules/stages/{stage_id}/advance`.
 
 [Guided examples](guided-examples.md#rollout) points to a staged rollout with an automatic rollback that runs on the demo stack.
 

@@ -10,10 +10,25 @@ const METRIC_TYPES: Array<{ value: MetricType; label: string }> = (
 interface MetricsEditorProps {
   metrics: MetricFormData[];
   dispatch: React.Dispatch<ExperimentFormAction>;
+  /**
+   * The field a refusal shown elsewhere is about, and that refusal's element
+   * id. The field then carries `aria-describedby` pointing at it, and a text
+   * field `aria-invalid` too. Unset in guided setup, which renders as before.
+   */
+  invalid?: { index: number; field: 'name' | 'event_name' | 'is_primary' } | null;
+  invalidDescribedBy?: string;
 }
 
 /** The metrics heading and one row per metric. The caller supplies the section. */
-export function MetricsEditor({ metrics, dispatch }: MetricsEditorProps) {
+export function MetricsEditor({ metrics, dispatch, invalid = null, invalidDescribedBy }: MetricsEditorProps) {
+  // A radio takes no aria-invalid; it is described by the refusal only.
+  const marks = (index: number, field: 'name' | 'event_name' | 'is_primary') =>
+    invalid && invalidDescribedBy && invalid.index === index && invalid.field === field
+      ? {
+          ...(field === 'is_primary' ? {} : { 'aria-invalid': true as const }),
+          'aria-describedby': invalidDescribedBy,
+        }
+      : {};
   return (
     <>
       <div className="flex items-center justify-between">
@@ -54,6 +69,7 @@ export function MetricsEditor({ metrics, dispatch }: MetricsEditorProps) {
                   aria-label={`Metric ${index + 1} name`}
                   className={`flex-1 ${smallInputClass}`}
                   data-testid={`metric-name-${index}`}
+                  {...marks(index, 'name')}
                 />
                 <input
                   type="text"
@@ -66,6 +82,7 @@ export function MetricsEditor({ metrics, dispatch }: MetricsEditorProps) {
                   aria-label={`Metric ${index + 1} event name`}
                   className={`flex-1 font-mono ${smallInputClass}`}
                   data-testid={`metric-event-${index}`}
+                  {...marks(index, 'event_name')}
                 />
                 <select
                   name={`metric_type_${index}`}
@@ -92,6 +109,7 @@ export function MetricsEditor({ metrics, dispatch }: MetricsEditorProps) {
                     checked={metric.is_primary}
                     onChange={() => dispatch({ type: 'setPrimary', index })}
                     data-testid={`metric-primary-${index}`}
+                    {...marks(index, 'is_primary')}
                   />
                   Primary metric
                 </label>
