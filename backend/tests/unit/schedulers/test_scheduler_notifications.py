@@ -538,6 +538,9 @@ class TestExperimentSchedulerNotifications:
         mock_exp.start_date = start_date or now
         mock_exp.end_date = end_date or now
         mock_exp.status = ExperimentStatus.DRAFT
+        # What Start requires; the scheduler starts only such a draft (#1454).
+        mock_exp.variants = [MagicMock(is_control=True), MagicMock(is_control=False)]
+        mock_exp.metric_definitions = [MagicMock()]
         return mock_exp
 
     @pytest.mark.asyncio
