@@ -36,6 +36,39 @@ text = "Mutual Exclusion Groups"
 by = ["exempt:baseline"]
 
 [[unit]]
+text = "In the dashboard, an ADMIN or DEVELOPER opens Exclusion groups from the Experiments page: it lists the groups and creates one."
+by = [
+    "test:frontend/src/tests/pages/experiments-index.test.tsx::offers %s the \"Exclusion groups\" link, underlined",
+    "test:frontend/src/tests/pages/exclusion-groups.test.tsx::sees each group, its share as a percent, its count and its status as a word, after one read",
+    "test:frontend/src/tests/pages/exclusion-groups.test.tsx::sends exactly the name and the share as a fraction: 50% is 0.5",
+]
+
+[[unit]]
+text = "A group's page adds and removes its experiments, renames the group and changes its share of traffic, shown as a percent: 50% is a traffic_allocation of 0.5."
+by = [
+    "test:frontend/src/tests/pages/exclusion-group-detail.test.tsx::sends POST {experiment_id} for the chosen one, then shows it as a member",
+    "test:frontend/src/tests/pages/exclusion-group-detail.test.tsx::asks first, naming it, then sends DELETE on its own path and re-reads",
+    "test:frontend/src/tests/pages/exclusion-group-detail.test.tsx::sends a name that differs only in case, and only the name",
+    "test:frontend/src/tests/pages/exclusion-group-detail.test.tsx::sends a new share as a fraction, and nothing else: 25% is 0.25",
+    "test:frontend/src/tests/pages/exclusion-groups.test.tsx::sends exactly the name and the share as a fraction: 50% is 0.5",
+]
+
+[[unit]]
+text = "It offers draft, active and paused experiments that are in no group, and none for an archived group."
+by = [
+    "test:frontend/src/tests/pages/exclusion-group-detail.test.tsx::the picker offers draft, active and paused experiments that are in no group, and nothing else",
+    "test:frontend/src/tests/pages/exclusion-group-detail.test.tsx::is not offered for an archived group, and its experiments are not read; Remove stays",
+]
+
+[[unit]]
+text = "Archiving and unarchiving a group there needs the ADMIN role."
+by = [
+    "test:frontend/src/tests/pages/exclusion-group-detail.test.tsx::a DEVELOPER is told it needs the ADMIN role, and has no control for it",
+    "test:frontend/src/tests/pages/exclusion-group-detail.test.tsx::an ADMIN unarchives with PUT {status: \"active\"}, and the picker returns",
+    "test:backend/tests/unit/core/test_dashboard_experiment_roles.py::test_administer_eligibility_roles_match_require_admin",
+]
+
+[[unit]]
 text = "How It Works"
 by = ["exempt:baseline"]
 

@@ -21,6 +21,12 @@ It prints `"ADMIN"`.
 
 ## Mutual Exclusion Groups
 
+In the dashboard, an ADMIN or DEVELOPER opens Exclusion groups from the Experiments page: it lists
+the groups and creates one. A group's page adds and removes its experiments, renames the group and
+changes its share of traffic, shown as a percent: 50% is a `traffic_allocation` of 0.5. It offers
+draft, active and paused experiments that are in no group, and none for an archived group.
+Archiving and unarchiving a group there needs the ADMIN role.
+
 ### How It Works
 
 Traffic is partitioned using consistent hashing on user ID. Each group has a `traffic_allocation` (0.0–1.0) that defines the fraction of users eligible for experiments within the group. Users are assigned to at most one experiment within the group.

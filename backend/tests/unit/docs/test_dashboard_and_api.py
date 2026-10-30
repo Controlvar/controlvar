@@ -134,6 +134,8 @@ WITNESSES: Dict[str, str] = {
     "Set a bandit's weights by hand": "bandit-weights-override",
     # #1446: only reading a holdout's results is beta.
     "Global holdouts: create and activate; read their results (beta)": "holdouts-page",
+    # #1455's first half: the list page's loaded state (never loading,
+    # refused or error); membership is on each group's page.
     "Mutual exclusion groups": "exclusion-groups-page",
     "Split-URL experiments (full profile)": "split-url-config",
     "CUPED-adjusted results (beta)": "cuped-results",
