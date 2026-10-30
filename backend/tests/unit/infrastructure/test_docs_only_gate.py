@@ -623,6 +623,22 @@ def test_every_jest_twin_runs_on_a_docs_only_change(twin):
     ), f"{twin} is not in DOCS_TESTS, by path or by directory"
 
 
+def test_jest_twins_lists_every_twin():
+    """A twin names its Jest file in a module-level `JEST_TWIN`; the files that
+    do are exactly JEST_TWINS's keys, so deleting an entry fails on its own."""
+    found = {
+        path.relative_to(REPO_ROOT).as_posix()
+        for root in ("backend/tests", "modules/backend/tests")
+        if (REPO_ROOT / root).is_dir()
+        for path in (REPO_ROOT / root).rglob("*.py")
+        if re.search(r"^JEST_TWIN\s*=", path.read_text(encoding="utf-8"), re.M)
+    }
+    assert found == set(JEST_TWINS), (
+        "files defining JEST_TWIN and the keys of JEST_TWINS differ: "
+        f"{sorted(found ^ set(JEST_TWINS))}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # _platform.yml: the skip input
 # ---------------------------------------------------------------------------

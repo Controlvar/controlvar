@@ -40,6 +40,9 @@ pytestmark = [pytest.mark.unit, pytest.mark.regression]
 REPO_ROOT = Path(__file__).resolve().parents[4]
 TABLE = "frontend/src/content/home-quotes.json"
 FIXTURE = "frontend/src/tests/fixtures/home-quotes-cases.json"
+#: The Jest file this twins. test_docs_only_gate.py finds every twin by this
+#: name and holds the set to its JEST_TWINS, which pins each to the docs lane.
+JEST_TWIN = "frontend/src/tests/content/home-quotes.test.tsx"
 
 #: Every refusal, by code; the Jest reader's RULES. The fixture has a case for each.
 RULES = (

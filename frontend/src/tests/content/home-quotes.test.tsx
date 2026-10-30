@@ -141,26 +141,79 @@ describe.each([
   });
 });
 
-describe('the marketing build', () => {
-  it.each(LINKS)('links %s to docs.controlvar.com, at docs/%s', (_id, docsPage) => {
-    const scripts = JSON.parse(readRepo('frontend/package.json') ?? '{}').scripts as Record<string, string>;
-    const site = /NEXT_PUBLIC_DOCS_URL=(\S+)/.exec(scripts['build:marketing'])?.[1];
+/**
+ * The marketing build as `npm run build:marketing` makes it: its
+ * NEXT_PUBLIC_DOCS_URL, read from package.json, and the page rendered to HTML
+ * as the static export renders it.
+ *
+ * The tests above run with no NEXT_PUBLIC_DOCS_URL, where `docsUrl()` gives
+ * the repository's GitHub URL, so a link hard-coded to that URL passed them
+ * (#1459 Q round 1, plant 7b: 48 of 48 green). Here the same link must be
+ * docs.controlvar.com, so a hard-code fails in one setting or the other.
+ * DOCS_SITE is read at module load, so the page, React and the renderer are
+ * all loaded in one fresh module registry (`isolateModules`), and rendered
+ * with `renderToStaticMarkup`, which needs no second copy of the DOM renderer.
+ */
+describe('the marketing build, rendered with its docs URL', () => {
+  const scripts = JSON.parse(readRepo('frontend/package.json') ?? '{}').scripts as Record<string, string>;
+  const site = /NEXT_PUBLIC_DOCS_URL=(\S+)/.exec(scripts['build:marketing'] ?? '')?.[1];
+
+  it('is docs.controlvar.com', () => {
     expect(site).toBe('https://docs.controlvar.com/');
-    // DOCS_SITE is read at module load, so the marketing build's value needs
-    // a fresh module registry (as in services/docs.test.ts).
+  });
+
+  it.each(LINKS)('links %s to docs.controlvar.com, at docs/%s, in the rendered page', (id, docsPage, linkText) => {
     const before = process.env.NEXT_PUBLIC_DOCS_URL;
-    let url = '';
+    let html = '';
+    let expected = '';
     try {
       jest.isolateModules(() => {
         process.env.NEXT_PUBLIC_DOCS_URL = site;
-        const docs: typeof import('@/services/docs') = require('@/services/docs');
-        url = docs.docsUrl(docsPage);
+        const R: typeof import('react') = require('react');
+        const server: typeof import('react-dom/server') = require('react-dom/server');
+        (require('@/utils/site-mode').isMarketingSite as jest.Mock).mockReturnValue(true);
+        const Home: typeof HomePage = require('@/pages/index').default;
+        const Auth: typeof AuthProvider = require('@/contexts/AuthContext').AuthProvider;
+        expected = (require('@/services/docs') as typeof import('@/services/docs')).docsUrl(docsPage);
+        html = server.renderToStaticMarkup(R.createElement(Auth, null, R.createElement(Home)));
       });
     } finally {
       if (before === undefined) delete process.env.NEXT_PUBLIC_DOCS_URL;
       else process.env.NEXT_PUBLIC_DOCS_URL = before;
     }
     const dir = docsPage.replace(/(^|\/)README$/, '');
-    expect(url).toBe(dir ? `https://docs.controlvar.com/${dir}/` : 'https://docs.controlvar.com/');
+    expect(expected).toBe(dir ? `https://docs.controlvar.com/${dir}/` : 'https://docs.controlvar.com/');
+    // The marketing build really rendered: its CTA, not the sign-in.
+    expect(html).toContain('Try the power calculator');
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const anchors = doc.querySelectorAll(`[data-quote="${id}"] a`);
+    expect(anchors).toHaveLength(1);
+    expect(anchors[0].textContent).toBe(linkText);
+    expect(anchors[0].getAttribute('href')).toBe(expected);
+  });
+});
+
+/**
+ * A homepage component links the docs only through `docsUrl`. An `href`
+ * written as an absolute URL is a link `docs-links.test.ts` never sees, and
+ * one equal to the repository's docs URL passes every render test that sets no
+ * NEXT_PUBLIC_DOCS_URL. A cheap guard beside the rendered one above.
+ */
+describe('components/homepage', () => {
+  const DIR = path.join(REPO_ROOT, 'frontend', 'src', 'components', 'homepage');
+  const files = (dir: string): string[] =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? files(path.join(dir, e.name)) : /\.tsx?$/.test(e.name) ? [path.join(dir, e.name)] : [],
+    );
+
+  it('writes no href as an absolute URL', () => {
+    const found = files(DIR);
+    expect(found.map((f) => path.basename(f))).toContain('Quote.tsx');
+    const literal = /href=\s*\{?\s*["'`]https?:/g;
+    const hits = found.flatMap((f) => {
+      const text = fs.readFileSync(f, 'utf8');
+      return (text.match(literal) ?? []).map((m) => `${path.relative(REPO_ROOT, f)}: ${m}`);
+    });
+    expect(hits).toEqual([]);
   });
 });
