@@ -180,6 +180,12 @@ experiment is kept.
 
 ## Global Holdout
 
+In the dashboard, Global holdouts on the Experiments page shows the active holdout to an ADMIN or
+DEVELOPER, and reads a holdout's results (beta) for one event name. An ADMIN also sees every
+holdout there, and creates, edits, activates and ends them; a new holdout's size starts at 5% in
+the dashboard. The page does not offer a new size once a holdout has been active, nor Activate for
+one that has ended.
+
 A global holdout keeps a percentage of new users out of **all** experiments platform-wide. New users in the holdout are not assigned to any experiment: `POST /api/v1/tracking/assign` answers with the control variant. Users who already had an assignment when the holdout was activated keep it.
 
 Only one holdout can be active at a time, and the database enforces it. Activating a holdout, with `PUT /api/v1/holdout/{holdout_id}` or by creating it with `"is_active": true`, deactivates the active one. If two activations happen at the same moment, the second answers `409` and can be retried.

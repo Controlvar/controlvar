@@ -132,7 +132,9 @@ WITNESSES: Dict[str, str] = {
     "Archive and unarchive a feature flag": "flag-archive",
     "Create a bandit experiment": "bandit-create",
     "Set a bandit's weights by hand": "bandit-weights-override",
-    # #1446: only reading a holdout's results is beta.
+    # #1446: only reading a holdout's results is beta. #1455's second half:
+    # the page's loaded state (every holdout for an ADMIN, the active one for
+    # a DEVELOPER), never loading, refused or error.
     "Global holdouts: create and activate; read their results (beta)": "holdouts-page",
     # #1455's first half: the list page's loaded state (never loading,
     # refused or error); membership is on each group's page.

@@ -201,6 +201,41 @@ describe('a role that may read them (ADMIN, DEVELOPER, a superuser)', () => {
     expect(Array.from(links[0].classList)).toContain('underline');
   });
 
+  // #1455: the holdout row, answered, links to the global-holdout page,
+  // whether a holdout is active or none is.
+  it.each([
+    ['an active holdout', () => HOLDOUT, HOLDOUT_SENTENCE],
+    ['none active', () => null, 'None active'],
+  ] as [string, Reply, string][])('the holdout row for %s links to the global-holdout page', async (_, holdout, text) => {
+    serve({}, { holdout });
+    await open();
+    const row = await screen.findByTestId('experiment-holdout');
+    const links = Array.from(row.querySelectorAll('a'));
+    expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([[text, '/experiments/holdouts']]);
+    expect(Array.from(links[0].classList)).toContain('underline');
+  });
+
+  it.each([
+    ['loading', 'ADMIN', { holdout: pending }, 'experiment-holdout-loading'],
+    [
+      'error',
+      'ADMIN',
+      {
+        holdout: () => {
+          throw apiError(500, 'x');
+        },
+      },
+      'experiment-holdout-error',
+    ],
+    ['refused', 'VIEWER', {}, 'experiment-holdout-refused'],
+  ] as [string, string, { holdout?: Reply }, string][])('the holdout row %s links nowhere', async (_, role, replies, id) => {
+    signIn(role);
+    serve({}, replies);
+    await open();
+    const row = await screen.findByTestId(id);
+    expect(row.querySelectorAll('a')).toHaveLength(0);
+  });
+
   it.each([
     ['None', { mutual_exclusion_group_id: null }, {}, 'experiment-exclusion-group'],
     ['loading', {}, { group: pending }, 'experiment-exclusion-group-loading'],
@@ -533,14 +568,13 @@ describe('the note under the header', () => {
     serve();
     await open();
     const note = screen.getByTestId('experiment-api-settings-note');
-    // Exclusion groups are no longer named (#1455): the group's own page
-    // changes them, and the group row links there.
+    // Exclusion groups and the global holdout are no longer named (#1455):
+    // their own pages change them, and their rows link there.
     expect(note).toHaveTextContent(
-      /^Set through the API, not on this page: the global holdout, a paused experiment's resume, sequential testing\.$/,
+      /^Set through the API, not on this page: a paused experiment's resume, sequential testing\.$/,
     );
     const links = Array.from(note.querySelectorAll('a'));
     expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
-      ['the global holdout', docsUrl('api/mutual-exclusion-groups', 'global-holdout')],
       // A draft's dates are set on this page (#1454); a paused one's resume is not.
       ["a paused experiment's resume", docsUrl('guides/user-guide', 'pausing-and-stopping')],
       ['sequential testing', docsUrl('api/sequential-testing', 'turning-it-on')],

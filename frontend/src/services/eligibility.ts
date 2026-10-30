@@ -4,8 +4,9 @@ import { GlobalHoldout, MutualExclusionGroup } from '@/types/eligibility';
 /**
  * The two reads behind the experiment page's "Exclusion group" and "Global
  * holdout" rows (#1449). The experiment page only reads: groups are created
- * and changed on the exclusion-group pages (`services/exclusionGroups.ts`,
- * #1455).
+ * and changed on the exclusion-group pages (`services/exclusionGroups.ts`),
+ * holdouts on the global-holdout page (`services/holdouts.ts`), #1455. That
+ * page also reads `activeHoldout` for a DEVELOPER.
  *
  * Both routes check EXPERIMENT CREATE (`_require_developer`): ADMIN, DEVELOPER
  * and superusers get 200, ANALYST and VIEWER 403. The page asks only for a

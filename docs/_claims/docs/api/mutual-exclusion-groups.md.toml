@@ -313,6 +313,32 @@ text = "Global Holdout"
 by = ["exempt:baseline"]
 
 [[unit]]
+text = "In the dashboard, Global holdouts on the Experiments page shows the active holdout to an ADMIN or DEVELOPER, and reads a holdout's results (beta) for one event name."
+by = [
+    "test:frontend/src/tests/pages/experiments-index.test.tsx::offers %s the \"Global holdouts\" link, underlined, after \"Exclusion groups\"",
+    "test:frontend/src/tests/pages/holdouts.test.tsx::a DEVELOPER reads the active holdout only, never /holdout/all, and is told who changes it",
+    "test:frontend/src/tests/pages/holdouts.test.tsx::sends query {metric}, then shows each group, the difference, its interval, p and the verdict as a word",
+]
+
+[[unit]]
+text = "An ADMIN also sees every holdout there, and creates, edits, activates and ends them; a new holdout's size starts at 5% in the dashboard."
+by = [
+    "test:frontend/src/tests/pages/holdouts.test.tsx::reads /holdout/all once, and sees every holdout and the active one",
+    "test:frontend/src/tests/pages/holdouts.test.tsx::defaults to 5% and not activated, says what the size means, and sends exactly that",
+    "test:frontend/src/tests/pages/holdouts.test.tsx::activating asks first, naming the holdout it ends; then PUT is_active: true, a re-read, and one Active",
+    "test:frontend/src/tests/pages/holdouts.test.tsx::ending asks first, then PUT is_active: false, and none is active",
+    "test:frontend/src/tests/pages/holdouts.test.tsx::a holdout never activated: its size can change, and only what changed is sent",
+    "test:backend/tests/unit/core/test_dashboard_experiment_roles.py::test_administer_eligibility_roles_match_require_admin",
+]
+
+[[unit]]
+text = "The page does not offer a new size once a holdout has been active, nor Activate for one that has ended."
+by = [
+    "test:frontend/src/tests/pages/holdouts.test.tsx::has been active: its size is text, never a field, and is never sent",
+    "test:frontend/src/tests/pages/holdouts.test.tsx::Activate is offered only on a holdout never activated; End only on the active one",
+]
+
+[[unit]]
 text = "A global holdout keeps a percentage of new users out of all experiments platform-wide."
 by = ["exempt:baseline"]
 

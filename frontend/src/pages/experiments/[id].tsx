@@ -12,7 +12,8 @@ import { EligibilityUser, useExperimentEligibility } from '@/hooks/useExperiment
 import { isApiError } from '@/services/api';
 import { docsUrl } from '@/services/docs';
 import { ExperimentsService } from '@/services/experiments';
-import { GlobalHoldout, MutualExclusionGroup } from '@/types/eligibility';
+import { MutualExclusionGroup } from '@/types/eligibility';
+import { holdoutLabel } from '@/utils/holdouts';
 import {
   Experiment,
   ExperimentStatus,
@@ -154,11 +155,6 @@ export function groupLabel(group: MutualExclusionGroup): string {
   return group.status === 'archived' ? `${group.name}${ELIGIBILITY_COPY.groupArchived}` : group.name;
 }
 
-/** The active global holdout as its row shows it. It applies to every experiment, not this one. */
-export function holdoutLabel(holdout: GlobalHoldout): string {
-  return `${holdout.name}: keeps ${holdout.holdout_percentage}% of new users out of every experiment`;
-}
-
 /**
  * The header's "Exclusion group" and "Global holdout" items. A component of
  * its own so that its reads start only once the experiment has loaded (the
@@ -202,8 +198,21 @@ function EligibilityRows({
       </div>
       <div className="flex items-baseline gap-1.5">
         <dt className="text-slate-500">Global holdout</dt>
-        {holdout.kind === 'absent' && <dd data-testid="experiment-holdout">{ELIGIBILITY_COPY.holdoutNone}</dd>}
-        {holdout.kind === 'present' && <dd data-testid="experiment-holdout">{holdoutLabel(holdout.value)}</dd>}
+        {/* Created, activated and ended on the global-holdout page (#1455). */}
+        {holdout.kind === 'absent' && (
+          <dd data-testid="experiment-holdout">
+            <Link href="/experiments/holdouts" className={NOTE_LINK}>
+              {ELIGIBILITY_COPY.holdoutNone}
+            </Link>
+          </dd>
+        )}
+        {holdout.kind === 'present' && (
+          <dd data-testid="experiment-holdout">
+            <Link href="/experiments/holdouts" className={NOTE_LINK}>
+              {holdoutLabel(holdout.value)}
+            </Link>
+          </dd>
+        )}
         {holdout.kind === 'loading' && (
           <dd data-testid="experiment-holdout-loading">{ELIGIBILITY_COPY.loading}</dd>
         )}
@@ -512,15 +521,6 @@ export default function ExperimentDetailPage() {
               </dl>
               <p className="mt-2 text-xs text-slate-600" data-testid="experiment-api-settings-note">
                 Set through the API, not on this page:{' '}
-                <a
-                  href={docsUrl('api/mutual-exclusion-groups', 'global-holdout')}
-                  className={NOTE_LINK}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  the global holdout
-                </a>
-                ,{' '}
                 <a
                   href={docsUrl('guides/user-guide', 'pausing-and-stopping')}
                   className={NOTE_LINK}

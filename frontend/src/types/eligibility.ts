@@ -62,6 +62,82 @@ export interface ExclusionGroupChanges {
   traffic_allocation?: number;
 }
 
+/**
+ * `GlobalHoldoutResponse` in full, as the global-holdout page reads it from
+ * `GET /api/v1/holdout/all` (#1455). `holdout_percentage` is a WHOLE percent,
+ * 1 to 20, unlike a group's fractional share.
+ */
+export interface HoldoutDetail {
+  id: string;
+  name: string;
+  description?: string | null;
+  holdout_percentage: number;
+  is_active: boolean;
+  owner_id?: string | null;
+  /** When it was activated (UTC, zone-less); null if never, or active since before membership was recorded. */
+  activated_at?: string | null;
+  /** When it ended (UTC, zone-less); an ended holdout cannot restart. */
+  deactivated_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** `GlobalHoldoutListResponse`, from `GET /api/v1/holdout/all` (ADMIN). */
+export interface HoldoutList {
+  items: HoldoutDetail[];
+  total: number;
+}
+
+/** `GlobalHoldoutCreate`. */
+export interface HoldoutCreate {
+  name: string;
+  description?: string;
+  holdout_percentage: number;
+  is_active: boolean;
+}
+
+/** The fields of `GlobalHoldoutUpdate` the page changes: only those that changed are sent. */
+export interface HoldoutChanges {
+  name?: string;
+  description?: string;
+  holdout_percentage?: number;
+  is_active?: boolean;
+}
+
+export type HoldoutUnavailableReason = 'activated_before_measurement' | 'not_activated' | 'too_few_users' | 'no_events';
+
+/** One arm of `HoldoutResultsResponse`. */
+export interface HoldoutResultsGroup {
+  group: 'in_holdout' | 'not_in_holdout';
+  users: number;
+  conversions: number;
+  /** 0 to 1; null when `users` is 0. */
+  conversion_rate: number | null;
+  excluded_users?: number;
+}
+
+/** "Not in holdout" minus "in holdout", as fractions of 1. */
+export interface HoldoutResultsDifference {
+  absolute: number;
+  relative_pct?: number | null;
+  ci_lower: number;
+  ci_upper: number;
+  p_value: number | null;
+  is_significant: boolean;
+}
+
+/** `HoldoutResultsResponse`, from `GET /api/v1/holdout/{holdout_id}/results` (beta). */
+export interface HoldoutResults {
+  holdout_id: string;
+  metric: string;
+  unavailable_reason: HoldoutUnavailableReason | null;
+  /** The server's sentence for `unavailable_reason`: never shown, the page has its own. */
+  message?: string | null;
+  groups: HoldoutResultsGroup[];
+  difference: HoldoutResultsDifference | null;
+  analysis_status?: string;
+}
+
 /** `GlobalHoldoutResponse`, from `GET /api/v1/holdout` (null when none is active). */
 export interface GlobalHoldout {
   id: string;
