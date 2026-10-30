@@ -1,0 +1,310 @@
+{
+  "about": "Tables for content/home-quotes.json's two readers: frontend/src/tests/content/home-quotes-rules.ts (Jest) and backend/tests/unit/docs/test_homepage_quotes_docs.py (pytest). Each reader runs every case against `files` (a case's own `files` replace those paths; null deletes one) and must give exactly its `refusals`, in order. Every refusal code a reader knows has a case here.",
+  "files": {
+    "mkdocs.yml": "site_name: Fixture\nnav:\n  - Home: README.md\n  - Limits: limits.md\n  - Guides:\n      - Reading results: guides/results.md\n  - Tool (beta): tool.md\n",
+    "docs/README.md": "# Fixture docs\n",
+    "docs/limits.md": "# Limits\n\n| Metric | How |\n|---|---|\n| Revenue | A revenue metric is analysed as its mean value\nper assigned user, compared with Welch's t-test. |\n",
+    "docs/guides/results.md": "# Reading results\n\nFor a revenue metric a second line gives the difference per user with its confidence interval.\n",
+    "docs/tool.md": "# Run the tool with one command (beta)\n\nIt installs the core profile in `us-west-2`. It is not for production data.\n\n```bash\n    npm install @example/tool\n```\n",
+    "docs/orphan.md": "# Orphan tool (beta)\n\nIt installs the core profile in us-west-2, and no nav lists this page.\n"
+  },
+  "cases": [
+    {
+      "name": "accepts a sentence and a code block; prose() folds case, drops code marks and collapses whitespace, and code lines are stripped",
+      "refusals": [],
+      "table": {
+        "quotes": [
+          {
+            "id": "revenue",
+            "parts": ["A revenue metric is analysed as its mean value per assigned user, compared with Welch's t-test, and its results give the difference per user with its confidence interval."],
+            "sources": [
+              { "page": "limits", "phrases": ["a revenue metric is analysed as its mean value per assigned user", "compared with Welch's t-test"] },
+              { "page": "guides/results", "phrases": ["the difference per user with its confidence interval"] }
+            ]
+          },
+          {
+            "id": "tool",
+            "parts": ["Or ", { "link": "run the tool with one command", "page": "tool" }, ", a beta that installs the core profile in us-west-2; it is not for production data."],
+            "sources": [{ "page": "tool", "phrases": ["installs the core profile in us-west-2", "it is not for production data"] }]
+          },
+          { "id": "tool-install", "code": ["npm install @example/tool"], "sources": [{ "page": "tool" }] }
+        ]
+      }
+    },
+    {
+      "name": "accepts a link to a page nested in the nav, whose title has no (beta), in a quote that does not say beta",
+      "refusals": [],
+      "table": {
+        "quotes": [
+          {
+            "id": "results",
+            "parts": [{ "link": "Reading results", "page": "guides/results" }, " gives the difference per user with its confidence interval."],
+            "sources": [{ "page": "guides/results", "phrases": ["the difference per user with its confidence interval"] }]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the table has a key besides quotes",
+      "refusals": ["keys"],
+      "table": {
+        "quotes": [
+          { "id": "results", "parts": ["It gives the difference per user with its confidence interval."], "sources": [{ "page": "guides/results", "phrases": ["the difference per user with its confidence interval"] }] }
+        ],
+        "version": 1
+      }
+    },
+    {
+      "name": "a quote has no sources key",
+      "refusals": ["keys"],
+      "table": { "quotes": [{ "id": "results", "parts": ["It gives the difference per user with its confidence interval."] }] }
+    },
+    {
+      "name": "a link has a key besides link and page",
+      "refusals": ["keys"],
+      "table": {
+        "quotes": [
+          {
+            "id": "tool",
+            "parts": ["Or ", { "link": "run the tool with one command", "page": "tool", "href": "https://example.com/" }, ", a beta that installs the core profile in us-west-2."],
+            "sources": [{ "page": "tool", "phrases": ["installs the core profile in us-west-2"] }]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a sentence's source has a key besides page and phrases",
+      "refusals": ["keys"],
+      "table": {
+        "quotes": [
+          { "id": "results", "parts": ["It gives the difference per user with its confidence interval."], "sources": [{ "page": "guides/results", "phrases": ["the difference per user with its confidence interval"], "line": 3 }] }
+        ]
+      }
+    },
+    {
+      "name": "a code block's source names phrases",
+      "refusals": ["keys"],
+      "table": { "quotes": [{ "id": "tool-install", "code": ["npm install @example/tool"], "sources": [{ "page": "tool", "phrases": ["npm install @example/tool"] }] }] }
+    },
+    {
+      "name": "quotes is not a list",
+      "refusals": ["type"],
+      "table": { "quotes": { "id": "results" } }
+    },
+    {
+      "name": "a part is neither a string nor a link",
+      "refusals": ["type"],
+      "table": {
+        "quotes": [
+          { "id": "results", "parts": ["It gives the difference per user with its confidence interval", 2], "sources": [{ "page": "guides/results", "phrases": ["the difference per user with its confidence interval"] }] }
+        ]
+      }
+    },
+    {
+      "name": "the table has no quotes",
+      "refusals": ["empty"],
+      "table": { "quotes": [] }
+    },
+    {
+      "name": "a source names no phrase",
+      "refusals": ["empty"],
+      "table": { "quotes": [{ "id": "results", "parts": ["It gives the difference per user with its confidence interval."], "sources": [{ "page": "guides/results", "phrases": [] }] }] }
+    },
+    {
+      "name": "a code block has no lines",
+      "refusals": ["empty"],
+      "table": { "quotes": [{ "id": "tool-install", "code": [], "sources": [{ "page": "tool" }] }] }
+    },
+    {
+      "name": "an id is not lower-case words joined by hyphens",
+      "refusals": ["id"],
+      "table": { "quotes": [{ "id": "Results quote", "parts": ["It gives the difference per user with its confidence interval."], "sources": [{ "page": "guides/results", "phrases": ["the difference per user with its confidence interval"] }] }] }
+    },
+    {
+      "name": "two quotes share an id",
+      "refusals": ["duplicate-id"],
+      "table": {
+        "quotes": [
+          { "id": "results", "parts": ["It gives the difference per user with its confidence interval."], "sources": [{ "page": "guides/results", "phrases": ["the difference per user with its confidence interval"] }] },
+          { "id": "results", "parts": ["It gives the difference per user with its confidence interval."], "sources": [{ "page": "guides/results", "phrases": ["the difference per user with its confidence interval"] }] }
+        ]
+      }
+    },
+    {
+      "name": "a page is named with its .md",
+      "refusals": ["page-name"],
+      "table": { "quotes": [{ "id": "results", "parts": ["It gives the difference per user with its confidence interval."], "sources": [{ "page": "guides/results.md", "phrases": ["the difference per user with its confidence interval"] }] }] }
+    },
+    {
+      "name": "a page name ends with a newline (Python's $ would accept it; JavaScript's does not)",
+      "refusals": ["page-name"],
+      "table": { "quotes": [{ "id": "results", "parts": ["It gives the difference per user with its confidence interval."], "sources": [{ "page": "guides/results\n", "phrases": ["the difference per user with its confidence interval"] }] }] }
+    },
+    {
+      "name": "an id ends with a newline",
+      "refusals": ["id"],
+      "table": { "quotes": [{ "id": "results\n", "parts": ["It gives the difference per user with its confidence interval."], "sources": [{ "page": "guides/results", "phrases": ["the difference per user with its confidence interval"] }] }] }
+    },
+    {
+      "name": "a quote cites no page",
+      "refusals": ["no-source"],
+      "table": { "quotes": [{ "id": "results", "parts": ["It gives the difference per user with its confidence interval."], "sources": [] }] }
+    },
+    {
+      "name": "a quote has two links",
+      "refusals": ["links"],
+      "table": {
+        "quotes": [
+          {
+            "id": "tool",
+            "parts": [{ "link": "run the tool with one command", "page": "tool" }, " (a beta) or read ", { "link": "Limits", "page": "limits" }, "; it installs the core profile in us-west-2."],
+            "sources": [{ "page": "tool", "phrases": ["installs the core profile in us-west-2"] }]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a phrase is under 20 characters",
+      "refusals": ["short-phrase"],
+      "table": { "quotes": [{ "id": "results", "parts": ["It gives the difference per user with its confidence interval."], "sources": [{ "page": "guides/results", "phrases": ["difference per user"] }] }] }
+    },
+    {
+      "name": "the quote no longer says what its phrase says (production use, not production data)",
+      "refusals": ["not-in-quote"],
+      "table": {
+        "quotes": [
+          {
+            "id": "tool",
+            "parts": ["Or ", { "link": "run the tool with one command", "page": "tool" }, ", a beta that is not for production use."],
+            "sources": [{ "page": "tool", "phrases": ["it is not for production data"] }]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the cited page no longer says the phrase",
+      "refusals": ["not-on-page"],
+      "files": { "docs/guides/results.md": "# Reading results\n\nFor a revenue metric a second line gives the change per user with its interval.\n" },
+      "table": { "quotes": [{ "id": "results", "parts": ["It gives the difference per user with its confidence interval."], "sources": [{ "page": "guides/results", "phrases": ["the difference per user with its confidence interval"] }] }] }
+    },
+    {
+      "name": "a cited page does not exist",
+      "refusals": ["no-page"],
+      "table": { "quotes": [{ "id": "results", "parts": ["It gives the difference per user with its confidence interval."], "sources": [{ "page": "guides/gone", "phrases": ["the difference per user with its confidence interval"] }] }] }
+    },
+    {
+      "name": "a linked page does not exist",
+      "refusals": ["no-page"],
+      "table": {
+        "quotes": [
+          {
+            "id": "tool",
+            "parts": ["Or ", { "link": "run the tool with one command", "page": "gone" }, ", a beta that installs the core profile in us-west-2."],
+            "sources": [{ "page": "tool", "phrases": ["installs the core profile in us-west-2"] }]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a code block cites a page that does not exist",
+      "refusals": ["no-page"],
+      "table": { "quotes": [{ "id": "tool-install", "code": ["npm install @example/tool"], "sources": [{ "page": "gone" }] }] }
+    },
+    {
+      "name": "a linked page is not in the nav",
+      "refusals": ["not-in-nav"],
+      "table": {
+        "quotes": [
+          {
+            "id": "orphan",
+            "parts": ["Or the ", { "link": "orphan tool", "page": "orphan" }, ", a beta that installs the core profile in us-west-2."],
+            "sources": [{ "page": "orphan", "phrases": ["installs the core profile in us-west-2"] }]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the nav lists the linked page only without a label",
+      "refusals": ["not-in-nav"],
+      "files": { "mkdocs.yml": "site_name: Fixture\nnav:\n  - README.md\n  - tool.md\n" },
+      "table": {
+        "quotes": [
+          {
+            "id": "tool",
+            "parts": ["Or ", { "link": "run the tool with one command", "page": "tool" }, ", a beta that installs the core profile in us-west-2."],
+            "sources": [{ "page": "tool", "phrases": ["installs the core profile in us-west-2"] }]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a linked page does not open with a title",
+      "refusals": ["no-title"],
+      "files": { "docs/tool.md": "Run the tool with one command (beta)\n\nIt installs the core profile in us-west-2.\n" },
+      "table": {
+        "quotes": [
+          {
+            "id": "tool",
+            "parts": ["Or ", { "link": "run the tool with one command", "page": "tool" }, ", a beta that installs the core profile in us-west-2."],
+            "sources": [{ "page": "tool", "phrases": ["installs the core profile in us-west-2"] }]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a link's text is not its page's title",
+      "refusals": ["link-text"],
+      "table": {
+        "quotes": [
+          {
+            "id": "tool",
+            "parts": ["Or ", { "link": "the one-command tool", "page": "tool" }, ", a beta that installs the core profile in us-west-2."],
+            "sources": [{ "page": "tool", "phrases": ["installs the core profile in us-west-2"] }]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the quote says beta and the linked page's title no longer ends (beta)",
+      "refusals": ["says-beta"],
+      "files": { "docs/tool.md": "# Run the tool with one command\n\nIt installs the core profile in `us-west-2`. It is not for production data.\n" },
+      "table": {
+        "quotes": [
+          {
+            "id": "tool",
+            "parts": ["Or ", { "link": "run the tool with one command", "page": "tool" }, ", a beta that installs the core profile in us-west-2."],
+            "sources": [{ "page": "tool", "phrases": ["installs the core profile in us-west-2"] }]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the quote says beta and links no page",
+      "refusals": ["says-beta"],
+      "table": { "quotes": [{ "id": "results", "parts": ["It gives the difference per user with its confidence interval (beta)."], "sources": [{ "page": "guides/results", "phrases": ["the difference per user with its confidence interval"] }] }] }
+    },
+    {
+      "name": "the linked page's title ends (beta) and the quote does not say beta",
+      "refusals": ["omits-beta"],
+      "table": {
+        "quotes": [
+          {
+            "id": "tool",
+            "parts": ["Or ", { "link": "run the tool with one command", "page": "tool" }, ", which installs the core profile in us-west-2."],
+            "sources": [{ "page": "tool", "phrases": ["installs the core profile in us-west-2"] }]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a code line is not a line of the page",
+      "refusals": ["code-not-on-page"],
+      "table": { "quotes": [{ "id": "tool-install", "code": ["npm install @example/other-tool"], "sources": [{ "page": "tool" }] }] }
+    },
+    {
+      "name": "a code line is part of a line of the page, not a whole one",
+      "refusals": ["code-not-on-page"],
+      "table": { "quotes": [{ "id": "tool-install", "code": ["npm install"], "sources": [{ "page": "tool" }] }] }
+    }
+  ]
+}

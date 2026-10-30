@@ -275,8 +275,8 @@ NOT_DOCS_TESTS = {
     # docs-only ones too.
     "backend/tests/smoke/test_legacy_name.py": "the lint job runs the same check",
 }
-# docs-links.test.ts (Jest) runs on a docs-only change as its pinned Python
-# twin, backend/tests/unit/docs/test_dashboard_docs_links.py.
+# A Jest test that reads docs/ runs on a docs-only change as its Python twin
+# (JEST_TWINS below).
 # The real-tree scan in test_leak_guard.py reads docs/ through `git ls-files`;
 # the required Leak Guard workflow runs the same guard on every pull request.
 
@@ -590,6 +590,37 @@ def test_the_dashboard_and_api_gate_runs_on_a_docs_only_change():
     assert any(
         rel == t or (t.endswith("/") and rel.startswith(t)) for t in DOCS_TESTS
     ), f"{rel} is not in DOCS_TESTS, by path or by directory"
+
+
+#: Python twins of Jest tests that read docs/, and the Jest file each mirrors.
+#: Jest does not run on a docs-only change, so the twin is what fails the
+#: pull request that rewords the docs side; without it that pull request
+#: merges green and the next one to run the frontend suite goes red.
+JEST_TWINS = {
+    # docsUrl() links in frontend/src address pages that exist under docs/.
+    "backend/tests/unit/docs/test_dashboard_docs_links.py": (
+        "frontend/src/tests/services/docs-links.test.ts"
+    ),
+    # The homepage's quoted sentences (frontend/src/content/home-quotes.json)
+    # against the pages they quote, the linked page's "(beta)" title and its
+    # place in the mkdocs nav.
+    "backend/tests/unit/docs/test_homepage_quotes_docs.py": (
+        "frontend/src/tests/content/home-quotes.test.tsx"
+    ),
+}
+
+
+@pytest.mark.parametrize("twin", sorted(JEST_TWINS))
+def test_every_jest_twin_runs_on_a_docs_only_change(twin):
+    """The twin and its Jest file exist, and the twin is in DOCS_TESTS (by
+    path or by directory), never excused in NOT_DOCS_TESTS."""
+    assert (REPO_ROOT / twin).is_file(), f"{twin} is gone"
+    jest = JEST_TWINS[twin]
+    assert (REPO_ROOT / jest).is_file(), f"{jest}, which {twin} mirrors, is gone"
+    assert twin not in NOT_DOCS_TESTS, f"{twin} must run on a docs-only change"
+    assert any(
+        twin == t or (t.endswith("/") and twin.startswith(t)) for t in DOCS_TESTS
+    ), f"{twin} is not in DOCS_TESTS, by path or by directory"
 
 
 # ---------------------------------------------------------------------------
