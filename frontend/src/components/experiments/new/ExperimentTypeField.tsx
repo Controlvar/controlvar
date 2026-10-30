@@ -34,7 +34,7 @@ export function ExperimentTypeField({ value, dispatch }: ExperimentTypeFieldProp
           </option>
         ))}
       </select>
-      <p className="text-xs text-slate-400 mt-1" data-testid="experiment-type-note">
+      <p className="text-xs text-slate-500 mt-1" data-testid="experiment-type-note">
         <a href={docsUrl('api/split-url')} className="text-blue-600 hover:text-blue-800 hover:underline">
           Split URL
         </a>{' '}

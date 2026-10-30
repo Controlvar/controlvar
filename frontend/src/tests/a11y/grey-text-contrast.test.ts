@@ -28,6 +28,12 @@ const FILES = [
   'pages/experiments/holdouts.tsx',
   'components/experiments/HoldoutForm.tsx',
   'components/experiments/HoldoutResultsPanel.tsx',
+  // The experiment page and the new-experiment form's basic fields and type
+  // note, whole. The nightly audit checks neither page's contrast (it opens the
+  // form for its label rules only), so this is their only pin.
+  'pages/experiments/[id].tsx',
+  'components/experiments/new/BasicInfoFields.tsx',
+  'components/experiments/new/ExperimentTypeField.tsx',
 ];
 
 /**
@@ -137,10 +143,10 @@ describe("the flag page's rollout schedule section", () => {
 });
 
 /**
- * The experiment page's header terms (#1449). The page has other slate-400
- * text, so it cannot join FILES; this pins its header `<dl>`, the page's only
- * one, by its `dt` tags. The nightly audit never opens this page, and jsdom
- * cannot measure contrast, so nothing else checks it.
+ * The experiment page's header terms (#1449). The whole page is in FILES, which
+ * refuses slate-400; this is stricter on its header `<dl>`, the page's only
+ * one: no `dt` is slate-400 or lighter. The nightly audit never opens this
+ * page, and jsdom cannot measure contrast, so nothing else checks it.
  */
 describe("the experiment page's header terms", () => {
   const PAGE = 'pages/experiments/[id].tsx';
