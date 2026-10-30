@@ -3,8 +3,9 @@ import { GlobalHoldout, MutualExclusionGroup } from '@/types/eligibility';
 
 /**
  * The two reads behind the experiment page's "Exclusion group" and "Global
- * holdout" rows (#1449). Read-only: the dashboard never creates or changes a
- * group or a holdout.
+ * holdout" rows (#1449). The experiment page only reads: groups are created
+ * and changed on the exclusion-group pages (`services/exclusionGroups.ts`,
+ * #1455).
  *
  * Both routes check EXPERIMENT CREATE (`_require_developer`): ADMIN, DEVELOPER
  * and superusers get 200, ANALYST and VIEWER 403. The page asks only for a

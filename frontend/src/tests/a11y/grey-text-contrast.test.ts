@@ -21,7 +21,32 @@ const FILES = [
   'pages/feature-flags/index.tsx',
   'components/admin/AdminSidebar.tsx',
   'components/admin/AdminLayout.tsx',
+  // #1455: the nightly audit does not visit these, so this is their only pin.
+  'pages/experiments/exclusion-groups/index.tsx',
+  'pages/experiments/exclusion-groups/[id].tsx',
+  'components/experiments/ExclusionGroupForm.tsx',
 ];
+
+/**
+ * The exclusion-group pages (#1455) sit on the slate-50 page background,
+ * where slate-500 is 4.55:1, too close to 4.5. So they use no text lighter
+ * than slate-600 at all (UX: slate-600 inside bg-slate-50).
+ */
+const SLATE_50_FILES = [
+  'pages/experiments/exclusion-groups/index.tsx',
+  'pages/experiments/exclusion-groups/[id].tsx',
+  'components/experiments/ExclusionGroupForm.tsx',
+];
+
+describe('slate-50 pages use slate-600 or darker text', () => {
+  it.each(SLATE_50_FILES)('%s', (file) => {
+    const source = fs.readFileSync(path.join(SRC, file), 'utf8');
+    const light = Array.from(source.matchAll(/(?<!placeholder:)\btext-slate-([1-5])00\b/g)).map((m) => m[0]);
+    expect(light).toEqual([]);
+    // The pattern reads this file's shades: a file with none would pass vacuously.
+    expect(source).toMatch(/\btext-slate-[6-9]00\b/);
+  });
+});
 
 describe('grey text contrast', () => {
   it.each(FILES)('%s uses no slate-400 text', (file) => {

@@ -1,9 +1,44 @@
 import {
   FLAG_ROLE_NOTE,
+  canAdministerEligibility,
   canChangeExperiment,
   canChangeFeatureFlags,
   canCreateExperiment,
 } from '@/utils/experimentPermissions';
+
+// #1455 (PE 9): archiving a group, and the holdout's admin actions, are
+// `_require_admin` on the server: a superuser, or the ADMIN role itself.
+// test_dashboard_experiment_roles.py holds the list equal to both servers'
+// behaviour; this holds the helper's own answers, the null user included.
+describe('canAdministerEligibility', () => {
+  it.each([
+    ['ADMIN', true],
+    ['DEVELOPER', false],
+    ['ANALYST', false],
+    ['VIEWER', false],
+  ])('a non-superuser %s -> %s', (role, expected) => {
+    expect(canAdministerEligibility({ role, is_superuser: false })).toBe(expected);
+  });
+
+  it('a superuser VIEWER may, as may a superuser of any role', () => {
+    expect(canAdministerEligibility({ role: 'VIEWER', is_superuser: true })).toBe(true);
+    expect(canAdministerEligibility({ role: 'ANALYST', is_superuser: true })).toBe(true);
+    expect(canAdministerEligibility({ role: null, is_superuser: true })).toBe(true);
+  });
+
+  it('no session yet answers false: the controls wait for a known ADMIN (fail closed)', () => {
+    expect(canAdministerEligibility(null)).toBe(false);
+    expect(canAdministerEligibility(undefined)).toBe(false);
+  });
+
+  it('a user with no role or an unknown role may not', () => {
+    expect(canAdministerEligibility({})).toBe(false);
+    expect(canAdministerEligibility({ role: null })).toBe(false);
+    expect(canAdministerEligibility({ role: 'OWNER' })).toBe(false);
+    // Roles are matched exactly, as the API sends them.
+    expect(canAdministerEligibility({ role: 'admin' })).toBe(false);
+  });
+});
 
 describe('canChangeExperiment', () => {
   it.each([

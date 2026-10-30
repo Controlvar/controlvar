@@ -44,7 +44,7 @@ The table lists each capability and where you do it today:
 | Create a bandit experiment | API only | [Multi-armed bandits](../api/multi-armed-bandit.md) |
 | Set a bandit's weights by hand | API only | [Multi-armed bandits](../api/multi-armed-bandit.md) |
 | Global holdouts: create and activate; read their results (beta) | API only | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md) |
-| Mutual exclusion groups | API only | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md) |
+| Mutual exclusion groups | Dashboard | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md) |
 | Split-URL experiments (full profile) | API only | [Split URL testing](../api/split-url.md) |
 | CUPED-adjusted results (beta) | API only | [CUPED](../api/cuped.md) |
 | The interaction scan and the pair test (beta) | API only | [Interaction detection](../api/interaction-detection.md) |

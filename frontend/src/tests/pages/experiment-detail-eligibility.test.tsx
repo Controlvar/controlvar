@@ -188,6 +188,42 @@ describe('a role that may read them (ADMIN, DEVELOPER, a superuser)', () => {
     );
   });
 
+  // #1455 (PLAN C5): membership is changed on the group's page, so the row
+  // links there, by the experiment's own group id, underlined (not by colour).
+  it.each(['active', 'archived'])("the %s group's name links to the group's page", async (status) => {
+    serve({}, { group: () => ({ ...GROUP, status }) });
+    await open();
+    const row = await screen.findByTestId('experiment-exclusion-group');
+    const links = Array.from(row.querySelectorAll('a'));
+    expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+      [row.textContent, '/experiments/exclusion-groups/grp-1'],
+    ]);
+    expect(Array.from(links[0].classList)).toContain('underline');
+  });
+
+  it.each([
+    ['None', { mutual_exclusion_group_id: null }, {}, 'experiment-exclusion-group'],
+    ['loading', {}, { group: pending }, 'experiment-exclusion-group-loading'],
+    [
+      'error',
+      {},
+      {
+        group: () => {
+          throw apiError(500, 'x');
+        },
+      },
+      'experiment-exclusion-group-error',
+    ],
+  ] as [string, Partial<Experiment>, { group?: Reply }, string][])(
+    'the %s state links nowhere',
+    async (_, experiment, replies, id) => {
+      serve(experiment, replies);
+      await open();
+      const row = await screen.findByTestId(id);
+      expect(row.querySelectorAll('a')).toHaveLength(0);
+    },
+  );
+
   it('a group id the API leaves out reads "None", and is not asked for', async () => {
     const { mutual_exclusion_group_id: _omitted, ...rest } = EXPERIMENT;
     mockedApiFetch.mockImplementation(
@@ -497,12 +533,13 @@ describe('the note under the header', () => {
     serve();
     await open();
     const note = screen.getByTestId('experiment-api-settings-note');
+    // Exclusion groups are no longer named (#1455): the group's own page
+    // changes them, and the group row links there.
     expect(note).toHaveTextContent(
-      /^Set through the API, not on this page: exclusion groups, the global holdout, start and end dates, sequential testing\.$/,
+      /^Set through the API, not on this page: the global holdout, start and end dates, sequential testing\.$/,
     );
     const links = Array.from(note.querySelectorAll('a'));
     expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
-      ['exclusion groups', docsUrl('api/mutual-exclusion-groups', 'mutual-exclusion-groups')],
       ['the global holdout', docsUrl('api/mutual-exclusion-groups', 'global-holdout')],
       ['start and end dates', docsUrl('guides/user-guide', 'creating-an-experiment')],
       ['sequential testing', docsUrl('api/sequential-testing', 'turning-it-on')],

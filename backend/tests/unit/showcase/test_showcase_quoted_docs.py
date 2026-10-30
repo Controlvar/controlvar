@@ -100,10 +100,12 @@ API_SCENES = ("api-intro", "api")
 #: dashboard lacks.
 API_WORDS = ("holdout", "exclusion", "sequential", "schedule", "cuped")
 #: The guide's rows the API part rests on, by the start of their first cell.
+#: "Mutual exclusion groups" left with #1455's group pages: video 9's API part
+#: is withdrawn (D182) and is no longer checked against that row; video 9's
+#: re-plan retires it (EM-2).
 API_ONLY_ROWS = (
     "Schedule an experiment's start and end dates",
     "Global holdouts",
-    "Mutual exclusion groups",
 )
 
 
@@ -317,7 +319,6 @@ CLAIMS: Dict[str, Claim] = {
         (Drawn("headline", "Through the API"),),
         (
             (GUIDE, "| Schedule an experiment's start and end dates | API only |"),
-            (GUIDE, "| Mutual exclusion groups | API only |"),
             (
                 GUIDE,
                 "| Global holdouts: create and activate; read their results (beta)"

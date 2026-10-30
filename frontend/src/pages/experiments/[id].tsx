@@ -183,7 +183,12 @@ function EligibilityRows({
         <dt className="text-slate-500">Exclusion group</dt>
         {group.kind === 'absent' && <dd data-testid="experiment-exclusion-group">{ELIGIBILITY_COPY.groupNone}</dd>}
         {group.kind === 'present' && (
-          <dd data-testid="experiment-exclusion-group">{groupLabel(group.value)}</dd>
+          <dd data-testid="experiment-exclusion-group">
+            {/* Membership is changed on the group's page (#1455, PLAN C5). */}
+            <Link href={`/experiments/exclusion-groups/${groupId}`} className={NOTE_LINK}>
+              {groupLabel(group.value)}
+            </Link>
+          </dd>
         )}
         {group.kind === 'loading' && (
           <dd data-testid="experiment-exclusion-group-loading">{ELIGIBILITY_COPY.loading}</dd>
@@ -504,15 +509,6 @@ export default function ExperimentDetailPage() {
               </dl>
               <p className="mt-2 text-xs text-slate-600" data-testid="experiment-api-settings-note">
                 Set through the API, not on this page:{' '}
-                <a
-                  href={docsUrl('api/mutual-exclusion-groups', 'mutual-exclusion-groups')}
-                  className={NOTE_LINK}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  exclusion groups
-                </a>
-                ,{' '}
                 <a
                   href={docsUrl('api/mutual-exclusion-groups', 'global-holdout')}
                   className={NOTE_LINK}
