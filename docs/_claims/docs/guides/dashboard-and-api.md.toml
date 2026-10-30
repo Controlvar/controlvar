@@ -96,6 +96,14 @@ text = "See on the experiment page its start and end dates | Dashboard | Running
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
+text = "See on the experiment page its exclusion group | Dashboard | Mutual exclusion groups and global holdout"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
+text = "See on the experiment page whether a global holdout is active | Dashboard | Mutual exclusion groups and global holdout"
+by = ["mechanism:dashboard-and-api"]
+
+[[unit]]
 text = "Segments: list, create, and upload a list of user ids | Dashboard | Segments"
 by = ["mechanism:dashboard-and-api"]
 
