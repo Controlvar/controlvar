@@ -75,9 +75,27 @@ FPS = 30
 TITLE_CARD_MS = 3000
 END_CARD_MS = 4000
 #: The finished video, cards included, is 55 to 90 seconds long (inclusive):
-#: 90 s since the videos are narrated (D71), which holds each beat longer.
+#: 90 s since the videos are narrated (D71), which holds each beat longer. A
+#: video in ``MAX_VIDEO_MS_BY_VIDEO`` may run to its own cap instead.
 MIN_VIDEO_MS = 55_000
 MAX_VIDEO_MS = 90_000
+#: The videos allowed to run longer, each with its own cap. Video 9 designs an
+#: experiment in the dashboard and then makes and reads back its API settings
+#: on camera, which the default cap does not hold. A video's cap is
+#: ``max_video_ms(slug)``: the cue sheet, gate 1, the capture's projection and
+#: the voice step's all read it there, and no other module reads these two.
+MAX_VIDEO_MS_BY_VIDEO: Dict[str, int] = {"09-design-in-depth": 150_000}
+
+
+def max_video_ms(slug: str) -> int:
+    """The longest video *slug* may be, cards included, in ms.
+
+    Its own cap, or ``MAX_VIDEO_MS``: both are read at each call, and a slug
+    the table does not name (a probe, a synthetic capture) gets the default.
+    It never raises; that every key is a registered video is a unit test.
+    """
+    return MAX_VIDEO_MS_BY_VIDEO.get(slug, MAX_VIDEO_MS)
+
 
 # --- Captions --------------------------------------------------------------
 
@@ -463,8 +481,9 @@ def caption_problems(text: str) -> List[str]:
     return problems
 
 
-def cue_timing_problems(cues: Sequence[Cue], duration_ms: int) -> List[str]:
-    """Order, overlap, reading time and gaps, on the frame-rounded times shown."""
+def cue_timing_problems(cues: Sequence[Cue], duration_ms: int, slug: str) -> List[str]:
+    """Order, overlap, reading time and gaps, on the frame-rounded times shown,
+    and the length of video *slug* with its cards (``max_video_ms``)."""
     problems: List[str] = []
     total_frames = frames_for_ms(duration_ms)
     previous: Optional[Cue] = None
@@ -507,10 +526,11 @@ def cue_timing_problems(cues: Sequence[Cue], duration_ms: int) -> List[str]:
                 f"{tail / 1000:.3f} s without a caption after cue {len(cues)}; at most {MAX_CUE_GAP_MS / 1000:.3f} s"
             )
     total_ms = ms_for_frames(video_frames(duration_ms))
-    if not MIN_VIDEO_MS <= total_ms <= MAX_VIDEO_MS:
+    longest = max_video_ms(slug)
+    if not MIN_VIDEO_MS <= total_ms <= longest:
         problems.append(
             f"the video would be {total_ms / 1000:.3f} s with its cards; a showcase is "
-            f"{MIN_VIDEO_MS // 1000}-{MAX_VIDEO_MS // 1000} s"
+            f"{MIN_VIDEO_MS // 1000}-{longest // 1000} s"
         )
     return problems
 
@@ -676,8 +696,8 @@ SENTENCE_SPREAD_LU = 2.0
 VOICE_CHARACTER_CAP = 10_000
 #: The generative engine's price, for the estimate the voice step prints.
 DOLLARS_PER_MILLION_CHARACTERS = 30
-#: The voice step refuses a video projected above this share of MAX_VIDEO_MS:
-#: the length estimate runs about 3.5% short of a recording.
+#: The voice step refuses a video projected above this share of its cap
+#: (``max_video_ms``): the length estimate runs about 3.5% short of a recording.
 PROJECTION_SHARE = 0.97
 
 #: How a written word is said: applied only to the text sent to Polly, whole
@@ -1437,7 +1457,7 @@ def _read_cues(root: Path, problems: List[str]) -> Optional[CueSheet]:
             )
         )
     if len(cues) == len(data["cues"]):
-        problems.extend(cue_timing_problems(cues, duration_ms))
+        problems.extend(cue_timing_problems(cues, duration_ms, slug))
     return CueSheet(
         slug=slug,
         title=title,

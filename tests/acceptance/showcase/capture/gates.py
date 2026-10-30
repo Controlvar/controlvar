@@ -1604,10 +1604,12 @@ def design_end(
     seed_experiments: int,
     owner_id: Any,
     readings: Mapping[str, str],
+    moved: Optional[Mapping[str, Any]] = None,
 ) -> Verdict:
     """Gate 10 "design" (``storyboard.DesignEnd``): the video made exactly the
     experiment it declares, and left it a draft. In order, the first failure
-    refusing:
+    refusing (*moved*: the ``UNTOUCHED`` fields a console scene set, each with
+    the value it set; ``start_date`` compared as an instant, naive as UTC):
 
     1. exactly one experiment has the name, with the key, a draft, owned by the
        signed-in user (*owner_id*);
@@ -1807,8 +1809,17 @@ def design_end(
             f"bayesian_enabled is {analysis[2]!r}; the storyboard turns it"
             f" {'on' if end.analysis.bayesian else 'off'}",
         )
+    moved = dict(moved or {})
     for key, value in UNTOUCHED:
-        if saved[key] != value:
+        if key in moved:
+            if not _same_setting(key, saved[key], moved[key]):
+                return (
+                    False,
+                    numbers,
+                    f"{end.name!r} has {key} {saved[key]!r}; the console set"
+                    f" {moved[key]!r}",
+                )
+        elif saved[key] != value:
             return (
                 False,
                 numbers,
@@ -1846,4 +1857,198 @@ def design_end(
                 f"{kind} showed {drawn!r}; the API saved {wanted!r}",
             )
     numbers["shown"] = shown
+    return True, numbers, ""
+
+
+def _same_setting(key: str, got: Any, wanted: Any) -> bool:
+    """A field a console set, against the value it set: a date as an instant
+    (naive read as UTC, to the second), anything else equal and of one type."""
+    if key.endswith("_date") and isinstance(wanted, str):
+        from showcase.capture.console import as_instant
+
+        a, b = as_instant(got), as_instant(wanted)
+        return a is not None and b is not None and a.replace(microsecond=0) == b
+    return type(got) is type(wanted) and got == wanted
+
+
+#: The setup's exclusion group takes all the traffic: no user of the seeded
+#: experiment in it is left out of it.
+GROUP_TRAFFIC = 1.0
+
+
+def _member_names(group: Mapping[str, Any]) -> List[str]:
+    return sorted(str(e.get("name")) for e in group.get("experiments") or [])
+
+
+def console_before(
+    setup: Any,
+    *,
+    groups: Mapping[str, Any],
+    group: Optional[Mapping[str, Any]],
+    holdouts: Mapping[str, Any],
+    saved: Mapping[str, Any],
+) -> Verdict:
+    """Gate 10a's half for a console scene, at the saved draft before its
+    first call: the setup's one exclusion group and nothing else, at all the
+    traffic, holding exactly the setup's experiments (read from the group,
+    never from an experiment), and no holdout at all. The draft's sequential
+    testing settings are recorded as read, for 10b."""
+    numbers: Dict[str, Any] = {
+        "groups": sorted(str(g.get("name")) for g in groups.get("items") or []),
+        "groups_total": groups.get("total"),
+        "holdouts_total": holdouts.get("total"),
+        "sequential_testing_config": saved.get("sequential_testing_config"),
+        "sequential_testing_method": saved.get("sequential_testing_method"),
+    }
+    want = setup.exclusion_groups
+    if len(want) != 1:
+        return False, numbers, f"the setup makes {len(want)} exclusion groups, not 1"
+    want = want[0]
+    if groups.get("total") != 1 or numbers["groups"] != [want.name]:
+        return (
+            False,
+            numbers,
+            f"the API holds the groups {numbers['groups']} ({groups.get('total')}); the"
+            f" setup made only {want.name!r}",
+        )
+    if group is None:
+        return False, numbers, f"{want.name!r} could not be read"
+    numbers.update(
+        group_id=str(group.get("id")),
+        traffic_allocation=group.get("traffic_allocation"),
+        members=_member_names(group),
+    )
+    if group.get("traffic_allocation") != want.traffic_allocation or (
+        want.traffic_allocation != GROUP_TRAFFIC
+    ):
+        return (
+            False,
+            numbers,
+            f"{want.name!r} takes {group.get('traffic_allocation')!r} of the traffic;"
+            f" the setup declares {want.traffic_allocation!r}, and the video's group"
+            f" takes all of it ({GROUP_TRAFFIC})",
+        )
+    if numbers["members"] != sorted(want.experiments):
+        return (
+            False,
+            numbers,
+            f"{want.name!r} holds {numbers['members']}; the setup added"
+            f" {sorted(want.experiments)}",
+        )
+    if holdouts.get("total") != 0:
+        return (
+            False,
+            numbers,
+            f"the API holds {holdouts.get('total')!r} holdouts before the video makes one",
+        )
+    return True, numbers, ""
+
+
+def console_after(
+    end: Any,
+    setup: Any,
+    *,
+    before: Mapping[str, Any],
+    group: Optional[Mapping[str, Any]],
+    holdouts: Mapping[str, Any],
+    active: Any,
+    saved: Mapping[str, Any],
+    exchanges: Sequence[Mapping[str, Any]],
+    start: Optional[str],
+) -> Verdict:
+    """Gate 10b's half for a console scene, after it: what its calls set is
+    what the API holds. The draft is in the setup's group (the id the group
+    add drew), whose members, read from the group, are the setup's and the
+    draft; one holdout, the one the video made, active at the percentage it
+    sent; the start the schedule sent; sequential testing on, its
+    configuration and method still unset (null, as 10a read them)."""
+    numbers: Dict[str, Any] = {}
+    by_key = {e.get("sets"): e for e in exchanges if e.get("sets")}
+    added = by_key.get("exclusion_group") or {}
+    made = by_key.get("holdout") or {}
+    group_id = str(before.get("group_id"))
+    drawn_group = (added.get("shown") or {}).get("group_id")
+    numbers.update(
+        group_id=group_id,
+        drawn_group_id=drawn_group,
+        mutual_exclusion_group_id=saved.get("mutual_exclusion_group_id"),
+    )
+    if str(saved.get("mutual_exclusion_group_id")) != group_id or (
+        str(drawn_group) != group_id
+    ):
+        return (
+            False,
+            numbers,
+            f"{end.name!r} is in group {saved.get('mutual_exclusion_group_id')!r}, the"
+            f" group add drew {drawn_group!r}; the setup's group is {group_id!r}",
+        )
+    if group is None:
+        return False, numbers, "the setup's group could not be read"
+    numbers["members"] = _member_names(group)
+    wanted = sorted([*setup.exclusion_groups[0].experiments, end.name])
+    if numbers["members"] != wanted:
+        return (
+            False,
+            numbers,
+            f"the group holds {numbers['members']}; the setup and the video put"
+            f" {wanted} in it",
+        )
+    sent = json.loads(made.get("sent") or "{}")
+    numbers.update(
+        holdouts_total=holdouts.get("total"),
+        holdout_kept=(made.get("kept") or {}).get("holdout"),
+        active_holdout=None
+        if not isinstance(active, dict)
+        else {
+            k: active.get(k) for k in ("id", "name", "holdout_percentage", "is_active")
+        },
+    )
+    if holdouts.get("total") != 1:
+        return (
+            False,
+            numbers,
+            f"the API holds {holdouts.get('total')!r} holdouts; the video made 1",
+        )
+    if (
+        not isinstance(active, dict)
+        or str(active.get("id")) != str(numbers["holdout_kept"])
+        or active.get("is_active") is not True
+        or active.get("holdout_percentage") != sent.get("holdout_percentage")
+    ):
+        return (
+            False,
+            numbers,
+            f"the active holdout is {numbers['active_holdout']!r}; the video made"
+            f" {numbers['holdout_kept']!r}, active, at"
+            f" {sent.get('holdout_percentage')!r}",
+        )
+    numbers.update(
+        start_sent=start,
+        start_date=saved.get("start_date"),
+        sequential_testing_config=saved.get("sequential_testing_config"),
+        sequential_testing_method=saved.get("sequential_testing_method"),
+    )
+    if start is None or not _same_setting("start_date", saved.get("start_date"), start):
+        return (
+            False,
+            numbers,
+            f"{end.name!r} starts {saved.get('start_date')!r}; the schedule sent {start!r}",
+        )
+    if saved.get("sequential_testing_config") is not None or saved.get(
+        "sequential_testing_config"
+    ) != before.get("sequential_testing_config"):
+        return (
+            False,
+            numbers,
+            f"sequential_testing_config is {saved.get('sequential_testing_config')!r};"
+            " the video sent none, and 10a read"
+            f" {before.get('sequential_testing_config')!r}",
+        )
+    if saved.get("sequential_testing_method") is not None:
+        return (
+            False,
+            numbers,
+            f"sequential_testing_method is {saved.get('sequential_testing_method')!r};"
+            " the video sent none",
+        )
     return True, numbers, ""
