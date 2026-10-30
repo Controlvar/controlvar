@@ -52,7 +52,8 @@ export function canReadEligibility(
  *
  * Schedule uses the same check; the dashboard does not offer it. Delete checks
  * EXPERIMENT DELETE instead, which exactly the same roles hold, so the
- * page's "Edit details" and "Delete draft" both use this helper
+ * page's "Edit details", "Edit variants and metrics" and "Delete draft" all
+ * use this helper
  * (`backend/tests/unit/core/test_dashboard_experiment_roles.py` keeps the
  * role lists here equal to `permissions.py`).
  */

@@ -9,7 +9,17 @@
  */
 import { TargetingRules } from '@/types/targeting';
 import { createEmptyRules, validateRules } from '@/utils/targeting';
-import { ExperimentType, MetricType, CreateExperimentRequest } from '@/types/experiments';
+import {
+  DesignMetric,
+  DesignVariant,
+  Experiment,
+  ExperimentDesignUpdate,
+  ExperimentMetric,
+  ExperimentType,
+  ExperimentVariant,
+  MetricType,
+  CreateExperimentRequest,
+} from '@/types/experiments';
 import { CorrectionMethod } from '@/types/results';
 import {
   DEFAULT_CONFIDENCE_LEVEL,
@@ -49,6 +59,32 @@ export interface MetricFormData {
    * means false, the API's default.
    */
   lower_is_better?: boolean;
+  /**
+   * The stored fields this form does not show, kept as they were read so the
+   * design edit sends them back unchanged (`buildDesignPayload`). Set only by
+   * `formStateFromExperiment`; a metric added in the form has none. The
+   * reducer's `changeMetric` and `setPrimary` spread the row, so it survives
+   * every edit of the row.
+   */
+  carried?: MetricCarried;
+}
+
+/**
+ * A stored metric's fields that no editor shows. Null means the experiment
+ * answered with no value.
+ */
+export interface MetricCarried {
+  description: string | null;
+  aggregation_method: string | null;
+  minimum_sample_size: number | null;
+  /**
+   * The metric's own `expected_effect`. On the metric that was primary when
+   * the form was seeded it is null: that value is the experiment's planned
+   * effect, held in `designPlannedEffect`, and goes to whichever metric is
+   * primary on save.
+   */
+  expected_effect: number | null;
+  event_value_path: string | null;
 }
 
 export interface ExperimentFormState {
@@ -75,6 +111,15 @@ export interface ExperimentFormState {
    * here, not in the estimate panel, so switching views keeps it.
    */
   plannedEffectPct: string;
+  /**
+   * The design edit's planned effect: the stored primary metric's
+   * `expected_effect`, exactly as stored (null when it has none). Set only by
+   * `formStateFromExperiment`, and absent when no stored metric is primary.
+   * `buildDesignPayload` puts it on whichever metric is primary on save, so
+   * the planned sample does not change when the primary does, as
+   * `buildCreatePayload` does with `plannedEffectPct`.
+   */
+  designPlannedEffect?: number | null;
 }
 
 const DEFAULT_VARIANTS: VariantFormData[] = [
@@ -361,6 +406,180 @@ export function buildCreatePayload(state: ExperimentFormState): CreateExperiment
   };
   if (state.bayesianEnabled) payload.bayesian_enabled = true;
   return payload;
+}
+
+// --- design edit: a draft's variants and metrics (#1453) ---------------------
+//
+// `PUT /api/v1/experiments/{id}` REPLACES both lists in one commit: a variant
+// or a metric left out is deleted, and a field left out of an item is reset to
+// its default, with a 200. So the experiment page's design edit always sends
+// every item, and every stored field of each, including the ones no editor
+// shows (`MetricFormData.carried`).
+
+/** A stored configuration as the variant editor shows it: indented JSON, or blank for none. */
+export function configurationText(configuration: Record<string, unknown> | null | undefined): string {
+  return configuration == null ? '' : JSON.stringify(configuration, null, 2);
+}
+
+function variantFromStored(variant: ExperimentVariant): VariantFormData {
+  return {
+    name: variant.name,
+    description: variant.description ?? '',
+    traffic_allocation: variant.traffic_allocation,
+    is_control: variant.is_control,
+    configuration_text: configurationText(variant.configuration),
+  };
+}
+
+function metricFromStored(metric: ExperimentMetric, holdsPlannedEffect: boolean): MetricFormData {
+  return {
+    name: metric.name,
+    event_name: metric.event_name,
+    metric_type: metric.metric_type as MetricType,
+    is_primary: metric.is_primary,
+    lower_is_better: metric.lower_is_better === true,
+    carried: {
+      description: metric.description ?? null,
+      aggregation_method: metric.aggregation_method ?? null,
+      minimum_sample_size: metric.minimum_sample_size ?? null,
+      expected_effect: holdsPlannedEffect ? null : (metric.expected_effect ?? null),
+      event_value_path: metric.event_value_path ?? null,
+    },
+  };
+}
+
+/**
+ * The form state the design edit starts from: the experiment's variants and
+ * metrics as stored, in the order the API listed them. The first primary
+ * metric's `expected_effect` becomes `designPlannedEffect`.
+ */
+export function formStateFromExperiment(experiment: Experiment): ExperimentFormState {
+  const planned = experiment.metrics.findIndex((m) => m.is_primary);
+  const state: ExperimentFormState = {
+    ...createInitialFormState(),
+    name: experiment.name,
+    variants: experiment.variants.map(variantFromStored),
+    metrics: experiment.metrics.map((m, i) => metricFromStored(m, i === planned)),
+  };
+  if (planned >= 0) state.designPlannedEffect = experiment.metrics[planned].expected_effect ?? null;
+  return state;
+}
+
+/**
+ * The design edit's body: exactly `{variants, metrics}`, both complete.
+ *
+ * - A variant carries all five `VariantBase` fields. A blank description and
+ *   no configuration are sent as null.
+ * - A metric carries what the editor shows, plus `carried` as it was read.
+ *   `aggregation_method` and `minimum_sample_size` are left out when they
+ *   have no value (the API refuses null there and stores its default); the
+ *   Optional fields are sent as null.
+ * - The primary metric's `expected_effect` is `designPlannedEffect`, so it
+ *   moves to a new primary, as `buildCreatePayload` puts the planned effect on
+ *   the primary only. With no stored primary, each metric keeps its own.
+ *
+ * Names and event names are trimmed, as on create. Validation
+ * (`checkDesign`) refuses a configuration that does not parse before this is
+ * called.
+ */
+export function buildDesignPayload(state: ExperimentFormState): ExperimentDesignUpdate {
+  const variants = state.variants.map((v): DesignVariant => {
+    const configuration = parseConfiguration(v.configuration_text);
+    return {
+      name: v.name.trim(),
+      description: v.description === '' ? null : v.description,
+      is_control: v.is_control,
+      traffic_allocation: Number(v.traffic_allocation) || 0,
+      configuration: configuration.ok && configuration.value !== undefined ? configuration.value : null,
+    };
+  });
+  const metrics = state.metrics.map((m): DesignMetric => {
+    const carried = m.carried;
+    const takesPlan = m.is_primary && state.designPlannedEffect !== undefined;
+    const metric: DesignMetric = {
+      name: m.name.trim(),
+      description: carried?.description ?? null,
+      event_name: m.event_name.trim(),
+      metric_type: m.metric_type,
+      is_primary: m.is_primary,
+      expected_effect: takesPlan ? (state.designPlannedEffect ?? null) : (carried?.expected_effect ?? null),
+      event_value_path: carried?.event_value_path ?? null,
+      lower_is_better: m.lower_is_better === true,
+    };
+    if (carried?.aggregation_method != null) metric.aggregation_method = carried.aggregation_method;
+    if (carried?.minimum_sample_size != null) metric.minimum_sample_size = carried.minimum_sample_size;
+    return metric;
+  });
+  return { variants, metrics };
+}
+
+/** The design edit's own refusals; every other one is guided setup's (`checkVariants`, `checkMetrics`). */
+export const TWO_VARIANTS = 'An experiment needs at least two variants to start.';
+export const ONE_CONTROL = 'Only one variant can be the control.';
+export const ONE_PRIMARY = 'Only one metric can be the primary metric.';
+
+/** The control a refusal is about, so the form can move focus there. */
+export type DesignField =
+  | { list: 'variants' | 'metrics'; index: -1; field: 'add' }
+  | { list: 'variants'; index: number; field: 'name' | 'traffic_allocation' | 'is_control' | 'configuration' }
+  | { list: 'metrics'; index: number; field: 'name' | 'event_name' | 'is_primary' };
+
+export interface DesignProblem {
+  message: string;
+  field: DesignField;
+}
+
+function indexesWhere<T>(items: T[], test: (item: T) => boolean): number[] {
+  return items.flatMap((item, i) => (test(item) ? [i] : []));
+}
+
+/** The field `checkVariants`' first problem is about, found in the order it checks. */
+function variantProblemField(variants: VariantFormData[]): DesignField {
+  const unnamed = variants.findIndex((v) => !v.name.trim());
+  if (unnamed >= 0) return { list: 'variants', index: unnamed, field: 'name' };
+  if (!variants.some((v) => v.is_control)) return { list: 'variants', index: 0, field: 'is_control' };
+  if (allocationTotalOf(variants) !== 100) return { list: 'variants', index: 0, field: 'traffic_allocation' };
+  const configuration = configurationProblems(variants).findIndex((p) => p !== null);
+  return { list: 'variants', index: Math.max(configuration, 0), field: 'configuration' };
+}
+
+/** The field `checkMetrics`' first problem is about, found in the order it checks. */
+function metricProblemField(metrics: MetricFormData[]): DesignField {
+  if (metrics.length === 0) return { list: 'metrics', index: -1, field: 'add' };
+  const blank = metrics.findIndex((m) => !m.name.trim() || !m.event_name.trim());
+  if (blank >= 0) {
+    return { list: 'metrics', index: blank, field: metrics[blank].name.trim() ? 'event_name' : 'name' };
+  }
+  const names = metrics.map((m) => m.name.trim());
+  const repeat = names.findIndex((name, i) => names.indexOf(name) !== i);
+  if (repeat >= 0) return { list: 'metrics', index: repeat, field: 'name' };
+  return { list: 'metrics', index: 0, field: 'is_primary' };
+}
+
+/**
+ * The design edit's first problem, or null when it can be sent. In order:
+ * at least two variants (Start refuses fewer, and a scheduled draft would be
+ * started without that check), guided setup's variant checks, exactly one
+ * control, guided setup's metric checks, exactly one primary. The API accepts
+ * one variant, no metric, two controls and two primaries, so only this stops
+ * them.
+ */
+export function checkDesign(state: ExperimentFormState): DesignProblem | null {
+  const { variants, metrics } = state;
+  if (variants.length < 2) return { message: TWO_VARIANTS, field: { list: 'variants', index: -1, field: 'add' } };
+  const variantProblem = checkVariants(variants);
+  if (variantProblem !== null) return { message: variantProblem, field: variantProblemField(variants) };
+  const controls = indexesWhere(variants, (v) => v.is_control);
+  if (controls.length > 1) {
+    return { message: ONE_CONTROL, field: { list: 'variants', index: controls[0], field: 'is_control' } };
+  }
+  const metricProblem = checkMetrics(metrics);
+  if (metricProblem !== null) return { message: metricProblem, field: metricProblemField(metrics) };
+  const primaries = indexesWhere(metrics, (m) => m.is_primary);
+  if (primaries.length > 1) {
+    return { message: ONE_PRIMARY, field: { list: 'metrics', index: primaries[0], field: 'is_primary' } };
+  }
+  return null;
 }
 
 // --- reducer -----------------------------------------------------------------

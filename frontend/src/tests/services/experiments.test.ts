@@ -140,6 +140,43 @@ describe('ExperimentsService.updateDetails', () => {
   });
 });
 
+describe('ExperimentsService.updateDesign', () => {
+  it('sends PUT /experiments/{id} with exactly the two lists it is given', async () => {
+    const body = {
+      variants: [
+        { name: 'A', description: null, is_control: true, traffic_allocation: 50, configuration: null },
+        { name: 'B', description: 'b', is_control: false, traffic_allocation: 50, configuration: { x: 1 } },
+      ],
+      metrics: [
+        {
+          name: 'M',
+          description: null,
+          event_name: 'm',
+          metric_type: 'conversion' as const,
+          is_primary: true,
+          expected_effect: null,
+          event_value_path: null,
+          lower_is_better: false,
+        },
+      ],
+    };
+    mockOk({ id: 'abc' });
+    await ExperimentsService.updateDesign('abc', body);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${BASE}/api/v1/experiments/abc`);
+    expect(init.method).toBe('PUT');
+    expect(JSON.parse(init.body as string)).toEqual(body);
+  });
+
+  it('throws on error', async () => {
+    mockError(400, 'Bad Request');
+    await expect(ExperimentsService.updateDesign('abc', { variants: [], metrics: [] })).rejects.toThrow(
+      'Bad Request',
+    );
+  });
+});
+
 describe('ExperimentsService.clone', () => {
   it('sends POST to /clone with no body and returns the new experiment', async () => {
     mockOk({ id: 'new-id', name: 'Copy of X', status: 'draft' });

@@ -22,14 +22,35 @@ interface VariantsEditorProps {
    * takes focus, so a problem never sits in a closed section.
    */
   revealProblems?: number;
+  /**
+   * The field a refusal shown elsewhere is about, and that refusal's element
+   * id. The field then carries `aria-describedby` pointing at it, and a text
+   * field `aria-invalid` too. Unset in guided setup, which renders as before.
+   */
+  invalid?: { index: number; field: 'name' | 'traffic_allocation' | 'is_control' } | null;
+  invalidDescribedBy?: string;
 }
 
 const hasText = (v: VariantFormData) => (v.configuration_text ?? '').trim() !== '';
 
 /** The variants heading, running allocation total and one row per variant. The caller supplies the section. */
-export function VariantsEditor({ variants, dispatch, revealProblems = 0 }: VariantsEditorProps) {
+export function VariantsEditor({
+  variants,
+  dispatch,
+  revealProblems = 0,
+  invalid = null,
+  invalidDescribedBy,
+}: VariantsEditorProps) {
   const allocationTotal = allocationTotalOf(variants);
   const problems = configurationProblems(variants);
+  // A radio takes no aria-invalid; it is described by the refusal only.
+  const marks = (index: number, field: 'name' | 'traffic_allocation' | 'is_control') =>
+    invalid && invalidDescribedBy && invalid.index === index && invalid.field === field
+      ? {
+          ...(field === 'is_control' ? {} : { 'aria-invalid': true as const }),
+          'aria-describedby': invalidDescribedBy,
+        }
+      : {};
   // Which configuration sections are open. A row that already has text starts
   // open, so switching between guided setup and the single-page form shows it.
   const [open, setOpen] = useState<boolean[]>(() => variants.map(hasText));
@@ -110,6 +131,7 @@ export function VariantsEditor({ variants, dispatch, revealProblems = 0 }: Varia
                   aria-label={`Variant ${index + 1} name`}
                   className={`flex-1 ${smallInputClass}`}
                   data-testid={`variant-name-${index}`}
+                  {...marks(index, 'name')}
                 />
                 <div className="flex items-center gap-1">
                   <input
@@ -129,6 +151,7 @@ export function VariantsEditor({ variants, dispatch, revealProblems = 0 }: Varia
                     aria-label={`Variant ${index + 1} allocation`}
                     className={`w-16 text-center ${smallInputClass}`}
                     data-testid={`variant-allocation-${index}`}
+                    {...marks(index, 'traffic_allocation')}
                   />
                   <span className="text-xs text-slate-500">%</span>
                 </div>
@@ -140,6 +163,7 @@ export function VariantsEditor({ variants, dispatch, revealProblems = 0 }: Varia
                   checked={variant.is_control}
                   onChange={() => dispatch({ type: 'setControl', index })}
                   data-testid={`variant-control-${index}`}
+                  {...marks(index, 'is_control')}
                 />
                 Control
               </label>

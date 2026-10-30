@@ -692,6 +692,11 @@ STALE: Tuple[Tuple[str, str], ...] = (
         r"bayesian and frequentist analysis",
         "a headline that does not say which of the two the dashboard shows",
     ),
+    (
+        r"delete (this|the|a) draft and (create|make) it again",
+        "the experiment page's Edit variants and metrics changes a draft's "
+        "variants and metrics in place (#1453)",
+    ),
 )
 
 _DROP = frozenset("*`")
@@ -770,6 +775,8 @@ def test_no_page_repeats_a_removed_dashboard_claim():
         "Classic A/B test, sequential testing (mSPRT), Bayesian results (API only), variant",
         "(frequentist + sequential in the dashboard, Bayesian in the API)",
         "Statistical rigor with Bayesian and Frequentist analysis",
+        "Variants and metrics cannot; to change them, delete this draft and\n"
+        "create it again.",
     ],
 )
 def test_the_sweep_catches_the_removed_wording(removed):

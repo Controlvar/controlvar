@@ -32,6 +32,36 @@ describe('grey text contrast', () => {
 });
 
 /**
+ * The experiment page's "Edit variants and metrics" (#1453) and what it
+ * renders. The nightly audit never opens the form, and jsdom cannot measure
+ * contrast, so this is the only check on its grey text. The form's own panel
+ * is white, so guided setup's slate-500 hints keep their 4.76:1 there.
+ */
+describe("the experiment page's variants and metrics form", () => {
+  const DESIGN_FILES = [
+    'components/experiments/ExperimentDesignForm.tsx',
+    'components/experiments/ExperimentManageSection.tsx',
+    'components/experiments/new/VariantsEditor.tsx',
+    'components/experiments/new/MetricsEditor.tsx',
+  ];
+
+  it.each(DESIGN_FILES)('%s uses no slate-400 text', (file) => {
+    const source = fs.readFileSync(path.join(SRC, file), 'utf8');
+    expect(source.match(/(?<!placeholder:)\btext-slate-400\b/g)).toBeNull();
+  });
+
+  it('the form panel is white, not slate-50', () => {
+    const source = fs.readFileSync(path.join(SRC, DESIGN_FILES[0]), 'utf8');
+    // From `<form` to its test id: the tag's own attributes (an `=>` inside
+    // one would end a `[^>]*` match early).
+    const forms = Array.from(source.matchAll(/<form\b[\s\S]*?data-testid="design-form"/g));
+    expect(forms).toHaveLength(1);
+    expect(forms[0][0]).toMatch(/className="[^"]*\bbg-white\b/);
+    expect(forms[0][0]).not.toMatch(/\bbg-slate-50\b/);
+  });
+});
+
+/**
  * The experiment page's header terms (#1449). The page has other slate-400
  * text, so it cannot join FILES; this pins its header `<dl>`, the page's only
  * one, by its `dt` tags. The nightly audit never opens this page, and jsdom
