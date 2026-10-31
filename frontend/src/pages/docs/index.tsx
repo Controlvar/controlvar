@@ -228,7 +228,7 @@ export default function DocsIndex() {
                           {link.label}
                         </span>
                         <span className="text-gray-400">—</span>
-                        <span className="text-gray-500 group-hover:text-gray-700 transition">
+                        <span className="text-gray-500 group-hover:text-gray-700 transition [overflow-wrap:anywhere]">
                           {link.desc}
                         </span>
                       </a>
