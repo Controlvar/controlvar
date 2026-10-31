@@ -6,7 +6,8 @@ This module defines models for experiments, variants, and metrics.
 """
 
 import enum
-from datetime import datetime, timezone
+import threading
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from sqlalchemy import (
@@ -295,6 +296,30 @@ class Experiment(Base, BaseModel):
         return f"<Experiment {self.name}>"
 
 
+_variant_clock_lock = threading.Lock()
+_last_variant_created_at: Optional[datetime] = None
+
+
+def next_variant_created_at() -> datetime:
+    """A ``created_at`` strictly later than any this process gave a variant (#1469).
+
+    ``Experiment.variants`` is ordered by ``[created_at, id]``, and create,
+    update and clone insert every variant of an experiment in one request. On
+    a fast machine two rows can share a microsecond, and the random uuid then
+    decides the order: which treatment sequential testing compares with the
+    control, and which variant a bucket maps to for a new user. Handing out a
+    strictly increasing value makes the order the insertion order.
+    """
+    global _last_variant_created_at
+    with _variant_clock_lock:
+        now = datetime.utcnow()
+        last = _last_variant_created_at
+        if last is not None and now <= last:
+            now = last + timedelta(microseconds=1)
+        _last_variant_created_at = now
+        return now
+
+
 @event.listens_for(Experiment.status, "set", active_history=True)
 def _clear_resume_on_status_change(target, value, oldvalue, initiator):
     """Drop a scheduled resume whenever the status really changes (#436).
@@ -411,3 +436,14 @@ class Metric(Base, BaseModel):
 
     def __repr__(self):
         return f"<Metric {self.name}>"
+
+
+@event.listens_for(Variant, "before_insert")
+def _order_variants_by_insertion(mapper, connection, target):
+    """Stamp a variant that has no ``created_at`` with a strictly later one (#1469).
+
+    Runs per instance in the order the unit of work inserts them, which is the
+    order they were added. A ``created_at`` the caller set is kept.
+    """
+    if target.created_at is None:
+        target.created_at = next_variant_created_at()
