@@ -438,6 +438,20 @@ jobs:
           node scripts/check-site-media.mjs out
           node --test scripts/site-head.test.mjs
 
+      # The export above in a real browser (#1459): phone width, axe and Tab
+      # focus on its four pages (tests/e2e/marketing-site.site.spec.ts).
+      - name: Cache the Playwright browser
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
+      - name: Install chromium only
+        run: cd frontend && npx playwright install --with-deps chromium
+
+      - name: The public site in a browser (phone width, axe, Tab focus)
+        run: cd frontend && npx playwright test --project=site
+
   # Each SDK's OWN exported hash function against golden-vectors.json: the
   # Python SDK's source, the JS and edge packages as built, the React Native
   # source (which is what that package ships), the Go module. One step per SDK,
