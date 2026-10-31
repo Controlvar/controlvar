@@ -360,10 +360,21 @@ def design_state(
     token: str,
     readings: Mapping[str, str],
     seed_experiments: int,
+    *,
+    board: Optional[storyboard.Storyboard] = None,
+    setup: Optional[Mapping[str, Any]] = None,
+    dated: Optional[Mapping[str, Mapping[str, str]]] = None,
 ) -> Tuple[bool, Dict[str, Any], str]:
     """Gate 10's half for an experiment the video designed: the API's answers
     (the experiments list with its total, the one named experiment read in
-    full, and the signed-in user), judged by ``gates.design_end``."""
+    full, and the signed-in user), judged by ``gates.design_end``.
+
+    What the video then set on the draft's own pages, when the end state
+    declares it: sequential testing on, the start the ``date`` step set (its
+    instant, as the page computed it) and the setup's group (its id, as
+    ``make_setup`` made it) are the fields it moved; the groups, the group
+    itself, every holdout and the active one are read off camera and judged
+    by ``gates.eligibility_end``; and the dates by ``gates.dates_in_zone``."""
     from showcase.capture import gates as judge
 
     listed = _api(f"{api_url}/api/v1/experiments/?limit=100", token)
@@ -371,14 +382,76 @@ def design_state(
     if len(named) == 1:
         named = [_api(f"{api_url}/api/v1/experiments/{named[0]['id']}", token)]
     me = _api(f"{api_url}/api/v1/auth/me", token)
-    return judge.design_end(
+    sets = bool(end.analysis.sequential or end.scheduled_start or end.group)
+    if not sets and end.holdout is None:
+        return judge.design_end(
+            end,
+            named=named,
+            total=int(listed["total"]),
+            seed_experiments=seed_experiments,
+            owner_id=me.get("id"),
+            readings=readings,
+        )
+    dated = dated or {}
+    moved: Dict[str, Any] = {}
+    extra: Dict[str, Any] = {}
+    if end.analysis.sequential:
+        moved["sequential_testing_enabled"] = True
+    if end.scheduled_start is not None:
+        start = dated.get(end.scheduled_start) or {}
+        moved["start_date"] = start.get("instant")
+        extra["start_shown"] = start.get("shown")
+    group: Optional[Dict[str, Any]] = None
+    groups: Optional[Dict[str, Any]] = None
+    if end.group is not None:
+        made = [
+            g
+            for g in (setup or {}).get("exclusion_groups") or []
+            if g["group"] == end.group
+        ]
+        group_id = str(made[0]["id"]) if len(made) == 1 else None
+        moved["mutual_exclusion_group_id"] = group_id
+        groups = _api(f"{api_url}/api/v1/mutual-exclusion-groups", token)
+        if group_id is not None:
+            group = _api(f"{api_url}/api/v1/mutual-exclusion-groups/{group_id}", token)
+            extra["group_name"] = group.get("name")
+    holdouts: Optional[Dict[str, Any]] = None
+    active: Any = None
+    if end.holdout is not None:
+        holdouts = _api(f"{api_url}/api/v1/holdout/all", token)
+        active = _api(f"{api_url}/api/v1/holdout", token)
+        extra["holdout"] = active
+    ok, design, why = judge.design_end(
         end,
         named=named,
         total=int(listed["total"]),
         seed_experiments=seed_experiments,
         owner_id=me.get("id"),
         readings=readings,
+        moved=moved,
+        extra=extra,
     )
+    numbers: Dict[str, Any] = {"design": design, "moved": moved}
+    if not ok:
+        return False, numbers, why
+    ok, eligibility, why = judge.eligibility_end(
+        end,
+        board.setup if board is not None else None,
+        groups=groups,
+        group=group,
+        holdouts=holdouts,
+        active=active,
+        saved=named[0],
+    )
+    numbers["eligibility"] = eligibility
+    if not ok:
+        return False, numbers, why
+    if dated and board is not None and board.time_zone and board.locale:
+        ok, zoned, why = judge.dates_in_zone(dated, board.time_zone, board.locale)
+        numbers["dates"] = zoned
+        if not ok:
+            return False, numbers, why
+    return True, numbers, ""
 
 
 def write_private(path: Path, text: str) -> None:
@@ -781,6 +854,7 @@ def capture_video(
                     log,
                     work,
                     pacing=voiced.Pacing(clips),
+                    setup=setup,
                     setup_answers=setup_answers,
                 )
             except directing.CaptureFailed as error:
@@ -911,6 +985,25 @@ def make_stack(
     )
 
 
+def context_zone(board: storyboard.Storyboard) -> Dict[str, Any]:
+    """What the capture's browser context is given beyond its fixed arguments:
+    the storyboard's ``time_zone`` and ``locale`` when it pins them, and
+    nothing when it does not (the browser then takes the machine's, as it
+    always has)."""
+    zone: Dict[str, Any] = {}
+    if board.time_zone is not None:
+        zone["timezone_id"] = board.time_zone
+    if board.locale is not None:
+        zone["locale"] = board.locale
+    return zone
+
+
+#: QA 5a: the zone and the locale the page runs in, as it resolves them.
+RESOLVED_ZONE_JS = (
+    "() => [Intl.DateTimeFormat().resolvedOptions().timeZone, navigator.language]"
+)
+
+
 #: Gate 10/1's question to the API, asked from the page with the page's own token.
 WHO_JS = """async () => {
   const token = localStorage.getItem('experimently.token');
@@ -929,6 +1022,7 @@ def record(
     log: Callable[[str], None],
     work: guard.WorkRoot,
     pacing: Optional[voiced.Pacing] = None,
+    setup: Optional[Mapping[str, Any]] = None,
     setup_answers: Sequence[Any] = (),
 ) -> Dict[str, Any]:
     """The browser part of a capture: self-test, scenes, end state, recorded-data gates."""
@@ -958,6 +1052,7 @@ def record(
                 viewport=dict(config.VIEWPORT),
                 device_scale_factor=1,
                 service_workers="block",
+                **context_zone(board),
             )
             page = context.new_page()
             counted = board.end_state.experiment
@@ -1029,6 +1124,14 @@ def record(
                 zoom_target=directing.ZOOM_TARGET,
             )
             log("overlay self-test passed")
+            # QA 5a: a board that pins its zone and locale runs in them, as the
+            # page itself resolves them; refused before any scene otherwise.
+            zone: Optional[Tuple[bool, Dict[str, Any], str]] = None
+            if board.time_zone is not None and board.locale is not None:
+                resolved = page.evaluate(RESOLVED_ZONE_JS)
+                zone = judge.zone_end(board.time_zone, board.locale, *resolved)
+                if not zone[0]:
+                    raise directing.CaptureFailed("gate 10", zone[2])
             refuse_unquoted_code(board, stack.tree)
             users = Users(
                 board.traffic,
@@ -1083,6 +1186,8 @@ def record(
                 storyboard=[s.id for s in board.scenes],
                 # Typed as shown: each type step's field, read back (lengths).
                 typed=director.tally.typed,
+                # Each date step's field, read back, on a storyboard that has one.
+                **({"dated": director.tally.dates} if director.tally.dates else {}),
             )
             # Gate 10: the end state, through the API.
             who = page.evaluate(WHO_JS)
@@ -1114,6 +1219,8 @@ def record(
                 numbers["flag"] = made
                 if not ok:
                     why.append(reason)
+            if zone is not None:
+                numbers["zone"] = zone[1]
             if end.design is not None:
                 ok, made, reason = design_state(
                     end.design,
@@ -1121,6 +1228,9 @@ def record(
                     token,
                     director.readings,
                     board.seed_counts.experiments,
+                    board=board,
+                    setup=setup,
+                    dated=director.dates,
                 )
                 numbers["design"] = made
                 if not ok:

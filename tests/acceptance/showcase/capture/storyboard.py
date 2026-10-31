@@ -62,12 +62,18 @@ back by itself. That card says the gap the cut hides, measured
 what gate 10/4 holds the platform and the page to. A dashboard scene may open
 a flag's page by the flag's name (``flag_of``), its id looked up off camera.
 
-Two steps work a form control the way a person would be seen to: ``choose``
+Three steps work a form control the way a person would be seen to: ``choose``
 changes a native <select> to one of its options without opening it (a
 screencast never draws a native list, so an open one would film a select
-changing by itself; C9), and ``slide`` moves a range input to a value on its
+changing by itself; C9), ``slide`` moves a range input to a value on its
 own steps (the power calculator's are 0.05 apart), the drawn cursor on its
-thumb.
+thumb, and ``date`` sets a ``datetime-local`` input, its picker never opened
+(as ``choose``), to a day a few days after the take at a fixed time of day,
+in the browser's zone: the page computes the value, so the take is right on
+any day it is filmed, and its reading keeps the value, its instant and how
+the page draws it. A storyboard with a ``date`` step pins the browser's
+``time_zone`` and ``locale``, so the take is the same on any machine; one
+without names neither, and its browser is as it always was.
 
 A scene that films a credential the product shows (the invite dialog's
 one-time password) names it under ``masks``, a closed list: the capture hides
@@ -82,7 +88,11 @@ holding a template (``{``) or anything but plain text, a ``type`` of a
 credential into a step not marked secret, an on-camera step that opens the API
 keys page, a locator naming nothing, a scene with no beats, a code line that
 names a host and port, traffic finished before it starts, a ``choose`` or
-``slide`` in ``before`` (cut, so never seen), a flag's end state naming a
+``slide`` in ``before`` (cut, so never seen), a ``date`` anywhere but a beat's
+steps, ``days_ahead`` outside 1 to 7, ``at`` other than 06:00 to 21:59, a
+``date`` reading named twice or as another beat's ``record``, a ``date`` on a
+storyboard that does not pin its ``time_zone`` and ``locale``, a zone the
+zone database does not know, a flag's end state naming a
 segment the setup does not make or a reading no beat records, an incident step
 other than ``story: 2`` or out of order, or ``{rollback_minutes}`` anywhere but
 the card after the wait, and a narration ``narration.board_problems`` refuses
@@ -95,6 +105,7 @@ from __future__ import annotations
 
 import json
 import re
+import zoneinfo
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Mapping, Optional, Tuple, Union
 
@@ -227,14 +238,37 @@ class Slide(_Strict):
     value: float = Field(ge=0, le=100_000)
 
 
-Step = Union[Click, Move, Type, Look, ScrollTo, WaitFor, Choose, Slide]
+#: A ``date`` step's time of day, "HH:MM": 06:00 to 21:59, clear of midnight
+#: and of the night hours a change of daylight saving time skips or repeats.
+DATE_AT = r"^(?:0[6-9]|1[0-9]|2[01]):[0-5][0-9]$"
+#: The name a ``date`` step keeps its reading under.
+READING_NAME = r"^[a-z][a-z0-9-]{0,40}$"
+
+
+class Date(_Strict):
+    """A ``datetime-local`` input set to the day ``days_ahead`` days after the
+    page's own today, at ``at``, in the browser's zone (the storyboard's
+    ``time_zone``), its picker never opened (C9, as ``choose``).
+
+    The cursor goes to the field and presses it; the page computes the value
+    and the field is filled with it; gate 12 reads it back (``gates.date_as_set``).
+    ``record`` keeps the value, its instant (``toISOString``) and how the page
+    draws it (``toLocaleString``)."""
+
+    date: Locator
+    days_ahead: int = Field(ge=1, le=7)
+    at: str = Field(pattern=DATE_AT)
+    record: str = Field(pattern=READING_NAME)
+
+
+Step = Union[Click, Move, Type, Look, ScrollTo, WaitFor, Choose, Slide, Date]
 #: The steps that enter data. In a cut (a beat's ``before``) what they enter is
 #: entered off camera, so the scene states off-camera setup (D84,
 #: ``required_departures``). A click is not one: video 2 clicks its Live tab in
-#: a cut, the cursor on the tab before it. The load refuses a choose or a slide
-#: in a cut outright (``parse``), so today the row is met by a type; the other
-#: two are in it for the day that refusal is lifted.
-ENTERS_DATA = (Type, Choose, Slide)
+#: a cut, the cursor on the tab before it. The load refuses a choose, a slide
+#: or a date in a cut outright (``parse``), so today the row is met by a type;
+#: the other three are in it for the day that refusal is lifted.
+ENTERS_DATA = (Type, Choose, Slide, Date)
 
 
 class Claim(_Strict):
@@ -802,7 +836,19 @@ DesignReading = Literal[
     "review_analysis",
     "detail_analysis",
     "detail_bayesian",
+    "detail_sequential",
+    "detail_start",
+    "detail_group",
+    "detail_holdout",
+    "detail_note",
 ]
+#: The readings that compare what the video set on the draft's own pages, each
+#: with the end state's field it needs.
+DESIGN_SET_READINGS: Dict[str, str] = {
+    "detail_start": "scheduled_start",
+    "detail_group": "group",
+    "detail_holdout": "holdout",
+}
 
 
 class DesignVariant(_Strict):
@@ -899,6 +945,8 @@ class DesignAnalysis(_Strict):
     confidence: float
     correction: str
     bayesian: bool
+    #: Sequential testing (beta), ticked on the Estimate step (#1463).
+    sequential: bool = False
 
     @model_validator(mode="after")
     def _offered(self) -> "DesignAnalysis":
@@ -915,11 +963,23 @@ class DesignAnalysis(_Strict):
         return self
 
 
+class DesignHoldout(_Strict):
+    """The global holdout the video makes and activates on its own page."""
+
+    name: str = Field(min_length=1, max_length=200)
+    #: The dashboard's range for a new holdout (HoldoutForm: 1 to 20).
+    percentage: int = Field(ge=1, le=20)
+
+
 class DesignEnd(_Strict):
     """Gate 10 for an experiment the video designs and leaves a draft
     (``gates.design_end``): it exists once, exactly as declared, with nothing
     guided setup cannot set, and the readings named in ``shown`` said what was
-    saved, in the product's words."""
+    saved, in the product's words. What the video then sets on the draft's own
+    pages is declared too (``gates.eligibility_end``): its start (the reading
+    of the ``date`` step named ``scheduled_start``), the setup's exclusion
+    group it joins (``group``), and the global holdout it makes and activates
+    (``holdout``). Absent, each is held untouched as before."""
 
     name: str = Field(min_length=1, max_length=100)
     key: str = Field(min_length=1)
@@ -934,6 +994,11 @@ class DesignEnd(_Strict):
     analysis: DesignAnalysis
     #: Each reading compared, by the ``record`` name of the beat that read it.
     shown: Dict[DesignReading, str] = Field(min_length=1)
+    #: The ``date`` step's reading the draft's start was set with.
+    scheduled_start: Optional[str] = Field(default=None, pattern=READING_NAME)
+    #: The setup's exclusion group the draft is added to, by its name.
+    group: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    holdout: Optional[DesignHoldout] = None
 
     @model_validator(mode="after")
     def _as_the_wizard_saves(self) -> "DesignEnd":
@@ -956,6 +1021,11 @@ class DesignEnd(_Strict):
             raise ValueError(
                 "a design end state compares at least one Review row (review_*)"
             )
+        for kind, needs in DESIGN_SET_READINGS.items():
+            if kind in self.shown and getattr(self, needs) is None:
+                raise ValueError(
+                    f"the design end state compares {kind}, and declares no {needs}"
+                )
         return self
 
 
@@ -1064,7 +1134,61 @@ class Storyboard(_Strict):
     never_show: List[str] = Field(default_factory=list)
     traffic: Optional[Traffic] = None
     setup: Optional[Setup] = None
+    #: The browser's zone (an IANA name) and locale (``en-US``), pinned for a
+    #: storyboard that draws times: both or neither. Neither: the browser takes
+    #: the machine's, as it always has.
+    time_zone: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    locale: Optional[str] = Field(default=None, pattern=r"^[a-z]{2,3}-[A-Z]{2}$")
     scenes: List[Scene] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _dates_and_their_zone(self) -> "Storyboard":
+        """The browser's ``time_zone`` and ``locale``, both or neither, the zone
+        one the zone database knows; and each ``date`` step's reading named
+        once, never as a beat's ``record``, on a storyboard that pins both."""
+        if (self.time_zone is None) != (self.locale is None):
+            raise ValueError(
+                "a storyboard pins the browser's time_zone and locale together,"
+                " or neither"
+            )
+        if self.time_zone is not None:
+            try:
+                zoneinfo.ZoneInfo(self.time_zone)
+            except (zoneinfo.ZoneInfoNotFoundError, ValueError):
+                raise ValueError(
+                    f"time_zone {self.time_zone!r} is not a zone the zone database knows"
+                ) from None
+        recorded = [name for s in self.scenes for b in s.beats for name in b.record]
+        dated = [
+            step.record
+            for scene in self.scenes
+            for beat in scene.beats
+            for step in beat.steps
+            if isinstance(step, Date)
+        ]
+        for name in dated:
+            if name in recorded or dated.count(name) > 1:
+                raise ValueError(f"the date step's reading {name!r} is named twice")
+        if dated and self.time_zone is None:
+            raise ValueError(
+                "a storyboard with a date step pins the browser's time_zone and"
+                " locale, so the take is the same on any machine"
+            )
+        design = self.end_state.design
+        if design is not None and design.scheduled_start is not None:
+            if design.scheduled_start not in dated:
+                raise ValueError(
+                    f"the design's end state starts at the reading"
+                    f" {design.scheduled_start!r}, which no date step records"
+                )
+        if design is not None and design.group is not None:
+            groups = [g.name for g in self.setup.exclusion_groups] if self.setup else []
+            if design.group not in groups:
+                raise ValueError(
+                    f"the design's end state puts it in {design.group!r}, which the"
+                    " setup does not make"
+                )
+        return self
 
     @model_validator(mode="after")
     def _traffic_in_order(self) -> "Storyboard":
@@ -1366,6 +1490,7 @@ _STEP_KEYS = {
     "url": WaitFor,
     "choose": Choose,
     "slide": Slide,
+    "date": Date,
 }
 
 
@@ -1433,6 +1558,11 @@ def parse(data: Any, *, source: str = "storyboard") -> Storyboard:
                 raise StoryboardError(
                     f"{where}: a choose or slide in before is cut from the video"
                 )
+            if any(isinstance(step, Date) for step in [*beat.before, *beat.exit]):
+                raise StoryboardError(
+                    f"{where}: a date is set in the beat's steps, on camera, never"
+                    " in before or exit"
+                )
     # G1 and G3, the narration's rules (the voice step runs them again).
     from showcase.capture import narration
 
@@ -1475,6 +1605,7 @@ def _locators(step: Any) -> List[Locator]:
         "wait_for",
         "choose",
         "slide",
+        "date",
     ):
         value = getattr(step, key, None)
         if isinstance(value, Locator):
@@ -1731,7 +1862,8 @@ def step_ms(step: Any) -> int:
         ms = step.ms
     elif isinstance(step, ScrollTo):
         ms = config.SCROLL_MS
-    elif isinstance(step, Choose):
+    elif isinstance(step, (Choose, Date)):
+        # A date is filled as a choose is chosen: pressed, set, held to settle.
         ms = (
             config.POINTER_MS
             + config.POINTER_REST_MS

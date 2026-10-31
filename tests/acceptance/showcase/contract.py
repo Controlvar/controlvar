@@ -674,8 +674,10 @@ DEFAULT_VOICE_GAIN_DB = 4.5
 #: of -22.5 LUFS in the voice step (2026-10-29), against -23.7 to -23.9 for
 #: videos 1-4 and 6, so 4.5 dB puts them at -18.0 and G10 refuses; 3.5 dB puts
 #: them at -19.0. Why its new clips are louder is not known: a change in
-#: Polly's output level is suspected, and no Polly call has checked it.
-VOICE_GAIN_DB_BY_VIDEO: Dict[str, float] = {"09-design-in-depth": 3.5}
+#: Polly's output level is suspected, and no Polly call has checked it. Its 26
+#: dashboard clips (D182) render at -19.33 LUFS at 3.5 dB, just under G17's
+#: window [-19.3, -18.7], so it takes 3.7 dB (-19.13 in the rehearsal).
+VOICE_GAIN_DB_BY_VIDEO: Dict[str, float] = {"09-design-in-depth": 3.7}
 
 
 def voice_gain_db(slug: str) -> float:

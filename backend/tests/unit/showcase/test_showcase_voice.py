@@ -984,8 +984,12 @@ def test_the_parser_refuses_a_missing_summary_or_label(text, reason):
 
 def test_the_gain_and_the_precheck_are_the_plans():
     assert contract.DEFAULT_VOICE_GAIN_DB == 4.5
-    # Video 9 alone takes another gain: its new clips measure louder.
-    assert contract.VOICE_GAIN_DB_BY_VIDEO == {"09-design-in-depth": 3.5}
+    # Video 9 alone takes another gain: its new clips measure louder. 3.7 dB
+    # since its dashboard clips rendered at -19.33 at 3.5 (the EM's ruling).
+    assert contract.VOICE_GAIN_DB_BY_VIDEO == {"09-design-in-depth": 3.7}
+    gains = {slug: contract.voice_gain_db(slug) for slug in config.VIDEOS}
+    assert gains.pop("09-design-in-depth") == 3.7
+    assert len(gains) == 6 and set(gains.values()) == {4.5}, gains
     assert contract.PRECHECK_PEAK_DBTP == -1.3
     assert (contract.LOUDNESS_TARGET_LUFS, contract.PRECHECK_LOUDNESS_LU) == (
         -19.0,

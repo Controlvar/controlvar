@@ -1,17 +1,34 @@
-# Video 9, Design an experiment in depth: past the basics of guided setup (video
-# 2) into the options the dashboard offers when an experiment is designed: a
-# second metric, a third version and its traffic split, who can join (a
-# targeting rule), the confidence level and the multiple-comparison correction,
-# the Bayesian view, the Review step and the saved draft. On the `demo` seed;
-# the experiment is created and left a draft, so no traffic is sent.
+# Video 9, Design an experiment in depth: one experiment designed end to end in
+# the dashboard (D182). Past the basics of guided setup (video 2): a second
+# metric, a third version and its traffic split, who can join (a targeting
+# rule), the confidence level and the multiple-comparison correction, the
+# Bayesian view and sequential testing (beta), the Review step and the saved
+# draft. Then, on their own pages: the draft's start date, a global holdout
+# made and activated, and the draft added to an exclusion group; the draft's
+# page reads all four back. On the `demo` seed; the experiment is left a
+# draft, so no traffic is sent.
 #
 # * The departures from a new user's path, each stated on screen where it
 #   happens: the sign-in, done off camera (the first caption); and the
 #   exclusion group "Checkout tests", made off camera before the first scene
-#   with the seeded Checkout Button Color in it (`setup`). The group is kept
-#   for the re-record in the dashboard (D182), which adds this draft to it on
-#   camera; this board does not show it. Nothing else is set up, simulated,
-#   skipped or masked.
+#   with the seeded Checkout Button Color in it (`setup`), so that adding this
+#   draft to it shows a group of two. One caption says so, on the group's own
+#   beat (D188). Nothing else is set up, simulated, skipped or masked.
+# * The holdout is made and activated on camera, the last thing the video
+#   changes before the page that reads it. Each video's stack is its own and
+#   thrown away, and this one sends no traffic, so an active holdout changes
+#   no assignment and nothing in another video. The holdout is global: it
+#   keeps new users out of every experiment, this one included, and is never
+#   said to belong to this experiment. The Activate click ends the create
+#   beat (its exit); the next beat opens the Q4 row's Edit form and shows its
+#   size locked ("Fixed once a holdout has been active"), while "its size is
+#   fixed" is said (narration review condition 2). Each beat's focus is an
+#   element its own clicks keep on the page (gate 9).
+# * The start date is set with a `date` step: two days after the take's own
+#   day, at 09:00, in the browser's zone, which this board pins
+#   (`time_zone`, `locale`: the take is the same on any machine; D188). The
+#   page computes the value, so it is right on any day the video is filmed.
+#   No sentence says a date or a clock time: the date is drawn, never said.
 # * The share boxes are changed by selecting the number and typing over it
 #   (`select: true`), the way a person commonly replaces a value. Emptying a
 #   share box and then typing draws a leading zero ("034") while 34 is saved;
@@ -23,7 +40,22 @@
 #   targeting rule as the builder sent it (its ids aside), the analysis
 #   settings, and nothing guided setup cannot set. The Review rows and the
 #   page's analysis rows recorded below must say, in the product's own words,
-#   what was saved.
+#   what was saved. What the video then sets on the draft's own pages is
+#   declared too, and held both ways (a field set that is not declared, or
+#   declared and not set, refuses): sequential testing on, the start the
+#   `date` step set (its instant, as the page computed it), the setup's group
+#   (its id, as the setup made it) and the one holdout, active, at its size.
+#   The groups, the group's members, every holdout and the active one are
+#   read off camera, never from the cached experiment (`eligibility_end`).
+#   The page must run in the pinned zone and locale, as it resolves them, and
+#   each date must be its value read in that zone on that day.
+# * The payoff beat records each row the narration reads back, compared with
+#   what the API holds in the product's own words (the group's name, the
+#   holdout's `holdoutLabel`, "Starts" and the start as the page drew it at
+#   the `date` step), and the note under the draft's settings
+#   (`experiment-api-settings-note`), which must read exactly "Set through the
+#   API, not on this page: a paused experiment's resume, turning sequential
+#   testing on or off after creation." (PE 1, EM-3).
 # * What each narrated claim rests on:
 #   - "Everyone else gets the control, and isn't enrolled": an ineligible user
 #     gets the control with `assigned: false` and no assignment
@@ -37,9 +69,20 @@
 #     help text, drawn while it is said ("about 5% (at 95% confidence)").
 #   - "each version's chance of being best": the Bayesian panel's "Chance to be
 #     best" for every variant.
+#   - Every sentence, these four included: its row of CLAIMS in
+#     test_showcase_quoted_docs.py, with what is drawn while it is said and
+#     the pages that state it.
+# * Length cuts, in order, if the voiced length runs over 143 s. Each drops
+#   whole sentences, so none needs a new clip: (1) drop the holdouts page's
+#   first beat and its sentence ("A holdout covers all your experiments, so it
+#   has its own page."; the scope note is still on screen in the next beat);
+#   (2) drop "Check results whenever you like, and stop once the evidence is
+#   strong."; (3) drop "And the holdout is active.". Dropping "That includes
+#   this one." or "Until then, it stays a draft." saves nothing: those beats
+#   are timed by their steps.
 # * `say` is the narration, in the other videos' voice; every number it says
-#   is drawn while it is said (G2): "100%" in "Currently 100%", and "5%" in the
-#   correction's help text. No sentence says a date or a clock time.
+#   is drawn while it is said (G2): "100%" in "Currently 100%", "5%" in the
+#   correction's help text, and "5%" in the holdout's confirm.
 slug: 09-design-in-depth
 title: "Design an experiment in depth"
 seed: demo
@@ -47,6 +90,8 @@ seed_counts: {experiments: 3, feature_flags: 2, users: 4}
 never_show:
   - Assign a user from your app
   - guardrail
+time_zone: America/Los_Angeles
+locale: en-US
 end_state:
   signed_in_as: admin@demo.com
   design:
@@ -67,7 +112,11 @@ end_state:
         - logical_operator: AND
           conditions:
             - {attribute: user.country, operator: in, value: "US, CA"}
-    analysis: {confidence: 0.95, correction: benjamini_hochberg, bayesian: true}
+    analysis:
+      {confidence: 0.95, correction: benjamini_hochberg, bayesian: true, sequential: true}
+    scheduled_start: scheduled-start
+    group: Checkout tests
+    holdout: {name: Q4 holdout, percentage: 5}
     shown:
       review_variants: review-variants
       review_metrics: review-metrics
@@ -75,6 +124,11 @@ end_state:
       review_analysis: review-analysis
       detail_analysis: analysis
       detail_bayesian: bayesian
+      detail_sequential: detail-sequential
+      detail_start: detail-start
+      detail_group: detail-group
+      detail_holdout: detail-holdout
+      detail_note: api-settings-note
 setup:
   exclusion_groups:
     - name: Checkout tests
@@ -87,6 +141,8 @@ scenes:
     departures:
       - kind: off-camera setup
         says: Signed in off camera
+      - kind: off-camera setup
+        says: made off camera
     beats:
       - cue: Signed in off camera. Past the basics of guided setup.
         focus: {testid: new-experiment-btn}
@@ -201,6 +257,18 @@ scenes:
           - click: {testid: analysis-bayesian}
           - look: {css: "div:has(> #analysis-bayesian)"}
             ms: 1000
+
+      - before:
+          - scroll_to: {testid: analysis-sequential}
+        cue: "Optional: sequential testing (beta)."
+        focus: {css: "div:has(> #analysis-sequential)"}
+        say:
+          - Turn on sequential testing, in beta.
+          - Check results whenever you like, and stop once the evidence is strong.
+        steps:
+          - click: {testid: analysis-sequential}
+          - look: {css: "div:has(> #analysis-sequential)"}
+            ms: 1000
         exit:
           - click: {testid: wizard-next}
 
@@ -232,13 +300,132 @@ scenes:
         record:
           analysis: {testid: experiment-analysis}
           bayesian: {testid: experiment-bayesian}
-        payoff: true
         steps:
           - look: {testid: experiment-analysis}
             ms: 1000
           - look: {testid: experiment-bayesian}
             ms: 800
+          - look: {testid: experiment-sequential}
+            ms: 800
           - look: {testid: variants-table}
             ms: 1200
           - look: {testid: metrics-list}
             ms: 1000
+
+      - cue: "Schedule its start: it starts on its own."
+        focus: {testid: experiment-manage}
+        say:
+          - Give it a start date, and it starts on its own.
+          - Until then, it stays a draft.
+        steps:
+          - click: {testid: experiment-schedule}
+          - date: {testid: schedule-start}
+            days_ahead: 2
+            at: "09:00"
+            record: scheduled-start
+          - look: {testid: schedule-start-readback}
+            ms: 1500
+          - click: {testid: schedule-save}
+          - look: {css: "div:has(> [data-testid=experiment-start-date])"}
+            ms: 1500
+        exit:
+          - click: {css: "[data-testid=experiment-holdout] a"}
+
+      - before:
+          - wait_for: {testid: holdout-scope-note}
+        cue: "Global holdouts: one page, for every experiment."
+        focus: {testid: holdout-scope-note}
+        say:
+          - A holdout covers all your experiments, so it has its own page.
+        steps:
+          - look: {testid: holdout-scope-note}
+            ms: 2500
+
+      - cue: "Create one, and activate it now."
+        focus: {css: "#holdouts-all-heading"}
+        say:
+          - A global holdout keeps 5% of new users out of every experiment.
+          - That includes this one.
+        steps:
+          - click: {testid: new-holdout-btn}
+          - type: {testid: holdout-name}
+            text: Q4 holdout
+          - look: {testid: holdout-size}
+            ms: 1000
+          - click: {testid: holdout-activate-now}
+          - click: {testid: holdout-submit}
+          - look: {testid: holdout-confirm}
+            ms: 2000
+        exit:
+          - click: {testid: holdout-confirm-yes}
+          - wait_for: {testid: holdout-active-card}
+
+      - cue: "Active: its size is now fixed."
+        focus: {testid: holdout-row}
+        say:
+          - "It's active now, and its size is fixed."
+        steps:
+          - look: {testid: holdout-active-card}
+            ms: 1500
+          - click: {testid: holdout-edit}
+          - look: {testid: holdout-size-locked}
+            ms: 1500
+        exit:
+          - click: {role: link, name: "← Experiments"}
+          - wait_for: {testid: exclusion-groups-link}
+          - click: {testid: exclusion-groups-link}
+
+      - before:
+          - wait_for: {testid: exclusion-groups-table}
+        cue: Checkout tests, made off camera with Checkout Button Color.
+        focus: {testid: exclusion-group-row}
+        say:
+          - Experiments in the same exclusion group never share a user.
+        steps:
+          - look: {testid: exclusion-group-row}
+            ms: 1500
+        exit:
+          - click: {testid: exclusion-group-link}
+
+      - before:
+          - wait_for: {testid: exclusion-group-add-select}
+        cue: Add this draft to the group.
+        focus: {testid: exclusion-group-members}
+        say:
+          - Add this draft to the group with Checkout Button Color.
+        steps:
+          - choose: {testid: exclusion-group-add-select}
+            option: Delivery promise (Draft)
+          - click: {testid: exclusion-group-add}
+          - look: {testid: exclusion-group-member-list}
+            ms: 1500
+        exit:
+          - click: {role: link, name: Delivery promise}
+
+      - before:
+          - wait_for: {testid: experiment-holdout}
+          - wait_for: {testid: experiment-exclusion-group}
+        cue: "Still a draft: sequential on, a start, a group, a holdout."
+        focus: {css: "dl:has([data-testid=experiment-holdout])"}
+        payoff: true
+        say:
+          - "Read it back: it's still a draft, in its group."
+          - It has its start date, and sequential testing is on.
+          - And the holdout is active.
+        record:
+          detail-sequential: {testid: experiment-sequential}
+          detail-start: {css: "div:has(> [data-testid=experiment-start-date])"}
+          detail-group: {testid: experiment-exclusion-group}
+          detail-holdout: {testid: experiment-holdout}
+          api-settings-note: {testid: experiment-api-settings-note}
+        steps:
+          - look: {testid: experiment-status}
+            ms: 800
+          - look: {css: "div:has(> [data-testid=experiment-exclusion-group])"}
+            ms: 1500
+          - look: {css: "div:has(> [data-testid=experiment-start-date])"}
+            ms: 1500
+          - look: {css: "div:has(> [data-testid=experiment-sequential])"}
+            ms: 1500
+          - look: {css: "div:has(> [data-testid=experiment-holdout])"}
+            ms: 2000

@@ -58,7 +58,10 @@ stand-in pages where Playwright is not installed. What it does, in order:
   sets the option without opening it, and holds the closed select on the new
   text for ``config.SETTLE_MS``; a ``click`` on a select is refused. A
   ``slide`` step glides the cursor along a range input's track while the value
-  follows it to the storyboard's number.
+  follows it to the storyboard's number. A ``date`` step presses a
+  ``datetime-local`` input as ``choose`` presses a select, its picker never
+  opened; the page computes the day and time in its own zone, the field is
+  filled, and gate 12 reads it back (``judge.date_as_set``).
 * A narrated capture (``voiced.Pacing``) holds each beat until its
   sentences' slots fit its cue (the TILE rule), less what its exit takes at
   the least, so the narration may run over the exit; a cue that still ends
@@ -312,6 +315,30 @@ SELECT_ARROW_PX = 22
 #: it has none, which is 1 for a range).
 RANGE_JS = """el => [el.tagName, String(el.type || '').toLowerCase(),
   Number(el.min || 0), Number(el.max || 100), Number(el.value), String(el.step || '')]"""
+#: A ``date`` step's field: its tag and its type.
+FIELD_KIND_JS = "el => [el.tagName, String(el.type || '').toLowerCase()]"
+#: A ``date`` step's value, computed by the page in its own zone: its today plus
+#: ``days`` days, at ``at`` ("HH:MM"), as a ``datetime-local`` value.
+DATE_VALUE_JS = """([days, at]) => {
+  const now = new Date();
+  const when = new Date(now.getFullYear(), now.getMonth(), now.getDate() + days,
+    Number(at.slice(0, 2)), Number(at.slice(3, 5)), 0, 0);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())}` +
+    `T${pad(when.getHours())}:${pad(when.getMinutes())}`;
+}"""
+#: A ``date`` field's value read back by the page: formatted as DATE_VALUE_JS
+#: formats it, the instant it names, and how the page draws it.
+DATE_READ_JS = """(value) => {
+  const when = new Date(value);
+  const pad = (n) => String(n).padStart(2, '0');
+  return {
+    back: `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())}` +
+      `T${pad(when.getHours())}:${pad(when.getMinutes())}`,
+    instant: isNaN(when.getTime()) ? '' : when.toISOString(),
+    shown: when.toLocaleString(),
+  };
+}"""
 
 #: Gate 9: is the element on top at this point (or something inside it)?
 ON_TOP_JS = """(el, point) => {
@@ -432,6 +459,9 @@ class Tally:
     #: Gate 12 (typed as shown): each ``type`` step's field read back after its
     #: keys, as lengths (``Director.check_typed``).
     typed: List[Dict[str, Any]] = field(default_factory=list)
+    #: Gate 12 for each ``date`` step: the value the page computed, the field
+    #: read back, and the page's own reading of it (``judge.date_as_set``).
+    dates: List[Dict[str, Any]] = field(default_factory=list)
     #: G2: one number check a narration sentence, and what each found.
     narration_checks: int = 0
     spoken: List[Dict[str, Any]] = field(default_factory=list)
@@ -665,6 +695,9 @@ class Director:
         self.resolve = resolve
         #: Texts a beat's ``record`` kept at its cue's start, by name (gate 10).
         self.readings: Dict[str, str] = {}
+        #: Each ``date`` step's reading, by its ``record`` name: the value set,
+        #: the instant it names, and how the page draws it.
+        self.dates: Dict[str, Dict[str, str]] = {}
         self.signed_in = False
         #: A narrated capture's slots per beat (voice PR C2); empty when silent.
         self.pacing = pacing or Pacing()
@@ -1624,6 +1657,8 @@ class Director:
             self.scroll_into_view(found)
         elif isinstance(step, storyboard.Choose):
             self.choose(step)
+        elif isinstance(step, storyboard.Date):
+            self.date(step)
         elif isinstance(step, storyboard.Slide):
             found, box = self._visible_box(step.slide)
             self.slide(found, box, step.value, step.slide.describe())
@@ -1691,6 +1726,36 @@ class Director:
         self.tally.choices.append({"where": self.where, "ok": ok, **numbers})
         if not ok:
             raise CaptureFailed("C9", f"{self.where}: {what}: {why}")
+
+    def date(self, step: storyboard.Date) -> None:
+        """A ``datetime-local`` field set as ``choose`` sets a select (C9): the
+        cursor presses it, its picker never opened; the page computes the day
+        and the time in its own zone; the field is filled with it, and gate 12
+        reads it back (``judge.date_as_set``). The reading keeps the value, the
+        instant it names and how the page draws it."""
+        found, box = self._visible_box(step.date)
+        what = step.date.describe()
+        tag, kind = found.evaluate(FIELD_KIND_JS)
+        if str(tag).upper() != "INPUT" or kind != "datetime-local":
+            raise CaptureFailed(
+                "gate 12", f"{self.where}: {what} is not a datetime-local input"
+            )
+        self.move_to(*box.centre)
+        self.page.wait_for_timeout(config.POINTER_REST_MS)
+        self.click_pulse(*box.centre)
+        value = str(self.page.evaluate(DATE_VALUE_JS, [step.days_ahead, step.at]))
+        found.fill(value)
+        read = found.input_value()
+        back = self.page.evaluate(DATE_READ_JS, read)
+        ok, numbers, why = judge.date_as_set(step.at, value, read, str(back["back"]))
+        reading = {"value": read, "instant": back["instant"], "shown": back["shown"]}
+        self.tally.dates.append(
+            {"where": self.where, "field": what, "ok": ok, **numbers, **reading}
+        )
+        if not ok:
+            raise CaptureFailed("gate 12", f"{self.where}: {what}: {why}")
+        self.dates[step.record] = reading
+        self.page.wait_for_timeout(config.SETTLE_MS)
 
     def slide(self, found: Locator, box: Box, value: float, what: str) -> None:
         """Move a range input to *value*, one of its steps: the drawn cursor
