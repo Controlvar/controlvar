@@ -87,6 +87,75 @@ The image lines name the images of this file's own release,
 [Releases, images and verification](https://docs.controlvar.com/self-hosting/releases/)
 shows how to check what you pulled.
 
+## Back up and restore
+
+A backup is two files, taken together: a dump of the database and your `.env`.
+Keep both outside the Docker volumes, on another machine if you can, and keep
+them private: `.env` holds the secrets.
+
+Every command below names the Compose project, `experimently-selfhost`, which
+is the `name:` in `compose.yml`, and none of them deletes a volume.
+
+### Back up
+
+From this directory:
+
+```bash
+mkdir -m 700 -p ~/controlvar-backups
+docker compose -p experimently-selfhost exec -T postgres \
+  sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' \
+  > ~/controlvar-backups/controlvar.dump
+cp .env ~/controlvar-backups/controlvar.env
+```
+
+The dump is made inside the `postgres` service with the user and database
+that service was started with (the defaults in `compose.yml`, unless you set
+`POSTGRES_USER` and `POSTGRES_DB`), and written to the file you redirect it to
+on the host.
+
+`.env` has to travel with the dump. `generate-env.sh` writes a note at the top
+of it that its secrets cannot be regenerated. `SECRET_KEY` signs the sign-in
+tokens, and `AUDIT_HMAC_KEY` signs the audit records of the `full` profile:
+run `generate-env.sh` again on a new host and it makes different keys.
+
+Redis needs no backup. In this stack it holds the rate-limit counters and
+response caches, which the API rebuilds, and the API runs without it
+(`REDIS_REQUIRED` is `false`). It writes an append-only file to its own
+volume, so a restart keeps its data.
+
+### Restore
+
+Restore into a fresh stack of the same image tag the dump came from: the same
+release, because the database records the revision it was migrated to, and
+the same profile. An older image refuses to start on a database a newer release
+migrated (see
+[Database migrations](https://docs.controlvar.com/self-hosting/migrations/)),
+so restore first and upgrade afterwards, the usual way.
+
+On the new host, put that release's `compose.yml` and the saved `.env` in one
+directory, and do not run `generate-env.sh`. Do not run the commands below in
+the directory of a stack that is running: the first replaces its `.env`, and
+the restore loads into whatever database its `postgres` service holds. Then:
+
+```bash
+cp ~/controlvar-backups/controlvar.env .env
+docker compose -p experimently-selfhost up -d --wait postgres
+docker compose -p experimently-selfhost exec -T postgres \
+  sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --exit-on-error' \
+  < ~/controlvar-backups/controlvar.dump
+docker compose -p experimently-selfhost up -d --wait
+```
+
+Only PostgreSQL is started first, so the database it creates is still empty
+when the dump is loaded: the API creates the schema on its first start.
+When the API then starts it finds the restored schema and the restored users,
+and creates neither a schema nor a first administrator.
+
+To restore on the host that runs the stack, stop it with
+`docker compose -p experimently-selfhost stop`, which keeps its volumes, and
+restore under another project name: the same commands with a different `-p`
+start with empty volumes.
+
 ## What CI runs
 
 The `compose-production` workflow runs this file on every pull request that
