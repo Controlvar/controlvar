@@ -77,7 +77,7 @@ by = [
 ]
 
 [[unit]]
-text = "Evaluate a flag | GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON, optional> | — | {key, enabled, config, reason}"
+text = "Evaluate a flag | GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON, optional> | — | {key, enabled, value, value_type, config, reason}"
 by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
     "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_no_context_keeps_existing_behaviour",

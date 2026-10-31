@@ -110,7 +110,7 @@ For a full AWS deployment, see [CDK Deployment](../self-hosting/cdk.md).
 
 ### What is the difference between a feature flag and an experiment?
 
-**Feature flags** control whether a feature is visible to a user. They are primarily operational tools — used for gradual rollouts, kill switches, and beta programs. A flag has no statistical analysis attached to it.
+**Feature flags** control whether a feature is visible to a user, or which value they get. They are primarily operational tools — used for gradual rollouts, kill switches, and beta programs. A flag has no statistical analysis attached to it. A flag does not measure which value does better; an experiment does.
 
 **Experiments** are scientific tools for causal measurement. They split users into variants, track defined metrics, and apply statistical tests to determine whether a variant is better than the control. Experiments have a defined start and end date and produce a ship/no-ship recommendation.
 

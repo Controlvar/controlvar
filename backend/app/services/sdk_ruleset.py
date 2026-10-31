@@ -57,9 +57,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 from typing import Any, Dict, Iterable, List, Optional
 
+from backend.app.core.flag_values import is_portable_number
 from backend.app.core.targeting_adapter import normalise_targeting_rules
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.schemas.targeting_rule import (
@@ -75,11 +75,6 @@ RULESET_SCHEMA = 1
 
 #: The server's flag bucketing function, by name (see the module docstring).
 BUCKETING = "md5-mod100-v1"
-
-#: The largest integer both Python and JavaScript represent exactly. A number
-#: of greater magnitude on either side of a comparison is answered by the
-#: server.
-MAX_SAFE_INTEGER = 2**53 - 1
 
 #: Operators an SDK may evaluate itself (the engine's names). Every other
 #: operator makes its flag ``evaluation: "remote"``.
@@ -135,21 +130,13 @@ EVALUATION_REMOTE = "remote"
 # ---------------------------------------------------------------------------
 # Value domains
 # ---------------------------------------------------------------------------
-
-
-def is_portable_number(value: Any) -> bool:
-    """A JSON number both languages compare identically.
-
-    Not a bool (checked first: ``True`` is an ``int`` in Python), finite, and
-    of magnitude at most :data:`MAX_SAFE_INTEGER`. The magnitude is checked
-    before anything converts the value, so a huge ``int`` never reaches a
-    float conversion.
-    """
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return False
-    if isinstance(value, int):
-        return -MAX_SAFE_INTEGER <= value <= MAX_SAFE_INTEGER
-    return math.isfinite(value) and abs(value) <= MAX_SAFE_INTEGER
+#
+# A portable number is ``backend.app.core.flag_values.is_portable_number``:
+# not a bool, finite, and of magnitude at most ``MAX_SAFE_INTEGER`` (2**53 - 1,
+# the largest integer both Python and JavaScript represent exactly). A number
+# of greater magnitude on either side of a comparison is answered by the
+# server. One definition, shared with the flag value rules and the vectors
+# generator.
 
 
 def condition_is_local(condition: Condition) -> bool:

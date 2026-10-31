@@ -33,6 +33,7 @@ from backend.app.core.context_limits import (
     check_context,
     check_context_text,
 )
+from backend.app.core.flag_values import flag_value_type, served_value
 from backend.app.core.logger import unexpected_failure
 from backend.app.core.metrics import record_flag_evaluation
 from backend.app.core.permissions import (
@@ -71,6 +72,7 @@ from backend.app.services.audit_service import (
 from backend.app.services.feature_flag_service import (
     FeatureFlagService,
     FlagStatusReadOnly,
+    FlagValuesRefused,
     FlagVerb,
     transition,
 )
@@ -133,6 +135,21 @@ def _status_read_only() -> RequestValidationError:
     """
     return RequestValidationError(
         [{"type": "read_only", "loc": ("body", "status"), "msg": STATUS_READ_ONLY}]
+    )
+
+
+def _values_refused(refused: FlagValuesRefused) -> RequestValidationError:
+    """The 422 for an update whose ``value_type`` or values do not fit (#1497).
+
+    The same shape as every other request validation error: each refusal at
+    ``["body", <field>]`` with its fixed ``type`` and ``msg``, which name the
+    field and never the value.
+    """
+    return RequestValidationError(
+        [
+            {"type": error.type, "loc": ("body", field), "msg": error.message()}
+            for field, error in refused.errors
+        ]
     )
 
 
@@ -320,6 +337,8 @@ async def create_feature_flag(
     - Optional description
     - Optional targeting rules for specific user segments
     - Optional rollout percentage
+    - Optional `value_type` (`boolean` when left out) and, for a `string`,
+      `number` or `json` flag, its `on_value` and `off_value`
 
     The flag is created off (INACTIVE) unless the request sends
     `is_active: true`. A field the API does not read answers 422. The read-only
@@ -327,6 +346,8 @@ async def create_feature_flag(
     `status`) are accepted and ignored, except that a `status` must be the one
     the flag is created with. `targeting_rules` the flag evaluator would not
     apply as written answer 422, with the place and the reason in the message.
+    A value that does not fit `value_type` or its limits answers 422 at that
+    field, with a message that names the field and never the value.
 
     Returns:
         FeatureFlagRead: The newly created feature flag
@@ -378,7 +399,11 @@ async def create_feature_flag(
             outcome=AuditOutcome.SUCCESS,
             resource_id=str(created.id),
             actor_id=str(current_user.id) if current_user else None,
-            new_value={"key": created.key, "name": created.name},
+            new_value={
+                "key": created.key,
+                "name": created.name,
+                "value_type": created.value_type,
+            },
         )
         # log() only flushes, and the create above has already committed, so
         # without this the record is rolled back when the session closes.
@@ -485,13 +510,18 @@ async def update_feature_flag(
       400, and nothing is changed: unarchive it first
     - Targeting rules
     - Rollout percentage
+    - `on_value` and `off_value`, for a `string`, `number` or `json` flag
 
     A field the API does not read answers 422, and so does an explicit null on
-    `key`, `name`, `is_active`, `rollout_percentage` or `default_value`. The
-    read-only fields of a flag response (`id`, `owner_id`, `created_at`,
-    `updated_at`, `status`) are accepted and ignored, so a GET body can be sent
-    back unchanged unless its `targeting_rules` are ones PUT now refuses (422);
-    omitting the field still works. A `status` must equal the flag's.
+    `key`, `name`, `is_active`, `rollout_percentage`, `default_value`,
+    `value_type`, `on_value` or `off_value`. The read-only fields of a flag
+    response (`id`, `owner_id`, `created_at`, `updated_at`, `status`) are
+    accepted and ignored, so a GET body can be sent back unchanged unless its
+    `targeting_rules` are ones PUT now refuses (422); omitting the field still
+    works. A `status` must equal the flag's, and a `value_type` the flag's type
+    (422 `read_only` otherwise). A value is checked against the flag's type,
+    and the two values as they will be stored must differ; a boolean flag's
+    `on_value: true` and `off_value: false` are accepted and change nothing.
 
     `targeting_rules` the flag evaluator would not apply as written answer 422,
     with the place and the reason in the message. Stored rules are not
@@ -542,6 +572,7 @@ async def update_feature_flag(
         "name": flag.name,
         "status": str(flag.status),
         "rollout_percentage": flag.rollout_percentage,
+        "value_type": flag_value_type(flag),
     }
     before_audit = audit_snapshot(EntityType.FEATURE_FLAG, flag)
 
@@ -554,6 +585,8 @@ async def update_feature_flag(
         updated_row = feature_flag_service.update_feature_flag(flag, feature_flag_in)
     except FlagStatusReadOnly:
         raise _status_read_only() from None
+    except FlagValuesRefused as refused:
+        raise _values_refused(refused) from None
     except ArchivedFlagError:
         raise _archived_refusal() from None
     except IntegrityError as e:
@@ -573,6 +606,7 @@ async def update_feature_flag(
             "name": updated_flag.name,
             "status": updated_flag.status,
             "rollout_percentage": updated_flag.rollout_percentage,
+            "value_type": updated_flag.value_type,
         }
         audit = AuditLogService(db)
         audit.log(
@@ -1021,6 +1055,14 @@ def _evaluate_flag_by_key(
     archived, ...) evaluates to ``enabled: false`` with ``reason: "inactive"``
     rather than 404: the client should treat it as "off", not as an error.
     Only an unknown key is a 404.
+
+    ``value`` is what the flag serves this user (#1497): its ``on_value`` when
+    ``enabled``, its ``off_value`` otherwise, so every way a flag is off --
+    inactive, archived, no match, outside the percentage, ``reason: "error"``
+    -- serves the off value; a boolean flag's ``value`` is ``enabled``. A
+    stored value outside the value rules is answered with no ``value`` key
+    (``flag_values.served_value``). ``config`` is always ``None``: the value
+    travels in ``value``, never in ``config``.
     """
     db_flag = db.query(FeatureFlag).filter(FeatureFlag.key == flag_key).first()
     if not db_flag:
@@ -1033,14 +1075,14 @@ def _evaluate_flag_by_key(
     evaluation = feature_flag_service.evaluate_flag_detailed(db_flag, user_id, context)
     record_flag_evaluation(flag_key, "enabled" if evaluation["enabled"] else "disabled")
 
-    # ``config`` has always been ``None`` here (the flag dict has no ``value``);
-    # kept for backwards compatibility with existing SDKs.
-    return {
-        "key": flag_key,
-        "enabled": evaluation["enabled"],
-        "config": None,
-        "reason": evaluation["reason"],
-    }
+    answer: Dict[str, Any] = {"key": flag_key, "enabled": evaluation["enabled"]}
+    servable, value = served_value(db_flag, evaluation["enabled"])
+    if servable:
+        answer["value"] = value
+    answer["value_type"] = flag_value_type(db_flag)
+    answer["config"] = None
+    answer["reason"] = evaluation["reason"]
+    return answer
 
 
 @router.get(
@@ -1074,10 +1116,13 @@ async def evaluate_feature_flag(
     **Authentication**: Requires a valid API key in the X-API-Key header.
 
     Returns:
-        ``{"key", "enabled", "config", "reason"}`` where ``reason`` is one of
-        ``targeting_rule`` (a rule matched and its rollout % decided),
-        ``rollout`` (the global rollout % decided), ``inactive`` (the flag exists
-        but is not ACTIVE: ``enabled`` is false) or ``error``. ``config`` is
+        ``{"key", "enabled", "value", "value_type", "config", "reason"}``
+        where ``reason`` is one of ``targeting_rule`` (a rule matched and its
+        rollout % decided), ``rollout`` (the global rollout % decided),
+        ``inactive`` (the flag exists but is not ACTIVE: ``enabled`` is false)
+        or ``error``. ``value`` is the flag's ``on_value`` when ``enabled`` is
+        true and its ``off_value`` otherwise (for a boolean flag, ``value``
+        equals ``enabled``); ``value_type`` is the flag's type. ``config`` is
         always null.
 
     Raises:
@@ -1118,7 +1163,11 @@ async def evaluate_feature_flag_post(
     in the request body instead of the query string.
 
     Body: ``{"user_id": "...", "context": {...}}``. Returns the same
-    ``{"key", "enabled", "config", "reason"}`` payload as the GET variant.
+    ``{"key", "enabled", "value", "value_type", "config", "reason"}`` payload
+    as the GET variant: ``value`` is the flag's ``on_value`` when ``enabled``
+    is true and its ``off_value`` otherwise (for a boolean flag, ``value``
+    equals ``enabled``); ``value_type`` is the flag's type. ``config`` is
+    always null.
 
     **Authentication**: Requires a valid API key in the X-API-Key header.
 

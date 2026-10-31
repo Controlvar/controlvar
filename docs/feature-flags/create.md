@@ -147,14 +147,18 @@ The request takes these fields:
 - `is_active` (default `false`);
 - `rollout_percentage` (0–100, default 0);
 - `targeting_rules`;
-- `default_value`: what the flag serves when it is off. Only `false` is accepted for now,
-  and it is the default; `true` answers `422`;
+- `value_type`: `boolean` (the default), `string`, `number` or `json` (see
+  [Serve a value](#serve-a-value));
+- `on_value` and `off_value`: what a `string`, `number` or `json` flag serves;
+- `default_value`: deprecated, `off_value` replaces it. Only `false` is accepted, for every
+  flag, and it is the default; `true` answers `422`;
 - `tags`.
 
 **Any other field answers `422`** (`"type": "extra_forbidden"`), so a misspelled or
 unsupported field is never dropped silently. `null` is refused for `key`, `name`,
-`is_active`, `rollout_percentage` and `default_value`. A key that already exists answers
-`409`, and a key with capitals or spaces answers `422`.
+`is_active`, `rollout_percentage`, `default_value`, `value_type`, `on_value` and
+`off_value`. A key that already exists answers `409`, and a key with capitals or spaces
+answers `422`.
 
 The fields a response carries but no request writes (`id`, `owner_id`, `created_at`,
 `updated_at` and `status`) are accepted and ignored, so a GET body can be sent back
@@ -388,6 +392,111 @@ KEY=$(curl -s -X POST localhost:8000/api/v1/api-keys \
   -d '{"name":"flag-guide"}' | jq -r .key)
 ```
 
+### Serve a value
+
+A flag can serve a string, a number or a JSON value instead of on or off. Its `value_type`
+is set when it is created, and it has two values: `on_value`, what the users it is on for
+get, and `off_value`, what everyone else gets, and everyone while the flag is off. This
+creates a string flag for a checkout button's label, on for enterprise-plan users, and
+turns it on:
+
+```{.bash exec}
+LABEL=$(curl -s -X POST localhost:8000/api/v1/feature-flags/ \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{
+    "key": "checkout-button-label",
+    "name": "Checkout button label",
+    "value_type": "string",
+    "on_value": "Complete purchase",
+    "off_value": "Buy now",
+    "rollout_percentage": 0,
+    "is_active": true,
+    "targeting_rules": {
+      "logical_operator": "AND",
+      "groups": [
+        {
+          "logical_operator": "AND",
+          "conditions": [
+            {"attribute": "user.plan", "operator": "equals", "value": "enterprise"}
+          ]
+        }
+      ]
+    }
+  }')
+
+jq '{key, status, value_type, on_value, off_value}' <<<"$LABEL"
+```
+<!-- expect: "on_value": "Complete purchase" -->
+<!-- expect: "off_value": "Buy now" -->
+
+A user on the enterprise plan matches the rule, so the flag is on for them and they get the
+on value:
+
+```{.bash exec}
+curl -s -G localhost:8000/api/v1/feature-flags/evaluate/checkout-button-label \
+  -H "X-API-Key: $KEY" \
+  --data-urlencode "user_id=user-123" \
+  --data-urlencode 'context={"plan":"enterprise"}' | jq
+```
+<!-- expect: "value": "Complete purchase" -->
+<!-- expect: "value_type": "string" -->
+
+```json
+{
+  "key": "checkout-button-label",
+  "enabled": true,
+  "value": "Complete purchase",
+  "value_type": "string",
+  "config": null,
+  "reason": "targeting_rule"
+}
+```
+
+A user on the free plan matches no rule, and the rollout percentage is 0, so they get the
+off value:
+
+```{.bash exec}
+curl -s -G localhost:8000/api/v1/feature-flags/evaluate/checkout-button-label \
+  -H "X-API-Key: $KEY" \
+  --data-urlencode "user_id=user-123" \
+  --data-urlencode 'context={"plan":"free"}' | jq -c '{enabled, value, reason}'
+```
+<!-- expect: {"enabled":false,"value":"Buy now","reason":"rollout"} -->
+
+**What the API checks.** A `string` flag's two values are strings (an empty string is
+allowed), a `number` flag's are numbers (not `true` or `false`), and a `json` flag's are
+JSON objects or arrays. A create sends both, and they must differ: `3` and `3.0` are the
+same number. Each value is at most 8,192 bytes as compact JSON and 10 levels deep, every
+number in it is finite and from -9007199254740991 to 9007199254740991, and no string in it
+holds a NUL or an unpaired surrogate character. A value outside these answers `422` at that
+field, and the message names the field, never the value. This number flag is given text:
+
+```{.bash exec}
+curl -s -X POST localhost:8000/api/v1/feature-flags/ \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"key": "checkout-retries", "name": "Checkout retries", "value_type": "number",
+       "on_value": "ten", "off_value": 3}' | jq -c '{loc: .detail[0].loc, msg: .detail[0].msg}'
+```
+<!-- expect: "loc":["body","on_value"] -->
+<!-- expect: "msg":"on_value must be a number, because value_type is number" -->
+
+```json
+{"loc":["body","on_value"],"msg":"on_value must be a number, because value_type is number"}
+```
+
+`value_type` cannot change once the flag exists: an update may send it back unchanged, and
+any other value answers `422` with `"type": "read_only"`. An update may send either value
+on its own; it is checked against the flag's type, and the two values as they will be
+stored must still differ. A boolean flag's `on_value` is `true` and its `off_value` is
+`false`: a request may send those back, so a GET body still round-trips, and any other
+value answers `422`. `default_value` is deprecated and accepts only `false`, for every flag;
+read `off_value`.
+
+Every application that evaluates the flag can read both of its values, so do not put
+secrets in them.
+
 ---
 
 ## Flag Key Naming Conventions
@@ -399,8 +508,8 @@ digit. Anything else is refused with `422`.
 
 ## When a Flag Evaluates to Off
 
-A flag is on or off for each user. Its `default_value`, what it serves when it is off,
-is `false` for every flag for now. Evaluation returns `enabled: false` when:
+Every flag serves two values. Evaluation returns `enabled: false`, and `value` set to the
+flag's `off_value` (`false` for a boolean flag), when:
 
 - the flag is off (`reason: "inactive"`), which includes a flag that a safety rollback to
   0% turned off (see [Safety Monitoring](safety.md#what-a-rollback-changes));
@@ -477,6 +586,8 @@ curl -s -G localhost:8000/api/v1/feature-flags/evaluate/new-checkout-flow \
 {
   "key": "new-checkout-flow",
   "enabled": true,
+  "value": true,
+  "value_type": "boolean",
   "config": null,
   "reason": "targeting_rule"
 }
@@ -510,7 +621,8 @@ curl -s -G localhost:8000/api/v1/feature-flags/evaluate/new-checkout-flow \
 decided), `rollout` (no rule matched; the global rollout percentage decided), `inactive` or
 `error`. A `context` that is not a JSON object returns `422`.
 `GET /api/v1/feature-flags/user/{user_id}?context=...` evaluates every active flag the same way
-and returns `{"flag-key": true|false, ...}`.
+and returns `{"flag-key": true|false, ...}`. A value flag answers `true` when the user gets
+its on value.
 
 ### Reporting client-side errors
 

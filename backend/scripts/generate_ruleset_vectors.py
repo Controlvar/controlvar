@@ -76,6 +76,7 @@ if __name__ == "__main__":  # pragma: no cover - run as a script
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
 
+from backend.app.core.flag_values import MAX_SAFE_INTEGER, is_portable_number
 from backend.app.core.rules_engine import evaluate_rule
 from backend.app.core.targeting_adapter import (
     expand_context,
@@ -97,7 +98,6 @@ from backend.app.services.sdk_ruleset import (
     EQUALITY_OPERATORS,
     LIST_OPERATORS,
     LOCAL_OPERATORS,
-    MAX_SAFE_INTEGER,
     NUMERIC_OPERATORS,
     PRESENCE_OPERATORS,
     RULESET_SCHEMA,
@@ -106,7 +106,6 @@ from backend.app.services.sdk_ruleset import (
     build_flag_entry,
     build_ruleset,
     canonical_json,
-    is_portable_number,
 )
 from backend.app.services.segment_membership import SegmentMemberships
 

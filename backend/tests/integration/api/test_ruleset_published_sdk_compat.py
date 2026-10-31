@@ -11,6 +11,12 @@ ruleset serves today: a plain rollout, dashboard rules, native rules with a
 (the last three answered by the server), an inactive flag and an archived one.
 The API has refused the legacy list on write since #743, so that one flag is
 created through the API and its rules written as a row from before #743 was.
+Since #1497 (F4) it also creates a flag of every value type (boolean, string,
+number, json) served by the rollout, by a dashboard rule, by a native
+``default_rule``, and off: 16, the count asserted. ``/evaluate`` serves each
+one's on value exactly when ``enabled`` and its off value otherwise; the
+ruleset carries no values yet (F5 adds them), so the published wheels must
+still answer every value flag's ``enabled`` exactly as the server does.
 
 * The route answers 200 with exactly one entry per stored flag.
 * Each wheel runs in its own ``python -I -S`` process with only its verified
@@ -45,6 +51,7 @@ from sqlalchemy.orm import sessionmaker
 
 from backend.app.api import deps
 from backend.app.core.config import settings
+from backend.app.core.flag_values import VALUE_TYPES
 from backend.app.core.security import create_local_access_token, get_password_hash
 from backend.app.main import app
 from backend.app.models.feature_flag import FeatureFlag
@@ -173,6 +180,70 @@ SHAPES = {
 }
 INACTIVE = {"enabled": False, "reason": "inactive"}
 
+#: Every value type (#1497), each served by the rollout, by a dashboard rule,
+#: by a native ``default_rule``, and off. Built from the enum, so a new type
+#: joins the gate; the count is asserted in the test.
+VALUE_PAIRS = {
+    "boolean": {},
+    "string": {"on_value": "on-copy", "off_value": "off-copy"},
+    "number": {"on_value": 10, "off_value": 2.5},
+    "json": {"on_value": {"color": "blue"}, "off_value": ["fallback"]},
+}
+SERVED_BY = {
+    "rollout": ({"is_active": True, "rollout_percentage": 100}, "local"),
+    "rule": (
+        {
+            "is_active": True,
+            "rollout_percentage": 0,
+            "targeting_rules": SHAPES["dashboard"][0]["targeting_rules"],
+        },
+        "local",
+    ),
+    "default_rule": (
+        {
+            "is_active": True,
+            "rollout_percentage": 0,
+            "targeting_rules": {
+                "rules": [
+                    {
+                        "id": "enterprise",
+                        "rule": {
+                            "operator": "and",
+                            "conditions": [
+                                {
+                                    "attribute": "plan",
+                                    "operator": "eq",
+                                    "value": "enterprise",
+                                }
+                            ],
+                            "groups": [],
+                        },
+                        "rollout_percentage": 0,
+                        "priority": 0,
+                    }
+                ],
+                "default_rule": {
+                    "id": "everyone",
+                    "rule": {"operator": "and", "conditions": [], "groups": []},
+                    "rollout_percentage": 100,
+                    "priority": 0,
+                },
+            },
+        },
+        "local",
+    ),
+    "off": ({"is_active": False, "rollout_percentage": 100}, None),
+}
+VALUE_SHAPES = {
+    f"{value_type}-{served}": (
+        {**body, "value_type": value_type, **VALUE_PAIRS[value_type]},
+        evaluation,
+    )
+    for value_type in VALUE_TYPES
+    for served, (body, evaluation) in SERVED_BY.items()
+}
+ALL_SHAPES = {**SHAPES, **VALUE_SHAPES}
+
 
 @pytest.fixture(autouse=True)
 def _local_fail_closed(monkeypatch):
@@ -244,7 +315,7 @@ def stored(client, db_session):
     db_session.commit()
     suffix = uuid.uuid4().hex[:8]
     flags = {}
-    for shape, (body, _) in SHAPES.items():
+    for shape, (body, _) in ALL_SHAPES.items():
         body = json.loads(json.dumps(body).replace("{segment}", str(segment.id)))
         key = f"g2-{shape}-{suffix}"
         legacy = body.pop("targeting_rules") if shape == "legacy" else None
@@ -350,8 +421,10 @@ def test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches(
     assert len(body["flags"]) == stored_count
     entries = {entry["key"]: entry for entry in body["flags"]}
     ours = {shape: entries[key] for shape, key in keys.items()}
-    assert len(ours) == len(SHAPES) == 8
-    for shape, (_, evaluation) in SHAPES.items():
+    assert len(SHAPES) == 8
+    assert len(VALUE_SHAPES) == len(VALUE_TYPES) * len(SERVED_BY) == 16
+    assert len(ours) == len(ALL_SHAPES) == 24
+    for shape, (_, evaluation) in ALL_SHAPES.items():
         assert ours[shape]["active"] is (evaluation is not None), (shape, ours[shape])
         assert ours[shape].get("evaluation") == evaluation, (shape, ours[shape])
     assert ours["native"]["default_rule"]["rollout_percentage"] == 40
@@ -360,6 +433,36 @@ def test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches(
         _evaluate(client, api_key, p["flag"], p["user_id"], p["context"])
         for p in probes_first
     ]
+
+    # Every value flag, every probe: /evaluate serves the on value exactly
+    # when enabled and the off value otherwise, and each way of serving it
+    # was reached at least once.
+    reached = set()
+    for probe in _probes([keys[shape] for shape in VALUE_SHAPES]):
+        shape = next(s for s in VALUE_SHAPES if keys[s] == probe["flag"])
+        value_type = next(t for t in VALUE_TYPES if shape.startswith(f"{t}-"))
+        params = {"user_id": probe["user_id"]}
+        if probe["context"] is not None:
+            params["context"] = json.dumps(probe["context"])
+        answer = client.get(
+            f"{FLAGS}/evaluate/{quote(probe['flag'], safe='')}",
+            params=params,
+            headers={"X-API-Key": api_key},
+        ).json()
+        pair = VALUE_PAIRS[value_type] or {"on_value": True, "off_value": False}
+        served = pair["on_value"] if answer["enabled"] else pair["off_value"]
+        assert answer["value"] == served and answer["value_type"] == value_type, (
+            shape,
+            answer,
+        )
+        assert answer["config"] is None, answer
+        reached.add((shape, answer["enabled"], answer["reason"]))
+    for value_type in VALUE_TYPES:
+        assert (f"{value_type}-rollout", True, "rollout") in reached
+        assert (f"{value_type}-rule", True, "targeting_rule") in reached
+        assert (f"{value_type}-rule", False, "rollout") in reached
+        assert (f"{value_type}-default_rule", True, "targeting_rule") in reached
+        assert (f"{value_type}-off", False, "inactive") in reached
 
     # 2. Kill switch one: the DEVELOPER deactivates the rollout flag.
     deactivated = client.post(
@@ -482,7 +585,7 @@ def test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches(
         assert len(step["probes"]) == len(planned["probes"]) == len(expected)
         for probe, answer, server in zip(planned["probes"], step["probes"], expected):
             shape = shape_of[probe["flag"]]
-            if SHAPES[shape][1] == "remote":
+            if ALL_SHAPES[shape][1] == "remote":
                 deferred += 1
                 if answer != "DEFER":
                     problems.append(f"{shape} answered locally: {probe} -> {answer}")

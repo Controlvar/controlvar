@@ -561,3 +561,22 @@ by = [
     "test:backend/tests/unit/scripts/test_openapi_dump_and_stability.py::test_the_results_cache_key_names_the_engine_and_a_finished_answer_lasts_a_day",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
 ]
+
+[[unit]]
+text = "POST /api/v1/feature-flags/, GET /api/v1/feature-flags/, GET/PUT /api/v1/feature-flags/{flag_id}, POST /api/v1/feature-flags/{flag_id}/activate, POST /api/v1/feature-flags/{flag_id}/deactivate | #1497 | The request and response schemas gain value_type, on_value and off_value; every existing flag answers \"boolean\", true and false. value_type is set on create and refused (422, read_only) if an update changes it. A string, number or json flag's two values are checked against its type and limits and refused with 422 at their field. default_value is described as deprecated and still accepts only false; the 422 for true keeps its type and location, and its message now names off_value. A request that sends none of the new fields creates and updates a boolean flag exactly as before. See Serve a value."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_value_type_is_read_only",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_a_create_outside_the_contract_is_422_and_stores_nothing",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_every_get_body_can_be_put_back_unchanged",
+    "test:backend/tests/integration/api/test_flag_contract.py::test_every_response_can_be_put_back_unchanged",
+    "test:backend/tests/integration/api/test_flag_contract.py::test_default_value_true_is_422",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "GET/POST /api/v1/feature-flags/evaluate/{flag_key} | #1497 | The answer gains value (the flag's on_value when enabled is true, its off_value otherwise) and value_type; config is still null. The operations' description changes; the response schema, an object of any fields, does not."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
+    "test:backend/tests/integration/api/test_front_door_behaviour.py::test_every_flag_evaluates_with_a_null_config",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]

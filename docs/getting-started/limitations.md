@@ -7,7 +7,8 @@ the row links it.
 
 | What you might expect | What happens instead |
 |---|---|
-| A flag that serves one of several values | A flag is on or off for each user. Evaluation answers `"config": null` for every flag, a request that sends a flag a `variants` field is refused with `422`, and `default_value` accepts only `false`. To serve one of several experiences, run a multivariate experiment: each variant carries a `configuration`, which `POST /api/v1/tracking/assign` returns. |
+| A flag that serves one of several values | A flag serves two values: its on value to the users it is on for (a matching targeting rule's percentage, or the rollout percentage), and its off value to everyone else and to everyone while it is off. No rule or rollout splits users among three or more values. `GET /api/v1/feature-flags/user/{user_id}` answers every flag as on or off. For three or more experiences, run a multivariate experiment: each variant carries a `configuration`, which `POST /api/v1/tracking/assign` returns. |
+| A flag's value in every SDK | An SDK reads a flag's value only where its page documents a value method; every other SDK reads a value flag as on or off (`enabled` is `true` when the user gets the on value). `GET /api/v1/feature-flags/evaluate/{key}` returns the value in `value`. |
 
 ## Experiments and results
 

@@ -344,15 +344,15 @@ text = "What it does not do (yet)"
 by = ["exempt:label"]
 
 [[unit]]
-text = "A flag is on or off for each user: it carries no variants or values."
+text = "A flag serves two values, its on value and its off value; no rule or rollout splits users among three or more."
 by = [
     "test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_request_with_variants_is_refused",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_serves_false_when_off_and_nothing_else",
-    "test:backend/tests/integration/api/test_front_door_behaviour.py::test_every_flag_evaluates_with_a_null_config",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_boolean_flag_serves_false_when_off_and_a_value_flag_its_off_value",
+    "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestValueFields::test_no_third_value_or_split_is_accepted",
 ]
 
 [[unit]]
-text = "To serve one of several experiences, run a multivariate experiment."
+text = "For three or more experiences, run a multivariate experiment."
 by = ["exempt:advice"]
 
 [[unit]]
