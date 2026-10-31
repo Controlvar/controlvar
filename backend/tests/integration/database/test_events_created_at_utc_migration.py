@@ -84,9 +84,10 @@ REVISION = "1ab99332f0ba"
 #: The core revision it extends: the recipe's downgrade target.
 PARENT = "a89544fb1075"
 #: The core head of this tree, which ``upgrade heads`` runs on to past this
-#: revision, through ``806901fb7735`` (#580), ``d29a479daafe`` (#445) and
-#: ``37dcb2969766`` (#440): ``4c2c09a2b3e8`` (#1206).
-CORE_HEAD = "4c2c09a2b3e8"
+#: revision, through ``806901fb7735`` (#580), ``d29a479daafe`` (#445),
+#: ``37dcb2969766`` (#440) and ``4c2c09a2b3e8`` (#1206): ``607c51a59bf5``
+#: (#1497).
+CORE_HEAD = "607c51a59bf5"
 #: The core head of the previous release (0.16.2), with ``d12cbd384bbe`` and
 #: ``a89544fb1075`` pending in front of this revision.
 RELEASED = "271f03a31742"
