@@ -1027,6 +1027,8 @@ A 422 names positions and fields, never the ids that were sent.
   experiment and no variant, so it counts in no variant's results.
   `event_type` is free text (SDKs send the event name); `event_name` defaults to `event_type`. Metrics count
   events by `event_name`: a metric with `event_name: "purchase"` counts every `purchase` event.
+  Which metrics read `value`: a revenue, duration or custom metric adds it up per user; a count
+  metric counts the event and does not read it; a conversion metric does not read it.
 - **Headers**: X-API-Key: {api_key}
 - **Body**: `{"event_type": string, "event_name": string?, "user_id": string, "experiment_key": string?, "feature_flag_key": string?, "value": number?, "metadata": object?, "timestamp": datetime?}`
 - **Response**: 200 OK (the stored event); 404 a key that was given was not found; 422 invalid body

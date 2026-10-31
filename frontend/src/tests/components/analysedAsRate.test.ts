@@ -9,6 +9,7 @@
 import fs from 'fs';
 import path from 'path';
 import {
+  addsUpValues,
   analysedAsMean,
   analysedAsRate,
   buyersWithNoValue,
@@ -16,6 +17,7 @@ import {
   formatDifferencePerUser,
   formatSignedAmount,
   meanDescription,
+  meanLabelForType,
 } from '@/components/results/shared/resultFormat';
 import { MetricAnalysis, MetricResult, StatisticalTestUsed, VariantResult } from '@/types/results';
 
@@ -69,6 +71,10 @@ describe('analysedAsMean / analysedAsRate', () => {
     // The server says proportion: that wins over a test name.
     ['revenue', 'proportion', 'welch_t_test', false],
     ['count', 'proportion', 'fisher_exact', false],
+    // #439: count, duration and custom are means when the server says so.
+    ['count', 'mean', 'welch_t_test', true],
+    ['duration', 'mean', null, true],
+    ['custom', 'mean', 'welch_t_test', true],
     ['conversion', 'proportion', 'fisher_exact', false],
     // No `analysis` (a server older than the field): read the test.
     ['revenue', undefined, 'welch_t_test', true],
@@ -83,9 +89,19 @@ describe('analysedAsMean / analysedAsRate', () => {
     expect(analysedAsMean(m)).toBe(mean);
   });
 
-  it('labels a revenue mean "revenue per user" and any other mean "mean"', () => {
-    expect(meanDescription(metric('revenue', 'mean', 'welch_t_test'))).toBe('revenue per user');
-    expect(meanDescription(metric('duration', undefined, 'welch_t_test'))).toBe('mean');
+  // C1 (#439): each mean type is labelled by what it is per user.
+  it.each([
+    ['revenue', 'revenue per user'],
+    ['count', 'events per user'],
+    ['duration', 'duration per user'],
+    ['custom', 'value per user'],
+  ] as const)('labels a %s mean "%s"', (type, label) => {
+    expect(meanDescription(metric(type, 'mean', 'welch_t_test'))).toBe(label);
+    expect(meanLabelForType(type)).toBe(label);
+  });
+
+  it('labels a mean of a type it does not know "mean per user"', () => {
+    expect(meanLabelForType('ratio')).toBe('mean per user');
   });
 });
 
@@ -183,6 +199,19 @@ describe('buyersWithNoValue', () => {
     expect(buyersWithNoValue(revenue([null, 0, 0], [null, 0, 0]))).toBeNull();
     const share = { ...revenue([152, 0, 0], [160, 0, 0]), analysis: 'proportion' as const };
     expect(buyersWithNoValue(share)).toBeNull();
+  });
+
+  // C3 (#439): a duration or custom metric adds up `value` as revenue does,
+  // so its senders with no value are counted; a count does not read `value`,
+  // so a count of 0 is a measured 0 and gets no note.
+  it.each([
+    ['duration', 312],
+    ['custom', 312],
+    ['count', null],
+  ] as const)('a %s mean with every total 0 gives %s', (type, expected) => {
+    const m = { ...revenue([152, 0, 0], [160, 0, 0]), metric_type: type };
+    expect(buyersWithNoValue(m)).toBe(expected);
+    expect(addsUpValues(m)).toBe(type !== 'count');
   });
 });
 

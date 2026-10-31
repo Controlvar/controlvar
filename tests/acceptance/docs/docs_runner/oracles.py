@@ -466,9 +466,10 @@ def _revenue_arms(
 ) -> Dict[str, Tuple[int, int, int]]:
     """Per variant, its users and the two sums of its users' values.
 
-    A revenue metric's unit is the ASSIGNED user ("A revenue metric is analysed
-    as its mean value per assigned user: each user's event values added up, 0
-    for a user with none", ``getting-started/limitations.md``): a buyer's value
+    A revenue metric's unit is the ASSIGNED user ("A revenue, count, duration
+    or custom metric is analysed as its mean per assigned user ... for a
+    revenue, duration or custom metric it is the total of those events'
+    value; a user with none counts as 0", ``getting-started/concepts.md``): a buyer's value
     is the one event the traffic step sends for them, every other user's is 0,
     and 0 adds nothing to either sum. Refused: what ``_users_table`` refuses; a
     ``base`` or ``step`` that is not a whole number (the journeys send whole
@@ -538,9 +539,11 @@ def revenue_mean(
 ) -> float:
     """A revenue metric's ``mean`` for *variant*: its value per assigned user.
 
-    ``getting-started/limitations.md``: "A revenue metric is analysed as its
-    mean value per assigned user: each user's event values added up, 0 for a
-    user with none" (``guides/user-guide.md`` says the same of its results).
+    ``getting-started/concepts.md``: "A revenue, count, duration or custom
+    metric is analysed as its mean per assigned user ... for a revenue,
+    duration or custom metric it is the total of those events' value; a user
+    with none counts as 0" (``guides/user-guide.md`` says the same of its
+    results).
     So the total the variant's buyers send (``_ramp_sums``) over ALL its
     assigned users, buyers or not. Computed as an exact fraction of two
     integers and rounded once, so the API's number equals it exactly when its
@@ -602,7 +605,7 @@ def revenue_welch_p(
 ) -> float:
     """The two-sided p-value of Welch's t-test on the users' values.
 
-    ``getting-started/limitations.md``: a revenue metric's per-user values are
+    ``getting-started/concepts.md``: a revenue metric's per-user values are
     "compared with Welch's t-test". The test is Welch's, B. L. Welch, "The
     generalization of 'Student's' problem when several different population
     variances are involved", Biometrika 34 (1947), with the degrees of freedom

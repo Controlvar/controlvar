@@ -125,8 +125,8 @@ step: [Guided examples](docs/guides/guided-examples.md).
 
 - A flag is on or off for each user: it carries no variants or values. To serve one of several
   experiences, run a multivariate experiment.
-- Only a revenue metric is analysed by its values (its mean per assigned user); a count, duration
-  or custom metric is analysed as a conversion: whether each user sent the metric's event.
+- A revenue, count, duration or custom metric's sequential, Bayesian, sample-size, breakdown and
+  daily views are of the share of users who sent its event.
 - Variant weights must add up to exactly 100%; there is no separate experiment-level traffic
   allocation.
 - One deployment is one environment: run staging and production as separate deployments, each

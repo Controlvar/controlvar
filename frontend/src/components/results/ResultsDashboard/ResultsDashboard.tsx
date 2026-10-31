@@ -8,6 +8,7 @@ import {
   SampleSizeOverrides,
   SampleSizeResult,
   DimensionalBreakdownResponse,
+  MetricAnalysis,
   MetricResult,
 } from '@/types/results';
 import {
@@ -153,10 +154,11 @@ export function resultsErrorMessage(e: unknown): string {
 type Tab = 'overview' | 'trends' | 'sample-size' | 'sequential' | 'breakdowns' | 'live';
 
 /**
- * The chart heading says what the bars are. A revenue metric analysed as a
- * mean is headed "revenue per user"; a count, duration or custom metric is
- * analysed as a share of users with an event, so it is headed as that, never
- * as a "conversion rate" of its values.
+ * The chart heading says what the bars are. A metric analysed as a mean is
+ * headed by what it is per user ("revenue per user", "events per user",
+ * "duration per user", "value per user"). A non-conversion metric a server
+ * analysed as a share of users with an event (one older than #439) is headed
+ * as that share, never as a "conversion rate" of its values.
  */
 function primaryMetricHeading(metric: MetricResult): string {
   if (analysedAsMean(metric)) return `${metric.metric_name} — ${meanDescription(metric)}`;
@@ -177,6 +179,20 @@ function bayesianShareNote(metric: MetricResult, eventName?: string): React.Reac
       {meanDescription(metric)}.
     </>
   );
+}
+
+/**
+ * How the results analysed the metric a sample-size plan is for, by its id:
+ * the Sample Size tab's note then says what the results show for it. Undefined
+ * when the plan names no metric the results carry.
+ */
+function analysisOf(
+  metrics: MetricResult[],
+  metricId: string | null | undefined,
+): MetricAnalysis | undefined {
+  const metric = metricId ? metrics.find((m) => m.metric_id === metricId) : undefined;
+  if (!metric) return undefined;
+  return analysedAsMean(metric) ? 'mean' : 'proportion';
 }
 
 function LoadingSkeleton() {
@@ -506,6 +522,7 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
               <SampleSizeMeter
                 data={sampleSize}
                 eventName={sampleSize.metric_id ? eventNames[sampleSize.metric_id] : undefined}
+                resultsAnalysis={analysisOf(results.metrics, sampleSize.metric_id)}
                 overrides={sampleSizeOverrides}
                 onRecalculate={(o) => void fetchSampleSize(o)}
                 recalculating={sampleSizeLoading}

@@ -17,8 +17,9 @@ its own output per ``ENGINE_VERSION``.
 ``mean_metric_result`` does the same for a mean metric, from each variant's
 unit count and its sums of ``y - k`` and ``(y - k) ** 2`` centred on the grand
 mean ``k``.  ``test_mean_metric_result.py`` holds it to an exact reference.
-``per_user_mean_metric_result`` gives ``/results`` a revenue metric's mean per
-assigned user from each user's value total, through ``mean_metric_result``.
+``per_user_mean_metric_result`` gives ``/results`` a revenue, count, duration
+or custom metric's mean per assigned user from each user's value, through
+``mean_metric_result``.
 """
 
 import logging
@@ -725,13 +726,22 @@ def welch_difference_intervals(
 # ---------------------------------------------------------------------------
 
 #: The metric types ``/results`` analyses as a mean per assigned user
-#: (``per_user_mean_metric_result``).  Every other type is analysed as a
-#: proportion (``binomial_metric_result``).
-MEAN_METRIC_TYPES = ("revenue",)
+#: (``per_user_mean_metric_result``): every type but ``conversion``, which is
+#: analysed as a proportion (``binomial_metric_result``).  A new
+#: ``MetricType`` member fails ``test_value_metrics_per_user.py`` until it is
+#: classified here or as a proportion.
+MEAN_METRIC_TYPES = ("revenue", "count", "duration", "custom")
+
+#: The mean types whose per-user value is the number of the metric's events
+#: the user sent, whatever their ``value`` (``AnalysisService.event_counts``).
+#: Every other mean type adds up the events' ``value``
+#: (``AnalysisService.value_totals``).
+EVENT_COUNT_METRIC_TYPES = ("count",)
 
 #: ``(variant, n, n_converted, totals)``: the users assigned to the variant,
-#: how many of them converted, and the value total of each assigned user who
-#: has one.  Every other assigned user's total is 0.
+#: how many of them converted, and the value of each assigned user who has
+#: one: their events' value total, or for a count metric their number of
+#: events.  Every other assigned user's value is 0.
 PerUserTotals = Tuple[Any, int, int, Sequence[float]]
 
 
@@ -787,10 +797,12 @@ def per_user_mean_metric_result(
     *,
     metric: Any,
 ) -> Dict[str, Any]:
-    """One metric's result as its mean per assigned user (a revenue metric).
+    """One metric's result as its mean per assigned user (``MEAN_METRIC_TYPES``).
 
-    Every user assigned to a variant is one unit, and their value is the total
-    of their counted values: 0 for a user with none.  The arms are compared
+    Every user assigned to a variant is one unit, and their value is what the
+    caller read for them (the total of their counted values, or for a count
+    metric their number of events): 0 for a user with none.  The metric's type
+    is only echoed here; nothing below reads it.  The arms are compared
     with ``mean_metric_result`` on sums centred on the grand mean ``k``, the
     total of every value over every assigned user.
 
