@@ -166,7 +166,7 @@ text = "pulls | Total assignments to this variant"
 by = ["test:backend/tests/integration/services/test_bandit_scheduler_db.py::test_postgres_fallback_counts_converting_users_as_results_does"]
 
 [[unit]]
-text = "successes | Converting users in this variant: users assigned to it with at least one conversion event, each counted once. When the primary metric has lower_is_better set, the users who did not convert instead (see below)"
+text = "successes | Converting users in this variant: users assigned to it with at least one conversion event, each counted once"
 by = ["test:backend/tests/integration/services/test_bandit_scheduler_db.py::test_postgres_fallback_counts_converting_users_as_results_does"]
 
 [[unit]]
@@ -307,11 +307,19 @@ text = "When the experiment's primary metric has lower_is_better set (uninstalls
 by = ["test:backend/tests/unit/services/test_lower_is_better_direction.py::TestTheBanditReadsTheDirection::test_traffic_moves_to_fewer_converting_users_when_lower_is_better"]
 
 [[unit]]
-text = "Every algorithm and both live sources (DynamoDB and PostgreSQL) apply this; the persisted BanditState already holds the result."
+text = "Every algorithm and both live sources (DynamoDB and PostgreSQL) apply this, and so does the persisted BanditState fallback."
 by = [
     "test:backend/tests/unit/services/test_lower_is_better_direction.py::TestTheBanditReadsTheDirection::test_traffic_moves_to_fewer_converting_users_when_lower_is_better",
-    "test:backend/tests/unit/services/test_lower_is_better_direction.py::TestTheBanditReadsTheDirection::test_the_stored_state_is_not_flipped_a_second_time",
+    "test:backend/tests/unit/services/test_lower_is_better_direction.py::TestTheBanditReadsTheDirection::test_editing_the_direction_changes_the_next_ticks_weights",
 ]
+
+[[unit]]
+text = "The stored and reported successes and conversion_rate stay the converting users and their share, whatever the direction; only the algorithms see the flipped counts."
+by = ["test:backend/tests/unit/services/test_lower_is_better_direction.py::TestTheBanditReadsTheDirection::test_stored_and_reported_counts_stay_raw_for_a_lower_is_better_metric"]
+
+[[unit]]
+text = "Because a user who has not yet converted counts as a success, the most recent assignments look best until their exposure window has passed, so such a bandit needs a settled exposure window (an event that happens days after assignment gives a misleading early signal)."
+by = ["exempt:advice"]
 
 [[unit]]
 text = "A user who converts three times counts once."

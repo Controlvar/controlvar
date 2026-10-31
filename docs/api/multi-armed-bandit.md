@@ -158,7 +158,7 @@ looks like this:
 | `algorithm` | The experiment's `optimization_type` |
 | `current_weight` | Current traffic allocation fraction (0–1, sums to 1.0 across variants) |
 | `pulls` | Total assignments to this variant |
-| `successes` | Converting users in this variant: users assigned to it with at least one conversion event, each counted once. When the primary metric has `lower_is_better` set, the users who did not convert instead (see below) |
+| `successes` | Converting users in this variant: users assigned to it with at least one conversion event, each counted once |
 | `regret_reduction_pct` | Estimated regret reduction compared with a uniform split; `null` until there is data, and while the weights do no better than a uniform split |
 | `recommendation` | `EXPLORING`, `CONVERGING`, or `DEPLOYING_<variant name>` once one variant dominates |
 | `last_updated` | When the weights were last computed; `null` before the first update |
@@ -236,7 +236,12 @@ For each variant the scheduler needs pulls (assignments) and successes (conversi
 
 When the experiment's primary metric has `lower_is_better` set (uninstalls, errors), the bandit counts a user who did
 not convert as the success, so the variant with fewer converting users earns the traffic. Every algorithm and both
-live sources (DynamoDB and PostgreSQL) apply this; the persisted `BanditState` already holds the result.
+live sources (DynamoDB and PostgreSQL) apply this, and so does the persisted `BanditState` fallback. The stored and
+reported `successes` and `conversion_rate` stay the converting users and their share, whatever the direction; only the
+algorithms see the flipped counts. Because a user who has not yet converted counts as a success, the most recent
+assignments look best until their exposure window has passed, so such a bandit needs a settled exposure window
+(an event that happens days after assignment gives a misleading early signal).
+
 ### How the weights affect traffic
 
 `POST /api/v1/tracking/assign` reads the latest `BanditState` for bandit experiments and routes **new** users

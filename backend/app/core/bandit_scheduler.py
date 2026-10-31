@@ -229,7 +229,14 @@ class BanditScheduler:
             experiment.id, variant_ids, experiment=experiment
         )
 
-        # Build the raw dict expected by BanditService
+        # variant_stats holds RAW converting-user counts: those are what is
+        # stored and reported.  The algorithms and the regret estimate get
+        # reward counts (a non-converting user is the success when the
+        # primary metric is lower-is-better), from the one helper.
+        lower_is_better = self._primary_lower_is_better(experiment)
+        reward_stats = _as_rewards(variant_stats, lower_is_better)
+
+        # Build the dict expected by BanditService
         variant_data: Dict[str, Dict] = {
             vid: {
                 "successes": vs.successes,
@@ -237,7 +244,7 @@ class BanditScheduler:
                 "pulls": vs.pulls,
                 "total_reward": vs.total_reward,
             }
-            for vid, vs in variant_stats.items()
+            for vid, vs in reward_stats.items()
         }
 
         # Deterministic seed for the Monte Carlo algorithms:
@@ -261,7 +268,7 @@ class BanditScheduler:
         )
 
         total_pulls = sum(vs.pulls for vs in variant_stats.values())
-        regret_pct = self.estimate_regret_reduction(new_weights, variant_stats)
+        regret_pct = self.estimate_regret_reduction(new_weights, reward_stats)
         now_iso = tick_at.isoformat()
 
         # Build full variant_weights payload (weights + stats per variant)
@@ -317,6 +324,7 @@ class BanditScheduler:
             seed=seed,
             n_samples=n_samples,
             tick_at=tick_at,
+            lower_is_better=lower_is_better,
         )
 
         self.db.commit()
@@ -340,11 +348,15 @@ class BanditScheduler:
         tick_at: datetime,
         seed: Optional[int],
         n_samples: Optional[int],
+        lower_is_better: bool = False,
     ) -> List[BanditStateHistory]:
         """Build the ``bandit_state_history`` rows for one tick (not persisted).
 
+        ``successes``/``failures`` are the raw converting-user counts.
         ``alpha``/``beta`` are the Beta-Bernoulli posterior parameters the
-        tick used (``prior + successes`` / ``prior + failures``).  Variant ids
+        tick used: ``prior + successes`` / ``prior + failures``, from the
+        reward counts, so for a lower-is-better metric they are swapped
+        (a user who did not convert is the success).  Variant ids
         that are not UUIDs are skipped: they cannot reference ``variants.id``.
         """
         rows: List[BanditStateHistory] = []
@@ -358,13 +370,16 @@ class BanditScheduler:
                 continue
             successes = int(vdata.get("successes", 0))
             failures = int(vdata.get("failures", 0))
+            reward_successes, reward_failures = (
+                (failures, successes) if lower_is_better else (successes, failures)
+            )
             rows.append(
                 BanditStateHistory(
                     experiment_id=experiment_id,
                     variant_id=variant_uuid,
                     algorithm=algorithm,
-                    alpha=ThompsonSampling.PRIOR_ALPHA + successes,
-                    beta=ThompsonSampling.PRIOR_BETA + failures,
+                    alpha=ThompsonSampling.PRIOR_ALPHA + reward_successes,
+                    beta=ThompsonSampling.PRIOR_BETA + reward_failures,
                     weight=float(vdata.get("weight", 0.0)),
                     successes=successes,
                     failures=failures,
@@ -387,6 +402,7 @@ class BanditScheduler:
         seed: Optional[int],
         n_samples: Optional[int],
         tick_at: datetime,
+        lower_is_better: bool = False,
     ) -> None:
         """Stage the history rows and the tick snapshot; never raises.
 
@@ -404,6 +420,7 @@ class BanditScheduler:
                     tick_at=tick_at,
                     seed=seed,
                     n_samples=n_samples,
+                    lower_is_better=lower_is_better,
                 )
             )
             rows.append(
@@ -470,13 +487,12 @@ class BanditScheduler:
         dynamo_stats = self._stats_from_dynamodb(experiment_id, variant_ids)
         pg_stats = self._stats_from_postgres(experiment_id, variant_ids, experiment)
 
-        # The comparison and the choice are made on raw converting-user counts;
-        # the metric's direction is applied once, to the chosen source.
-        lower_is_better = self._primary_lower_is_better(experiment)
-
+        # Every source returns RAW counts (successes = converting users, as
+        # stored and reported); the metric's direction is applied only at the
+        # algorithm input, by ``_as_rewards`` in ``update_experiment``.
         if _has_pulls(dynamo_stats):
             if _at_least_as_complete(dynamo_stats, pg_stats):
-                return _as_rewards(dynamo_stats, lower_is_better)  # type: ignore[arg-type]
+                return dynamo_stats  # type: ignore[return-value]
             logger.warning(
                 "BanditScheduler: DynamoDB counters for experiment %s have fewer "
                 "pulls or successes than PostgreSQL; using PostgreSQL",
@@ -484,9 +500,8 @@ class BanditScheduler:
             )
 
         if _has_pulls(pg_stats):
-            return _as_rewards(pg_stats, lower_is_better)  # type: ignore[arg-type]
+            return pg_stats  # type: ignore[return-value]
 
-        # BanditState already holds reward counts (flipped when it was written).
         stats = self._stats_from_bandit_state(experiment_id, variant_ids)
         if stats is not None:
             return stats
