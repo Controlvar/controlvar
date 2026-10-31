@@ -55,7 +55,7 @@ export const FRESH_LOAD_NOTICE =
 
 const TYPE_DESCRIPTIONS: Record<string, string> = {
   a_b: 'Compare a control with one or more alternatives.',
-  mv: 'Compare several combinations of changes at once.',
+  mv: 'Compare several versions against a control, with each user seeing one version.',
 };
 
 /** Input types where Enter means "Next" on the first three steps. */
