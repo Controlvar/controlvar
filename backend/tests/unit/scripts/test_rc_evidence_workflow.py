@@ -13,7 +13,9 @@ Pinned, because the verifier's PASS is only as good as these:
   that fails, so a dispatch elsewhere is red, never skipped;
 * the python-suites matrix is ``SUITES``' pytest ones, each leg installing
   what its pull request job does (pytest only for sdk/python's suite and the
-  SDK contract self-tests; Node.js beside backend/requirements.txt for the
+  SDK contract tests, the latter with the PR job's Node.js for the published
+  JS evaluators and then the check that every published one is pinned;
+  Node.js beside backend/requirements.txt for the
   CDK stack tests, with --import-mode=importlib; for the chart's render
   tests, chart.yml's pinned helm, EXPERIMENTLY_CHART_TESTS=1 and its no-skip
   check, with unit leaving their tree to it), and the jest-suites matrix its
@@ -240,6 +242,55 @@ def test_each_leg_installs_what_its_pull_request_job_does(doc):
     assert 'python -m pytest tests/sdk-contract -v -o addopts=""' in runs
     (session,) = rc.SUITES["sdk-contract"]
     assert session.args == ("tests/sdk-contract", "-o", "addopts=")
+
+
+def test_the_sdk_contract_leg_has_the_pr_jobs_node_and_the_completeness_check(doc):
+    """pr-qa-gate.yml's SDK Contract Tests sets up Node.js, which the published
+    evaluator gate (tests/sdk-contract/test_published_ruleset.py) needs and
+    fails without (#1497). The leg sets up the same version before the suite,
+    and runs published_versions_check.py -- nightly-qa's step -- after it."""
+    gate = _load(WORKFLOWS / "pr-qa-gate.yml")["jobs"]["sdk-contracts"]["steps"]
+    their_node = next(
+        s for s in gate if str(s.get("uses", "")).startswith("actions/setup-node")
+    )
+    steps = doc["jobs"]["python-suites"]["steps"]
+    names = [s.get("name") for s in steps]
+    node = next(
+        s
+        for s in steps
+        if s.get("name") == "Set up Node.js for the published JS evaluators"
+    )
+    assert node["if"] == "matrix.suite == 'sdk-contract'"
+    assert node["uses"] == their_node["uses"]
+    assert node["with"] == {"node-version": their_node["with"]["node-version"]}
+    assert names.index(node["name"]) < names.index("Run the suite")
+
+    script = "tests/sdk-contract/published_versions_check.py"
+    check = next(
+        s
+        for s in steps
+        if s.get("name") == "Every published local evaluator is in the gate"
+    )
+    assert check["if"] == "matrix.suite == 'sdk-contract'"
+    assert check["run"].strip() == f"python {script}"
+    assert names.index("Run the suite") < names.index(check["name"])
+    assert (REPO_ROOT / script).is_file()
+    nightly = _load(WORKFLOWS / "nightly-qa.yml")["jobs"]["sdk-contract-tests"]["steps"]
+    assert check["run"].strip() in [str(s.get("run", "")).strip() for s in nightly]
+    # Never on a pull request: a publish would turn every open one red.
+    on_pull_requests = []
+    for path in sorted(WORKFLOWS.glob("*.y*ml")):
+        workflow = _load(path)
+        if "pull_request" not in _on(workflow):
+            continue
+        runs = [
+            str(step.get("run", ""))
+            for job in (workflow.get("jobs") or {}).values()
+            for step in job.get("steps") or []
+        ]
+        if any("published_versions_check.py" in run for run in runs):
+            on_pull_requests.append(path.name)
+    assert on_pull_requests == []
 
 
 def test_the_cdk_leg_runs_as_the_cdk_stack_tests_job(doc):
