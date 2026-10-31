@@ -6,12 +6,18 @@ metric's ``lower_is_better`` (#1377), and adds that field to every metric
 result.  For a metric that is higher-is-better, whether ``lower_is_better`` is
 False or the definition has no such attribute at all, the output is 1.4.0's
 plus the new field: these tests drop the field and compare with the hashes
-pinned for 1.4.0, which has shipped and is never edited.
+pinned for 1.4.0, which is frozen and never edited.
 
-The lower-is-better outputs are pinned here per ``ENGINE_VERSION``, with the
-same rules as ``test_sufficient_stats_fingerprint.py``: never edit the hash of
-a released version; a change after release bumps the version and adds its
-entries.
+The lower-is-better outputs are pinned here per ``ENGINE_VERSION``.  The rule:
+an engine-changing PR bumps ``ENGINE_VERSION`` to the next minor and appends it
+to ``RELEASED_ENGINE_VERSIONS`` ("frozen on main") in the same change.  A
+frozen version's entries are never edited, and no key is ever added under one.
+A PR is engine-changing when, for the same database rows and request, it adds,
+removes or changes any number, decision (winner, recommendation, Bayesian
+decision, ``can_stop``) or allocation weight that a path stamping
+``engine_version`` returns, caches or persists: results and its snapshots,
+Bayesian, CUPED, sequential, and the bandit's state, history and status.  A
+revert of an engine-changing PR bumps again.
 """
 
 import copy
@@ -37,7 +43,7 @@ from backend.tests.unit.services import (
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
-#: The last engine before the direction was read; it has shipped.
+#: The last engine before the direction was read; it is frozen.
 BEFORE_DIRECTION = "1.4.0"
 
 #: Leave the attribute off the metric altogether.
@@ -202,8 +208,8 @@ def test_lower_is_better_fingerprint(function):
     )
 
 
-def test_the_engine_that_reads_the_direction_is_not_a_released_one():
-    """1.4.0 has shipped without the direction, so the engine that reads it
+def test_the_engine_that_reads_the_direction_is_not_a_frozen_one():
+    """1.4.0 is frozen without the direction, so the engine that reads it
     must be a later version."""
     assert BEFORE_DIRECTION in sufficient_stats.RELEASED_ENGINE_VERSIONS
     assert sufficient_stats._key(ENGINE_VERSION) > sufficient_stats._key(

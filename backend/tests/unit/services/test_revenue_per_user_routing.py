@@ -9,9 +9,17 @@ database replaced, as ``test_binomial_metric_result_characterisation.py``
 replaces it.
 
 The output for an experiment with a revenue primary metric is pinned per
-``ENGINE_VERSION`` with the fingerprints' rules: never edit the hash of a
-released version; a change after a release bumps the version and adds its
-entry.  The revenue analysis is new in 1.5.0, which has not shipped.
+``ENGINE_VERSION``.  The rule: an engine-changing PR bumps ``ENGINE_VERSION``
+to the next minor and appends it to ``RELEASED_ENGINE_VERSIONS`` ("frozen on
+main") in the same change.  A frozen version's entries are never edited, and
+no key is ever added under one.  A PR is engine-changing when, for the same
+database rows and request, it adds, removes or changes any number, decision
+(winner, recommendation, Bayesian decision, ``can_stop``) or allocation weight
+that a path stamping ``engine_version`` returns, caches or persists: results
+and its snapshots, Bayesian, CUPED, sequential, and the bandit's state,
+history and status.  A revert of an engine-changing PR bumps again.
+
+The revenue analysis is new in 1.5.0 (v0.38.0 and v0.39.0).
 """
 
 from __future__ import annotations
@@ -191,11 +199,25 @@ def test_the_revenue_results_are_pinned_for_the_running_engine(monkeypatch):
     assert _fingerprint(output) == REVENUE_RESULTS_FINGERPRINTS[ENGINE_VERSION]
 
 
-def test_the_revenue_analysis_is_not_in_a_released_engine():
-    """A revenue metric was a proportion in every released engine, so the
-    first engine with this entry must be one that has not shipped."""
-    first = min(REVENUE_RESULTS_FINGERPRINTS, key=sufficient_stats._key)
-    assert first not in sufficient_stats.RELEASED_ENGINE_VERSIONS
-    assert sufficient_stats._key(first) > max(
-        map(sufficient_stats._key, sufficient_stats.RELEASED_ENGINE_VERSIONS)
-    )
+#: The engine that introduced the revenue analysis (v0.38.0).
+REVENUE_FIRST_VERSION = "1.5.0"
+
+
+def test_the_revenue_analysis_is_pinned_only_from_the_version_that_added_it():
+    """A revenue metric was a proportion in every engine before 1.5.0, so the
+    revenue entry is absent from 1.1.0-1.4.0 and present under 1.5.0 (which
+    shipped, so it is in ``RELEASED_ENGINE_VERSIONS``) and the running version.
+    """
+    released = sufficient_stats.RELEASED_ENGINE_VERSIONS
+    assert REVENUE_FIRST_VERSION in released
+    for version in released:
+        pinned = version in REVENUE_RESULTS_FINGERPRINTS
+        if sufficient_stats._key(version) < sufficient_stats._key(
+            REVENUE_FIRST_VERSION
+        ):
+            assert not pinned, (
+                f"revenue is pinned under {version}, which shipped before it"
+            )
+        else:
+            assert pinned, f"revenue is missing from {version}"
+    assert ENGINE_VERSION in REVENUE_RESULTS_FINGERPRINTS
