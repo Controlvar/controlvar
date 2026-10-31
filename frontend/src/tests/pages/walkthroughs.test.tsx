@@ -71,6 +71,7 @@ const PINNED = [
   '05-plan-and-team',
   '06-shoplab-ab-test',
   '08-warehouse-explainer',
+  '09-design-in-depth',
 ];
 
 const CONTENT = path.join(__dirname, '..', '..', 'content');
