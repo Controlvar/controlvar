@@ -85,6 +85,15 @@ jobs:
         with:
           python-version: '3.11'
 
+      # A tag push releases the SDK and version its tag names. A dispatch
+      # names them in its inputs, and when it runs at a release tag
+      # (`--ref sdk/<name>/v<version>`) they must be that tag's own. The
+      # environment's policy (repository configuration: tags matching
+      # `sdk/*/v*`) looks at the ref, not at what the run builds, so without
+      # this a dispatch at one SDK's tag could build another SDK from that
+      # tag's commit (`--ref sdk/react/v0.1.0 -f sdk=js`). A dispatch from a
+      # branch keeps its inputs; its publish jobs are left to that tag-only
+      # policy (intent: this file cannot assert repository configuration).
       - name: Parse and check
         id: parse
         env:
@@ -94,6 +103,22 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
+          # sdk/<name>/v<version> -- the name may contain a hyphen
+          # (openfeature-python, react-native) but never a slash.
+          release_tag=false
+          tag_sdk=""
+          tag_version=""
+          if [ "$REF_TYPE" = "tag" ]; then
+            case "$REF_NAME" in
+              sdk/*/v*)
+                release_tag=true
+                tag_sdk="${REF_NAME#sdk/}"
+                tag_sdk="${tag_sdk%%/*}"
+                tag_version="${REF_NAME##*/v}"
+                ;;
+            esac
+          fi
+
           if [ -n "$INPUT_SDK" ]; then
             sdk="$INPUT_SDK"
             version="${INPUT_VERSION#v}"
@@ -102,15 +127,20 @@ jobs:
               echo "::error::not a tag ref: $REF_NAME"
               exit 1
             fi
-            # sdk/<name>/v<version> -- the name may contain a hyphen
-            # (openfeature-python, react-native) but never a slash.
-            case "$REF_NAME" in
-              sdk/*/v*) ;;
-              *) echo "::error::$REF_NAME is not sdk/<name>/v<version>"; exit 1 ;;
-            esac
-            sdk="${REF_NAME#sdk/}"
-            sdk="${sdk%%/*}"
-            version="${REF_NAME##*/v}"
+            if [ "$release_tag" != "true" ]; then
+              echo "::error::$REF_NAME is not sdk/<name>/v<version>"
+              exit 1
+            fi
+            sdk="$tag_sdk"
+            version="$tag_version"
+          fi
+
+          # At a release tag, the run releases that tag and nothing else.
+          if [ "$release_tag" = "true" ]; then
+            if [ "$sdk" != "$tag_sdk" ] || [ "$version" != "$tag_version" ]; then
+              printf '%s\n' "::error::this run is at the tag $REF_NAME (sdk $tag_sdk, version $tag_version), but its inputs ask for sdk $sdk, version $version. A dispatch at a release tag must name that tag's own SDK and version; to release $sdk $version, dispatch at its own tag."
+              exit 1
+            fi
           fi
 
           # Refuses an unknown name, an SDK with no publishing identity, and a
