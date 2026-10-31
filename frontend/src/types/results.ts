@@ -72,10 +72,10 @@ export interface VariantResult {
   /** The test behind p_value; null for the control variant. */
   statistical_test_used?: StatisticalTestUsed | null;
   /**
-   * For a metric analysed as a mean: this variant's mean minus the control's,
-   * per assigned user. Null for the control, for a proportion metric, and
-   * when either variant has fewer than 2 users. Absent from a server older
-   * than the field.
+   * For a metric analysed as a mean (revenue, count, duration or custom):
+   * this variant's mean minus the control's, per assigned user. Null for the
+   * control, for a proportion metric, and when either variant has fewer than
+   * 2 users. Absent from a server older than the field.
    */
   absolute_difference?: number | null;
   /**
@@ -88,8 +88,10 @@ export interface VariantResult {
 
 /**
  * How a metric's variants are compared (backend MetricResult.analysis):
- * 'mean' is a revenue metric's value per assigned user, by Welch's t-test;
- * 'proportion' is the share of users who sent the metric's event.
+ * 'mean' is a revenue, count, duration or custom metric's value per assigned
+ * user (for a count, its number of events; otherwise its events' total
+ * value), by Welch's t-test; 'proportion' is a conversion metric's share of
+ * users who sent the metric's event.
  */
 export type MetricAnalysis = 'proportion' | 'mean';
 

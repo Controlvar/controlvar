@@ -3626,12 +3626,11 @@
               "name": "Conversion Rate"
             },
             {
-              "description": "Average value of completed orders",
+              "description": "Each user's purchase values added up, averaged over every assigned user",
               "event_name": "purchase",
-              "event_value_path": "order_value",
               "is_primary": false,
               "metric_type": "revenue",
-              "name": "Average Order Value"
+              "name": "Revenue per user"
             }
           ],
           "name": "Button Color Test",
@@ -7654,10 +7653,8 @@
       "MetricBase": {
         "description": "Base model for metric data.",
         "example": {
-          "aggregation_method": "average",
           "description": "Percentage of users who complete a purchase",
           "event_name": "purchase_completed",
-          "event_value_path": "value",
           "expected_effect": 0.05,
           "is_primary": true,
           "lower_is_better": false,
@@ -7668,7 +7665,7 @@
         "properties": {
           "aggregation_method": {
             "default": "average",
-            "description": "How to aggregate the metric",
+            "description": "Not read: the analysis does not use it, and how a metric is analysed follows from metric_type (see analysis in the results).  Stored and returned as sent.",
             "maxLength": 50,
             "title": "Aggregation Method",
             "type": "string"
@@ -7702,7 +7699,7 @@
                 "type": "null"
               }
             ],
-            "description": "JSON path to extract value from event payload",
+            "description": "Not read: the analysis does not use it.  A revenue, duration or custom metric adds up each event's top-level value; a count or conversion metric does not read value, and values inside an event's properties are never read.  Stored and returned as sent.",
             "title": "Event Value Path"
           },
           "expected_effect": {
@@ -7732,7 +7729,7 @@
           "metric_type": {
             "$ref": "#/components/schemas/backend__app__schemas__experiment__MetricType",
             "default": "conversion",
-            "description": "Type of metric"
+            "description": "What the metric measures.  conversion: the share of assigned users who sent event_name.  count: the number of event_name events per assigned user; their value is not read.  revenue, duration and custom: the total value of a user's event_name events, per assigned user.  In each mean a user with none counts as 0."
           },
           "minimum_sample_size": {
             "default": 100,
@@ -7761,6 +7758,7 @@
         "description": "Model for metric response data.",
         "properties": {
           "aggregation_method": {
+            "description": "Not read: the analysis does not use it, and how a metric is analysed follows from metric_type (see analysis in the results).  Stored and returned as sent.",
             "title": "Aggregation Method",
             "type": "string"
           },
@@ -7793,6 +7791,7 @@
                 "type": "null"
               }
             ],
+            "description": "Not read: the analysis does not use it.  A revenue, duration or custom metric adds up each event's top-level value; a count or conversion metric does not read value, and values inside an event's properties are never read.  Stored and returned as sent.",
             "title": "Event Value Path"
           },
           "expected_effect": {
@@ -7825,6 +7824,7 @@
             "type": "boolean"
           },
           "metric_type": {
+            "description": "What the metric measures.  conversion: the share of assigned users who sent event_name.  count: the number of event_name events per assigned user; their value is not read.  revenue, duration and custom: the total value of a user's event_name events, per assigned user.  In each mean a user with none counts as 0.",
             "title": "Metric Type",
             "type": "string"
           },
@@ -7863,7 +7863,7 @@
         "properties": {
           "analysis": {
             "default": "proportion",
-            "description": "How the variants are compared.  'mean' for a revenue metric: the mean value per assigned user, compared with Welch's t-test.  'proportion' for every other metric type: the share of users who converted, compared with Fisher's exact test.",
+            "description": "How the variants are compared.  'mean' for a revenue, count, duration or custom metric: the mean per assigned user (see VariantResult.mean), compared with Welch's t-test.  'proportion' for a conversion metric: the share of users who converted, compared with Fisher's exact test.",
             "enum": [
               "proportion",
               "mean"
@@ -12742,7 +12742,7 @@
         "type": "object"
       },
       "VariantResult": {
-        "description": "Statistical results for a single variant on a single metric.\n\nContains all per-variant statistics produced by the analysis engine,\nincluding sample counts, point estimates, confidence intervals,\nsignificance tests, and effect-size characterisation.\n\nFor the control variant, fields that represent a comparison vs. the\ncontrol (``p_value``, ``adjusted_p_value``, ``relative_improvement_pct``,\n``effect_size``, ``effect_size_label``, ``power``, and\n``statistical_test_used``) are ``None``.\n\nThe metric's ``analysis`` says what ``mean`` is.  For a metric analysed\nas a proportion (every type but revenue) ``mean`` is the share of the\nvariant's users who converted, in [0, 1].  For a revenue metric\n(``analysis`` ``\"mean\"``) it is the mean value per assigned user: each\nuser's values added up, 0 for a user with none.  ``conversions`` is the\nnumber of users who converted either way.",
+        "description": "Statistical results for a single variant on a single metric.\n\nContains all per-variant statistics produced by the analysis engine,\nincluding sample counts, point estimates, confidence intervals,\nsignificance tests, and effect-size characterisation.\n\nFor the control variant, fields that represent a comparison vs. the\ncontrol (``p_value``, ``adjusted_p_value``, ``relative_improvement_pct``,\n``effect_size``, ``effect_size_label``, ``power``, and\n``statistical_test_used``) are ``None``.\n\nThe metric's ``analysis`` says what ``mean`` is.  For a metric analysed\nas a proportion (a conversion metric) ``mean`` is the share of the\nvariant's users who converted, in [0, 1].  For a revenue, count, duration\nor custom metric (``analysis`` ``\"mean\"``) it is the mean per assigned\nuser of each user's value, 0 for a user with none: for a count metric the\nnumber of the metric's events they sent, otherwise the total of those\nevents' value.  ``conversions`` is the number of users who converted\neither way.",
         "properties": {
           "absolute_difference": {
             "anyOf": [
@@ -12814,7 +12814,7 @@
                 "type": "null"
               }
             ],
-            "description": "Number of assigned users with at least one conversion event; a user who converts several times counts once, so this never exceeds sample_size.  For a revenue metric too: the users who sent the metric's event, whatever its value.",
+            "description": "Number of assigned users with at least one conversion event; a user who converts several times counts once, so this never exceeds sample_size.  For a metric analysed as a mean too: the users who sent the metric's event, whatever its value.",
             "title": "Conversions"
           },
           "effect_size": {
@@ -12851,7 +12851,7 @@
             "type": "boolean"
           },
           "mean": {
-            "description": "When the metric's analysis is 'proportion': the share of the variant's users who converted, in [0, 1].  When it is 'mean' (a revenue metric): the mean value per assigned user, each user's values added up and 0 for a user with none.",
+            "description": "When the metric's analysis is 'proportion': the share of the variant's users who converted, in [0, 1].  When it is 'mean' (a revenue, count, duration or custom metric): the mean per assigned user of each user's value, 0 for a user with none: for a count metric the number of the metric's events they sent, otherwise the total of those events' value.",
             "title": "Mean",
             "type": "number"
           },

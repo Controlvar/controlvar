@@ -10,7 +10,12 @@ import {
   Legend,
 } from 'recharts';
 import { MetricAnalysis, MetricResult, VariantResult } from '@/types/results';
-import { formatAmount, isFiniteNumber } from '@/components/results/shared/resultFormat';
+import {
+  capitalised,
+  formatAmount,
+  isFiniteNumber,
+  meanLabelForType,
+} from '@/components/results/shared/resultFormat';
 
 interface ConversionChartProps {
   variants: VariantResult[];
@@ -20,8 +25,19 @@ interface ConversionChartProps {
    * default) its rate as a percentage.
    */
   analysis?: MetricAnalysis;
-  /** The metric's type: a revenue mean is labelled "Revenue per user". */
+  /**
+   * The metric's type, which names a mean: "Revenue per user", "Events per
+   * user", "Duration per user" or "Value per user".
+   */
   metricType?: MetricResult['metric_type'];
+}
+
+/** What the chart says before the first value. */
+function emptyText(mean: boolean, metricType?: string): string {
+  if (!mean) return 'No conversions yet';
+  if (metricType === 'revenue') return 'No revenue yet';
+  if (metricType === 'count') return 'No events yet';
+  return 'No values yet';
 }
 
 const CONTROL_COLOR = '#3b82f6'; // blue-500
@@ -33,7 +49,7 @@ export function ConversionChart({
   metricType,
 }: ConversionChartProps) {
   const mean = analysis === 'mean';
-  const revenue = mean && metricType === 'revenue';
+  const meanLabel = capitalised(meanLabelForType(metricType ?? ''));
 
   if (!variants.length) {
     return (
@@ -51,7 +67,7 @@ export function ConversionChart({
         className="flex items-center justify-center h-48 text-slate-500"
         data-testid="conversion-chart-empty"
       >
-        {revenue ? 'No revenue yet' : mean ? 'No values yet' : 'No conversions yet'}
+        {emptyText(mean, metricType)}
       </div>
     );
   }
@@ -86,7 +102,7 @@ export function ConversionChart({
           <Tooltip
             formatter={(v) =>
               mean
-                ? [formatAmount(v as number), revenue ? 'Revenue per user' : 'Mean']
+                ? [formatAmount(v as number), meanLabel]
                 : [`${((v as number) * 100).toFixed(2)}%`, 'Rate']
             }
           />

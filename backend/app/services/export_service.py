@@ -317,8 +317,9 @@ class ExportService:
         and the results API agree. An experiment whose results cannot be
         computed (it has no control variant, for example) keeps its variant
         rows with the result columns empty.  ``conversion_rate`` is empty too
-        when the primary metric is analysed as a mean (a revenue metric): its
-        ``mean`` is a value per user, not a rate.
+        when the primary metric is analysed as a mean (a revenue, count,
+        duration or custom metric): its ``mean`` is a value per user, not a
+        rate.
         """
         rows: List[VariantExportRow] = []
         for exp in experiments:

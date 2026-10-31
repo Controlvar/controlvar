@@ -283,19 +283,46 @@ by = [
 ]
 
 [[unit]]
-text = "A metric can also be created with the type revenue, count or duration."
+text = "Count | How many times each user sends the event, as events per user | Articles read: one article_read event each"
 by = [
-    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
-    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_only_a_revenue_metric_as_a_mean",
+    "test:backend/tests/integration/api/test_value_metrics_results.py::test_a_count_metric_counts_events_sent_with_no_value",
+    "test:frontend/src/tests/components/MetricComparisonTable.valueMetrics.test.tsx::labels its value by what it is per user, with the difference per user",
 ]
 
 [[unit]]
-text = "A revenue metric is analysed as its mean value per assigned user: each user's event values added up, 0 for a user with none."
-by = ["test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user"]
+text = "Duration | Time each user spends, added up, as duration per user | Seconds watched sent as the value of watch_session"
+by = [
+    "test:backend/tests/integration/api/test_value_metrics_results.py::test_duration_and_custom_add_up_each_users_values",
+    "test:frontend/src/tests/components/MetricComparisonTable.valueMetrics.test.tsx::labels its value by what it is per user, with the difference per user",
+]
 
 [[unit]]
-text = "A count or duration metric is analysed as a conversion: whether each user sent the metric's event, not the event's value."
-by = ["test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_only_a_revenue_metric_as_a_mean"]
+text = "Custom | A number each user's events add up to, as value per user | Points sent as the value of points_earned"
+by = [
+    "test:backend/tests/integration/api/test_value_metrics_results.py::test_duration_and_custom_add_up_each_users_values",
+    "test:frontend/src/tests/components/MetricComparisonTable.valueMetrics.test.tsx::labels its value by what it is per user, with the difference per user",
+]
+
+[[unit]]
+text = "A conversion metric is analysed as the share of assigned users who sent its event."
+by = [
+    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_every_type_but_conversion_as_a_mean",
+    "test:backend/tests/unit/services/test_binomial_metric_result_characterisation.py::test_binomial_metric_result_characterisation",
+]
+
+[[unit]]
+text = "A revenue, count, duration or custom metric is analysed as its mean per assigned user, compared with Welch's t-test: for a count metric each user's value is the number of the metric's events they sent, whatever their value; for a revenue, duration or custom metric it is the total of those events' value; a user with none counts as 0."
+by = [
+    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_every_type_but_conversion_as_a_mean",
+    "test:backend/tests/integration/api/test_value_metrics_results.py::test_a_count_metric_counts_events_sent_with_no_value",
+    "test:backend/tests/integration/api/test_value_metrics_results.py::test_a_count_does_not_read_the_value",
+    "test:backend/tests/integration/api/test_value_metrics_results.py::test_duration_and_custom_add_up_each_users_values",
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
+]
+
+[[unit]]
+text = "So a duration metric is time spent per assigned user, not the time one event takes."
+by = ["test:backend/tests/unit/services/test_value_metrics_per_user.py::test_duration_and_custom_match_scipy_on_the_per_user_values"]
 
 [[unit]]
 text = "See Limitations."
