@@ -44,9 +44,11 @@ import manifest from '@/content/videos.json';
  * or revert the change.
  *
  * Adding a video changes no code: an entry in `content/videos.json`, its
- * transcript in `content/walkthroughs/<slug>.json`, and the per-video rows of
- * the tests that pin them (the slug list in `tests/pages/walkthroughs.test.tsx`,
- * the description's facts in `test_site_walkthroughs.py`).
+ * transcript in `content/walkthroughs/<slug>.json`, its poster's frame in
+ * `content/poster-frames.json` (`scripts/check-site-media.mjs`), and the
+ * per-video rows of the tests that pin them (the slug list in
+ * `tests/pages/walkthroughs.test.tsx`, the description's facts in
+ * `test_site_walkthroughs.py`).
  */
 
 export type MediaFile = { name: string; bytes: number; sha256: string };

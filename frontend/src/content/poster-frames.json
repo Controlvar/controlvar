@@ -1,0 +1,64 @@
+{
+  "posters": [
+    {
+      "slug": "01-getting-started",
+      "mp4_sha256": "9cb480bae8819f30b4571f016780a81216bb573e7c8bab697c486318a1600cec",
+      "poster_sha256": "fbe152dc6f04ffdc92f5e191184fcc2ce837e763c8967e26b10e5d6ef658aafc",
+      "t": 50,
+      "first_cue": 3,
+      "crop": [1920, 940, 0, 0],
+      "pad": "#f3fafe",
+      "psnr_db": 43.43
+    },
+    {
+      "slug": "02-first-experiment",
+      "mp4_sha256": "03d296e58df02e711a2990fb2877f46c7678069efb104c4e99111470ab98a079",
+      "poster_sha256": "6581a80cd68f9f90398708c6267763757bc13c864135607a50a98709c6631d44",
+      "t": 40.5,
+      "first_cue": 3.033,
+      "crop": [1920, 940, 0, 0],
+      "pad": "#f6f9fc",
+      "psnr_db": 44.95
+    },
+    {
+      "slug": "03-flag-rollout",
+      "mp4_sha256": "130574a2e973c1bb79026c424fef2ae3b7722a25005511e79da514a360ec6b37",
+      "poster_sha256": "c033987b9903ceb90b414e7fd462eadbd88178e80c99be15d2e223d32d1e3114",
+      "t": 33,
+      "first_cue": 3.033,
+      "crop": [1920, 940, 0, 0],
+      "pad": "#f3fafe",
+      "psnr_db": 44.21
+    },
+    {
+      "slug": "05-plan-and-team",
+      "mp4_sha256": "5446fa6cdb042a32991f8ca52acf9e88d4c89db83f7dcd45c9fdde8fee519e6c",
+      "poster_sha256": "ece0127a444c3ed993fcb333fd025d0af7bdb90e8dd22c9443773054a6392561",
+      "t": 54,
+      "first_cue": 3.067,
+      "crop": [1920, 940, 0, 0],
+      "pad": "#979799",
+      "psnr_db": 42.04
+    },
+    {
+      "slug": "06-shoplab-ab-test",
+      "mp4_sha256": "3c36550c491d7791e56399eae0a88de44b2bd1f1c9119f68ded3257428336420",
+      "poster_sha256": "c29952818e8b29a8077b4cc7801204d681a2e74453994b2819a952b766608c67",
+      "t": 48,
+      "first_cue": 3.033,
+      "crop": [1920, 940, 0, 0],
+      "pad": "#f6f9fb",
+      "psnr_db": 46.64
+    },
+    {
+      "slug": "08-warehouse-explainer",
+      "mp4_sha256": "8495d45e4d7f205dc7b98e214a50c6f0aa88359821502e38e318fc8d82b57e5b",
+      "poster_sha256": "705c2c487bc1f29a437170b1efc5fd7639bcb9b0fb1f254b0c11115d6e5feb54",
+      "t": 1,
+      "first_cue": 0,
+      "crop": null,
+      "pad": null,
+      "psnr_db": 41.68
+    }
+  ]
+}
