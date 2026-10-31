@@ -562,6 +562,21 @@ class TestLateConversions:
             ]
         }
 
+    @pytest.mark.regression
+    def test_a_cached_answer_older_than_24_hours_still_tags_a_keyless_track_1423(self, transport):
+        """#1423: with cache_ttl_seconds above 24 hours the answer outlives its 24 hour record."""
+        client = ExperimentationClient(API_URL, API_KEY, cache_ttl_seconds=48 * 3600, transport=transport)
+        assign_route(transport)
+        batch_route(transport, success_count=1)
+        with mock.patch("controlvar.cache._now") as now:
+            now.return_value = 1000.0
+            client.get_assignment("checkout_flow", "user-1")
+            now.return_value = 1000.0 + 25 * 3600  # past 24 hours, inside the 48 hour cache
+            assert len(client.cached_assignments("user-1")) == 1
+            assert client.track("user-1", "purchase", event_value=120) is True
+        assert transport.calls() == ["POST /api/v1/tracking/assign", "POST /api/v1/tracking/batch"]
+        assert batch_keys(transport.last) == ["checkout_flow"]
+
     def test_control_the_same_purchase_at_299_seconds_while_still_cached(self, client, transport):
         assign_route(transport)
         batch_route(transport, success_count=1)
