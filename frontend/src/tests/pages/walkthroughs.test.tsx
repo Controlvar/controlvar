@@ -203,11 +203,14 @@ describe('marketing build (G3)', () => {
 
   const section = (container: HTMLElement) => container.querySelector('section#walkthroughs') as HTMLElement;
 
-  it('renders the section after the hero, with exactly the pinned videos in order', () => {
+  // #1459 moved the section from straight after the hero (#1290's place) to
+  // between the SDKs and the deploy cards, the approved redesign's order.
+  it('renders the section after the SDKs and before the deploy cards, with exactly the pinned videos in order', () => {
     const { container } = renderHome();
     const walk = section(container);
     expect(walk).toBeInTheDocument();
-    expect(walk.previousElementSibling?.querySelector('h1')).toBeInTheDocument();
+    expect(walk.previousElementSibling?.querySelector('h2')).toHaveTextContent(/^SDKs for the stack you have$/);
+    expect(walk.nextElementSibling?.querySelector('h2')).toHaveTextContent(/^Deploy it yourself$/);
     expect(Array.from(walk.querySelectorAll('ol > li')).map((li) => li.id)).toEqual(PINNED.map(anchorFor));
     expect(walk.querySelectorAll('video')).toHaveLength(PINNED.length);
   });

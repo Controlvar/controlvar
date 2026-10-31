@@ -25,12 +25,22 @@ const LINKS: Readonly<Record<string, string>> = {
 };
 
 type Part = string | { link: string; page: string };
-const ROWS: ReadonlyArray<{ id: string; parts: Part[] }> = table.quotes;
+const ROWS: ReadonlyArray<{ id: string; parts?: Part[]; code?: string[] }> = table.quotes;
 
+/**
+ * A sentence renders as a `<span>`; a code row (lines of a docs page's code
+ * block) as a `<code>` of its lines, for a `<pre>` to hold.
+ */
 export function Quote({ id }: { id: string }) {
   const row = ROWS.find((q) => q.id === id);
   if (!row) {
     throw new Error(`content/home-quotes.json has no quote with the id ${id}`);
+  }
+  if (row.code) {
+    return <code data-quote={id}>{row.code.join('\n')}</code>;
+  }
+  if (!row.parts) {
+    throw new Error(`the quote ${id} has neither parts nor code`);
   }
   return (
     <span data-quote={id}>

@@ -37,6 +37,14 @@
           ]
         }
       ]
+    },
+    {
+      "id": "sdk-snippet",
+      "code": [
+        "const assignment = await client.getAssignment('checkout_button_color', user);",
+        "await client.track('user-123', 'purchase', { value: 49.99, experimentKey: 'checkout_button_color' });"
+      ],
+      "sources": [{ "page": "sdk/javascript" }]
     }
   ]
 }
