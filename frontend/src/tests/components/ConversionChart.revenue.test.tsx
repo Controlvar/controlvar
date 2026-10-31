@@ -79,9 +79,26 @@ describe('ConversionChart for revenue per user', () => {
     expect(screen.getAllByTestId('variant-bar')).toHaveLength(2);
   });
 
-  it('labels a mean that is not revenue "Mean"', () => {
-    render(<ConversionChart variants={perUser} analysis="mean" metricType="duration" />);
-    expect(screen.getByTestId('tooltip-label')).toHaveTextContent(/^Mean$/);
+  // #439: a count, duration or custom mean is labelled by what it is per
+  // user, never a bare "Mean".
+  it.each([
+    ['count', 'Events per user'],
+    ['duration', 'Duration per user'],
+    ['custom', 'Value per user'],
+  ] as const)('labels a %s mean "%s"', (metricType, label) => {
+    render(<ConversionChart variants={perUser} analysis="mean" metricType={metricType} />);
+    expect(screen.getByTestId('tooltip-label')).toHaveTextContent(new RegExp(`^${label}$`));
+    expect(screen.getByTestId('conversion-chart').textContent).not.toMatch(/%|\$|Rate|Mean/);
+  });
+
+  it.each([
+    ['count', 'No events yet'],
+    ['duration', 'No values yet'],
+    ['custom', 'No values yet'],
+  ] as const)('says what a %s chart is waiting for: "%s"', (metricType, text) => {
+    const none = perUser.map((v) => ({ ...v, mean: 0 }));
+    render(<ConversionChart variants={none} analysis="mean" metricType={metricType} />);
+    expect(screen.getByTestId('conversion-chart-empty')).toHaveTextContent(new RegExp(`^${text}$`));
   });
 
   it('keeps a proportion as a percentage, as before', () => {

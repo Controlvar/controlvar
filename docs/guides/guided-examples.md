@@ -249,7 +249,7 @@ and the same nightly CI run walks them.
 - **Completing a test.** It cannot be undone, so on the demo stack these examples pause the test
   instead.
 - **What an order is worth.** These examples count the users who pressed a button or ordered;
-  [Limitations](../getting-started/limitations.md) says how a revenue metric is analysed.
+  [Concepts](../getting-started/concepts.md) says how a revenue metric is analysed.
 - **One visitor under two ids.** There is no identify or alias call, as
   [Limitations](../getting-started/limitations.md) says.
 - **How soon an open page sees a flag change.** StreamPulse asks for its flags when you pick a

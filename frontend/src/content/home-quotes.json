@@ -3,14 +3,14 @@
     {
       "id": "revenue-metric",
       "parts": [
-        "A revenue metric is analysed as its mean value per assigned user, compared with Welch's t-test, and its results give the difference per user with its confidence interval."
+        "Revenue, count, duration and custom metrics are analysed as their mean per assigned user, compared with Welch's t-test, and their results give the difference per user with its confidence interval."
       ],
       "sources": [
         {
-          "page": "getting-started/limitations",
+          "page": "getting-started/concepts",
           "phrases": [
-            "a revenue metric is analysed as its mean value per assigned user",
-            "compared with Welch's t-test"
+            "revenue, count, duration",
+            "mean per assigned user, compared with Welch's t-test"
           ]
         },
         {

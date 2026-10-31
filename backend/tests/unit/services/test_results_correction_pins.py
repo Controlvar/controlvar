@@ -126,6 +126,14 @@ ONE_TREATMENT_PINS: Dict[str, Dict[str, str]] = {
             "0b23f7ba940954b161499973d2c8830487fa8c6fb4e8d0196c68f2d5191fb8b2"
         ),
     },
+    # 1.7.0 (#439) routes count, duration and custom to the mean; these
+    # fixtures have none: 1.6.0's.
+    "1.7.0": {
+        "two_variants": "9e41155e9bf3433659bc62c1af0f86371613da5ce204d16108a258f037a71be6",
+        "three_variants_one_null_p": (
+            "0b23f7ba940954b161499973d2c8830487fa8c6fb4e8d0196c68f2d5191fb8b2"
+        ),
+    },
 }
 
 #: The correction a request with no method gets, on every path: the stored

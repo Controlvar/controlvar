@@ -256,7 +256,7 @@ describe('before the first purchase', () => {
     // enough data, without a 0.00 amount that would read as a measurement.
     expect(cells(row(/one_page/))[4]).toBe('Not enough data to estimate');
     // No one sent the event, so there is nothing to say about values.
-    expect(screen.queryByTestId('revenue-no-value-note')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('no-value-note')).not.toBeInTheDocument();
   });
 });
 
@@ -303,7 +303,7 @@ describe('users sent the event with no value', () => {
         eventNames={{ 'm-rev': 'purchase' }}
       />,
     );
-    const note = screen.getByTestId('revenue-no-value-note');
+    const note = screen.getByTestId('no-value-note');
     expect(note).toHaveTextContent(
       "Order value: 312 users sent purchase, and every user's total value is 0. " +
         "Send the amount in the event's value field, not in its properties.",
@@ -318,7 +318,7 @@ describe('users sent the event with no value', () => {
 
   it('says "its event" when the event name is not known', () => {
     render(<MetricComparisonTable metrics={[noValues()]} confidenceLevel={0.95} />);
-    expect(screen.getByTestId('revenue-no-value-note')).toHaveTextContent(
+    expect(screen.getByTestId('no-value-note')).toHaveTextContent(
       'Order value: 312 users sent its event,',
     );
   });
@@ -331,7 +331,7 @@ describe('users sent the event with no value', () => {
         eventNames={{ 'm-rev': 'purchase' }}
       />,
     );
-    expect(screen.queryByTestId('revenue-no-value-note')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('no-value-note')).not.toBeInTheDocument();
   });
 
   it('is not shown for a metric analysed as a share', () => {
@@ -342,7 +342,7 @@ describe('users sent the event with no value', () => {
         confidenceLevel={0.95}
       />,
     );
-    expect(screen.queryByTestId('revenue-no-value-note')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('no-value-note')).not.toBeInTheDocument();
   });
 });
 
@@ -358,7 +358,7 @@ describe('accessibility', () => {
         eventNames={{ 'm-rev-2': 'purchase' }}
       />,
     );
-    expect(screen.getByTestId('revenue-no-value-note')).toBeInTheDocument();
+    expect(screen.getByTestId('no-value-note')).toBeInTheDocument();
     const result = await axe.run(container, { rules: { 'color-contrast': { enabled: false } } });
     expect(result.violations).toEqual([]);
   });
