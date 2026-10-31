@@ -168,7 +168,14 @@ export default function HomePage() {
               Four containers — Postgres, Redis, the API and the dashboard — with the
               database created and seeded on the way up.
             </p>
-            <pre className="mt-5 overflow-x-auto rounded-lg bg-slate-900 p-5 text-sm leading-relaxed text-slate-100">
+            {/* It scrolls sideways on a phone, so it takes focus: a keyboard can then scroll it
+                (axe scrollable-region-focusable; tests/e2e/marketing-site.site.spec.ts). */}
+            <pre
+              tabIndex={0}
+              role="region"
+              aria-label="Run it locally"
+              className="mt-5 overflow-x-auto rounded-lg bg-slate-900 p-5 text-sm leading-relaxed text-slate-100"
+            >
               <code>{`git clone https://github.com/Controlvar/controlvar.git
 cd controlvar
 docker compose up -d --wait`}</code>
