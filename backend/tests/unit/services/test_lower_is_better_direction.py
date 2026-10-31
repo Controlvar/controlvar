@@ -636,16 +636,17 @@ class TestBayesianDirection:
         assert result["decision"] == decision
 
 
-class TestTheBanditDoesNotReadTheDirection:
-    """A documented limit, pinned: the bandit maximises the share of users who
-    send the primary metric's event and does not read ``lower_is_better``, so
-    on a lower-is-better primary it moves traffic toward the worse arm.  A
-    change that makes the bandit read the direction updates this test and the
-    limitations page together."""
+class TestTheBanditReadsTheDirection:
+    """The bandit moves traffic toward the better arm in the metric's
+    direction (#1385).  For a lower-is-better primary (uninstalls, errors) a
+    user who did NOT convert is the success, so the arm with fewer converting
+    users earns the traffic, for every algorithm and every stats source.  A
+    higher-is-better primary keeps the old behaviour."""
 
-    def test_traffic_moves_to_more_converting_users_on_a_lower_is_better_primary(
-        self,
-    ):
+    ALGORITHMS = ["thompson_sampling", "ucb1", "epsilon_greedy"]
+
+    @staticmethod
+    def _run(algorithm: str, lower_is_better: Any, source: str) -> Dict[str, float]:
         from unittest.mock import MagicMock, patch
         from uuid import UUID
 
@@ -656,17 +657,20 @@ class TestTheBanditDoesNotReadTheDirection:
         db.query.return_value.filter.return_value.first.return_value = None
         experiment = MagicMock()
         experiment.id = UUID("99999999-0000-4000-8000-000000000009")
-        experiment.optimization_type = "thompson_sampling"
+        experiment.optimization_type = algorithm
         experiment.variants = [
             SimpleNamespace(id=UUID(_CONTROL), name="control", is_control=True),
             SimpleNamespace(id=UUID(_T1), name="t1", is_control=False),
         ]
-        experiment.metric_definitions = [_metric(True)]
-        # Uninstalls: control 10%, treatment 5%.  Lower is better, so the
-        # treatment is the better arm.
-        stats = {
-            _CONTROL: VariantStats(_CONTROL, successes=200, failures=1800, pulls=2000),
-            _T1: VariantStats(_T1, successes=100, failures=1900, pulls=2000),
+        experiment.metric_definitions = [_metric(lower_is_better)]
+        # Converting users: control 10%, treatment 5%.
+        raw = {
+            _CONTROL: VariantStats(
+                _CONTROL, successes=200, failures=1800, pulls=2000, total_reward=200.0
+            ),
+            _T1: VariantStats(
+                _T1, successes=100, failures=1900, pulls=2000, total_reward=100.0
+            ),
         }
         computed: Dict[str, float] = {}
         real_compute = BanditService.compute_weights
@@ -676,12 +680,75 @@ class TestTheBanditDoesNotReadTheDirection:
             return dict(computed)
 
         scheduler = BanditScheduler(db=db)
-        with (
-            patch.object(
-                scheduler, "get_variant_stats_from_counters", return_value=stats
-            ),
-            patch.object(BanditService, "compute_weights", side_effect=capture),
-        ):
+        patches = [patch.object(BanditService, "compute_weights", side_effect=capture)]
+        if source == "postgres":
+            patches.append(
+                patch.object(scheduler, "_stats_from_dynamodb", return_value=None)
+            )
+            patches.append(
+                patch.object(scheduler, "_stats_from_postgres", return_value=raw)
+            )
+        else:
+            patches.append(
+                patch.object(scheduler, "_stats_from_dynamodb", return_value=raw)
+            )
+            patches.append(
+                patch.object(scheduler, "_stats_from_postgres", return_value=None)
+            )
+        for p in patches:
+            p.start()
+        try:
             assert scheduler.update_experiment(experiment) is True
-        assert computed[_CONTROL] > 0.99
-        assert computed[_T1] < 0.01
+        finally:
+            for p in patches:
+                p.stop()
+        return computed
+
+    @pytest.mark.parametrize("source", ["postgres", "dynamodb"])
+    @pytest.mark.parametrize("algorithm", ALGORITHMS)
+    def test_traffic_moves_to_fewer_converting_users_when_lower_is_better(
+        self, algorithm, source
+    ):
+        weights = self._run(algorithm, True, source)
+        assert weights[_T1] > weights[_CONTROL]
+        if algorithm != "ucb1":
+            assert weights[_T1] > 0.85
+
+    @pytest.mark.parametrize("source", ["postgres", "dynamodb"])
+    @pytest.mark.parametrize("algorithm", ALGORITHMS)
+    def test_traffic_moves_to_more_converting_users_when_higher_is_better(
+        self, algorithm, source
+    ):
+        weights = self._run(algorithm, False, source)
+        assert weights[_CONTROL] > weights[_T1]
+        if algorithm != "ucb1":
+            assert weights[_CONTROL] > 0.85
+
+    def test_the_stored_state_is_not_flipped_a_second_time(self):
+        """BanditState already holds reward counts; reading it back as the
+        stats source must not apply the direction again."""
+        from unittest.mock import MagicMock, patch
+        from uuid import UUID
+
+        from backend.app.core.bandit_scheduler import BanditScheduler
+
+        scheduler = BanditScheduler(db=MagicMock())
+        experiment = MagicMock()
+        experiment.metric_definitions = [_metric(True)]
+        stored = {
+            _CONTROL: {"successes": 1800, "failures": 200, "pulls": 2000},
+            _T1: {"successes": 1900, "failures": 100, "pulls": 2000},
+        }
+        state = SimpleNamespace(variant_weights=stored)
+        scheduler.db.query.return_value.filter.return_value.first.return_value = state
+        with (
+            patch.object(scheduler, "_stats_from_dynamodb", return_value=None),
+            patch.object(scheduler, "_stats_from_postgres", return_value=None),
+        ):
+            stats = scheduler.get_variant_stats_from_counters(
+                UUID("99999999-0000-4000-8000-000000000009"),
+                [_CONTROL, _T1],
+                experiment=experiment,
+            )
+        assert stats[_CONTROL].successes == 1800
+        assert stats[_T1].successes == 1900

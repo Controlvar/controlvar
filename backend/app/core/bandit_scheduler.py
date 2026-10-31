@@ -77,6 +77,31 @@ def _has_pulls(stats: Optional[Dict[str, VariantStats]]) -> bool:
     return bool(stats) and any(vs.pulls > 0 for vs in stats.values())
 
 
+def _as_rewards(
+    stats: Dict[str, VariantStats], lower_is_better: bool
+) -> Dict[str, VariantStats]:
+    """Turn converting-user counts into the bandit's reward counts.
+
+    Higher is better: a converting user is a success, unchanged.  Lower is
+    better (an error or churn event): a user who did NOT convert is the
+    success, so the arm with fewer converting users earns the traffic (#1385).
+    ``total_reward`` (UCB1) follows ``successes``.
+    """
+    if not lower_is_better:
+        return stats
+    flipped: Dict[str, VariantStats] = {}
+    for vid, vs in stats.items():
+        successes = max(vs.pulls - vs.successes, 0)
+        flipped[vid] = VariantStats(
+            variant_id=vid,
+            successes=successes,
+            failures=vs.pulls - successes,
+            pulls=vs.pulls,
+            total_reward=float(successes),
+        )
+    return flipped
+
+
 def _at_least_as_complete(
     candidate: Optional[Dict[str, VariantStats]],
     reference: Optional[Dict[str, VariantStats]],
@@ -445,9 +470,13 @@ class BanditScheduler:
         dynamo_stats = self._stats_from_dynamodb(experiment_id, variant_ids)
         pg_stats = self._stats_from_postgres(experiment_id, variant_ids, experiment)
 
+        # The comparison and the choice are made on raw converting-user counts;
+        # the metric's direction is applied once, to the chosen source.
+        lower_is_better = self._primary_lower_is_better(experiment)
+
         if _has_pulls(dynamo_stats):
             if _at_least_as_complete(dynamo_stats, pg_stats):
-                return dynamo_stats  # type: ignore[return-value]
+                return _as_rewards(dynamo_stats, lower_is_better)  # type: ignore[arg-type]
             logger.warning(
                 "BanditScheduler: DynamoDB counters for experiment %s have fewer "
                 "pulls or successes than PostgreSQL; using PostgreSQL",
@@ -455,8 +484,9 @@ class BanditScheduler:
             )
 
         if _has_pulls(pg_stats):
-            return pg_stats  # type: ignore[return-value]
+            return _as_rewards(pg_stats, lower_is_better)  # type: ignore[arg-type]
 
+        # BanditState already holds reward counts (flipped when it was written).
         stats = self._stats_from_bandit_state(experiment_id, variant_ids)
         if stats is not None:
             return stats
@@ -598,6 +628,23 @@ class BanditScheduler:
         return stats
 
     @staticmethod
+    def _primary_metric(experiment: Optional[Experiment]) -> Any:
+        """The ``is_primary`` Metric row, else the first one, else ``None``."""
+        if experiment is None:
+            return None
+        metrics = list(getattr(experiment, "metric_definitions", None) or [])
+        primary = next((m for m in metrics if getattr(m, "is_primary", False)), None)
+        if primary is None and metrics:
+            primary = metrics[0]
+        return primary
+
+    @classmethod
+    def _primary_lower_is_better(cls, experiment: Optional[Experiment]) -> bool:
+        """The primary metric's direction; only ``True`` means lower is better."""
+        primary = cls._primary_metric(experiment)
+        return getattr(primary, "lower_is_better", False) is True
+
+    @staticmethod
     def _primary_event_name(experiment: Optional[Experiment]) -> Optional[str]:
         """
         Resolve the conversion event for an experiment.
@@ -609,10 +656,7 @@ class BanditScheduler:
         if experiment is None:
             return None
 
-        metrics = list(getattr(experiment, "metric_definitions", None) or [])
-        primary = next((m for m in metrics if getattr(m, "is_primary", False)), None)
-        if primary is None and metrics:
-            primary = metrics[0]
+        primary = BanditScheduler._primary_metric(experiment)
         if primary is not None and getattr(primary, "event_name", None):
             return str(primary.event_name)
 

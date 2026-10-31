@@ -166,7 +166,7 @@ text = "pulls | Total assignments to this variant"
 by = ["test:backend/tests/integration/services/test_bandit_scheduler_db.py::test_postgres_fallback_counts_converting_users_as_results_does"]
 
 [[unit]]
-text = "successes | Converting users in this variant: users assigned to it with at least one conversion event, each counted once"
+text = "successes | Converting users in this variant: users assigned to it with at least one conversion event, each counted once. When the primary metric has lower_is_better set, the users who did not convert instead (see below)"
 by = ["test:backend/tests/integration/services/test_bandit_scheduler_db.py::test_postgres_fallback_counts_converting_users_as_results_does"]
 
 [[unit]]
@@ -301,6 +301,17 @@ by = ["exempt:baseline"]
 [[unit]]
 text = "PostgreSQL: pulls = assignments rows per variant; successes = converting users, counted exactly as /results counts them: users assigned to the variant with at least one event, tagged with that variant, whose event_name matches the experiment's primary metric (see the event-matching rule in the tracking API docs)."
 by = ["test:backend/tests/integration/services/test_bandit_scheduler_db.py::test_postgres_fallback_counts_converting_users_as_results_does"]
+
+[[unit]]
+text = "When the experiment's primary metric has lower_is_better set (uninstalls, errors), the bandit counts a user who did not convert as the success, so the variant with fewer converting users earns the traffic."
+by = ["test:backend/tests/unit/services/test_lower_is_better_direction.py::TestTheBanditReadsTheDirection::test_traffic_moves_to_fewer_converting_users_when_lower_is_better"]
+
+[[unit]]
+text = "Every algorithm and both live sources (DynamoDB and PostgreSQL) apply this; the persisted BanditState already holds the result."
+by = [
+    "test:backend/tests/unit/services/test_lower_is_better_direction.py::TestTheBanditReadsTheDirection::test_traffic_moves_to_fewer_converting_users_when_lower_is_better",
+    "test:backend/tests/unit/services/test_lower_is_better_direction.py::TestTheBanditReadsTheDirection::test_the_stored_state_is_not_flipped_a_second_time",
+]
 
 [[unit]]
 text = "A user who converts three times counts once."
