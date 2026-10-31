@@ -238,7 +238,9 @@ def build_flag_entry(flag: FeatureFlag) -> Dict[str, Any]:
     return {
         "key": flag.key,
         "active": True,
-        "evaluation": EVALUATION_LOCAL,
+        # TAMPER (PF-13, never merged): one flag served with an evaluation value
+        # the published SDKs do not know.
+        "evaluation": "local-v2" if flag.key == "unicode" else EVALUATION_LOCAL,
         "rollout_percentage": int(flag.rollout_percentage or 0),
         "rules": rules,
         "default_rule": default_rule,
