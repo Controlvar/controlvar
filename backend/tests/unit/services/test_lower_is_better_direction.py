@@ -19,6 +19,7 @@ from typing import Any, Dict, List
 import numpy as np
 import pytest
 
+from backend.app.core.stats_engine import ENGINE_VERSION
 from backend.app.schemas.bayesian import BayesianConfig, BayesianDecision
 from backend.app.schemas.results import MetricResult
 from backend.app.services import analysis_service as analysis_module
@@ -33,6 +34,9 @@ from backend.app.services.sufficient_stats_analysis import (
     BinomialVariant,
     binomial_metric_result,
     mean_metric_result,
+)
+from backend.tests.unit.services import (
+    test_sufficient_stats_fingerprint as sufficient_stats,
 )
 from backend.tests.unit.services.test_binomial_metric_result_characterisation import (
     _FakeSession,
@@ -636,6 +640,11 @@ class TestBayesianDirection:
         assert result["decision"] == decision
 
 
+#: The last engine whose bandit did not read the primary metric's
+#: ``lower_is_better``; it is frozen (#1385).
+BEFORE_BANDIT_DIRECTION = "1.5.0"
+
+
 class TestTheBanditReadsTheDirection:
     """The bandit moves traffic toward the better arm in the metric's
     direction (#1385).  For a lower-is-better primary (uninstalls, errors) a
@@ -764,6 +773,11 @@ class TestTheBanditReadsTheDirection:
             if isinstance(c.args[0], BanditState)
         ]
         assert len(states) == 1
+        # The regret estimate is in reward counts too: weights that favour
+        # the arm with fewer converting users beat a uniform split.  On raw
+        # counts the same weights do worse, and the stored value is null.
+        assert states[0].regret_reduction_pct is not None
+        assert states[0].regret_reduction_pct > 0
         vw = states[0].variant_weights
         assert vw[_CONTROL]["successes"] == 200
         assert vw[_CONTROL]["failures"] == 1800
@@ -798,3 +812,18 @@ class TestTheBanditReadsTheDirection:
         assert weights[_CONTROL] > weights[_T1]
         if algorithm != "ucb1":
             assert weights[_CONTROL] > 0.85
+
+
+def test_the_engine_whose_bandit_reads_the_direction_is_not_a_frozen_one():
+    """1.5.0 is frozen with a bandit that ignores ``lower_is_better``: its
+    weights, regret and history alpha/beta favour more conversions whatever
+    the direction.  The engine whose bandit reads the direction must
+    therefore be a later version (#1385)."""
+    assert BEFORE_BANDIT_DIRECTION in sufficient_stats.RELEASED_ENGINE_VERSIONS
+    assert sufficient_stats._key(ENGINE_VERSION) > sufficient_stats._key(
+        BEFORE_BANDIT_DIRECTION
+    ), (
+        f"ENGINE_VERSION {ENGINE_VERSION} is the frozen "
+        f"{BEFORE_BANDIT_DIRECTION} or older, but the bandit's output for a "
+        "lower-is-better primary changed (#1385): bump ENGINE_VERSION"
+    )
