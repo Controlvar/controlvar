@@ -212,8 +212,8 @@ These are the dashboard's **build-time** dependencies. The dashboard image runs 
 | Package | Version |
 |---|---|
 | `@img/colour` | 1.1.0 |
-| `@next/env` | 16.4.1 |
-| `@next/swc-linux-x64-gnu` | 16.4.1 |
+| `@next/env` | 16.4.3 |
+| `@next/swc-linux-x64-gnu` | 16.4.3 |
 | `@reduxjs/toolkit` | 2.11.2 |
 | `@standard-schema/spec` | 1.1.0 |
 | `@standard-schema/utils` | 0.3.0 |
@@ -236,10 +236,10 @@ These are the dashboard's **build-time** dependencies. The dashboard image runs 
 | `eventemitter3` | 5.0.4 |
 | `immer` | 11.1.18 |
 | `nanoid` | 3.3.20 |
-| `next` | 16.4.1 |
+| `next` | 16.4.3 |
 | `postcss` | 8.5.23 |
-| `react` | 19.3.0 |
-| `react-dom` | 19.3.0 |
+| `react` | 19.3.1 |
+| `react-dom` | 19.3.1 |
 | `react-is` | 19.2.4 |
 | `react-redux` | 9.2.0 |
 | `recharts` | 3.10.1 |
@@ -275,12 +275,12 @@ These are the dashboard's **build-time** dependencies. The dashboard image runs 
 |---|---|
 | `@img/sharp-linux-x64` | 0.35.5 |
 | `@img/sharp-linuxmusl-x64` | 0.35.5 |
-| `@playwright/test` | 1.64.0 |
+| `@playwright/test` | 1.64.1 |
 | `@swc/helpers` | 0.5.23 |
 | `baseline-browser-mapping` | 2.11.21 |
 | `detect-libc` | 2.1.2 |
-| `playwright` | 1.64.0 |
-| `playwright-core` | 1.64.0 |
+| `playwright` | 1.64.1 |
+| `playwright-core` | 1.64.1 |
 | `sharp` | 0.35.5 |
 
 #### BSD-3-Clause (2)
