@@ -191,6 +191,25 @@ def test_the_revenue_results_are_pinned_for_the_running_engine(monkeypatch):
     assert _fingerprint(output) == REVENUE_RESULTS_FINGERPRINTS[ENGINE_VERSION]
 
 
+#: Digest of the revenue pins recorded for released engine versions.
+RELEASED_REVENUE_DIGEST = (
+    "be7b434116ac78213016cee91a3c1ba6869c18b948ea5f7214f9f7393266093e"
+)
+
+
+@pytest.mark.regression
+def test_released_revenue_fingerprints_are_frozen():
+    released = {
+        v: h
+        for v, h in REVENUE_RESULTS_FINGERPRINTS.items()
+        if v in sufficient_stats.RELEASED_ENGINE_VERSIONS
+    }
+    assert sufficient_stats.frozen_digest(released) == RELEASED_REVENUE_DIGEST, (
+        "the pinned revenue output of a released engine version changed "
+        f"({', '.join(released)}); bump ENGINE_VERSION instead"
+    )
+
+
 #: The engine that introduced the revenue analysis (v0.38.0).
 REVENUE_FIRST_VERSION = "1.5.0"
 

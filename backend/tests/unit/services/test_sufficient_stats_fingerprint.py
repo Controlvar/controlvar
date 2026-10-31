@@ -267,6 +267,35 @@ def test_engine_versions_that_shipped_are_recorded():
     assert RELEASED_ENGINE_VERSIONS == ("1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.5.0")
 
 
+def frozen_digest(pins: Dict[str, Any]) -> str:
+    """sha256 of the canonical JSON (sorted keys, no whitespace) of ``pins``."""
+    payload = json.dumps(pins, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+#: Digest of every pin recorded for a version in ``RELEASED_ENGINE_VERSIONS``.
+#: Changing a shipped hash changes this; so does adding a key under a shipped
+#: version.  Both mean the engine changed and ``ENGINE_VERSION`` must move.
+#: When a release ships a new engine version, append it to the tuple and
+#: recompute this literal in the same change.
+RELEASED_PINS_DIGEST = (
+    "6a0a753e20f3adb5b32691fa65b969ddb6aff8670ec4860e224c75f0b0a33f9e"
+)
+
+
+@pytest.mark.regression
+def test_released_fingerprints_are_frozen():
+    """A shipped fingerprint cannot be replaced silently (probe E3: change an
+    estimator and replace its 1.5.0 hash, and every other test here passed)."""
+    for version in RELEASED_ENGINE_VERSIONS:
+        assert version in SUFFICIENT_STATS_FINGERPRINTS, version
+    released = {v: SUFFICIENT_STATS_FINGERPRINTS[v] for v in RELEASED_ENGINE_VERSIONS}
+    assert frozen_digest(released) == RELEASED_PINS_DIGEST, (
+        "the pinned output of a released engine version changed "
+        f"({', '.join(RELEASED_ENGINE_VERSIONS)}); bump ENGINE_VERSION instead"
+    )
+
+
 def test_running_version_is_not_older_than_a_released_one():
     """``ENGINE_VERSION`` never goes back below a version that has shipped."""
     assert _key(ENGINE_VERSION) >= max(map(_key, RELEASED_ENGINE_VERSIONS))
