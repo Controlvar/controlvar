@@ -6,7 +6,9 @@ metric's ``lower_is_better`` (#1377), and adds that field to every metric
 result.  For a metric that is higher-is-better, whether ``lower_is_better`` is
 False or the definition has no such attribute at all, the output is 1.4.0's
 plus the new field: these tests drop the field and compare with the hashes
-pinned for 1.4.0, which is frozen and never edited.
+pinned for 1.4.0, which is frozen and never edited.  A proportion result's
+variants also carry the difference fields #1496 added later; those are dropped
+too (``test_difference_intervals.py`` holds them).
 
 The lower-is-better outputs are pinned here per ``ENGINE_VERSION``.  The rule:
 an engine-changing PR bumps ``ENGINE_VERSION`` to the next minor and appends it
@@ -30,6 +32,7 @@ import pytest
 
 from backend.app.core.stats_engine import ENGINE_VERSION
 from backend.app.services.sufficient_stats_analysis import (
+    DIFFERENCE_FIELDS,
     BinomialVariant,
     binomial_metric_result,
     mean_metric_result,
@@ -58,12 +61,30 @@ def _with_direction(metric: Any, lower_is_better: Any) -> SimpleNamespace:
     return SimpleNamespace(**fields)
 
 
-def _without_the_field(outputs: Dict[str, Any]) -> Dict[str, Any]:
+#: The estimators whose results carry the #1496 fields, added after 1.5.0.
+_CARRY_DIFFERENCE_FIELDS = {"binomial_metric_result"}
+
+
+def _without_the_difference_fields(metric: Dict[str, Any]) -> None:
+    """Drop the fields #1496 added after 1.5.0 from a proportion result's
+    variants, after checking each carries them all.
+    ``test_difference_intervals.py`` holds those fields to their own oracles
+    and holds the rest of the output to the engine before them."""
+    for variant in metric["variants"]:
+        for field in DIFFERENCE_FIELDS:
+            assert field in variant, field
+            del variant[field]
+
+
+def _without_the_field(outputs: Dict[str, Any], function: str) -> Dict[str, Any]:
     """The estimator outputs less ``lower_is_better``, after checking that
-    every one of them carried it as False (so the strip is not vacuous)."""
+    every one of them carried it as False (so the strip is not vacuous), and
+    less the #1496 fields for an estimator that carries them."""
     stripped = copy.deepcopy(outputs)
     for output in stripped.values():
         assert output.pop("lower_is_better") is False
+        if function in _CARRY_DIFFERENCE_FIELDS:
+            _without_the_difference_fields(output)
     return stripped
 
 
@@ -93,7 +114,7 @@ def test_a_higher_is_better_metric_gives_the_output_of_1_4_0(
     )
     outputs = sufficient_stats._ESTIMATORS[function]()
     assert (
-        _hash(_without_the_field(outputs))
+        _hash(_without_the_field(outputs, function))
         == sufficient_stats.SUFFICIENT_STATS_FINGERPRINTS[BEFORE_DIRECTION][function]
     )
 
@@ -121,6 +142,7 @@ def test_results_for_higher_is_better_metrics_are_those_of_1_4_0(
     )
     for metric in output["metrics"]:
         assert metric.pop("lower_is_better") is False
+        _without_the_difference_fields(metric)
     actual, _payload = characterisation._fingerprint(output)
     assert actual == characterisation.CHARACTERISATIONS[BEFORE_DIRECTION][case]
 

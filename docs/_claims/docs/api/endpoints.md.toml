@@ -1148,6 +1148,100 @@ by = [
 ]
 
 [[unit]]
+text = "The difference from the control, its intervals and the impact"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Each treatment of each metric in metrics carries its difference from the control."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_every_metric_type_carries_the_fields_through_the_results",
+    "test:backend/tests/integration/api/test_results_difference_intervals.py::test_a_mean_metric_carries_the_relative_interval_and_the_impact",
+]
+
+[[unit]]
+text = "absolute_difference is in the unit of mean: for a metric analysed as a proportion, the difference of the shares of users who converted, computed from conversions and sample_size (0.012 is 1.2 percentage points); for one analysed as a mean, the difference per assigned user."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_proportion_difference_is_the_difference_of_the_shares",
+    "test:backend/tests/unit/services/test_revenue_per_user.py",
+]
+
+[[unit]]
+text = "absolute_difference_ci is its interval, relative_improvement_pct_ci the interval of relative_improvement_pct, and incremental_impact with incremental_impact_ci the difference and its interval times the treatment's own sample_size."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_proportion_impact_is_the_difference_times_the_treatments_users",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_mean_impact_is_the_difference_times_the_treatments_users",
+]
+
+[[unit]]
+text = "The control's are all null."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_every_metric_type_carries_the_fields_through_the_results",
+    "test:backend/tests/integration/api/test_results_difference_intervals.py::test_a_proportion_with_a_control_at_0_has_a_difference_and_no_relative_change",
+]
+
+[[unit]]
+text = "The intervals are at the response's confidence_level and are not adjusted for multiple comparisons."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_proportion_interval_is_newcombes",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_b5_an_adjusted_treatment_is_not_significant_although_its_interval_excludes_0",
+]
+
+[[unit]]
+text = "For a proportion the difference's interval is Newcombe's, built from each variant's Wilson score interval; for a mean it is Welch's."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_proportion_interval_is_newcombes",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_mean_interval_is_welchs",
+]
+
+[[unit]]
+text = "The relative change's interval is the MOVER-R interval on the same per-variant limits (Fieller's interval, for a mean), so the three intervals agree on whether 0 is inside."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_relative_interval_matches_the_oracle_over_a_grid",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_mean_relative_interval_solves_its_defining_equations",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_proportion_grids_hold_r1_and_r2",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_seeded_mean_rows_match_the_oracle_and_hold_r1_and_r2",
+]
+
+[[unit]]
+text = "is_significant is decided by the test, not by an interval."
+by = ["test:backend/tests/unit/services/test_difference_intervals.py::test_the_proportion_interval_against_significance"]
+
+[[unit]]
+text = "With two or more treatments under a correction, an interval can exclude 0 on a treatment that is not significant."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_b5_an_adjusted_treatment_is_not_significant_although_its_interval_excludes_0",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_mean_interval_against_significance",
+]
+
+[[unit]]
+text = "For a proportion, near the threshold, the interval and Fisher's exact test can disagree either way: 128 of 1,000 against 100 of 1,000 is not significant (p 0.057) while its interval runs from +0.0001 to +0.056, and 3 of 50 against 18 of 100 is significant (p 0.049) while its interval reaches +0.00003."
+by = ["test:backend/tests/unit/services/test_difference_intervals.py::test_named_boundary_tables"]
+
+[[unit]]
+text = "relative_improvement_pct_ci is null when relative_improvement_pct is, and when the control's own limits reach 0 or twice its mean, where the relative change has no finite bound: a control with 2 conversions of 200 users has none at 0.95."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_control_at_0_has_no_relative_interval",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_an_unbounded_control_has_no_relative_interval",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_mean_control_whose_interval_reaches_0_has_no_relative_interval",
+]
+
+[[unit]]
+text = "absolute_difference_ci is null only when absolute_difference is, or for a mean when neither variant's values vary."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_every_none_on_the_grids_is_counted",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_an_arm_with_no_users_has_no_difference",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_mean_with_no_variation_has_an_impact_but_no_interval",
+]
+
+[[unit]]
+text = "The impact is a plain number over the treatment's own assigned users: converting users for a proportion, the total of the per-user values for a mean, with no currency or unit and no projection to other users or a later period."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_impact_is_a_plain_number",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_proportion_impact_is_the_difference_times_the_treatments_users",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_mean_impact_is_the_difference_times_the_treatments_users",
+]
+
+[[unit]]
 text = "The planned effect"
 by = ["exempt:label"]
 
