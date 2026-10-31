@@ -1,6 +1,9 @@
 # SDK contract tests
 
-Two layers keep the SDKs honest.
+Three layers keep the SDKs honest: the golden vectors and the ruleset vectors
+(offline, against the SDKs in this tree), the published local evaluators
+(against the releases on npm and PyPI), and the live contract (against a
+running backend).
 
 ## 1. Golden vectors (offline)
 
@@ -79,7 +82,59 @@ regenerates it in-process, with no database and no `.git`), pins the counts and 
 and runs a reference local evaluator over the file. A change to the rules engine, the targeting
 adapter or the flag service that moves any answer fails there until the file is regenerated.
 
-## 2. Live contract (against a running backend)
+## 2. Published local evaluators (#1497)
+
+The SDKs in this tree are not the only ones reading the ruleset. Every release already on a
+registry with a local evaluator keeps reading what the server sends, and a document it cannot read
+is dropped whole: it keeps answering from its last ruleset, so a later kill switch never reaches
+it, and nothing on the server says so. `published-sdks.json` pins each such release by URL and
+digest (npm `@controlvar/js-sdk` and PyPI `controlvar`, 0.1.1 and 0.2.0), with a declared
+`expectation`: `accepted` for all four.
+
+`test_published_ruleset.py` (G1) downloads each one (`published_sdks.py`: three attempts, five
+seconds apart), checks the digest before unpacking it and on every later load, refuses an archive
+with an absolute path, a `..` or a link in it, and unpacks only the evaluator's code into a fresh
+directory. A harness (`harness/published_js_ruleset.cjs` under node, required by absolute path;
+`harness/published_python_ruleset.py` under `python -I -S` with only the extraction on
+`sys.path`) runs it in its own process from an empty working directory, and the test requires:
+
+- identity: every SDK module it loaded is inside the verified extraction;
+- outcome: driven through a baseline document, then `ruleset-vectors.json`'s `ruleset` plus a
+  sentinel flag, then the sentinel turned off, it loads the server's ruleset (its version moves)
+  and the sentinel answers `{enabled: false, reason: "inactive"}`. A release that refuses the
+  format passes only if its pin says `format-refused`, which is a decision taken in that file;
+- answers: every case is DEFER or exactly the server's `{enabled, reason}`, and the cases it
+  answers locally are exactly the `must_local` ones (1294 today; the count is logged).
+
+Every run also plants a defect into the inputs, against the same four releases, and checks the
+failure by its text: P1 an unknown `evaluation` (fails, naming the flag), P2 a rule with no
+integer percentage, P3 a percentage of `50.0` (fails for Python, passes for JavaScript, whose
+`JSON.parse` makes it 50), P4 schema 2 under `accepted` (fails; passes under `format-refused`),
+P5 keys the releases do not know at every level (passes), P6 the same files loaded from outside
+the verified extraction (fails on identity), P7 one expected answer flipped, P8 a wrong digest
+(fails before anything is unpacked).
+
+`backend/tests/integration/api/test_ruleset_published_sdk_compat.py` (G2) does the same for the
+two Python releases with the route's own response bytes: a DEVELOPER creates flags of every shape
+through the API, the releases load `GET /api/v1/sdk/ruleset`, answer exactly as `/evaluate`
+does, and both kill switches (deactivate, and a safety rollback to 0%) reach them.
+
+There is no skip. With no network or no node the tests fail and say so. They run wherever
+`pytest tests/sdk-contract` runs: the SDK Contract Tests job, core-build's `vectors` step,
+nightly-qa, and rc-evidence at a release tag.
+
+`published_versions_check.py` lists every version on both registries, reads each file's member
+names (no extraction, no import), and fails when a release with a local evaluator is not pinned,
+or a pin is not the registry's file and digest. It runs in nightly-qa and rc-evidence, not on pull
+requests: a publish would otherwise turn every open pull request red until the pin lands. A new
+release with a local evaluator is added to `published-sdks.json` after it is published.
+
+```bash
+python -m pytest tests/sdk-contract/test_published_ruleset.py -o addopts="" -q
+python tests/sdk-contract/published_versions_check.py
+```
+
+## 3. Live contract (against a running backend)
 
 `live/run_live_contract.py` runs every SDK's `contract_smoke` entry point against a real backend
 and checks the JSON it prints: a sticky assignment (`control` / `treatment`), a flag evaluation

@@ -1,0 +1,41 @@
+{
+  "about": "Every published SDK release that evaluates flags locally, pinned by URL and digest (#1497). tests/sdk-contract/test_published_ruleset.py downloads each one, checks the digest before unpacking it, and feeds it the ruleset the server sends (ruleset-vectors.json); the integration test test_ruleset_published_sdk_compat.py feeds the Python ones the route's own bytes. expectation is what the release must do with that ruleset: accepted (it loads it, answers like the server and a later kill switch reaches it) or format-refused (it hands every flag back to the server). Changing it to format-refused is a decision, not a fix. published_versions_check.py fails when a registry holds a release with a local evaluator that is not listed here.",
+  "artefacts": [
+    {
+      "language": "js",
+      "registry": "npm",
+      "package": "@controlvar/js-sdk",
+      "version": "0.1.1",
+      "url": "https://registry.npmjs.org/@controlvar/js-sdk/-/js-sdk-0.1.1.tgz",
+      "digest": "sha512-Z4E/SwWbdXHd7PMyt/EmjneVyy2j3/O10NutVUI1cstYCpfdhRkyNp2Vp1aZhGBA0KZA+WtF0ubNwmuTI9kElw==",
+      "expectation": "accepted"
+    },
+    {
+      "language": "js",
+      "registry": "npm",
+      "package": "@controlvar/js-sdk",
+      "version": "0.2.0",
+      "url": "https://registry.npmjs.org/@controlvar/js-sdk/-/js-sdk-0.2.0.tgz",
+      "digest": "sha512-S+0A9KtNSuYkGO6Ae9+nw5rbLvdZVLbZl9V+txGFoWSQEHii70vXwzr8BYGIxnkaK3aInXzErSjJ2dJnKZV98Q==",
+      "expectation": "accepted"
+    },
+    {
+      "language": "python",
+      "registry": "pypi",
+      "package": "controlvar",
+      "version": "0.1.1",
+      "url": "https://files.pythonhosted.org/packages/2d/f2/62ad19ed80a532be028ecccead9b69c00ccd6de6af4674624db6b86c554d/controlvar-0.1.1-py3-none-any.whl",
+      "digest": "sha256:f7891f0231118bea7f3841920d1f5b7b8beb74c5f2944a8126d67a85b21128ac",
+      "expectation": "accepted"
+    },
+    {
+      "language": "python",
+      "registry": "pypi",
+      "package": "controlvar",
+      "version": "0.2.0",
+      "url": "https://files.pythonhosted.org/packages/ea/fa/ac440ee7714c00b02feaa2371e591daeb94509a6086d2fe9af18f91c2fce/controlvar-0.2.0-py3-none-any.whl",
+      "digest": "sha256:fff64e87a5c7c1b2867d54e0759b8f987a36bc7eeab543c943af47530bc0e0a3",
+      "expectation": "accepted"
+    }
+  ]
+}

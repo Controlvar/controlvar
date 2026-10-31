@@ -24,10 +24,12 @@ name: RC evidence
 # sdk-unit-tests.yml), the tag's whole tree, one job each: the pytest ones in
 # the python-suites matrix (with the chart's render tests, run as chart.yml
 # runs them: EXPERIMENTLY_CHART_TESTS=1, its pinned helm, no skip; the CDK
-# stack tests, sdk/python's own suite, the SDK contract self-tests and the
-# demo apps' simulators; `deps` is what each installs, as its pull request
-# job does), the jest ones in the jest-suites matrix (the frontend, sdk/js and
-# the two demo apps), whose reports are written as JUnit too. The list is
+# stack tests, sdk/python's own suite, the SDK contract tests -- with Node.js
+# for the published evaluators, and the check that every published one is
+# pinned -- and the demo apps' simulators; `deps` is what each installs, as
+# its pull request job does), the jest ones in the jest-suites matrix (the
+# frontend, sdk/js and the two demo apps), whose reports are written as JUnit
+# too. The list is
 # SUITES in scripts/rc_evidence.py. Their JUnit reports and the verifier's
 # record (the run table, the verdicts it read, the reports) are kept 90 days.
 # The table is in the log and the record, not the step summary: it names run
@@ -159,6 +161,15 @@ jobs:
         with:
           node-version: '22'
 
+      # As pr-qa-gate.yml's SDK Contract Tests: the suite runs the published
+      # JavaScript SDKs' local evaluators under node (#1497), and fails rather
+      # than skips without it.
+      - name: Set up Node.js for the published JS evaluators
+        if: matrix.suite == 'sdk-contract'
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
       # As chart.yml's chart job: the helm it pins (the same version and
       # sha256), first on PATH and as $HELM, which the render tests run. The
       # runner image ships its own helm; this one's version is asserted.
@@ -228,6 +239,13 @@ jobs:
         env:
           SUITE: ${{ matrix.suite }}
         run: python scripts/rc_evidence.py --suite "$SUITE" --junit-dir "$RUNNER_TEMP/junit"
+
+      # The suite checked every release pinned in published-sdks.json; this
+      # fails when npm or PyPI holds a release with a local evaluator that is
+      # not pinned (#1497). As nightly-qa runs it; never on a pull request.
+      - name: Every published local evaluator is in the gate
+        if: matrix.suite == 'sdk-contract'
+        run: python tests/sdk-contract/published_versions_check.py
 
       # As chart.yml: here the variable and helm are both set, so a skipped
       # chart test means one was lost, and it must not pass for green.

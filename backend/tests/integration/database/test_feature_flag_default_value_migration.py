@@ -50,15 +50,19 @@ PREVIOUS_CORE_HEAD = "d12cbd384bbe"
 #: revision, ``1ab99332f0ba`` (``events.created_at`` in UTC), adds no DDL, and
 #: ``806901fb7735`` (the experiments' correction settings) adds only what a
 #: database built by ``create_all`` already has, and ``d29a479daafe`` (holdout
-#: population), ``37dcb2969766`` (segment kind and members) and
-#: ``4c2c09a2b3e8`` (rollback records keep without a safety configuration) find
-#: their objects already built by ``create_all`` and add none.
-CORE_HEAD = "4c2c09a2b3e8"
+#: population), ``37dcb2969766`` (segment kind and members), ``4c2c09a2b3e8``
+#: (rollback records keep without a safety configuration) and ``607c51a59bf5``
+#: (a flag's value type and two values) find their objects already built by
+#: ``create_all`` and add none.
+CORE_HEAD = "607c51a59bf5"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``d29a479daafe``
 #: (#445) drops ``holdout_population``; ``37dcb2969766`` (#440) drops
 #: ``segment_members``.
 LATER_DOWNGRADE_TABLES = {"holdout_population", "segment_members"}
+#: ``feature_flags`` columns a later core revision's downgrade drops:
+#: ``607c51a59bf5`` (#1497) drops a flag's value type and its two values.
+LATER_DOWNGRADE_COLUMNS = {"value_type", "on_value", "off_value"}
 #: The modules branch's head, in the previous release and in this one alike.
 MODULES_HEAD = "modules_0002_warehouse_analysis"
 
@@ -374,7 +378,7 @@ def test_downgrade_removes_the_column_and_nothing_else(
         c["name"]
         for c in inspect(test_db).get_columns("feature_flags", schema=scratch_schema)
     }
-    assert after == columns - {COLUMN}
+    assert after == columns - {COLUMN} - LATER_DOWNGRADE_COLUMNS
     assert (
         set(inspect(test_db).get_table_names(schema=scratch_schema))
         == tables - LATER_DOWNGRADE_TABLES
