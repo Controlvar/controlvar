@@ -9,15 +9,17 @@ counts through each estimator, hashes the outputs and compares the hash with
 the one pinned for the current ``ENGINE_VERSION`` **and that function**.
 
 It is separate from ``ENGINE_FINGERPRINTS`` in ``test_engine_fingerprint.py``,
-which is not edited for these functions.  The rules:
-
-* never edit the hash of a (version, function) pair that has shipped in a
-  release;
-* a new estimator adds its own key under the current version; it does not
-  touch another function's entry;
-* when an estimator's output changes after its version shipped, bump
-  ``ENGINE_VERSION`` (see ``test_engine_fingerprint.py``) and add the new
-  version's entries, keeping the old ones.
+which is not edited for these functions.  The rule: an engine-changing PR
+bumps ``ENGINE_VERSION`` to the next minor and appends it to
+``RELEASED_ENGINE_VERSIONS`` ("frozen on main") in the same change.  A frozen
+version's entries are never edited, and no key is ever added under one, so a
+new estimator is pinned under a new version, never under a frozen one.  A PR
+is engine-changing when, for the same database rows and request, it adds,
+removes or changes any number, decision (winner, recommendation, Bayesian
+decision, ``can_stop``) or allocation weight that a path stamping
+``engine_version`` returns, caches or persists: results and its snapshots,
+Bayesian, CUPED, sequential, and the bandit's state, history and status.  A
+revert of an engine-changing PR bumps again.
 """
 
 import hashlib
@@ -77,10 +79,13 @@ SUFFICIENT_STATS_FINGERPRINTS: Dict[str, Dict[str, str]] = {
     },
 }
 
-#: Engine versions that have shipped in a release.  A function new in this
-#: release is pinned under a later version only, never added to one of these
-#: (a new key under a released version passes every hash, which is how a
-#: changed engine could keep a released version number).
+#: The engine versions frozen on main, oldest first.  An engine-changing PR
+#: appends its new ``ENGINE_VERSION`` here in the same change; nothing is ever
+#: removed or reordered.  A function new in a version is pinned under that new
+#: version only, never added under an earlier one (a new key under a frozen
+#: version passes every hash, which is how a changed engine could keep a
+#: frozen version number).  ``test_engine_versions_frozen.py`` holds the
+#: digests that enforce it.
 RELEASED_ENGINE_VERSIONS = ("1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.5.0")
 
 _CONTROL = "ffffffff-0000-4000-8000-000000000002"
@@ -253,52 +258,6 @@ def test_cuped_metric_result_is_pinned_only_from_the_version_that_added_it():
         else:
             assert pinned, f"cuped_metric_result is missing from {version}"
     assert "cuped_metric_result" in SUFFICIENT_STATS_FINGERPRINTS[ENGINE_VERSION]
-
-
-@pytest.mark.regression
-def test_engine_versions_that_shipped_are_recorded():
-    """1.5.0 shipped in v0.38.0 and v0.39.0 (#1383, #1400) while this tuple
-    still ended at 1.4.0, so its hashes could be replaced with no test failing.
-
-    A release that ships a new ``ENGINE_VERSION`` appends it here in the same
-    change that bumps it.  This reads no git and no tags (core-build has no
-    ``.git``); the literal tuple is the record.
-    """
-    assert RELEASED_ENGINE_VERSIONS == ("1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.5.0")
-
-
-def frozen_digest(pins: Dict[str, Any]) -> str:
-    """sha256 of the canonical JSON (sorted keys, no whitespace) of ``pins``."""
-    payload = json.dumps(pins, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-
-#: Digest of every pin recorded for a version in ``RELEASED_ENGINE_VERSIONS``.
-#: Changing a shipped hash changes this; so does adding a key under a shipped
-#: version.  Both mean the engine changed and ``ENGINE_VERSION`` must move.
-#: When a release ships a new engine version, append it to the tuple and
-#: recompute this literal in the same change.
-RELEASED_PINS_DIGEST = (
-    "6a0a753e20f3adb5b32691fa65b969ddb6aff8670ec4860e224c75f0b0a33f9e"
-)
-
-
-@pytest.mark.regression
-def test_released_fingerprints_are_frozen():
-    """A shipped fingerprint cannot be replaced silently (probe E3: change an
-    estimator and replace its 1.5.0 hash, and every other test here passed)."""
-    for version in RELEASED_ENGINE_VERSIONS:
-        assert version in SUFFICIENT_STATS_FINGERPRINTS, version
-    released = {v: SUFFICIENT_STATS_FINGERPRINTS[v] for v in RELEASED_ENGINE_VERSIONS}
-    assert frozen_digest(released) == RELEASED_PINS_DIGEST, (
-        "the pinned output of a released engine version changed "
-        f"({', '.join(RELEASED_ENGINE_VERSIONS)}); bump ENGINE_VERSION instead"
-    )
-
-
-def test_running_version_is_not_older_than_a_released_one():
-    """``ENGINE_VERSION`` never goes back below a version that has shipped."""
-    assert _key(ENGINE_VERSION) >= max(map(_key, RELEASED_ENGINE_VERSIONS))
 
 
 def test_every_pinned_function_is_exercised():

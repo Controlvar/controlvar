@@ -38,6 +38,17 @@ import numpy as np
 #: winner, the recommendation and the Bayesian decision read the metric's
 #: ``lower_is_better``, and ``/results`` analyses a revenue metric as its mean
 #: per assigned user.
+#:
+#: The rule: an engine-changing PR bumps ``ENGINE_VERSION`` to the next minor
+#: and appends it to ``RELEASED_ENGINE_VERSIONS`` ("frozen on main", in
+#: ``backend/tests/unit/services/test_sufficient_stats_fingerprint.py``) in the
+#: same change.  A frozen version's entries are never edited, and no key is
+#: ever added under one.  A PR is engine-changing when, for the same database
+#: rows and request, it adds, removes or changes any number, decision (winner,
+#: recommendation, Bayesian decision, ``can_stop``) or allocation weight that a
+#: path stamping ``engine_version`` returns, caches or persists: results and
+#: its snapshots, Bayesian, CUPED, sequential, and the bandit's state, history
+#: and status.  A revert of an engine-changing PR bumps again.
 ENGINE_VERSION: str = "1.5.0"
 
 #: Mask that keeps the derived seed inside the signed 64-bit range.

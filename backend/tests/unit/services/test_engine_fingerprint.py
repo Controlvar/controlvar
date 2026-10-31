@@ -7,16 +7,22 @@ means something if it moves whenever the numbers move.  This test runs a fixed
 dataset through every analysis path, hashes the outputs, and compares the hash
 with the one pinned for the current version.
 
-When this test fails, the engine's output changed.  Then:
+When this test fails, the engine's output changed.  The rule: an
+engine-changing PR bumps ``ENGINE_VERSION`` to the next minor and appends it to
+``RELEASED_ENGINE_VERSIONS`` ("frozen on main") in the same change.  A frozen
+version's entries are never edited, and no key is ever added under one.  A PR
+is engine-changing when, for the same database rows and request, it adds,
+removes or changes any number, decision (winner, recommendation, Bayesian
+decision, ``can_stop``) or allocation weight that a path stamping
+``engine_version`` returns, caches or persists: results and its snapshots,
+Bayesian, CUPED, sequential, and the bandit's state, history and status.  A
+revert of an engine-changing PR bumps again.
 
-* if the current ``ENGINE_VERSION`` has **not** shipped in a release, replace
-  its hash below with the new one (the change is part of that version);
-* if it **has** shipped, bump ``ENGINE_VERSION`` in
-  ``backend/app/core/stats_engine.py`` (and ``test_stats_determinism.py`` and
-  both OpenAPI snapshots, whose ``engine_version`` defaults follow it), and add
-  the new version's hash here, keeping the old entries.
-
-Never edit the hash of a released version.
+So bump ``ENGINE_VERSION`` in ``backend/app/core/stats_engine.py`` (both
+OpenAPI snapshots follow it), append it to ``RELEASED_ENGINE_VERSIONS`` in
+``test_sufficient_stats_fingerprint.py``, add the new version's hash here and
+in every other pin table, and add its digest to ``FROZEN_DIGESTS`` in
+``test_engine_versions_frozen.py``.  Never edit an existing entry.
 """
 
 import dataclasses
@@ -235,8 +241,9 @@ def test_engine_output_matches_the_fingerprint_for_this_version():
     actual = engine_fingerprint()
     assert actual == ENGINE_FINGERPRINTS[ENGINE_VERSION], (
         f"The statistics engine's output changed under ENGINE_VERSION "
-        f"{ENGINE_VERSION} (fingerprint {actual}). Bump ENGINE_VERSION if "
-        f"{ENGINE_VERSION} has shipped; otherwise update its fingerprint. "
+        f"{ENGINE_VERSION} (fingerprint {actual}). An engine-changing PR "
+        "bumps ENGINE_VERSION to the next minor and appends it to "
+        "RELEASED_ENGINE_VERSIONS; never edit this version's fingerprint. "
         "See this module's docstring."
     )
 

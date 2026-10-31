@@ -9,9 +9,17 @@ database replaced, as ``test_binomial_metric_result_characterisation.py``
 replaces it.
 
 The output for an experiment with a revenue primary metric is pinned per
-``ENGINE_VERSION`` with the fingerprints' rules: never edit the hash of a
-released version; a change after a release bumps the version and adds its
-entry.  The revenue analysis is new in 1.5.0, which shipped in v0.38.0 and v0.39.0.
+``ENGINE_VERSION``.  The rule: an engine-changing PR bumps ``ENGINE_VERSION``
+to the next minor and appends it to ``RELEASED_ENGINE_VERSIONS`` ("frozen on
+main") in the same change.  A frozen version's entries are never edited, and
+no key is ever added under one.  A PR is engine-changing when, for the same
+database rows and request, it adds, removes or changes any number, decision
+(winner, recommendation, Bayesian decision, ``can_stop``) or allocation weight
+that a path stamping ``engine_version`` returns, caches or persists: results
+and its snapshots, Bayesian, CUPED, sequential, and the bandit's state,
+history and status.  A revert of an engine-changing PR bumps again.
+
+The revenue analysis is new in 1.5.0 (v0.38.0 and v0.39.0).
 """
 
 from __future__ import annotations
@@ -189,25 +197,6 @@ def test_the_revenue_results_are_pinned_for_the_running_engine(monkeypatch):
         monkeypatch,
     )
     assert _fingerprint(output) == REVENUE_RESULTS_FINGERPRINTS[ENGINE_VERSION]
-
-
-#: Digest of the revenue pins recorded for released engine versions.
-RELEASED_REVENUE_DIGEST = (
-    "be7b434116ac78213016cee91a3c1ba6869c18b948ea5f7214f9f7393266093e"
-)
-
-
-@pytest.mark.regression
-def test_released_revenue_fingerprints_are_frozen():
-    released = {
-        v: h
-        for v, h in REVENUE_RESULTS_FINGERPRINTS.items()
-        if v in sufficient_stats.RELEASED_ENGINE_VERSIONS
-    }
-    assert sufficient_stats.frozen_digest(released) == RELEASED_REVENUE_DIGEST, (
-        "the pinned revenue output of a released engine version changed "
-        f"({', '.join(released)}); bump ENGINE_VERSION instead"
-    )
 
 
 #: The engine that introduced the revenue analysis (v0.38.0).
