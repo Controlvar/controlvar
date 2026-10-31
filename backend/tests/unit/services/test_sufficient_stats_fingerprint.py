@@ -9,15 +9,17 @@ counts through each estimator, hashes the outputs and compares the hash with
 the one pinned for the current ``ENGINE_VERSION`` **and that function**.
 
 It is separate from ``ENGINE_FINGERPRINTS`` in ``test_engine_fingerprint.py``,
-which is not edited for these functions.  The rules:
-
-* never edit the hash of a (version, function) pair that has shipped in a
-  release;
-* a new estimator adds its own key under the current version; it does not
-  touch another function's entry;
-* when an estimator's output changes after its version shipped, bump
-  ``ENGINE_VERSION`` (see ``test_engine_fingerprint.py``) and add the new
-  version's entries, keeping the old ones.
+which is not edited for these functions.  The rule: an engine-changing PR
+bumps ``ENGINE_VERSION`` to the next minor and appends it to
+``RELEASED_ENGINE_VERSIONS`` ("frozen on main") in the same change.  A frozen
+version's entries are never edited, and no key is ever added under one, so a
+new estimator is pinned under a new version, never under a frozen one.  A PR
+is engine-changing when, for the same database rows and request, it adds,
+removes or changes any number, decision (winner, recommendation, Bayesian
+decision, ``can_stop``) or allocation weight that a path stamping
+``engine_version`` returns, caches or persists: results and its snapshots,
+Bayesian, CUPED, sequential, and the bandit's state, history and status.  A
+revert of an engine-changing PR bumps again.
 """
 
 import hashlib
@@ -77,11 +79,14 @@ SUFFICIENT_STATS_FINGERPRINTS: Dict[str, Dict[str, str]] = {
     },
 }
 
-#: Engine versions that have shipped in a release.  A function new in this
-#: release is pinned under a later version only, never added to one of these
-#: (a new key under a released version passes every hash, which is how a
-#: changed engine could keep a released version number).
-RELEASED_ENGINE_VERSIONS = ("1.1.0", "1.2.0", "1.3.0", "1.4.0")
+#: The engine versions frozen on main, oldest first.  An engine-changing PR
+#: appends its new ``ENGINE_VERSION`` here in the same change; nothing is ever
+#: removed or reordered.  A function new in a version is pinned under that new
+#: version only, never added under an earlier one (a new key under a frozen
+#: version passes every hash, which is how a changed engine could keep a
+#: frozen version number).  ``test_engine_versions_frozen.py`` holds the
+#: digests that enforce it.
+RELEASED_ENGINE_VERSIONS = ("1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.5.0")
 
 _CONTROL = "ffffffff-0000-4000-8000-000000000002"
 _TREATMENT_1 = "00000000-0000-4000-8000-000000000001"
@@ -253,11 +258,6 @@ def test_cuped_metric_result_is_pinned_only_from_the_version_that_added_it():
         else:
             assert pinned, f"cuped_metric_result is missing from {version}"
     assert "cuped_metric_result" in SUFFICIENT_STATS_FINGERPRINTS[ENGINE_VERSION]
-
-
-def test_running_version_is_not_older_than_a_released_one():
-    """``ENGINE_VERSION`` never goes back below a version that has shipped."""
-    assert _key(ENGINE_VERSION) >= max(map(_key, RELEASED_ENGINE_VERSIONS))
 
 
 def test_every_pinned_function_is_exercised():

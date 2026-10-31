@@ -93,7 +93,16 @@ _FIXTURES: Dict[str, _Fixture] = {
 #: ``norm.ppf(1 - (1 - level) / 2)`` instead of a fixed 1.96 (which also moves
 #: the 95% intervals, in about the sixth significant digit), and the legacy
 #: ``is_significant`` is decided at ``1 - level`` instead of 0.05.  The rules
-#: are the fingerprints': never edit the hashes of a released version.
+#: are the fingerprints' (``test_engine_fingerprint.py``): an engine-changing
+#: PR bumps ``ENGINE_VERSION`` to the next minor and appends it to
+#: ``RELEASED_ENGINE_VERSIONS`` ("frozen on main") in the same change; a frozen
+#: version's entries are never edited, and no key is ever added under one.  A
+#: PR is engine-changing when, for the same database rows and request, it adds,
+#: removes or changes any number, decision (winner, recommendation, Bayesian
+#: decision, ``can_stop``) or allocation weight that a path stamping
+#: ``engine_version`` returns, caches or persists: results and its snapshots,
+#: Bayesian, CUPED, sequential, and the bandit's state, history and status.  A
+#: revert of an engine-changing PR bumps again.
 CHARACTERISATIONS: Dict[str, Dict[str, str]] = {
     "1.1.0": {
         "three_variants-0.95-none": "69488213db4a93d25b2ca00c0ed2f52674c24691fd8607c91ab567d5b07aed01",
