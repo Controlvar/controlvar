@@ -8,6 +8,7 @@ import { LOGIN_PATH } from '@/services/api';
 import { CONTACT_EMAIL, isMarketingSite } from '@/utils/site-mode';
 import { docsUrl } from '@/services/docs';
 import { Walkthroughs } from '@/components/Walkthroughs';
+import { Quote } from '@/components/homepage/Quote';
 
 export const HOME_AFTER_LOGIN = '/experiments';
 
@@ -117,7 +118,14 @@ export default function HomePage() {
                 },
                 {
                   title: 'Statistics beyond a p-value',
-                  body: 'Frequentist and Bayesian analysis, sequential testing with mSPRT for early stopping, multi-armed bandits, and per-segment breakdowns with a Bonferroni correction across segments.',
+                  // A <Quote> is a sentence from content/home-quotes.json, held
+                  // to the docs page it quotes (tests/content/home-quotes.test.tsx).
+                  body: (
+                    <>
+                      {'Frequentist and Bayesian analysis, sequential testing with mSPRT for early stopping, multi-armed bandits, and per-segment breakdowns with a Bonferroni correction across segments. '}
+                      <Quote id="revenue-metric" />
+                    </>
+                  ),
                 },
                 {
                   title: 'SDKs for the stack you have',
@@ -125,7 +133,13 @@ export default function HomePage() {
                 },
                 {
                   title: 'Deploy it yourself',
-                  body: 'Run the published container images with Docker Compose on one machine, install them on Kubernetes with the Helm chart attached to each release, or use the CDK app to deploy to ECS Fargate, Aurora PostgreSQL and ElastiCache in your own AWS account. There is no hosted tier, so there is nothing to be locked into.',
+                  body: (
+                    <>
+                      {'Run the published container images with Docker Compose on one machine, install them on Kubernetes with the Helm chart attached to each release, or use the CDK app to deploy to ECS Fargate, Aurora PostgreSQL and ElastiCache in your own AWS account. '}
+                      <Quote id="aws-installer" />
+                      {' There is no hosted tier, so there is nothing to be locked into.'}
+                    </>
+                  ),
                 },
                 {
                   title: 'Open, and checkable',
