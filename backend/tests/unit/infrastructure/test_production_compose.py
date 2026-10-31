@@ -554,9 +554,24 @@ class TestBackupAndRestore:
             (command,) = [c for c in self._compose_commands() if tool in c]
             assert '-U "$POSTGRES_USER" -d "$POSTGRES_DB"' in command
         # The names the prose gives for those defaults.
-        assert environment["POSTGRES_USER"] == "${POSTGRES_USER:-experimently}"
+        assert environment["POSTGRES_USER"] == DATABASE_USER_BEFORE_THE_RENAME
         assert environment["POSTGRES_DB"] == "${POSTGRES_DB:-experimentation}"
-        assert "(`experimently` and `experimentation` unless" in _backup_section()
+        assert "(the defaults in compose.yml, unless" in " ".join(
+            _backup_section().replace("`", "").split()
+        )
+
+    def test_the_restore_warns_before_the_block_about_a_running_stack(self):
+        section = " ".join(_backup_section().replace("`", "").split())
+        warning = (
+            "Do not run the commands below in the directory of a stack that is running"
+        )
+        assert warning in section
+        assert section.index(warning) < section.index(
+            "cp ~/controlvar-backups/controlvar.env"
+        )
+        # The two reasons it gives are the two commands' effects.
+        assert "the first replaces its .env" in section
+        assert "whatever database its postgres service holds" in section
 
     def test_the_dump_is_custom_format_and_the_restore_reads_it(self):
         (dump,) = [c for c in self._compose_commands() if "pg_dump" in c]
@@ -566,9 +581,11 @@ class TestBackupAndRestore:
         assert "> ~/controlvar-backups/controlvar.dump" in dump
         assert "< ~/controlvar-backups/controlvar.dump" in restore
 
-    def test_postgres_alone_is_started_first_and_nothing_waits_on_it(self, services):
+    def test_postgres_alone_is_started_first_and_nothing_waits_on_it(
+        self, compose, services
+    ):
         assert (
-            "docker compose -p experimently-selfhost up -d --wait postgres"
+            f"docker compose -p {compose['name']} up -d --wait postgres"
             in self._compose_commands()
         )
         assert "depends_on" not in services["postgres"]

@@ -237,7 +237,7 @@ text = "Back up"
 by = ["exempt:label"]
 
 [[unit]]
-text = "The dump is made inside the postgres service with the user and database that service was started with (experimently and experimentation unless you set POSTGRES_USER and POSTGRES_DB), and written to the file you redirect it to on the host."
+text = "The dump is made inside the postgres service with the user and database that service was started with (the defaults in compose.yml, unless you set POSTGRES_USER and POSTGRES_DB), and written to the file you redirect it to on the host."
 by = [
     "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_exec_runs_in_the_postgres_service_without_a_terminal",
     "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_tools_read_the_database_user_and_name_the_service_has",
@@ -303,6 +303,13 @@ text = "On the new host, put that release's compose.yml and the saved .env in on
 by = [
     "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_env_file_is_restored_beside_compose_yml",
     "test:backend/tests/unit/infrastructure/test_production_compose.py::TestGenerator::test_a_second_run_refuses_and_leaves_the_file_alone",
+]
+
+[[unit]]
+text = "Do not run the commands below in the directory of a stack that is running: the first replaces its .env, and the restore loads into whatever database its postgres service holds."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_restore_warns_before_the_block_about_a_running_stack",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_env_file_is_restored_beside_compose_yml",
 ]
 
 [[unit]]

@@ -109,9 +109,9 @@ cp .env ~/controlvar-backups/controlvar.env
 ```
 
 The dump is made inside the `postgres` service with the user and database
-that service was started with (`experimently` and `experimentation` unless
-you set `POSTGRES_USER` and `POSTGRES_DB`), and written to the file you
-redirect it to on the host.
+that service was started with (the defaults in `compose.yml`, unless you set
+`POSTGRES_USER` and `POSTGRES_DB`), and written to the file you redirect it to
+on the host.
 
 `.env` has to travel with the dump. `generate-env.sh` writes a note at the top
 of it that its secrets cannot be regenerated. `SECRET_KEY` signs the sign-in
@@ -133,7 +133,9 @@ migrated (see
 so restore first and upgrade afterwards, the usual way.
 
 On the new host, put that release's `compose.yml` and the saved `.env` in one
-directory, and do not run `generate-env.sh`. Then:
+directory, and do not run `generate-env.sh`. Do not run the commands below in
+the directory of a stack that is running: the first replaces its `.env`, and
+the restore loads into whatever database its `postgres` service holds. Then:
 
 ```bash
 cp ~/controlvar-backups/controlvar.env .env
