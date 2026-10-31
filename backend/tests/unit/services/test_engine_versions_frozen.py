@@ -18,7 +18,10 @@ sha256 of the canonical JSON (sorted keys, no whitespace) of that version's
 entry in each registered table.  A table with no entry for a version
 contributes nothing to that version's digest, so a new table whose first entry
 is a new version changes no existing digest.  The dict only ever grows by
-appending a line.  Replacing a hash or adding a key under a frozen version
+appending a line; so does ``FROZEN_VERSIONS``, the literal of the frozen
+versions in order.  The engine-changing PR appends to all three: the tuple
+``RELEASED_ENGINE_VERSIONS``, ``FROZEN_DIGESTS`` and ``FROZEN_VERSIONS``.
+Replacing a hash or adding a key under a frozen version
 changes that version's digest and fails here; the failing line names the
 version.
 
@@ -28,8 +31,9 @@ registered, so a new table cannot escape the freeze.
 
 To freeze a new version: append it to ``RELEASED_ENGINE_VERSIONS`` in
 ``test_sufficient_stats_fingerprint.py``, bump ``ENGINE_VERSION``, add the
-version's entries to every pin table, and append its digest below (run this
-module; the failure prints the value).
+version's entries to every pin table, append its digest to ``FROZEN_DIGESTS``
+(run this module; the failure prints the value) and its version to
+``FROZEN_VERSIONS``.
 """
 
 import ast
@@ -100,6 +104,13 @@ FROZEN_DIGESTS: Dict[str, str] = {
 }
 
 
+#: The frozen versions, oldest first, as a literal that only ever grows by
+#: appending.  The engine-changing PR appends its version to all three of
+#: ``RELEASED_ENGINE_VERSIONS``, ``FROZEN_DIGESTS`` and this tuple.  It is what
+#: stops a frozen middle version being dropped from the first two together.
+FROZEN_VERSIONS: Tuple[str, ...] = ("1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.5.0")
+
+
 def _key(version: str) -> Tuple[int, ...]:
     return tuple(int(part) for part in version.split("."))
 
@@ -121,6 +132,19 @@ def test_engine_versions_that_shipped_are_recorded():
     still ended at 1.4.0, so its hashes could be replaced with no test failing.
     Every frozen version has a digest, and every digest has a frozen version."""
     assert set(FROZEN_DIGESTS) == set(RELEASED_ENGINE_VERSIONS)
+
+
+def test_a_frozen_version_is_never_dropped():
+    """``FROZEN_VERSIONS`` is an append-only literal.  The tuple must start with
+    it, and it must be the digest keys in order, so dropping a frozen version
+    (the first as much as a middle one) from the tuple and its digest line
+    together fails here."""
+    assert RELEASED_ENGINE_VERSIONS[: len(FROZEN_VERSIONS)] == FROZEN_VERSIONS, (
+        f"RELEASED_ENGINE_VERSIONS {RELEASED_ENGINE_VERSIONS} no longer starts "
+        f"with the frozen versions {FROZEN_VERSIONS}: a frozen version is "
+        "never removed or reordered"
+    )
+    assert tuple(FROZEN_DIGESTS) == FROZEN_VERSIONS
 
 
 def test_the_running_engine_is_the_last_frozen_version():
@@ -175,7 +199,15 @@ def _version_keyed_tables() -> List[Tuple[str, str]]:
 def test_every_version_keyed_table_is_registered():
     """A table keyed by engine version that is not in ``PIN_TABLES`` would sit
     outside the freeze.  This module's own ``FROZEN_DIGESTS`` is the one other
-    version-keyed table."""
+    version-keyed table.
+
+    This is a heuristic.  It sees only top-level assignments, under
+    ``backend/tests/unit``, of a dict literal with a string-literal key shaped
+    ``N.N.N``.  It misses a non-literal key (``{V: ...}``), a nested dict, a
+    ``dict([...])`` call, a later ``X["1.5.0"] = ...``, a class attribute, a
+    key such as ``"v1.5.0"`` or ``"1.5"``, and any file outside
+    ``backend/tests/unit``.  It also does not check that a ``PIN_TABLES`` entry
+    is the object its (path, name) names."""
     found = set(_version_keyed_tables())
     registered = set(PIN_TABLES) | {(_THIS, "FROZEN_DIGESTS")}
     assert found == registered, (
