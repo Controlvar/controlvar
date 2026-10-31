@@ -38,6 +38,10 @@ import numpy as np
 #: winner, the recommendation and the Bayesian decision read the metric's
 #: ``lower_is_better``, and ``/results`` analyses a revenue metric as its mean
 #: per assigned user.
+#: 1.6.0 (#1385): a bandit whose primary metric is lower-is-better counts a
+#: user who did not convert as the success, so its weights, regret estimate
+#: and history alpha/beta favour the variant with fewer conversions; the
+#: stored and reported counts stay the converting users.
 #:
 #: The rule: an engine-changing PR bumps ``ENGINE_VERSION`` to the next minor
 #: and appends it to ``RELEASED_ENGINE_VERSIONS`` ("frozen on main", in
@@ -49,7 +53,7 @@ import numpy as np
 #: path stamping ``engine_version`` returns, caches or persists: results and
 #: its snapshots, Bayesian, CUPED, sequential, and the bandit's state, history
 #: and status.  A revert of an engine-changing PR bumps again.
-ENGINE_VERSION: str = "1.5.0"
+ENGINE_VERSION: str = "1.6.0"
 
 #: Mask that keeps the derived seed inside the signed 64-bit range.
 _SEED_MASK = (1 << 63) - 1

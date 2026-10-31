@@ -234,6 +234,14 @@ For each variant the scheduler needs pulls (assignments) and successes (conversi
 3. The previously persisted `BanditState`.
 4. Zero-count priors (equal weights).
 
+When the experiment's primary metric has `lower_is_better` set (uninstalls, errors), the bandit counts a user who did
+not convert as the success, so the variant with fewer converting users earns the traffic. Every algorithm and both
+live sources (DynamoDB and PostgreSQL) apply this, and so does the persisted `BanditState` fallback. The stored and
+reported `successes` and `conversion_rate` stay the converting users and their share, whatever the direction; only the
+algorithms see the flipped counts. Because a user who has not yet converted counts as a success, the most recent
+assignments look best until their exposure window has passed, so such a bandit needs a settled exposure window
+(an event that happens days after assignment gives a misleading early signal).
+
 ### How the weights affect traffic
 
 `POST /api/v1/tracking/assign` reads the latest `BanditState` for bandit experiments and routes **new** users

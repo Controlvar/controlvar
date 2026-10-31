@@ -77,6 +77,31 @@ def _has_pulls(stats: Optional[Dict[str, VariantStats]]) -> bool:
     return bool(stats) and any(vs.pulls > 0 for vs in stats.values())
 
 
+def _as_rewards(
+    stats: Dict[str, VariantStats], lower_is_better: bool
+) -> Dict[str, VariantStats]:
+    """Turn converting-user counts into the bandit's reward counts.
+
+    Higher is better: a converting user is a success, unchanged.  Lower is
+    better (an error or churn event): a user who did NOT convert is the
+    success, so the arm with fewer converting users earns the traffic (#1385).
+    ``total_reward`` (UCB1) follows ``successes``.
+    """
+    if not lower_is_better:
+        return stats
+    flipped: Dict[str, VariantStats] = {}
+    for vid, vs in stats.items():
+        successes = max(vs.pulls - vs.successes, 0)
+        flipped[vid] = VariantStats(
+            variant_id=vid,
+            successes=successes,
+            failures=vs.pulls - successes,
+            pulls=vs.pulls,
+            total_reward=float(successes),
+        )
+    return flipped
+
+
 def _at_least_as_complete(
     candidate: Optional[Dict[str, VariantStats]],
     reference: Optional[Dict[str, VariantStats]],
@@ -204,7 +229,14 @@ class BanditScheduler:
             experiment.id, variant_ids, experiment=experiment
         )
 
-        # Build the raw dict expected by BanditService
+        # variant_stats holds RAW converting-user counts: those are what is
+        # stored and reported.  The algorithms and the regret estimate get
+        # reward counts (a non-converting user is the success when the
+        # primary metric is lower-is-better), from the one helper.
+        lower_is_better = self._primary_lower_is_better(experiment)
+        reward_stats = _as_rewards(variant_stats, lower_is_better)
+
+        # Build the dict expected by BanditService
         variant_data: Dict[str, Dict] = {
             vid: {
                 "successes": vs.successes,
@@ -212,7 +244,7 @@ class BanditScheduler:
                 "pulls": vs.pulls,
                 "total_reward": vs.total_reward,
             }
-            for vid, vs in variant_stats.items()
+            for vid, vs in reward_stats.items()
         }
 
         # Deterministic seed for the Monte Carlo algorithms:
@@ -236,7 +268,7 @@ class BanditScheduler:
         )
 
         total_pulls = sum(vs.pulls for vs in variant_stats.values())
-        regret_pct = self.estimate_regret_reduction(new_weights, variant_stats)
+        regret_pct = self.estimate_regret_reduction(new_weights, reward_stats)
         now_iso = tick_at.isoformat()
 
         # Build full variant_weights payload (weights + stats per variant)
@@ -292,6 +324,7 @@ class BanditScheduler:
             seed=seed,
             n_samples=n_samples,
             tick_at=tick_at,
+            lower_is_better=lower_is_better,
         )
 
         self.db.commit()
@@ -315,11 +348,15 @@ class BanditScheduler:
         tick_at: datetime,
         seed: Optional[int],
         n_samples: Optional[int],
+        lower_is_better: bool = False,
     ) -> List[BanditStateHistory]:
         """Build the ``bandit_state_history`` rows for one tick (not persisted).
 
+        ``successes``/``failures`` are the raw converting-user counts.
         ``alpha``/``beta`` are the Beta-Bernoulli posterior parameters the
-        tick used (``prior + successes`` / ``prior + failures``).  Variant ids
+        tick used: ``prior + successes`` / ``prior + failures``, from the
+        reward counts, so for a lower-is-better metric they are swapped
+        (a user who did not convert is the success).  Variant ids
         that are not UUIDs are skipped: they cannot reference ``variants.id``.
         """
         rows: List[BanditStateHistory] = []
@@ -333,13 +370,16 @@ class BanditScheduler:
                 continue
             successes = int(vdata.get("successes", 0))
             failures = int(vdata.get("failures", 0))
+            reward_successes, reward_failures = (
+                (failures, successes) if lower_is_better else (successes, failures)
+            )
             rows.append(
                 BanditStateHistory(
                     experiment_id=experiment_id,
                     variant_id=variant_uuid,
                     algorithm=algorithm,
-                    alpha=ThompsonSampling.PRIOR_ALPHA + successes,
-                    beta=ThompsonSampling.PRIOR_BETA + failures,
+                    alpha=ThompsonSampling.PRIOR_ALPHA + reward_successes,
+                    beta=ThompsonSampling.PRIOR_BETA + reward_failures,
                     weight=float(vdata.get("weight", 0.0)),
                     successes=successes,
                     failures=failures,
@@ -362,6 +402,7 @@ class BanditScheduler:
         seed: Optional[int],
         n_samples: Optional[int],
         tick_at: datetime,
+        lower_is_better: bool = False,
     ) -> None:
         """Stage the history rows and the tick snapshot; never raises.
 
@@ -379,6 +420,7 @@ class BanditScheduler:
                     tick_at=tick_at,
                     seed=seed,
                     n_samples=n_samples,
+                    lower_is_better=lower_is_better,
                 )
             )
             rows.append(
@@ -445,6 +487,9 @@ class BanditScheduler:
         dynamo_stats = self._stats_from_dynamodb(experiment_id, variant_ids)
         pg_stats = self._stats_from_postgres(experiment_id, variant_ids, experiment)
 
+        # Every source returns RAW counts (successes = converting users, as
+        # stored and reported); the metric's direction is applied only at the
+        # algorithm input, by ``_as_rewards`` in ``update_experiment``.
         if _has_pulls(dynamo_stats):
             if _at_least_as_complete(dynamo_stats, pg_stats):
                 return dynamo_stats  # type: ignore[return-value]
@@ -598,6 +643,23 @@ class BanditScheduler:
         return stats
 
     @staticmethod
+    def _primary_metric(experiment: Optional[Experiment]) -> Any:
+        """The ``is_primary`` Metric row, else the first one, else ``None``."""
+        if experiment is None:
+            return None
+        metrics = list(getattr(experiment, "metric_definitions", None) or [])
+        primary = next((m for m in metrics if getattr(m, "is_primary", False)), None)
+        if primary is None and metrics:
+            primary = metrics[0]
+        return primary
+
+    @classmethod
+    def _primary_lower_is_better(cls, experiment: Optional[Experiment]) -> bool:
+        """The primary metric's direction; only ``True`` means lower is better."""
+        primary = cls._primary_metric(experiment)
+        return getattr(primary, "lower_is_better", False) is True
+
+    @staticmethod
     def _primary_event_name(experiment: Optional[Experiment]) -> Optional[str]:
         """
         Resolve the conversion event for an experiment.
@@ -609,10 +671,7 @@ class BanditScheduler:
         if experiment is None:
             return None
 
-        metrics = list(getattr(experiment, "metric_definitions", None) or [])
-        primary = next((m for m in metrics if getattr(m, "is_primary", False)), None)
-        if primary is None and metrics:
-            primary = metrics[0]
+        primary = BanditScheduler._primary_metric(experiment)
         if primary is not None and getattr(primary, "event_name", None):
             return str(primary.event_name)
 

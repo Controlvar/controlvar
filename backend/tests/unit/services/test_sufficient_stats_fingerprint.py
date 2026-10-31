@@ -77,6 +77,13 @@ SUFFICIENT_STATS_FINGERPRINTS: Dict[str, Dict[str, str]] = {
         "cuped_metric_result": "29e33befe849a6cc36fd462b5d4e1f2a361efcff2f695a38c612653c11363f67",
         "mean_metric_result": "dbd894429d89e81cb669f5063a4e275452432696c904a180ca3d6e64ae6cbd41",
     },
+    # #1385: a lower-is-better bandit's weights, regret and history
+    # alpha/beta.  These estimators are unchanged: 1.5.0's.
+    "1.6.0": {
+        "binomial_metric_result": "77ad64a045ff7cac8ca009488eac45d1db6e0216f8bb5f13b86315519187a9c1",
+        "cuped_metric_result": "29e33befe849a6cc36fd462b5d4e1f2a361efcff2f695a38c612653c11363f67",
+        "mean_metric_result": "dbd894429d89e81cb669f5063a4e275452432696c904a180ca3d6e64ae6cbd41",
+    },
 }
 
 #: The engine versions frozen on main, oldest first.  An engine-changing PR
@@ -86,7 +93,7 @@ SUFFICIENT_STATS_FINGERPRINTS: Dict[str, Dict[str, str]] = {
 #: version passes every hash, which is how a changed engine could keep a
 #: frozen version number).  ``test_engine_versions_frozen.py`` holds the
 #: digests that enforce it.
-RELEASED_ENGINE_VERSIONS = ("1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.5.0")
+RELEASED_ENGINE_VERSIONS = ("1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.5.0", "1.6.0")
 
 _CONTROL = "ffffffff-0000-4000-8000-000000000002"
 _TREATMENT_1 = "00000000-0000-4000-8000-000000000001"

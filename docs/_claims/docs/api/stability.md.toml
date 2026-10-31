@@ -551,3 +551,13 @@ by = [
     "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_a_revenue_primary_names_its_winner_in_the_summary",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
 ]
+
+[[unit]]
+text = "GET /api/v1/bandit/{experiment_id}, POST /api/v1/bandit/{experiment_id}/update, PUT /api/v1/bandit/{experiment_id}/weights, GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results, GET /api/v1/results/{experiment_id}/bayesian | #1385 | A bandit whose primary metric has lower_is_better set counts a user who did not convert as the success, so its weights (and the recommendation, which reads them), its regret_reduction_pct and the alpha and beta of its history rows now favour the variant with fewer conversions; they used to favour the one with more, whatever the setting. The status counts stay raw: each variant's successes and conversion_rate are still the users who converted and their share. A bandit whose primary metric is higher-is-better is unchanged, and so is everything else these operations return apart from the engine version. The engine version becomes 1.6.0, so the results routes do not serve an answer cached before the upgrade; the OpenAPI document changes only in the engine_version default of the responses that carry it (bandit, Bayesian, variance reduction). See Where the counts come from."
+by = [
+    "test:backend/tests/unit/services/test_lower_is_better_direction.py::TestTheBanditReadsTheDirection",
+    "test:backend/tests/unit/services/test_lower_is_better_direction.py::test_the_engine_whose_bandit_reads_the_direction_is_not_a_frozen_one",
+    "test:backend/tests/unit/services/test_engine_versions_frozen.py",
+    "test:backend/tests/unit/scripts/test_openapi_dump_and_stability.py::test_the_results_cache_key_names_the_engine_and_a_finished_answer_lasts_a_day",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
