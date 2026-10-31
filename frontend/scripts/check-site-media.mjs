@@ -41,14 +41,24 @@
  * `{"posters": [row, ...]}`, one row per manifest entry and none for a video
  * the manifest does not list, each row exactly
  *
- *   {"slug", "mp4_sha256", "poster_sha256", "t", "first_cue", "crop", "psnr_db"}
+ *   {"slug", "mp4_sha256", "poster_sha256", "t", "first_cue", "crop", "pad", "psnr_db"}
  *
  * It says which frame of the video the poster is: the frame at `t` seconds of
- * the pinned mp4, cropped to `crop` ([width, height, x, y], or null for the
- * whole frame) and scaled to 1280x720. Whether the poster's pixels are that
- * frame needs ffmpeg, which the CI runner does not have, so `psnr_db` (the
- * poster against that frame, at least 35) is measured when the founder
- * approves the poster's upload, and recorded. Here, with no ffmpeg:
+ * the pinned mp4, cut to `crop` ([width, height, x, y]), scaled to 1280 wide
+ * and, when the crop is not 16:9, padded top and bottom to 1280x720 with the
+ * colour `pad`. `crop` null is the whole frame, which only an animation keeps:
+ * a recording's caption band comes off (#1459 D200: the page, 1920x940 at
+ * 0,0, padded with its own background). `pad` is null exactly when the crop
+ * fills the poster (16:9, or the whole frame). `psnr_db` is the poster against
+ * that frame, transformed the same way: at least 35, measured with ffmpeg when
+ * the founder approves the poster's upload.
+ *
+ * CI CANNOT CHECK THE PIXELS. The runner has no ffmpeg, so nothing here
+ * verifies that the poster is the frame its row names: `psnr_db` is a typed
+ * number, and a swapped poster with a hand-written row (its new sha256, a
+ * plausible t, psnr_db 41) passes. That is verified by re-running the ffmpeg
+ * commands: by whoever asks for the upload approval, and by the reviewer of
+ * every manifest PR that adds or changes a row. What CI checks, with no ffmpeg:
  *
  *   - the row's mp4_sha256 and poster_sha256 are the manifest's, so neither
  *     file can change without its row being written again;
@@ -58,8 +68,10 @@
  *     on its title card and its first cue starts as the card ends, so a frame
  *     before the first cue is the card. A title card is a frame of its own
  *     video too, which is why only a pinned frame time can tell it apart;
- *   - `psnr_db` is a number of at least 35; `crop` is null or four whole
- *     numbers.
+ *   - `psnr_db` is a number of at least 35; `crop` is null or whole pixels
+ *     with a width and height of at least 1, null only for an animation (its
+ *     transcript says `"kind": "animation"`); `pad` is null or `#rrggbb`,
+ *     paired with the crop as above.
  *
  * Exit 0 when all hold; 1 with every problem listed.
  */
@@ -73,7 +85,8 @@ const TRANSCRIPTS = fileURLToPath(new URL('../src/content/walkthroughs/', import
 export const POSTER_FRAMES = fileURLToPath(new URL('../src/content/poster-frames.json', import.meta.url));
 /** The least PSNR, in dB, of a poster against the frame its row names. */
 export const MIN_PSNR_DB = 35;
-const FRAME_KEYS = ['slug', 'mp4_sha256', 'poster_sha256', 't', 'first_cue', 'crop', 'psnr_db'];
+const FRAME_KEYS = ['slug', 'mp4_sha256', 'poster_sha256', 't', 'first_cue', 'crop', 'pad', 'psnr_db'];
+const COLOUR = /^#[0-9a-f]{6}$/;
 // Assembled, so this file never contains the word it looks for
 // (scripts/check_legacy_name.py does the same).
 const FORMER_NAME = ['experi', 'mently'].join('');
@@ -377,9 +390,10 @@ const ms = (value) => Math.round(value * 1000);
 
 /**
  * Problems with the poster-frames file (its `text`) against the manifest's
- * entries and the files placed in `mediaDir` (POSTER FRAMES above).
+ * entries, the files placed in `mediaDir` and the transcripts' kinds
+ * (POSTER FRAMES above).
  */
-export function frameProblems(text, videos, mediaDir) {
+export function frameProblems(text, videos, mediaDir, transcriptDir) {
   let data;
   try {
     data = JSON.parse(text);
@@ -409,8 +423,22 @@ export function frameProblems(text, videos, mediaDir) {
     if (row.poster_sha256 !== entry.poster.sha256) {
       problems.push(`${where} poster_sha256 ${String(row.poster_sha256).slice(0, 12)} is not the manifest's ${entry.poster.sha256.slice(0, 12)}: the poster changed and its frame was not measured again`);
     }
-    if (row.crop !== null && !(Array.isArray(row.crop) && row.crop.length === 4 && row.crop.every((n) => Number.isInteger(n) && n >= 0))) {
-      problems.push(`${where} crop must be null or [width, height, x, y] in whole pixels`);
+    const cropShaped = row.crop === null ||
+      (Array.isArray(row.crop) && row.crop.length === 4 && row.crop.every((n) => Number.isInteger(n) && n >= 0) && row.crop[0] >= 1 && row.crop[1] >= 1);
+    if (!cropShaped) {
+      problems.push(`${where} crop must be null or [width, height, x, y] in whole pixels, the width and height at least 1`);
+    } else if (row.crop === null) {
+      // A missing transcript reads as a recording, the stricter case; entryProblems reports it.
+      const transcriptPath = join(transcriptDir, `${entry.slug}.json`);
+      const kind = existsSync(transcriptPath) ? JSON.parse(readFileSync(transcriptPath, 'utf8')).kind : undefined;
+      if (kind !== 'animation') problems.push(`${where} crop is null (the whole frame), but ${entry.slug} is a recording: its caption band comes off, and only an animation keeps its whole frame`);
+    }
+    if (row.pad !== null && !(typeof row.pad === 'string' && COLOUR.test(row.pad))) {
+      problems.push(`${where} pad must be null or a colour written #rrggbb`);
+    } else if (cropShaped) {
+      const fills = row.crop === null || row.crop[0] * 9 === row.crop[1] * 16;
+      if (fills && row.pad !== null) problems.push(`${where} pad is ${row.pad}, but the crop is 16:9 and fills the poster, so pad must be null`);
+      if (!fills && row.pad === null) problems.push(`${where} crop ${row.crop[0]}x${row.crop[1]} is not 16:9, so pad must name the colour it is padded with to 1280x720`);
     }
     const notNumbers = ['t', 'first_cue', 'psnr_db'].filter((key) => !finite(row[key]) || row[key] < 0);
     if (notNumbers.length) {
@@ -428,6 +456,7 @@ export function frameProblems(text, videos, mediaDir) {
     }
     const first = cues[0].start;
     if (ms(row.first_cue) !== ms(first)) problems.push(`${where} first_cue ${row.first_cue} s, but the first cue of out/media/${siteName} starts at ${first} s`);
+    // In whole milliseconds, a WebVTT timestamp's precision: a t less than half a millisecond before the cue (2.9996 s against 3.000 s) counts as at it.
     if (ms(row.t) < ms(first)) problems.push(`${where} t ${row.t} s is before the first cue (${first} s): that frame is the title card`);
     const mp4Path = join(mediaDir, entry.mp4.name);
     const duration = existsSync(mp4Path) ? mp4Facts(readFileSync(mp4Path)).duration : null;
@@ -449,7 +478,7 @@ export function check(outDir, manifestPath = MANIFEST, transcriptDir = TRANSCRIP
   if (JSON.stringify(want) !== JSON.stringify(have)) problems.push(`out/media holds ${JSON.stringify(have)}, want ${JSON.stringify(want)}`);
   for (const entry of videos) problems.push(...entryProblems(entry, mediaDir, transcriptDir));
   if (!existsSync(framesPath)) problems.push(`${framesPath} is missing: every listed poster needs its frame row`);
-  else problems.push(...frameProblems(readFileSync(framesPath, 'utf8'), videos, mediaDir));
+  else problems.push(...frameProblems(readFileSync(framesPath, 'utf8'), videos, mediaDir, transcriptDir));
   problems.push(...pageProblems(readFileSync(indexPath, 'utf8'), videos));
   return problems;
 }

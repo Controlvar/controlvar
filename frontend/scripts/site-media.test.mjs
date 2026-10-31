@@ -509,8 +509,9 @@ const frameRow = (entry) => ({
   poster_sha256: entry.poster.sha256,
   t: 50,
   first_cue: 3,
-  crop: [1664, 936, 0, 0],
-  psnr_db: 41.52,
+  crop: [1920, 940, 0, 0],
+  pad: '#f3fafe',
+  psnr_db: 43.43,
 });
 
 /** frameProblems over contentFixture's placed files, after `plant` changes the file, the manifest or the media. */
@@ -519,16 +520,24 @@ function framed(plant = () => {}, fixture = {}) {
   const file = { posters: [frameRow(f.entry)] };
   const videos = [f.entry];
   const text = plant({ file, row: file.posters[0], videos, f });
-  const problems = frameProblems(typeof text === 'string' ? text : JSON.stringify(file), videos, f.media);
+  const problems = frameProblems(typeof text === 'string' ? text : JSON.stringify(file), videos, f.media, f.transcripts);
   rmSync(f.dir, { recursive: true });
   return problems;
 }
 
+/** An animation (08's shape): captions from 0 s, a transcript of kind "animation", its whole frame. */
+const ANIMATION_VTT = 'WEBVTT\n\n00:00:00.000 --> 00:00:08.000\nOne.\n';
+const asAnimation = { vtt: ANIMATION_VTT, transcriptOf: animationOf([{ on_screen: ['One.'] }]) };
+const wholeFrame = ({ row }) => Object.assign(row, { t: 1, first_cue: 0, crop: null, pad: null });
+
 describe('frameProblems', () => {
   it('passes a row naming a frame after the first cue, and an animation whose captions start at 0', () => {
     assert.deepEqual(framed(), []);
-    const animation = 'WEBVTT\n\n00:00:00.000 --> 00:00:08.000\nOne.\n';
-    assert.deepEqual(framed(({ row }) => Object.assign(row, { t: 1, first_cue: 0, crop: null }), { vtt: animation }), []);
+    assert.deepEqual(framed(wholeFrame, asAnimation), []);
+    // a 16:9 crop fills the poster, with no pad
+    assert.deepEqual(framed(({ row }) => Object.assign(row, { crop: [1664, 936, 0, 0], pad: null })), []);
+    // t is compared in whole milliseconds: under half a millisecond before the cue counts as at it
+    assert.deepEqual(framed(({ row }) => { row.t = 2.9996; }), []);
   });
 
   // PE 7's plants, and the shape. Each must be refused.
@@ -552,6 +561,15 @@ describe('frameProblems', () => {
     [`a PSNR under ${MIN_PSNR_DB} dB`, ({ row }) => { row.psnr_db = 30.53; }, /psnr_db 30\.53 is under 35/],
     ['a t written as a string', ({ row }) => { row.t = '50'; }, /t must be a number of at least 0/],
     ['a crop of two numbers', ({ row }) => { row.crop = [1664, 936]; }, /crop must be null or \[width, height, x, y\]/],
+    ['a crop of no width', ({ row }) => { row.crop = [0, 940, 0, 0]; }, /the width and height at least 1/],
+    ['a crop of no height', ({ row }) => { row.crop = [1920, 0, 0, 0]; }, /the width and height at least 1/],
+    ['a crop at a negative x', ({ row }) => { row.crop = [1920, 940, -1, 0]; }, /crop must be null or \[width, height, x, y\] in whole pixels/],
+    ['a recording kept whole (crop null): its caption band left on', ({ row }) => { row.crop = null; row.pad = null; }, /crop is null \(the whole frame\), but 01-getting-started is a recording/],
+    ['a page crop that is not 16:9 with no pad (a stretched poster)', ({ row }) => { row.pad = null; }, /crop 1920x940 is not 16:9, so pad must name the colour/],
+    ['a 16:9 crop with a pad', ({ row }) => { row.crop = [1664, 936, 0, 0]; }, /pad is #f3fafe, but the crop is 16:9 and fills the poster/],
+    ['an animation kept whole with a pad', (state) => { wholeFrame(state); state.row.pad = '#ffffff'; }, /pad is #ffffff, but the crop is 16:9/, asAnimation],
+    ['a pad that is not #rrggbb', ({ row }) => { row.pad = 'white'; }, /pad must be null or a colour written #rrggbb/],
+    ['a pad in capitals', ({ row }) => { row.pad = '#F3FAFE'; }, /pad must be null or a colour written #rrggbb/],
     ['a row with a key missing', ({ row }) => { delete row.psnr_db; }, /posters\[0\] must have exactly the keys/],
     ['a row with an extra key', ({ row }) => { row.note = 'title card'; }, /posters\[0\] must have exactly the keys/],
     ['two rows for one video', ({ file }) => { file.posters.push({ ...file.posters[0] }); }, /two rows for "01-getting-started"/],
@@ -559,9 +577,9 @@ describe('frameProblems', () => {
     ['a file that is not JSON', () => '{"posters": [', /is not JSON/],
     ['captions that were not placed', ({ f }) => { rmSync(join(f.media, `${f.stem}.site.vtt`)); }, /\.site\.vtt is missing or has no cue/],
   ];
-  for (const [what, plant, pattern] of plants) {
+  for (const [what, plant, pattern, fixture] of plants) {
     it(`fails ${what}`, () => {
-      const problems = framed(plant);
+      const problems = framed(plant, fixture);
       assert.ok(problems.some((p) => pattern.test(p)), problems.join('\n') || 'no problem reported');
     });
   }
