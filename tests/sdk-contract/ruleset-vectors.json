@@ -11,6 +11,7 @@
   "version": "46f9d4e84b1c41bc8890317166dca1825b79cdc7329092b33891ab91306acff3",
   "bucketing": "md5-mod100-v1",
   "flags": [
+  {"active":true,"evaluation":"local-v2","key":"planted"},
   {"active":true,"default_rule":null,"evaluation":"local","key":"alias-device","rollout_percentage":0,"rules":[{"id":"dashboard","match":{"conditions":[],"groups":[{"conditions":[{"attribute":"device.os","operator":"eq","value":"ios"}],"groups":[],"op":"and"}],"op":"and"},"rollout_percentage":100}]},
   {"active":true,"default_rule":null,"evaluation":"local","key":"alias-explicit-wins","rollout_percentage":0,"rules":[{"id":"dashboard","match":{"conditions":[],"groups":[{"conditions":[{"attribute":"user.country","operator":"eq","value":"DE"}],"groups":[],"op":"and"}],"op":"and"},"rollout_percentage":100}]},
   {"active":true,"default_rule":null,"evaluation":"local","key":"alias-reverse","rollout_percentage":0,"rules":[{"id":"dashboard","match":{"conditions":[],"groups":[{"conditions":[{"attribute":"plan","operator":"eq","value":"pro"}],"groups":[],"op":"and"}],"op":"and"},"rollout_percentage":100}]},
