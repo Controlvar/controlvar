@@ -4,6 +4,7 @@ module.exports = {
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/types/**/*.{js,ts,jsx,tsx}',
     // The modules' dashboard code (the `@modules/*` alias; absent from a core
     // tree, where the glob matches nothing). Without it a class used only by
     // a module page is never generated.
