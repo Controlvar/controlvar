@@ -56,6 +56,7 @@ from backend.tests.unit.services import (
 from backend.tests.unit.services import test_results_correction_pins as correction_pins
 from backend.tests.unit.services import test_revenue_per_user_routing as revenue
 from backend.tests.unit.services import test_sufficient_stats_fingerprint as sufficient
+from backend.tests.unit.services import test_value_metrics_per_user as value_metrics
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
@@ -92,6 +93,10 @@ PIN_TABLES: Dict[Tuple[str, str], Dict[str, Any]] = {
         "services/test_binomial_metric_result_characterisation.py",
         "CHARACTERISATIONS",
     ): characterisation.CHARACTERISATIONS,
+    (
+        "services/test_value_metrics_per_user.py",
+        "VALUE_RESULTS_FINGERPRINTS",
+    ): value_metrics.VALUE_RESULTS_FINGERPRINTS,
 }
 
 #: One digest per frozen version.  Append a line; never edit one.
@@ -104,6 +109,9 @@ FROZEN_DIGESTS: Dict[str, str] = {
     # 1.6.0 (#1385) changes a lower-is-better bandit, which no pin table
     # runs: its entries are 1.5.0's, so its digest is too.
     "1.6.0": "428844d519af491070788ffdead8493147ae1731cc0bc11d0ef07ba92d6da64f",
+    # 1.7.0 (#439): 1.6.0's entries, plus the count, duration and custom
+    # results in VALUE_RESULTS_FINGERPRINTS, a table whose first entry it is.
+    "1.7.0": "1aab98b378814d91fe0c8644b0b240162fbf1d053e64f0da80a21c36cc2a148b",
 }
 
 
@@ -118,6 +126,7 @@ FROZEN_VERSIONS: Tuple[str, ...] = (
     "1.4.0",
     "1.5.0",
     "1.6.0",
+    "1.7.0",
 )
 
 

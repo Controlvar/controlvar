@@ -459,15 +459,16 @@ def test_no_example_sends_the_fields_nothing_reads():
 # ---------------------------------------------------------------------------
 
 #: The last engine version that analysed a count, duration or custom metric
-#: as the share of users who sent its event.  Set in the commit that bumps
-#: ``ENGINE_VERSION`` for #439.
-VALUE_SHARE_UNTIL = "1.5.0"
+#: as the share of users who sent its event (#1385's; #439 is 1.7.0).
+VALUE_SHARE_UNTIL = "1.6.0"
 
 #: sha256 of the canonical ``get_experiment_results`` output for the
 #: experiment below (a count primary, a duration and a custom metric), per
 #: engine version.  Only versions after ``VALUE_SHARE_UNTIL`` have an entry.
+#: Registered in ``test_engine_versions_frozen.PIN_TABLES``, so a frozen
+#: version's entry here is frozen too.
 VALUE_RESULTS_FINGERPRINTS: Dict[str, str] = {
-    "1.5.0": "989e0ff6d76177e6e675257634f16a18fb9b4b43a9e3dce919cdadff33be11e2",
+    "1.7.0": "989e0ff6d76177e6e675257634f16a18fb9b4b43a9e3dce919cdadff33be11e2",
 }
 
 

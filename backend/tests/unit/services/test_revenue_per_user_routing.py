@@ -71,6 +71,9 @@ REVENUE_RESULTS_FINGERPRINTS: Dict[str, str] = {
     "1.5.0": "5ade759aa8ce18ef518dfde1acc9d6a3c2a3eda4dc1d31d8898e68d62225ef06",
     # 1.6.0 (#1385) changes a lower-is-better bandit only: 1.5.0's.
     "1.6.0": "5ade759aa8ce18ef518dfde1acc9d6a3c2a3eda4dc1d31d8898e68d62225ef06",
+    # 1.7.0 (#439) routes count, duration and custom to the mean; this
+    # experiment's revenue and conversion results are 1.6.0's.
+    "1.7.0": "5ade759aa8ce18ef518dfde1acc9d6a3c2a3eda4dc1d31d8898e68d62225ef06",
 }
 
 
