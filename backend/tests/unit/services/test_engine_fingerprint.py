@@ -75,6 +75,9 @@ ENGINE_FINGERPRINTS: Dict[str, str] = {
     # decision read lower_is_better.  This dataset is higher-is-better
     # throughout, so its output is 1.4.0's.
     "1.5.0": "003234aa770b7f48e4d42ee0e718895523371c24251dadb6e46dc8355b7e346c",
+    # 1.6.0 is #1385: a lower-is-better bandit's weights, regret and history
+    # alpha/beta.  This dataset runs no bandit, so its output is 1.5.0's.
+    "1.6.0": "003234aa770b7f48e4d42ee0e718895523371c24251dadb6e46dc8355b7e346c",
 }
 
 # Two ids where the control sorts AFTER the treatment, so an engine that

@@ -101,6 +101,9 @@ FROZEN_DIGESTS: Dict[str, str] = {
     "1.3.0": "85047995d86198ceec4a21eddd772c6df22b17b911017310ffc1dcf3f5b70eac",
     "1.4.0": "863715ed587943b3b45b8940c8037461e316c9154400d70d3ff817943ae69537",
     "1.5.0": "428844d519af491070788ffdead8493147ae1731cc0bc11d0ef07ba92d6da64f",
+    # 1.6.0 (#1385) changes a lower-is-better bandit, which no pin table
+    # runs: its entries are 1.5.0's, so its digest is too.
+    "1.6.0": "428844d519af491070788ffdead8493147ae1731cc0bc11d0ef07ba92d6da64f",
 }
 
 
@@ -108,7 +111,14 @@ FROZEN_DIGESTS: Dict[str, str] = {
 #: appending.  The engine-changing PR appends its version to all three of
 #: ``RELEASED_ENGINE_VERSIONS``, ``FROZEN_DIGESTS`` and this tuple.  It is what
 #: stops a frozen middle version being dropped from the first two together.
-FROZEN_VERSIONS: Tuple[str, ...] = ("1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.5.0")
+FROZEN_VERSIONS: Tuple[str, ...] = (
+    "1.1.0",
+    "1.2.0",
+    "1.3.0",
+    "1.4.0",
+    "1.5.0",
+    "1.6.0",
+)
 
 
 def _key(version: str) -> Tuple[int, ...]:
