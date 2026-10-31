@@ -521,7 +521,7 @@ Resolved with `license-checker-rseidelsohn --production`.
 | `@types/istanbul-lib-coverage` | 2.0.6 |
 | `@types/istanbul-lib-report` | 3.0.3 |
 | `@types/istanbul-reports` | 3.0.4 |
-| `@types/node` | 26.6.3 |
+| `@types/node` | 26.6.5 |
 | `@types/stack-utils` | 2.0.3 |
 | `@types/yargs` | 15.0.20 |
 | `@types/yargs` | 17.0.35 |
