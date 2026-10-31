@@ -44,14 +44,17 @@
  *   {"slug", "mp4_sha256", "poster_sha256", "t", "first_cue", "crop", "pad", "psnr_db"}
  *
  * It says which frame of the video the poster is: the frame at `t` seconds of
- * the pinned mp4, cut to `crop` ([width, height, x, y]), scaled to 1280 wide
- * and, when the crop is not 16:9, padded top and bottom to 1280x720 with the
- * colour `pad`. `crop` null is the whole frame, which only an animation keeps:
- * a recording's caption band comes off (#1459 D200: the page, 1920x940 at
- * 0,0, padded with its own background). `pad` is null exactly when the crop
- * fills the poster (16:9, or the whole frame). `psnr_db` is the poster against
- * that frame, transformed the same way: at least 35, measured with ffmpeg when
- * the founder approves the poster's upload.
+ * the pinned mp4, transformed one of two ways (#1459, the founder's D200):
+ *
+ *   - a recording: `crop` [1920, 940, 0, 0], the whole page above the 140 px
+ *     caption band and nothing narrower, scaled to 1280x627 and padded top
+ *     and bottom to 1280x720 with the page's own background colour, `pad`
+ *     (`#rrggbb`);
+ *   - an animation (its transcript says `"kind": "animation"`): `crop` and
+ *     `pad` null, the whole frame scaled to 1280x720.
+ *
+ * `psnr_db` is the poster against that frame, transformed the same way: at
+ * least 35, measured with ffmpeg when the founder approves the poster's upload.
  *
  * CI CANNOT CHECK THE PIXELS. The runner has no ffmpeg, so nothing here
  * verifies that the poster is the frame its row names: `psnr_db` is a typed
@@ -68,10 +71,9 @@
  *     on its title card and its first cue starts as the card ends, so a frame
  *     before the first cue is the card. A title card is a frame of its own
  *     video too, which is why only a pinned frame time can tell it apart;
- *   - `psnr_db` is a number of at least 35; `crop` is null or whole pixels
- *     with a width and height of at least 1, null only for an animation (its
- *     transcript says `"kind": "animation"`); `pad` is null or `#rrggbb`,
- *     paired with the crop as above.
+ *   - `psnr_db` is a number of at least 35; `crop` is exactly
+ *     [1920, 940, 0, 0] or null, and null only for an animation; `pad` is a
+ *     `#rrggbb` colour with that crop and null with a null crop.
  *
  * Exit 0 when all hold; 1 with every problem listed.
  */
@@ -87,6 +89,8 @@ export const POSTER_FRAMES = fileURLToPath(new URL('../src/content/poster-frames
 export const MIN_PSNR_DB = 35;
 const FRAME_KEYS = ['slug', 'mp4_sha256', 'poster_sha256', 't', 'first_cue', 'crop', 'pad', 'psnr_db'];
 const COLOUR = /^#[0-9a-f]{6}$/;
+/** A recording poster's crop (D200): the whole 1920x940 page above the caption band. */
+const PAGE_CROP = [1920, 940, 0, 0];
 // Assembled, so this file never contains the word it looks for
 // (scripts/check_legacy_name.py does the same).
 const FORMER_NAME = ['experi', 'mently'].join('');
@@ -423,22 +427,25 @@ export function frameProblems(text, videos, mediaDir, transcriptDir) {
     if (row.poster_sha256 !== entry.poster.sha256) {
       problems.push(`${where} poster_sha256 ${String(row.poster_sha256).slice(0, 12)} is not the manifest's ${entry.poster.sha256.slice(0, 12)}: the poster changed and its frame was not measured again`);
     }
-    const cropShaped = row.crop === null ||
-      (Array.isArray(row.crop) && row.crop.length === 4 && row.crop.every((n) => Number.isInteger(n) && n >= 0) && row.crop[0] >= 1 && row.crop[1] >= 1);
-    if (!cropShaped) {
-      problems.push(`${where} crop must be null or [width, height, x, y] in whole pixels, the width and height at least 1`);
+    const isPage = Array.isArray(row.crop) && row.crop.length === PAGE_CROP.length && row.crop.every((n, i) => n === PAGE_CROP[i]);
+    if (row.crop !== null && !isPage) {
+      problems.push(`${where} crop ${JSON.stringify(row.crop)} is not the page, [1920, 940, 0, 0]: a recording's poster is the whole page above the caption band, padded, never cut (D200)`);
     } else if (row.crop === null) {
-      // A missing transcript reads as a recording, the stricter case; entryProblems reports it.
-      const transcriptPath = join(transcriptDir, `${entry.slug}.json`);
-      const kind = existsSync(transcriptPath) ? JSON.parse(readFileSync(transcriptPath, 'utf8')).kind : undefined;
-      if (kind !== 'animation') problems.push(`${where} crop is null (the whole frame), but ${entry.slug} is a recording: its caption band comes off, and only an animation keeps its whole frame`);
+      // Unreadable or missing, the transcript cannot show an animation, so the null crop is refused (the stricter case).
+      let kind;
+      try {
+        kind = JSON.parse(readFileSync(join(transcriptDir, `${entry.slug}.json`), 'utf8')).kind;
+      } catch (error) {
+        problems.push(`${where}: cannot read src/content/walkthroughs/${entry.slug}.json (${error.message}), so a null crop cannot be shown to be an animation's`);
+      }
+      if (kind !== 'animation') problems.push(`${where} crop is null (the whole frame), but ${entry.slug} is not an animation: a recording's caption band comes off, and only an animation keeps its whole frame`);
     }
     if (row.pad !== null && !(typeof row.pad === 'string' && COLOUR.test(row.pad))) {
       problems.push(`${where} pad must be null or a colour written #rrggbb`);
-    } else if (cropShaped) {
-      const fills = row.crop === null || row.crop[0] * 9 === row.crop[1] * 16;
-      if (fills && row.pad !== null) problems.push(`${where} pad is ${row.pad}, but the crop is 16:9 and fills the poster, so pad must be null`);
-      if (!fills && row.pad === null) problems.push(`${where} crop ${row.crop[0]}x${row.crop[1]} is not 16:9, so pad must name the colour it is padded with to 1280x720`);
+    } else if (row.crop === null && row.pad !== null) {
+      problems.push(`${where} pad is ${row.pad}, but the crop is null: the whole frame is 16:9 already, so pad must be null`);
+    } else if (isPage && row.pad === null) {
+      problems.push(`${where} crop is the page (1920x940, not 16:9), so pad must name the colour it is padded with to 1280x720`);
     }
     const notNumbers = ['t', 'first_cue', 'psnr_db'].filter((key) => !finite(row[key]) || row[key] < 0);
     if (notNumbers.length) {
