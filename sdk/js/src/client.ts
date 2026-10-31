@@ -99,7 +99,7 @@ function isUntagged(bodies: TrackBody[]): boolean {
  *   `cacheTtlMs`; failures are never cached. Concurrent calls for the same
  *   user + key share one in-flight request.
  * - Every successful answer also records its key for the key-less `track()`
- *   fan-out, for 24 hours (see `attribution.ts`); `clearCache()` keeps that record.
+ *   fan-out, for 24 hours, or the cache lifetime if longer (see `attribution.ts`); `clearCache()` keeps that record.
  * - `getAssignment`, `evaluateFlag`, `getAllFlags` and `fetchAssignments` throw
  *   `ExperimentationError`; `getVariant` / `isFeatureEnabled` return safe
  *   defaults instead; `track` / `trackBatch` / `reportError` never reject.
@@ -115,7 +115,7 @@ export class ExperimentationClient {
   private readonly flags: UserKeyCache<FlagEvaluation>;
   private readonly assignments: UserKeyCache<Assignment>;
   /** The keys a key-less `track()` is sent to; outlives the cache entries. */
-  private readonly attributed = new AttributedKeys();
+  private readonly attributed: AttributedKeys;
   /** Requests currently in flight, so concurrent callers share one fetch. */
   private readonly inflight = new Map<string, Promise<unknown>>();
   /** The local-evaluation runtime; `null` in server mode. */
@@ -133,6 +133,7 @@ export class ExperimentationClient {
     const ttl = config.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
     this.flags = new UserKeyCache<FlagEvaluation>(ttl);
     this.assignments = new UserKeyCache<Assignment>(ttl);
+    this.attributed = new AttributedKeys(ttl);
 
     const evaluation = config.evaluation ?? 'server';
     if (evaluation !== 'server' && evaluation !== 'local') {

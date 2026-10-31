@@ -41,7 +41,10 @@ class AttributedKeys:
     patches it moves this record and the cache together.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, cache_ttl_seconds: float = 0) -> None:
+        # 24 hours, or the cache lifetime when that is longer, so a cached answer never
+        # outlives the record that tags its events (#1423).
+        self._horizon = max(ATTRIBUTION_HORIZON_SECONDS, cache_ttl_seconds)
         self._lock = threading.Lock()
         self._users: "OrderedDict[str, Tuple[_Answers, _Answers]]" = OrderedDict()
 
@@ -72,7 +75,7 @@ class AttributedKeys:
             if answers is None:
                 return [], []
             now = cache._now()
-            experiments, flags = _live(answers[0], now), _live(answers[1], now)
+            experiments, flags = _live(answers[0], now, self._horizon), _live(answers[1], now, self._horizon)
             if not answers[0] and not answers[1]:
                 del self._users[user_id]
             return experiments, flags
@@ -95,10 +98,10 @@ class AttributedKeys:
                 self._users.popitem(last=False)
 
 
-def _live(answers: _Answers, now: float) -> List[str]:
+def _live(answers: _Answers, now: float, horizon: float) -> List[str]:
     out: List[str] = []
     for key, (answered_at, reason) in list(answers.items()):
-        if now - answered_at > ATTRIBUTION_HORIZON_SECONDS:
+        if now - answered_at > horizon:
             del answers[key]
         elif reason not in LIFECYCLE_REASONS:
             out.append(key)
