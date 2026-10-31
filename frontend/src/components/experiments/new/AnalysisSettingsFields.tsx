@@ -11,7 +11,8 @@ import { ExperimentFormAction } from './formState';
 import { wizardInputClass } from './fieldStyles';
 
 export const ANALYSIS_LEGEND = 'How results will be judged';
-export const ANALYSIS_SUBLINE = 'Saved with the experiment. You cannot change these after it starts.';
+export const ANALYSIS_SUBLINE =
+  'Saved with the experiment. The confidence level and the correction cannot be changed after it starts.';
 
 export const CONFIDENCE_HELP =
   'How sure the results must be before a difference is called significant. At 95%, a variant is ' +
