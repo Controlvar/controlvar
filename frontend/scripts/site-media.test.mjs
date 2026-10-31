@@ -30,7 +30,7 @@ import {
   retryAfterMs,
   toSiteVtt,
 } from './fetch-site-media.mjs';
-import { attributes, entryProblems, jpegSize, mp4Facts, pageProblems, parseVtt } from './check-site-media.mjs';
+import { MIN_PSNR_DB, attributes, check, entryProblems, frameProblems, jpegSize, mp4Facts, pageProblems, parseVtt } from './check-site-media.mjs';
 import { platformProblems } from './check-platform-export.mjs';
 
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -498,6 +498,93 @@ describe('pageProblems', () => {
       assert.ok(problems.some((p) => pattern.test(p)), problems.join('\n') || 'no problem reported');
     });
   }
+});
+
+// --- poster frames (#1459, PE 7) ---------------------------------------------------------
+
+/** A row naming a frame of contentFixture's video after its first cue (VTT's starts at 3 s). */
+const frameRow = (entry) => ({
+  slug: entry.slug,
+  mp4_sha256: entry.mp4.sha256,
+  poster_sha256: entry.poster.sha256,
+  t: 50,
+  first_cue: 3,
+  crop: [1664, 936, 0, 0],
+  psnr_db: 41.52,
+});
+
+/** frameProblems over contentFixture's placed files, after `plant` changes the file, the manifest or the media. */
+function framed(plant = () => {}, fixture = {}) {
+  const f = contentFixture(fixture);
+  const file = { posters: [frameRow(f.entry)] };
+  const videos = [f.entry];
+  const text = plant({ file, row: file.posters[0], videos, f });
+  const problems = frameProblems(typeof text === 'string' ? text : JSON.stringify(file), videos, f.media);
+  rmSync(f.dir, { recursive: true });
+  return problems;
+}
+
+describe('frameProblems', () => {
+  it('passes a row naming a frame after the first cue, and an animation whose captions start at 0', () => {
+    assert.deepEqual(framed(), []);
+    const animation = 'WEBVTT\n\n00:00:00.000 --> 00:00:08.000\nOne.\n';
+    assert.deepEqual(framed(({ row }) => Object.assign(row, { t: 1, first_cue: 0, crop: null }), { vtt: animation }), []);
+  });
+
+  // PE 7's plants, and the shape. Each must be refused.
+  const plants = [
+    ['a t inside the title card', ({ row }) => { row.t = 0.5; }, /t 0\.5 s is before the first cue \(3 s\): that frame is the title card/],
+    ['a t one millisecond before the first cue', ({ row }) => { row.t = 2.999; }, /before the first cue/],
+    ['a first_cue that is not the placed captions\'', ({ row }) => { row.first_cue = 3.033; }, /first_cue 3\.033 s, but the first cue of out\/media\/.*\.site\.vtt starts at 3 s/],
+    ['captions whose first cue moved, under an unchanged row', ({ f }) => {
+      const site = join(f.media, `${f.stem}.site.vtt`);
+      writeFileSync(site, readFileSync(site, 'utf8').replace('00:00:03.000 -->', '00:00:51.000 -->'));
+    }, /starts at 51 s/],
+    ['a listed video with no row', ({ file }) => { file.posters = []; }, /01-getting-started: poster-frames\.json has no row/],
+    ['a row for a video videos.json does not list', ({ file }) => {
+      file.posters.push({ ...file.posters[0], slug: '09-design-in-depth' });
+    }, /a row for "09-design-in-depth", which videos\.json does not list/],
+    ['a poster swapped in videos.json without measuring its frame again', ({ videos }) => {
+      videos[0] = { ...videos[0], poster: { ...videos[0].poster, sha256: 'b'.repeat(64) } };
+    }, /poster_sha256 .* is not the manifest's bbbbbbbbbbbb: the poster changed/],
+    ['a row of another render', ({ row }) => { row.mp4_sha256 = 'c'.repeat(64); }, /mp4_sha256 cccccccccccc is not the manifest's/],
+    ['a t after the video ends', ({ row }) => { row.t = 84; }, /t 84 s is not inside the 84\.000 s video/],
+    [`a PSNR under ${MIN_PSNR_DB} dB`, ({ row }) => { row.psnr_db = 30.53; }, /psnr_db 30\.53 is under 35/],
+    ['a t written as a string', ({ row }) => { row.t = '50'; }, /t must be a number of at least 0/],
+    ['a crop of two numbers', ({ row }) => { row.crop = [1664, 936]; }, /crop must be null or \[width, height, x, y\]/],
+    ['a row with a key missing', ({ row }) => { delete row.psnr_db; }, /posters\[0\] must have exactly the keys/],
+    ['a row with an extra key', ({ row }) => { row.note = 'title card'; }, /posters\[0\] must have exactly the keys/],
+    ['two rows for one video', ({ file }) => { file.posters.push({ ...file.posters[0] }); }, /two rows for "01-getting-started"/],
+    ['a file with another top-level key', ({ file }) => JSON.stringify({ ...file, videos: [] }), /must be \{"posters": \[\.\.\.\]\} and nothing else/],
+    ['a file that is not JSON', () => '{"posters": [', /is not JSON/],
+    ['captions that were not placed', ({ f }) => { rmSync(join(f.media, `${f.stem}.site.vtt`)); }, /\.site\.vtt is missing or has no cue/],
+  ];
+  for (const [what, plant, pattern] of plants) {
+    it(`fails ${what}`, () => {
+      const problems = framed(plant);
+      assert.ok(problems.some((p) => pattern.test(p)), problems.join('\n') || 'no problem reported');
+    });
+  }
+
+  it('is part of check(), which refuses a missing poster-frames file', () => {
+    const f = contentFixture();
+    const { entry, stem } = f;
+    writeFileSync(
+      join(f.dir, 'index.html'),
+      `<video controls="" preload="none" poster="/media/${entry.poster.name}" width="1920" height="1080" aria-labelledby="t" ` +
+        `aria-describedby="d" src="/media/${entry.mp4.name}"><track kind="captions" srcLang="en" label="English" src="/media/${stem}.site.vtt"/></video>`,
+    );
+    const manifest = join(f.dir, 'videos.json');
+    writeFileSync(manifest, JSON.stringify({ videos: [entry] }));
+    const frames = join(f.dir, 'poster-frames.json');
+    writeFileSync(frames, JSON.stringify({ posters: [frameRow(entry)] }));
+    assert.deepEqual(check(f.dir, manifest, f.transcripts, frames), []);
+    writeFileSync(frames, JSON.stringify({ posters: [{ ...frameRow(entry), t: 0.5 }] }));
+    assert.ok(check(f.dir, manifest, f.transcripts, frames).some((p) => /that frame is the title card/.test(p)));
+    rmSync(frames);
+    assert.ok(check(f.dir, manifest, f.transcripts, frames).some((p) => /poster-frames\.json is missing/.test(p)));
+    rmSync(f.dir, { recursive: true });
+  });
 });
 
 // --- G2b (check-platform-export.mjs) ------------------------------------------------------

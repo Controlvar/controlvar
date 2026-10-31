@@ -1,0 +1,58 @@
+{
+  "posters": [
+    {
+      "slug": "01-getting-started",
+      "mp4_sha256": "9cb480bae8819f30b4571f016780a81216bb573e7c8bab697c486318a1600cec",
+      "poster_sha256": "66455b960474f6375a1363592eeadb40d27392e052602607aa29f2a0a48e3176",
+      "t": 50,
+      "first_cue": 3,
+      "crop": [1664, 936, 0, 0],
+      "psnr_db": 41.52
+    },
+    {
+      "slug": "02-first-experiment",
+      "mp4_sha256": "03d296e58df02e711a2990fb2877f46c7678069efb104c4e99111470ab98a079",
+      "poster_sha256": "305bf82b345b83fad21711e46b9a0964dea13570c3a56b941387bc5374c2de85",
+      "t": 40.5,
+      "first_cue": 3.033,
+      "crop": [1664, 936, 0, 0],
+      "psnr_db": 43.58
+    },
+    {
+      "slug": "03-flag-rollout",
+      "mp4_sha256": "130574a2e973c1bb79026c424fef2ae3b7722a25005511e79da514a360ec6b37",
+      "poster_sha256": "f253e08e246625e31009f0336576504e48d356877b842d26556e8f14fd21d9d2",
+      "t": 33,
+      "first_cue": 3.033,
+      "crop": [1664, 936, 0, 0],
+      "psnr_db": 43.5
+    },
+    {
+      "slug": "05-plan-and-team",
+      "mp4_sha256": "5446fa6cdb042a32991f8ca52acf9e88d4c89db83f7dcd45c9fdde8fee519e6c",
+      "poster_sha256": "63e130d230b5381160368b91f9118b0c52c38a57aecf4809c5e5fcf727b859e4",
+      "t": 54,
+      "first_cue": 3.067,
+      "crop": [1664, 936, 0, 0],
+      "psnr_db": 42.82
+    },
+    {
+      "slug": "06-shoplab-ab-test",
+      "mp4_sha256": "3c36550c491d7791e56399eae0a88de44b2bd1f1c9119f68ded3257428336420",
+      "poster_sha256": "c3e706ecd3858eead8e61cb00cd994e72925eb6a950c09ecc9795467fe2333cd",
+      "t": 48,
+      "first_cue": 3.033,
+      "crop": [1664, 936, 0, 0],
+      "psnr_db": 47.44
+    },
+    {
+      "slug": "08-warehouse-explainer",
+      "mp4_sha256": "8495d45e4d7f205dc7b98e214a50c6f0aa88359821502e38e318fc8d82b57e5b",
+      "poster_sha256": "705c2c487bc1f29a437170b1efc5fd7639bcb9b0fb1f254b0c11115d6e5feb54",
+      "t": 1,
+      "first_cue": 0,
+      "crop": null,
+      "psnr_db": 41.68
+    }
+  ]
+}

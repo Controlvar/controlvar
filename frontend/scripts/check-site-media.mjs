@@ -22,6 +22,8 @@
  *   words    the transcript's spoken lines (`src/content/walkthroughs/
  *            <slug>.json`) are the cues' text, in order; it names this mp4
  *   poster   the pinned bytes; a JPEG of 1280x720, at most 64 KiB
+ *   frame    the poster is a frame of the video itself, not its title card
+ *            (#1459): see POSTER FRAMES below
  *   all      the project's former name in none of the downloaded bytes
  *
  * That is a recording: a transcript with no `kind`. An ANIMATION (the
@@ -35,6 +37,30 @@
  * renders it (`src/components/Walkthroughs.tsx`), its one caption track not
  * `default`, no `<iframe>`, and every `src` and `poster` on this site.
  *
+ * POSTER FRAMES (#1459). `src/content/poster-frames.json` is
+ * `{"posters": [row, ...]}`, one row per manifest entry and none for a video
+ * the manifest does not list, each row exactly
+ *
+ *   {"slug", "mp4_sha256", "poster_sha256", "t", "first_cue", "crop", "psnr_db"}
+ *
+ * It says which frame of the video the poster is: the frame at `t` seconds of
+ * the pinned mp4, cropped to `crop` ([width, height, x, y], or null for the
+ * whole frame) and scaled to 1280x720. Whether the poster's pixels are that
+ * frame needs ffmpeg, which the CI runner does not have, so `psnr_db` (the
+ * poster against that frame, at least 35) is measured when the founder
+ * approves the poster's upload, and recorded. Here, with no ffmpeg:
+ *
+ *   - the row's mp4_sha256 and poster_sha256 are the manifest's, so neither
+ *     file can change without its row being written again;
+ *   - `first_cue` is the start of the first cue of the placed
+ *     `out/media/<stem>.site.vtt`, read from that file;
+ *   - `t` is at or after that start, and inside the video. A recording opens
+ *     on its title card and its first cue starts as the card ends, so a frame
+ *     before the first cue is the card. A title card is a frame of its own
+ *     video too, which is why only a pinned frame time can tell it apart;
+ *   - `psnr_db` is a number of at least 35; `crop` is null or four whole
+ *     numbers.
+ *
  * Exit 0 when all hold; 1 with every problem listed.
  */
 import { createHash } from 'node:crypto';
@@ -44,6 +70,10 @@ import { fileURLToPath } from 'node:url';
 import { MANIFEST, SITE_SETTING, parseManifest, placedNames, stemOf } from './fetch-site-media.mjs';
 
 const TRANSCRIPTS = fileURLToPath(new URL('../src/content/walkthroughs/', import.meta.url));
+export const POSTER_FRAMES = fileURLToPath(new URL('../src/content/poster-frames.json', import.meta.url));
+/** The least PSNR, in dB, of a poster against the frame its row names. */
+export const MIN_PSNR_DB = 35;
+const FRAME_KEYS = ['slug', 'mp4_sha256', 'poster_sha256', 't', 'first_cue', 'crop', 'psnr_db'];
 // Assembled, so this file never contains the word it looks for
 // (scripts/check_legacy_name.py does the same).
 const FORMER_NAME = ['experi', 'mently'].join('');
@@ -339,7 +369,75 @@ export function entryProblems(entry, mediaDir, transcriptDir = TRANSCRIPTS) {
   return problems;
 }
 
-export function check(outDir, manifestPath = MANIFEST, transcriptDir = TRANSCRIPTS) {
+const hasExactly = (value, keys) =>
+  value !== null && typeof value === 'object' && !Array.isArray(value) &&
+  Object.keys(value).length === keys.length && keys.every((k) => Object.prototype.hasOwnProperty.call(value, k));
+const finite = (value) => typeof value === 'number' && Number.isFinite(value);
+const ms = (value) => Math.round(value * 1000);
+
+/**
+ * Problems with the poster-frames file (its `text`) against the manifest's
+ * entries and the files placed in `mediaDir` (POSTER FRAMES above).
+ */
+export function frameProblems(text, videos, mediaDir) {
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (error) {
+    return [`poster-frames.json is not JSON: ${error.message}`];
+  }
+  if (!hasExactly(data, ['posters']) || !Array.isArray(data.posters)) return ['poster-frames.json must be {"posters": [...]} and nothing else'];
+  const problems = [];
+  const rows = new Map();
+  data.posters.forEach((row, i) => {
+    if (!hasExactly(row, FRAME_KEYS)) problems.push(`poster-frames.json posters[${i}] must have exactly the keys ${FRAME_KEYS.join(', ')}`);
+    else if (rows.has(row.slug)) problems.push(`poster-frames.json has two rows for ${JSON.stringify(row.slug)}`);
+    else rows.set(row.slug, row);
+  });
+  const listed = new Set(videos.map((entry) => entry.slug));
+  for (const slug of rows.keys()) {
+    if (!listed.has(slug)) problems.push(`poster-frames.json has a row for ${JSON.stringify(slug)}, which videos.json does not list`);
+  }
+  for (const entry of videos) {
+    const where = `${entry.slug}: poster-frames.json`;
+    const row = rows.get(entry.slug);
+    if (!row) {
+      problems.push(`${where} has no row; when ${entry.poster.name}'s upload is approved, measure which frame of the video it is and add one`);
+      continue;
+    }
+    if (row.mp4_sha256 !== entry.mp4.sha256) problems.push(`${where} mp4_sha256 ${String(row.mp4_sha256).slice(0, 12)} is not the manifest's ${entry.mp4.sha256.slice(0, 12)}`);
+    if (row.poster_sha256 !== entry.poster.sha256) {
+      problems.push(`${where} poster_sha256 ${String(row.poster_sha256).slice(0, 12)} is not the manifest's ${entry.poster.sha256.slice(0, 12)}: the poster changed and its frame was not measured again`);
+    }
+    if (row.crop !== null && !(Array.isArray(row.crop) && row.crop.length === 4 && row.crop.every((n) => Number.isInteger(n) && n >= 0))) {
+      problems.push(`${where} crop must be null or [width, height, x, y] in whole pixels`);
+    }
+    const notNumbers = ['t', 'first_cue', 'psnr_db'].filter((key) => !finite(row[key]) || row[key] < 0);
+    if (notNumbers.length) {
+      problems.push(`${where} ${notNumbers.join(', ')} must be a number of at least 0`);
+      continue;
+    }
+    if (row.psnr_db < MIN_PSNR_DB) problems.push(`${where} psnr_db ${row.psnr_db} is under ${MIN_PSNR_DB}: the poster is not the frame its row names`);
+    // The first cue as placed, read from the file: never a typed value.
+    const siteName = `${stemOf(entry)}.site.vtt`;
+    const sitePath = join(mediaDir, siteName);
+    const cues = existsSync(sitePath) ? parseVtt(readFileSync(sitePath, 'utf8')).cues : [];
+    if (!cues.length) {
+      problems.push(`${where}: out/media/${siteName} is missing or has no cue, so t cannot be held to the first cue`);
+      continue;
+    }
+    const first = cues[0].start;
+    if (ms(row.first_cue) !== ms(first)) problems.push(`${where} first_cue ${row.first_cue} s, but the first cue of out/media/${siteName} starts at ${first} s`);
+    if (ms(row.t) < ms(first)) problems.push(`${where} t ${row.t} s is before the first cue (${first} s): that frame is the title card`);
+    const mp4Path = join(mediaDir, entry.mp4.name);
+    const duration = existsSync(mp4Path) ? mp4Facts(readFileSync(mp4Path)).duration : null;
+    if (duration === null) problems.push(`${where}: out/media/${entry.mp4.name} is missing or has no length, so t cannot be held inside the video`);
+    else if (row.t >= duration) problems.push(`${where} t ${row.t} s is not inside the ${duration.toFixed(3)} s video`);
+  }
+  return problems;
+}
+
+export function check(outDir, manifestPath = MANIFEST, transcriptDir = TRANSCRIPTS, framesPath = POSTER_FRAMES) {
   const videos = parseManifest(readFileSync(manifestPath, 'utf8'));
   const mediaDir = join(outDir, 'media');
   const problems = [];
@@ -350,6 +448,8 @@ export function check(outDir, manifestPath = MANIFEST, transcriptDir = TRANSCRIP
   const have = readdirSync(mediaDir).sort();
   if (JSON.stringify(want) !== JSON.stringify(have)) problems.push(`out/media holds ${JSON.stringify(have)}, want ${JSON.stringify(want)}`);
   for (const entry of videos) problems.push(...entryProblems(entry, mediaDir, transcriptDir));
+  if (!existsSync(framesPath)) problems.push(`${framesPath} is missing: every listed poster needs its frame row`);
+  else problems.push(...frameProblems(readFileSync(framesPath, 'utf8'), videos, mediaDir));
   problems.push(...pageProblems(readFileSync(indexPath, 'utf8'), videos));
   return problems;
 }
@@ -373,6 +473,6 @@ if (invokedAsScript()) {
     process.exitCode = 1;
   } else {
     const count = parseManifest(readFileSync(MANIFEST, 'utf8')).length;
-    console.log(`check-site-media: ${count} video(s): pinned bytes, faststart, sound as declared (recordings: AAC narration; animations: none), captions = pinned .vtt + line:-5, transcript = cues, poster 1280x720, page wiring: all hold`);
+    console.log(`check-site-media: ${count} video(s): pinned bytes, faststart, sound as declared (recordings: AAC narration; animations: none), captions = pinned .vtt + line:-5, transcript = cues, poster 1280x720, poster frame at or after the first cue, page wiring: all hold`);
   }
 }
