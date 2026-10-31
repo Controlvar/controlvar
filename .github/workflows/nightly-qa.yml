@@ -280,11 +280,18 @@ jobs:
       - name: SDKs this job checks, and those it does not
         run: python tests/sdk-contract/hash_contract.py --list
 
-      - name: The comparison rejects a wrong answer (hash_contract.py self-tests)
+      - name: The comparison rejects a wrong answer; the published evaluators accept the ruleset
         run: python -m pytest tests/sdk-contract -v -o addopts=""
 
       - name: SDK hashes (python, js, edge, react-native, go)
         run: python tests/sdk-contract/hash_contract.py python js edge react-native go
+
+      # The pytest step above fed every release pinned in published-sdks.json
+      # the server's ruleset; this fails when npm or PyPI holds a release with
+      # a local evaluator that is not pinned (#1497). Not on pull requests: a
+      # publish would turn every open one red until the pin lands.
+      - name: Every published local evaluator is in the gate
+        run: python tests/sdk-contract/published_versions_check.py
 
   frontend-tests:
     name: Frontend Unit Tests
