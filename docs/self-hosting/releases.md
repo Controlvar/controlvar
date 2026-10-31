@@ -169,8 +169,11 @@ the full profile lists its modules.
 
 Each SDK is released by its own tag, such as `sdk/js/v1.2.3` or
 `sdk/python/v1.2.3`, and versions independently of the platform.
-`sdk-release.yml` publishes to PyPI and npm by trusted publishing (OIDC — no
-long-lived token in any secret), behind the `sdk-release` environment.
+npm and PyPI publish by trusted publishing (OIDC), with no long-lived token.
+Maven Central has no trusted publishing: a Central user token and the GPG
+signing key are secrets of the `sdk-release` environment, read only by the job
+that signs and uploads, in a run the founder approves. That job uploads for
+validation and cannot publish; the founder publishes in the Central Portal.
 A prerelease — a version with a `-`, such as `1.0.0-rc.1` — publishes under
 the `next` dist-tag, so `npm install <package>` keeps resolving the last
 stable version and `npm install <package>@next` gets the prerelease.

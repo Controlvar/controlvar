@@ -1,22 +1,29 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- child.project.url.inherit.append.path and the three child.scm.* attributes
+     below stop Maven appending each module's artifactId to the inherited url and
+     scm values: without them core's url is .../sdk/java#readme/controlvar-sdk, a
+     page that does not exist, published with the version on Maven Central for
+     good. -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd"
+         child.project.url.inherit.append.path="false">
     <modelVersion>4.0.0</modelVersion>
 
     <!-- ═══════════════════════════════════════════════════════════════
          Parent / aggregator POM.
-         - Module "." (this directory) produces the core SDK jar.
+         - Module "core" produces the core SDK jar (controlvar-sdk).
          - Module "spring-boot-starter" produces the auto-config starter.
          ═══════════════════════════════════════════════════════════════ -->
 
     <groupId>com.controlvar</groupId>
     <artifactId>controlvar-sdk-parent</artifactId>
-    <version>1.0.0</version>
+    <version>0.1.0</version>
     <packaging>pom</packaging>
 
     <name>Controlvar Java SDK — Parent</name>
     <description>Parent POM for the Controlvar Java SDK and Spring Boot starter</description>
+    <url>https://github.com/Controlvar/controlvar/tree/main/sdk/java#readme</url>
 
     <modules>
         <!-- Core SDK (the original single-module project, now a sub-module) -->
@@ -32,6 +39,21 @@
             <distribution>repo</distribution>
         </license>
     </licenses>
+
+    <developers>
+        <developer>
+            <name>Controlvar</name>
+            <organization>Controlvar</organization>
+            <organizationUrl>https://controlvar.com</organizationUrl>
+        </developer>
+    </developers>
+
+    <scm child.scm.connection.inherit.append.path="false"
+         child.scm.developerConnection.inherit.append.path="false"
+         child.scm.url.inherit.append.path="false">
+        <connection>scm:git:https://github.com/Controlvar/controlvar.git</connection>
+        <url>https://github.com/Controlvar/controlvar</url>
+    </scm>
 
   <properties>
         <maven.compiler.source>11</maven.compiler.source>
@@ -51,4 +73,72 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- What Maven Central needs beside each jar: its sources and javadoc
+             jars, then the bundle. `-Pcentral -DskipTests package` builds the
+             jars (sdk-unit-tests.yml runs it, so a javadoc error fails a pull
+             request rather than a release). `-Pcentral deploy` is run only by
+             sdk-release.yml's maven-build job: the plugin below replaces the
+             deploy step with its own, which writes
+             target/central-publishing/central-bundle.zip. skipUpload is set
+             here, not on the command line, because a value in the POM is not
+             overridden by a -DskipUpload property (read from the plugin's
+             descriptor, not seen in a run). The workflow's maven job signs that
+             bundle and uploads it to the Central Portal for validation only;
+             nothing in this repository publishes it. -->
+        <profile>
+            <id>central</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>3.4.0</version>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <!-- The contract smoke runner is not API: core/pom.xml
+                                 leaves it out of the jar, and these leave it out of
+                                 the sources and javadoc. -->
+                            <excludes>
+                                <exclude>com/controlvar/sdk/examples/**</exclude>
+                            </excludes>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>3.12.0</version>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <excludePackageNames>com.controlvar.sdk.examples</excludePackageNames>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>0.12.0</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <skipUpload>true</skipUpload>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

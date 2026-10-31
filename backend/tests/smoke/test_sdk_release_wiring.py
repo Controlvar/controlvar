@@ -102,11 +102,20 @@ def test_wired_sdks_report_a_version_and_unwired_ones_refuse(sdk: str) -> None:
         )
 
 
-@pytest.mark.parametrize(
-    "sdk", sorted(name for name, eco in ecosystems().items() if eco in {"pypi", "npm"})
+#: The SDKs whose tag the gate compares with a manifest: every ecosystem but
+#: `tag-only` (no manifest) and `unwired` (refused whatever the version), so a
+#: new ecosystem is in the parametrisation below without anyone adding it.
+COMPARED_SDKS = sorted(
+    name for name, eco in ecosystems().items() if eco not in {"tag-only", "unwired"}
 )
+
+
+@pytest.mark.parametrize("sdk", COMPARED_SDKS)
 def test_a_mismatched_tag_is_refused(sdk: str) -> None:
-    """The gate's whole job: a tag that does not match the manifest."""
+    """The gate's whole job: a tag that does not match the manifest.
+
+    It once listed pypi and npm by name, so wiring java to maven would have
+    left the maven reader's mismatch untested."""
     result = subprocess.run(
         [
             sys.executable,
@@ -384,23 +393,45 @@ def test_every_npm_sdk_names_its_repository(sdk: str) -> None:
 # publish job checks the package it uploads against the tag
 # --------------------------------------------------------------------------
 #
-# Two sets, both exact, so that neither split can be undone without a test
-# going red:
+# Exact sets, so that no split can be undone without a test going red:
 #
 #   UNSPLIT_TOKEN_JOBS  jobs that install or test while holding
 #                       `id-token: write`. None.
-#   PUBLISH_JOBS        jobs that hold the token and publish only.
+#   PUBLISH_JOBS        jobs that hold the OIDC token and publish only.
+#   ENVIRONMENT_JOBS    jobs in the `sdk-release` environment: the OIDC ones
+#                       and `maven`, which holds no token (Maven Central has
+#                       no trusted publishing) but reads the environment's
+#                       secrets. Its own set, so that splitting it from the
+#                       token set cannot drop `maven` from the checks that
+#                       loop over the environment.
 
 UNSPLIT_TOKEN_JOBS: set[str] = set()
 PUBLISH_JOBS = {"pypi", "npm"}
+ENVIRONMENT_JOBS = {"pypi", "npm", "maven"}
 RELEASE_ENVIRONMENT = "sdk-release"
+
+#: The secrets each job reads, exactly. Only `maven` reads any: npm and PyPI
+#: publish by OIDC, with no long-lived token.
+SECRETS_BY_JOB = {
+    "maven": {
+        "CENTRAL_TOKEN_USERNAME",
+        "CENTRAL_TOKEN_PASSWORD",
+        "GPG_PRIVATE_KEY",
+        "GPG_PASSPHRASE",
+    },
+}
+#: The configuration variables each job reads, exactly.
+VARIABLES_BY_JOB = {"maven": {"MAVEN_GPG_FINGERPRINT"}}
 
 #: A step whose `run:` installs packages, runs a test suite or builds one.
 INSTALLS_OR_TESTS = re.compile(
     r"\bnpm\s+(ci|install|test|run)\b"
     r"|\bpip3?\s+install\b|-m\s+pip\s+install\b"
     r"|\bpytest\b|-m\s+build\b|\btwine\b"
+    r"|\bmvnw?\b"
 )
+SECRET = re.compile(r"\$\{\{[^}]*?\bsecrets\.([A-Za-z_][A-Za-z0-9_]*)")
+VARIABLE = re.compile(r"\$\{\{[^}]*?\bvars\.([A-Za-z_][A-Za-z0-9_]*)")
 EXPRESSION = re.compile(r"\$\{\{\s*(.*?)\s*\}\}")
 PYPA_PIN = re.compile(r"pypa/gh-action-pypi-publish@([0-9a-f]{40})")
 
@@ -455,42 +486,114 @@ def test_no_job_that_installs_or_tests_can_request_an_oidc_token() -> None:
     )
 
 
-def test_the_release_environment_and_the_token_sit_on_the_publish_jobs_only() -> None:
-    """B3. The approval and the token belong to the jobs that publish."""
-    workflow = _workflow()
-    expected = PUBLISH_JOBS | UNSPLIT_TOKEN_JOBS
-    with_environment = set()
-    with_token = set()
+def _environment_jobs(workflow: dict) -> set[str]:
+    """The jobs that name an environment, read from the workflow itself."""
+    found = set()
     for name, job in workflow["jobs"].items():
         environment = job.get("environment")
         if isinstance(environment, dict):
             environment = environment.get("name")
         if environment is not None:
             assert environment == RELEASE_ENVIRONMENT, (name, environment)
-            with_environment.add(name)
-        if _can_request_oidc(_effective_permissions(workflow, job)):
-            with_token.add(name)
-    assert with_environment == expected, (
+            found.add(name)
+    return found
+
+
+def test_the_release_environment_and_the_token_sit_on_the_publish_jobs_only() -> None:
+    """B3. The approval belongs to the jobs that publish or upload, and the
+    OIDC token to the ones that publish by it. The two sets differ by `maven`
+    alone, which uploads with the environment's secrets."""
+    workflow = _workflow()
+    with_environment = _environment_jobs(workflow)
+    with_token = {
+        name
+        for name, job in workflow["jobs"].items()
+        if _can_request_oidc(_effective_permissions(workflow, job))
+    }
+    expected_environment = ENVIRONMENT_JOBS | UNSPLIT_TOKEN_JOBS
+    expected_token = PUBLISH_JOBS | UNSPLIT_TOKEN_JOBS
+    assert with_environment == expected_environment, (
         f"jobs in the {RELEASE_ENVIRONMENT!r} environment: {sorted(with_environment)}; "
-        f"expected exactly {sorted(expected)}"
+        f"expected exactly {sorted(expected_environment)}"
     )
-    assert with_token == expected, (
+    assert with_token == expected_token, (
         f"jobs that can request an OIDC token: {sorted(with_token)}; "
-        f"expected exactly {sorted(expected)}"
+        f"expected exactly {sorted(expected_token)}"
     )
+    assert ENVIRONMENT_JOBS - PUBLISH_JOBS == {"maven"}
 
 
 def test_no_publish_job_run_block_contains_an_expression() -> None:
-    """C3. In a publish job, values reach a script through `env:` only."""
-    jobs = _workflow()["jobs"]
-    assert PUBLISH_JOBS <= set(jobs), sorted(PUBLISH_JOBS - set(jobs))
+    """C3. In a job that holds the environment, values reach a script
+    through `env:` only. The loop is over the jobs the workflow puts in the
+    environment, not over the OIDC set, so `maven`, which holds the
+    environment and no token, is checked too."""
+    workflow = _workflow()
+    jobs = workflow["jobs"]
+    environment_jobs = _environment_jobs(workflow)
+    assert ENVIRONMENT_JOBS <= environment_jobs, sorted(
+        ENVIRONMENT_JOBS - environment_jobs
+    )
     found = [
         (name, step.get("name") or step.get("uses"))
-        for name in sorted(PUBLISH_JOBS)
+        for name in sorted(environment_jobs)
         for step in jobs[name]["steps"]
         if "${{" in _run_of(step)
     ]
     assert not found, f"a publish-job run: block contains ${{{{ }}}}: {found}"
+
+
+def _references(pattern: re.Pattern, node) -> set[str]:
+    """Every name `pattern` captures anywhere in a parsed YAML node."""
+    if isinstance(node, dict):
+        return set().union(
+            *(
+                _references(pattern, key) | _references(pattern, value)
+                for key, value in node.items()
+            )
+        )
+    if isinstance(node, list):
+        return set().union(*(_references(pattern, item) for item in node))
+    return set(pattern.findall(str(node)))
+
+
+def _by_job(pattern: re.Pattern) -> dict[str, set[str]]:
+    jobs = _workflow()["jobs"]
+    found = {name: _references(pattern, job) for name, job in jobs.items()}
+    return {name: names for name, names in found.items() if names}
+
+
+def test_each_job_reads_exactly_its_own_secrets() -> None:
+    """Only `maven` reads a secret, and exactly the Central token and the
+    signing key: npm and PyPI publish by OIDC, with no long-lived token, and
+    no build job, which runs tests and third-party plugins, holds a
+    credential. Nothing outside the jobs (a workflow-level `env:`) names
+    one either, every expression that reads one names it (no
+    `toJSON(secrets)`, no `secrets['X']`), and the secrets reach `maven`
+    through step `env:` only."""
+    workflow = _workflow()
+    assert _by_job(SECRET) == SECRETS_BY_JOB
+    assert _by_job(VARIABLE) == VARIABLES_BY_JOB
+    outside = {key: value for key, value in workflow.items() if key != "jobs"}
+    assert not _references(SECRET, outside), _references(SECRET, outside)
+
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert "secrets: inherit" not in text
+    for expression in EXPRESSION.findall(text):
+        for context in ("secrets", "vars"):
+            if re.search(rf"\b{context}\b", expression):
+                assert re.fullmatch(rf"{context}\.[A-Z][A-Z0-9_]*", expression), (
+                    f"${{{{ {expression} }}}} reads {context} other than by one name"
+                )
+
+    for name in SECRETS_BY_JOB:
+        job = workflow["jobs"][name]
+        assert not _references(SECRET, job.get("env") or {}), name
+        for step in job["steps"]:
+            label = step.get("name") or step.get("uses")
+            outside_env = {key: value for key, value in step.items() if key != "env"}
+            assert not _references(SECRET, outside_env), (name, label)
+            assert not _references(VARIABLE, outside_env), (name, label)
 
 
 def test_the_pypi_build_and_publish_jobs_are_a_pair() -> None:

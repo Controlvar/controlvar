@@ -651,7 +651,7 @@ text = "Full reference: Java SDK."
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "Install it from a clone of this repository: mvn install in sdk/java builds both modules and installs them into your local ~/.m2, where the dependency below resolves."
+text = "Install it from a clone of this repository: ./mvnw install in sdk/java builds both modules and installs them into your local ~/.m2, where the dependency below resolves."
 by = ["test:backend/tests/smoke/test_sdk_java_modules.py::test_the_build_has_a_core_module_and_a_spring_boot_starter"]
 
 [[unit]]

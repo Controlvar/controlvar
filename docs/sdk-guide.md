@@ -328,14 +328,14 @@ function CheckoutButton() {
 
 ### Installation
 
-Install it from a clone of this repository: `mvn install` in `sdk/java` builds both modules and
+Install it from a clone of this repository: `./mvnw install` in `sdk/java` builds both modules and
 installs them into your local `~/.m2`, where the dependency below resolves.
 
 ```xml
 <dependency>
   <groupId>com.controlvar</groupId>
   <artifactId>controlvar-sdk</artifactId>
-  <version>1.0.0</version>
+  <version>0.1.0</version>
 </dependency>
 <!-- Spring Boot: use controlvar-spring-boot-starter instead -->
 ```
