@@ -81,7 +81,7 @@ SUFFICIENT_STATS_FINGERPRINTS: Dict[str, Dict[str, str]] = {
 #: release is pinned under a later version only, never added to one of these
 #: (a new key under a released version passes every hash, which is how a
 #: changed engine could keep a released version number).
-RELEASED_ENGINE_VERSIONS = ("1.1.0", "1.2.0", "1.3.0", "1.4.0")
+RELEASED_ENGINE_VERSIONS = ("1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.5.0")
 
 _CONTROL = "ffffffff-0000-4000-8000-000000000002"
 _TREATMENT_1 = "00000000-0000-4000-8000-000000000001"
@@ -253,6 +253,18 @@ def test_cuped_metric_result_is_pinned_only_from_the_version_that_added_it():
         else:
             assert pinned, f"cuped_metric_result is missing from {version}"
     assert "cuped_metric_result" in SUFFICIENT_STATS_FINGERPRINTS[ENGINE_VERSION]
+
+
+@pytest.mark.regression
+def test_engine_versions_that_shipped_are_recorded():
+    """1.5.0 shipped in v0.38.0 and v0.39.0 (#1383, #1400) while this tuple
+    still ended at 1.4.0, so its hashes could be replaced with no test failing.
+
+    A release that ships a new ``ENGINE_VERSION`` appends it here in the same
+    change that bumps it.  This reads no git and no tags (core-build has no
+    ``.git``); the literal tuple is the record.
+    """
+    assert RELEASED_ENGINE_VERSIONS == ("1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.5.0")
 
 
 def test_running_version_is_not_older_than_a_released_one():
