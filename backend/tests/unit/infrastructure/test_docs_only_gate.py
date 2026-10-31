@@ -172,8 +172,8 @@ DOCS_TESTS = (
     "modules/backend/tests/unit/services/test_sso_docs_messages.py",
     # Video 2's SDK card quotes docs/sdk/javascript.md's quick start line for
     # line (#1066); passes with backend/requirements.txt alone (checked).
-    # Video 9's API part holds each of its sentences to the pages of docs/
-    # that state it (CLAIMS, #1442), and imports no module it did not before.
+    # Video 9's claims check (CLAIMS) holds a sentence to the pages of docs/
+    # that state it, and imports no module it did not before.
     "backend/tests/unit/showcase/test_showcase_quoted_docs.py",
 )
 

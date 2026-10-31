@@ -79,9 +79,10 @@ END_CARD_MS = 4000
 #: video in ``MAX_VIDEO_MS_BY_VIDEO`` may run to its own cap instead.
 MIN_VIDEO_MS = 55_000
 MAX_VIDEO_MS = 90_000
-#: The videos allowed to run longer, each with its own cap. Video 9 designs an
-#: experiment in the dashboard and then makes and reads back its API settings
-#: on camera, which the default cap does not hold. A video's cap is
+#: The videos allowed to run longer, each with its own cap. Video 9 is to
+#: design an experiment end to end in the dashboard (D182: guided setup, then
+#: the settings set on their own pages), which the default cap does not hold.
+#: A video's cap is
 #: ``max_video_ms(slug)``: the cue sheet, gate 1, the capture's projection and
 #: the voice step's all read it there, and no other module reads these two.
 MAX_VIDEO_MS_BY_VIDEO: Dict[str, int] = {"09-design-in-depth": 150_000}

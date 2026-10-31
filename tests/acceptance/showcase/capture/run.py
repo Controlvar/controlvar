@@ -26,13 +26,8 @@ Order, and what must be true before each step:
    tree, the scenes (with the storyboard's traffic and its results warmed off
    camera between them), gate 10 (the end state), and the capture directory
    (``write_capture``). The stack comes down in a ``finally``, and nothing
-   labelled may be left. A storyboard with a console scene (video 9) has its
-   exclusion group made in the setup (``console.send``, exact statuses), gate
-   10a read off camera at the saved draft before the console's first call,
-   the calls made on camera (``console.Calls``), then gate api (every
-   exchange as the storyboard declares it) and gate 10b (what the calls set)
-   in place of gate 10's design check; the manifest's "10" carries 10a and
-   10b, and is ok only when both are.
+   labelled may be left. A storyboard's exclusion group (video 9's) is made
+   in the setup through ``offcamera.send``, with exact statuses.
 5. Video 4: a setting the video states on screen (overrides.yaml
    ``statement``, Quick Start stack only) is read back from the API's own log
    after the stack is up (C6, ``interval_read_back``); B9's fit is refused in
@@ -235,17 +230,17 @@ def make_setup(
 
     Each segment is made once, as a rules segment; an answer that is not that
     segment, active, refuses the video. Each exclusion group is made through
-    ``console.send`` (exactly 201, no redirect), then each of its experiments,
-    by name (exactly one), added to it (exactly 200); every answer goes to
-    *answers* for the run's redactor, and is never recorded whole. Nothing for
-    a storyboard without a setup.
+    ``offcamera.send`` (exactly 201, no redirect), then each of its
+    experiments, by name (exactly one), added to it (exactly 200); every answer
+    goes to *answers* for the run's redactor, and is never recorded whole.
+    Nothing for a storyboard without a setup.
     """
     if board.setup is None:
         return {}
-    from showcase.capture import console
+    from showcase.capture import offcamera
 
     call = call or _api
-    send = send or console.send
+    send = send or offcamera.send
     kept = answers if answers is not None else []
     groups = []
     for group in board.setup.exclusion_groups:
@@ -258,7 +253,7 @@ def make_setup(
                 {"name": group.name, "traffic_allocation": group.traffic_allocation},
                 201,
             )
-        except console.CallRefused as error:
+        except offcamera.CallRefused as error:
             raise StackError(f"setup: group {group.name!r}: {error}") from None
         kept.append(answer)
         if (
@@ -281,7 +276,7 @@ def make_setup(
                     {"experiment_id": experiment},
                     200,
                 )
-            except console.CallRefused as error:
+            except offcamera.CallRefused as error:
                 raise StackError(
                     f"setup: {name!r} into {group.name!r}: {error}"
                 ) from None
@@ -384,141 +379,6 @@ def design_state(
         owner_id=me.get("id"),
         readings=readings,
     )
-
-
-def _setup_group(setup: Optional[Mapping[str, Any]]) -> Optional[Mapping[str, Any]]:
-    groups = (setup or {}).get("exclusion_groups") or []
-    return groups[0] if len(groups) == 1 else None
-
-
-def _console_reads(api_url: str, token: str, group_id: Optional[str]) -> Dict[str, Any]:
-    """What gates 10a and 10b read beside the experiment: the exclusion groups,
-    the setup's group itself (its members, never the cached experiment), every
-    holdout and the active one."""
-    return {
-        "groups": _api(f"{api_url}/api/v1/mutual-exclusion-groups", token),
-        "group": _api(f"{api_url}/api/v1/mutual-exclusion-groups/{group_id}", token)
-        if group_id
-        else None,
-        "holdouts": _api(f"{api_url}/api/v1/holdout/all", token),
-        "active": _api(f"{api_url}/api/v1/holdout", token),
-    }
-
-
-def console_before_calls(
-    board: storyboard.Storyboard,
-    api_url: str,
-    token: str,
-    readings: Mapping[str, str],
-    setup: Optional[Mapping[str, Any]],
-) -> Tuple[bool, Dict[str, Any], str]:
-    """Gate 10a, at the saved draft before a console scene's first call:
-    gate 10's design checks unchanged (``gates.UNTOUCHED`` whole), and the
-    setup's group and no holdout (``gates.console_before``)."""
-    from showcase.capture import gates as judge
-
-    end = board.end_state.design
-    assert end is not None and board.setup is not None
-    ok, design, why = design_state(
-        end, api_url, token, readings, board.seed_counts.experiments
-    )
-    numbers: Dict[str, Any] = {"design": design}
-    if not ok:
-        return False, numbers, why
-    group = _setup_group(setup)
-    reads = _console_reads(api_url, token, group["id"] if group else None)
-    saved = _api(
-        f"{api_url}/api/v1/experiments/{experiment_id(api_url, token, end.name)}", token
-    )
-    ok, api, why = judge.console_before(
-        board.setup,
-        groups=reads["groups"],
-        group=reads["group"],
-        holdouts=reads["holdouts"],
-        saved=saved,
-    )
-    numbers.update(api)
-    return ok, numbers, why
-
-
-def console_values(
-    board: storyboard.Storyboard,
-    api_url: str,
-    token: str,
-    setup: Optional[Mapping[str, Any]],
-) -> Dict[str, str]:
-    """The fixed placeholders' values, looked up off camera: ``{experiment}``,
-    the one experiment with the design's name, and ``{group}``, the setup's
-    one group (``{start}`` is taken when its request is drawn)."""
-    values: Dict[str, str] = {}
-    if board.end_state.design is not None:
-        values["experiment"] = experiment_id(
-            api_url, token, board.end_state.design.name
-        )
-    group = _setup_group(setup)
-    if group is not None:
-        values["group"] = str(group["id"])
-    return values
-
-
-def console_after_calls(
-    board: storyboard.Storyboard,
-    api_url: str,
-    token: str,
-    readings: Mapping[str, str],
-    before: Mapping[str, Any],
-    calls: Any,
-) -> Tuple[bool, Dict[str, Any], str]:
-    """Gate 10b, after the console scene: gate 10's design checks again with
-    the fields the calls set (``moved``), then ``gates.console_after``."""
-    from showcase.capture import gates as judge
-
-    end = board.end_state.design
-    assert end is not None
-    records = [exchange.record() for exchange in calls.exchanges]
-    start = calls.values.get("start")
-    moved: Dict[str, Any] = {}
-    if "sequential" in end.api:
-        moved["sequential_testing_enabled"] = True
-    if "exclusion_group" in end.api:
-        moved["mutual_exclusion_group_id"] = str(before.get("group_id"))
-    if "scheduled_start" in end.api:
-        moved["start_date"] = start
-    listed = _api(f"{api_url}/api/v1/experiments/?limit=100", token)
-    named = [item for item in listed["items"] if item.get("name") == end.name]
-    if len(named) == 1:
-        named = [_api(f"{api_url}/api/v1/experiments/{named[0]['id']}", token)]
-    me = _api(f"{api_url}/api/v1/auth/me", token)
-    ok, design, why = judge.design_end(
-        end,
-        named=named,
-        total=int(listed["total"]),
-        seed_experiments=board.seed_counts.experiments,
-        owner_id=me.get("id"),
-        readings=readings,
-        moved=moved,
-    )
-    numbers: Dict[str, Any] = {"design": design, "moved": moved}
-    if not ok:
-        return False, numbers, why
-    reads = _console_reads(api_url, token, str(before.get("group_id")))
-    ok, api, why = judge.console_after(
-        end,
-        board.setup,
-        before=before,
-        group=reads["group"],
-        holdouts=reads["holdouts"],
-        active=reads["active"],
-        saved=named[0],
-        exchanges=records,
-        start=start,
-    )
-    numbers.update(api)
-    return ok, numbers, why
-
-
-def _no_send(*_args: Any) -> Tuple[int, Any]:
-    raise RuntimeError("no console scene ran, so no call may be sent")
 
 
 def write_private(path: Path, text: str) -> None:
@@ -921,7 +781,6 @@ def capture_video(
                     log,
                     work,
                     pacing=voiced.Pacing(clips),
-                    setup=setup,
                     setup_answers=setup_answers,
                 )
             except directing.CaptureFailed as error:
@@ -1070,14 +929,12 @@ def record(
     log: Callable[[str], None],
     work: guard.WorkRoot,
     pacing: Optional[voiced.Pacing] = None,
-    setup: Optional[Mapping[str, Any]] = None,
     setup_answers: Sequence[Any] = (),
 ) -> Dict[str, Any]:
     """The browser part of a capture: self-test, scenes, end state, recorded-data gates."""
     from docs_runner import redaction
     from playwright.sync_api import sync_playwright
 
-    from showcase.capture import console
     from showcase.capture import director as directing
     from showcase.capture import gates as judge
 
@@ -1087,8 +944,6 @@ def record(
     # is a needle from now on, as every page answer's is.
     for answer in setup_answers:
         redaction.register_credentials(answer, redactor)
-    #: Gate 10a, read off camera before a console scene's first call.
-    before_calls: Optional[Tuple[bool, Dict[str, Any], str]] = None
     ports = options.ports
     forbidden = forbidden_text(board, ports)
     #: Keys the run read from a file (the StreamPulse server key): gate 6 must
@@ -1208,23 +1063,6 @@ def record(
                         log=log,
                         incident=incident,
                     )
-                    if scene.console is not None and before_calls is None:
-                        # Off camera, at the saved draft, before the first call:
-                        # gate 10a; then the calls' placeholders, looked up.
-                        before_calls = console_before_calls(
-                            board, stack.api_url, token, director.readings, setup
-                        )
-                        if not before_calls[0]:
-                            raise directing.CaptureFailed(
-                                "gate 10",
-                                f"10a, before the first call: {before_calls[2]}",
-                            )
-                        director.calls = console.Calls(
-                            lambda method, path, body, status: console.send(
-                                stack.api_url, token, method, path, body, status
-                            ),
-                            console_values(board, stack.api_url, token, setup),
-                        )
                     log(f"scene {scene.id}")
                     shown = with_traffic_minutes(scene, users.report)
                     if incident is not None:
@@ -1276,34 +1114,7 @@ def record(
                 numbers["flag"] = made
                 if not ok:
                     why.append(reason)
-            consoled = any(s.console is not None for s in board.scenes)
-            if consoled:
-                # Gate api: every exchange the console scenes made, as the board
-                # declares them; refused here, before the end state is read.
-                calls = director.calls or console.Calls(_no_send, {})
-                problems, api_numbers = console.api_problems(
-                    board, calls, sorted(redactor.values)
-                )
-                gates["api"] = gate(not problems, **api_numbers)
-                if problems:
-                    raise directing.CaptureFailed("api", "; ".join(problems))
-            if end.design is not None and consoled:
-                # Gate 10b, after the console: 10a's checks again, with what the
-                # calls set; "10" is ok only when 10a and 10b both are.
-                assert before_calls is not None and director.calls is not None
-                ok, made, reason = console_after_calls(
-                    board,
-                    stack.api_url,
-                    token,
-                    director.readings,
-                    before_calls[1],
-                    director.calls,
-                )
-                numbers["10a"] = gate(before_calls[0], **before_calls[1])
-                numbers["10b"] = gate(ok, **made)
-                if not ok:
-                    why.append(f"10b: {reason}")
-            elif end.design is not None:
+            if end.design is not None:
                 ok, made, reason = design_state(
                     end.design,
                     stack.api_url,

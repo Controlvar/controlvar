@@ -14,10 +14,11 @@ from __future__ import annotations
 import copy
 import re
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import pytest
 import yaml
+from showcase import contract
 from showcase.capture import gates, run, storyboard
 
 pytestmark = [pytest.mark.unit]
@@ -864,3 +865,85 @@ def test_gate_10_judges_a_design_end_state():
     assert "if end.design is not None:" in block
     assert "design_state(" in block
     assert "board.seed_counts.experiments" in block
+
+
+def test_the_manifest_keeps_gate_10_and_the_render_refuses_one_without_it(tmp_path):
+    from backend.tests.unit.showcase.capture_dirs import default_manifest, make_capture
+
+    assert "10" in contract.REQUIRED_CAPTURE_GATES
+    assert "api" not in contract.REQUIRED_CAPTURE_GATES
+    manifest = default_manifest()
+    del manifest["gates"]["10"]
+    root = make_capture(tmp_path / "c", manifest=manifest)
+    with pytest.raises(
+        contract.CaptureRefused, match="capture gate 10 is not in the manifest"
+    ):
+        contract.validate_capture_dir(root)
+
+
+# ---------------------------------------------------------------------------
+# What the video sets beyond guided setup (``moved``), and nothing else
+# ---------------------------------------------------------------------------
+
+#: The setup's group and the start the video set, as stand-ins: the run makes
+#: the group's id, and the start is taken when the video sets it.
+GROUP = "8c2e1d4a-1111-4222-8333-0000000000a1"
+START = "2026-10-30T09:00:00Z"
+
+
+def test_untouched_keeps_its_8_rows():
+    assert [k for k, _ in gates.UNTOUCHED] == [
+        "sequential_testing_enabled",
+        "variance_reduction_config",
+        "mutual_exclusion_group_id",
+        "optimization_type",
+        "split_url_config",
+        "start_date",
+        "end_date",
+        "resume_at",
+    ]
+
+
+def design_after(**changes) -> Tuple[bool, Dict[str, Any], str]:
+    end = design()
+    answer = dict(
+        saved(end),
+        sequential_testing_enabled=True,
+        mutual_exclusion_group_id=GROUP,
+        start_date="2026-10-30T09:00:00",
+    )
+    answer.update(changes)
+    return gates.design_end(
+        end,
+        named=[answer],
+        total=4,
+        seed_experiments=3,
+        owner_id=answer["owner_id"],
+        readings=DRAWN,
+        moved={
+            "sequential_testing_enabled": True,
+            "mutual_exclusion_group_id": GROUP,
+            "start_date": START,
+        },
+    )
+
+
+def test_design_end_passes_with_what_the_video_moved():
+    ok, _numbers, why = design_after()
+    assert ok, why
+
+
+@pytest.mark.parametrize(
+    "changes, words",
+    [
+        ({"status": "active"}, "is 'active', not 'draft'"),
+        ({"sequential_testing_enabled": False}, "has sequential_testing_enabled False"),
+        ({"bayesian_enabled": False}, "bayesian_enabled is False"),
+        ({"start_date": "2026-10-30T10:00:00"}, "has start_date '2026-10-30T10:00:00'"),
+        ({"end_date": "2026-12-01T00:00:00"}, "has end_date"),
+        ({"optimization_type": "thompson_sampling"}, "has optimization_type"),
+    ],
+)
+def test_design_end_refuses_anything_else_moved(changes, words):
+    ok, _numbers, why = design_after(**changes)
+    assert not ok and words in why, why

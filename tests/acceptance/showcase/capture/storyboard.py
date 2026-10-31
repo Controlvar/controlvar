@@ -69,21 +69,6 @@ changing by itself; C9), and ``slide`` moves a range input to a value on its
 own steps (the power calculator's are 0.05 apart), the drawn cursor on its
 thumb.
 
-A ``console`` scene shows calls to the API, made by the tool with the admin
-signed in off camera, on a page the tool draws (its ``label``, then each
-beat's request and the API's own answer, and the beat's ``note``). Its first
-beat makes a ``call``, and each later one makes one or keeps the call before
-it on screen. A call is one of a closed list (``API_CALLS``), made by the
-beat's one ``send`` step, with the answer's status and the values it expects
-declared (``answer``) and the fields drawn named (``show``). A path or body
-names the run's own
-ids only through a closed set of placeholders (``{experiment}``, the
-designed experiment; ``{group}``, the setup's exclusion group; ``{start}``,
-the next UTC day at 09:00:00Z), or an id an earlier call kept (``keep``),
-never a value written down. Each call that changes something sets one key
-of the design end state's ``api``, which names every such key. The scene
-states its off-camera setup on screen, as every departure is.
-
 A scene that films a credential the product shows (the invite dialog's
 one-time password) names it under ``masks``, a closed list: the capture hides
 it before it is painted (C4 of T149, S6 of plan v2.2) and the scene states the
@@ -100,13 +85,8 @@ names a host and port, traffic finished before it starts, a ``choose`` or
 ``slide`` in ``before`` (cut, so never seen), a flag's end state naming a
 segment the setup does not make or a reading no beat records, an incident step
 other than ``story: 2`` or out of order, or ``{rollback_minutes}`` anywhere but
-the card after the wait, a ``call`` or a ``note`` outside a console scene, a
-``send`` outside a console beat's steps or a call without exactly one, a
-call not in ``API_CALLS``, a placeholder outside the closed set or a kept id
-used before it is kept or kept twice, an id, a credential, a scheme, a host
-and port or ``localhost`` written into a call, an ``api`` key no call sets or
-one the end state does not name, and a narration ``narration.board_problems``
-refuses (every problem at once). Caption text
+the card after the wait, and a narration ``narration.board_problems`` refuses
+(every problem at once). Caption text
 never comes from the page or the run: ``compile_cues`` is a pure function of
 the file, so the cue list is the same on every run (gate 13a).
 """
@@ -116,7 +96,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Mapping, NamedTuple, Optional, Tuple, Union
+from typing import Any, Dict, List, Literal, Mapping, Optional, Tuple, Union
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
@@ -247,14 +227,7 @@ class Slide(_Strict):
     value: float = Field(ge=0, le=100_000)
 
 
-class Send(_Strict):
-    """On a console beat, while its caption is up: make the beat's ``call`` and
-    draw the API's answer. Exactly once, in the steps of a beat with a call."""
-
-    send: Literal[True]
-
-
-Step = Union[Click, Move, Type, Look, ScrollTo, WaitFor, Choose, Slide, Send]
+Step = Union[Click, Move, Type, Look, ScrollTo, WaitFor, Choose, Slide]
 #: The steps that enter data. In a cut (a beat's ``before``) what they enter is
 #: entered off camera, so the scene states off-camera setup (D84,
 #: ``required_departures``). A click is not one: video 2 clicks its Live tab in
@@ -272,174 +245,6 @@ class Claim(_Strict):
     source: str = Field(pattern=r"^docs/[A-Za-z0-9/_.-]+\.md(?::[0-9]{1,5})?$")
 
 
-#: A call's path: under the API, its ids as placeholders, at most 100 characters.
-CALL_PATH = re.compile(r"^/api/v1/[A-Za-z0-9/_{}-]+$")
-CALL_PATH_CHARS = 100
-#: A call's JSON body, written compactly, at most this many bytes.
-CALL_BODY_BYTES = 2048
-#: A top-level key of an answer, as ``show``, ``answer`` and ``keep`` name one.
-FIELD_NAME = re.compile(r"^[a-z_][a-z0-9_]{0,63}$")
-#: A name an earlier call keeps an id under (``keep``), used as ``{name}``.
-KEPT_NAME = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
-#: An id written into a call: a UUID, with or without its dashes. The run makes
-#: every id; a call names one only through a placeholder.
-WRITTEN_ID = re.compile(
-    r"[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}", re.IGNORECASE
-)
-_SCHEME = re.compile(r"://|\bhttps?:", re.IGNORECASE)
-PLACEHOLDER = re.compile(r"\{([^{}]*)\}")
-#: The placeholders any call may use: the experiment the video designs, the
-#: setup's exclusion group, and the start a schedule is given (the next UTC day
-#: at 09:00:00Z, taken when the request is drawn). Ids an earlier call keeps
-#: (``keep``) are used the same way, after that call.
-FIXED_PLACEHOLDERS: Tuple[str, ...] = ("experiment", "group", "start")
-
-
-class CallAnswer(_Strict):
-    """The answer a call expects: its exact status, and the values some of its
-    shown fields must have, placeholders resolved when the call is made."""
-
-    status: Literal[200, 201]
-    fields: Dict[str, Any] = Field(default_factory=dict)
-
-
-class Call(_Strict):
-    """One request a console beat makes, and what its answer must be.
-
-    ``show`` names the top-level fields of the answer the console draws;
-    ``keep`` names an id of the answer that later calls use as ``{name}``.
-    What a call may be is a closed list (``API_CALLS``)."""
-
-    method: Literal["GET", "POST", "PUT"]
-    path: str = Field(min_length=1, max_length=CALL_PATH_CHARS)
-    body: Optional[Dict[str, Any]] = None
-    answer: CallAnswer
-    show: List[str] = Field(min_length=1, max_length=8)
-    keep: Dict[str, str] = Field(default_factory=dict)
-
-    @model_validator(mode="after")
-    def _shape(self) -> "Call":
-        if not CALL_PATH.match(self.path):
-            raise ValueError(
-                f"a call's path is under /api/v1/, letters, digits, / _ - and"
-                f" placeholders only: not {self.path!r}"
-            )
-        if self.method == "GET" and self.body is not None:
-            raise ValueError("a GET sends no body")
-        if self.method != "GET" and self.body is None:
-            raise ValueError(f"a {self.method} sends a body")
-        if self.body is not None:
-            size = len(json.dumps(self.body, separators=(",", ":")).encode("utf-8"))
-            if size > CALL_BODY_BYTES:
-                raise ValueError(
-                    f"a call's body is {size} bytes; at most {CALL_BODY_BYTES}"
-                )
-        if len(set(self.show)) != len(self.show):
-            raise ValueError(f"show names a field twice: {self.show}")
-        for name in [*self.show, *self.answer.fields, *self.keep.values()]:
-            if not FIELD_NAME.match(name):
-                raise ValueError(f"{name!r} is not a top-level field of an answer")
-        unshown = [name for name in self.answer.fields if name not in self.show]
-        if unshown:
-            raise ValueError(
-                f"the answer's {unshown[0]!r} is checked but not shown: add it to show"
-            )
-        for name in self.keep:
-            if not KEPT_NAME.match(name) or name in FIXED_PLACEHOLDERS:
-                raise ValueError(
-                    f"keep {name!r}: a kept id's name is lower case, and not one of"
-                    f" {list(FIXED_PLACEHOLDERS)}"
-                )
-        for text in self.written():
-            problem = written_problem(text)
-            if problem:
-                raise ValueError(f"a call {problem}: {text[:80]!r}")
-        return self
-
-    def written(self) -> List[str]:
-        """Every string written into the call: its path, and each key and
-        string value of its body and of the answer it expects, at any depth."""
-        return [self.path, *_strings(self.body), *_strings(self.answer.fields)]
-
-    def placeholders(self) -> List[str]:
-        """Every ``{name}`` the call uses, in its path, its body and its answer."""
-        return [name for text in self.written() for name in PLACEHOLDER.findall(text)]
-
-
-def _strings(value: Any) -> List[str]:
-    """Each key and string value inside *value* (JSON data), in order."""
-    if isinstance(value, str):
-        return [value]
-    if isinstance(value, dict):
-        return [s for k, v in value.items() for s in (*_strings(k), *_strings(v))]
-    if isinstance(value, list):
-        return [s for item in value for s in _strings(item)]
-    return []
-
-
-def written_problem(text: str) -> Optional[str]:
-    """Why *text*, written into a call, may not be sent or drawn, or None."""
-    if WRITTEN_ID.search(text):
-        return "names an id: the run makes every id, and a call uses a placeholder"
-    if _SCHEME.search(text):
-        return "names a scheme: the tool adds the stack's own address"
-    if HOST_PORT.search(text) or re.search(r"localhost", text, re.IGNORECASE):
-        return "names a host"
-    squeezed = contract.normalise(text)
-    for number, needle in enumerate(config.STATIC_NEEDLES, start=1):
-        if contract.normalise(needle) in squeezed:
-            return f"holds a secret value (static needle {number})"
-    without = PLACEHOLDER.sub("", text)
-    if "{" in without or "}" in without:
-        return "holds a brace outside a placeholder"
-    return None
-
-
-class ApiCallKind(NamedTuple):
-    """One kind of call a console beat may make (``API_CALLS``)."""
-
-    #: The status the call must answer, exactly.
-    status: int
-    #: The design end state's ``api`` key the call sets; None for a read.
-    sets: Optional[str]
-    #: The keys its body may hold.
-    allowed: Tuple[str, ...]
-    #: Its body exactly, when only one is right.
-    exact: Optional[Mapping[str, Any]] = None
-
-
-#: The calls a console beat may make, by method and path: a closed list. The
-#: four that change something, each setting one key of the design end state's
-#: ``api``, and the two reads that show what they did.
-API_CALLS: Dict[Tuple[str, str], ApiCallKind] = {
-    ("POST", "/api/v1/mutual-exclusion-groups/{group}/experiments"): ApiCallKind(
-        200, "exclusion_group", ("experiment_id",), {"experiment_id": "{experiment}"}
-    ),
-    ("POST", "/api/v1/holdout"): ApiCallKind(
-        201, "holdout", ("name", "description", "holdout_percentage", "is_active")
-    ),
-    ("PUT", "/api/v1/experiments/{experiment}/schedule"): ApiCallKind(
-        200, "scheduled_start", ("start_date",), {"start_date": "{start}"}
-    ),
-    ("PUT", "/api/v1/experiments/{experiment}"): ApiCallKind(
-        200,
-        "sequential",
-        ("sequential_testing_enabled", "sequential_testing_config"),
-    ),
-    ("GET", "/api/v1/experiments/{experiment}"): ApiCallKind(200, None, ()),
-    ("GET", "/api/v1/holdout"): ApiCallKind(200, None, ()),
-}
-#: The keys the calls set, as the design end state names them.
-ApiKey = Literal["exclusion_group", "holdout", "scheduled_start", "sequential"]
-
-
-class Console(_Strict):
-    """A page the tool draws for a scene of API calls: its label, then each
-    beat's request and the API's answer, and the beat's note."""
-
-    label: str = Field(min_length=8, max_length=60)
-
-
 class Beat(_Strict):
     before: List[Step] = Field(default_factory=list)
     cue: str
@@ -455,11 +260,6 @@ class Beat(_Strict):
     say: List[str] = Field(default_factory=list, max_length=contract.MAX_SAY_SENTENCES)
     #: Number words the narration says, each with its page of the docs.
     claims: List[Claim] = Field(default_factory=list)
-    #: On a console beat: the call it makes (its ``send`` step makes it).
-    call: Optional[Call] = None
-    #: On a console beat: a line the console draws beside the exchange, to be
-    #: on the page from the cue's start to its exit (U2 and G2 read it there).
-    note: Optional[str] = Field(default=None, min_length=1, max_length=240)
 
 
 #: The longest line a code card shows (it is drawn 1,600 px wide).
@@ -709,8 +509,6 @@ class Scene(_Strict):
     #: off camera, as ``results_of`` does.
     flag_of: Optional[str] = Field(default=None, min_length=1, max_length=128)
     card: Optional[Card] = None
-    #: A page the tool draws for API calls (each beat's ``call``).
-    console: Optional[Console] = None
     #: Sign in as the demo admin off camera before the scene.
     signed_in: bool = False
     #: Results to load off camera first, so no skeleton is filmed (by experiment name).
@@ -722,11 +520,11 @@ class Scene(_Strict):
 
     @model_validator(mode="after")
     def _page_or_card(self) -> "Scene":
-        openers = (self.open, self.results_of, self.flag_of, self.card, self.console)
+        openers = (self.open, self.results_of, self.flag_of, self.card)
         if sum(x is not None for x in openers) != 1:
             raise ValueError(
                 "a scene opens a page, opens an experiment's results or a flag's"
-                " page, or draws a card or a console: exactly one, not both"
+                " page, or draws a card: exactly one, not both"
             )
         if self.app != "dashboard" and (
             self.open is None or self.signed_in or self.warm_results
@@ -1136,14 +934,9 @@ class DesignEnd(_Strict):
     analysis: DesignAnalysis
     #: Each reading compared, by the ``record`` name of the beat that read it.
     shown: Dict[DesignReading, str] = Field(min_length=1)
-    #: What a console scene then sets on it through the API, by the key each
-    #: call sets (``API_CALLS``): every key a call sets, and no other.
-    api: List[ApiKey] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _as_the_wizard_saves(self) -> "DesignEnd":
-        if len(set(self.api)) != len(self.api):
-            raise ValueError(f"an api key repeats: {self.api}")
         names = [variant.name for variant in self.variants]
         if len(set(names)) != len(names):
             raise ValueError(f"a variant name repeats: {names}")
@@ -1333,113 +1126,6 @@ class Storyboard(_Strict):
                         " which no beat records"
                     )
         return self
-
-    @model_validator(mode="after")
-    def _console_calls(self) -> "Storyboard":
-        """A console scene's calls: each beat's ``call`` and its one ``send``,
-        each call one of ``API_CALLS``, every placeholder known where it is
-        used, and the ``api`` keys the calls set exactly the end state's."""
-        design = self.end_state.design
-        groups = self.setup.exclusion_groups if self.setup is not None else []
-        known = ["start"]
-        if design is not None:
-            known.append("experiment")
-        if len(groups) == 1:
-            known.append("group")
-        kept: List[str] = []
-        sets: List[str] = []
-        for scene in self.scenes:
-            console = scene.console is not None
-            for number, beat in enumerate(scene.beats, start=1):
-                where = f"scene {scene.id} beat {number}"
-                if not console and (beat.call is not None or beat.note is not None):
-                    raise ValueError(
-                        f"{where}: a call or a note is drawn only on a console scene"
-                    )
-                for part in ("before", "exit"):
-                    if any(isinstance(s, Send) for s in getattr(beat, part)):
-                        raise ValueError(
-                            f"{where}: a send is made in the beat's steps, never in {part}"
-                        )
-                sends = sum(isinstance(s, Send) for s in beat.steps)
-                if beat.call is None:
-                    if sends:
-                        raise ValueError(f"{where}: a send with no call to make")
-                    if console and (
-                        number == 1 or scene.beats[number - 2].call is None
-                    ):
-                        raise ValueError(
-                            f"{where}: a console beat with no call keeps the call"
-                            " before it on screen, so it follows a beat that makes one"
-                        )
-                    continue
-                if sends != 1:
-                    raise ValueError(
-                        f"{where}: a call is made by exactly one send in its steps,"
-                        f" not {sends}"
-                    )
-                call = beat.call
-                kind = API_CALLS.get((call.method, call.path))
-                if kind is None:
-                    raise ValueError(
-                        f"{where}: {call.method} {call.path} is not one of the calls"
-                        " a console may make (API_CALLS)"
-                    )
-                if call.answer.status != kind.status:
-                    raise ValueError(
-                        f"{where}: {call.method} {call.path} answers"
-                        f" {kind.status}, not {call.answer.status}"
-                    )
-                extra = sorted(set(call.body or {}) - set(kind.allowed))
-                if extra:
-                    raise ValueError(
-                        f"{where}: {call.method} {call.path} sends no {extra[0]!r}"
-                    )
-                if kind.exact is not None and call.body != dict(kind.exact):
-                    raise ValueError(
-                        f"{where}: {call.method} {call.path} sends exactly"
-                        f" {json.dumps(dict(kind.exact))}"
-                    )
-                for name in call.placeholders():
-                    if name in known or name in kept:
-                        continue
-                    if any(
-                        name in later.call.keep for later in self._calls_after(beat)
-                    ):
-                        raise ValueError(
-                            f"{where}: {{{name}}} is used before the call that keeps it"
-                        )
-                    raise ValueError(
-                        f"{where}: {{{name}}} is not a placeholder this storyboard"
-                        f" has ({', '.join(known + kept)})"
-                    )
-                for name in call.keep:
-                    if name in kept:
-                        raise ValueError(f"{where}: {name!r} is kept twice")
-                    kept.append(name)
-                if kind.sets is not None:
-                    sets.append(kind.sets)
-        declared = list(design.api) if design is not None else []
-        if len(set(sets)) != len(sets):
-            raise ValueError(f"an api key is set by two calls: {sets}")
-        undeclared = [key for key in sets if key not in declared]
-        if undeclared:
-            raise ValueError(
-                f"a call sets {undeclared[0]!r}, which the design end state's api"
-                " does not name"
-            )
-        unset = [key for key in declared if key not in sets]
-        if unset:
-            raise ValueError(
-                f"the design end state's api names {unset[0]!r}, which no call sets"
-            )
-        return self
-
-    def _calls_after(self, beat: Beat) -> List[Beat]:
-        """The beats with a call after *beat*, in order."""
-        beats = [b for s in self.scenes for b in s.beats if b.call is not None]
-        at = next(i for i, b in enumerate(beats) if b is beat)
-        return beats[at + 1 :]
 
     @model_validator(mode="after")
     def _team_and_calculations(self) -> "Storyboard":
@@ -1680,7 +1366,6 @@ _STEP_KEYS = {
     "url": WaitFor,
     "choose": Choose,
     "slide": Slide,
-    "send": Send,
 }
 
 
@@ -1737,20 +1422,11 @@ def parse(data: Any, *, source: str = "storyboard") -> Storyboard:
     except ValidationError as error:
         raise StoryboardError(f"{source}: {error}") from None
     for scene in board.scenes:
-        if scene.console is not None and not _PLAIN.match(scene.console.label):
-            raise StoryboardError(
-                f"{source} scene {scene.id}: a console's label is plain text"
-            )
         for index, beat in enumerate(scene.beats):
             where = f"{source} scene {scene.id} beat {index + 1}"
             problem = caption_problem(beat.cue)
             if problem:
                 raise StoryboardError(f"{where}: {problem}")
-            if beat.note is not None and not _PLAIN.match(beat.note):
-                raise StoryboardError(
-                    f"{where}: a note is plain text (letters, digits and ordinary"
-                    " punctuation; no template)"
-                )
             for step in [*beat.before, *beat.steps, *beat.exit]:
                 _refuse_step(step, where)
             if any(isinstance(step, (Choose, Slide)) for step in beat.before):
@@ -1864,9 +1540,7 @@ def required_departures(board: Storyboard) -> List[Tuple[str, str]]:
     * ``time skip``: the scene that finishes them, after the minutes they took
       off camera (its card says how many, measured: ``{traffic_minutes}``);
     * ``masked value``: a scene that masks a credential the product draws
-      (``masks``; S7 of plan v2.2): the tool replaces what the page draws;
-    * ``off-camera setup`` again: a console scene, whose calls are made with
-      the admin signed in to the API off camera.
+      (``masks``; S7 of plan v2.2): the tool replaces what the page draws.
 
     Off camera (``off_camera``, S7 of plan v2.2), each step by what it is: an
     app's seed, a visitor and ``story`` (the demo's rollout script, run by the
@@ -1893,7 +1567,6 @@ def required_departures(board: Storyboard) -> List[Tuple[str, str]]:
             or signs_in
             or scene.warm_results
             or enters_data_in_a_cut
-            or scene.console is not None
         ):
             needed.append((scene.id, "off-camera setup"))
         if scene.traffic in ("start", "run"):
@@ -1963,14 +1636,10 @@ def own_build_scene(board: Storyboard) -> Optional[str]:
 
 
 def scene_screen_text(scene: Scene) -> List[str]:
-    """What a scene draws that a storyboard controls: its captions, its card,
-    and a console's label and notes."""
+    """What a scene draws that a storyboard controls: its captions and its card."""
     texts = [beat.cue for beat in scene.beats]
     if scene.card is not None:
         texts += [t for t in scene.card.drawn_text() if t]
-    if scene.console is not None:
-        texts.append(scene.console.label)
-        texts += [beat.note for beat in scene.beats if beat.note]
     return texts
 
 
@@ -2018,14 +1687,6 @@ def min_cue_ms(text: str) -> int:
     """How long the capture holds *text*: the contract's reading time, plus a margin
     so that rounding the cue's ends to frames never takes it under."""
     return contract.reading_time_ms(text) + config.CUE_MARGIN_MS
-
-
-def min_hold_ms(beat: Beat) -> int:
-    """The least a beat is held: its caption's ``min_cue_ms``, and on a console
-    beat that makes a call, ``config.EXCHANGE_MIN_MS`` (the answer stays up
-    long enough to read)."""
-    floor = config.EXCHANGE_MIN_MS if beat.call is not None else 0
-    return max(min_cue_ms(beat.cue), floor)
 
 
 def compile_cues(board: Storyboard) -> List[Dict[str, Any]]:
@@ -2084,8 +1745,6 @@ def step_ms(step: Any) -> int:
             + config.SLIDE_MS
             + config.SETTLE_MS
         )
-    elif isinstance(step, Send):
-        ms = config.PAINT_MS + config.SEND_MS
     else:  # a wait on camera: the element is there, then it paints
         ms = config.PAINT_MS
     return ms + STEP_OVERHEAD_MS
@@ -2103,7 +1762,7 @@ def estimate_ms(board: Storyboard) -> int:
     for scene in board.scenes:
         total += SCENE_GAP_MS
         for beat in scene.beats:
-            held = max(min_hold_ms(beat), sum(step_ms(s) for s in beat.steps))
+            held = max(min_cue_ms(beat.cue), sum(step_ms(s) for s in beat.steps))
             total += held + (config.PAYOFF_MS if beat.payoff else 0)
             total += sum(step_ms(s) for s in beat.exit) + config.CUE_GAP_MS
     return total
@@ -2144,7 +1803,7 @@ def voiced_estimate_ms(
             exit_ms = sum(step_ms(s) for s in beat.exit)
             overlap = 0 if beat.payoff else exit_ms
             held = max(
-                min_hold_ms(beat), steps, spoken + config.CUE_MARGIN_MS - overlap
+                min_cue_ms(beat.cue), steps, spoken + config.CUE_MARGIN_MS - overlap
             )
             total += held + (config.PAYOFF_MS if beat.payoff else 0)
             total += exit_ms + config.CUE_GAP_MS
