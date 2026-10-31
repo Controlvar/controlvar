@@ -271,6 +271,46 @@ class TestGetSchedulerHistory:
         assert isinstance(data, list)
         assert len(data) == 5
 
+    @pytest.mark.parametrize("limit", [0, -1, 1001])
+    def test_rejects_limit_outside_bounds(self, limit):
+        """A limit outside 1..1000 is invalid, not a database error."""
+
+        admin_user = make_admin_user()
+        mock_db = make_mock_db()
+
+        app.dependency_overrides[deps.get_current_active_user] = lambda: admin_user
+        app.dependency_overrides[deps.get_db] = lambda: mock_db
+
+        with patch(
+            "backend.app.api.v1.endpoints.scheduler_health.SchedulerHealthService.get_run_history",
+        ) as get_run_history:
+            client = TestClient(app)
+            response = client.get(
+                f"/api/v1/scheduler/experiment/history?limit={limit}",
+            )
+
+        assert response.status_code == 422
+        get_run_history.assert_not_called()
+
+    @pytest.mark.parametrize("limit", [1, 1000])
+    def test_accepts_limit_at_bounds(self, limit):
+        admin_user = make_admin_user()
+        mock_db = make_mock_db()
+
+        app.dependency_overrides[deps.get_current_active_user] = lambda: admin_user
+        app.dependency_overrides[deps.get_db] = lambda: mock_db
+
+        with patch(
+            "backend.app.api.v1.endpoints.scheduler_health.SchedulerHealthService.get_run_history",
+            return_value=[],
+        ):
+            client = TestClient(app)
+            response = client.get(
+                f"/api/v1/scheduler/experiment/history?limit={limit}",
+            )
+
+        assert response.status_code == 200
+
 
 # ---------------------------------------------------------------------------
 # POST /api/v1/scheduler/notify/test
