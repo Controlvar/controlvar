@@ -10,6 +10,24 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.40.0](https://github.com/Controlvar/controlvar/compare/v0.39.0...v0.40.0) (2026-10-31)
+
+
+### Features
+
+* **site:** the homepage names the AWS installer beta and how a revenue metric is analysed ([#1481](https://github.com/Controlvar/controlvar/issues/1481)) ([6e1a71f](https://github.com/Controlvar/controlvar/commit/6e1a71fa2bf021181509a5f0333bab4f273d8778))
+* **site:** the homepage shows the product, with screenshots, how it works and a video grid ([#1486](https://github.com/Controlvar/controlvar/issues/1486)) ([ad96a80](https://github.com/Controlvar/controlvar/commit/ad96a8011bf14b80294c5e74b596677d352fad29))
+
+
+### Bug Fixes
+
+* **site:** check the public site in a browser, and let a keyboard reach the code block ([#1480](https://github.com/Controlvar/controlvar/issues/1480)) ([f944ede](https://github.com/Controlvar/controlvar/commit/f944edebb54b86f0ba1c6998efa612d6f9cc9a0f))
+
+
+### Documentation
+
+* **readme:** link the website and docs, show the dashboard, start from the published images ([#1495](https://github.com/Controlvar/controlvar/issues/1495)) ([bfa9a5c](https://github.com/Controlvar/controlvar/commit/bfa9a5cdd4d4d5e9ad32b2b857223d289e5dbbce))
+
 ## [0.39.0](https://github.com/Controlvar/controlvar/compare/v0.38.0...v0.39.0) (2026-10-30)
 
 
