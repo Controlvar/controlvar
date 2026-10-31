@@ -271,6 +271,7 @@ class TestGetSchedulerHistory:
         assert isinstance(data, list)
         assert len(data) == 5
 
+    @pytest.mark.regression
     @pytest.mark.parametrize("limit", [0, -1, 1001])
     def test_rejects_limit_outside_bounds(self, limit):
         """A limit outside 1..1000 is invalid, not a database error."""
@@ -292,6 +293,7 @@ class TestGetSchedulerHistory:
         assert response.status_code == 422
         get_run_history.assert_not_called()
 
+    @pytest.mark.regression
     @pytest.mark.parametrize("limit", [1, 1000])
     def test_accepts_limit_at_bounds(self, limit):
         admin_user = make_admin_user()
