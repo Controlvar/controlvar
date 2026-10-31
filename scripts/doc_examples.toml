@@ -214,7 +214,7 @@ expects = 10
 path = "README.md"
 environment = "bare"
 exec = 2
-skip = 1
+skip = 2
 expects = 1
 
 [[document]]

@@ -15,6 +15,21 @@ by = [
 ]
 
 [[unit]]
+text = "Website: controlvar.com · Documentation: docs.controlvar.com"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The results page of a ShopLab demo experiment in the Controlvar dashboard: its users, the planned sample reached, the leading variant and the sample ratio check."
+by = [
+    "journey:experiment-results#results-page",
+    "journey:experiment-results#ratio-results-page",
+]
+
+[[unit]]
+text = "Watch the walkthrough videos on controlvar.com."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "The core, the optional modules and the dashboard are Apache-2.0; the client SDKs under sdk/ are MIT."
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_tree_is_apache_and_the_sdks_are_mit"]
 
@@ -42,7 +57,43 @@ text = "Clone the repository:"
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "Then start the stack from the repository root:"
+text = "On the published images"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Start the released images from deploy/compose/; nothing is built:"
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_nothing_is_built",
+]
+
+[[unit]]
+text = "Open http://localhost:8080 and sign in as admin@example.com with the FIRST_SUPERUSER_PASSWORD that generate-env.sh wrote to deploy/compose/.env."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestGenerator::test_without_inputs_it_writes_the_local_url_and_the_example_admin",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestGenerator::test_it_writes_every_required_setting_privately",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_only_the_dashboard_publishes_a_port_on_loopback_by_default",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_it_rehearses_in_the_compose_topology",
+]
+
+[[unit]]
+text = "This stack has no demo data and no demo account."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestApiEnvironment::test_production_with_no_seed_and_no_bypass",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestText::test_no_demo_material",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_it_refuses_the_demo_login_and_checks_only_the_dashboard_publishes",
+]
+
+[[unit]]
+text = "Its settings are in deploy/compose/README.md."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Built from source, with the demo data"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Start the stack from the repository root:"
 by = ["exempt:instruction"]
 
 [[unit]]

@@ -2,6 +2,12 @@
 
 > **Open-source A/B testing and feature flags that you run yourself.**
 
+**Website:** [controlvar.com](https://controlvar.com) · **Documentation:** [docs.controlvar.com](https://docs.controlvar.com)
+
+![The results page of a ShopLab demo experiment in the Controlvar dashboard: its users, the planned sample reached, the leading variant and the sample ratio check.](frontend/public/screens/results-88c79d580b09.webp)
+
+Watch the [walkthrough videos](https://controlvar.com/#walkthroughs) on controlvar.com.
+
 The core, the optional modules and the dashboard are Apache-2.0; the client SDKs under `sdk/`
 are MIT. Controlvar is pre-1.0: see the
 [releases](https://github.com/Controlvar/controlvar/releases).
@@ -20,7 +26,24 @@ git clone https://github.com/Controlvar/controlvar.git
 cd controlvar
 ```
 
-Then start the stack from the repository root:
+### On the published images
+
+Start the released images from `deploy/compose/`; nothing is built:
+
+```{.bash skip reason="server: pulls the published images and starts them as a stack of their own"}
+cd deploy/compose
+./generate-env.sh
+docker compose up -d --wait
+```
+
+Open **http://localhost:8080** and sign in as **admin@example.com** with the
+`FIRST_SUPERUSER_PASSWORD` that `generate-env.sh` wrote to `deploy/compose/.env`.
+This stack has no demo data and no demo account. Its settings are in
+[deploy/compose/README.md](deploy/compose/README.md).
+
+### Built from source, with the demo data
+
+Start the stack from the repository root:
 
 ```{.bash exec timeout=1200}
 docker compose up -d --wait
