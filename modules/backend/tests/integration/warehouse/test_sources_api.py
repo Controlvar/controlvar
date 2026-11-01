@@ -333,13 +333,153 @@ def test_source_audit_has_full_definition(wh):
         "metric_type": "proportion",
         "conversion_window_hours": 168,
         "cap_value": None,
+        "lower_is_better": False,
         "validated_at": None,
     }
     assert rows[1].old_value == definition
     assert rows[1].new_value["conversion_window_hours"] == 24
     assert rows[1].new_value["filters"] == []
+    assert rows[1].new_value["lower_is_better"] is False
     assert rows[2].old_value["conversion_window_hours"] == 24
     assert rows[2].new_value is None
+
+
+def _metric_put(**overrides):
+    return {
+        "kind": "metric",
+        "name": "Checkout errors",
+        "table": "main.events",
+        "columns": {"unit_id": "user_id", "event_at": "event_at"},
+        "metric_type": "proportion",
+        **overrides,
+    }
+
+
+def test_a_metric_source_stores_and_returns_its_direction(wh):
+    """lower_is_better is stored, and every route that returns a source
+    returns it: create, get, list, validate and update (#1386)."""
+    _tables(wh)
+    admin = wh.as_("ADMIN")
+    connection = wh.athena_connection(admin)
+    created = wh.metric_source(
+        admin, connection["id"], name="Checkout errors", lower_is_better=True
+    )
+    assert created["lower_is_better"] is True
+    assert admin.get(f"{WA}/sources/{created['id']}").json()["lower_is_better"] is True
+    listed = {s["id"]: s for s in admin.get(f"{WA}/sources").json()["sources"]}
+    assert listed[created["id"]]["lower_is_better"] is True
+    assert wh.validate(admin, created["id"])["source"]["lower_is_better"] is True
+    updated = admin.put(
+        f"{WA}/sources/{created['id']}", json=_metric_put(lower_is_better=True)
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["lower_is_better"] is True
+    stored = wh.db.get(WarehouseSource, uuid.UUID(created["id"]))
+    wh.db.refresh(stored)
+    assert stored.lower_is_better is True
+    # The audit trail records it in the definition, before and after (the
+    # validation is recorded between the two).
+    rows = _audit_rows(wh, created["id"])
+    create, update = rows[0], rows[-1]
+    assert [str(r.action).split(".")[-1] for r in (create, update)] == [
+        "CREATE",
+        "UPDATE",
+    ]
+    assert create.new_value["lower_is_better"] is True
+    assert (
+        update.old_value["lower_is_better"],
+        update.new_value["lower_is_better"],
+    ) == (
+        True,
+        True,
+    )
+
+
+@pytest.mark.regression
+def test_a_put_without_lower_is_better_sets_it_back_to_false(wh):
+    """PUT replaces the whole definition: a body without the field sets it to
+    false, as an omitted cap_value clears the cap.  The audit trail shows the
+    change."""
+    admin = wh.as_("ADMIN")
+    connection = wh.athena_connection(admin)
+    created = wh.metric_source(
+        admin, connection["id"], name="Checkout errors", lower_is_better=True
+    )
+
+    response = admin.put(f"{WA}/sources/{created['id']}", json=_metric_put())
+
+    assert response.status_code == 200, response.text
+    assert response.json()["lower_is_better"] is False
+    assert admin.get(f"{WA}/sources/{created['id']}").json()["lower_is_better"] is False
+    _, update = _audit_rows(wh, created["id"])
+    assert (
+        update.old_value["lower_is_better"],
+        update.new_value["lower_is_better"],
+    ) == (
+        True,
+        False,
+    )
+
+
+@pytest.mark.parametrize("value", ["true", 1, None])
+def test_lower_is_better_must_be_a_json_boolean(wh, value):
+    admin = wh.as_("ADMIN")
+    connection = wh.athena_connection(admin)
+    created = wh.metric_source(admin, connection["id"], name="Checkout errors")
+    before = wh.db.query(WarehouseSource).count()
+    for response in (
+        admin.post(
+            f"{WA}/sources",
+            json={
+                "connection_id": connection["id"],
+                **_metric_put(name="Other", lower_is_better=value),
+            },
+        ),
+        admin.put(
+            f"{WA}/sources/{created['id']}", json=_metric_put(lower_is_better=value)
+        ),
+    ):
+        assert response.status_code == 422, response.text
+        assert any(
+            e["type"] == "bool_type" and e["loc"][-1] == "lower_is_better"
+            for e in response.json()["detail"]
+        ), response.json()
+    assert wh.db.query(WarehouseSource).count() == before
+
+
+def test_an_assignment_source_has_no_direction(wh):
+    """null in every response and in the audit definition, and a body that
+    sends one is refused."""
+    admin = wh.as_("ADMIN")
+    connection = wh.athena_connection(admin)
+    assignment = wh.assignment_source(admin, connection["id"])
+    assert assignment["lower_is_better"] is None
+    got = admin.get(f"{WA}/sources/{assignment['id']}").json()
+    assert got["lower_is_better"] is None
+    (create,) = _audit_rows(wh, assignment["id"])
+    assert create.new_value["lower_is_better"] is None
+
+    body = {
+        "kind": "assignment",
+        "name": "Exposures 2",
+        "table": "main.exposures",
+        "columns": {
+            "unit_id": "user_id",
+            "experiment_key": "experiment_key",
+            "variant": "variant",
+            "exposed_at": "exposed_at",
+        },
+        "lower_is_better": False,
+    }
+    for response in (
+        admin.post(f"{WA}/sources", json={"connection_id": connection["id"], **body}),
+        admin.put(f"{WA}/sources/{assignment['id']}", json=body),
+    ):
+        assert response.status_code == 422, response.text
+        assert any(
+            e["type"] == "extra_forbidden" and e["loc"][-1] == "lower_is_better"
+            for e in response.json()["detail"]
+        ), response.json()
 
 
 def test_a_source_name_is_unique_per_connection_and_kind(wh):

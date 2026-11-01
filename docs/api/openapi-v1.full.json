@@ -10238,6 +10238,12 @@
             "title": "Kind",
             "type": "string"
           },
+          "lower_is_better": {
+            "default": false,
+            "description": "True for a metric where a decrease is the improvement, such as an error rate or churn: an analysis started afterwards names a winner only for a significant decrease. Omitted means false, on a PUT as on a POST.",
+            "title": "Lower Is Better",
+            "type": "boolean"
+          },
           "metric_type": {
             "enum": [
               "proportion",
@@ -10312,6 +10318,12 @@
             "const": "metric",
             "title": "Kind",
             "type": "string"
+          },
+          "lower_is_better": {
+            "default": false,
+            "description": "True for a metric where a decrease is the improvement, such as an error rate or churn: an analysis started afterwards names a winner only for a significant decrease. Omitted means false, on a PUT as on a POST.",
+            "title": "Lower Is Better",
+            "type": "boolean"
           },
           "metric_type": {
             "enum": [
@@ -15776,6 +15788,18 @@
             "title": "Kind",
             "type": "string"
           },
+          "lower_is_better": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "True for a metric source where a decrease is the improvement. Null for an assignment source.",
+            "title": "Lower Is Better"
+          },
           "metric_type": {
             "anyOf": [
               {
@@ -15833,7 +15857,7 @@
         "type": "object"
       },
       "SplitUrlConfig": {
-        "description": "Configuration for a split URL experiment.\n\nRequires at least 2 URL variants whose traffic_allocation values are each\nfrom 0 to 100 and sum to 100.",
+        "description": "Configuration for a split URL experiment.\n\nRequires at least 2 URL variants with unique names, whose\ntraffic_allocation values are each from 0 to 100 and sum to 100, and whose\nURLs are absolute http or https URLs (see each field).",
         "properties": {
           "canonical_url": {
             "anyOf": [
@@ -15844,6 +15868,7 @@
                 "type": "null"
               }
             ],
+            "description": "Stored; not read: nothing uses the stored value.",
             "title": "Canonical Url"
           },
           "cookie_name": {
@@ -15855,14 +15880,17 @@
                 "type": "null"
               }
             ],
+            "description": "Stored; not read: nothing uses the stored value.",
             "title": "Cookie Name"
           },
           "cookie_ttl_days": {
             "default": 30,
+            "description": "Stored; not read: nothing uses the stored value.",
             "title": "Cookie Ttl Days",
             "type": "integer"
           },
           "variants": {
+            "description": "One URL per variant: at least two, with unique names, whose traffic_allocation values add up to 100. In a split_url experiment the URL variant named like the experiment's control variant gives the control URL, and no other URL variant may have the control URL's host and path.",
             "items": {
               "$ref": "#/components/schemas/SplitUrlVariant"
             },
@@ -15880,16 +15908,19 @@
         "description": "A single URL variant in a split URL experiment.",
         "properties": {
           "name": {
+            "description": "The name of the experiment variant this URL is for. In a split_url experiment each URL variant names one of the experiment's variants, and each of those has exactly one URL variant.",
             "title": "Name",
             "type": "string"
           },
           "traffic_allocation": {
+            "description": "Percentage of traffic, from 0 to 100. In a split_url experiment it must equal, within 0.01, the traffic_allocation of the experiment variant with the same name: the experiment's variants decide the split.",
             "maximum": 100,
             "minimum": 0,
             "title": "Traffic Allocation",
             "type": "number"
           },
           "url": {
+            "description": "The page for this variant: an absolute http:// or https:// URL of at most 2048 characters, with an ASCII host name without a % sign (an internationalised name in its xn-- form), and without a user name or password, a # fragment, a backslash, whitespace or control characters. Its path has no . or .. segment (also written %2e) and no character a browser percent-encodes in a path (a non-ASCII character or one of \" < > ^ ` { | }): write those percent-encoded, as the browser sends them. Stored exactly as sent.",
             "title": "Url",
             "type": "string"
           }
@@ -23066,7 +23097,7 @@
         ]
       },
       "put": {
-        "description": "Update experiment.\n\nThis endpoint allows users to update an existing experiment.\nThe caller's role must hold UPDATE on experiments; who created the\nexperiment is not considered.\n\nFields that can be updated:\n- Basic properties: name, description, hypothesis\n- Variants: if experiment is in DRAFT status\n- Metrics: if experiment is in DRAFT status\n- Targeting (`targeting_rules`): while the experiment is DRAFT or PAUSED,\n  for every role including superusers. On a PAUSED experiment it must be\n  the only field in the request. On an ACTIVE, COMPLETED or ARCHIVED\n  experiment a request that includes `targeting_rules` is refused, even\n  when the value equals the stored one; pause the experiment first.\n  People already assigned keep their variant; the new rules apply to\n  people not yet in the experiment once it is resumed.\n\n`status` is not changed by an update, for any role including superusers.\nA `status` equal to the current one is accepted and changes nothing, so an\nexperiment fetched with GET can be sent back. Any other value is refused\nwith 422; status changes through `POST /api/v1/experiments/{id}/start`,\n`/pause`, `/complete` or `/archive`. `status` still counts as a field\nsent, so on a PAUSED experiment `targeting_rules` must be sent without it.\n\n`schedule` is not applied here: a request that contains it, with any\nvalue including null, is refused with 422. Schedule an experiment with\n`PUT /api/v1/experiments/{experiment_id}/schedule`.\n\nReturns:\n    ExperimentResponse: The updated experiment\n\nRaises:\n    HTTPException 403: If the caller's role does not hold UPDATE on\n        experiments. This is checked before the experiment's state.\n    HTTPException 400: If the experiment's state does not allow the change\n        (the detail names the state): any change to a non-DRAFT experiment\n        by a non-superuser, other than targeting alone on a PAUSED one;\n        targeting outside DRAFT or PAUSED; targeting with other fields on\n        a PAUSED experiment; variants or metrics outside DRAFT\n    HTTPException 404: If the experiment doesn't exist\n    HTTPException 422: If `targeting_rules` is not a valid rule set,\n        `status` differs from the experiment's current status, or the\n        request contains `schedule`",
+        "description": "Update experiment.\n\nThis endpoint allows users to update an existing experiment.\nThe caller's role must hold UPDATE on experiments; who created the\nexperiment is not considered.\n\nFields that can be updated:\n- Basic properties: name, description, hypothesis\n- Variants: if experiment is in DRAFT status\n- Metrics: if experiment is in DRAFT status\n- Targeting (`targeting_rules`): while the experiment is DRAFT or PAUSED,\n  for every role including superusers. On a PAUSED experiment it must be\n  the only field in the request. On an ACTIVE, COMPLETED or ARCHIVED\n  experiment a request that includes `targeting_rules` is refused, even\n  when the value equals the stored one; pause the experiment first.\n  People already assigned keep their variant; the new rules apply to\n  people not yet in the experiment once it is resumed.\n\n`status` is not changed by an update, for any role including superusers.\nA `status` equal to the current one is accepted and changes nothing, so an\nexperiment fetched with GET can be sent back. Any other value is refused\nwith 422; status changes through `POST /api/v1/experiments/{id}/start`,\n`/pause`, `/complete` or `/archive`. `status` still counts as a field\nsent, so on a PAUSED experiment `targeting_rules` must be sent without it.\n\n`schedule` is not applied here: a request that contains it, with any\nvalue including null, is refused with 422. Schedule an experiment with\n`PUT /api/v1/experiments/{experiment_id}/schedule`.\n\nReturns:\n    ExperimentResponse: The updated experiment\n\nRaises:\n    HTTPException 403: If the caller's role does not hold UPDATE on\n        experiments. This is checked before the experiment's state.\n    HTTPException 400: If the experiment's state does not allow the change\n        (the detail names the state): any change to a non-DRAFT experiment\n        by a non-superuser, other than targeting alone on a PAUSED one;\n        targeting outside DRAFT or PAUSED; targeting with other fields on\n        a PAUSED experiment; variants or metrics outside DRAFT\n    HTTPException 404: If the experiment doesn't exist\n    HTTPException 422: If `targeting_rules` is not a valid rule set,\n        `status` differs from the experiment's current status, the\n        request contains `schedule`, or a request sending `variants`,\n        `split_url_config` or `experiment_type` would leave a split URL\n        experiment whose `split_url_config` does not match its variants",
         "operationId": "update_experiment_api_v1_experiments__experiment_id__put",
         "parameters": [
           {
@@ -24269,7 +24300,7 @@
     },
     "/api/v1/experiments/{experiment_id}/start": {
       "post": {
-        "description": "Start an experiment.\n\nThis endpoint activates an experiment, changing its status to ACTIVE\nand setting the start date to now if not already set. A draft started\nbefore its scheduled start date starts now, and its start date is set to\nnow; a scheduled end date is kept.\n\nStarting an experiment makes it eligible for:\n- User traffic assignment\n- Event tracking and analysis\n- Results calculation\n\nPrerequisites for starting an experiment:\n- The experiment must be in DRAFT or PAUSED status\n- The experiment must have at least one control and one non-control variant\n- The experiment must have at least one metric defined\n- An experiment with no start date must not have an end date that has\n  passed: set a later one, or clear it, with\n  PUT /{experiment_id}/schedule first\n\nReturns:\n    ExperimentResponse: The updated experiment with ACTIVE status\n\nRaises:\n    HTTPException 400: If the experiment cannot be started\n    HTTPException 403: If the caller's role does not hold UPDATE on experiments",
+        "description": "Start an experiment.\n\nThis endpoint activates an experiment, changing its status to ACTIVE\nand setting the start date to now if not already set. A draft started\nbefore its scheduled start date starts now, and its start date is set to\nnow; a scheduled end date is kept.\n\nStarting an experiment makes it eligible for:\n- User traffic assignment\n- Event tracking and analysis\n- Results calculation\n\nPrerequisites for starting an experiment:\n- The experiment must be in DRAFT or PAUSED status\n- The experiment must have at least one control and one non-control variant\n- The experiment must have at least one metric defined\n- An experiment with no start date must not have an end date that has\n  passed: set a later one, or clear it, with\n  PUT /{experiment_id}/schedule first\n- A split URL experiment must have a `split_url_config` whose URL\n  variants match its variants. Its control URL's host and path must not\n  be those of an active split URL experiment's control URL or of one of\n  that experiment's variant URLs, and none of its variant URLs may have\n  the host and path of an active split URL experiment's control URL\n\nReturns:\n    ExperimentResponse: The updated experiment with ACTIVE status\n\nRaises:\n    HTTPException 400: If the experiment cannot be started\n    HTTPException 403: If the caller's role does not hold UPDATE on experiments",
         "operationId": "start_experiment_api_v1_experiments__experiment_id__start_post",
         "parameters": [
           {
@@ -24811,7 +24842,7 @@
     },
     "/api/v1/feature-flags/": {
       "get": {
-        "description": "Retrieve feature flags.\n- **skip**: Number of feature flags to skip in pagination\n- **limit**: Maximum number of feature flags to return\n- **status**: Filter by status (ACTIVE, INACTIVE)\n- **search**: Filter by name or key",
+        "description": "Retrieve feature flags.\n- **skip**: Number of feature flags to skip in pagination\n- **limit**: Maximum number of feature flags to return\n- **status**: Filter by status (`active`, `inactive`, `archived`; any case)\n- **search**: Filter by name or key",
         "operationId": "list_feature_flags_api_v1_feature_flags__get",
         "parameters": [
           {
@@ -24835,6 +24866,7 @@
             }
           },
           {
+            "description": "Only flags with this status: `active`, `inactive` or `archived`, in any case. Any other value answers 422; an empty value means no filter.",
             "in": "query",
             "name": "status",
             "required": false,
@@ -24847,6 +24879,7 @@
                   "type": "null"
                 }
               ],
+              "description": "Only flags with this status: `active`, `inactive` or `archived`, in any case. Any other value answers 422; an empty value means no filter.",
               "title": "Status"
             }
           },
@@ -27766,6 +27799,7 @@
         "operationId": "list_llm_experiments_api_v1_llm_experiments__get",
         "parameters": [
           {
+            "description": "Only experiments with this status: `DRAFT`, `ACTIVE`, `PAUSED` or `COMPLETED`, in any case. Any other value answers 422; an empty value means no filter.",
             "in": "query",
             "name": "status",
             "required": false,
@@ -27778,10 +27812,12 @@
                   "type": "null"
                 }
               ],
+              "description": "Only experiments with this status: `DRAFT`, `ACTIVE`, `PAUSED` or `COMPLETED`, in any case. Any other value answers 422; an empty value means no filter.",
               "title": "Status"
             }
           },
           {
+            "description": "Only experiments with this task type: `chat_completion`, `text_generation`, `classification`, `summarization`, `code_generation` or `embedding`, in any case. Any other value answers 422; an empty value means no filter.",
             "in": "query",
             "name": "task_type",
             "required": false,
@@ -27794,6 +27830,7 @@
                   "type": "null"
                 }
               ],
+              "description": "Only experiments with this task type: `chat_completion`, `text_generation`, `classification`, `summarization`, `code_generation` or `embedding`, in any case. Any other value answers 422; an empty value means no filter.",
               "title": "Task Type"
             }
           },
@@ -29100,10 +29137,12 @@
         "operationId": "list_groups_api_v1_mutual_exclusion_groups_get",
         "parameters": [
           {
+            "description": "Only groups with this status: `active` or `archived`, in any case. Any other value answers 422; an empty value means no filter.",
             "in": "query",
             "name": "status",
             "required": false,
             "schema": {
+              "description": "Only groups with this status: `active` or `archived`, in any case. Any other value answers 422; an empty value means no filter.",
               "title": "Status",
               "type": "string"
             }
@@ -29566,6 +29605,7 @@
             }
           },
           {
+            "description": "Only entries with this delivery status: `sent`, `failed` or `skipped`, in any case. Any other value answers 422; an empty value means no filter.",
             "in": "query",
             "name": "status",
             "required": false,
@@ -29578,6 +29618,7 @@
                   "type": "null"
                 }
               ],
+              "description": "Only entries with this delivery status: `sent`, `failed` or `skipped`, in any case. Any other value answers 422; an empty value means no filter.",
               "title": "Status"
             }
           }

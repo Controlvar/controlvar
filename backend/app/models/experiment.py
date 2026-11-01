@@ -7,8 +7,8 @@ This module defines models for experiments, variants, and metrics.
 
 import enum
 import threading
-from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from datetime import datetime, timedelta
+from typing import Optional
 
 from sqlalchemy import (
     Boolean,
@@ -31,41 +31,11 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.base import NEVER_SET, NO_VALUE
-from sqlalchemy.types import TypeDecorator
 
 from backend.app.core.database_config import get_schema_name
+from backend.app.models.column_types import UTCDateTime
 
 from .base import Base, BaseModel
-
-
-class UTCDateTime(TypeDecorator):
-    """A ``timestamp without time zone`` column whose bound values are UTC.
-
-    ``experiments.start_date`` and ``end_date`` hold UTC with no zone, but
-    the API binds them in three shapes: an aware datetime (a request's dates,
-    completion), an ISO string (a start) and a naive one. PostgreSQL converts
-    an aware value to the session's time zone on the way into such a column
-    and ignores the offset in a string, so on a server whose time zone is not
-    UTC the two dates moved apart by the offset: west of UTC an end date
-    landed before its start and completing answered 500 (#704). Every bound
-    value is converted here to naive UTC, the stored form, whatever the
-    session's zone; a naive value is taken to be UTC already. The database
-    type is unchanged (no migration), and values read back are returned as
-    stored. ``UTCTimestampString`` in ``models/event.py`` does the same for
-    ``events.created_at``.
-    """
-
-    impl = DateTime
-    cache_ok = True
-
-    def process_bind_param(self, value: Any, dialect: Any) -> Optional[datetime]:
-        if value is None:
-            return None
-        if isinstance(value, str):
-            value = datetime.fromisoformat(value)
-        if isinstance(value, datetime) and value.tzinfo is not None:
-            value = value.astimezone(timezone.utc).replace(tzinfo=None)
-        return value
 
 
 class ExperimentStatus(enum.Enum):

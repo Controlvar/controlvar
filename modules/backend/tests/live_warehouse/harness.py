@@ -1076,6 +1076,7 @@ def run_plan(
                 name="Paid",
                 metric_type="proportion",
                 is_primary=True,
+                lower_is_better=False,
                 query=build_metric_query(
                     client.dialect, assignment, metric, EXPERIMENT_KEY, window
                 ),

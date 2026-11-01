@@ -572,17 +572,37 @@ def test_a_set_value_is_rendered_exactly():
 
 
 @pytest.mark.regression
-@pytest.mark.parametrize("value", ["", "   "])
-def test_an_empty_value_is_refused_by_the_template_too(value):
-    error = refused(
-        "core",
-        "--skip-schema-validation",
-        "--set-string",
-        f"api.forwardedAllowIps={value}",
-    )
+@pytest.mark.parametrize(
+    "setting",
+    [
+        ("--set-string", "api.forwardedAllowIps="),
+        ("--set-string", "api.forwardedAllowIps=   "),
+        ("--set", "api.forwardedAllowIps=null"),
+    ],
+    ids=["empty", "blank", "null"],
+)
+def test_an_empty_value_is_refused_by_the_template_too(setting):
+    error = refused("core", "--skip-schema-validation", *setting)
     assert "api.forwardedAllowIps is empty" in error, (
         f"expected the chart to refuse an empty api.forwardedAllowIps:\n{error}"
     )
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("how", ["--set", "values file"])
+def test_a_null_value_is_refused_by_the_schema(how, tmp_path):
+    """Helm drops a key whose value is null before it checks the schema, so
+    `minLength` never sees it; the `api` object requires the key, and the
+    chart's own default always supplies it."""
+    if how == "--set":
+        args = ("--set", "api.forwardedAllowIps=null")
+    else:
+        values = tmp_path / "null.yaml"
+        values.write_text("api:\n  forwardedAllowIps: ~\n", encoding="utf-8")
+        args = ("-f", str(values))
+    error = refused("core", *args)
+    assert "values don't meet the specifications of the schema" in error, error
+    assert "forwardedAllowIps" in error, error
 
 
 @pytest.mark.parametrize(

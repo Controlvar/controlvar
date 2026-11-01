@@ -27,6 +27,24 @@ to request access, a role change, or superuser access.
 [What the dashboard does, and what is API only](dashboard-and-api.md) lists, row by row, what
 has a screen and what works through the API only, with the guide for each.
 
+### Request time-outs
+
+The dashboard gives up on a request when the API has not started to answer within 30 seconds:
+120 seconds for results, for the audit-log export and for warehouse connection and source
+checks, and 31 minutes for a warehouse preview. A read that times out says the API did not
+answer. A change that times out says the request may or may not have been carried out, because
+the API may still finish it: reload the page and check before you try again.
+
+Two things the deadline does not cover. First, it ends when the API starts to answer, so a
+response that begins and then stalls while its body arrives (a download or export that stops
+partway) is not timed out, and the page can keep waiting. Second, only the places that were
+checked show the time-out wording: some other error messages put the underlying message inside
+their own fixed sentence, so a time-out there can read as an ordinary failure. User deletion is
+fixed; the others were not audited one by one.
+
+If you raise `WAREHOUSE_MAX_QUERY_TIMEOUT_SECONDS` above 1800, the dashboard still gives up on a
+warehouse preview after 31 minutes.
+
 ---
 
 ## Experiments
@@ -162,8 +180,8 @@ on a `DRAFT` experiment, with an ADMIN or DEVELOPER token. The experiment activa
 `start_date` and completes at `end_date`, which must be at least an hour later. The scheduler
 checks every 15 minutes by default (`EXPERIMENT_SCHEDULER_INTERVAL_MINUTES`), so it can start
 or complete up to that much later. A draft that
-is not ready to start (it needs two variants, a control and a metric) stays a draft until it
-is. A date you leave out of the request is left as it is, and `null` clears it. A date written without a
+is not ready to start (it needs two variants, a control and a metric, and a split URL
+experiment needs a valid `split_url_config`) stays a draft until it is. A date you leave out of the request is left as it is, and `null` clears it. A date written without a
 UTC offset is read in `time_zone`, an IANA name such as `America/Los_Angeles` (default
 `UTC`); a date with an offset, like the ones below, keeps it. Dates are stored in UTC.
 The experiment's page shows these dates in your browser's time zone, as "Starts" and "Ends"

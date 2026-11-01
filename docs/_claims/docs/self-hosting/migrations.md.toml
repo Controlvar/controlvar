@@ -301,6 +301,25 @@ text = "modules_0003_lower_is_better gives each warehouse metric source a direct
 by = ["test:backend/tests/integration/database/test_modules_0003_transitions.py::test_a_database_at_the_previous_release_upgrades_and_every_source_reads_false"]
 
 [[unit]]
+text = "Until someone marks them again, those metrics are analysed as higher is better."
+by = [
+    "test:backend/tests/integration/database/test_modules_0003_transitions.py::test_downgrade_drops_the_column_keeps_the_rows_and_an_upgrade_restores_false",
+    "test:modules/backend/tests/unit/warehouse/test_runner_direction.py::test_a_run_names_the_winner_in_the_direction_of_its_source",
+]
+
+[[unit]]
+text = "Before downgrading, note which metric sources are marked: the dashboard's Warehouse › Metric sources list tags each one \"lower is better\"."
+by = ["test:modules/frontend/src/tests/warehouse/warehouse-index.test.tsx::tags a metric source marked lower is better in the list, outside its link"]
+
+[[unit]]
+text = "The compliance audit trail keeps a record too, and a downgrade leaves it in place: each source's latest entry (resource_type=warehouse_source) carries its definition as last saved, lower_is_better included."
+by = [
+    "test:backend/tests/integration/database/test_modules_0003_transitions.py::test_downgrade_drops_the_column_keeps_the_rows_and_an_upgrade_restores_false",
+    "test:modules/backend/tests/integration/warehouse/test_sources_api.py::test_a_metric_source_stores_and_returns_its_direction",
+    "test:modules/backend/tests/integration/warehouse/test_sources_api.py::test_a_put_without_lower_is_better_sets_it_back_to_false",
+]
+
+[[unit]]
 text = "This revision adds the column warehouse_sources.lower_is_better (boolean, NOT NULL, default false), and every source already stored gets false."
 by = [
     "test:backend/tests/integration/database/test_modules_0003_transitions.py::test_a_database_at_the_previous_release_upgrades_and_every_source_reads_false",

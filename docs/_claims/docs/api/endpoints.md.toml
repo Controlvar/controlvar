@@ -2505,6 +2505,15 @@ text = "An experiment with no start_date whose end_date has passed is refused wi
 by = ["test:backend/tests/integration/api/test_start_after_end_date.py::test_starting_a_draft_whose_end_date_has_passed_answers_400"]
 
 [[unit]]
+text = "A split URL experiment is also refused with 400 when its split_url_config is missing or cannot split; see Starting a split URL experiment."
+by = [
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_refuses_a_split_url_experiment_with_no_config",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_refuses_a_config_that_cannot_split_saying_why",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_refuses_the_same_control_page_as_an_active_experiment",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_refuses_a_chain_either_way",
+]
+
+[[unit]]
 text = "POST /api/v1/experiments/{experiment_id}/pause: active to paused."
 by = ["test:backend/tests/integration/api/test_experiment_status_lifecycle_only.py::test_the_lifecycle_endpoints_still_move_the_status"]
 
@@ -3401,6 +3410,13 @@ by = ["exempt:label"]
 [[unit]]
 text = "At least two URL variants, with traffic_allocation values (0-100) that sum to 100."
 by = ["test:backend/tests/unit/schemas/test_split_url_schemas.py"]
+
+[[unit]]
+text = "In a split_url experiment the URL variants name the experiment's variants one to one, with the same allocations, and each url is an absolute http:// or https:// URL; see Validation Rules."
+by = [
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_config_that_does_not_match_its_variants_is_refused_at_its_loc",
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_url_no_visitor_could_be_sent_to_is_refused_at_its_loc",
+]
 
 [[unit]]
 text = "cookie_name and cookie_ttl_days (default 30) are optional."

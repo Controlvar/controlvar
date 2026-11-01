@@ -1616,7 +1616,10 @@ the caller's role, superusers included:
   is set to now; a scheduled `end_date` is kept. An experiment with no
   `start_date` whose `end_date` has passed is refused with 400 and nothing is
   changed; set a later `end_date`, or clear it with `null`, through
-  `PUT /api/v1/experiments/{experiment_id}/schedule` and start it again.
+  `PUT /api/v1/experiments/{experiment_id}/schedule` and start it again. A
+  split URL experiment is also refused with 400 when its `split_url_config`
+  is missing or cannot split; see
+  [Starting a split URL experiment](split-url.md#starting-a-split-url-experiment).
 - `POST /api/v1/experiments/{experiment_id}/pause`: `active` to `paused`.
 - `POST /api/v1/experiments/{experiment_id}/complete`: `active` or `paused` to
   `completed`, and sets `end_date` to now. An experiment that an earlier
@@ -2276,4 +2279,7 @@ it does not predict the edge router.
 ```
 
 At least two URL variants, with `traffic_allocation` values (0-100) that sum to 100.
+In a `split_url` experiment the URL variants name the experiment's variants one to one,
+with the same allocations, and each `url` is an absolute `http://` or `https://` URL; see
+[Validation Rules](split-url.md#validation-rules).
 `cookie_name` and `cookie_ttl_days` (default 30) are optional.

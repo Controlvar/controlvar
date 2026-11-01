@@ -265,8 +265,28 @@ def shared_client(_module_data, _module_factory):
 
 
 @pytest.fixture(scope="module")
-def flag_id(_module_data):
+def seeded_flag_id(_module_data):
+    """The flag the module-wide ``seeded_schedule`` belongs to (read tests only)."""
     return _module_data["flag_id"]
+
+
+@pytest.fixture
+def flag_id(_module_factory, admin_id):
+    """A fresh flag for every test, so no two tests share a flag's schedules."""
+    session = _module_factory()
+    try:
+        flag = FeatureFlag(
+            key=f"rs-flag-{uuid.uuid4().hex[:12]}",
+            name="RS Per-Test Flag",
+            status=FeatureFlagStatus.INACTIVE,
+            owner_id=admin_id,
+            rollout_percentage=0,
+        )
+        session.add(flag)
+        session.commit()
+        return str(flag.id)
+    finally:
+        session.close()
 
 
 @pytest.fixture(scope="module")
@@ -275,9 +295,11 @@ def admin_id(_module_data):
 
 
 @pytest.fixture(scope="module")
-def seeded_schedule(shared_client, flag_id):
+def seeded_schedule(shared_client, seeded_flag_id):
     """Create one pre-existing schedule for read tests."""
-    return _create_schedule_via_api(shared_client, flag_id, "Seeded Read Schedule")
+    return _create_schedule_via_api(
+        shared_client, seeded_flag_id, "Seeded Read Schedule"
+    )
 
 
 # =============================================================================
@@ -407,17 +429,19 @@ class TestListRolloutSchedules:
         ids = [item["id"] for item in response.json()["items"]]
         assert seeded_schedule["id"] in ids
 
-    def test_filter_by_feature_flag_id(self, shared_client, seeded_schedule, flag_id):
+    def test_filter_by_feature_flag_id(
+        self, shared_client, seeded_schedule, seeded_flag_id
+    ):
         """Filtering by feature_flag_id returns schedules for that flag only."""
         response = shared_client.get(
             "/api/v1/rollout-schedules/",
-            params={"feature_flag_id": flag_id},
+            params={"feature_flag_id": seeded_flag_id},
         )
         assert response.status_code == 200, response.text
         items = response.json()["items"]
         assert len(items) >= 1
         for item in items:
-            assert item["feature_flag_id"] == flag_id
+            assert item["feature_flag_id"] == seeded_flag_id
 
     def test_filter_by_status_draft(self, shared_client, seeded_schedule):
         """Filtering by status=draft returns only draft schedules."""
