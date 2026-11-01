@@ -123,6 +123,23 @@ function save() {
   fireEvent.click(screen.getByTestId('save-flag'));
 }
 
+/**
+ * What a screen reader would read as *field* takes focus: whether it is
+ * `aria-invalid`, and the text of everything `aria-describedby` names, read in
+ * the focus event itself rather than after the render that follows.
+ */
+function watchFocus(field: HTMLElement) {
+  const seen: Array<{ invalid: string | null; description: string }> = [];
+  field.addEventListener('focus', () => {
+    const ids = (field.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean);
+    seen.push({
+      invalid: field.getAttribute('aria-invalid'),
+      description: ids.map((id) => document.getElementById(id)?.textContent ?? '').join(' '),
+    });
+  });
+  return seen;
+}
+
 /** The header card: name, status, key, description and the switch. */
 function header() {
   return screen.getByTestId('flag-name').closest('.bg-white') as HTMLElement;
@@ -341,6 +358,58 @@ describe("a value flag's Values section", () => {
     expect(screen.getByTestId('rollout-percentage')).toHaveAccessibleDescription(
       'The share of users who match no targeting rule that get the on value. Everyone else gets the off value.',
     );
+  });
+});
+
+describe('focus lands on a field that is already refused (#1531 review)', () => {
+  it('a refusal made here: the field is aria-invalid and described by it when it takes focus', async () => {
+    install(flag(STRING));
+    render(<FeatureFlagDetailPage />);
+    await loaded();
+    type(onField(), 'Buy now');
+    const seen = watchFocus(onField());
+    save();
+    await waitFor(() => expect(onField()).toHaveFocus());
+    expect(seen).toHaveLength(1);
+    expect(seen[0].invalid).toBe('true');
+    expect(seen[0].description).toMatch(
+      /^on_value equals off_value; the two values must differ, or turning the flag off changes nothing What users/,
+    );
+  });
+
+  it("the API's 422: the field is aria-invalid and described by it when it takes focus", async () => {
+    install(flag({ value_type: 'number', on_value: 10, off_value: 3 }), () => {
+      throw new ApiError({
+        status: 422,
+        detail: [{ loc: ['body', 'off_value'], msg: 'off_value larger than 8192 bytes', type: 'value_too_large' }],
+      });
+    });
+    render(<FeatureFlagDetailPage />);
+    await loaded();
+    type(offField(), '4');
+    const seen = watchFocus(offField());
+    save();
+    await waitFor(() => expect(offField()).toHaveFocus());
+    expect(seen).toEqual([
+      {
+        invalid: 'true',
+        description: 'off_value larger than 8192 bytes What everyone else gets, and what everyone gets while the flag is off.',
+      },
+    ]);
+  });
+});
+
+describe('a string keeps its newlines (#1531 review)', () => {
+  it('"Buy\\nnow" stored is shown with its newline, and an edit sends the newline it keeps', async () => {
+    const puts = install(flag({ value_type: 'string', on_value: 'Buy\nnow', off_value: 'Later' }));
+    render(<FeatureFlagDetailPage />);
+    await loaded();
+    expect(onField()).toHaveValue('Buy\nnow');
+    type(onField(), 'Buy\nnow, today');
+    save();
+    await screen.findByTestId('save-success');
+    expect(puts).toEqual([{ rollout_percentage: 25, on_value: 'Buy\nnow, today' }]);
+    expect(onField()).toHaveValue('Buy\nnow, today');
   });
 });
 

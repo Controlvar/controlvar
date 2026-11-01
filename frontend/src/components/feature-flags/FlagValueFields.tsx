@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   EMPTY_STRING_HINT,
   TYPE_FIXED_NOTE,
@@ -14,6 +14,7 @@ import {
   ValueField,
   ValueFlagType,
   ValueTexts,
+  firstInvalid,
   valueToDisplay,
 } from '@/utils/flagValues';
 
@@ -35,14 +36,59 @@ export interface FlagValueFieldsProps {
 }
 
 /**
+ * A page's two value fields: their text, their refusals, and the elements, so
+ * focus can move to the first refused one.
+ *
+ * Focus moves in an effect, after React has committed the refusals: the field
+ * that takes focus is already `aria-invalid` and described by its refusal, so a
+ * screen reader announces the refusal with the field. Focusing in the same
+ * tick as `setErrors` would land on the field as it was before.
+ */
+export function useFlagValueFields() {
+  const [texts, setTexts] = useState<ValueTexts>({ on_value: '', off_value: '' });
+  const [errors, setErrors] = useState<ValueErrors>({});
+  const fieldRefs: ValueFieldRefs = useRef({});
+  const focusPending = useRef(false);
+
+  useEffect(() => {
+    if (!focusPending.current) return;
+    focusPending.current = false;
+    const first = firstInvalid(errors);
+    if (first) fieldRefs.current[first]?.focus();
+  }, [errors]);
+
+  /** Show the refusals at their fields; the first takes focus once they are rendered. */
+  const showErrors = useCallback((next: ValueErrors) => {
+    focusPending.current = true;
+    setErrors(next);
+  }, []);
+
+  /** The user typed in *field*: keep the text, and clear that field's refusal. */
+  const change = useCallback((field: ValueField, text: string) => {
+    setTexts((current) => ({ ...current, [field]: text }));
+    setErrors((current) => {
+      if (!current[field]) return current;
+      const copy = { ...current };
+      delete copy[field];
+      return copy;
+    });
+  }, []);
+
+  return { texts, setTexts, errors, setErrors, showErrors, change, fieldRefs };
+}
+
+/**
  * The On value and Off value fields of a string, number or JSON flag (#1497).
  *
  * Each has a `<label for>`, a hint, and, when refused, the reason under it in
- * words, linked by `aria-describedby` with `aria-invalid` set. A string is a
- * one-line text box (it may be empty); a number is a plain text box (no
- * `type=number`, and no `inputmode`: the iOS decimal pad has no minus sign); a
- * JSON value is a monospace text area that leaves Tab alone and scrolls long
- * lines inside itself.
+ * words, linked by `aria-describedby` with `aria-invalid` set.
+ * - A string is a text area of two rows (it may be empty): a text input would
+ *   drop the newlines of a stored string the moment its field is edited.
+ * - A number is a plain text box (no `type=number`, and no `inputmode`: the
+ *   iOS decimal pad has no minus sign).
+ * - A JSON value is a monospace text area that scrolls long lines inside
+ *   itself.
+ * Neither text area takes Tab: it moves focus as usual.
  */
 export function FlagValueFields({ type, texts, errors, onChange, fieldRefs }: FlagValueFieldsProps) {
   return (
@@ -79,6 +125,17 @@ export function FlagValueFields({ type, texts, errors, onChange, fieldRefs }: Fl
                 spellCheck={false}
                 className={`${CONTROL} font-mono resize-y overflow-auto ${error ? INVALID : ''}`}
               />
+            ) : type === 'string' ? (
+              <textarea
+                {...common}
+                ref={(node) => {
+                  fieldRefs.current[field] = node;
+                }}
+                onChange={(e) => onChange(field, e.target.value)}
+                rows={2}
+                autoComplete="off"
+                className={`${CONTROL} resize-y ${error ? INVALID : ''}`}
+              />
             ) : (
               <input
                 {...common}
@@ -87,9 +144,9 @@ export function FlagValueFields({ type, texts, errors, onChange, fieldRefs }: Fl
                 }}
                 type="text"
                 autoComplete="off"
-                spellCheck={type === 'string'}
+                spellCheck={false}
                 onChange={(e) => onChange(field, e.target.value)}
-                className={`${CONTROL} ${type === 'number' ? 'font-mono' : ''} ${error ? INVALID : ''}`}
+                className={`${CONTROL} font-mono ${error ? INVALID : ''}`}
               />
             )}
             {error && (

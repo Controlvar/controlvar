@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { TargetingRuleBuilder } from '@/components/targeting';
@@ -14,15 +14,12 @@ import {
 import { targetingToSend } from '@/utils/flagTargeting';
 import { CreateFeatureFlagRequest, FeatureFlagsService } from '@/services/featureFlags';
 import { PageTitle } from '@/components/PageTitle';
-import { FlagTypeChoice, FlagValueFields, ValueFieldRefs } from '@/components/feature-flags/FlagValueFields';
+import { FlagTypeChoice, FlagValueFields, useFlagValueFields } from '@/components/feature-flags/FlagValueFields';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { FLAG_ROLE_NOTE, canChangeFeatureFlags } from '@/utils/experimentPermissions';
 import {
   FlagValueType,
   ROLLOUT_VALUE_HINT,
-  ValueErrors,
-  ValueField,
-  ValueTexts,
   checkNewValues,
   firstInvalid,
   isValueFlagType,
@@ -53,26 +50,14 @@ export default function NewFeatureFlagPage() {
   // between String, Number and JSON, and checked against the type chosen when
   // the form is sent; Boolean removes the two fields and sends neither.
   const [valueType, setValueType] = useState<FlagValueType>('boolean');
-  const [valueTexts, setValueTexts] = useState<ValueTexts>({ on_value: '', off_value: '' });
-  const [valueErrors, setValueErrors] = useState<ValueErrors>({});
-  const valueRefs: ValueFieldRefs = useRef({});
-
-  /** Show the refusals at their fields and move focus to the first. */
-  const showValueErrors = (errors: ValueErrors) => {
-    setValueErrors(errors);
-    const first = firstInvalid(errors);
-    if (first) valueRefs.current[first]?.focus();
-  };
-
-  const handleValueChange = (field: ValueField, text: string) => {
-    setValueTexts((current) => ({ ...current, [field]: text }));
-    setValueErrors((current) => {
-      if (!current[field]) return current;
-      const copy = { ...current };
-      delete copy[field];
-      return copy;
-    });
-  };
+  const {
+    texts: valueTexts,
+    errors: valueErrors,
+    setErrors: setValueErrors,
+    showErrors: showValueErrors,
+    change: handleValueChange,
+    fieldRefs: valueRefs,
+  } = useFlagValueFields();
 
   const handleTypeChange = (type: FlagValueType) => {
     setValueType(type);

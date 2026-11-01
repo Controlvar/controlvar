@@ -144,10 +144,11 @@ describe("the flag page's rollout schedule section", () => {
 
 /**
  * A flag's Type and value fields (#1497), on the new-flag form and a value
- * flag's page. The nightly audit opens neither, and jsdom cannot measure
- * contrast, so this is their only check: no grey lighter than slate-600
- * (7.58:1 on white; the read-only values sit on slate-50), and each refusal
- * red-700 (6.47:1 on white) or darker.
+ * flag's page. The nightly audit (tests/e2e/accessibility.spec.ts) scans the
+ * form and a value flag's header and Values section, but only nightly, and
+ * jsdom cannot measure contrast, so this is their pull-request-time pin: no
+ * grey lighter than slate-600 (7.58:1 on white; the read-only values sit on
+ * slate-50), and each refusal red-700 (6.47:1 on white) or darker.
  */
 describe("a flag's Type and value fields", () => {
   const FILE = 'components/feature-flags/FlagValueFields.tsx';

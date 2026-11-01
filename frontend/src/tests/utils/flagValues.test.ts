@@ -210,6 +210,33 @@ describe('valueRefusals', () => {
     expect(valueRefusals(new Error('boom'))).toBeNull();
   });
 
+  it('takes only an item at exactly ["body", field]: the same name nested elsewhere is not a value (#1531 review)', () => {
+    const nested = { loc: ['body', 'targeting_rules', 'on_value'], msg: 'nested', type: 'x' };
+    const bare = { loc: ['off_value'], msg: 'bare', type: 'x' };
+    const query = { loc: ['query', 'on_value'], msg: 'query', type: 'x' };
+    expect(valueRefusals(new ApiError({ status: 422, detail: [nested, bare, query] }))).toBeNull();
+    const refused = valueRefusals(
+      new ApiError({
+        status: 422,
+        detail: [nested, { loc: ['body', 'off_value'], msg: 'off_value larger than 8192 bytes', type: 'value_too_large' }],
+      }),
+    );
+    expect(refused?.fields).toEqual({ off_value: 'off_value larger than 8192 bytes' });
+    expect(refused?.rest?.detail).toEqual([nested]);
+  });
+
+  it("keeps the response's request id on the rest (#1531 review)", () => {
+    const err = new ApiError({
+      status: 422,
+      requestId: 'req-1531',
+      detail: [
+        { loc: ['body', 'on_value'], msg: 'on_value larger than 8192 bytes', type: 'value_too_large' },
+        { loc: ['body', 'name'], msg: 'Field required', type: 'missing' },
+      ],
+    });
+    expect(valueRefusals(err)?.rest?.requestId).toBe('req-1531');
+  });
+
   it('has no rest when every item is a value refusal', () => {
     const err = new ApiError({
       status: 422,

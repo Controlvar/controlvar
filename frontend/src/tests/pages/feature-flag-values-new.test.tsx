@@ -73,6 +73,23 @@ function submit() {
   fireEvent.click(screen.getByTestId('submit-flag'));
 }
 
+/**
+ * What a screen reader would read as *field* takes focus: whether it is
+ * `aria-invalid`, and the text of everything `aria-describedby` names, read in
+ * the focus event itself rather than after the render that follows.
+ */
+function watchFocus(field: HTMLElement) {
+  const seen: Array<{ invalid: string | null; description: string }> = [];
+  field.addEventListener('focus', () => {
+    const ids = (field.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean);
+    seen.push({
+      invalid: field.getAttribute('aria-invalid'),
+      description: ids.map((id) => document.getElementById(id)?.textContent ?? '').join(' '),
+    });
+  });
+  return seen;
+}
+
 beforeEach(() => {
   mockedApiFetch.mockReset();
   mockAuth.mockReset();
@@ -380,6 +397,59 @@ describe("the API's 422 on a value", () => {
     expect(await screen.findByTestId('create-error')).toHaveTextContent('A feature flag with this key already exists');
     expect(screen.queryByTestId('flag-on-value-error')).toBeNull();
     expect(screen.queryByTestId('flag-off-value-error')).toBeNull();
+  });
+});
+
+describe('focus lands on a field that is already refused (#1531 review)', () => {
+  it('a refusal made here: the field is aria-invalid and described by it when it takes focus', async () => {
+    install();
+    render(<NewFeatureFlagPage />);
+    fillName();
+    chooseType('Number');
+    type(onField(), '1');
+    type(offField(), 'ten');
+    const seen = watchFocus(offField());
+    submit();
+    await waitFor(() => expect(offField()).toHaveFocus());
+    expect(seen).toEqual([
+      {
+        invalid: 'true',
+        description:
+          'Enter a number, such as 10, -3 or 2.5. What everyone else gets, and what everyone gets while the flag is off.',
+      },
+    ]);
+  });
+
+  it("the API's 422: the field is aria-invalid and described by it when it takes focus", async () => {
+    install(() => {
+      throw refusal('on_value', 'on_value larger than 8192 bytes', 'value_too_large');
+    });
+    render(<NewFeatureFlagPage />);
+    fillName();
+    chooseType('String');
+    type(onField(), 'x'.repeat(9000));
+    type(offField(), 'Buy now');
+    const seen = watchFocus(onField());
+    submit();
+    await waitFor(() => expect(onField()).toHaveFocus());
+    expect(seen).toHaveLength(1);
+    expect(seen[0].invalid).toBe('true');
+    expect(seen[0].description).toMatch(/^on_value larger than 8192 bytes What users the flag is on for get/);
+  });
+});
+
+describe('a string keeps its newlines (#1531 review)', () => {
+  it('"Buy\\nnow" typed into On value is sent with its newline', async () => {
+    const posts = install();
+    render(<NewFeatureFlagPage />);
+    fillName();
+    chooseType('String');
+    type(onField(), 'Buy\nnow');
+    type(offField(), 'Later');
+    expect(onField()).toHaveValue('Buy\nnow');
+    submit();
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalled());
+    expect(posts[0]).toMatchObject({ value_type: 'string', on_value: 'Buy\nnow', off_value: 'Later' });
   });
 });
 

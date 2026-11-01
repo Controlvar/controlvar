@@ -34,7 +34,7 @@ import { RolloutScheduleManager } from '@/components/feature-flags/RolloutSchedu
 import {
   FlagValueFields,
   FlagValueReadOnly,
-  ValueFieldRefs,
+  useFlagValueFields,
 } from '@/components/feature-flags/FlagValueFields';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { FLAG_ROLE_NOTE, canChangeFeatureFlags } from '@/utils/experimentPermissions';
@@ -45,7 +45,6 @@ import {
   VALUE_FIELDS,
   VALUE_FLAG_STATUS_OFF,
   VALUE_FLAG_STATUS_ON,
-  ValueErrors,
   ValueField,
   ValueTexts,
   checkEditedValues,
@@ -183,43 +182,35 @@ export default function FeatureFlagDetailPage() {
     on_value: undefined,
     off_value: undefined,
   });
-  const [valueTexts, setValueTexts] = useState<ValueTexts>({ on_value: '', off_value: '' });
   const [initialTexts, setInitialTexts] = useState<ValueTexts>({ on_value: '', off_value: '' });
-  const [valueErrors, setValueErrors] = useState<ValueErrors>({});
-  const valueRefs: ValueFieldRefs = useRef({});
+  const {
+    texts: valueTexts,
+    setTexts: setValueTexts,
+    errors: valueErrors,
+    setErrors: setValueErrors,
+    showErrors: showValueErrors,
+    change: handleValueChange,
+    fieldRefs: valueRefs,
+  } = useFlagValueFields();
 
   useEffect(() => {
     if (saveError) saveErrorRef.current?.focus();
   }, [saveError]);
 
   /** Show *values* as the flag's stored pair, in the fields when it has a type the page can edit. */
-  const loadValues = useCallback((type: string, values: Record<ValueField, unknown>) => {
-    setStoredValues(values);
-    const texts: ValueTexts = { on_value: '', off_value: '' };
-    if (isValueFlagType(type)) {
-      for (const field of VALUE_FIELDS) texts[field] = valueToText(type, values[field]);
-    }
-    setValueTexts(texts);
-    setInitialTexts(texts);
-    setValueErrors({});
-  }, []);
-
-  /** Show the refusals at their fields and move focus to the first. */
-  const showValueErrors = (errors: ValueErrors) => {
-    setValueErrors(errors);
-    const first = firstInvalid(errors);
-    if (first) valueRefs.current[first]?.focus();
-  };
-
-  const handleValueChange = (field: ValueField, text: string) => {
-    setValueTexts((current) => ({ ...current, [field]: text }));
-    setValueErrors((current) => {
-      if (!current[field]) return current;
-      const copy = { ...current };
-      delete copy[field];
-      return copy;
-    });
-  };
+  const loadValues = useCallback(
+    (type: string, values: Record<ValueField, unknown>) => {
+      setStoredValues(values);
+      const texts: ValueTexts = { on_value: '', off_value: '' };
+      if (isValueFlagType(type)) {
+        for (const field of VALUE_FIELDS) texts[field] = valueToText(type, values[field]);
+      }
+      setValueTexts(texts);
+      setInitialTexts(texts);
+      setValueErrors({});
+    },
+    [setValueTexts, setValueErrors],
+  );
 
   /** Show `value` as the stored rules: in the builder when it can, read-only otherwise. */
   const loadRules = useCallback((value: unknown) => {

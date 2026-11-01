@@ -309,6 +309,11 @@ export function checkEditedValues(
  * A 422's refusals of `on_value` and `off_value`, by field and in the API's
  * words, and an `ApiError` holding the rest of its items (or null when there
  * are none). Null when the error has no such refusal.
+ *
+ * Only an item at exactly `["body", "on_value"]` or `["body", "off_value"]`
+ * is a value's refusal: a field of that name nested anywhere else (inside the
+ * targeting rules, say) is not. The rest keeps the response's request id, so
+ * whatever shows it can still name the request.
  */
 export function valueRefusals(err: unknown): { fields: ValueErrors; rest: ApiError | null } | null {
   if (!(err instanceof ApiError) || err.status !== 422 || !Array.isArray(err.detail)) return null;
@@ -316,7 +321,7 @@ export function valueRefusals(err: unknown): { fields: ValueErrors; rest: ApiErr
   const rest: unknown[] = [];
   for (const item of err.detail as unknown[]) {
     const loc: unknown[] = isPlainObject(item) && Array.isArray(item.loc) ? item.loc : [];
-    const field = loc[loc.length - 1];
+    const field = loc.length === 2 && loc[0] === 'body' ? loc[1] : undefined;
     const msg = isPlainObject(item) && typeof item.msg === 'string' ? item.msg : '';
     if ((field === 'on_value' || field === 'off_value') && msg) {
       if (!fields[field]) fields[field] = msg;
@@ -325,7 +330,11 @@ export function valueRefusals(err: unknown): { fields: ValueErrors; rest: ApiErr
     }
   }
   if (Object.keys(fields).length === 0) return null;
-  return { fields, rest: rest.length > 0 ? new ApiError({ status: 422, detail: rest }) : null };
+  const others =
+    rest.length > 0
+      ? new ApiError({ status: 422, detail: rest, requestId: err.requestId, retryAfter: err.retryAfter })
+      : null;
+  return { fields, rest: others };
 }
 
 /** The first field with an error, in page order. */
