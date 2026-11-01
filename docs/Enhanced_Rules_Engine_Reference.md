@@ -54,9 +54,9 @@ Experiment targeting also accepts `json_path` and `percentage_bucket`, in the na
 they are not documented here. Flag targeting refuses them with `422`, because flag evaluation
 does not implement them.
 
-A comparison or unit this page does not list is refused when rules are saved (`422`). Rules
-saved earlier with one keep answering as they did: the condition does not hold, so under `NOT`
-it holds for every user. `python -m backend.scripts.check_targeting_rules` lists the flags,
+A distance unit, or a native-shape comparison, this page does not list is refused when rules
+are saved (`422`). Rules saved earlier with one keep answering as they did: the condition does
+not hold, so under `NOT` it holds for every user. `python -m backend.scripts.check_targeting_rules` lists the flags,
 experiments and segments that have such rules, and a save that sends them back is refused until
 they are corrected.
 

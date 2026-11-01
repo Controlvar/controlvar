@@ -254,7 +254,7 @@ by = [
 ]
 
 [[unit]]
-text = "A comparison or unit this page does not list is refused when rules are saved (422)."
+text = "A distance unit, or a native-shape comparison, this page does not list is refused when rules are saved (422)."
 by = [
     "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_refused_with_fixed_text",
     "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_every_native_operator_is_refused_or_can_match",
