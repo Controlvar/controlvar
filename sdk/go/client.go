@@ -20,6 +20,8 @@ type Client interface {
 	// GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=... The server
 	// decides; successful results are cached per user + key for the cache TTL.
 	// On failure it returns a disabled EvalResult together with the error.
+	// Each call returns an EvalResult of its own; a string, number or json
+	// flag's value is read with its StringValue, NumberValue or DecodeValue.
 	EvaluateFlag(ctx context.Context, flagKey string, user *User) (*EvalResult, error)
 
 	// GetAssignment assigns the user to an experiment variant via
@@ -105,11 +107,14 @@ func New(opts ...Option) (Client, error) {
 }
 
 // evaluateResponse is the wire form of GET /api/v1/feature-flags/evaluate/{key}.
-// Config is kept raw because the server may return any JSON value.
+// Config and Value are kept raw because the server may return any JSON value.
+// A server without flag values sends neither value nor value_type.
 type evaluateResponse struct {
-	Key     string          `json:"key"`
-	Enabled bool            `json:"enabled"`
-	Config  json.RawMessage `json:"config"`
+	Key       string          `json:"key"`
+	Enabled   bool            `json:"enabled"`
+	Config    json.RawMessage `json:"config"`
+	Value     json.RawMessage `json:"value"`
+	ValueType string          `json:"value_type"`
 }
 
 // EvaluateFlag implements Client.
@@ -124,7 +129,8 @@ func (c *client) EvaluateFlag(ctx context.Context, flagKey string, user *User) (
 	key := cacheKey(cacheKindFlag, user.ID, flagKey)
 	if cached, ok := c.cache.Get(key); ok {
 		if cf, ok := cached.(*cachedFlag); ok {
-			return cf.result, nil
+			// Every caller gets its own copy: the cached result is shared.
+			return cf.result.clone(), nil
 		}
 	}
 
@@ -137,7 +143,7 @@ func (c *client) EvaluateFlag(ctx context.Context, flagKey string, user *User) (
 		return &EvalResult{Key: flagKey, Enabled: false}, fmt.Errorf("evaluate flag %q: %w", flagKey, err)
 	}
 
-	result := &EvalResult{Key: resp.Key, Enabled: resp.Enabled}
+	result := &EvalResult{Key: resp.Key, Enabled: resp.Enabled, ValueType: resp.ValueType}
 	if result.Key == "" {
 		result.Key = flagKey
 	}
@@ -147,9 +153,12 @@ func (c *client) EvaluateFlag(ctx context.Context, flagKey string, user *User) (
 			result.Config = cfg
 		}
 	}
+	if hasValue(resp.Value) {
+		result.Value = resp.Value
+	}
 
 	c.cache.Set(key, &cachedFlag{userID: user.ID, result: result})
-	return result, nil
+	return result.clone(), nil
 }
 
 // assignRequest is the body of POST /api/v1/tracking/assign.
