@@ -198,18 +198,31 @@ def newcombe_interval(treatment: ArmLimits, control: ArmLimits) -> Tuple[float, 
 
 
 def _mover_ratio(
-    treatment: ArmLimits, control: ArmLimits
+    treatment: ArmLimits, control: ArmLimits, nonnegative: bool = False
 ) -> Optional[Tuple[float, float]]:
     """The MOVER-R interval of ``m_t / m_c`` for a control whose mean is above
-    0, or None when the control's limits do not keep its mean away from 0.
+    0, or None in the two cases below (a proportion's control with no
+    conversions; a mean's control whose limits reach 0).
 
     The lower bound ``L <= m_t / m_c`` solves
     ``(m_t - L m_c)^2 = (m_t - l_t)^2 + L^2 (u_c - m_c)^2`` and the upper bound
     ``U >= m_t / m_c`` solves ``(U m_c - m_t)^2 = (u_t - m_t)^2 + U^2 (m_c - l_c)^2``.
     Each is the root of a quadratic whose leading coefficient is
-    ``u_c (2 m_c - u_c)`` (``l_c (2 m_c - l_c)`` for the upper bound); when
-    ``l_c <= 0`` or ``u_c >= 2 m_c`` one of them is not above 0, the set of
-    ratios the data allow is not an interval, and the answer is None.
+    ``u_c (2 m_c - u_c)`` (``l_c (2 m_c - l_c)`` for the upper bound).
+
+    ``nonnegative`` is true for a ratio of two proportions, which is never
+    below 0.  The lower bound's equation is then the MOVER limit on ratios of
+    0 and above only: its limit falls from ``l_t`` at 0 to at most 0 at
+    ``m_t / m_c``, so ``L`` is in ``[0, m_t / m_c]`` whatever the sign of
+    ``u_c (2 m_c - u_c)``, and ``L`` is 0 when the treatment has no
+    conversions.  ``U`` is finite exactly when ``l_c > 0``, so the answer is
+    None only when the control has no conversions.
+
+    For a mean (``nonnegative`` false) the limits are symmetric and a ratio of
+    either sign is possible.  The answer is None when ``l_c <= 0`` or
+    ``u_c >= 2 m_c`` (one condition when the limits are symmetric): the
+    control's mean plus or minus its margin reaches 0, and Fieller's set of
+    ratios is then unbounded.
 
     The discriminants are written as sums of non-negative terms (the same
     numbers as ``b^2 - a c``), and each root is taken in the form that does
@@ -217,7 +230,9 @@ def _mover_ratio(
     """
     m_t, l_t, u_t = treatment
     m_c, l_c, u_c = control
-    if not (l_c > 0.0 and u_c < 2.0 * m_c):
+    if not l_c > 0.0:
+        return None
+    if not nonnegative and not u_c < 2.0 * m_c:
         return None
     a_low = u_c * (2.0 * m_c - u_c)
     a_high = l_c * (2.0 * m_c - l_c)
@@ -226,6 +241,8 @@ def _mover_ratio(
     root_high = math.sqrt((u_t - m_t) ** 2 * a_high + m_t * m_t * (m_c - l_c) ** 2)
     if b > 0.0:
         low = l_t * (2.0 * m_t - l_t) / (b + root_low)
+    elif nonnegative:
+        low = 0.0
     else:
         low = (b - root_low) / a_low
     if b < 0.0:
@@ -236,10 +253,10 @@ def _mover_ratio(
 
 
 def relative_change_interval(
-    treatment: ArmLimits, control: ArmLimits
+    treatment: ArmLimits, control: ArmLimits, nonnegative: bool = False
 ) -> Optional[Tuple[float, float]]:
     """The interval of ``100 * (m_t - m_c) / |m_c|``, the relative change in
-    percent, from each arm's limits; None when it has no finite bounds.
+    percent, from each arm's limits, or None in the cases below.
 
     For a control whose mean is above 0 it is ``100 * (ratio - 1)`` over the
     MOVER-R interval of ``m_t / m_c``.  For one below 0 both arms are negated
@@ -247,13 +264,15 @@ def relative_change_interval(
     change is ``100 * (1 - ratio)``, so the interval is reflected:
     ``[100 * (1 - U), 100 * (1 - L)]``.
 
-    None when the control's mean is 0, and when the control's limits, so
-    oriented, do not keep its mean away from 0 (the lower limit at or below 0,
-    or the upper limit at or above twice the mean): the change is then
-    unbounded at this level, as for a control with 2 conversions of 200 users
-    at 0.95.  Neither of these is unexpected, and neither is logged.  A
-    limit or a bound that is not a finite number is unexpected: it is logged
-    as a warning, and gives None.
+    ``nonnegative`` is for two proportions, whose ratio is never below 0
+    (``_mover_ratio``): the interval is then None only when the control has
+    no conversions, and its lower end is never below -100%.  For a mean the
+    interval is also None when the control's limits, so oriented, reach 0
+    (the lower limit at or below 0, or the upper at or above twice the mean),
+    where Fieller's set of ratios is unbounded.  None when the control's mean
+    is 0 too.  None of these is unexpected, and none is logged.  A limit or a
+    bound that is not a finite number is unexpected: it is logged as a
+    warning, and gives None.
     """
     numbers = (*treatment, *control)
     if not all(math.isfinite(value) for value in numbers):
@@ -265,7 +284,7 @@ def relative_change_interval(
     if control.mean == 0.0:
         return None
     if control.mean > 0.0:
-        ratio = _mover_ratio(treatment, control)
+        ratio = _mover_ratio(treatment, control, nonnegative=nonnegative)
         if ratio is None:
             return None
         low, high = ratio
@@ -329,7 +348,8 @@ def _proportion_difference(
 
     ``absolute_difference`` is ``x_t / n_t - x_c / n_c`` from the counts; its
     interval is Newcombe's, from each arm's Wilson limits at ``z``, and the
-    relative change's interval is the MOVER-R interval on the same limits.
+    relative change's interval is the MOVER-R interval on the same limits over
+    ratios of 0 and above, None only when the control has no conversions.
     Everything is None when either arm has no users.
     """
     if n_t <= 0 or n_c <= 0:
@@ -341,7 +361,9 @@ def _proportion_difference(
     return {
         "absolute_difference": difference,
         "absolute_difference_ci": interval,
-        "relative_improvement_pct_ci": relative_change_interval(treatment, control),
+        "relative_improvement_pct_ci": relative_change_interval(
+            treatment, control, nonnegative=True
+        ),
         **_impact(difference, interval, n_t),
     }
 
@@ -482,8 +504,9 @@ def binomial_metric_result(
     the level ``1 - alpha`` and not adjusted for multiple comparisons:
     ``absolute_difference`` (``x_t / n_t - x_c / n_c``, from the counts) with
     Newcombe's interval from each arm's Wilson limits,
-    ``relative_improvement_pct_ci`` (MOVER-R on the same limits; None when
-    the control's limits do not keep its rate away from 0), and
+    ``relative_improvement_pct_ci`` (MOVER-R on the same limits over ratios
+    of 0 and above; None only when the control has no conversions, and never
+    below -100%), and
     ``incremental_impact`` and ``incremental_impact_ci``, the difference and
     its interval times the treatment's ``sample_size``.  All five are None on
     the control, and on a treatment when either arm has no users.

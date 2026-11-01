@@ -842,11 +842,15 @@ Fisher's exact test can disagree either way: 128 of 1,000 against 100 of
 to +0.056, and 3 of 50 against 18 of 100 is significant (p 0.049) while its
 interval reaches +0.00003.
 
-`relative_improvement_pct_ci` is null when `relative_improvement_pct` is, and
-when the control's own limits reach 0 or twice its mean, where the relative
-change has no finite bound: a control with 2 conversions of 200 users has
-none at 0.95. `absolute_difference_ci` is null only when `absolute_difference`
-is, or for a mean when neither variant's values vary.
+For a proportion, `relative_improvement_pct_ci` is null only when the control
+has no conversions. The ratio is taken over values of 0 and above, so the
+lower end is never below -100%, and at low counts the interval is wide: a
+treatment with 6 converting users out of 200 against a control with 2 out of
+200 gives -34.2% to +1,206.3% at 0.95. For a mean it is null when
+`absolute_difference_ci` is, when the control's mean is 0, and when the
+control's mean plus or minus its margin reaches 0, where Fieller's set of
+ratios is unbounded. `absolute_difference_ci` is null only when
+`absolute_difference` is, or for a mean when neither variant's values vary.
 
 The impact is a plain number over the treatment's own assigned users:
 converting users for a proportion, the total of the per-user values for a

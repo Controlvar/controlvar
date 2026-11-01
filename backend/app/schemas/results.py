@@ -313,13 +313,16 @@ class VariantResult(BaseModel):
             "(Wilson score limits for a proportion; for a mean, each mean "
             "plus or minus Welch's critical value times its standard error, "
             "which is Fieller's interval), so it contains 0 exactly when "
-            "absolute_difference_ci does.  None for the control, when "
-            "relative_improvement_pct or absolute_difference_ci is None, and "
-            "when the control's limits do not keep its mean away from 0 (the "
-            "lower limit at or below 0, or the upper at or above twice the "
-            "mean): the relative change then has no finite bound at this "
-            "level.  For example, a control with 2 conversions of 200 users "
-            "has no relative interval at 0.95."
+            "absolute_difference_ci does.  None for the control and when "
+            "absolute_difference_ci is None.  For a proportion the ratio is "
+            "taken over values of 0 and above, so the lower end is never "
+            "below -100%, and the interval is None only when the control has "
+            "no conversions; it can be wide: a treatment with 6 converting "
+            "users out of 200 against a control with 2 out of 200 gives -34.2% "
+            "to +1,206.3% at 0.95.  For a mean it is also None when the control's mean is 0, "
+            "and when the control's mean plus or minus Welch's critical value "
+            "times its standard error reaches 0, where Fieller's set of "
+            "ratios is unbounded."
         ),
     )
     incremental_impact: Optional[float] = Field(

@@ -78,11 +78,11 @@ by = [
 ]
 
 [[unit]]
-text = "An interval on the relative change for every treatment | relative_improvement_pct_ci is null when the control's own limits reach 0 or twice its mean, where the relative change has no finite bound: a control with 2 conversions of 200 users has none at the 0.95 level. The interval on the difference is still reported."
+text = "An interval on the relative change for every treatment | For a proportion, relative_improvement_pct_ci is null only when the control has no conversions; at low counts it is wide: a treatment with 6 converting users out of 200 against a control with 2 out of 200 gives -34.2% to +1,206.3% at the 0.95 level. For a mean it is null when the control's mean plus or minus its margin reaches 0, where Fieller's set of ratios is unbounded. The interval on the difference is still reported."
 by = [
-    "test:backend/tests/unit/services/test_difference_intervals.py::test_an_unbounded_control_has_no_relative_interval",
-    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_mean_control_whose_interval_reaches_0_has_no_relative_interval",
     "test:backend/tests/unit/services/test_difference_intervals.py::test_every_none_on_the_architects_grid_is_counted",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_low_count_control_has_a_bounded_relative_interval",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_mean_control_whose_interval_reaches_0_has_no_relative_interval",
 ]
 
 [[unit]]

@@ -9,16 +9,22 @@ that share no code with ``sufficient_stats_analysis``.
   for a proportion; for a mean, the arm's mean plus or minus
   ``t(1 - alpha / 2, df)`` times its standard error, with the
   Welch-Satterthwaite df, from numpy and scipy.
-* The relative change's bounds: ``scipy.optimize.brentq`` on each bound's
-  defining equation, and the residual of the code's bound in that equation.
-  No closed form is typed again here, and Katz's log interval is not used:
-  it is another method, and on 150/1000 against 120/1000 it covers a ratio of
-  1 where MOVER-R does not.  The oracle finds an unbounded control itself: a
-  defining equation with no root on its side is a relative interval of None.
+* The relative change's bounds: ``scipy.optimize.brentq`` on MOVER's limits
+  of ``D(theta) = m_t - theta * m_c``, sign-aware (the limits of
+  ``theta * m_c`` swap below 0), with the floor of the ratio set by the
+  analysis under test (0 for two proportions, none for two means), never by
+  the code's flag or predicate; and the residual of the code's bound in its
+  defining equation.  No closed form is typed again here, and Katz's log
+  interval is not used: it is another method, and on 150/1000 against
+  120/1000 it covers a ratio of 1 where MOVER-R does not.  The oracle finds an
+  unbounded set itself: no bound within its search is a relative interval of
+  None.
 * The relations to ``is_significant``, counted exactly on fixed grids.
 
 Plants that turn this file red (PR evidence): the arms swapped; a Wald
-interval in place of Newcombe's; the guard for an unbounded control removed;
+interval in place of Newcombe's; the old guard (``u_c < 2 m_c``) kept for
+proportions; a 0-conversion treatment's lower bound divided by ``a_low``;
+the proportion flag on the mean path; the mean guard reduced to ``l_c > 0``;
 a negative control negated without reflecting the interval; ``l_t`` and
 ``u_t`` swapped in one bound; the impact scaled by the control's users.
 """
@@ -191,58 +197,89 @@ def _upper_equation(t, c):
 #: calls the ratio unbounded.
 _SEARCH_LIMIT = 1e15
 
+#: The floor of the ratio for each analysis, set by the test from the analysis
+#: it tests (never read from the code): two proportions have a ratio of 0 or
+#: above; a ratio of two means can have either sign.
+PROPORTION_FLOOR = 0.0
+MEAN_FLOOR = None
 
-def _root_beside(equation, theta0: float, direction: int) -> Optional[float]:
-    """The bound on one side of ``theta0``: the root of ``equation`` there,
-    by brentq.  The ratios the data allow are those where the equation is at
-    most 0, so when it is not above 0 far out on that side, the set reaches
-    as far as one looks and the answer is None (unbounded), whether or not
-    the equation crosses 0 on the way."""
-    if not equation(theta0 + direction * _SEARCH_LIMIT) > 0.0:
-        return None
-    if equation(theta0) == 0.0:
-        return theta0
+
+def _lower_limit_of_d(theta: float, t, c) -> float:
+    """MOVER's lower limit of ``D(theta) = m_t - theta * m_c`` from the arms'
+    limits, for either sign of ``theta``: when ``theta < 0`` the limits of
+    ``theta * m_c`` swap (its upper limit is ``theta * l_c``)."""
+    (m_t, l_t, _), (m_c, l_c, u_c) = t, c
+    top = theta * u_c if theta >= 0.0 else theta * l_c
+    return (m_t - theta * m_c) - math.hypot(m_t - l_t, top - theta * m_c)
+
+
+def _upper_limit_of_d(theta: float, t, c) -> float:
+    """MOVER's upper limit of ``D(theta)``, sign-aware the same way."""
+    (m_t, _, u_t), (m_c, l_c, u_c) = t, c
+    bottom = theta * l_c if theta >= 0.0 else theta * u_c
+    return (m_t - theta * m_c) + math.hypot(u_t - m_t, theta * m_c - bottom)
+
+
+def _brentq(f, a: float, b: float) -> float:
+    return brentq(f, a, b, xtol=1e-15, rtol=4 * np.finfo(float).eps, maxiter=1000)
+
+
+def _first_past(test, theta0: float, direction: int, floor: Optional[float]):
+    """The first point, stepping away from ``theta0`` by doubling steps, where
+    ``test`` holds; None if it does not within ``_SEARCH_LIMIT`` (or above
+    the floor, stepping down)."""
     step = max(1.0, abs(theta0))
     while step < _SEARCH_LIMIT:
-        far = theta0 + direction * step
-        if equation(far) > 0.0:
-            low, high = sorted((theta0, far))
-            return brentq(
-                equation,
-                low,
-                high,
-                xtol=1e-15,
-                rtol=4 * np.finfo(float).eps,
-                maxiter=1000,
-            )
+        theta = theta0 + direction * step
+        if floor is not None and direction < 0 and theta <= floor:
+            return floor if test(floor) else None
+        if test(theta):
+            return theta
         step *= 2.0
     return None
 
 
-def _oracle_ratio(t, c) -> Optional[Tuple[float, float]]:
-    """Both bounds of ``m_t / m_c`` for ``m_c > 0`` from their defining
-    equations; None when either has no root."""
+def _oracle_ratio(t, c, floor: Optional[float]) -> Optional[Tuple[float, float]]:
+    """Both bounds of ``m_t / m_c`` for ``m_c > 0``: the ratios ``theta``
+    (``theta >= floor`` when there is a floor) whose ``D(theta)`` has a lower
+    limit at most 0 and an upper limit at least 0, found by brentq on the
+    sign-aware limits above.  None when either side has no bound within the
+    search: the set of ratios the data allow is unbounded."""
     theta0 = t[0] / c[0]
-    low = _root_beside(_lower_equation(t, c), theta0, -1)
-    high = _root_beside(_upper_equation(t, c), theta0, +1)
-    if low is None or high is None:
+
+    def lower(theta):
+        return _lower_limit_of_d(theta, t, c)
+
+    def upper(theta):
+        return _upper_limit_of_d(theta, t, c)
+
+    if floor is not None and lower(floor) <= 0.0:
+        low = floor
+    else:
+        far = _first_past(lambda th: lower(th) > 0.0, theta0, -1, floor)
+        if far is None:
+            return None
+        low = _brentq(lower, far, theta0)
+    far = _first_past(lambda th: upper(th) < 0.0, theta0, +1, None)
+    if far is None:
         return None
-    return low, high
+    return low, _brentq(upper, theta0, far)
 
 
-def _oracle_relative(t, c) -> Optional[Tuple[float, float]]:
+def _oracle_relative(t, c, floor: Optional[float]) -> Optional[Tuple[float, float]]:
     """The relative change in percent, ``100 (m_t - m_c) / |m_c|``.
 
     For ``m_c > 0`` it is ``100 (ratio - 1)``.  For ``m_c < 0``, negating
     every value negates the relative change while the control's mean becomes
     positive, so the interval is the mirrored data's, negated and reversed.
+    ``floor`` is the analysis's (``PROPORTION_FLOOR`` or ``MEAN_FLOOR``).
     """
     if c[0] == 0.0:
         return None
     if c[0] < 0.0:
-        mirrored = _oracle_relative((-t[0], -t[2], -t[1]), (-c[0], -c[2], -c[1]))
+        mirrored = _oracle_relative((-t[0], -t[2], -t[1]), (-c[0], -c[2], -c[1]), floor)
         return None if mirrored is None else (-mirrored[1], -mirrored[0])
-    ratio = _oracle_ratio(t, c)
+    ratio = _oracle_ratio(t, c, floor)
     if ratio is None:
         return None
     return 100.0 * (ratio[0] - 1.0), 100.0 * (ratio[1] - 1.0)
@@ -505,7 +542,7 @@ def test_the_proportion_relative_interval_solves_its_defining_equations(table, l
     x_t, n_t, x_c, n_c = table
     row = _proportion(x_t, n_t, x_c, n_c, level=level)
     t, c = _scipy_wilson(x_t, n_t, level), _scipy_wilson(x_c, n_c, level)
-    expected = _oracle_relative(t, c)
+    expected = _oracle_relative(t, c, PROPORTION_FLOOR)
     if expected is None:
         assert row["relative_improvement_pct_ci"] is None
         return
@@ -522,7 +559,7 @@ def test_the_relative_interval_matches_the_oracle_over_a_grid(grid):
     wilson_c = {x: _scipy_wilson(x, n_c, level) for x in range(n_c + 1)}
     wilson_t = {x: _scipy_wilson(x, n_t, level) for x in range(n_t + 1)}
     for x_t, x_c, row in _grid(n_t, n_c, level):
-        expected = _oracle_relative(wilson_t[x_t], wilson_c[x_c])
+        expected = _oracle_relative(wilson_t[x_t], wilson_c[x_c], PROPORTION_FLOOR)
         actual = row["relative_improvement_pct_ci"]
         assert (actual is None) == (expected is None), (x_t, x_c, actual, expected)
         if actual is None:
@@ -565,7 +602,7 @@ MEAN_FIXTURES = [
 
 def _relative_oracle_for_means(y_t, y_c, level):
     t, c = _welch_limits(np.asarray(y_t), np.asarray(y_c), level)
-    return t, c, _oracle_relative(t, c)
+    return t, c, _oracle_relative(t, c, MEAN_FLOOR)
 
 
 @pytest.mark.parametrize("name", [f[0] for f in MEAN_FIXTURES])
@@ -643,6 +680,8 @@ def test_the_proportion_grids_hold_r1_and_r2():
             rows += 1
             point = row["relative_improvement_pct"]
             assert relative[0] - 1e-9 <= point <= relative[1] + 1e-9
+            # A ratio of two proportions is never below 0.
+            assert relative[0] >= -100.0
             assert (relative[0] > 0, relative[1] < 0) == (
                 difference[0] > 0,
                 difference[1] < 0,
@@ -671,20 +710,62 @@ def test_a_control_at_0_has_no_relative_interval():
     assert row["relative_improvement_pct_ci"] is None
 
 
-def test_an_unbounded_control_has_no_relative_interval(caplog):
-    """A 2/200 control at 0.95: its Wilson upper limit (0.0357) is above
-    twice its rate (0.02), so the change has no finite lower bound.  The
-    difference's interval is still there, and nothing is logged."""
-    _, l_c, u_c = _scipy_wilson(2, 200, 0.95)
-    assert l_c > 0 and u_c >= 2 * 0.01
+#: Proportion tables whose control's Wilson upper limit is above twice its
+#: rate (a 2/200 control at 0.95: 0.0357 against 0.02), and the relative
+#: interval each has (PS-1 reopened, T234): bounded, wide, never below -100%.
+LOW_COUNT_RELATIVE = {
+    (6, 200, 2, 200): (-34.18048952850553, 1206.3102447884623),
+    (6, 200, 4, 200): (-55.392957656015426, 397.4833386943205),
+}
+
+
+@pytest.mark.parametrize("table", sorted(LOW_COUNT_RELATIVE), ids=str)
+def test_a_low_count_control_has_a_bounded_relative_interval(table, caplog):
+    """A control of a few conversions: its Wilson upper limit reaches past
+    twice its rate, and the ratio of the two proportions is still bounded
+    over ratios of 0 and above.  The pinned interval is the oracle's, and
+    nothing is logged."""
+    x_t, n_t, x_c, n_c = table
+    _, l_c, u_c = _scipy_wilson(x_c, n_c, 0.95)
+    assert l_c > 0 and u_c >= 2 * x_c / n_c
     with caplog.at_level(logging.WARNING):
-        row = _proportion(6, 200, 2, 200)
-        unbounded = _proportion(6, 200, 4, 200)
-    assert row["relative_improvement_pct_ci"] is None
-    assert row["absolute_difference_ci"] is not None
-    # Without the guard the closed form gives a finite interval here.
-    assert unbounded["relative_improvement_pct_ci"] is None
+        row = _proportion(x_t, n_t, x_c, n_c)
+    expected = _oracle_relative(
+        _scipy_wilson(x_t, n_t, 0.95), (x_c / n_c, l_c, u_c), PROPORTION_FLOOR
+    )
+    assert row["relative_improvement_pct_ci"] == pytest.approx(
+        LOW_COUNT_RELATIVE[table], rel=1e-12
+    )
+    _assert_close(row["relative_improvement_pct_ci"], expected, rel=1e-9, abs_=1e-7)
+    assert row["relative_improvement_pct_ci"][0] >= -100.0
     assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
+
+
+def test_a_treatment_with_no_conversions_at_the_exact_edge():
+    """Constructed limits where ``u_c`` is exactly ``2 m_c`` and the treatment
+    has no conversions (``b == 0``): the lower bound is 0, so the change's is
+    -100%, with no division by ``u_c (2 m_c - u_c)``, which is 0 here.  Not a
+    confidence level that lands on the edge: that hit depends on the last bit
+    of ``norm.ppf``."""
+    treatment = ArmLimits(0.0, 0.0, 0.3)
+    control = ArmLimits(0.25, 0.0625, 0.5)
+    assert control.upper == 2 * control.mean
+    interval = relative_change_interval(treatment, control, nonnegative=True)
+    assert interval[0] == -100.0
+    assert interval[1] == pytest.approx(81.42294704442907, rel=1e-12)
+    expected = _oracle_relative(treatment, control, PROPORTION_FLOOR)
+    _assert_close(interval, expected, rel=1e-9, abs_=1e-7)
+
+
+@pytest.mark.parametrize("mean", [0.5, -0.5])
+def test_a_mean_control_at_the_float_edge_has_no_relative_interval(mean):
+    """A mean control whose upper limit rounds to exactly twice its mean while
+    its lower limit is a hair above 0: the mean's guard keeps both halves, so
+    the answer is None, not a huge or failing bound."""
+    treatment = ArmLimits(mean, mean - 0.25, mean + 0.25)
+    control = ArmLimits(1.0, 2.0**-53, 2.0)
+    assert control.lower > 0 and control.upper == 2 * control.mean
+    assert relative_change_interval(treatment, control) is None
 
 
 def test_a_mean_control_whose_interval_reaches_0_has_no_relative_interval():
@@ -988,32 +1069,35 @@ def test_a_treatment_whose_users_all_have_0_reads_minus_100_percent():
 
 
 #: The architect's grid: arm sizes 5 to 200, every count, the control's at
-#: least 1: 175,130 tables.  Relative intervals that are None, per level,
-#: measured with the guard (they equal the count recomputed below from
-#: scipy's Wilson limits).
+#: least 1: 175,130 tables.  Relative intervals that are None, per level:
+#: none, because a proportion's relative interval is None only when the
+#: control has no conversions (PS-1 reopened, T234).  The count is also
+#: recomputed below from scipy's Wilson limits.
 ARCHITECT_SIZES = (5, 10, 20, 30, 50, 100, 200)
-ARCHITECT_RELATIVE_NONE = {0.80: 5_908, 0.95: 13_082, 0.99: 19_412}
-#: The same for the grids above, through ``binomial_metric_result``.
+ARCHITECT_RELATIVE_NONE = {0.80: 0, 0.95: 0, 0.99: 0}
+#: The same for the grids above, through ``binomial_metric_result``: the
+#: tables whose control has no conversions, ``n_t + 1`` per grid.
 GRID_RELATIVE_NONE = {
-    (20, 20, 0.95): 105,
-    (50, 50, 0.95): 306,
-    (100, 37, 0.95): 606,
-    (37, 100, 0.95): 266,
-    (20, 200, 0.95): 168,
-    (20, 200, 0.99): 252,
-    (50, 100, 0.95): 357,
-    (50, 100, 0.99): 561,
+    (20, 20, 0.95): 21,
+    (50, 50, 0.95): 51,
+    (100, 37, 0.95): 101,
+    (37, 100, 0.95): 38,
+    (20, 200, 0.95): 21,
+    (20, 200, 0.99): 21,
+    (50, 100, 0.95): 51,
+    (50, 100, 0.99): 51,
 }
 
 
-def _scipy_unbounded_controls(sizes: Sequence[int], level: float, start: int):
-    """``(x_c, n_c)`` whose scipy Wilson limits do not keep the rate away
-    from 0: lower at or below 0, or upper at or above twice the rate."""
+def _scipy_controls_with_no_bound(sizes: Sequence[int], level: float, start: int):
+    """``(x_c, n_c)`` whose scipy Wilson lower limit is at or below 0, where
+    a ratio of proportions has no upper bound: a control with no conversions.
+    The test's own predicate, never the code's."""
     out = set()
     for n_c in sizes:
         for x_c in range(start, n_c + 1):
-            p, low, high = _scipy_wilson(x_c, n_c, level)
-            if low <= 0.0 or high >= 2.0 * p:
+            _, low, _ = _scipy_wilson(x_c, n_c, level)
+            if low <= 0.0:
                 out.add((x_c, n_c))
     return out
 
@@ -1022,7 +1106,7 @@ def _scipy_unbounded_controls(sizes: Sequence[int], level: float, start: int):
 def test_every_none_on_the_grids_is_counted(grid):
     """S2.13 per field: the difference's interval is never None with users
     in both arms; the relative interval is None exactly as often as the
-    control is unbounded by scipy's Wilson limits."""
+    control has no upper bound by scipy's Wilson limits (no conversions)."""
     n_t, n_c, level = grid
     rows = _grid(n_t, n_c, level)
     absolute_none = sum(row["absolute_difference_ci"] is None for _, _, row in rows)
@@ -1030,7 +1114,7 @@ def test_every_none_on_the_grids_is_counted(grid):
         row["relative_improvement_pct_ci"] is None for _, _, row in rows
     )
     impact_none = sum(row["incremental_impact_ci"] is None for _, _, row in rows)
-    unbounded = _scipy_unbounded_controls((n_c,), level, start=0)
+    unbounded = _scipy_controls_with_no_bound((n_c,), level, start=0)
     assert (absolute_none, impact_none) == (0, 0)
     assert relative_none == GRID_RELATIVE_NONE[grid] == len(unbounded) * (n_t + 1)
 
@@ -1041,7 +1125,7 @@ def test_every_none_on_the_architects_grid_is_counted(level):
     ``binomial_metric_result`` calls for each treatment: here directly, as
     the grid is 175,130 tables."""
     z = ssa.two_sided_z(level)
-    tables = absolute_none = relative_none = 0
+    tables = absolute_none = relative_none = below_minus_100 = 0
     for n_c in ARCHITECT_SIZES:
         for x_c in range(1, n_c + 1):
             for n_t in ARCHITECT_SIZES:
@@ -1049,11 +1133,14 @@ def test_every_none_on_the_architects_grid_is_counted(level):
                     fields = ssa._proportion_difference(n_t, x_t, n_c, x_c, z)
                     tables += 1
                     absolute_none += fields["absolute_difference_ci"] is None
-                    relative_none += fields["relative_improvement_pct_ci"] is None
-    unbounded = _scipy_unbounded_controls(ARCHITECT_SIZES, level, start=1)
+                    relative = fields["relative_improvement_pct_ci"]
+                    relative_none += relative is None
+                    below_minus_100 += relative is not None and relative[0] < -100.0
+    unbounded = _scipy_controls_with_no_bound(ARCHITECT_SIZES, level, start=1)
     per_control = sum(n + 1 for n in ARCHITECT_SIZES)
     assert tables == 175_130
     assert absolute_none == 0
+    assert below_minus_100 == 0
     assert (
         relative_none == ARCHITECT_RELATIVE_NONE[level] == len(unbounded) * per_control
     )

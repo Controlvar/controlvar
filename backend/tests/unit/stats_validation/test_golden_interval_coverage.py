@@ -14,9 +14,11 @@ The band is 1,868 to 1,932 of 2,000: 95% plus or minus 3.29 standard
 deviations of Binomial(2,000, 0.95), about its central 99.9%.
 
 The settings are ones where the relative interval is never None at the seed
-(a control whose limits reach 0 has none), and each battery asserts that, so
-a None cannot quietly shrink the count's denominator.  A separate low-count
-battery pins how many relative intervals are None where they often are.
+(a proportion's control with no conversions, or a mean's control whose limits
+reach 0, has none), and each battery asserts that, so a None cannot quietly
+shrink the count's denominator.  A separate low-count battery, where some
+draws' controls have no conversions, holds both intervals to a one-sided
+floor and pins its counts.
 
 Measured at these seeds, with no relative interval None in any of them:
 
@@ -39,6 +41,7 @@ seed, so every count is the same on every run.
 
 from __future__ import annotations
 
+import math
 from functools import lru_cache
 from types import SimpleNamespace
 from typing import Dict, Tuple
@@ -77,7 +80,11 @@ MEAN_TREATMENT = 11.0
 
 #: The low-count battery: control rate 0.02, +30%, 200 users per arm.
 LOW_COUNT_SEED = 1_496_054
-LOW_COUNT_RELATIVE_NONE = 1_907
+#: Draws whose control has no conversions, the only ones with no relative
+#: interval.
+LOW_COUNT_RELATIVE_NONE = 36
+#: (absolute covered of 2,000, relative covered, relative present).
+LOW_COUNT_COVERED = (1_940, 1_909, 1_964)
 
 
 def _treatment(result):
@@ -172,11 +179,27 @@ def test_the_mean_intervals_cover_the_true_difference():
     assert MIN_COVERED <= relative <= MAX_COVERED
 
 
-def test_a_low_count_control_has_no_relative_interval_as_often_as_measured():
+def _one_sided_floor(present: int) -> float:
+    """95% of ``present`` less 3.29 standard deviations of
+    Binomial(present, 0.95)."""
+    return CONFIDENCE_LEVEL * present - 3.29 * math.sqrt(
+        present * CONFIDENCE_LEVEL * (1.0 - CONFIDENCE_LEVEL)
+    )
+
+
+def test_the_low_count_intervals_cover_at_least_their_level():
     """Control rate 0.02, +30%, 200 users per arm: the control expects 4
-    conversions, and its Wilson limits reach twice its rate in most draws,
-    where the relative change has no finite bound.  Measured: 1,907 of the
-    2,000 relative intervals are None; every absolute one is present."""
+    conversions.  A proportion's relative interval is None only when the
+    control has no conversions, which happens in 36 of these 2,000 draws;
+    the test counts those from the draws themselves, not from the code.
+
+    The floor is one-sided because the correct method over-covers here: at
+    so few conversions both intervals are conservative.  Measured: the
+    difference's interval covers 1,940 of 2,000 and the relative change's
+    1,909 of the 1,964 that have one.  1,909 is above the symmetric band's
+    upper limit for 1,964 draws (1,897), so a symmetric band would fail a
+    correct implementation; an interval that under-covers still fails the
+    floor, and any change at all fails the exact pins."""
     rng = np.random.default_rng(LOW_COUNT_SEED)
     users, rate, lift = 200, 0.02, 0.30
     control_counts = rng.binomial(users, rate, size=SIMS)
@@ -187,7 +210,7 @@ def test_a_low_count_control_has_no_relative_interval_as_often_as_measured():
         metric_type="conversion",
         is_primary=True,
     )
-    absolute_none = relative_none = 0
+    absolute = relative = present = absolute_none = relative_none = 0
     for x_c, x_t in zip(control_counts, treatment_counts):
         row = _treatment(
             binomial_metric_result(
@@ -198,6 +221,15 @@ def test_a_low_count_control_has_no_relative_interval_as_often_as_measured():
             )
         )
         absolute_none += row["absolute_difference_ci"] is None
-        relative_none += row["relative_improvement_pct_ci"] is None
+        absolute += _covers(row["absolute_difference_ci"], rate * lift)
+        if row["relative_improvement_pct_ci"] is None:
+            relative_none += 1
+        else:
+            present += 1
+            relative += _covers(row["relative_improvement_pct_ci"], 100.0 * lift)
+    no_control_conversions = int((control_counts == 0).sum())
     assert absolute_none == 0
-    assert relative_none == LOW_COUNT_RELATIVE_NONE
+    assert relative_none == no_control_conversions == LOW_COUNT_RELATIVE_NONE
+    assert (absolute, relative, present) == LOW_COUNT_COVERED
+    assert absolute >= _one_sided_floor(SIMS)
+    assert relative >= _one_sided_floor(present)
