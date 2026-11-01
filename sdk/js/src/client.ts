@@ -1,7 +1,7 @@
 import { AttributedKeys } from './attribution';
 import { UserKeyCache } from './cache';
 import { ExperimentationError, asExperimentationError } from './errors';
-import { DEFER } from './evaluator';
+import { DEFER, copyValue, isValueOfType } from './evaluator';
 import {
   DEFAULT_REFRESH_INTERVAL_MS,
   LocalEvaluation,
@@ -81,6 +81,27 @@ function toIso(timestamp: Date | string): string {
   return timestamp instanceof Date ? timestamp.toISOString() : String(timestamp);
 }
 
+/** The JSON type of a value the server sent without a `value_type`. */
+function jsonTypeOf(value: unknown): string {
+  return value !== null && typeof value === 'object' ? 'json' : typeof value;
+}
+
+/** A value type as the typed getters' messages name it. */
+function describeType(type: string): string {
+  switch (type) {
+    case 'boolean':
+      return 'a boolean';
+    case 'string':
+      return 'a string';
+    case 'number':
+      return 'a number';
+    case 'json':
+      return 'a JSON value';
+    default:
+      return `a value of type ${JSON.stringify(type.slice(0, 64))}`;
+  }
+}
+
 /** One body that names no experiment and no flag: nothing was attributed. */
 function isUntagged(bodies: TrackBody[]): boolean {
   return bodies.length === 1 && !bodies[0].experiment_key && !bodies[0].feature_flag_key;
@@ -102,7 +123,9 @@ function isUntagged(bodies: TrackBody[]): boolean {
  *   fan-out, for 24 hours, or the cache lifetime if longer (see `attribution.ts`); `clearCache()` keeps that record.
  * - `getAssignment`, `evaluateFlag`, `getAllFlags` and `fetchAssignments` throw
  *   `ExperimentationError`; `getVariant` / `isFeatureEnabled` return safe
- *   defaults instead; `track` / `trackBatch` / `reportError` never reject.
+ *   defaults instead; `getStringValue` / `getNumberValue` / `getJsonValue` return
+ *   the caller's default and pass the reason to `onError(err, 'value')`;
+ *   `track` / `trackBatch` / `reportError` never reject.
  * - A 429 is retried once after the server's `Retry-After` (capped at `timeoutMs`).
  */
 export class ExperimentationClient {
@@ -290,6 +313,9 @@ export class ExperimentationClient {
    * With `evaluation: 'local'`, a flag the ruleset can answer is answered in-process from the
    * attributes passed (no request, no cache read) with `source: 'local'`; anything else is
    * evaluated by the server as above, with `source: 'server'`.
+   *
+   * `value` and `valueType` are copied from the server's `value` and `value_type` when it sends
+   * them; a local answer carries the ones the server would send.
    */
   async evaluateFlag(flagKey: string, user: UserContext): Promise<FlagEvaluation> {
     const { userId, attributes } = requireUser(user);
@@ -301,6 +327,9 @@ export class ExperimentationClient {
           enabled: answer.enabled,
           config: null,
           reason: answer.reason,
+          // A copy: a caller changing it must not change the ruleset every user is answered from.
+          value: copyValue(answer.value),
+          valueType: answer.valueType,
           source: 'local',
         };
         // Recorded for the key-less track() fan-out, exactly as a server answer is.
@@ -322,6 +351,9 @@ export class ExperimentationClient {
         config: data?.config === undefined ? null : data.config,
       };
       if (typeof data?.reason === 'string') evaluation.reason = data.reason;
+      // Only copied when the server sent them: an older server's answer has neither.
+      if (data?.value !== undefined && data.value !== null) evaluation.value = data.value;
+      if (typeof data?.value_type === 'string') evaluation.valueType = data.value_type;
       if (this.local) evaluation.source = 'server';
       this.flags.set(userId, flagKey, evaluation);
       this.attributed.recordFlag(userId, flagKey);
@@ -336,6 +368,35 @@ export class ExperimentationClient {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * The string a string flag serves this user: its on value when the flag is on for them, its off
+   * value otherwise. Evaluated as `evaluateFlag` does, locally included, with the same cache.
+   *
+   * Never rejects. Returns `defaultValue`, and passes the reason to `onError(err, 'value')`, when
+   * the request fails, the flag is unknown (404), the server sends no value (a server without
+   * flag values), or the flag serves another type (`err.code` `'TYPE_MISMATCH'`).
+   */
+  async getStringValue(flagKey: string, user: UserContext, defaultValue: string): Promise<string> {
+    return this.typedValue(flagKey, user, defaultValue, 'string', 'getStringValue');
+  }
+
+  /**
+   * The number a number flag serves this user (an integer or a decimal, as saved); see
+   * `getStringValue` for when it returns `defaultValue` instead. Never rejects.
+   */
+  async getNumberValue(flagKey: string, user: UserContext, defaultValue: number): Promise<number> {
+    return this.typedValue(flagKey, user, defaultValue, 'number', 'getNumberValue');
+  }
+
+  /**
+   * The JSON object or array a json flag serves this user, as a new copy on every call: changing
+   * it changes nothing the SDK keeps. It is checked to be an object or an array, not to match `T`.
+   * See `getStringValue` for when it returns `defaultValue` instead. Never rejects.
+   */
+  async getJsonValue<T = unknown>(flagKey: string, user: UserContext, defaultValue: T): Promise<T> {
+    return this.typedValue(flagKey, user, defaultValue, 'json', 'getJsonValue');
   }
 
   /**
@@ -506,6 +567,48 @@ export class ExperimentationClient {
       ...flags.map(flagKey => ({ ...base, feature_flag_key: flagKey })),
     ];
     return bodies.length > 0 ? bodies : [base];
+  }
+
+  /**
+   * The typed getters' one body: the value the flag serves this user when it is of `type` (a
+   * copy), and otherwise `defaultValue`, with the reason passed to `onError(err, 'value')`.
+   */
+  private async typedValue<T>(
+    flagKey: string,
+    user: UserContext,
+    defaultValue: T,
+    type: 'string' | 'number' | 'json',
+    method: string
+  ): Promise<T> {
+    try {
+      const { value, valueType } = await this.evaluateFlag(flagKey, user);
+      const flag = JSON.stringify(String(flagKey));
+      if (value === undefined || value === null) {
+        throw new ExperimentationError(
+          `Flag ${flag} came back without a value (from a server without flag values, or one that ` +
+            `cannot serve this flag's stored value); ${method} returned your default`,
+          { code: 'INVALID_RESPONSE' }
+        );
+      }
+      const served = typeof valueType === 'string' ? valueType : jsonTypeOf(value);
+      if (served !== type) {
+        throw new ExperimentationError(
+          `Flag ${flag} serves ${describeType(served)}; ${method} returned your default`,
+          { code: 'TYPE_MISMATCH' }
+        );
+      }
+      if (!isValueOfType(value, type)) {
+        throw new ExperimentationError(
+          `Flag ${flag} serves ${describeType(type)}, but the server's value is not one; ` +
+            `${method} returned your default`,
+          { code: 'INVALID_RESPONSE' }
+        );
+      }
+      return copyValue(value) as T;
+    } catch (err) {
+      this.report(err, 'value');
+      return defaultValue;
+    }
   }
 
   private report(err: unknown, operation: SwallowedOperation): void {

@@ -3,8 +3,9 @@
  * generates from its own ruleset builder and flag evaluator (drift-checked in the backend suite).
  *
  * The property: for every case the SDK either defers to the server or gives exactly the server's
- * `{enabled, reason}`; every `must_local` case is answered locally; and nothing else is. The
- * number of local answers is pinned, so an SDK that defers everything fails.
+ * `{enabled, reason}` and `value` (a value case's `expected_value`; `enabled` for a boolean
+ * flag); every `must_local` case is answered locally; and nothing else is. The number of local
+ * answers is pinned, so an SDK that defers everything fails.
  */
 import { createHash } from 'crypto';
 import { readFileSync } from 'fs';
@@ -15,7 +16,10 @@ import {
   LOCAL_OPERATORS,
   MAX_SAFE_INTEGER,
   RULESET_SCHEMA,
+  VALUE_TYPES,
   WHITESPACE_CODE_POINTS,
+  type Defer,
+  type LocalAnswer,
   evaluateLocally,
   flagBucket,
   flattenContext,
@@ -31,7 +35,19 @@ interface VectorCase {
   user_id: string;
   context: Record<string, unknown> | null;
   expected: { enabled: boolean; reason: string };
+  /** What the server's `value` is, on a string, number or json flag's case only. */
+  expected_value?: unknown;
   must_local: boolean;
+}
+
+/** The server's `value` for a case: `expected_value`, or `enabled` for a boolean flag. */
+function serverValue(testCase: VectorCase): unknown {
+  return 'expected_value' in testCase ? testCase.expected_value : testCase.expected.enabled;
+}
+
+/** Equal as JSON, so a type change ("10" for 10, 1 for true) is a difference. */
+function sameJson(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 interface Vectors {
@@ -90,13 +106,42 @@ describe('the local domain is the one in the vectors file', () => {
 });
 
 describe('differential: every case is deferred or answered exactly as the server did', () => {
-  const results = vectors.cases.map(testCase => ({ testCase, result: answer(testCase) }));
+  const results: Array<{ testCase: VectorCase; result: LocalAnswer | Defer }> = vectors.cases.map(testCase => ({
+    testCase,
+    result: answer(testCase),
+  }));
 
   test('no local answer differs from the server', () => {
     const wrong = results
-      .filter(({ result }) => result !== DEFER)
-      .filter(({ testCase, result }) => JSON.stringify(result) !== JSON.stringify(testCase.expected))
-      .map(({ testCase, result }) => `${testCase.id}: local ${JSON.stringify(result)}, server ${JSON.stringify(testCase.expected)}`);
+      .flatMap(({ testCase, result }) =>
+        result === DEFER
+          ? []
+          : [
+              {
+                id: testCase.id,
+                local: { enabled: result.enabled, reason: result.reason, value: result.value },
+                server: { ...testCase.expected, value: serverValue(testCase) },
+              },
+            ]
+      )
+      .filter(({ local, server }) => !sameJson(local, server))
+      .map(({ id, local, server }) => `${id}: local ${JSON.stringify(local)}, server ${JSON.stringify(server)}`);
+    expect(wrong).toEqual([]);
+  });
+
+  test("every value flag's must_local case is answered locally with the server's value and type", () => {
+    const valueCases = results.filter(({ testCase }) => 'expected_value' in testCase && testCase.must_local);
+    // Every value type the ruleset names, each as a local and an inactive/archived flag (F5's corpus).
+    expect(valueCases).toHaveLength(39);
+    const flags = new Map((vectors.ruleset as { flags: Array<{ key: string; value_type?: string }> }).flags.map(f => [f.key, f]));
+    const types = new Set(valueCases.map(({ testCase }) => flags.get(testCase.flag)?.value_type));
+    expect([...types].sort()).toEqual([...VALUE_TYPES].sort());
+    const wrong = valueCases
+      .filter(({ testCase, result }) => {
+        if (result === DEFER) return true;
+        return result.valueType !== flags.get(testCase.flag)?.value_type || !sameJson(result.value, testCase.expected_value);
+      })
+      .map(({ testCase, result }) => `${testCase.id}: ${result === DEFER ? 'deferred' : JSON.stringify(result)}`);
     expect(wrong).toEqual([]);
   });
 
@@ -145,7 +190,7 @@ describe('named classes', () => {
   test('prototype names are ordinary attributes', () => {
     const testCase = find('proto-dunder', { __proto__: 'x' });
     expect(testCase.must_local).toBe(true);
-    expect(answer(testCase)).toEqual(testCase.expected);
+    expect(answer(testCase)).toEqual({ ...testCase.expected, value: testCase.expected.enabled, valueType: 'boolean' });
     const flat = flattenContext(JSON.parse('{"__proto__": "x"}'));
     expect(flat.get('__proto__')).toBe('x');
     expect(flattenContext({}).has('constructor')).toBe(false);
@@ -169,6 +214,107 @@ describe('named classes', () => {
     const base = vectors.ruleset as Record<string, unknown>;
     expect(indexRuleset({ ...base, schema: 2 })).toBeNull();
     expect(indexRuleset({ ...base, bucketing: 'md5-mod100-v2' })).toBeNull();
+  });
+});
+
+// ─── Flag values, and entries this SDK cannot read ───────────────────────────
+
+const ON_FOR_EVERYONE = { active: true, evaluation: 'local', rollout_percentage: 100, rules: [], default_rule: null };
+
+/** A schema-1 document holding a boolean flag `plain` (on for everyone) and the given entries. */
+function documentWith(...entries: Array<Record<string, unknown>>) {
+  return { schema: 1, version: 'v', bucketing: 'md5-mod100-v1', flags: [{ key: 'plain', ...ON_FOR_EVERYONE }, ...entries] };
+}
+
+const PLAIN_ANSWER = { enabled: true, reason: 'rollout', value: true, valueType: 'boolean' };
+
+describe('flag values', () => {
+  test.each([
+    ['string', 'on-copy', 'off-copy'],
+    ['number', 10, 2.5],
+    ['json', { color: 'blue' }, ['fallback']],
+  ])('a %s flag serves its on value when on, and its off value when off or turned off', (type, on, off) => {
+    const values = { value_type: type, on_value: on, off_value: off };
+    const ruleset = indexRuleset(
+      documentWith(
+        { key: 'on', ...ON_FOR_EVERYONE, ...values },
+        { key: 'outside', ...ON_FOR_EVERYONE, rollout_percentage: 0, ...values },
+        { key: 'killed', active: false, value_type: type, off_value: off }
+      )
+    )!;
+    expect(evaluateLocally(ruleset, 'on', 'user-1', null)).toEqual({ enabled: true, reason: 'rollout', value: on, valueType: type });
+    expect(evaluateLocally(ruleset, 'outside', 'user-1', null)).toEqual({
+      enabled: false,
+      reason: 'rollout',
+      value: off,
+      valueType: type,
+    });
+    expect(evaluateLocally(ruleset, 'killed', 'user-1', null)).toEqual({
+      enabled: false,
+      reason: 'inactive',
+      value: off,
+      valueType: type,
+    });
+  });
+
+  test('a boolean flag (no value_type) serves enabled, whatever else its entry carries', () => {
+    const ruleset = indexRuleset(documentWith({ key: 'off', active: false }, { key: 'extra', ...ON_FOR_EVERYONE, on_value: 'x' }))!;
+    expect(evaluateLocally(ruleset, 'plain', 'user-1', null)).toEqual(PLAIN_ANSWER);
+    expect(evaluateLocally(ruleset, 'extra', 'user-1', null)).toEqual(PLAIN_ANSWER);
+    expect(evaluateLocally(ruleset, 'off', 'user-1', null)).toEqual({
+      enabled: false,
+      reason: 'inactive',
+      value: false,
+      valueType: 'boolean',
+    });
+  });
+});
+
+describe('an entry this SDK cannot read defers that one flag, and the document still loads (Q12)', () => {
+  const unreadable: Array<[string, Record<string, unknown>]> = [
+    ['an evaluation it does not know', { key: 'f', active: true, evaluation: 'local_v3', rollout_percentage: 100 }],
+    ['no evaluation at all', { key: 'f', active: true }],
+    // The ruleset publishes value_type as string | number | json; these are outside that set.
+    ['a value_type it does not know (date)', { key: 'f', ...ON_FOR_EVERYONE, value_type: 'date', on_value: 'a', off_value: 'b' }],
+    ['value_type boolean, which a ruleset never names', { key: 'f', ...ON_FOR_EVERYONE, value_type: 'boolean', on_value: true, off_value: false }],
+    ['a value_type that is not a string', { key: 'f', ...ON_FOR_EVERYONE, value_type: 7, on_value: 'a', off_value: 'b' }],
+    ['a null value_type', { key: 'f', ...ON_FOR_EVERYONE, value_type: null, on_value: 'a', off_value: 'b' }],
+    ['an inactive entry with a value_type it does not know', { key: 'f', active: false, value_type: 'date', off_value: 'b' }],
+    // Mistyped or missing values.
+    ['a string flag whose on_value is a number', { key: 'f', ...ON_FOR_EVERYONE, value_type: 'string', on_value: 10, off_value: 'off' }],
+    ['a string flag with no on_value', { key: 'f', ...ON_FOR_EVERYONE, value_type: 'string', off_value: 'off' }],
+    ['a string flag with no off_value', { key: 'f', ...ON_FOR_EVERYONE, value_type: 'string', on_value: 'on' }],
+    ['a number flag whose off_value is a string', { key: 'f', ...ON_FOR_EVERYONE, value_type: 'number', on_value: 10, off_value: '2.5' }],
+    ['a number flag whose on_value is a boolean', { key: 'f', ...ON_FOR_EVERYONE, value_type: 'number', on_value: true, off_value: 2.5 }],
+    ['a number flag whose on_value is past 2^53-1', { key: 'f', ...ON_FOR_EVERYONE, value_type: 'number', on_value: 2 ** 53, off_value: 1 }],
+    ['a json flag whose on_value is a string', { key: 'f', ...ON_FOR_EVERYONE, value_type: 'json', on_value: '{"a":1}', off_value: [] }],
+    ['a json flag whose off_value is null', { key: 'f', ...ON_FOR_EVERYONE, value_type: 'json', on_value: { a: 1 }, off_value: null }],
+    ['an inactive string flag with no off_value', { key: 'f', active: false, value_type: 'string' }],
+    ['an inactive number flag whose off_value is a string', { key: 'f', active: false, value_type: 'number', off_value: '1' }],
+  ];
+
+  test.each(unreadable)('%s', (_label, entry) => {
+    const ruleset = indexRuleset(documentWith(entry));
+    expect(ruleset).not.toBeNull();
+    expect(evaluateLocally(ruleset!, 'f', 'user-1', null)).toBe(DEFER);
+    expect(evaluateLocally(ruleset!, 'plain', 'user-1', null)).toEqual(PLAIN_ANSWER);
+  });
+
+  test('a number value written 1e400 parses to Infinity and defers', () => {
+    const text = JSON.stringify(
+      documentWith({ key: 'f', ...ON_FOR_EVERYONE, value_type: 'number', on_value: 7, off_value: 1 })
+    ).replace('"on_value":7', '"on_value":1e400');
+    const ruleset = indexRuleset(JSON.parse(text))!;
+    expect(ruleset.flags.get('f')!.on_value).toBe(Infinity);
+    expect(evaluateLocally(ruleset, 'f', 'user-1', null)).toBe(DEFER);
+    expect(evaluateLocally(ruleset, 'plain', 'user-1', null)).toEqual(PLAIN_ANSWER);
+  });
+
+  test('a malformed entry of a known shape still rejects the whole document', () => {
+    expect(indexRuleset(documentWith({ key: 'f', active: true, evaluation: 'local' }))).toBeNull();
+    expect(indexRuleset(documentWith({ key: 'f', ...ON_FOR_EVERYONE, rollout_percentage: 50.5 }))).toBeNull();
+    expect(indexRuleset(documentWith({ key: 7, active: true, evaluation: 'remote' }))).toBeNull();
+    expect(indexRuleset(documentWith({ key: 'f', active: 'yes' }))).toBeNull();
   });
 });
 

@@ -4,9 +4,18 @@ import type { ExperimentationError } from './errors';
  * Operations whose failures are swallowed and reported through `onError`:
  * `'refresh'` (a ruleset fetch), `'flush'` (sending evaluation counts) and `'evaluate'` (an
  * unexpected failure inside local evaluation; the call then goes to the server) occur only with
- * `evaluation: 'local'`. `'reportError'` is an error report the server did not store.
+ * `evaluation: 'local'`. `'reportError'` is an error report the server did not store. `'value'`
+ * is a typed getter (`getStringValue`, `getNumberValue`, `getJsonValue`) that returned the
+ * caller's default.
  */
-export type SwallowedOperation = 'track' | 'trackBatch' | 'refresh' | 'flush' | 'evaluate' | 'reportError';
+export type SwallowedOperation =
+  | 'track'
+  | 'trackBatch'
+  | 'refresh'
+  | 'flush'
+  | 'evaluate'
+  | 'reportError'
+  | 'value';
 
 /** Where flags are evaluated: by the server (the default) or in-process from its ruleset. */
 export type EvaluationMode = 'server' | 'local';
@@ -18,16 +27,20 @@ export interface ClientConfig {
   apiKey: string;
   /** Per-request timeout in milliseconds (default 5000). */
   timeoutMs?: number;
-  /** How long a successful evaluation/assignment is reused, per user + key (default 300 000 ms). */
+  /**
+   * How long a successful evaluation/assignment is reused, per user + key (default 300 000 ms).
+   * `0` caches nothing: every call is answered afresh.
+   */
   cacheTtlMs?: number;
   /** Variant name returned by `getVariant` when assignment fails (default `'control'`). */
   defaultVariant?: string;
   /** Custom `fetch` implementation. Defaults to the global `fetch` (Node >= 18, browsers). */
   fetch?: typeof fetch;
   /**
-   * Called with the error whenever `track` / `trackBatch` / `reportError` swallow a failure, and
-   * in local mode when a ruleset refresh (`'refresh'`), an evaluation-count report (`'flush'`) or
-   * a local evaluation (`'evaluate'`, which then goes to the server) fails.
+   * Called with the error whenever `track` / `trackBatch` / `reportError` swallow a failure,
+   * whenever a typed getter returns the caller's default (`'value'`), and in local mode when a
+   * ruleset refresh (`'refresh'`), an evaluation-count report (`'flush'`) or a local evaluation
+   * (`'evaluate'`, which then goes to the server) fails.
    * Those operations never reject; this is the only way to observe their failures.
    */
   onError?: (error: ExperimentationError, operation: SwallowedOperation) => void;
@@ -98,6 +111,19 @@ export interface FlagEvaluation {
    * reason the server would have given.
    */
   reason?: string;
+  /**
+   * What the flag serves this user: its on value when `enabled` is true, its off value otherwise
+   * (a string, a number, or a JSON object or array); for a boolean flag, `enabled`. `undefined`
+   * when the server did not send one (a server without flag values, or a stored value it cannot
+   * serve). A JSON value is the object the SDK caches for this user and flag: read it, or call
+   * `getJsonValue`, which returns a copy.
+   */
+  value?: unknown;
+  /**
+   * The flag's type: `'boolean'`, `'string'`, `'number'` or `'json'`. `undefined` when the
+   * server did not send one.
+   */
+  valueType?: string;
   /**
    * Set only with `evaluation: 'local'`: `'local'` when answered in-process from the ruleset,
    * `'server'` when the server evaluated it.
@@ -191,6 +217,13 @@ export interface FlagEvaluateResponse {
   config?: unknown | null;
   /** `targeting_rule` | `rollout` | `inactive` | `error`; absent on older servers. */
   reason?: string;
+  /**
+   * The flag's `on_value` when `enabled`, its `off_value` otherwise; `enabled` for a boolean flag.
+   * Absent on older servers, and when the server cannot serve the stored value.
+   */
+  value?: unknown;
+  /** `boolean` | `string` | `number` | `json`; absent on older servers. */
+  value_type?: string;
 }
 
 /** `POST /api/v1/tracking/batch` */
