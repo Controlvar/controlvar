@@ -1,8 +1,9 @@
+import path from 'path';
 import React from 'react';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { UserTable } from '@/components/admin/users/UserTable';
 import { AdminService } from '@/services/admin';
-import { AdminUser, UserListResponse } from '@/types/admin';
+import { AdminUser, ROLE_COLORS, USER_ROLE_LABELS, UserListResponse, UserRole } from '@/types/admin';
 
 jest.mock('@/services/admin');
 
@@ -116,6 +117,25 @@ describe('UserTable', () => {
     await waitFor(() => {
       expect(screen.getByText('Admin')).toBeInTheDocument();
     });
+  });
+
+  it('applies ROLE_COLORS classes for every role and scans src/types in tailwind.config.js (#1297)', async () => {
+    const roles: UserRole[] = ['ADMIN', 'DEVELOPER', 'ANALYST', 'VIEWER'];
+    const users = roles.map((role, idx) =>
+      makeUser({ id: `r-${idx}`, username: `u-${role.toLowerCase()}`, role }),
+    );
+    mockListUsers.mockResolvedValue(makeResponse(users));
+    render(<UserTable />);
+    for (const role of roles) {
+      const badge = await screen.findByText(USER_ROLE_LABELS[role]);
+      for (const cls of ROLE_COLORS[role].split(/\s+/)) {
+        expect(badge).toHaveClass(cls);
+      }
+    }
+    const tailwindConfig = require(path.resolve(__dirname, '..', '..', '..', 'tailwind.config.js'));
+    expect(tailwindConfig.content).toEqual(
+      expect.arrayContaining([expect.stringMatching(/^\.\/src\/types\/\*\*\/\*\.\{.*ts.*\}$/)]),
+    );
   });
 
   it('shows active/inactive status badge', async () => {
