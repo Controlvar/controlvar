@@ -25339,7 +25339,7 @@
     },
     "/api/v1/scheduler/{name}/history": {
       "get": {
-        "description": "Return the most recent run records for a named scheduler.\n\nDefault limit is 20; pass ``?limit=N`` to override.",
+        "description": "Return the most recent run records for a named scheduler.\n\nDefault limit is 20; pass ``?limit=N`` (1 to 1000) to override.",
         "operationId": "get_run_history_api_v1_scheduler__name__history_get",
         "parameters": [
           {
@@ -25356,6 +25356,8 @@
             "required": false,
             "schema": {
               "default": 20,
+              "maximum": 1000,
+              "minimum": 1,
               "title": "Limit",
               "type": "integer"
             }
