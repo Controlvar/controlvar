@@ -1572,7 +1572,9 @@ jobs:
       # back 200 with the stub's text. The placeholder keys are set on the
       # re-created api container by the override file only; no job in this
       # repository sets a real LLM key, so nothing here can reach a provider.
-      # The ALB step below re-creates the api again without them. smoke.sh
+      # The ALB step below re-creates the api again with the keys empty
+      # (docker-compose.yml passes them as ${NAME:-}, and an empty key is the
+      # same as none) and without the base URLs. smoke.sh
       # refuses to run without CI=true, which Actions sets for every step and
       # nothing in this job overrides, so a local run cannot repoint a
       # developer's stack by accident.

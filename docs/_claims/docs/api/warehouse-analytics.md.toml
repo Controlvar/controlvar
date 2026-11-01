@@ -506,9 +506,10 @@ text = "Setting | Default | Meaning"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "WAREHOUSE_CREDENTIALS_KEYS | unset | Fernet keys, comma-separated, newest first, that encrypt stored warehouse credentials. While unset, storing or using a credential answers 503 credentials_unavailable. In staging and production a malformed value is refused when the API starts, and the full profile's modules do not load until it is fixed."
+text = "WAREHOUSE_CREDENTIALS_KEYS | unset | Fernet keys, comma-separated, newest first, that encrypt stored warehouse credentials. While unset or empty, storing or using a credential answers 503 credentials_unavailable. In staging and production a malformed value is refused when the API starts, and the full profile's modules do not load until it is fixed."
 by = [
     "test:modules/backend/tests/integration/warehouse/test_connections_api.py",
+    "test:modules/backend/tests/unit/core/test_credential_crypto.py::TestTheSetting::test_an_empty_value_from_the_environment_reads_as_not_set",
     "test:modules/backend/tests/unit/test_modules_settings.py::TestRegistrationValidates::test_malformed_credential_keys_in_production_fail_the_registration",
     "test:backend/tests/unit/core/test_preflight.py",
 ]
@@ -540,6 +541,19 @@ by = ["test:modules/backend/tests/integration/warehouse/test_connections_api.py"
 [[unit]]
 text = "Deleting a connection deletes its row and its credentials; its sources go with it, and its past analyses keep their results and the connection's name."
 by = ["test:modules/backend/tests/integration/warehouse/test_connections_api.py::test_delete_connection_leaves_no_ciphertext"]
+
+[[unit]]
+text = "Both compose files pass WAREHOUSE_CREDENTIALS_KEYS to the API, empty by default, and an empty value is the same as one that is not set."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestFeatureKeys::test_the_api_is_passed_the_key_empty_by_default",
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_api_is_passed_each_feature_key_empty_by_default",
+    "test:backend/tests/unit/infrastructure/test_compose_feature_keys.py::test_an_empty_warehouse_key_list_is_not_an_error",
+    "test:modules/backend/tests/unit/core/test_credential_crypto.py::TestTheSetting::test_an_empty_value_from_the_environment_reads_as_not_set",
+]
+
+[[unit]]
+text = "Put it in the .env file next to the compose file: a value exported in another terminal does not reach the container, and one exported in the terminal that runs docker compose up does."
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "API"
