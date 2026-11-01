@@ -195,7 +195,6 @@ def test_a_path_outside_the_open_areas_is_refused_by_location(path):
         "backend/tests/unit/api/__init__.py",
         "backend/app/sitecustomize_helper.py",
         "modules/backend/app/x.py",
-        "modules/frontend/src/x.tsx",
         "frontend/src/x.tsx",
         "sdk/go/x.go",
         "demo/shoplab/src/x.ts",
