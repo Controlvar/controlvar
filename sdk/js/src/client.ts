@@ -76,6 +76,15 @@ function withoutQuery(path: string): string {
   return question === -1 ? path : path.slice(0, question);
 }
 
+/** The query of `url` (`?…`) as the URL parser writes it, or `''` when it cannot be parsed. */
+function serialisedQuery(url: string): string {
+  try {
+    return new URL(url).search;
+  } catch {
+    return '';
+  }
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -683,8 +692,11 @@ export class ExperimentationClient {
         );
       }
       let message = err instanceof Error ? err.message : String(err);
-      // A fetch implementation may name the full URL in its own message.
-      if (shown !== path) message = message.split(url).join(`${this.apiUrl}${shown}`);
+      // A fetch implementation may name the URL in its own message, as passed or as the URL
+      // parser writes it (`'` as `%27`, for one). The query is removed in both forms.
+      for (const query of [path.slice(shown.length), serialisedQuery(url)]) {
+        if (query.length > 1) message = message.split(query).join('');
+      }
       throw new ExperimentationError(`Network error (${method} ${shown}): ${message}`, {
         code: 'NETWORK_ERROR',
         cause: err,

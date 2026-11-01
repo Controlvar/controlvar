@@ -29,13 +29,15 @@ def without_query(url: str) -> str:
 def failure_message(method: str, url: str, exc: BaseException) -> str:
     """``"<method> <url without its query> failed: <exc>"``.
 
-    Where *exc*'s own text repeats the full URL (urllib's ``unknown url type``
-    does), that is shortened the same way.
+    Where *exc*'s own text repeats the URL, whole (urllib's ``unknown url type``
+    does) or as the request target, path and query (http.client's ``InvalidURL``
+    does), its query is removed too.
     """
     shown = without_query(url)
     detail = str(exc)
-    if shown != url:
-        detail = detail.replace(url, shown)
+    query = url[len(shown) :]
+    if len(query) > 1:
+        detail = detail.replace(query, "")
     return f"{method} {shown} failed: {detail}"
 
 

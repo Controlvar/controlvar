@@ -1382,3 +1382,14 @@ class TestRequestErrorsNameThePathWithoutItsQuery:
             client.get_feature_flag("f", "user-1", ATTRIBUTES)
         assert str(info.value) == f"GET api.example.com{EVALUATE} failed: unknown url type: 'api.example.com{EVALUATE}'"
         assert_no_query(str(info.value))
+
+    def test_an_api_url_with_a_space(self):
+        """http.client refuses the request target, path and query, naming it in its own message."""
+        client = ExperimentationClient("http://127.0.0.1:1/base path", API_KEY)
+        with pytest.raises(TransportError) as info:
+            client.get_feature_flag("f", "user-1", {"name": f"O'{CANARY}"})
+        assert str(info.value) == (
+            f"GET http://127.0.0.1:1/base path{EVALUATE} failed: URL can't contain control characters. "
+            f"'/base path{EVALUATE}' (found at least ' ')"
+        )
+        assert_no_query(str(info.value))

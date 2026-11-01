@@ -625,6 +625,27 @@ describe('request error messages name the path without its query string', () => 
     expectNoQuery(error.message);
   });
 
+  const asPassed = (input: string) => input;
+  const asParsed = (input: string) => new URL(input).href;
+  it.each([
+    ['as passed, an apostrophe in the attributes', asPassed, baseConfig.apiUrl, { name: "O'Brien" }],
+    ['as the URL parser writes it, an apostrophe in the attributes', asParsed, baseConfig.apiUrl, { name: "O'Brien" }],
+    ['as the URL parser writes it, an upper-case host and a default port', asParsed, 'https://API.example.com:443', { device: 'mobile' }],
+  ])('a network error whose own message names the URL %s', async (_label, form, apiUrl, attributes) => {
+    global.fetch = jest
+      .fn()
+      .mockImplementation((input: string) =>
+        Promise.reject(new Error(`request to ${form(input)} failed, reason: connect ECONNREFUSED`))
+      );
+    const client = new ExperimentationClient({ ...baseConfig, apiUrl });
+    const error = await captureError(client.evaluateFlag('my-flag', { userId: 'user-123', attributes }));
+    expect(error.message).toBe(
+      `Network error (GET ${evaluatePath}): request to https://api.example.com${evaluatePath} failed, reason: connect ECONNREFUSED`
+    );
+    expectNoQuery(error.message);
+    expect(error.message).not.toContain('Brien');
+  });
+
   it('a timeout', async () => {
     jest.useFakeTimers();
     global.fetch = jest.fn().mockImplementation((_url: string, init: RequestInit) => {
