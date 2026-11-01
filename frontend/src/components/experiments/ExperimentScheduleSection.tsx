@@ -67,8 +67,10 @@ export const SCHEDULE_ERROR_COPY: Record<number, string> & { fallback: string } 
   fallback: 'Could not save the dates. Try again.',
 };
 
+/** A time-out shows the dashboard's own time-out sentence, not the status-0 entry (#1040). */
 export function scheduleErrorCopy(err: unknown): string {
   if (!isApiError(err)) return SCHEDULE_ERROR_COPY.fallback;
+  if (err.timedOut) return err.message;
   return SCHEDULE_ERROR_COPY[err.status] ?? SCHEDULE_ERROR_COPY.fallback;
 }
 

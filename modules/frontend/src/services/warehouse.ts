@@ -9,7 +9,15 @@
  * or a test -- never in a URL. No response carries it back, and nothing here
  * keeps a copy: the caller's form owns the value and clears it after a save.
  */
-import { apiFetch } from '@/services/api';
+import { LONG_REQUEST_TIMEOUT_MS, apiFetch } from '@/services/api';
+
+/**
+ * How long the dashboard waits for a preview: the API's largest query limit
+ * by default (`WAREHOUSE_MAX_QUERY_TIMEOUT_SECONDS`, 1800 s), plus the API's
+ * 30 s preview margin (`PREVIEW_MARGIN_SECONDS`), plus 30 s for the trip.
+ * An operator who raises that limit gets a dashboard that gives up first.
+ */
+export const PREVIEW_REQUEST_TIMEOUT_MS = (1800 + 30 + 30) * 1000;
 
 
 export type WarehouseType = 'bigquery' | 'snowflake' | 'athena';
@@ -221,13 +229,21 @@ export const warehouseService = {
   deleteConnection: (id: string) =>
     apiFetch<void>(`/api/v1/warehouse/analysis/connections/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
-  /** Test before saving (BigQuery, Athena). The body is held in memory by the API, not stored. */
+  /**
+   * Test before saving (BigQuery, Athena). The body is held in memory by the API, not stored.
+   * A test (and a validate) may use the API's whole 30 s budget, so it waits longer than that.
+   */
   testUnsavedConnection: (body: BigQueryBody | AthenaBody) =>
-    apiFetch<ConnectionTestResult>(`/api/v1/warehouse/analysis/connections/test`, { method: 'POST', json: body }),
+    apiFetch<ConnectionTestResult>(`/api/v1/warehouse/analysis/connections/test`, {
+      method: 'POST',
+      json: body,
+      timeoutMs: LONG_REQUEST_TIMEOUT_MS,
+    }),
 
   testConnection: (id: string) =>
     apiFetch<ConnectionTestResult>(`/api/v1/warehouse/analysis/connections/${encodeURIComponent(id)}/test`, {
       method: 'POST',
+      timeoutMs: LONG_REQUEST_TIMEOUT_MS,
     }),
 
   regenerateKey: (id: string) =>
@@ -253,11 +269,13 @@ export const warehouseService = {
   validateSource: (id: string) =>
     apiFetch<ValidateResult>(`/api/v1/warehouse/analysis/sources/${encodeURIComponent(id)}/validate`, {
       method: 'POST',
+      timeoutMs: LONG_REQUEST_TIMEOUT_MS,
     }),
 
   previewSource: (id: string, body: PreviewRequest = {}) =>
     apiFetch<PreviewResult>(`/api/v1/warehouse/analysis/sources/${encodeURIComponent(id)}/preview`, {
       method: 'POST',
       json: body,
+      timeoutMs: PREVIEW_REQUEST_TIMEOUT_MS,
     }),
 };

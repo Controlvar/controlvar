@@ -73,6 +73,7 @@ const LOGOUT_PATH = '/api/v1/auth/logout';
 
 /** Copy for a session that could not be restored for a reason other than 401. */
 export function sessionErrorMessage(err: unknown): string {
+  if (err instanceof ApiError && err.timedOut) return err.message;
   if (err instanceof ApiError && err.isNetworkError) return unreachableMessage();
   if (err instanceof ApiError && err.isServerError) {
     const id = err.requestId ? ` Request ID: ${err.requestId}.` : '';

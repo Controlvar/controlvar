@@ -358,6 +358,12 @@ count = 4
 reason = "C9: the chart keeps its directory; every reference to it"
 
 [[keep]]
+path = "backend/tests/unit/scripts/contributor_guard_tree.txt"
+literal = "charts/experimently"
+count = 23
+reason = "C9: the chart keeps its directory; a frozen listing of every tracked path, which names each file under it"
+
+[[keep]]
 path = "docs/_claims/docs/self-hosting/kubernetes.md.toml"
 literal = "charts/experimently"
 count = 2
