@@ -58,7 +58,7 @@ The platform supports a range of statistical approaches:
 
 | Method | Description |
 |--------|-------------|
-| Frequentist (Fisher's exact test) | Each treatment against the control: a two-sided Fisher's exact test on the users who converted and the users who did not. A revenue metric is compared on its mean per assigned user with Welch's t-test instead; warehouse analysis (beta) compares a mean metric with Welch's t-test |
+| Frequentist (Fisher's exact test) | Each treatment against the control: a two-sided Fisher's exact test on the users who converted and the users who did not. A revenue, count, duration or custom metric is compared on its mean per assigned user with Welch's t-test instead; warehouse analysis (beta) compares a mean metric with Welch's t-test |
 | Sequential testing (mSPRT) | Continuous monitoring with valid p-values at any sample size |
 | Always-valid confidence intervals | Confidence sequences that are valid at every look |
 | Alpha spending (O'Brien-Fleming, Pocock) | Not computed yet: the response's `alpha_spending` is empty; use the mSPRT, which is valid under continuous monitoring |
@@ -110,7 +110,7 @@ For a full AWS deployment, see [CDK Deployment](../self-hosting/cdk.md).
 
 ### What is the difference between a feature flag and an experiment?
 
-**Feature flags** control whether a feature is visible to a user. They are primarily operational tools — used for gradual rollouts, kill switches, and beta programs. A flag has no statistical analysis attached to it.
+**Feature flags** control whether a feature is visible to a user, or which value they get. They are primarily operational tools — used for gradual rollouts, kill switches, and beta programs. A flag has no statistical analysis attached to it. A flag does not measure which value does better; an experiment does.
 
 **Experiments** are scientific tools for causal measurement. They split users into variants, track defined metrics, and apply statistical tests to determine whether a variant is better than the control. Experiments have a defined start and end date and produce a ship/no-ship recommendation.
 

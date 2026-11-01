@@ -78,6 +78,9 @@ _ = client.Track(ctx, &exp.TrackEvent{UserID: user.ID, EventName: "page_view"})
 | `Track(ctx, *TrackEvent)` | `error` | Informational error; never panics |
 | `TrackBatch(ctx, []*TrackEvent)` | `error` | Informational error; at most 100 events per request |
 | `Close()` | `error` (always `nil`) | Clears the cache, closes idle connections; idempotent |
+| `(*EvalResult).StringValue(def string)` | `string` | `def`; never panics (Flag values, below) |
+| `(*EvalResult).NumberValue(def float64)` | `float64` | `def`; never panics (Flag values, below) |
+| `(*EvalResult).DecodeValue(v any)` | `error` | An error, with `v` left as it was; never panics (Flag values, below) |
 | `ConsistentHash(userID, key)` | `float64` in `[0, 1)` | Pure function (parity utility, see below) |
 
 Types (`types.go`):
@@ -85,10 +88,42 @@ Types (`types.go`):
 | Type | Fields |
 |---|---|
 | `User` | `ID string`, `Attributes map[string]interface{}` (sent as assignment `context`) |
-| `EvalResult` | `Key string`, `Enabled bool`, `Config map[string]any` (always `nil`: the evaluate endpoint returns `config: null` for every flag) |
+| `EvalResult` | `Key string`, `Enabled bool`, `Config map[string]any` (always `nil`: the evaluate endpoint returns `config: null` for every flag), `Value json.RawMessage` (what the flag serves this user; `nil` when the server sent none), `ValueType string` (`"boolean"`, `"string"`, `"number"` or `"json"`; `""` when the server sent none) |
 | `Assignment` | `ExperimentKey`, `UserID`, `VariantID`, `VariantName string`, `IsControl bool`, `Configuration map[string]any` |
 | `TrackEvent` | `UserID`, `EventName` (required), `EventType` (defaults to `EventName`), `ExperimentKey`, `FeatureFlagKey`, `Value *float64` (`exp.Float64(v)`), `Properties` (sent as `metadata`), `Timestamp time.Time` (ISO-8601 when non-zero) |
 | `APIError` | `StatusCode int`, `Message string`, `RetryAfter string` (429); use `errors.As` |
+
+## Flag values
+
+`EvalResult.Value` is what the flag serves this user: its on value when `Enabled` is true, its
+off value otherwise (`true` or `false` for a boolean flag). `EvalResult.ValueType` is the flag's
+type. Read the value with the method for its type:
+
+```go
+label, _ := client.EvaluateFlag(ctx, "checkout-button-label", user) // a string flag
+fmt.Println(label.StringValue("Buy now"))
+
+limit, _ := client.EvaluateFlag(ctx, "max-items", user) // a number flag
+fmt.Println(limit.NumberValue(10))
+
+hero, _ := client.EvaluateFlag(ctx, "hero-banner", user) // a json flag
+banner := Banner{Title: "Welcome"}                       // your default
+if err := hero.DecodeValue(&banner); err != nil {
+    // banner is still your default
+}
+```
+
+- `StringValue` and `NumberValue` return your default, and `DecodeValue` returns an error and
+  leaves `v` as it was, when there is no value of that type to read: a nil result, a failed
+  evaluation, a flag of another type, or a value that does not decode.
+- Against a server that sends no `value`, `StringValue` returns your default.
+- None of them panics, on a nil `*EvalResult` included.
+- `DecodeValue` decodes into a new value of `v`'s type and stores it in `v` only on success, so a
+  field the value does not name is zero, not your default.
+- `EvaluateFlag` returns a new copy on every call, cache hits included, so changing `Value`
+  changes nothing the client has cached.
+- `EvaluateFlag` sends the user's ID only; `User.Attributes` are sent on assignment, not on flag
+  evaluation.
 
 ## Caching and failure behaviour
 
@@ -132,7 +167,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `EvaluateFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
+| `EvaluateFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, value, value_type, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
 | `GetAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `Track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `Track` without keys, `TrackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |

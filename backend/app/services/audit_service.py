@@ -62,7 +62,13 @@ AUDIT_VALUE_MAX = 4000
 #: the entity's model (``test_audit_values.py`` checks it), so a field a base
 #: does not have cannot be listed.
 AUDIT_VALUE_FIELDS: Dict[EntityType, Tuple[str, ...]] = {
-    EntityType.FEATURE_FLAG: ("key", "name", "status", "rollout_percentage"),
+    EntityType.FEATURE_FLAG: (
+        "key",
+        "name",
+        "status",
+        "rollout_percentage",
+        "value_type",
+    ),
     EntityType.EXPERIMENT: (
         "key",
         "name",
@@ -86,9 +92,19 @@ AUDIT_VALUE_FIELDS: Dict[EntityType, Tuple[str, ...]] = {
 }
 
 #: Fields an update records by name only, under ``changed_fields``: the entry
-#: says that they changed, never what they hold.
+#: says that they changed, never what they hold. A flag's ``on_value`` and
+#: ``off_value`` are user-authored content of up to 8 KiB, like its rules: a
+#: value recorded beside them could push the whole entry over
+#: ``AUDIT_VALUE_MAX`` and lose the ``rollout_percentage`` change with it
+#: (Plan F ruling 3).
 AUDIT_NAME_ONLY_FIELDS: Dict[EntityType, Tuple[str, ...]] = {
-    EntityType.FEATURE_FLAG: ("description", "targeting_rules", "variants"),
+    EntityType.FEATURE_FLAG: (
+        "description",
+        "targeting_rules",
+        "variants",
+        "on_value",
+        "off_value",
+    ),
     EntityType.EXPERIMENT: ("description", "hypothesis", "targeting_rules", "metrics"),
     EntityType.USER: ("email",),
     EntityType.API_KEY: (),

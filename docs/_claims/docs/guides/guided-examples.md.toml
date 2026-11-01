@@ -585,7 +585,7 @@ text = "What an order is worth."
 by = ["exempt:label"]
 
 [[unit]]
-text = "These examples count the users who pressed a button or ordered; Limitations says how a revenue metric is analysed."
+text = "These examples count the users who pressed a button or ordered; Concepts says how a revenue metric is analysed."
 by = [
     "journey:guided-examples#press-counted",
     "journey:guided-examples#order-counted",

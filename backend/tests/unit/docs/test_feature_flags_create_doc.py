@@ -86,9 +86,34 @@ def _flag_requests():
 
 
 def test_the_page_has_its_examples():
-    assert len(_shell()) == 11
-    # create, rules, rules refused (#535), turn on
-    assert len(list(_flag_requests())) == 4
+    assert len(_shell()) == 15
+    # create, rules, rules refused (#535), turn on, a string flag created and
+    # a number flag refused (#1497)
+    assert len(list(_flag_requests())) == 6
+
+
+def test_the_value_examples_are_what_the_api_answers():
+    """#1497: the string flag the page creates is a valid create, and the
+    number flag it sends text answers exactly the promised message, at
+    ``on_value``."""
+    from pydantic import ValidationError
+
+    text = PAGE.read_text(encoding="utf-8")
+    promised = re.search(r'<!-- expect: "msg":"(on_value [^"]+)" -->', text)
+    assert promised, "the value 422 example's expectation is missing"
+    created = [
+        json.loads(body)
+        for _, method, _, body in _flag_requests()
+        if method == "POST" and '"value_type"' in body
+    ]
+    assert len(created) == 2
+    label, refused = created
+    assert FeatureFlagCreate(**label).value_type == "string"
+    with pytest.raises(ValidationError) as caught:
+        FeatureFlagCreate(**refused)
+    (error,) = caught.value.errors()
+    assert error["loc"] == ("on_value",)
+    assert error["msg"] == promised.group(1)
 
 
 def test_the_refused_rules_example_is_what_the_api_answers():

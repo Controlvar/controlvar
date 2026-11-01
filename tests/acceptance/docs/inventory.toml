@@ -834,7 +834,7 @@ reason = "not walked: the README says the package is not on Packagist yet; #1107
 [documents."sdk/dotnet/README.md"]
 scope = "in"
 class = "reference"
-reason = "not walked: the README says the package is not on NuGet yet; #1107 tests its flows"
+reason = "not walked: the package is not on NuGet yet (docs/sdk/dotnet.md says so; the README is the one NuGet will show, so it names no status); #1107 tests its flows"
 
 [documents."sdk/elixir/README.md"]
 scope = "in"

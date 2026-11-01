@@ -242,15 +242,56 @@ describe('SampleSizeMeter', () => {
   describe('notes', () => {
     // The Power Calculator plans a conversion rate too, so the note must not
     // send a non-conversion metric there as if it could plan one.
-    it('labels a non-conversion metric and says the Power Calculator plans conversion rates only', () => {
+    //
+    // #439 inverted this pin: a count metric's results are events per user,
+    // so the note no longer says it is "analysed as a conversion". C5: each
+    // mean type, with its own label.
+    it.each([
+      ['count', 'events per user'],
+      ['duration', 'duration per user'],
+      ['custom', 'value per user'],
+    ] as const)(
+      'says a %s plan is for the share of users who send the event, not %s',
+      (metricType, label) => {
+        render(
+          <SampleSizeMeter
+            data={{ ...observed, metric_name: 'Visits', metric_type: metricType }}
+            eventName="visit"
+            resultsAnalysis="mean"
+          />
+        );
+        const note = screen.getByTestId('sample-size-metric-type-note');
+        expect(note).toHaveTextContent(
+          `Visits is analysed as ${label}, but this plan is for the share of users who send visit (a two-proportion test). ` +
+            `A sample-size plan for ${label} is not available, and the Power Calculator plans conversion rates only.`
+        );
+        expect(note).not.toHaveTextContent(/analysed as a conversion/i);
+        expect(note).not.toHaveTextContent(/use the Power Calculator/i);
+        expect(within(note).queryByRole('link')).not.toBeInTheDocument();
+      }
+    );
+
+    it('takes a count metric to be events per user when the results are not known', () => {
       render(<SampleSizeMeter data={{ ...observed, metric_name: 'Visits', metric_type: 'count' }} />);
+      expect(screen.getByTestId('sample-size-metric-type-note')).toHaveTextContent(
+        'Visits is analysed as events per user, but this plan is for the share of users who send its event'
+      );
+    });
+
+    // C4: the note reads the results' `analysis`. A server older than #439
+    // analysed a count metric as a share, and then the note says so.
+    it('says a metric the results analysed as a share is analysed as a conversion', () => {
+      render(
+        <SampleSizeMeter
+          data={{ ...observed, metric_name: 'Visits', metric_type: 'count' }}
+          resultsAnalysis="proportion"
+        />
+      );
       const note = screen.getByTestId('sample-size-metric-type-note');
       expect(note).toHaveTextContent(
         'Visits is a count metric, analysed as a conversion: the share of users who sent its event, so this plan is for a conversion rate. ' +
           'The Power Calculator plans conversion rates only, so it cannot plan a count metric either.'
       );
-      expect(note).not.toHaveTextContent(/use the Power Calculator/i);
-      expect(within(note).queryByRole('link')).not.toBeInTheDocument();
     });
 
     // A revenue metric's results are revenue per user; its plan is still for

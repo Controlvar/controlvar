@@ -9,6 +9,12 @@ from typing import Any, Dict, List, Optional, Union
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
+from backend.app.core.flag_values import (
+    BOOLEAN,
+    VALUE_FIELDS,
+    flag_value_type,
+    stored_values,
+)
 from backend.app.crud.base import CRUDBase
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.schemas.feature_flag import (
@@ -67,6 +73,11 @@ class CRUDFeatureFlag(CRUDBase[FeatureFlag, FeatureFlagCreate, FeatureFlagUpdate
             if k in model_fields and k not in READ_ONLY_FIELDS
         }
         obj_in_data["status"] = status
+        # A boolean flag stores neither value, whatever was sent (#1497).
+        value_type = obj_in_data.get("value_type") or BOOLEAN
+        obj_in_data["on_value"], obj_in_data["off_value"] = stored_values(
+            value_type, obj_in_data.get("on_value"), obj_in_data.get("off_value")
+        )
 
         # Create feature flag
         db_obj = FeatureFlag(**obj_in_data)
@@ -110,6 +121,13 @@ class CRUDFeatureFlag(CRUDBase[FeatureFlag, FeatureFlagCreate, FeatureFlagUpdate
             for k, v in update_data.items()
             if k in model_fields and k not in READ_ONLY_FIELDS
         }
+        # ``value_type`` is set on create only, and a boolean flag stores
+        # neither value (#1497). The API's writer, ``FeatureFlagService``, also
+        # checks the values against the stored flag; nothing routes here.
+        update_data.pop("value_type", None)
+        if flag_value_type(db_obj) == BOOLEAN:
+            for field in VALUE_FIELDS:
+                update_data.pop(field, None)
         if is_active is not None:
             # The one status rule (#631): an archived flag stays archived when
             # sent false, and is refused when sent true.

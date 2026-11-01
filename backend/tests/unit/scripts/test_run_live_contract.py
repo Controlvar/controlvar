@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -219,6 +220,9 @@ def test_the_smokes_are_given_each_setting_under_both_names(monkeypatch, runner)
         "run_local",
         lambda sdk, command, env, timeout, flag: local.append(env) or ("PASS", "ok"),
     )
+    monkeypatch.setattr(
+        runner, "run_published_local", lambda *args: ("PASS", "not run here")
+    )
     _, ran = run_main(monkeypatch, runner, "--sdk", "js")
     env = ran[0][1]
     for setting in ("url", "key"):
@@ -230,3 +234,202 @@ def test_the_smokes_are_given_each_setting_under_both_names(monkeypatch, runner)
     name, old, _ = SETTINGS["local"]
     assert local and local[0][name] == "scoped"
     assert local[0][old] == runner.DECOY_KEY != "scoped"
+
+
+# ---------------------------------------------------------------------------
+# The published releases against the live server (#1497, G3)
+# ---------------------------------------------------------------------------
+
+
+def test_the_published_releases_run_last_with_the_scoped_key(monkeypatch, runner):
+    monkeypatch.setenv("CONTROLVAR_LOCAL_API_KEY", "scoped")
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: f"/usr/bin/{tool}")
+    monkeypatch.setattr(runner, "check_ruleset", lambda *args: ("PASS", "ok"))
+    order = []
+    monkeypatch.setattr(
+        runner,
+        "run_local",
+        lambda sdk, command, env, timeout, flag: (
+            order.append(("local", sdk)) or ("PASS", "ok")
+        ),
+    )
+    monkeypatch.setattr(
+        runner,
+        "run_published_local",
+        lambda sdk, version, api_url, key, timeout: (
+            order.append(("published", sdk, version, key)) or ("PASS", "ok")
+        ),
+    )
+    status, _ = run_main(
+        monkeypatch, runner, "--sdk", "python", "--sdk", "js", "--strict"
+    )
+    assert status == 0
+    assert order == [
+        ("local", "python"),
+        ("local", "js"),
+        ("published", "python", "0.2.0", "scoped"),
+        ("published", "js", "0.2.0", "scoped"),
+    ]
+
+
+def test_a_published_row_fails_under_strict_without_node_or_a_key(
+    monkeypatch, runner, capsys
+):
+    monkeypatch.setattr(runner, "check_ruleset", lambda *args: ("PASS", "ok"))
+    monkeypatch.setattr(runner, "run_local", lambda *args: ("PASS", "ok"))
+    monkeypatch.setattr(
+        runner, "run_published_local", lambda *args: pytest.fail("must not run")
+    )
+    monkeypatch.setattr(
+        runner.shutil, "which", lambda tool: None if tool == "node" else tool
+    )
+    monkeypatch.setenv("CONTROLVAR_LOCAL_API_KEY", "scoped")
+    assert run_main(monkeypatch, runner, "--sdk", "js", "--strict")[0] == 1
+    out = " ".join(capsys.readouterr().out.split())
+    assert "FAIL js 0.2.0 (published, local) missing toolchain: node" in out
+    monkeypatch.delenv("CONTROLVAR_LOCAL_API_KEY")
+    assert run_main(monkeypatch, runner, "--sdk", "python", "--strict")[0] == 1
+    out = " ".join(capsys.readouterr().out.split())
+    assert "FAIL python 0.2.0 (published, local) no sdk:ruleset key" in out
+
+
+def test_the_published_rows_use_the_pins_the_seeds_flags_and_its_developer(runner):
+    from backend.app.core.flag_values import BOOLEAN, VALUE_TYPES
+    from backend.app.models.user import UserRole
+    from backend.scripts import seed_sdk_contract as seed
+    from backend.scripts.seed_demo_data import DEMO_USERS
+
+    pinned = {(a.language, a.version) for a in runner._published_sdks().load_pins()}
+    assert runner.PUBLISHED_LOCAL == {"python": "0.2.0", "js": "0.2.0"}
+    assert set(runner.PUBLISHED_LOCAL.items()) <= pinned
+    assert set(seed.VALUE_FLAGS) == set(VALUE_TYPES) - {BOOLEAN}
+    assert runner.VALUE_FLAG_KEYS == tuple(
+        key for key, _, _ in seed.VALUE_FLAGS.values()
+    )
+    (developer,) = [u for u in DEMO_USERS if u["email"] == runner.TOGGLE_USER[0]]
+    assert developer["password"] == runner.TOGGLE_USER[1]
+    assert developer["role"] == UserRole.DEVELOPER and not developer["is_superuser"]
+
+
+#: A stand-in for a published release's live harness: it prints the "loaded"
+#: report, waits for the runner's line, and prints the "after" report.
+FAKE_HARNESS = """
+import json, sys
+reports = json.load(open(sys.argv[1]))
+print(json.dumps(reports[0]), flush=True)
+sys.stdin.readline()
+print(json.dumps(reports[1]), flush=True)
+"""
+
+
+def _fake_published(monkeypatch, runner, tmp_path, loaded, after):
+    """``run_published_local`` with everything around it replaced: the pins,
+    the download, the API and the harness. Returns the flag changes made."""
+    from types import SimpleNamespace
+
+    artefact = SimpleNamespace(
+        language="python", version="0.2.0", digest="sha256:" + "0" * 64
+    )
+    monkeypatch.setattr(
+        runner,
+        "_published_sdks",
+        lambda: SimpleNamespace(
+            load_pins=lambda: [artefact],
+            fetch=lambda a, cache: b"",
+            extract=lambda a, data, dest: dest.mkdir(parents=True) or dest,
+            check_identity=lambda a, extraction, report: "controlvar/local.py",
+        ),
+    )
+    script = tmp_path / "harness.py"
+    script.write_text(FAKE_HARNESS)
+    reports = tmp_path / "reports.json"
+    reports.write_text(json.dumps([loaded, after]))
+    monkeypatch.setattr(
+        runner,
+        "_published_harness",
+        lambda language, root, config: [sys.executable, str(script), str(reports)],
+    )
+    monkeypatch.setattr(
+        runner, "_ruleset_request", lambda url, key: (200, {"etag": '"v1"'}, b"")
+    )
+    monkeypatch.setattr(runner, "_sign_in", lambda url: "token")
+    monkeypatch.setattr(
+        runner, "_flag_ids", lambda url, token, keys: {k: f"id-{k}" for k in keys}
+    )
+    turned = []
+    monkeypatch.setattr(
+        runner, "_turn", lambda url, token, ids, on: turned.append((sorted(ids), on))
+    )
+    return turned
+
+
+def _report(phase, answer, version="v1", ready=True):
+    return {
+        "phase": phase,
+        "seconds": 5.0,
+        "ready": {"ok": ready},
+        "status": {"ready": ready, "version": version},
+        "answers": {
+            key: dict(answer)
+            for key in (
+                "sdk_contract_value_string",
+                "sdk_contract_value_number",
+                "sdk_contract_value_json",
+            )
+        },
+        "errors": [],
+    }
+
+
+def test_a_published_release_that_receives_the_change_passes(
+    monkeypatch, runner, tmp_path
+):
+    turned = _fake_published(
+        monkeypatch,
+        runner,
+        tmp_path,
+        _report("loaded", runner.PUBLISHED_ON),
+        _report("after", runner.PUBLISHED_OFF),
+    )
+    status, detail = runner.run_published_local("python", "0.2.0", "http://x", "k", 30)
+    assert status == "PASS", detail
+    assert "each answered inactive locally after 5.0s" in detail
+    keys = sorted(runner.VALUE_FLAG_KEYS)
+    assert turned == [(keys, False), (keys, True)]
+
+
+def test_an_answer_that_does_not_change_fails_and_the_flags_go_back_on(
+    monkeypatch, runner, tmp_path
+):
+    """The QA plan's G3 failure: the release kept answering on."""
+    turned = _fake_published(
+        monkeypatch,
+        runner,
+        tmp_path,
+        _report("loaded", runner.PUBLISHED_ON),
+        _report("after", runner.PUBLISHED_ON),
+    )
+    status, detail = runner.run_published_local("python", "0.2.0", "http://x", "k", 30)
+    assert status == "FAIL"
+    assert "answer unchanged after the flags were turned off" in detail
+    assert [on for _, on in turned] == [False, True]
+
+
+def test_a_release_that_cannot_read_the_ruleset_fails_before_any_change(
+    monkeypatch, runner, tmp_path
+):
+    """A refused document: the release answers from the server, and no flag
+    is touched."""
+    server = {**runner.PUBLISHED_ON, "source": "server"}
+    turned = _fake_published(
+        monkeypatch,
+        runner,
+        tmp_path,
+        _report("loaded", server, version=None, ready=False),
+        _report("after", server, version=None, ready=False),
+    )
+    status, detail = runner.run_published_local("python", "0.2.0", "http://x", "k", 30)
+    assert status == "FAIL"
+    assert "did not load the ruleset the server serves (v1)" in detail
+    assert '"source": "server"' in detail
+    assert turned == []

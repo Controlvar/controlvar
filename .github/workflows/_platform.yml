@@ -209,7 +209,10 @@ jobs:
         if: ${{ !inputs.skip && contains(inputs.sdks, 'dotnet') }}
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '6.0.x'
+          # sdk/dotnet's examples target net8.0.
+          dotnet-version: |
+            8.0.x
+            10.0.x
 
       # ── dependencies ────────────────────────────────────────────────────────
       - name: Install backend dependencies

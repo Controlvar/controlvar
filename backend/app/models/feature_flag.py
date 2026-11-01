@@ -14,6 +14,7 @@ from sqlalchemy import (
     Text,
     event,
     false,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.declarative import declared_attr
@@ -59,6 +60,31 @@ def flag_status_name(value: object) -> str:
     return str(getattr(value, "value", value)).upper()
 
 
+#: The check on a flag's value type and its two values: the same name and SQL
+#: as migration ``607c51a59bf5``.  A boolean flag stores neither value; a
+#: string or number flag stores both, of that JSON type, and they differ; a json
+#: flag stores both, each an object or an array, and they differ.  Every
+#: non-boolean branch says IS NOT NULL because PostgreSQL passes a check whose
+#: expression is NULL.  Equality is JSONB's (``3`` equals ``3.0``).
+FLAG_VALUES_CHECK = "check_flag_values"
+FLAG_VALUES_CHECK_SQL = (
+    "(value_type = 'boolean' AND on_value IS NULL AND off_value IS NULL)"
+    " OR (value_type = 'string'"
+    " AND on_value IS NOT NULL AND off_value IS NOT NULL"
+    " AND jsonb_typeof(on_value) = 'string' AND jsonb_typeof(off_value) = 'string'"
+    " AND on_value <> off_value)"
+    " OR (value_type = 'number'"
+    " AND on_value IS NOT NULL AND off_value IS NOT NULL"
+    " AND jsonb_typeof(on_value) = 'number' AND jsonb_typeof(off_value) = 'number'"
+    " AND on_value <> off_value)"
+    " OR (value_type = 'json'"
+    " AND on_value IS NOT NULL AND off_value IS NOT NULL"
+    " AND jsonb_typeof(on_value) IN ('object', 'array')"
+    " AND jsonb_typeof(off_value) IN ('object', 'array')"
+    " AND on_value <> off_value)"
+)
+
+
 class FeatureFlag(Base, BaseModel):
     """Feature flag model for feature toggles."""
 
@@ -79,13 +105,30 @@ class FeatureFlag(Base, BaseModel):
     )
     targeting_rules = Column(JSONB)  # Rules for flag enablement
     rollout_percentage = Column(Integer, default=0, nullable=False)  # Gradual rollout
-    # What the flag serves when it is off.  The request schemas type it and
-    # accept only false for now (D40), so every row holds false; evaluation does
-    # not read it.  ``server_default`` is load-bearing: the previous release's
-    # image inserts rows without naming this column, and the database fills it.
+    # Deprecated in favour of ``off_value`` (#1497, DECISIONS T229).  The
+    # request schemas type it and accept only false, for every flag (D40), so
+    # every row holds false; evaluation does not read it.  ``server_default`` is
+    # load-bearing: the previous release's image inserts rows without naming
+    # this column, and the database fills it.
     default_value = Column(
         Boolean, nullable=False, default=False, server_default=false()
     )
+    # The flag's value type (boolean, string, number or json) and the two values
+    # a string, number or json flag serves: ``on_value`` to the users it is on
+    # for, ``off_value`` to everyone else (#1497).  A boolean flag keeps both
+    # NULL.  ``check_flag_values`` in ``__table_args__`` holds the combinations;
+    # the API writes them through ``backend.app.core.flag_values``'s rules and
+    # the evaluate route serves them.  ``server_default`` is load-bearing, as
+    # for ``default_value``.  ``none_as_null``: Python ``None``
+    # is stored as SQL NULL, not as JSON ``null``, which the check refuses.
+    value_type = Column(
+        String(16),
+        nullable=False,
+        default="boolean",
+        server_default=text("'boolean'"),
+    )
+    on_value = Column(JSONB(none_as_null=True), nullable=True)
+    off_value = Column(JSONB(none_as_null=True), nullable=True)
     variants = Column(JSONB)  # For multivariate flags
     tags = Column(JSONB)  # For categorization
 
@@ -150,6 +193,7 @@ class FeatureFlag(Base, BaseModel):
                 "rollout_percentage >= 0 AND rollout_percentage <= 100",
                 name="check_rollout_percentage",
             ),
+            CheckConstraint(FLAG_VALUES_CHECK_SQL, name=FLAG_VALUES_CHECK),
             {"schema": schema_name},
         )
 

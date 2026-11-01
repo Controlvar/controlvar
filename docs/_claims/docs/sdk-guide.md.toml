@@ -77,7 +77,7 @@ by = [
 ]
 
 [[unit]]
-text = "Evaluate a flag | GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON, optional> | — | {key, enabled, config, reason}"
+text = "Evaluate a flag | GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON, optional> | — | {key, enabled, value, value_type, config, reason}"
 by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
     "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_no_context_keeps_existing_behaviour",
@@ -651,7 +651,7 @@ text = "Full reference: Java SDK."
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "Install it from a clone of this repository: mvn install in sdk/java builds both modules and installs them into your local ~/.m2, where the dependency below resolves."
+text = "Install it from a clone of this repository: ./mvnw install in sdk/java builds both modules and installs them into your local ~/.m2, where the dependency below resolves."
 by = ["test:backend/tests/smoke/test_sdk_java_modules.py::test_the_build_has_a_core_module_and_a_spring_boot_starter"]
 
 [[unit]]

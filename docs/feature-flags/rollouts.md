@@ -335,7 +335,7 @@ curl -s -X POST localhost:8000/api/v1/rollout-schedules/$SCHEDULE_ID/cancel \
 It prints `"cancelled"`. The flag's current rollout percentage is not changed. To roll back,
 change the flag itself (see [Creating Feature Flags](create.md)), or use a
 [safety rollback](safety.md#manual-rollback): a rollback to 0% turns the flag off and pauses
-its schedule.
+its schedule. For a string, number or json flag, every user then gets its off value.
 
 ---
 

@@ -159,10 +159,12 @@ text = "Mark one metric as the primary metric (the one you decide on); any other
 by = ["journey:experiment-results#type-next"]
 
 [[unit]]
-text = "A revenue metric's results report its mean value per assigned user; every other metric reports the share of users who sent the metric's event."
+text = "A conversion metric's results report the share of users who sent the metric's event; a revenue, count, duration or custom metric's report its mean per assigned user."
 by = [
     "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
-    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_only_a_revenue_metric_as_a_mean",
+    "test:backend/tests/integration/api/test_value_metrics_results.py::test_a_count_metric_counts_events_sent_with_no_value",
+    "test:backend/tests/integration/api/test_value_metrics_results.py::test_duration_and_custom_add_up_each_users_values",
+    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_every_type_but_conversion_as_a_mean",
 ]
 
 [[unit]]
@@ -843,19 +845,22 @@ by = [
 ]
 
 [[unit]]
-text = "Value | Conversion rate for this variant: the share of its users who sent the metric's event. For a revenue metric, revenue per user: each user's event values added up, averaged over every user assigned to the variant (0 for a user with none), as a plain number with no currency"
+text = "Value | Conversion rate for this variant: the share of its users who sent the metric's event. For a revenue metric, revenue per user: each user's event values added up, averaged over every user assigned to the variant (0 for a user with none), as a plain number with no currency. A count metric reads events per user (how many times each user sent the event), a duration metric duration per user and a custom metric value per user, averaged the same way, with no unit"
 by = [
     "test:frontend/src/tests/components/ResultsTruthfulness.test.tsx::labels the row as a share of users, with no \"$\" and no \"per user\"",
     "test:frontend/src/tests/components/MetricComparisonTable.revenue.test.tsx::shows each variant as a plain amount labelled \"revenue per user\", with no \"%\" or \"$\"",
+    "test:frontend/src/tests/components/MetricComparisonTable.valueMetrics.test.tsx::labels its value by what it is per user, with the difference per user",
     "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
+    "test:backend/tests/integration/api/test_value_metrics_results.py::test_a_count_metric_counts_events_sent_with_no_value",
 ]
 
 [[unit]]
-text = "Change | Relative change vs. control (e.g., +12.3%). A significant change also says better or worse in the metric's direction, so a fall is better when lower is better. For a revenue metric a second line gives the difference per user with its confidence interval, e.g. +1.19 per user (95% CI −0.47 to +2.84), marked unadjusted when the p-value beside it is adjusted"
+text = "Change | Relative change vs. control (e.g., +12.3%). A significant change also says better or worse in the metric's direction, so a fall is better when lower is better. For a revenue, count, duration or custom metric a second line gives the difference per user with its confidence interval, e.g. +1.19 per user (95% CI −0.47 to +2.84), marked unadjusted when the p-value beside it is adjusted"
 by = [
     "journey:experiment-results#results-page",
     "test:frontend/src/tests/components/MetricComparisonTable.lowerIsBetter.test.tsx::lower is better: a significant fall is green \"better\", a significant rise red \"worse\"",
     "test:frontend/src/tests/components/MetricComparisonTable.revenue.test.tsx::gives the difference per user and its interval in the change cell",
+    "test:frontend/src/tests/components/MetricComparisonTable.valueMetrics.test.tsx::labels its value by what it is per user, with the difference per user",
     "test:frontend/src/tests/components/MetricComparisonTable.revenue.test.tsx::says \"unadjusted\" when the row shows an adjusted p-value (a correction with two treatments)",
 ]
 
@@ -889,12 +894,19 @@ by = [
 ]
 
 [[unit]]
-text = "Under the table, a revenue metric has a footnote saying what revenue per user is."
-by = ["test:frontend/src/tests/components/MetricComparisonTable.revenue.test.tsx::says what revenue per user is, under a table with a revenue row"]
+text = "Under the table, a revenue, count, duration or custom metric has a footnote saying what its value per user is."
+by = [
+    "test:frontend/src/tests/components/MetricComparisonTable.revenue.test.tsx::says what revenue per user is, under a table with a revenue row",
+    "test:frontend/src/tests/components/MetricComparisonTable.valueMetrics.test.tsx::has its own footnote, word for word, and no other type’s",
+]
 
 [[unit]]
-text = "If users sent a revenue metric's event but every user's total value is 0, a note says so: send the amount in the event's value field, not in its properties."
-by = ["test:frontend/src/tests/components/MetricComparisonTable.revenue.test.tsx::says so, naming the event, and where the amount belongs"]
+text = "If users sent a revenue, duration or custom metric's event but every user's total value is 0, a note says so: send the amount, duration or number in the event's value field, not in its properties."
+by = [
+    "test:frontend/src/tests/components/MetricComparisonTable.revenue.test.tsx::says so, naming the event, and where the amount belongs",
+    "test:frontend/src/tests/components/MetricComparisonTable.valueMetrics.test.tsx::a %s metric says the %s belongs in the event’s value",
+    "test:frontend/src/tests/components/MetricComparisonTable.valueMetrics.test.tsx::a count metric gets no note: it counts events and does not read value",
+]
 
 [[unit]]
 text = "A metric marked lower is better (lower_is_better), such as a guardrail, is listed like any other metric, with its users and conversions."
@@ -996,7 +1008,7 @@ text = "no users have been assigned yet, or there is no rate to plan from (no co
 by = ["test:frontend/src/tests/components/SampleSizeMeter.test.tsx"]
 
 [[unit]]
-text = "the metric is not a conversion: the plan is for a conversion rate whatever the metric's type, so a revenue metric's plan is for the share of users who buy."
+text = "the metric is not a conversion: the plan is for a conversion rate whatever the metric's type, so a revenue, count, duration or custom metric's plan is for the share of users who send its event."
 by = [
     "test:frontend/src/tests/components/SampleSizeMeter.test.tsx",
     "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_the_other_analyses_of_a_revenue_metric_stay_on_the_share_of_buyers",

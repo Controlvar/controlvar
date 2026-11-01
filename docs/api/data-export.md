@@ -20,8 +20,8 @@ parameters. Asked with another `correction_method` or `confidence_level`, `/resu
 report a different `is_significant`, winner and recommendation than the export; the
 counts, rates and unadjusted p-values are the same.
 
-When the primary metric is a revenue metric, `conversion_rate` is empty: `/results`
-reports that metric's `mean` as a value per assigned user, not a rate. `conversions` is
+When the primary metric is a revenue, count, duration or custom metric, `conversion_rate` is
+empty: `/results` reports that metric's `mean` as a value per assigned user, not a rate. `conversions` is
 still the number of users who sent the metric's event, and `p_value` is the p-value of
 Welch's t-test that `/results` reports.
 
@@ -161,7 +161,7 @@ Same as `/export/experiments` (`format`, `scope`, `start_date`, `end_date`).
 | `is_control`                | boolean | Whether this is the control variant                 |
 | `assignments`               | integer | Number of users assigned to this variant (`sample_size` in `/results`) |
 | `conversions`               | integer | Number of assigned users with at least one conversion on the primary metric (a repeat purchaser counts once) |
-| `conversion_rate`           | float   | Conversion rate [0, 1] (`mean` in `/results`); empty when the primary metric is a revenue metric |
+| `conversion_rate`           | float   | Conversion rate [0, 1] (`mean` in `/results`); empty when the primary metric is a revenue, count, duration or custom metric |
 | `p_value`                   | float   | Unadjusted p-value against control; empty for the control |
 | `is_significant`            | boolean | Whether the result is significant after the experiment's correction, at its confidence level |
 | `relative_improvement_pct`  | float   | Relative improvement over control (%); empty for the control |

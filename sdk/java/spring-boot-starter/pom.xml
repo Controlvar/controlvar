@@ -7,7 +7,7 @@
     <parent>
         <groupId>com.controlvar</groupId>
         <artifactId>controlvar-sdk-parent</artifactId>
-        <version>1.0.0</version>
+        <version>0.1.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -15,10 +15,7 @@
     <packaging>jar</packaging>
 
     <name>Controlvar Spring Boot Starter</name>
-    <description>
-        Spring Boot auto-configuration starter for the Controlvar Java SDK.
-        Provides zero-configuration integration via spring.factories / AutoConfiguration.imports.
-    </description>
+    <description>Spring Boot 3 auto-configuration for the Controlvar Java SDK: registers an ExperimentationClient bean when experimentation.api-key is set. Needs Java 17+.</description>
 
     <properties>
         <spring-boot.version>3.5.16</spring-boot.version>

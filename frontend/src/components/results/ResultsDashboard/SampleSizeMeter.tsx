@@ -2,11 +2,13 @@ import React, { useEffect, useId, useState } from 'react';
 import { ESTIMATE_PROBLEMS } from '@/components/experiments/new/estimate';
 import {
   CorrectionMethod,
+  MetricAnalysis,
   SampleSizeGuideOnlyReason,
   SampleSizeOverrides,
   SampleSizeResult,
   SampleSizeUnavailableReason,
 } from '@/types/results';
+import { meanLabelForType } from '@/components/results/shared/resultFormat';
 
 /**
  * The Sample Size tab (#666): the plan, every input it was calculated from and
@@ -24,27 +26,36 @@ interface SampleSizeMeterProps {
   recalculating?: boolean;
   /** The planned metric's event name, when the experiment could be read. */
   eventName?: string;
+  /**
+   * How the results analysed the planned metric (its `analysis` in the results
+   * response). Without it, as when the results are not loaded, a revenue,
+   * count, duration or custom metric is taken to be a mean, which is how this
+   * server analyses them.
+   */
+  resultsAnalysis?: MetricAnalysis;
 }
 
 /**
- * What a plan for a metric that is not a conversion is for. A revenue
- * metric's results are revenue per user, but its plan, like every plan, is
- * for the share of users who send its event. A count, duration or custom
- * metric is analysed as that share in the results too.
+ * What a plan for a metric that is not a conversion is for. A revenue, count,
+ * duration or custom metric's results are its mean per user ("revenue per
+ * user", "events per user", ...), but its plan, like every plan, is for the
+ * share of users who send its event. Only when the results analysed such a
+ * metric as that share (a server older than #439) does the note say so.
  */
 function metricTypeNote(
   metricName: string | null,
   metricType: string,
   eventName: string | undefined,
+  resultsAnalysis: MetricAnalysis | undefined,
 ): React.ReactNode {
   const name = metricName ?? 'This metric';
-  if (metricType === 'revenue') {
+  if (resultsAnalysis !== 'proportion') {
+    const label = meanLabelForType(metricType);
     return (
       <>
-        {name} is analysed as revenue per user, but this plan is for the share of users who send{' '}
+        {name} is analysed as {label}, but this plan is for the share of users who send{' '}
         {eventName ? <code>{eventName}</code> : 'its event'} (a two-proportion test). A sample-size
-        plan for revenue per user is not available, and the Power Calculator plans conversion rates
-        only.
+        plan for {label} is not available, and the Power Calculator plans conversion rates only.
       </>
     );
   }
@@ -115,6 +126,7 @@ export function SampleSizeMeter({
   onRecalculate,
   recalculating = false,
   eventName,
+  resultsAnalysis,
 }: SampleSizeMeterProps) {
   const {
     current_sample_size_per_variant: current,
@@ -425,7 +437,7 @@ export function SampleSizeMeter({
         </p>
         {metric_type && metric_type !== 'conversion' && (
           <p className="text-xs text-amber-800" data-testid="sample-size-metric-type-note">
-            {metricTypeNote(metric_name, metric_type, eventName)}
+            {metricTypeNote(metric_name, metric_type, eventName, resultsAnalysis)}
           </p>
         )}
 

@@ -33,6 +33,7 @@ by = ["exempt:label"]
 [[unit]]
 text = "From this directory:"
 by = ["exempt:instruction"]
+count = 2
 
 [[unit]]
 text = "generate-env.sh writes .env beside compose.yml with a generated SECRET_KEY, POSTGRES_PASSWORD, FIRST_SUPERUSER_PASSWORD and AUDIT_HMAC_KEY, readable by your user only."
@@ -207,6 +208,135 @@ by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestSh
 [[unit]]
 text = "Releases, images and verification shows how to check what you pulled."
 by = ["exempt:navigation"]
+
+[[unit]]
+text = "Back up and restore"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A backup is two files, taken together: a dump of the database and your .env."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_dump_is_custom_format_and_the_restore_reads_it",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_env_file_is_restored_beside_compose_yml",
+]
+
+[[unit]]
+text = "Keep both outside the Docker volumes, on another machine if you can, and keep them private: .env holds the secrets."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Every command below names the Compose project, experimently-selfhost, which is the name: in compose.yml, and none of them deletes a volume."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_every_compose_command_names_the_stacks_project",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_project_in_the_prose_is_the_composes",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_nothing_in_the_section_deletes_a_volume",
+]
+
+[[unit]]
+text = "Back up"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The dump is made inside the postgres service with the user and database that service was started with (the defaults in compose.yml, unless you set POSTGRES_USER and POSTGRES_DB), and written to the file you redirect it to on the host."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_exec_runs_in_the_postgres_service_without_a_terminal",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_tools_read_the_database_user_and_name_the_service_has",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_dump_is_custom_format_and_the_restore_reads_it",
+]
+
+[[unit]]
+text = ".env has to travel with the dump."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_generated_env_says_its_secrets_cannot_be_regenerated"]
+
+[[unit]]
+text = "generate-env.sh writes a note at the top of it that its secrets cannot be regenerated."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_generated_env_says_its_secrets_cannot_be_regenerated"]
+
+[[unit]]
+text = "SECRET_KEY signs the sign-in tokens, and AUDIT_HMAC_KEY signs the audit records of the full profile: run generate-env.sh again on a new host and it makes different keys."
+by = [
+    "test:backend/tests/unit/core/test_jwt_secret_rotation.py::test_a_token_signed_with_the_old_secret_is_refused_after_the_rotation",
+    "test:modules/backend/tests/unit/services/test_audit_signing_service.py::TestAuditSigningServiceInstantiation::test_service_reads_key_from_settings",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_generated_env_says_its_secrets_cannot_be_regenerated",
+]
+
+[[unit]]
+text = "Redis needs no backup."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_redis_is_optional_and_persists",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRedisRateLimiter::test_falls_back_when_redis_unavailable",
+]
+
+[[unit]]
+text = "In this stack it holds the rate-limit counters and response caches, which the API rebuilds, and the API runs without it (REDIS_REQUIRED is false)."
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRedisRateLimiter::test_uses_redis_when_available",
+    "test:backend/tests/unit/api/test_admin_stats_cache.py::test_admin_stats_cache_miss_writes_the_cache",
+    "test:backend/tests/unit/api/test_admin_stats_cache.py::test_clear_cache_scans_the_namespaces_the_app_actually_writes",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_redis_is_optional_and_persists",
+]
+
+[[unit]]
+text = "It writes an append-only file to its own volume, so a restart keeps its data."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_redis_persists",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_redis_is_optional_and_persists",
+]
+
+[[unit]]
+text = "Restore"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Restore into a fresh stack of the same image tag the dump came from: the same release, because the database records the revision it was migrated to, and the same profile."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version",
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated",
+]
+
+[[unit]]
+text = "An older image refuses to start on a database a newer release migrated (see Database migrations), so restore first and upgrade afterwards, the usual way."
+by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated"]
+
+[[unit]]
+text = "On the new host, put that release's compose.yml and the saved .env in one directory, and do not run generate-env.sh."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_env_file_is_restored_beside_compose_yml",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestGenerator::test_a_second_run_refuses_and_leaves_the_file_alone",
+]
+
+[[unit]]
+text = "Do not run the commands below in the directory of a stack that is running: the first replaces its .env, and the restore loads into whatever database its postgres service holds."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_restore_warns_before_the_block_about_a_running_stack",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_env_file_is_restored_beside_compose_yml",
+]
+
+[[unit]]
+text = "Then:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Only PostgreSQL is started first, so the database it creates is still empty when the dump is loaded: the API creates the schema on its first start."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_postgres_alone_is_started_first_and_nothing_waits_on_it",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_api_creates_the_schema_when_it_starts",
+    "test:backend/tests/integration/database/test_bootstrap_concurrency.py::test_concurrent_bootstraps_on_a_fresh_schema_do_not_race",
+]
+
+[[unit]]
+text = "When the API then starts it finds the restored schema and the restored users, and creates neither a schema nor a first administrator."
+by = [
+    "test:backend/tests/integration/database/test_bootstrap_concurrency.py::test_the_bootstrap_says_whether_it_created_the_first_administrator",
+    "test:backend/tests/integration/database/test_bootstrap_concurrency.py::test_a_long_password_setting_does_not_stop_a_database_that_has_users",
+]
+
+[[unit]]
+text = "To restore on the host that runs the stack, stop it with docker compose -p experimently-selfhost stop, which keeps its volumes, and restore under another project name: the same commands with a different -p start with empty volumes."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_project_in_the_prose_is_the_composes",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_volumes_take_their_names_from_the_project",
+]
 
 [[unit]]
 text = "What CI runs"

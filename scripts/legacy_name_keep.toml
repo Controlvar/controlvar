@@ -28,6 +28,18 @@ count = 3
 reason = "K1: the compose project name sets the volume names; a new name starts an empty database"
 
 [[keep]]
+path = "deploy/compose/README.md"
+literal = "experimently-selfhost"
+count = 6
+reason = "K1: the compose project name sets the volume names; a new name starts an empty database"
+
+[[keep]]
+path = "docs/_claims/deploy/compose/README.md.toml"
+literal = "experimently-selfhost"
+count = 2
+reason = "K1: the compose project name sets the volume names; a new name starts an empty database"
+
+[[keep]]
 path = "deploy/compose/compose.yml"
 literal = "experimently-selfhost"
 count = 2

@@ -1032,6 +1032,22 @@ describe('trackEvent with explicit keys', () => {
 // ─── trackEvent — fan-out ─────────────────────────────────────────────────────
 
 describe('trackEvent fan-out (no explicit keys)', () => {
+  it('#1423: a cached answer older than 24 hours still tags a keyless trackEvent (cacheTtlMs above 24 h)', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(T0);
+    const fetchMock = mockFetchSequence({ body: assignment }, { body: { success_count: 1 } });
+    const client = new ExperimentationClient({ ...baseConfig, cacheTtlMs: 48 * HOUR });
+    await client.assignExperiment(user, 'checkout');
+    now.mockReturnValue(T0 + 25 * HOUR); // past 24 hours, inside the 48 hour cache
+    expect(client.getAssignments('user-123')).toHaveLength(1);
+
+    await client.trackEvent('user-123', 'purchase');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(call(fetchMock, 1).url).toBe(BATCH_URL);
+    expect(batchKeys(call(fetchMock, 1).body)).toEqual(['checkout']);
+    now.mockRestore();
+  });
+
   it('sends the event once to /api/v1/tracking/track with no key and resolves when nothing is attributed to the user', async () => {
     const fetchMock = mockFetch({});
     const client = new ExperimentationClient(baseConfig);
