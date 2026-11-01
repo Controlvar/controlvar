@@ -34,6 +34,14 @@
 # run always uses (fuzz.yml). It was built from the workflow's own stack: a
 # local reproduction of _platform.yml's fuzz arm at that seed, then confirmed
 # by a dispatched run with no 5xx unlisted and no entry stale.
+#
+# Then #1514 gave the flag request schemas value_type, on_value and off_value,
+# which changed the requests the seed sends. The superuser pass no longer
+# sends the requests that answered 500 on GET /api/v1/rollout-schedules/
+# (#1001) and POST /api/v1/metrics/aggregate (#956), so their superuser
+# entries were removed because the run stopped sending those requests, not
+# because the bugs were fixed: both still answer 500 to the requests sent
+# before, and both issues stay open.
 
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
@@ -74,21 +82,7 @@ reason = "A status filter value outside the enum reaches the database query."
 
 [[known]]
 pass = "superuser"
-operation = "GET /api/v1/rollout-schedules/"
-status = 500
-issue = 1001
-reason = "A skip or page beyond the database's offset range reaches the query."
-
-[[known]]
-pass = "superuser"
 operation = "GET /api/v1/metrics/errors"
-status = 500
-issue = 956
-reason = "A date-time with a UTC offset beyond 15:59 reaches the database."
-
-[[known]]
-pass = "superuser"
-operation = "POST /api/v1/metrics/aggregate"
 status = 500
 issue = 956
 reason = "A date-time with a UTC offset beyond 15:59 reaches the database."
