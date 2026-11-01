@@ -20,7 +20,13 @@ The contract (``schema`` 1, beta)::
                                              "value": ["US", "CA"]}],
                              "groups": []}}],
         "default_rule": null},
+       {"key": "checkout_label", "active": true, "evaluation": "local",
+        "rollout_percentage": 50, "rules": [], "default_rule": null,
+        "value_type": "string", "on_value": "Buy now",
+        "off_value": "Purchase"},
        {"key": "old_flag", "active": false},
+       {"key": "old_label", "active": false, "value_type": "string",
+        "off_value": "Purchase"},
        {"key": "semver_flag", "active": true, "evaluation": "remote"}]}
 
 * Stored rules are read through the same
@@ -39,6 +45,22 @@ The contract (``schema`` 1, beta)::
   name and never compiles or runs a pattern.
 * Inactive flags ship as ``{"key", "active": false}``: the server answers
   them ``enabled: false, reason: "inactive"`` whatever their rules say.
+* A string, number or json flag (#1497) adds what it serves: a local entry
+  ``value_type``, ``on_value`` (to the users it is on for) and ``off_value``
+  (to everyone else); an inactive entry ``value_type`` and ``off_value``,
+  the value every user gets while it is off. A remote entry carries no value
+  (the SDK asks the server), and a boolean flag's entry no value field at
+  all, so a deployment with no value flags serves exactly the bytes it served
+  before. ``evaluation`` and the rule shapes are unchanged: a release that
+  does not read values answers such a flag's ``enabled`` and ``reason``
+  locally, as for any other flag.
+* A flag whose stored values cannot be served (a type this release does not
+  know, or a value outside the value rules, which only a direct database
+  write or a release with wider limits leaves:
+  :func:`~backend.app.core.flag_values.servable_values`, the evaluate route's
+  own test) is ``{"key", "active": true, "evaluation": "remote"}`` whatever
+  its status: the SDK asks the server, which answers it without a value. Its
+  values never reach the document.
 * Nothing else about a flag is included: not its name, description, owner,
   tags, variants or workspace.
 * ``version`` is the sha256 of the canonical JSON of everything else
@@ -59,7 +81,12 @@ import hashlib
 import json
 from typing import Any, Dict, Iterable, List, Optional
 
-from backend.app.core.flag_values import is_portable_number
+from backend.app.core.flag_values import (
+    BOOLEAN,
+    flag_value_type,
+    is_portable_number,
+    servable_values,
+)
 from backend.app.core.targeting_adapter import normalise_targeting_rules
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.schemas.targeting_rule import (
@@ -190,12 +217,35 @@ def is_active(flag: FeatureFlag) -> bool:
     return flag.status in (FeatureFlagStatus.ACTIVE, FeatureFlagStatus.ACTIVE.value)
 
 
+def value_fields(flag: FeatureFlag) -> Optional[Dict[str, Any]]:
+    """The value fields of *flag*'s local entry, or ``None`` when it has none.
+
+    ``{}`` for a boolean flag; ``{"value_type", "on_value", "off_value"}`` for
+    a string, number or json flag; ``None`` when its stored values cannot be
+    served (``servable_values``), which makes the flag a remote entry.
+    """
+    pair = servable_values(flag)
+    if pair is None:
+        return None
+    value_type = flag_value_type(flag)
+    if value_type == BOOLEAN:
+        return {}
+    return {"value_type": value_type, "on_value": pair[0], "off_value": pair[1]}
+
+
 def build_flag_entry(flag: FeatureFlag) -> Dict[str, Any]:
     """The ruleset entry for one flag."""
-    if not is_active(flag):
-        return {"key": flag.key, "active": False}
-
     remote = {"key": flag.key, "active": True, "evaluation": EVALUATION_REMOTE}
+    values = value_fields(flag)
+    if values is None:
+        return remote
+    if not is_active(flag):
+        inactive: Dict[str, Any] = {"key": flag.key, "active": False}
+        if values:
+            inactive["value_type"] = values["value_type"]
+            inactive["off_value"] = values["off_value"]
+        return inactive
+
     stored = flag.targeting_rules
     if isinstance(stored, list) and stored:
         # The legacy list shape has its own semantics (raw context, strict
@@ -229,6 +279,7 @@ def build_flag_entry(flag: FeatureFlag) -> Dict[str, Any]:
         "rollout_percentage": int(flag.rollout_percentage or 0),
         "rules": rules,
         "default_rule": default_rule,
+        **values,
     }
 
 

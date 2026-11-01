@@ -52,7 +52,7 @@ const vectors = JSON.parse(readFileSync(VECTORS_PATH, 'utf8')) as Vectors;
  * Pinned. A change here is a change to what this SDK must answer locally: it moves only with a
  * regenerated vectors file (and the backend pin in test_sdk_ruleset_vectors.py).
  */
-const EXPECTED_COUNTS = { cases: 2191, flags: 149, must_local: 1294 };
+const EXPECTED_COUNTS = { cases: 2242, flags: 161, must_local: 1333 };
 
 /**
  * A case's context is what the server received, so it is evaluated as parsed, not round-tripped

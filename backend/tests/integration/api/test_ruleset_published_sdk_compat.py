@@ -14,9 +14,11 @@ created through the API and its rules written as a row from before #743 was.
 Since #1497 (F4) it also creates a flag of every value type (boolean, string,
 number, json) served by the rollout, by a dashboard rule, by a native
 ``default_rule``, and off: 16, the count asserted. ``/evaluate`` serves each
-one's on value exactly when ``enabled`` and its off value otherwise; the
-ruleset carries no values yet (F5 adds them), so the published wheels must
-still answer every value flag's ``enabled`` exactly as the server does.
+one's on value exactly when ``enabled`` and its off value otherwise. Since
+F5 the ruleset carries each string, number and json flag's ``value_type`` and
+values (both on a local entry, the off value on an inactive one), and the
+published wheels, which read no value, must still answer every value flag's
+``enabled`` and ``reason`` exactly as the server does.
 
 * The route answers 200 with exactly one entry per stored flag.
 * Each wheel runs in its own ``python -I -S`` process with only its verified
@@ -428,6 +430,24 @@ def test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches(
         assert ours[shape]["active"] is (evaluation is not None), (shape, ours[shape])
         assert ours[shape].get("evaluation") == evaluation, (shape, ours[shape])
     assert ours["native"]["default_rule"]["rollout_percentage"] == 40
+    # The value fields each entry carries (F5): a string, number or json
+    # flag's type and values, as stored; nothing for a boolean flag.
+    for shape in VALUE_SHAPES:
+        value_type = next(t for t in VALUE_TYPES if shape.startswith(f"{t}-"))
+        entry = ours[shape]
+        carried = {
+            f: entry[f] for f in ("value_type", "on_value", "off_value") if f in entry
+        }
+        pair = VALUE_PAIRS[value_type]
+        if not pair:
+            expected_fields = {}
+        elif entry["active"]:
+            expected_fields = {"value_type": value_type, **pair}
+        else:
+            expected_fields = {"value_type": value_type, "off_value": pair["off_value"]}
+        assert json.dumps(carried, sort_keys=True) == json.dumps(
+            expected_fields, sort_keys=True
+        ), (shape, entry)
     probes_first = _probes(keys.values())
     expected_first = [
         _evaluate(client, api_key, p["flag"], p["user_id"], p["context"])

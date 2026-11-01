@@ -18,7 +18,14 @@ What the SDKs check against it (in their own jobs):
   ``expected`` (``{enabled, reason}``);
 * for every case marked ``must_local`` it answers locally, with exactly
   ``expected``; ``counts.must_local`` is the number of such cases, so an SDK
-  that defers everything fails.
+  that defers everything fails;
+* a case of a string, number or json flag (#1497) also carries
+  ``expected_value``: the value ``/feature-flags/evaluate/{key}`` answers in
+  ``value``. It is a key of its own, beside ``expected``, so an SDK that does
+  not read values compares ``expected`` exactly as before; one that does
+  gives exactly that value, compared as JSON, whenever it answers locally.
+  The corpus holds every such type as an active local flag, an active remote
+  flag, an inactive flag and an archived flag.
 
 ``must_local`` is the domain rule of the local evaluator, applied on the
 server side: the flag is ``evaluation: "local"`` (or inactive), ``user_id``
@@ -76,7 +83,16 @@ if __name__ == "__main__":  # pragma: no cover - run as a script
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
 
-from backend.app.core.flag_values import MAX_SAFE_INTEGER, is_portable_number
+from backend.app.core.flag_values import (
+    BOOLEAN,
+    JSON,
+    MAX_SAFE_INTEGER,
+    NUMBER,
+    STRING,
+    VALUE_TYPES,
+    is_portable_number,
+    served_value,
+)
 from backend.app.core.rules_engine import evaluate_rule
 from backend.app.core.targeting_adapter import (
     expand_context,
@@ -202,7 +218,11 @@ class Corpus:
         targeting_rules: Any,
         rollout_percentage: int = 0,
         status: str = "ACTIVE",
+        values: Optional[Tuple[str, Any, Any]] = None,
     ) -> str:
+        """A stored flag. *values* is ``(value_type, on_value, off_value)`` for
+        a string, number or json flag; a boolean flag stores none, as its row
+        does, and its line in the file is the one it had before #1497."""
         assert key not in self.flags, key
         self.flags[key] = {
             "key": key,
@@ -210,6 +230,12 @@ class Corpus:
             "rollout_percentage": rollout_percentage,
             "targeting_rules": targeting_rules,
         }
+        if values is not None:
+            value_type, on_value, off_value = values
+            assert value_type != BOOLEAN, key
+            self.flags[key].update(
+                value_type=value_type, on_value=on_value, off_value=off_value
+            )
         return key
 
     def case(self, key: str, user_id: str, context: Optional[Dict[str, Any]]) -> None:
@@ -276,6 +302,7 @@ def build_corpus() -> Corpus:
     _unicode_flags(corpus)
     _remote_flags(corpus)
     _segment_flags(corpus)
+    _value_flags(corpus)
     return corpus
 
 
@@ -725,6 +752,70 @@ def stub_memberships(db, user_id, context, segment_ids) -> SegmentMemberships:
     )
 
 
+#: The two values of each value type the corpus serves (#1497): plain words
+#: and small numbers, so nothing in the file reads as a credential to the
+#: leak scan (PE-8). An integer and a fraction; an object and an array.
+VALUE_PAIRS: Dict[str, Tuple[Any, Any]] = {
+    STRING: ("on-copy", "off-copy"),
+    NUMBER: (10, 2.5),
+    JSON: ({"color": "blue"}, ["fallback"]),
+}
+
+#: How a value flag reaches an SDK, each with its own flag per value type.
+VALUE_CLASSES = ("local", "remote", "inactive", "archived")
+
+
+def value_flag_key(value_type: str, value_class: str) -> str:
+    return f"value-{value_type}-{value_class}"
+
+
+def _value_flags(corpus: Corpus) -> None:
+    """Every value type but boolean, as each class of ruleset entry.
+
+    * ``local``: a rule (``plan`` equals ``pro``, 100%) and a 50% rollout, so
+      one flag serves its on value by the rule and by the rollout and its off
+      value outside the rollout; a ``plan`` that is not a string is outside
+      the local domain, and the SDK asks the server.
+    * ``remote``: a semantic-version rule, which only the server evaluates.
+    * ``inactive`` and ``archived``: the off value for everyone.
+    """
+    local_rules = dashboard(cond("plan", "equals", "pro"))
+    remote_rules = dashboard(cond("v", "semver_gte", "1.2"))
+    for value_type in VALUE_TYPES:
+        if value_type == BOOLEAN:
+            continue
+        values = (value_type, *VALUE_PAIRS[value_type])
+        key = corpus.flag(
+            value_flag_key(value_type, "local"),
+            local_rules,
+            rollout_percentage=50,
+            values=values,
+        )
+        corpus.case(key, USER, {"plan": "pro"})
+        for user in USERS[:8]:
+            corpus.case(key, user, {"plan": "free"})
+        corpus.case(key, USER, {"plan": 5})
+        key = corpus.flag(
+            value_flag_key(value_type, "remote"),
+            remote_rules,
+            rollout_percentage=30,
+            values=values,
+        )
+        corpus.case(key, USER, {"v": "1.3.0"})
+        corpus.case(key, USER, None)
+        corpus.case(key, "user-7", None)
+        for status in ("INACTIVE", "ARCHIVED"):
+            key = corpus.flag(
+                value_flag_key(value_type, status.lower()),
+                local_rules,
+                rollout_percentage=100,
+                status=status,
+                values=values,
+            )
+            corpus.case(key, USER, {"plan": "pro"})
+            corpus.case(key, USER, None)
+
+
 # ---------------------------------------------------------------------------
 # Evaluation
 # ---------------------------------------------------------------------------
@@ -736,13 +827,20 @@ def _roundtrip(value: Any) -> Any:
 
 
 def stored_flag(spec: Dict[str, Any]) -> FeatureFlag:
-    """A transient ``FeatureFlag`` carrying exactly what the database would."""
+    """A transient ``FeatureFlag`` carrying exactly what the database would.
+
+    A boolean flag's ``value_type`` is ``boolean`` and its two value columns
+    NULL, as the ``check_flag_values`` constraint requires.
+    """
     return FeatureFlag(
         key=spec["key"],
         name=spec["key"],
         status=FeatureFlagStatus[spec["status"]],
         rollout_percentage=spec["rollout_percentage"],
         targeting_rules=_roundtrip(spec["targeting_rules"]),
+        value_type=spec.get("value_type", BOOLEAN),
+        on_value=_roundtrip(spec.get("on_value")),
+        off_value=_roundtrip(spec.get("off_value")),
     )
 
 
@@ -761,6 +859,17 @@ def server_answer(
             flag, user_id, context
         )
     return {"enabled": bool(result["enabled"]), "reason": result["reason"]}
+
+
+def server_value(flag: FeatureFlag, answer: Dict[str, Any]) -> Any:
+    """The ``value`` ``/feature-flags/evaluate/{key}`` answers with *answer*.
+
+    The route's own ``served_value``. Every corpus value is within the value
+    rules, so every value flag here has one to serve.
+    """
+    servable, value = served_value(flag, answer["enabled"])
+    assert servable, flag.key
+    return value
 
 
 def _well_formed(text: str) -> bool:
@@ -855,16 +964,19 @@ def iter_cases(corpus: Corpus) -> Iterator[Dict[str, Any]]:
     for key, user_id, context in corpus.cases:
         context = _roundtrip(context)
         counters[key] = counters.get(key, 0) + 1
-        yield {
+        case: Dict[str, Any] = {
             "id": f"{key}#{counters[key]}",
             "flag": key,
             "user_id": user_id,
             "context": context,
             "expected": server_answer(flags[key], user_id, context),
-            "must_local": must_answer_locally(
-                corpus.flags[key], entries[key], user_id, context
-            ),
         }
+        if "value_type" in corpus.flags[key]:
+            case["expected_value"] = server_value(flags[key], case["expected"])
+        case["must_local"] = must_answer_locally(
+            corpus.flags[key], entries[key], user_id, context
+        )
+        yield case
 
 
 @contextlib.contextmanager
