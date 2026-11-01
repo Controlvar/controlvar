@@ -154,8 +154,16 @@ def test_the_vectors_through_get_feature_flag(no_thread):
     wrong, unsendable = [], []
     local_answers = 0
     for case in VECTORS["cases"]:
-        server.evaluate = lambda query, case=case: make_response(
-            200, {"key": case["flag"], "enabled": case["expected"]["enabled"], "config": None, "reason": case["expected"]["reason"]}
+        value = case["expected_value"] if "expected_value" in case else case["expected"]["enabled"]
+        server.evaluate = lambda query, case=case, value=value: make_response(
+            200,
+            {
+                "key": case["flag"],
+                "enabled": case["expected"]["enabled"],
+                "value": value,
+                "config": None,
+                "reason": case["expected"]["reason"],
+            },
         )
         before = len(server.calls("/api/v1/feature-flags/evaluate/"))
         try:
@@ -168,6 +176,8 @@ def test_the_vectors_through_get_feature_flag(no_thread):
         remote = len(server.calls("/api/v1/feature-flags/evaluate/")) - before
         if (result.enabled, result.reason) != (case["expected"]["enabled"], case["expected"]["reason"]):
             wrong.append((case["id"], result))
+        if json.dumps(result.value) != json.dumps(value):
+            wrong.append((case["id"], "value", result.value, "the server's is", value))
         if remote != (0 if case["must_local"] else 1) or result.source != ("server" if remote else "local"):
             wrong.append((case["id"], "must_local", case["must_local"], remote, result.source))
         local_answers += result.source == "local"
@@ -284,6 +294,182 @@ def test_server_mode_is_unchanged():
     assert client.status().evaluation == "server"
     with client:
         pass
+
+
+# ----------------------------------------------------------------------- flag values in local mode
+
+US_RULE = {
+    "id": "us",
+    "rollout_percentage": 100,
+    "match": {"op": "and", "conditions": [{"attribute": "user.country", "operator": "eq", "value": "US"}], "groups": []},
+}
+EVERYONE = {"active": True, "evaluation": "local", "rollout_percentage": 100, "rules": [], "default_rule": None}
+THEME = {"color": "blue", "sizes": [1, 2]}
+VALUE_RULESET = dict(
+    RULESET,
+    version="v3",
+    flags=RULESET["flags"]
+    + [
+        dict(
+            EVERYONE,
+            key="label",
+            rollout_percentage=0,
+            rules=[US_RULE],
+            value_type="string",
+            on_value="Complete purchase",
+            off_value="Buy now",
+        ),
+        dict(EVERYONE, key="limit", value_type="number", on_value=10, off_value=2.5),
+        dict(EVERYONE, key="theme", value_type="json", on_value=THEME, off_value=["fallback"]),
+        {"key": "killed-label", "active": False, "value_type": "string", "off_value": "Buy now"},
+        {"key": "remote-label", "active": True, "evaluation": "remote"},
+        {"key": "remote-limit", "active": True, "evaluation": "remote"},
+    ],
+)
+
+
+def test_the_typed_getters_answer_value_flags_from_the_ruleset_with_no_request(no_thread):
+    server = FakeServer(ok(VALUE_RULESET, '"v3"'))
+    client, errors = loaded(server)
+    before = len(server.requests)
+    assert client.get_string_value("label", "user-1", US, default="default") == "Complete purchase"
+    assert client.get_string_value("label", "user-1", FR, default="default") == "Buy now"
+    assert client.get_string_value("killed-label", "user-1", US, default="default") == "Buy now"
+    assert client.get_number_value("limit", "user-1", US, default=0) == 10
+    assert client.get_json_value("theme", "user-1", US, default={}) == THEME
+    result = client.get_feature_flag("label", "user-1", FR)
+    assert (result.enabled, result.reason, result.value, result.value_type, result.source) == (
+        False,
+        "rollout",
+        "Buy now",
+        "string",
+        "local",
+    )
+    killed = client.get_feature_flag("killed-label", "user-1", US)
+    assert (killed.enabled, killed.reason, killed.value, killed.source) == (False, "inactive", "Buy now", "local")
+    plain = client.get_feature_flag("all-on", "user-1")
+    assert (plain.value, plain.value_type) == (True, "boolean")
+    assert len(server.requests) == before
+    assert errors == []
+
+
+def test_a_remote_string_flag_and_a_remote_number_flag_served_off_return_the_off_value_the_server_sends(no_thread):
+    server = FakeServer(ok(VALUE_RULESET, '"v3"'))
+    off = {
+        "remote-label": {"value": "off-copy", "value_type": "string"},
+        "remote-limit": {"value": 2.5, "value_type": "number"},
+    }
+    asked: List[str] = []
+
+    def evaluate(query: Dict[str, str]) -> Response:
+        key = server.requests[-1]["path"].rsplit("/", 1)[-1]
+        asked.append(key)
+        return make_response(200, dict({"key": key, "enabled": False, "config": None, "reason": "rollout"}, **off[key]))
+
+    server.evaluate = evaluate
+    client, errors = loaded(server)
+    assert client.get_string_value("remote-label", "user-1", US, default="default") == "off-copy"
+    assert client.get_number_value("remote-limit", "user-1", US, default=99) == 2.5
+    result = client.get_feature_flag("remote-label", "user-1", US)  # cached: no third request
+    assert (result.enabled, result.value, result.value_type, result.source) == (False, "off-copy", "string", "server")
+    assert asked == ["remote-label", "remote-limit"]
+    assert errors == []
+
+
+def test_a_json_value_handed_out_is_a_copy_changing_it_changes_neither_the_ruleset_nor_the_next_answer(no_thread):
+    client, _ = loaded(FakeServer(ok(VALUE_RULESET, '"v3"')))
+    first = client.get_json_value("theme", "a", default={"color": "", "sizes": []})
+    first["color"] = "red"
+    first["sizes"].append(3)
+    evaluated = client.get_feature_flag("theme", "b").value
+    evaluated["color"] = "green"
+    second = client.get_json_value("theme", "c", default={})
+    # Literals, and the client's own indexed ruleset: handing out the ruleset's object would
+    # change both.
+    assert second == {"color": "blue", "sizes": [1, 2]}
+    assert second is not first
+    assert client._local._snapshot()[0].flags["theme"]["on_value"] == {"color": "blue", "sizes": [1, 2]}
+
+
+def test_turning_a_value_flag_off_reaches_the_client_at_the_next_refresh(no_thread):
+    killed = dict(
+        VALUE_RULESET,
+        version="v4",
+        flags=[
+            {"key": "label", "active": False, "value_type": "string", "off_value": "Buy now"} if f["key"] == "label" else f
+            for f in VALUE_RULESET["flags"]
+        ],
+    )
+    client, _ = loaded(FakeServer(ok(VALUE_RULESET, '"v3"'), ok(killed, '"v4"')))
+    assert client.get_string_value("label", "user-1", US, default="default") == "Complete purchase"
+    client._local.refresh_once()
+    assert client.status().ruleset_version == "v4"
+    assert client.get_string_value("label", "user-1", US, default="default") == "Buy now"
+    result = client.get_feature_flag("label", "user-1", US)
+    assert (result.enabled, result.reason, result.source) == (False, "inactive", "local")
+
+
+def test_against_a_server_from_before_flag_values_every_local_flag_reads_as_boolean(no_thread):
+    """E3: RULESET is that server's shape (no entry names a type). It loads and answers locally;
+    a typed getter returns the caller's default and reports TYPE_MISMATCH, never raises."""
+    server = FakeServer(ok())
+    client, errors = loaded(server)
+    before = len(server.requests)
+    result = client.get_feature_flag("all-on", "user-1")
+    assert (result.source, result.value, result.value_type) == ("local", True, "boolean")
+    assert client.get_string_value("all-on", "user-1", default="default") == "default"
+    assert client.get_number_value("off", "user-1", default=7) == 7
+    assert len(server.requests) == before
+    assert [(op, err.code, err.message) for op, err in errors] == [
+        ("value", "TYPE_MISMATCH", 'Flag "all-on" serves a boolean; get_string_value returned your default'),
+        ("value", "TYPE_MISMATCH", 'Flag "off" serves a boolean; get_number_value returned your default'),
+    ]
+
+
+def test_an_entry_this_sdk_cannot_read_sends_that_flag_to_the_server_and_the_rest_stay_local(no_thread):
+    """Q12: one unknown flag never invalidates the document."""
+    newer = dict(
+        RULESET,
+        version="v5",
+        flags=RULESET["flags"]
+        + [
+            dict(EVERYONE, key="launch-date", value_type="date", on_value="2026-11-01", off_value="2026-12-01"),
+            {"key": "next-gen", "active": True, "evaluation": "local_v3"},
+            dict(EVERYONE, key="mistyped", value_type="number", on_value="10", off_value=2.5),
+        ],
+    )
+    server = FakeServer(ok(newer, '"v5"'))
+
+    def evaluate(query: Dict[str, str]) -> Response:
+        key = server.requests[-1]["path"].rsplit("/", 1)[-1]
+        if key == "launch-date":
+            return make_response(
+                200,
+                {"key": key, "enabled": True, "value": "2026-11-01", "value_type": "date", "config": None, "reason": "rollout"},
+            )
+        return make_response(200, {"key": key, "enabled": True, "value": True, "value_type": "boolean", "config": None, "reason": "rollout"})
+
+    server.evaluate = evaluate
+    server.user_flags = lambda: make_response(
+        200, {"all-on": True, "us-only": True, "launch-date": True, "next-gen": True, "mistyped": True}
+    )
+    client, errors = loaded(server)
+    assert client.ready(0) == ReadyResult(True, "v5")
+    assert client.status().server_evaluated_flags == ["launch-date", "mistyped", "next-gen"]
+
+    assert client.get_feature_flag("all-on", "user-1", US).source == "local"
+    for key in ("launch-date", "next-gen", "mistyped"):
+        assert client.get_feature_flag(key, "user-1", US).source == "server"
+    assert len(server.calls("/api/v1/feature-flags/evaluate/")) == 3
+    client.get_all_flags("user-1", US)
+    assert len(server.calls("/api/v1/feature-flags/user/")) == 1
+    assert errors == []
+
+    # The server's answer names a type this SDK has no getter for: the caller's default.
+    assert client.get_string_value("launch-date", "user-1", US, default="soon") == "soon"
+    assert [(op, err.code, err.message) for op, err in errors] == [
+        ("value", "TYPE_MISMATCH", 'Flag "launch-date" serves a value of type "date"; get_string_value returned your default')
+    ]
 
 
 # ----------------------------------------------------------------------- the refresh failure table

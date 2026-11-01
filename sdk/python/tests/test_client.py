@@ -3,6 +3,8 @@ test can assert the exact method, URL, headers and JSON body that would hit the 
 
 from __future__ import annotations
 
+import dataclasses
+import inspect
 import json
 import threading
 from datetime import datetime, timezone
@@ -383,6 +385,296 @@ class TestGetAllFlags:
         with pytest.raises(ExperimentationError) as info:
             client.get_all_flags("u")
         assert info.value.status == 401
+
+
+# --------------------------------------------------------------------------- typed values
+
+GETTERS = ("get_string_value", "get_number_value", "get_json_value")
+#: A default of each getter's type, different from every value served below.
+DEFAULTS = {"get_string_value": "the default", "get_number_value": -1, "get_json_value": {"the": "default"}}
+
+
+def served(**fields):
+    """An evaluate answer for flag ``f``."""
+    return {"key": "f", "enabled": True, "config": None, "reason": "rollout", **fields}
+
+
+def value_client(transport, **kwargs):
+    errors = []
+    client = ExperimentationClient(
+        API_URL, API_KEY, transport=transport, on_error=lambda error, operation: errors.append((error, operation)), **kwargs
+    )
+    return client, errors
+
+
+class TestFlagEvaluationValue:
+    def test_copies_the_servers_value_and_value_type(self, client, transport):
+        transport.respond(200, json=served(value="Complete purchase", value_type="string"))
+        assert client.get_feature_flag("f", "user-1") == FlagEvaluation(
+            key="f", enabled=True, config=None, reason="rollout", value="Complete purchase", value_type="string"
+        )
+
+    def test_both_are_none_when_an_older_server_sends_neither(self, client, transport):
+        flag_route(transport)
+        evaluation = client.get_feature_flag("new_search", "user-1")
+        assert (evaluation.value, evaluation.value_type) == (None, None)
+
+    def test_a_value_type_that_is_not_a_string_is_none(self, client, transport):
+        transport.respond(200, json=served(value="x", value_type=7))
+        assert client.get_feature_flag("f", "user-1").value_type is None
+
+    def test_value_and_value_type_come_after_every_older_field(self):
+        assert [f.name for f in dataclasses.fields(FlagEvaluation)] == [
+            "key",
+            "enabled",
+            "config",
+            "reason",
+            "source",
+            "value",
+            "value_type",
+        ]
+
+    def test_positional_construction_by_existing_callers_keeps_working(self):
+        evaluation = FlagEvaluation("k", True, {"a": 1}, "rollout", "local")
+        assert (evaluation.key, evaluation.enabled, evaluation.config, evaluation.reason, evaluation.source) == (
+            "k",
+            True,
+            {"a": 1},
+            "rollout",
+            "local",
+        )
+        assert (evaluation.value, evaluation.value_type) == (None, None)
+        assert FlagEvaluation("k", False).value is None
+        full = FlagEvaluation("k", True, None, "rollout", None, "Buy now", "string")
+        assert (full.value, full.value_type) == ("Buy now", "string")
+
+    def test_an_experimentation_error_built_by_position_keeps_working(self):
+        error = ExperimentationError("GET /x failed with HTTP 404", 404, '{"detail":"no"}')
+        assert (error.message, error.status, error.body, error.code) == (
+            "GET /x failed with HTTP 404",
+            404,
+            '{"detail":"no"}',
+            None,
+        )
+        assert TransportError("down").code is None
+
+
+class TestTypedValues:
+    @pytest.mark.parametrize(
+        "method, fields, expected",
+        [
+            ("get_string_value", {"value": "Complete purchase", "value_type": "string"}, "Complete purchase"),
+            ("get_string_value", {"value": "", "value_type": "string"}, ""),
+            ("get_number_value", {"value": 10, "value_type": "number"}, 10),
+            ("get_number_value", {"value": 2.5, "value_type": "number"}, 2.5),
+            ("get_number_value", {"value": 0, "value_type": "number"}, 0),
+            ("get_number_value", {"value": -(2**53 - 1), "value_type": "number"}, -(2**53 - 1)),
+            ("get_json_value", {"value": {"color": "blue"}, "value_type": "json"}, {"color": "blue"}),
+            ("get_json_value", {"value": ["a", 1], "value_type": "json"}, ["a", 1]),
+            ("get_json_value", {"value": {}, "value_type": "json"}, {}),
+        ],
+    )
+    def test_returns_the_value_the_flag_serves(self, transport, method, fields, expected):
+        transport.respond(200, json=served(**fields))
+        client, errors = value_client(transport)
+        assert getattr(client, method)("f", "user-1", {"plan": "pro"}, default=DEFAULTS[method]) == expected
+        assert transport.last.url == f"{API_URL}/api/v1/feature-flags/evaluate/f?user_id=user-1&context=%7B%22plan%22%3A%22pro%22%7D"
+        assert errors == []
+
+    def test_an_integral_float_is_a_number_and_stays_a_float(self, transport):
+        """OPEN-11: JSON's ``10.0`` reaches Python as a float; it is a number, served as saved."""
+        transport.respond(200, body=b'{"key": "f", "enabled": true, "value": 10.0, "value_type": "number"}')
+        client, errors = value_client(transport)
+        value = client.get_number_value("f", "user-1", default=-1)
+        assert value == 10.0 and isinstance(value, float)
+        assert errors == []
+
+    @pytest.mark.parametrize("reason", ["rollout", "targeting_rule", "inactive", "error"])
+    def test_returns_the_off_value_the_server_sends_when_the_flag_is_off_for_the_user(self, transport, reason):
+        transport.respond(200, json=served(enabled=False, reason=reason, value="Buy now", value_type="string"))
+        client, errors = value_client(transport)
+        assert client.get_string_value("f", "user-1", default="the default") == "Buy now"
+        assert errors == []
+
+    def test_is_evaluated_once_per_user_and_flag_for_cache_ttl_seconds_like_get_feature_flag(self, client, transport):
+        transport.route("GET", "/api/v1/feature-flags/evaluate/f", json=served(value=10, value_type="number"))
+        client.get_number_value("f", "user-1", default=0)
+        client.get_number_value("f", "user-1", default=0)
+        client.get_feature_flag("f", "user-1")
+        assert len(transport.requests) == 1
+
+    def test_cache_ttl_zero_caches_nothing(self, transport):
+        transport.route("GET", "/api/v1/feature-flags/evaluate/f", json=served(value=10, value_type="number"))
+        client = ExperimentationClient(API_URL, API_KEY, cache_ttl_seconds=0, transport=transport)
+        with mock.patch("controlvar.cache._now", return_value=1000.0):
+            client.get_number_value("f", "user-1", default=0)
+            client.get_number_value("f", "user-1", default=0)
+            assert client.cached_flags("user-1") == []
+        assert len(transport.requests) == 2
+
+    @pytest.mark.parametrize(
+        "label, prepare, status, code",
+        [
+            ("a network failure", lambda t: t.fail(TransportError("connection refused")), None, None),
+            ("an unknown flag (404)", lambda t: t.respond(404, json={"detail": "not found"}), 404, None),
+            ("a 500", lambda t: t.respond(500, body=b"boom"), 500, None),
+            ("a body that is not JSON", lambda t: t.respond(200, body=b"<html>"), 200, None),
+            ("an older server, which sends no value", lambda t: t.respond(200, json=FLAG_RESPONSE), None, "INVALID_RESPONSE"),
+            (
+                "a stored value the server cannot serve (value_type and no value)",
+                lambda t: t.respond(200, json=served(value_type="string")),
+                None,
+                "INVALID_RESPONSE",
+            ),
+        ],
+    )
+    def test_each_returns_the_default_and_reports(self, label, prepare, status, code):
+        for method in GETTERS:
+            transport = FakeTransport()
+            prepare(transport)
+            client, errors = value_client(transport)
+            assert getattr(client, method)("f", "user-1", default=DEFAULTS[method]) is DEFAULTS[method]
+            assert [(type(error), error.status, error.code, operation) for error, operation in errors] == [
+                (TransportError if label == "a network failure" else ExperimentationError, status, code, "value")
+            ], label
+
+    def test_names_what_an_older_server_lacks(self, transport):
+        flag_route(transport)
+        client, errors = value_client(transport)
+        client.get_string_value("new_search", "user-1", default="x")
+        assert errors[0][0].message == (
+            'Flag "new_search" came back without a value (from a server without flag values, or one that cannot '
+            "serve this flag's stored value); get_string_value returned your default"
+        )
+
+    STRING = {"value": "Buy now", "value_type": "string"}
+    NUMBER = {"value": 10, "value_type": "number"}
+    JSON_VALUE = {"value": {"color": "blue"}, "value_type": "json"}
+    BOOLEAN = {"value": True, "value_type": "boolean"}
+
+    @pytest.mark.parametrize(
+        "method, name, fields",
+        [
+            ("get_number_value", "a string", STRING),
+            ("get_json_value", "a string", STRING),
+            ("get_string_value", "a number", NUMBER),
+            ("get_json_value", "a number", NUMBER),
+            ("get_string_value", "a JSON value", JSON_VALUE),
+            ("get_number_value", "a JSON value", JSON_VALUE),
+            ("get_string_value", "a boolean", BOOLEAN),
+            ("get_number_value", "a boolean", BOOLEAN),
+            ("get_json_value", "a boolean", BOOLEAN),
+        ],
+    )
+    def test_on_a_flag_of_another_type_the_default_and_type_mismatch(self, transport, method, name, fields):
+        transport.respond(200, json=served(key="checkout-button-label", **fields))
+        client, errors = value_client(transport)
+        assert getattr(client, method)("checkout-button-label", "user-1", default=DEFAULTS[method]) is DEFAULTS[method]
+        assert len(errors) == 1
+        error, operation = errors[0]
+        assert (operation, error.code, error.status) == ("value", "TYPE_MISMATCH", None)
+        assert error.message == f'Flag "checkout-button-label" serves {name}; {method} returned your default'
+
+    def test_never_coerces_a_string_10_is_not_a_number_and_10_is_not_a_string(self, transport):
+        transport.respond(200, json=served(key="a", value="10", value_type="string"))
+        transport.respond(200, json=served(key="b", value=10, value_type="number"))
+        client, errors = value_client(transport)
+        assert client.get_number_value("a", "user-1", default=-1) == -1
+        assert client.get_string_value("b", "user-1", default="x") == "x"
+        assert [error.code for error, _ in errors] == ["TYPE_MISMATCH", "TYPE_MISMATCH"]
+
+    def test_reads_the_values_own_type_when_the_server_sends_no_value_type(self, transport):
+        transport.respond(200, json=served(value="Buy now"))
+        client, errors = value_client(transport)
+        assert client.get_string_value("f", "user-1", default="x") == "Buy now"
+        assert client.get_number_value("f", "user-1", default=-1) == -1
+        assert [error.message for error, _ in errors] == ['Flag "f" serves a string; get_number_value returned your default']
+
+    @pytest.mark.parametrize(
+        "method, fields",
+        [
+            ("get_number_value", {"value": "10", "value_type": "number"}),
+            ("get_number_value", {"value": True, "value_type": "number"}),
+            ("get_number_value", {"value": 2**53, "value_type": "number"}),
+            ("get_number_value", {"value": float("inf"), "value_type": "number"}),
+            ("get_number_value", {"value": float("nan"), "value_type": "number"}),
+            ("get_json_value", {"value": "x", "value_type": "json"}),
+            ("get_string_value", {"value": 7, "value_type": "string"}),
+        ],
+    )
+    def test_a_value_that_is_not_of_the_type_the_server_names_is_the_default_never_a_wrong_value(
+        self, transport, method, fields
+    ):
+        transport.respond(200, json=served(**fields))
+        client, errors = value_client(transport)
+        assert getattr(client, method)("f", "user-1", default=DEFAULTS[method]) is DEFAULTS[method]
+        assert [(error.code, operation) for error, operation in errors] == [("INVALID_RESPONSE", "value")]
+        assert "but the server's value is not one" in errors[0][0].message
+
+    def test_reports_every_call_that_returns_the_default_not_only_the_first(self, transport):
+        transport.route("GET", "/api/v1/feature-flags/evaluate/f", json=served(value="Buy now", value_type="string"))
+        client, errors = value_client(transport)
+        client.get_number_value("f", "user-1", default=0)
+        client.get_number_value("f", "user-1", default=0)
+        assert len(errors) == 2
+        assert len(transport.requests) == 1  # the second answer came from the cache
+
+    def test_logs_a_warning_as_is_feature_enabled_does(self, transport, caplog):
+        transport.respond(404, json={"detail": "not found"})
+        client = ExperimentationClient(API_URL, API_KEY, transport=transport)
+        with caplog.at_level("WARNING", logger="controlvar.client"):
+            assert client.get_string_value("missing", "user-1", default="x") == "x"
+        assert [r.getMessage() for r in caplog.records] == [
+            "get_string_value(missing, user-1) failed: GET /api/v1/feature-flags/evaluate/missing failed with HTTP 404"
+        ]
+
+    def test_never_raises_for_attributes_it_cannot_send_without_on_error_or_with_a_raising_on_error(self, transport):
+        client, errors = value_client(transport)
+        assert client.get_string_value("f", "user-1", {"tags": {"a"}}, default="x") == "x"
+        assert transport.requests == []
+        [(error, operation)] = errors
+        assert (operation, error.code) == ("value", None)
+        assert isinstance(error, ExperimentationError) and isinstance(error.__cause__, TypeError)
+        assert error.message.startswith('Flag "f" could not be evaluated (TypeError: ')
+        assert error.message.endswith("; get_string_value returned your default")
+
+        transport.respond(500)
+        quiet = ExperimentationClient(API_URL, API_KEY, transport=transport)
+        assert quiet.get_number_value("f", "user-1", default=3) == 3
+
+        def boom(error, operation):
+            raise RuntimeError("handler bug")
+
+        transport.respond(500)
+        throwing = ExperimentationClient(API_URL, API_KEY, transport=transport, on_error=boom)
+        assert throwing.get_json_value("f", "user-1", default=[]) == []
+
+    def test_default_is_keyword_only_so_a_swapped_call_is_a_type_error(self, client, transport):
+        for method in GETTERS:
+            parameter = inspect.signature(getattr(client, method)).parameters["default"]
+            assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+            assert parameter.default is inspect.Parameter.empty
+        # The mistake keyword-only turns into a TypeError: the default passed where the user id goes.
+        with pytest.raises(TypeError):
+            client.get_string_value("k", "Buy now", "u1")
+        with pytest.raises(TypeError):
+            client.get_string_value("k", "u1", None, "Buy now")
+        with pytest.raises(TypeError):
+            client.get_number_value("k", "u1")
+        assert transport.requests == []
+
+    def test_get_json_value_returns_a_new_copy_on_every_call(self, client, transport):
+        transport.route(
+            "GET", "/api/v1/feature-flags/evaluate/theme", json=served(key="theme", value={"color": "blue", "sizes": [1, 2]}, value_type="json")
+        )
+        first = client.get_json_value("theme", "user-1", default={"color": "", "sizes": []})
+        first["color"] = "red"
+        first["sizes"].append(3)
+        second = client.get_json_value("theme", "user-1", default={})
+        assert second == {"color": "blue", "sizes": [1, 2]}
+        assert second is not first
+        assert client.get_feature_flag("theme", "user-1").value == {"color": "blue", "sizes": [1, 2]}
+        assert len(transport.requests) == 1  # both later answers came from the cache
 
 
 # ------------------------------------------------------------------------ track with a key
