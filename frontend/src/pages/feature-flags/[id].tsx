@@ -338,7 +338,7 @@ export default function FeatureFlagDetailPage() {
       <div className="flex-1 bg-slate-50 flex items-center justify-center">
         <PageTitle title={notFound ? 'Flag not found' : 'Feature Flag'} />
         <div className="text-center max-w-md px-4" data-testid={notFound ? 'flag-not-found' : 'flag-error'}>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 mb-2">
             {notFound ? '404' : 'Error'}
           </p>
           <p className="text-slate-800 text-lg mb-2">
