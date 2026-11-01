@@ -743,7 +743,11 @@ class TestNonUtcTimeZone:
         # The process and the query's own session are both in LA time.
         utc_now = datetime.now(UTC)
         local_minus_utc = datetime.now() - utc_now.replace(tzinfo=None)
-        expected = ZoneInfo(LA).utcoffset(utc_now.replace(tzinfo=None))
+        # LA's offset at this instant. Passing the naive UTC wall time to
+        # utcoffset() reads it as LA local time, which picks the wrong offset
+        # for seven hours after each US clock change (02:00-09:00 UTC on the
+        # first Sunday of November, 03:00-10:00 UTC on the second of March).
+        expected = utc_now.astimezone(ZoneInfo(LA)).utcoffset()
         assert round(local_minus_utc.total_seconds() / 60) == round(
             expected.total_seconds() / 60
         )
