@@ -761,7 +761,6 @@ SENDS_NO_CONTEXT = {
     "ios",
     "java",
     "openfeature",
-    "openfeature-python",
     "php",
     "react-native",
     "ruby",

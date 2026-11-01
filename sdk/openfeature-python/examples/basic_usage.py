@@ -40,13 +40,15 @@ def main() -> None:
     client = api.get_client()
 
     # 3. Build the evaluation context. targeting_key is the platform user_id and is
-    #    required; attributes are kept for your own hooks (they are not sent to the
-    #    evaluate endpoint).
+    #    required; the attributes are sent as the evaluate call's context, so the
+    #    flag's targeting rules see them.
     ctx = EvaluationContext(targeting_key="user-12345", attributes={"country": "US", "plan": "pro"})
 
-    # 4. Evaluate flags — same API regardless of provider.
+    # 4. Evaluate flags — same API regardless of provider. A string, number or json
+    #    flag answers its on or off value; a call of another type answers your default
+    #    with TYPE_MISMATCH.
     print("dark-mode enabled:", client.get_boolean_value("dark-mode", False, ctx))
-    print("checkout-experiment variant:", client.get_string_value("checkout-experiment", "control", ctx))
+    print("checkout-button-label:", client.get_string_value("checkout-button-label", "Buy now", ctx))
     print("cart-max-items:", client.get_integer_value("cart-max-items", 10, ctx))
     print("price-multiplier:", client.get_float_value("price-multiplier", 1.0, ctx))
     print("feature-config:", client.get_object_value("feature-config", {}, ctx))

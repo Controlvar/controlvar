@@ -4,8 +4,8 @@
 
 [OpenFeature](https://openfeature.dev) provider for Controlvar. Flags are
 evaluated **by the server** through the [`controlvar`](https://github.com/Controlvar/controlvar/tree/main/sdk/python) Python SDK
-(`GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targeting_key>`) and cached per
-user + flag; nothing is bucketed locally.
+(`GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targeting_key>&context=<attributes>`) and cached per
+user + flag; nothing is bucketed locally. Boolean, string, integer, float and object calls are answered.
 
 ## Install
 
@@ -18,6 +18,8 @@ pip install -e sdk/python -e sdk/openfeature-python
 
 Requires Python 3.9+ and `openfeature-sdk` 0.10.0 or later.
 The only other dependency is [`controlvar`](https://github.com/Controlvar/controlvar/tree/main/sdk/python), which itself has none.
+Install it from the same clone, as above: the `controlvar` 0.2.0 on PyPI reads no flag value, so
+with it every string, integer, float and object call answers your default with `GENERAL`.
 
 ## Quick start
 
@@ -36,9 +38,12 @@ provider = ExperimentationProvider(
 api.set_provider(provider)
 client = api.get_client()
 
-ctx = EvaluationContext(targeting_key="user-12345")          # targeting_key == platform user_id (required)
-enabled = client.get_boolean_value("dark-mode", False, ctx)
-# Only boolean flags carry a value: string, number and object calls return your default.
+# targeting_key == platform user_id (required); the attributes go to the flag's targeting rules.
+ctx = EvaluationContext(targeting_key="user-12345", attributes={"plan": "enterprise"})
+enabled = client.get_boolean_value("dark-mode", False, ctx)                       # -> enabled
+label = client.get_string_value("checkout-button-label", "Buy now", ctx)          # -> the flag's string value
+max_items = client.get_integer_value("cart-max-items", 10, ctx)                   # -> the flag's number value
+theme = client.get_object_value("checkout-theme", {"color": "blue"}, ctx)         # -> the flag's JSON value
 
 # Experiments and event tracking are not part of OpenFeature: use the SDK client underneath.
 assignment = provider.client.get_assignment("checkout_flow", "user-12345")
@@ -51,23 +56,57 @@ timeout=10, *, client=None, transport=None)`. Pass `client=` to share one
 
 ## Resolution rules
 
-| OpenFeature call | Value |
-|---|---|
-| `get_boolean_*` | `enabled` |
-| `get_string_*`, `get_integer_*`, `get_float_*`, `get_object_*` | the caller's default, reason `DEFAULT` |
+| OpenFeature call | Reads | Value |
+|---|---|---|
+| `get_boolean_*` | every flag | `enabled` |
+| `get_string_*` | a string flag | the flag's value |
+| `get_integer_*` | a number flag | the flag's value when it has no fractional part (`10` or `10.0` answers `10`) |
+| `get_float_*` | a number flag | the flag's value as a float (`10` answers `10.0`) |
+| `get_object_*` | a json flag | a new copy of the flag's value (an object or an array) |
 
-Only boolean flags carry a value: the evaluate endpoint returns `config: null` for every flag.
+The flag's value is its on value when the flag is on for the user, and its off value otherwise,
+an inactive flag included. Nothing is coerced: a call of another type gets your default.
 
+| The server's answer | Value | Reason | Variant |
+|---|---|---|---|
+| `reason: "targeting_rule"`, on / off | the on value / the off value | `TARGETING_MATCH` | `on` / `off` |
+| `reason: "rollout"`, on / off | the on value / the off value | `SPLIT` | `on` / `off` |
+| `reason: "inactive"` | the off value, not your default | `DISABLED` | `off` |
+| answered from the SDK's cache | as cached | `CACHED` | as cached |
+| `reason: "error"` | your default | `ERROR`, `GENERAL` | not set |
+| a flag of another type than the call | your default | `ERROR`, `TYPE_MISMATCH` | not set |
+| no value (a server or an SDK without flag values) | your default | `ERROR`, `GENERAL` | not set |
+| a value that is not of the flag's type | your default | `ERROR`, `PARSE_ERROR` | not set |
+
+That table is for string, integer, float and object calls. A server reason the provider does not
+know answers the value with reason `UNKNOWN`. An integer call on a number with a fractional part
+(`2.5`) answers `TYPE_MISMATCH`, and `bool` is never a number.
+
+- A boolean call answers `enabled` for every flag, a string, number or json flag included:
+  `TARGETING_MATCH` when the flag is on for the user, `DISABLED` when it is not, `CACHED` from the
+  SDK's cache. Its `variant` is not set, because `config` is always `null`.
 - `targeting_key` → `user_id`. It is required: without it you get the default value with
-  `TARGETING_KEY_MISSING`. **Context attributes are not sent** — the evaluate endpoint takes a
-  `context`, which this provider does not send yet.
-- A disabled flag resolves non-boolean calls to the default with reason `DISABLED`.
-- Reasons: `TARGETING_MATCH` (fresh from the server, on), `DISABLED`, `CACHED` (from the SDK
-  cache), `DEFAULT`, `ERROR` (`FLAG_NOT_FOUND` on 404 — an unknown flag key — otherwise
-  `GENERAL`). Errors never raise and are never cached.
-- `variant` on the details is not set, because `config` is always `null`.
+  `TARGETING_KEY_MISSING`.
+- The context's attributes are the user's attributes: the evaluate call carries them as its
+  `context`, for the flag's targeting rules. A `datetime`, at any depth, goes as an ISO 8601
+  string (a naive one is taken as UTC).
+- The SDK caches an answer per user + flag key, and the attributes are not part of that key:
+  within `cache_ttl` a second call for the same `targeting_key` and flag gets the first answer
+  (reason `CACHED`), whatever its attributes. A changed attribute is seen once that answer
+  expires; `cache_ttl=0` caches nothing, and `provider.client.clear_cache()` drops every answer.
+- Errors never raise and are never cached: 404 (an unknown flag key) → `FLAG_NOT_FOUND`; anything
+  else (401, 422, 5xx, timeout, network) → `GENERAL`. Both return your default with reason `ERROR`.
 - `client.track(event_name, ctx, TrackingEventDetails(value=…))` forwards to
   `ExperimentationClient.track` (an event with no key is fanned out by the Python SDK's rule).
+
+### Argument order
+
+OpenFeature's calls take your default second: `client.get_string_value("checkout-button-label",
+"Buy now", ctx)`. The SDK client underneath, `provider.client`, has typed getters of its own
+that take the user second and the default as a keyword:
+`provider.client.get_string_value("checkout-button-label", "user-12345", {"plan": "enterprise"}, default="Buy now")`.
+`default` is keyword-only, so a call written in OpenFeature's order on `provider.client` raises
+`TypeError` instead of evaluating the flag for a user named "Buy now".
 
 ## Backend endpoints used
 
@@ -75,7 +114,7 @@ Every request carries `X-API-Key: <key>`, `Content-Type: application/json`, `Acc
 
 | Call | Method and path | Response used |
 |---|---|---|
-| every `resolve_*_details` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
+| every `resolve_*_details` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…[&context=…]` | `{key, enabled, value, value_type, config, reason}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
 | `provider.client.track` with a key | `POST /api/v1/tracking/track` | ignored |
 | `provider.track`, and `provider.client.track` without a key | `POST /api/v1/tracking/batch`, one entry per experiment and flag it reaches; with none, `POST /api/v1/tracking/track` with no key | ignored |
 | `provider.client.track_batch` | `POST /api/v1/tracking/batch` | `{success_count, failure_count, errors}` |
