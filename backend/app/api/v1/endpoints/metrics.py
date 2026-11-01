@@ -5,11 +5,13 @@ This module provides API endpoints for retrieving metrics related to
 feature flag evaluations, performance, and errors.
 """
 
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timedelta
+from typing import Annotated, Any, Dict, List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.exceptions import RequestValidationError
+from pydantic import AfterValidator
 from sqlalchemy.orm import Session
 
 from backend.app.api.deps import get_current_user, get_db
@@ -22,9 +24,56 @@ from backend.app.schemas.metrics import (
     MetricsSummary,
     MetricType,
 )
-from backend.app.services.metrics_service import MetricsService
+from backend.app.services.metrics_service import SUMMARY_DEFAULT_PERIOD, MetricsService
 
 router = APIRouter()
+
+#: PostgreSQL stores a UTC offset of at most 15:59:59 either way, and fails a
+#: query that compares with a larger one ("time zone displacement out of
+#: range"), which answered 500 (#956, #1561).
+OFFSET_LIMIT = timedelta(hours=16)
+
+#: The fixed messages of the summary's two date refusals. Neither includes the
+#: value sent. Pydantic prefixes a validator's message with "Value error, ";
+#: the second refusal is raised by hand, so it carries the prefix itself.
+OFFSET_TOO_LARGE = "the UTC offset must be less than 16 hours"
+END_DATE_TOO_EARLY = (
+    "Value error, end_date is too early for the default 30-day period; "
+    "send start_date as well"
+)
+
+
+def _storable_offset(value: Optional[datetime]) -> Optional[datetime]:
+    """Refuse a date whose UTC offset is 16 hours or more either way.
+
+    A refusal is a validation error, i.e. 422 at ``["query", <field>]``. A
+    naive date, ``Z`` and offsets up to 15:59 either way pass unchanged. Used
+    as the ``AfterValidator`` inside the parameter's ``Annotated``, with the
+    ``Query`` beside it and ``None`` as the plain default: with the default
+    given as ``= Query(None, ...)`` instead, the validator is not run at all.
+    """
+    if value is not None:
+        offset = value.utcoffset()
+        if offset is not None and abs(offset) >= OFFSET_LIMIT:
+            raise ValueError(OFFSET_TOO_LARGE)
+    return value
+
+
+def _end_date_too_early() -> RequestValidationError:
+    """The 422 for an ``end_date`` whose default start falls before year 1.
+
+    The same shape as every other request validation error, through the
+    application's handler; nothing in it comes from the request.
+    """
+    return RequestValidationError(
+        [
+            {
+                "type": "value_error",
+                "loc": ("query", "end_date"),
+                "msg": END_DATE_TOO_EARLY,
+            }
+        ]
+    )
 
 
 @router.get(
@@ -42,8 +91,16 @@ def get_metrics_summary(
     feature_flag_id: Optional[UUID] = Query(
         None, description="Filter by feature flag ID"
     ),
-    start_date: Optional[datetime] = Query(None, description="Start date for metrics"),
-    end_date: Optional[datetime] = Query(None, description="End date for metrics"),
+    start_date: Annotated[
+        Optional[datetime],
+        Query(description="Start date for metrics"),
+        AfterValidator(_storable_offset),
+    ] = None,
+    end_date: Annotated[
+        Optional[datetime],
+        Query(description="End date for metrics"),
+        AfterValidator(_storable_offset),
+    ] = None,
     period: AggregationPeriod = Query(
         AggregationPeriod.DAY, description="Aggregation period"
     ),
@@ -55,7 +112,18 @@ def get_metrics_summary(
 
     This endpoint provides aggregated statistics such as total evaluations,
     unique users, average latency, and error rates.
+
+    A ``start_date`` or ``end_date`` whose UTC offset is 16 hours or more, or
+    an ``end_date`` sent alone whose default start would fall before year 1,
+    answers 422 (#1561); both used to answer 500.
     """
+    if start_date is None and end_date is not None:
+        # The service's own default, computed here so that a start before
+        # year 1 is refused at end_date rather than raised from the service.
+        try:
+            start_date = end_date - SUMMARY_DEFAULT_PERIOD
+        except OverflowError:
+            raise _end_date_too_early() from None
     return MetricsService.get_metrics_summary(
         db=db,
         feature_flag_id=feature_flag_id,

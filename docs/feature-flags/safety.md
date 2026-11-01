@@ -47,6 +47,18 @@ That `error_rate` still differs from the check's in three ways: it covers `start
 aggregated flag evaluations (of its `period`, by default `day`), not the raw ones; and it is a
 percentage, not a fraction, which can exceed 100 when errors outnumber those evaluations.
 
+### What the error rate divides by
+
+`error_rate` divides the errors that count by every evaluation of the flag in the same 15-minute
+window, whichever API key asked for it, your app's own key included. Each
+`GET /api/v1/feature-flags/user/{user_id}` counts as one evaluation of every active flag.
+Evaluation counts that a server-side SDK reports after evaluating locally count too; see
+[Local evaluation](../sdk/local-evaluation.md#safety-monitoring-and-the-dashboard).
+
+`error_count` counts errors only, so it does not change with how often the flag is evaluated. To
+roll back on a number of errors whatever the traffic, set a `critical_threshold` on `error_count`,
+alone or beside `error_rate`.
+
 ---
 
 ## Metrics You Can Monitor

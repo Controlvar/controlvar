@@ -608,3 +608,14 @@ by = [
     "test:backend/tests/unit/scripts/test_openapi_dump_and_stability.py::test_the_results_cache_key_names_the_engine_and_a_finished_answer_lasts_a_day",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
 ]
+
+[[unit]]
+text = "GET /api/v1/metrics/summary | #956 | A start_date or end_date whose UTC offset is 16 hours or more either way (such as +16:00 or -19:52) answers 422 at [\"query\", <field>] with the msg Value error, the UTC offset must be less than 16 hours; it used to answer 500, because the database cannot store such an offset. An end_date within the first 30 days of year 1 sent without a start_date, whose default start would fall before year 1, answers 422 at [\"query\", \"end_date\"] with the msg Value error, end_date is too early for the default 30-day period; send start_date as well; it used to answer 500. Neither message repeats the value sent. Every other request answers as before, offsets up to 15:59 either way included. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_metrics_summary_dates.py::test_an_offset_of_16_hours_or_more_answers_422",
+    "test:backend/tests/integration/api/test_metrics_summary_dates.py::test_an_end_date_whose_default_start_falls_before_year_1_answers_422",
+    "test:backend/tests/integration/api/test_metrics_summary_dates.py::test_the_same_end_date_with_a_start_date_is_answered",
+    "test:backend/tests/integration/api/test_metrics_summary_dates.py::test_offsets_under_16_hours_utc_and_naive_dates_are_answered",
+    "test:backend/tests/integration/api/test_metrics_summary_dates.py::test_a_period_bounded_at_15_59_either_way_reads_the_stored_metrics",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
