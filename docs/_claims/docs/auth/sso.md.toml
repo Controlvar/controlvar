@@ -475,6 +475,12 @@ by = [
 ]
 
 [[unit]]
+text = "sso_timed_out | the dashboard's own code: the sign-in request got no answer within its deadline (30 seconds); the page says \"Sign-in did not finish: the API did not answer within 30 seconds. Try again in a moment.\""
+by = [
+    "test:modules/frontend/src/tests/services/request-timeouts.test.ts",
+]
+
+[[unit]]
 text = "For sso_failed, sso_account and sso_email the page shows a Request ID when the API sent one; search the API log for it."
 by = [
     "test:modules/backend/tests/integration/api/test_sso_dashboard_sign_in.py::test_an_unexpected_error_is_sso_failed_with_the_request_id",
