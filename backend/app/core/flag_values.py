@@ -303,21 +303,24 @@ def flag_value_type(flag: Any) -> str:
     return getattr(flag, "value_type", None) or BOOLEAN
 
 
-def served_value(flag: Any, enabled: bool) -> Tuple[bool, Any]:
-    """``(True, value)``: what *flag* serves a user it is *enabled* for or not.
+def servable_values(flag: Any) -> Optional[Tuple[Any, Any]]:
+    """``(on_value, off_value)``: the two values *flag* serves, or ``None``.
 
-    ``on_value`` when *enabled*, ``off_value`` otherwise; a boolean flag's
-    value is *enabled* itself. ``(False, None)`` when the flag has no value to
-    serve: a type this release does not know, or a stored value outside the
-    rules above (only a direct database write, or a release with wider
-    limits, can leave one). The evaluate route then answers without
-    ``value``, and the flag's key, never the value, is logged once per process.
-    Both stored values are checked, so the flag answers the same way for every
-    user.
+    A boolean flag serves ``True`` and ``False``. A string, number or json
+    flag serves its stored pair. ``None`` when the flag has no value to serve:
+    a type this release does not know, or a stored value outside the rules
+    above (only a direct database write, or a release with wider limits, can
+    leave one). Both stored values are checked, so the flag answers the same
+    way for every user, and the flag's key, never a value, is logged once per
+    process.
+
+    The evaluate route (:func:`served_value`) and the SDK ruleset
+    (``backend.app.services.sdk_ruleset``) both read a stored row through this
+    function, so they cannot disagree about which rows have a value (PF-1).
     """
     value_type = flag_value_type(flag)
     if value_type == BOOLEAN:
-        return True, bool(enabled)
+        return True, False
     on_value = getattr(flag, "on_value", None)
     off_value = getattr(flag, "off_value", None)
     if value_type not in VALUE_TYPES or any(
@@ -328,9 +331,24 @@ def served_value(flag: Any, enabled: bool) -> Tuple[bool, Any]:
         if EVALUATION_NOTES.first(f"flag:{key}", "unservable value"):
             logger.warning(
                 "Flag %s: a stored value is outside the value rules (type %s); "
-                "evaluation answers it without a value",
+                "evaluation answers it without a value, and the SDK ruleset "
+                "lists it as evaluated by the server",
                 key,
                 value_type if value_type in VALUE_TYPES else "unknown",
             )
+        return None
+    return on_value, off_value
+
+
+def served_value(flag: Any, enabled: bool) -> Tuple[bool, Any]:
+    """``(True, value)``: what *flag* serves a user it is *enabled* for or not.
+
+    ``on_value`` when *enabled*, ``off_value`` otherwise; a boolean flag's
+    value is *enabled* itself. ``(False, None)`` when the flag has no value to
+    serve (:func:`servable_values`): the evaluate route then answers without
+    ``value``.
+    """
+    pair = servable_values(flag)
+    if pair is None:
         return False, None
-    return True, on_value if enabled else off_value
+    return True, pair[0] if enabled else pair[1]

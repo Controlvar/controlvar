@@ -1123,9 +1123,10 @@ def test_a_stored_value_outside_the_rules_is_answered_without_a_value(
     client, db_session, developer, api_key, cleanup, value_type, on_text, off_text
 ):
     """PF-1 (b): evaluate answers ``enabled`` and ``value_type`` and no
-    ``value``, for every user; the ruleset, the flag routes and the bulk route
-    answer 200. (F4's ruleset carries no values; F5's makes such a flag a
-    remote entry.)"""
+    ``value``, for every user; the ruleset serves the flag as a remote entry
+    (#1497, F5), active or not, so the SDK asks the server and the stored
+    values never reach the document; the flag routes and the bulk route answer
+    200."""
     key = _key("unservable")
     cleanup.append(key)
     _insert(db_session, key, value_type, on_text, off_text)
@@ -1139,20 +1140,29 @@ def test_a_stored_value_outside_the_rules_is_answered_without_a_value(
             "config": None,
             "reason": "rollout",
         }
-    ruleset = client.get("/api/v1/sdk/ruleset", headers={"X-API-Key": api_key})
-    assert ruleset.status_code == 200, ruleset.text
-    (entry,) = [e for e in ruleset.json()["flags"] if e["key"] == key]
-    assert set(entry) == {
-        "key",
-        "active",
-        "evaluation",
-        "rollout_percentage",
-        "rules",
-        "default_rule",
-    }
     flag_id = db_session.execute(
         text("SELECT id FROM feature_flags WHERE key = :k"), {"k": key}
     ).scalar()
+    stored = db_session.execute(
+        text("SELECT on_value, off_value FROM feature_flags WHERE key = :k"),
+        {"k": key},
+    ).one()
+    for status in ("INACTIVE", "ACTIVE"):
+        with db_session.get_bind().begin() as conn:
+            conn.execute(
+                text(
+                    f'UPDATE "{get_schema_name()}".feature_flags '
+                    "SET status = :s WHERE key = :k"
+                ),
+                {"s": status, "k": key},
+            )
+        ruleset = client.get("/api/v1/sdk/ruleset", headers={"X-API-Key": api_key})
+        assert ruleset.status_code == 200, ruleset.text
+        (entry,) = [e for e in ruleset.json()["flags"] if e["key"] == key]
+        assert entry == {"key": key, "active": True, "evaluation": "remote"}, status
+        for value in stored:
+            form = json.dumps(value, separators=(",", ":"))
+            assert len(form) < 5 or form not in ruleset.text, (status, form[:40])
     for path in (f"{COLLECTION}/{flag_id}", f"{COLLECTION}/?search={key}"):
         response = client.get(path, headers=_auth(developer))
         assert response.status_code == 200, (path, response.text)
