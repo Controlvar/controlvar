@@ -148,20 +148,6 @@ export interface IntervalParts {
   upper: string;
 }
 
-/** "95% CI −0.47 to +2.84", or "95% CI, unadjusted, −0.47 to +2.84". */
-export function intervalText(interval: IntervalParts): string {
-  const label = interval.unadjusted ? `${interval.level} CI, unadjusted,` : `${interval.level} CI`;
-  return `${label} ${interval.lower} to ${interval.upper}`;
-}
-
-/** The same, as a screen reader hears it: "95% confidence interval −0.47 to +2.84". */
-export function intervalSpoken(interval: IntervalParts): string {
-  const label = interval.unadjusted
-    ? `${interval.level} confidence interval, unadjusted,`
-    : `${interval.level} confidence interval`;
-  return `${label} ${interval.lower} to ${interval.upper}`;
-}
-
 function interval(
   confidenceLevel: number,
   unadjusted: boolean,
@@ -229,11 +215,6 @@ export interface DifferenceLine {
   interval: IntervalParts | null;
 }
 
-/** "+1.18 per user (95% CI −0.47 to +2.84)", or the lead alone. */
-export function formatDifferenceLine(line: DifferenceLine): string {
-  return line.interval ? `${line.lead} (${intervalText(line.interval)})` : line.lead;
-}
-
 function differenceOf(
   variant: VariantResult,
   confidenceLevel: number,
@@ -282,23 +263,6 @@ export function differenceLine(
   return analysedAsMean(metric)
     ? differenceOf(variant, confidenceLevel, unadjusted, 1, 'per user')
     : differenceOf(variant, confidenceLevel, unadjusted, 100, 'percentage points');
-}
-
-/**
- * A treatment's difference from the control per user, with its interval:
- * "+1.18 per user (95% CI −0.47 to +2.84)". The level is the response's.
- * `unadjusted` says the interval is not adjusted for multiple comparisons,
- * shown when the row's p-value is: the badge then reads the adjusted p, and
- * an interval that excludes 0 can sit on a row that is not significant.
- * Null as `differenceLine` says.
- */
-export function formatDifferencePerUser(
-  variant: VariantResult,
-  confidenceLevel: number,
-  unadjusted: boolean,
-): string | null {
-  const line = differenceOf(variant, confidenceLevel, unadjusted, 1, 'per user');
-  return line ? formatDifferenceLine(line) : null;
 }
 
 /**
@@ -483,12 +447,6 @@ export interface ImpactLine {
   interval: IntervalParts | null;
 }
 
-/** "+29 converting users (99% CI +16 to +46)", or the number and noun alone. */
-export function formatImpactLine(line: ImpactLine): string {
-  const text = `${line.value} ${line.noun}`;
-  return line.interval ? `${text} (${intervalText(line.interval)})` : text;
-}
-
 /**
  * A treatment's incremental impact (#1496): the difference times its own
  * assigned users, never projected. Users and events are rounded to whole
@@ -536,20 +494,38 @@ function testName(test: StatisticalTestUsed | null | undefined): string {
 }
 
 /**
+ * A p-value for a sentence that says which side of the threshold it is on:
+ * the p-value column's 4 decimals, and more when the rounded text would not
+ * be strictly on that side. A note exists only near the threshold, so a p of
+ * 0.04981 that is "below 0.05" reads "0.0498", and a p of 0.0099972 that is
+ * "below 0.01" reads "0.009997", never "0.0100". `alpha` is the threshold as
+ * the sentence writes it (`formatAlpha`).
+ */
+export function formatPOnSide(p: number, alpha: number, below: boolean): string {
+  for (let digits = 4; digits < 12; digits += 1) {
+    const text = p.toFixed(digits);
+    const shown = Number(text);
+    if (below ? shown < alpha : shown >= alpha) return text;
+  }
+  return p.toFixed(12);
+}
+
+/**
  * The sentence under a row's badge when its interval on the difference and
  * its significance disagree: the interval is not adjusted and significance
  * is, or, near the threshold, Fisher's exact test and Newcombe's interval
  * differ. Null when they agree, for the control, and without a finite
- * interval or p-value.
+ * interval or p-value. Each p has 4 decimals, more when needed to stay on
+ * the side of the threshold the sentence states (`formatPOnSide`).
  *
  * - Shown adjusted, the interval excludes 0, not significant: "Not
  *   significant after the Benjamini-Hochberg correction for 2 comparisons
- *   (adjusted p 0.071), although the unadjusted interval excludes 0."
+ *   (adjusted p 0.0713), although the unadjusted interval excludes 0."
  * - Otherwise, the interval excludes 0, not significant: "Not significant:
- *   Fisher's exact test gives p 0.057, not below 0.05, although the interval
+ *   Fisher's exact test gives p 0.0573, not below 0.05, although the interval
  *   excludes 0. The test decides; near the threshold the two can differ."
  * - The interval reaches 0, significant: "Significant: Fisher's exact test
- *   gives p 0.049, below 0.05, although the interval reaches 0. The test
+ *   gives p 0.0492, below 0.05, although the interval reaches 0. The test
  *   decides; near the threshold the two can differ." The p is the one the
  *   test gave, unadjusted.
  */
@@ -566,6 +542,7 @@ export function reconciliationNote(
   const excludesZero = ci[0] > 0 || ci[1] < 0;
   if (excludesZero === variant.is_significant) return null;
   const alpha = formatAlpha(confidenceLevel);
+  const threshold = Number(alpha);
   const test = testName(variant.statistical_test_used);
   const tail = ' The test decides; near the threshold the two can differ.';
   if (excludesZero) {
@@ -573,22 +550,22 @@ export function reconciliationNote(
       const adjusted = variant.adjusted_p_value as number;
       return (
         `Not significant after the ${correctionName(correctionMethod)} correction for ` +
-        `${comparisons} comparisons (adjusted p ${adjusted.toFixed(3)}), although the ` +
-        'unadjusted interval excludes 0.'
+        `${comparisons} comparisons (adjusted p ${formatPOnSide(adjusted, threshold, false)}), ` +
+        'although the unadjusted interval excludes 0.'
       );
     }
     const decisive = decisivePValue(variant);
     if (!isFiniteNumber(decisive)) return null;
     return (
-      `Not significant: ${test} gives p ${decisive.toFixed(3)}, not below ${alpha}, although ` +
-      `the interval excludes 0.${tail}`
+      `Not significant: ${test} gives p ${formatPOnSide(decisive, threshold, false)}, not ` +
+      `below ${alpha}, although the interval excludes 0.${tail}`
     );
   }
   const p = adjustedShown ? variant.p_value : decisivePValue(variant);
   if (!isFiniteNumber(p)) return null;
   return (
-    `Significant: ${test} gives p ${p.toFixed(3)}, below ${alpha}, although the interval ` +
-    `reaches 0.${tail}`
+    `Significant: ${test} gives p ${formatPOnSide(p, threshold, true)}, below ${alpha}, ` +
+    `although the interval reaches 0.${tail}`
   );
 }
 

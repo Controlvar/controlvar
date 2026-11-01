@@ -422,7 +422,7 @@ describe('C16: the interval and the significance disagree', () => {
   it('says so under the badge when significant but the interval reaches 0 (server: 3/50 against 18/100)', () => {
     renderCase(serverCase('c16_significant_reaching_zero'));
     expect(testIdText('treatment', 'reconciliation-note')).toBe(
-      "Significant: Fisher's exact test gives p 0.049, below 0.05, although the interval " +
+      "Significant: Fisher's exact test gives p 0.0492, below 0.05, although the interval " +
         'reaches 0. The test decides; near the threshold the two can differ.',
     );
     expect(testIdText('treatment', 'change-difference')).toBe(
@@ -433,7 +433,7 @@ describe('C16: the interval and the significance disagree', () => {
   it('says so when not significant but the interval excludes 0 (server: 128/1000 against 100/1000)', () => {
     renderCase(serverCase('c16_not_significant_excluding_zero'));
     expect(testIdText('treatment', 'reconciliation-note')).toBe(
-      "Not significant: Fisher's exact test gives p 0.057, not below 0.05, although the " +
+      "Not significant: Fisher's exact test gives p 0.0573, not below 0.05, although the " +
         'interval excludes 0. The test decides; near the threshold the two can differ.',
     );
   });
@@ -442,9 +442,35 @@ describe('C16: the interval and the significance disagree', () => {
     renderCase(serverCase('f8_three_variants_bh'));
     expect(testIdText('one_page', 'reconciliation-note')).toBe(
       'Not significant after the Benjamini-Hochberg correction for 2 comparisons (adjusted p ' +
-        '0.071), although the unadjusted interval excludes 0.',
+        '0.0713), although the unadjusted interval excludes 0.',
     );
     expect(testIdText('two_step', 'reconciliation-note')).toBeNull();
+  });
+
+  it('never prints a p below the threshold as the threshold (server: 45/200 against 5/50, p 0.04981)', () => {
+    renderCase(serverCase('c16_significant_p_near_alpha'));
+    expect(testIdText('treatment', 'reconciliation-note')).toBe(
+      "Significant: Fisher's exact test gives p 0.0498, below 0.05, although the interval " +
+        'reaches 0. The test decides; near the threshold the two can differ.',
+    );
+    // The same p as the p-value column.
+    expect(visibleText(cell('treatment', 'p-value'))).toBe('0.0498unadjusted');
+  });
+
+  it('adds digits at 0.99 when 4 would print the threshold (server: 15/200 against 2/150, p 0.0099972)', () => {
+    renderCase(serverCase('c16_significant_p_near_alpha_99'));
+    expect(testIdText('treatment', 'reconciliation-note')).toBe(
+      "Significant: Fisher's exact test gives p 0.009997, below 0.01, although the interval " +
+        'reaches 0. The test decides; near the threshold the two can differ.',
+    );
+  });
+
+  it('writes a p at the threshold as not below it at 0.99 (server: 67/200 against 68/300, p 0.0100040)', () => {
+    renderCase(serverCase('c16_not_significant_p_near_alpha_99'));
+    expect(testIdText('treatment', 'reconciliation-note')).toBe(
+      "Not significant: Fisher's exact test gives p 0.0100, not below 0.01, although the " +
+        'interval excludes 0. The test decides; near the threshold the two can differ.',
+    );
   });
 
   it('says nothing when they agree', () => {
@@ -454,15 +480,39 @@ describe('C16: the interval and the significance disagree', () => {
 });
 
 describe('F13: the footnotes', () => {
-  it('explains the intervals, spelled out, at the response\'s level, whenever one is shown', () => {
-    renderCase(serverCase('f1_wide_proportion'));
-    expect(screen.getByTestId('interval-footnote')).toHaveTextContent(
-      'Intervals are 99% confidence intervals (CI) of the difference from the control. They are ' +
-        'not adjusted for comparing several variants with the control; significance is, so the ' +
-        'two can disagree, and the row says so when they do. A percentage interval can be very ' +
-        'wide when counts are small.',
-    );
+  const unadjustedIntervals = (level: string) =>
+    `Intervals are ${level} confidence intervals (CI) of the difference from the control. They ` +
+    'are not adjusted for comparing several variants with the control; significance is, so the ' +
+    'two can disagree, and the row says so when they do. A percentage interval can be very ' +
+    'wide when counts are small.';
+  const testDecides = (level: string) =>
+    `Intervals are ${level} confidence intervals (CI) of the difference from the control. ` +
+    'Significance comes from the test, not the interval, so near the threshold the two can ' +
+    'disagree; the row says so when they do. A percentage interval can be very wide when ' +
+    'counts are small.';
+
+  it('says significance is adjusted when a row shows an adjusted p-value (server: two treatments, Benjamini-Hochberg)', () => {
+    renderCase(serverCase('f8_three_variants_bh'));
+    expect(screen.getByTestId('interval-footnote')).toHaveTextContent(unadjustedIntervals('95%'));
     expect(screen.getByTestId('interval-footnote').tagName).toBe('P');
+  });
+
+  it('says the test decides under no correction (server: two treatments, correction none)', () => {
+    renderCase(serverCase('f13_two_treatments_no_correction'));
+    expect(screen.getByTestId('interval-footnote')).toHaveTextContent(testDecides('95%'));
+    expect(screen.getByTestId('interval-footnote').textContent).not.toMatch(/significance is/);
+  });
+
+  it('says the test decides with one treatment (server: one treatment, Benjamini-Hochberg)', () => {
+    renderCase(serverCase('f13_one_treatment_bh'));
+    expect(screen.getByTestId('interval-footnote')).toHaveTextContent(testDecides('95%'));
+  });
+
+  it("explains the intervals, spelled out, at the response's level, whenever one is shown", () => {
+    renderCase(serverCase('f1_wide_proportion'));
+    expect(screen.getByTestId('interval-footnote')).toHaveTextContent(testDecides('99%'));
+    expect(screen.getByTestId('interval-footnote').textContent).toContain('very wide');
+    expect(screen.getByTestId('interval-footnote').textContent).toContain('confidence intervals (CI)');
   });
 
   it('explains the impact', () => {

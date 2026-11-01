@@ -17,8 +17,8 @@ import { IntervalParts } from '@/components/results/shared/resultFormat';
  *   cells is placed against the page, escapes the table's own horizontal
  *   scroll, and widens the page on a phone.
  *
- * Its visible text is `intervalText(interval)`, and what a screen reader
- * reads is `intervalSpoken(interval)`, each wrapped in `open` and `close`.
+ * Seen, it reads `{open}95% CI[, unadjusted,] {lower} to {upper}{close}`;
+ * a screen reader hears "confidence interval" in place of "CI".
  */
 export function IntervalText({
   interval,

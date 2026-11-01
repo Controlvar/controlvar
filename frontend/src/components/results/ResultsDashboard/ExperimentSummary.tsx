@@ -19,7 +19,6 @@ import {
   ImpactLine,
   NOT_ENOUGH_DATA,
   carriesImpact,
-  formatImpactLine,
   impactLine,
   showsAdjusted,
 } from '@/components/results/shared/resultFormat';
@@ -196,15 +195,6 @@ export function summaryImpact(
       significant: v.is_significant,
     }));
   return rows.length > 0 ? { metricName: metric.metric_name, rows } : null;
-}
-
-/**
- * A row's text: "One page: +124 converting users (95% CI +40 to +208)",
- * with ", not significant" when the treatment is not.
- */
-export function summaryImpactText(row: SummaryImpactRow): string {
-  if (!row.line) return `${row.variantName}: ${NOT_ENOUGH_DATA}`;
-  return `${row.variantName}: ${formatImpactLine(row.line)}${row.significant ? '' : ', not significant'}`;
 }
 
 export function ExperimentSummary({

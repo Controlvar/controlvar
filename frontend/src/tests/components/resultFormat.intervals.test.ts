@@ -7,9 +7,8 @@
 import {
   finitePair,
   formatGroupedSignedPct,
+  formatPOnSide,
   formatPctBound,
-  intervalSpoken,
-  intervalText,
 } from '@/components/results/shared/resultFormat';
 
 describe('finitePair', () => {
@@ -62,18 +61,22 @@ describe('formatPctBound', () => {
   });
 });
 
-describe('intervalText and intervalSpoken', () => {
-  const parts = { level: '95%', unadjusted: false, lower: '+2.1%', upper: '+22.5%' };
-
-  it('write "95% CI …", and "95% confidence interval …" for a screen reader', () => {
-    expect(intervalText(parts)).toBe('95% CI +2.1% to +22.5%');
-    expect(intervalSpoken(parts)).toBe('95% confidence interval +2.1% to +22.5%');
+describe('formatPOnSide', () => {
+  it("writes the p-value column's 4 decimals when they are on the stated side", () => {
+    expect(formatPOnSide(0.049813985629232, 0.05, true)).toBe('0.0498');
+    expect(formatPOnSide(0.05728829720920083, 0.05, false)).toBe('0.0573');
+    expect(formatPOnSide(0.010003994638408752, 0.01, false)).toBe('0.0100');
   });
 
-  it('carry "unadjusted" as words', () => {
-    expect(intervalText({ ...parts, unadjusted: true })).toBe('95% CI, unadjusted, +2.1% to +22.5%');
-    expect(intervalSpoken({ ...parts, unadjusted: true })).toBe(
-      '95% confidence interval, unadjusted, +2.1% to +22.5%',
-    );
+  it('adds digits until a p below the threshold no longer prints equal to it', () => {
+    expect(formatPOnSide(0.009997210905498512, 0.01, true)).toBe('0.009997');
+    expect(formatPOnSide(0.0499996, 0.05, true)).toBe('0.0499996');
+    expect(formatPOnSide(0.0499, 0.05, true)).toBe('0.0499');
+  });
+
+  it('adds digits until a p at or above the threshold no longer prints below it', () => {
+    expect(formatPOnSide(0.05, 0.05, false)).toBe('0.0500');
+    // Only a threshold with more places than the column can need this.
+    expect(formatPOnSide(0.04883, 0.04881, false)).toBe('0.04883');
   });
 });

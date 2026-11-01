@@ -1023,6 +1023,431 @@
         "winning_variant_id": null
       }
     },
+    "c16_significant_p_near_alpha": {
+      "what": "C16 at the threshold: 45/200 against 5/50: significant (Fisher p 0.04981, which 3 decimals would print as 0.050) while Newcombe's interval reaches 0",
+      "confidence_level": 0.95,
+      "correction_method": "none",
+      "metric": {
+        "metric_id": "dbe0eaa2-fd46-596b-a1a9-b9a1edf7ae7a",
+        "metric_name": "Signup",
+        "metric_type": "conversion",
+        "is_primary": true,
+        "lower_is_better": false,
+        "analysis": "proportion",
+        "variants": [
+          {
+            "variant_id": "4867b87a-60ad-5cee-8f4d-e9adc12580ff",
+            "variant_name": "control",
+            "is_control": true,
+            "sample_size": 50,
+            "conversions": 5,
+            "mean": 0.1,
+            "std_dev": 0.30000000000000004,
+            "confidence_interval": [
+              0.016845770539019325,
+              0.1831542294609807
+            ],
+            "p_value": null,
+            "adjusted_p_value": null,
+            "is_significant": false,
+            "effect_size": null,
+            "effect_size_label": null,
+            "relative_improvement_pct": null,
+            "power": null,
+            "statistical_test_used": null,
+            "absolute_difference": null,
+            "absolute_difference_ci": null,
+            "relative_improvement_pct_ci": null,
+            "incremental_impact": null,
+            "incremental_impact_ci": null
+          },
+          {
+            "variant_id": "f0263779-95c3-5b27-9667-6d9fcfa511e7",
+            "variant_name": "treatment",
+            "is_control": false,
+            "sample_size": 200,
+            "conversions": 45,
+            "mean": 0.225,
+            "std_dev": 0.41758232721225164,
+            "confidence_interval": [
+              0.16712710557357022,
+              0.2828728944264298
+            ],
+            "p_value": 0.049813985629232,
+            "adjusted_p_value": null,
+            "is_significant": true,
+            "effect_size": 0.3449309801328687,
+            "effect_size_label": "small",
+            "relative_improvement_pct": 125.0,
+            "power": 0.5876933536959548,
+            "statistical_test_used": "fisher_exact",
+            "absolute_difference": 0.125,
+            "absolute_difference_ci": [
+              -9.50156139390701e-05,
+              0.20944792115653557
+            ],
+            "relative_improvement_pct_ci": [
+              -0.046768574169830934,
+              432.41308423566113
+            ],
+            "incremental_impact": 25.0,
+            "incremental_impact_ci": [
+              -0.01900312278781402,
+              41.88958423130711
+            ]
+          }
+        ],
+        "has_significant_result": true,
+        "winning_variant_id": "f0263779-95c3-5b27-9667-6d9fcfa511e7"
+      }
+    },
+    "c16_significant_p_near_alpha_99": {
+      "what": "C16 at the threshold at 0.99: 15/200 against 2/150: significant (Fisher p 0.0099972, which 4 decimals would print as 0.0100) while the interval reaches 0",
+      "confidence_level": 0.99,
+      "correction_method": "none",
+      "metric": {
+        "metric_id": "3411656b-df4a-56ba-8c41-2eabf6090cec",
+        "metric_name": "Signup",
+        "metric_type": "conversion",
+        "is_primary": true,
+        "lower_is_better": false,
+        "analysis": "proportion",
+        "variants": [
+          {
+            "variant_id": "bbfb411b-61fe-5d3b-b814-031784cee7c2",
+            "variant_name": "control",
+            "is_control": true,
+            "sample_size": 150,
+            "conversions": 2,
+            "mean": 0.013333333333333334,
+            "std_dev": 0.11469767022723504,
+            "confidence_interval": [
+              0.0,
+              0.037456040594349364
+            ],
+            "p_value": null,
+            "adjusted_p_value": null,
+            "is_significant": false,
+            "effect_size": null,
+            "effect_size_label": null,
+            "relative_improvement_pct": null,
+            "power": null,
+            "statistical_test_used": null,
+            "absolute_difference": null,
+            "absolute_difference_ci": null,
+            "relative_improvement_pct_ci": null,
+            "incremental_impact": null,
+            "incremental_impact_ci": null
+          },
+          {
+            "variant_id": "33342983-b645-5a84-ae91-1a749a0523e5",
+            "variant_name": "treatment",
+            "is_control": false,
+            "sample_size": 200,
+            "conversions": 15,
+            "mean": 0.075,
+            "std_dev": 0.26339134382131846,
+            "confidence_interval": [
+              0.027026259698880742,
+              0.12297374030111925
+            ],
+            "p_value": 0.009997210905498512,
+            "adjusted_p_value": null,
+            "is_significant": true,
+            "effect_size": 0.3233546212014459,
+            "effect_size_label": "small",
+            "relative_improvement_pct": 462.4999999999999,
+            "power": 0.6619726309212453,
+            "statistical_test_used": "fisher_exact",
+            "absolute_difference": 0.06166666666666666,
+            "absolute_difference_ci": [
+              -0.0012495862970233335,
+              0.12535328791237643
+            ],
+            "relative_improvement_pct_ci": [
+              -2.2281177187149726,
+              3001.370188442462
+            ],
+            "incremental_impact": 12.333333333333332,
+            "incremental_impact_ci": [
+              -0.2499172594046667,
+              25.070657582475285
+            ]
+          }
+        ],
+        "has_significant_result": true,
+        "winning_variant_id": "33342983-b645-5a84-ae91-1a749a0523e5"
+      }
+    },
+    "c16_not_significant_p_near_alpha_99": {
+      "what": "C16 at the threshold at 0.99: 67/200 against 68/300: not significant (Fisher p 0.0100040) while the interval excludes 0",
+      "confidence_level": 0.99,
+      "correction_method": "none",
+      "metric": {
+        "metric_id": "db989713-488b-5c83-8902-413c1c24e1de",
+        "metric_name": "Signup",
+        "metric_type": "conversion",
+        "is_primary": true,
+        "lower_is_better": false,
+        "analysis": "proportion",
+        "variants": [
+          {
+            "variant_id": "d3c72b21-1443-5cd8-b1b5-4c42e28eb40b",
+            "variant_name": "control",
+            "is_control": true,
+            "sample_size": 300,
+            "conversions": 68,
+            "mean": 0.22666666666666666,
+            "std_dev": 0.4186751591495355,
+            "confidence_interval": [
+              0.16440314997923902,
+              0.2889301833540943
+            ],
+            "p_value": null,
+            "adjusted_p_value": null,
+            "is_significant": false,
+            "effect_size": null,
+            "effect_size_label": null,
+            "relative_improvement_pct": null,
+            "power": null,
+            "statistical_test_used": null,
+            "absolute_difference": null,
+            "absolute_difference_ci": null,
+            "relative_improvement_pct_ci": null,
+            "incremental_impact": null,
+            "incremental_impact_ci": null
+          },
+          {
+            "variant_id": "9a0a4af2-f7dc-51d0-afe4-86cd2e8b8525",
+            "variant_name": "treatment",
+            "is_control": false,
+            "sample_size": 200,
+            "conversions": 67,
+            "mean": 0.335,
+            "std_dev": 0.4719904660054057,
+            "confidence_interval": [
+              0.24903229995246762,
+              0.42096770004753237
+            ],
+            "p_value": 0.010003994638408752,
+            "adjusted_p_value": null,
+            "is_significant": false,
+            "effect_size": 0.24207465484722368,
+            "effect_size_label": "small",
+            "relative_improvement_pct": 47.79411764705884,
+            "power": 0.5302768835853968,
+            "statistical_test_used": "fisher_exact",
+            "absolute_difference": 0.10833333333333336,
+            "absolute_difference_ci": [
+              0.0039015223892567424,
+              0.2143437114718391
+            ],
+            "relative_improvement_pct_ci": [
+              1.4404967542825498,
+              113.86415175837024
+            ],
+            "incremental_impact": 21.66666666666667,
+            "incremental_impact_ci": [
+              0.7803044778513485,
+              42.86874229436782
+            ]
+          }
+        ],
+        "has_significant_result": false,
+        "winning_variant_id": null
+      }
+    },
+    "f13_two_treatments_no_correction": {
+      "what": "F13 under no correction: the three-variant arms with correction_method none, so nothing is adjusted",
+      "confidence_level": 0.95,
+      "correction_method": "none",
+      "metric": {
+        "metric_id": "614117cb-6680-5b6e-8578-0b491b1f6e83",
+        "metric_name": "Signup",
+        "metric_type": "conversion",
+        "is_primary": true,
+        "lower_is_better": false,
+        "analysis": "proportion",
+        "variants": [
+          {
+            "variant_id": "44ed5df3-5830-5fcf-8b63-97b0ffb0b630",
+            "variant_name": "control",
+            "is_control": true,
+            "sample_size": 1000,
+            "conversions": 100,
+            "mean": 0.1,
+            "std_dev": 0.30000000000000004,
+            "confidence_interval": [
+              0.08140614903086316,
+              0.11859385096913685
+            ],
+            "p_value": null,
+            "adjusted_p_value": null,
+            "is_significant": false,
+            "effect_size": null,
+            "effect_size_label": null,
+            "relative_improvement_pct": null,
+            "power": null,
+            "statistical_test_used": null,
+            "absolute_difference": null,
+            "absolute_difference_ci": null,
+            "relative_improvement_pct_ci": null,
+            "incremental_impact": null,
+            "incremental_impact_ci": null
+          },
+          {
+            "variant_id": "ae9d9c0a-fa81-5f97-955a-3177f48345bb",
+            "variant_name": "one_page",
+            "is_control": false,
+            "sample_size": 1000,
+            "conversions": 131,
+            "mean": 0.131,
+            "std_dev": 0.3374003556607491,
+            "confidence_interval": [
+              0.11008809356636755,
+              0.15191190643363245
+            ],
+            "p_value": 0.035657848880198205,
+            "adjusted_p_value": null,
+            "is_significant": true,
+            "effect_size": 0.09719352120029323,
+            "effect_size_label": "negligible",
+            "relative_improvement_pct": 31.000000000000018,
+            "power": 0.5844905884635365,
+            "statistical_test_used": "fisher_exact",
+            "absolute_difference": 0.031,
+            "absolute_difference_ci": [
+              0.0029528266146954738,
+              0.05912097674471261
+            ],
+            "relative_improvement_pct_ci": [
+              2.577350236497833,
+              67.27680603899309
+            ],
+            "incremental_impact": 31.0,
+            "incremental_impact_ci": [
+              2.9528266146954736,
+              59.12097674471261
+            ]
+          },
+          {
+            "variant_id": "3f043c79-433e-5b5c-956d-1b84fcfd31d0",
+            "variant_name": "two_step",
+            "is_control": false,
+            "sample_size": 1000,
+            "conversions": 104,
+            "mean": 0.10400000000000001,
+            "std_dev": 0.30526054445342266,
+            "confidence_interval": [
+              0.0850801030989183,
+              0.12291989690108172
+            ],
+            "p_value": 0.8246408444682718,
+            "adjusted_p_value": null,
+            "is_significant": false,
+            "effect_size": 0.013217255955419782,
+            "effect_size_label": "negligible",
+            "relative_improvement_pct": 4.0000000000000036,
+            "power": 0.06006518910446981,
+            "statistical_test_used": "fisher_exact",
+            "absolute_difference": 0.00399999999999999,
+            "absolute_difference_ci": [
+              -0.02264339847275565,
+              0.030658752534527017
+            ],
+            "relative_improvement_pct_ci": [
+              -19.772919045510704,
+              34.813298526117876
+            ],
+            "incremental_impact": 3.99999999999999,
+            "incremental_impact_ci": [
+              -22.64339847275565,
+              30.658752534527018
+            ]
+          }
+        ],
+        "has_significant_result": true,
+        "winning_variant_id": "ae9d9c0a-fa81-5f97-955a-3177f48345bb"
+      }
+    },
+    "f13_one_treatment_bh": {
+      "what": "F13 with one treatment under Benjamini-Hochberg (the default): the correction changes nothing, so no p-value is shown adjusted; 128/1000 against 100/1000",
+      "confidence_level": 0.95,
+      "correction_method": "benjamini_hochberg",
+      "metric": {
+        "metric_id": "323f25cd-7209-5362-ada8-ebde4d943e69",
+        "metric_name": "Signup",
+        "metric_type": "conversion",
+        "is_primary": true,
+        "lower_is_better": false,
+        "analysis": "proportion",
+        "variants": [
+          {
+            "variant_id": "0251a6dd-24c2-51f2-8f25-300611a9e396",
+            "variant_name": "control",
+            "is_control": true,
+            "sample_size": 1000,
+            "conversions": 100,
+            "mean": 0.1,
+            "std_dev": 0.30000000000000004,
+            "confidence_interval": [
+              0.08140614903086316,
+              0.11859385096913685
+            ],
+            "p_value": null,
+            "adjusted_p_value": null,
+            "is_significant": false,
+            "effect_size": null,
+            "effect_size_label": null,
+            "relative_improvement_pct": null,
+            "power": null,
+            "statistical_test_used": null,
+            "absolute_difference": null,
+            "absolute_difference_ci": null,
+            "relative_improvement_pct_ci": null,
+            "incremental_impact": null,
+            "incremental_impact_ci": null
+          },
+          {
+            "variant_id": "98dabb5c-50dd-5b7d-a17b-d939de6f6b04",
+            "variant_name": "treatment",
+            "is_control": false,
+            "sample_size": 1000,
+            "conversions": 128,
+            "mean": 0.128,
+            "std_dev": 0.3340898082851376,
+            "confidence_interval": [
+              0.10729327964812883,
+              0.14870672035187116
+            ],
+            "p_value": 0.05728829720920083,
+            "adjusted_p_value": 0.05728829720920083,
+            "is_significant": false,
+            "effect_size": 0.08825823010834954,
+            "effect_size_label": "negligible",
+            "relative_improvement_pct": 28.000000000000007,
+            "power": 0.5054473797684703,
+            "statistical_test_used": "fisher_exact",
+            "absolute_difference": 0.027999999999999997,
+            "absolute_difference_ci": [
+              0.0001019477074572124,
+              0.0559687038169744
+            ],
+            "relative_improvement_pct_ci": [
+              0.08899087937952466,
+              63.67407100762637
+            ],
+            "incremental_impact": 27.999999999999996,
+            "incremental_impact_ci": [
+              0.1019477074572124,
+              55.9687038169744
+            ]
+          }
+        ],
+        "has_significant_result": false,
+        "winning_variant_id": null
+      }
+    },
     "f10_count_events": {
       "what": "F10: a count metric over 10,000 users per arm: an impact in thousands of events",
       "confidence_level": 0.95,

@@ -219,7 +219,14 @@ test.describe("Journey: results checks", () => {
     const list = await api<{ items: ExperimentRow[] }>(adminPage, token as string, "/api/v1/experiments/?limit=100");
     expect(list.items.length).toBeGreaterThan(0);
 
-    const reached = { srmNull: 0, srmPassed: 0, srmWarning: 0, bayesian: 0, impactWithInterval: 0 };
+    const reached = {
+      srmNull: 0,
+      srmPassed: 0,
+      srmWarning: 0,
+      bayesian: 0,
+      relativeInterval: 0,
+      impactWithInterval: 0,
+    };
     const passedKeys: (string | null)[] = [];
     let scanned = false;
 
@@ -286,6 +293,7 @@ test.describe("Journey: results checks", () => {
           expect(shown.interval, `${where}: relative interval`).toBe(want.interval);
           expect(shown.difference, `${where}: difference`).toBe(want.difference);
           expect(shown.impact, `${where}: impact`).toBe(want.impact);
+          if (want.interval !== null) reached.relativeInterval += 1;
           if (want.impactHasInterval) {
             reached.impactWithInterval += 1;
             pageReachedImpact = true;
@@ -307,7 +315,9 @@ test.describe("Journey: results checks", () => {
     // Not vacuous: the seed's balanced experiment reaches the "passed" branch.
     expect(reached.srmPassed, JSON.stringify(reached)).toBeGreaterThan(0);
     expect(passedKeys).toContain("checkout_button_color");
-    // Not vacuous: some treatment's impact, with its interval, was compared.
+    // Not vacuous: some treatment's relative interval, and some impact with
+    // its interval, were compared with the API's numbers.
+    expect(reached.relativeInterval, JSON.stringify(reached)).toBeGreaterThan(0);
     expect(reached.impactWithInterval, JSON.stringify(reached)).toBeGreaterThan(0);
     expect(scanned, "a results page with an impact was scanned with axe").toBe(true);
   });

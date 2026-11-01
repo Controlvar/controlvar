@@ -105,3 +105,34 @@ def test_the_quoted_numbers(committed):
     one_page = _treatment(committed, "f8_three_variants_bh", "one_page")
     assert one_page["p_value"] < 0.05 < one_page["adjusted_p_value"]
     assert one_page["absolute_difference_ci"][0] > 0
+
+    # Under no correction the same arms are decided on the raw p.
+    raw = _treatment(committed, "f13_two_treatments_no_correction", "one_page")
+    assert raw["adjusted_p_value"] is None
+    assert raw["is_significant"] is True
+
+    # One treatment under Benjamini-Hochberg: the correction changes nothing.
+    alone = _treatment(committed, "f13_one_treatment_bh")
+    assert alone["adjusted_p_value"] == pytest.approx(alone["p_value"])
+
+
+@pytest.mark.parametrize(
+    ("case", "level", "p", "significant"),
+    [
+        # A p 3 decimals would print as the threshold.
+        ("c16_significant_p_near_alpha", 0.95, 0.049814, True),
+        # A p 4 decimals would print as the threshold.
+        ("c16_significant_p_near_alpha_99", 0.99, 0.0099972, True),
+        ("c16_not_significant_p_near_alpha_99", 0.99, 0.0100040, False),
+    ],
+)
+def test_the_cases_at_the_threshold(committed, case, level, p, significant):
+    """The notes' near-threshold cases are what the server computes: p just
+    either side of 1 - level, with an interval that disagrees with it."""
+    treatment = _treatment(committed, case)
+    assert committed["cases"][case]["confidence_level"] == level
+    assert treatment["p_value"] == pytest.approx(p, abs=5e-7)
+    assert treatment["is_significant"] is significant
+    low, high = treatment["absolute_difference_ci"]
+    excludes_zero = low > 0 or high < 0
+    assert excludes_zero is not significant

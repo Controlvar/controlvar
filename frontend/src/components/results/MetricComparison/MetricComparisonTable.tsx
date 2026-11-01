@@ -163,15 +163,27 @@ function NoValueNote({
 
 /**
  * Under a table whose server reports the intervals on the change (#1496),
- * when any interval is shown: what they are, that they are not adjusted, and
- * that a percentage interval can be very wide.
+ * when any interval is shown: what they are, how they relate to significance,
+ * and that a percentage interval can be very wide. Only when some row shows
+ * an adjusted p-value does it say that significance is adjusted and the
+ * intervals are not; under no correction, or with one treatment, nothing is
+ * adjusted, and it says only that the test decides.
  */
-export function intervalFootnote(confidenceLevel: number): string {
+export function intervalFootnote(confidenceLevel: number, adjustedShown: boolean): string {
+  const level = formatConfidence(confidenceLevel);
+  if (adjustedShown) {
+    return (
+      `Intervals are ${level} confidence intervals (CI) of the difference from the control. ` +
+      'They are not adjusted for comparing several variants with the control; significance ' +
+      'is, so the two can disagree, and the row says so when they do. A percentage interval ' +
+      'can be very wide when counts are small.'
+    );
+  }
   return (
-    `Intervals are ${formatConfidence(confidenceLevel)} confidence intervals (CI) of the ` +
-    'difference from the control. They are not adjusted for comparing several variants with ' +
-    'the control; significance is, so the two can disagree, and the row says so when they do. ' +
-    'A percentage interval can be very wide when counts are small.'
+    `Intervals are ${level} confidence intervals (CI) of the difference from the control. ` +
+    'Significance comes from the test, not the interval, so near the threshold the two can ' +
+    'disagree; the row says so when they do. A percentage interval can be very wide when ' +
+    'counts are small.'
   );
 }
 
@@ -550,7 +562,10 @@ export function MetricComparisonTable({
       )}
       {intervalNoted && (
         <p className="mt-3 text-xs text-slate-600" data-testid="interval-footnote">
-          {intervalFootnote(confidenceLevel)}
+          {intervalFootnote(
+            confidenceLevel,
+            views.some((v) => v.adjustedShown),
+          )}
         </p>
       )}
       {impactShown && (

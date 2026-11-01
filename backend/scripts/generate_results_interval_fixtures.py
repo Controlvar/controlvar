@@ -17,8 +17,11 @@ one below -1,000,000%, a mean whose control is too uncertain around 0 for a
 relative interval, a proportion control with no conversions, a treatment with
 no conversions (its relative lower bound is exactly -100%), an arm with no
 users, three variants under Benjamini-Hochberg, and the two boundary cases
-where the interval and the test disagree (PS-3: 3/50 against 18/100; 128/1000
-against 100/1000).
+where the interval and the test disagree (3/50 against 18/100; 128/1000
+against 100/1000). Also the notes' p right at the threshold (45/200 against
+5/50 at 0.95; 15/200 against 2/150 and 67/200 against 68/300 at 0.99), and the
+three shapes the interval footnote tells apart (two treatments with and
+without a correction, one treatment under Benjamini-Hochberg).
 
 Usage (from the repository root, venv active):
 
@@ -318,6 +321,85 @@ CASES: List[Case] = [
         "interval excludes 0",
         0.95,
         "none",
+        lambda c, lv, cm: _proportion(
+            c,
+            "Signup",
+            "conversion",
+            [("control", True, 1000, 100), ("treatment", False, 1000, 128)],
+            lv,
+            cm,
+        ),
+    ),
+    (
+        "c16_significant_p_near_alpha",
+        "C16 at the threshold: 45/200 against 5/50: significant (Fisher p 0.04981, which "
+        "3 decimals would print as 0.050) while Newcombe's interval reaches 0",
+        0.95,
+        "none",
+        lambda c, lv, cm: _proportion(
+            c,
+            "Signup",
+            "conversion",
+            [("control", True, 50, 5), ("treatment", False, 200, 45)],
+            lv,
+            cm,
+        ),
+    ),
+    (
+        "c16_significant_p_near_alpha_99",
+        "C16 at the threshold at 0.99: 15/200 against 2/150: significant (Fisher p "
+        "0.0099972, which 4 decimals would print as 0.0100) while the interval reaches 0",
+        0.99,
+        "none",
+        lambda c, lv, cm: _proportion(
+            c,
+            "Signup",
+            "conversion",
+            [("control", True, 150, 2), ("treatment", False, 200, 15)],
+            lv,
+            cm,
+        ),
+    ),
+    (
+        "c16_not_significant_p_near_alpha_99",
+        "C16 at the threshold at 0.99: 67/200 against 68/300: not significant (Fisher p "
+        "0.0100040) while the interval excludes 0",
+        0.99,
+        "none",
+        lambda c, lv, cm: _proportion(
+            c,
+            "Signup",
+            "conversion",
+            [("control", True, 300, 68), ("treatment", False, 200, 67)],
+            lv,
+            cm,
+        ),
+    ),
+    (
+        "f13_two_treatments_no_correction",
+        "F13 under no correction: the three-variant arms with correction_method none, so "
+        "nothing is adjusted",
+        0.95,
+        "none",
+        lambda c, lv, cm: _proportion(
+            c,
+            "Signup",
+            "conversion",
+            [
+                ("control", True, 1000, 100),
+                ("one_page", False, 1000, 131),
+                ("two_step", False, 1000, 104),
+            ],
+            lv,
+            cm,
+        ),
+    ),
+    (
+        "f13_one_treatment_bh",
+        "F13 with one treatment under Benjamini-Hochberg (the default): the correction "
+        "changes nothing, so no p-value is shown adjusted; 128/1000 against 100/1000",
+        0.95,
+        "benjamini_hochberg",
         lambda c, lv, cm: _proportion(
             c,
             "Signup",
