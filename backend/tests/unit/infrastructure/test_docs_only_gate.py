@@ -222,6 +222,11 @@ NOT_DOCS_TESTS = {
     ),
     # Hands the classifier path STRINGS such as "docs/a.py"; opens no file.
     "backend/tests/unit/scripts/test_classify_changes.py": "fixture strings only",
+    # Hands scripts/contributor_guard.py path STRINGS such as "docs/x.md", and
+    # walks the tree for the NAMES of its files; opens no file under docs/.
+    "backend/tests/unit/scripts/test_contributor_guard.py": (
+        "fixture strings and file names only"
+    ),
     # Gives storyboard narration claims a source STRING such as
     # "docs/getting-started/quick-start.md"; opens no file under docs/.
     "backend/tests/unit/showcase/test_showcase_narration.py": "fixture strings only",
