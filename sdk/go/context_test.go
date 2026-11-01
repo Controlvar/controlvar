@@ -121,6 +121,7 @@ func TestEvaluateFlag_UnencodableAttributes_SendAndCacheNothing(t *testing.T) {
 		"NaN":      math.NaN(),
 		"infinity": math.Inf(1),
 		"channel":  make(chan int),
+		"func":     func() {},
 	} {
 		t.Run(name, func(t *testing.T) {
 			fb := newFakeBackend(t)
@@ -163,12 +164,17 @@ func TestEvaluateFlag_UnencodableAttributes_SendAndCacheNothing(t *testing.T) {
 }
 
 // A context the server refuses (its 422 over the targeting context limits,
-// or a proxy's 400 or 414 for a long URL) is an error with the disabled
-// result, like any other non-2xx, and is not cached. The SDK keeps no copy
-// of the limits: it sends a context larger than 8,192 bytes and lets the
-// server answer.
+// or the 400, 414 or 431 of a server or proxy that refuses a long URL) is an
+// error with the disabled result, like any other non-2xx, and is not cached.
+// The SDK keeps no copy of the limits: it sends a context larger than 8,192
+// bytes and lets the server answer.
 func TestEvaluateFlag_ContextTheServerRefuses_IsAnErrorAndNotCached(t *testing.T) {
-	for _, status := range []int{http.StatusUnprocessableEntity, http.StatusBadRequest, http.StatusRequestURITooLong} {
+	for _, status := range []int{
+		http.StatusUnprocessableEntity,
+		http.StatusBadRequest,
+		http.StatusRequestURITooLong,
+		http.StatusRequestHeaderFieldsTooLarge,
+	} {
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			fb := newFakeBackend(t)
 			fb.respondJSON(http.MethodGet, contextFlagPath, status,

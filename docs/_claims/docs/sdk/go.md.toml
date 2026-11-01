@@ -387,7 +387,7 @@ text = "The SDK does not check the server's targeting context limits."
 by = ["test:sdk/go/context_test.go::TestEvaluateFlag_ContextTheServerRefuses_IsAnErrorAndNotCached"]
 
 [[unit]]
-text = "A context over them is answered 422, and a proxy that refuses a long URL may answer 400 or 414; EvaluateFlag then returns the disabled result and the APIError, and caches nothing."
+text = "A context over them is answered 422, and a server or proxy that refuses a long URL may answer 400, 414 or 431; EvaluateFlag then returns the disabled result and the APIError, and caches nothing."
 by = [
     "test:sdk/go/context_test.go::TestEvaluateFlag_ContextTheServerRefuses_IsAnErrorAndNotCached",
     "test:backend/tests/integration/api/test_targeting_context_limits.py::test_a_real_server_answers_the_clean_422",

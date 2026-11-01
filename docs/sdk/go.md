@@ -227,8 +227,9 @@ as compact JSON, URL-encoded. With nil or empty attributes, `EvaluateFlag` sends
   `EvaluateFlag` returns the disabled result and an error wrapping the `encoding/json` error,
   and `GetAssignment` returns `nil` and that error; neither sends nor caches anything.
 - The SDK does not check the server's [targeting context limits](../api/endpoints.md#targeting-context-limits).
-  A `context` over them is answered 422, and a proxy that refuses a long URL may answer 400 or
-  414; `EvaluateFlag` then returns the disabled result and the `*APIError`, and caches nothing.
+  A `context` over them is answered 422, and a server or proxy that refuses a long URL may answer
+  400, 414 or 431; `EvaluateFlag` then returns the disabled result and the `*APIError`, and
+  caches nothing.
 
 ---
 

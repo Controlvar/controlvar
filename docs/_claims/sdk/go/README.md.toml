@@ -57,10 +57,11 @@ text = "Changes"
 by = ["exempt:label"]
 
 [[unit]]
-text = "If your go.mod holds a pseudo-version from before this note, the next go get brings two changes:"
+text = "If your go.mod holds a pseudo-version from before this note, the next go get brings three changes:"
 by = [
-    "journey:sdk-go#quick-start-user-on",
-    "journey:sdk-go#quick-start-user-off",
+    "test:sdk/go/context_test.go::TestEvaluateFlag_SendsAttributesAsCompactJSONContext",
+    "test:sdk/go/context_test.go::TestEvaluateFlag_UnencodableAttributes_SendAndCacheNothing",
+    "test:sdk/go/context_test.go::TestEvaluateFlag_ContextTheServerRefuses_IsAnErrorAndNotCached",
 ]
 
 [[unit]]
@@ -90,6 +91,20 @@ by = [
 [[unit]]
 text = "Before, EvaluateFlag did not send attributes at all, so they caused no error."
 by = ["test:sdk/go/context_test.go::TestEvaluateFlag_UnencodableAttributes_SendAndCacheNothing"]
+
+[[unit]]
+text = "Attributes over the server's targeting context limits (8,192 bytes, 10 levels), or a URL too long for a server or proxy, now make EvaluateFlag return the disabled result and an APIError (422, or the 400, 414 or 431 of a server or proxy that refuses the URL), for any flag."
+by = [
+    "test:sdk/go/context_test.go::TestEvaluateFlag_ContextTheServerRefuses_IsAnErrorAndNotCached",
+    "test:backend/tests/integration/api/test_targeting_context_limits.py::test_a_real_server_answers_the_clean_422",
+]
+
+[[unit]]
+text = "Before, they were not sent, and the flag answered without them."
+by = [
+    "test:sdk/go/context_test.go::TestEvaluateFlag_ContextTheServerRefuses_IsAnErrorAndNotCached",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_no_context_keeps_existing_behaviour",
+]
 
 [[unit]]
 text = "Quick Start"
@@ -356,7 +371,7 @@ text = "The SDK does not check the server's targeting context limits."
 by = ["test:sdk/go/context_test.go::TestEvaluateFlag_ContextTheServerRefuses_IsAnErrorAndNotCached"]
 
 [[unit]]
-text = "A context over them is answered 422, and a proxy that refuses a long URL may answer 400 or 414; EvaluateFlag then returns the disabled result and the APIError, and caches nothing."
+text = "A context over them is answered 422, and a server or proxy that refuses a long URL may answer 400, 414 or 431; EvaluateFlag then returns the disabled result and the APIError, and caches nothing."
 by = [
     "test:sdk/go/context_test.go::TestEvaluateFlag_ContextTheServerRefuses_IsAnErrorAndNotCached",
     "test:backend/tests/integration/api/test_targeting_context_limits.py::test_a_real_server_answers_the_clean_422",

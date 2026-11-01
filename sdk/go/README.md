@@ -23,7 +23,7 @@ import exp "github.com/controlvar/controlvar/sdk/go"
 
 ## Changes
 
-If your `go.mod` holds a pseudo-version from before this note, the next `go get` brings two
+If your `go.mod` holds a pseudo-version from before this note, the next `go get` brings three
 changes:
 
 - `EvaluateFlag` sends `User.Attributes` as `context`, as `GetAssignment` does, so a flag's
@@ -32,6 +32,10 @@ changes:
 - Attributes that cannot be encoded as JSON (a NaN or infinite number, a channel, a func) now make
   `EvaluateFlag` return the disabled result and an error, and send nothing, as `GetAssignment`
   does with them. Before, `EvaluateFlag` did not send attributes at all, so they caused no error.
+- Attributes over the server's targeting context limits (8,192 bytes, 10 levels), or a URL too
+  long for a server or proxy, now make `EvaluateFlag` return the disabled result and an
+  `*APIError` (422, or the 400, 414 or 431 of a server or proxy that refuses the URL), for any
+  flag. Before, they were not sent, and the flag answered without them.
 
 ## Quick Start
 
@@ -150,8 +154,9 @@ as compact JSON, URL-encoded. With nil or empty attributes, `EvaluateFlag` sends
   and `GetAssignment` returns `nil` and that error; neither sends nor caches anything.
 - The SDK does not check the server's
   [targeting context limits](https://github.com/Controlvar/controlvar/blob/main/docs/api/endpoints.md#targeting-context-limits).
-  A `context` over them is answered 422, and a proxy that refuses a long URL may answer 400 or
-  414; `EvaluateFlag` then returns the disabled result and the `*APIError`, and caches nothing.
+  A `context` over them is answered 422, and a server or proxy that refuses a long URL may answer
+  400, 414 or 431; `EvaluateFlag` then returns the disabled result and the `*APIError`, and
+  caches nothing.
 
 ## Caching and failure behaviour
 
