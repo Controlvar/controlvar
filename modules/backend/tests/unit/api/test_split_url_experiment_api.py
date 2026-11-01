@@ -907,3 +907,88 @@ class TestSplitUrlPreviewEndpoint:
 
         assert "experiment_id" in result
         assert result["experiment_id"] == str(experiment_id)
+
+
+class TestSplitUrlPreviewHandlerRole:
+    """The module's preview handler, called directly rather than through the
+    core route, applies the same rule as the route: a superuser, or the ADMIN
+    or DEVELOPER role."""
+
+    @pytest.mark.regression
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "name", ["testviewer", "analyst_user", "developer_user", "admin_user"]
+    )
+    @pytest.mark.parametrize("role", ["viewer", "analyst"])
+    async def test_the_preview_handler_refuses_a_viewer_or_an_analyst(
+        self, mock_db, mock_experiment_service, role, name
+    ):
+        """A VIEWER or an ANALYST gets 403 from the module's handler itself."""
+        from fastapi import HTTPException
+
+        from backend.app.models.user import UserRole
+        from modules.backend.app.api.v1.endpoints.experiments_split_url import (
+            preview_split_url_assignment,
+        )
+
+        user = _SimpleUser(username=name, is_superuser=False, role=UserRole(role))
+        experiment_id = uuid.uuid4()
+        mock_experiment_service.get_experiment_by_id.return_value = (
+            make_mock_experiment_dict(
+                experiment_id=experiment_id,
+                owner_id=user.id,
+                experiment_type="split_url",
+                split_url_config=VALID_SPLIT_URL_CONFIG,
+            )
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await preview_split_url_assignment(
+                experiment_id=experiment_id,
+                user_id="some-user",
+                db=mock_db,
+                current_user=user,
+            )
+
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.regression
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("role", "is_superuser"),
+        [("developer", False), ("admin", False), ("viewer", True)],
+    )
+    async def test_the_preview_handler_admits_the_routes_roles(
+        self, mock_db, mock_experiment_service, role, is_superuser
+    ):
+        """A DEVELOPER, an ADMIN and a superuser get the preview."""
+        from backend.app.models.user import UserRole
+        from modules.backend.app.api.v1.endpoints.experiments_split_url import (
+            preview_split_url_assignment,
+        )
+
+        user = _SimpleUser(
+            username="preview_account", is_superuser=is_superuser, role=UserRole(role)
+        )
+        experiment_id = uuid.uuid4()
+        mock_experiment_service.get_experiment_by_id.return_value = (
+            make_mock_experiment_dict(
+                experiment_id=experiment_id,
+                owner_id=user.id,
+                experiment_type="split_url",
+                split_url_config=VALID_SPLIT_URL_CONFIG,
+            )
+        )
+
+        result = await preview_split_url_assignment(
+            experiment_id=experiment_id,
+            user_id="some-user",
+            db=mock_db,
+            current_user=user,
+        )
+
+        assert result["experiment_id"] == str(experiment_id)
+        assert result["url"] in [
+            "https://example.com/control",
+            "https://example.com/treatment",
+        ]
