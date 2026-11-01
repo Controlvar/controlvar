@@ -20,7 +20,8 @@ A name is refused by the first rule it breaks:
 2. location  under ``backend/``, ``modules/backend/``, ``modules/frontend/``,
              ``frontend/``, ``sdk/``, ``demo/``, ``docs/`` or ``tests/``, or
              exactly ``README.md``; and not under
-             ``backend/tests/unit/infrastructure/``;
+             ``backend/tests/unit/infrastructure/``, nor exactly one of the
+             package files above the CI-check tests (REFUSED_FILES);
 3. dot       no segment starts with ``.``;
 4. scripts   no segment is ``scripts``;
 5. claims    not under ``docs/_claims/`` or ``docs/security/``;
@@ -120,6 +121,14 @@ ALLOWED_ROOTS = (
 ALLOWED_FILES = ("readme.md",)
 #: Inside an allowed root, refused as a location all the same.
 CARVED_OUT = ("backend/tests/unit/infrastructure/",)
+#: Inside an allowed root, refused as a location: exactly these files, the
+#: packages Python initialises on the way to the CI-check tests. A file beside
+#: them (``backend/tests/unit/test_x.py``) stays allowed.
+REFUSED_FILES = (
+    "backend/__init__.py",
+    "backend/tests/__init__.py",
+    "backend/tests/unit/__init__.py",
+)
 
 #: Rule 5.
 CLAIMS = ("docs/_claims/",)
@@ -162,6 +171,8 @@ MANIFEST = tuple(
         r"(^|/)build\.rs$",
         # Test isolation.
         r"no_real_aws\.py$",
+        # Python start-up hooks: imported by every interpreter that finds them.
+        r"(^|/)(site|user)customize\.py$",
     )
 )
 
@@ -290,7 +301,7 @@ _PRINTABLE = re.compile(r"[\x21-\x7e]+")
 
 def _location(name: str) -> bool:
     allowed = name in ALLOWED_FILES or name.startswith(ALLOWED_ROOTS)
-    return not allowed or name.startswith(CARVED_OUT)
+    return not allowed or name.startswith(CARVED_OUT) or name in REFUSED_FILES
 
 
 def _dot(name: str) -> bool:
@@ -342,6 +353,8 @@ def reason(rule: str, path: str) -> str:
     """The text a contributor sees for a path `rule` refused."""
     name = path.lower()
     if rule == "location":
+        if name in REFUSED_FILES:
+            return SCRIPTS
         for root, text in REFUSED_ROOTS.items():
             if name.startswith(root):
                 return text

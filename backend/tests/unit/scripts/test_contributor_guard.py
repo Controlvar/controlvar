@@ -172,6 +172,9 @@ def refused(files: List[Dict[str, Any]], **fake: Any) -> Dict[str, str]:
         "modules/new/x.py",
         "backend/tests/unit/infrastructure/_workflow_graph.py",
         "backend/tests/unit/infrastructure/fixtures/x.json",
+        "backend/__init__.py",
+        "backend/tests/__init__.py",
+        "backend/tests/unit/__init__.py",
     ],
 )
 def test_a_path_outside_the_open_areas_is_refused_by_location(path):
@@ -185,6 +188,12 @@ def test_a_path_outside_the_open_areas_is_refused_by_location(path):
         "backend/app/x.py",
         "backend/lambda/x/handler.py",
         "backend/tests/unit/api/test_x.py",
+        # Beside the refused package files, and other packages' own files.
+        "backend/tests/unit/test_x.py",
+        "backend/tests/test_x.py",
+        "backend/app/__init__.py",
+        "backend/tests/unit/api/__init__.py",
+        "backend/app/sitecustomize_helper.py",
         "modules/backend/app/x.py",
         "modules/frontend/src/x.tsx",
         "frontend/src/x.tsx",
@@ -278,6 +287,9 @@ KIND_AND_NAME = {
     "sdk/elixir/mix.exs": "manifest",
     "sdk/x/Dockerfile.md": "manifest",
     "backend/tests/no_real_aws.py": "manifest",
+    "backend/docker/sitecustomize.py": "manifest",
+    "backend/app/usercustomize.py": "manifest",
+    "sdk/python/SiteCustomize.py": "manifest",
     "sdk/java/gradle/wrapper/x.json": "manifest",
     # Kinds outside the list, from the tree.
     "backend/x.conf": "kind",
@@ -305,6 +317,7 @@ CASE = {
     "frontend/Package.json": "manifest",
     "Backend/tests/unit/Infrastructure/x.py": "location",
     "SCRIPTS/x.py": "location",
+    "Backend/Tests/__init__.py": "location",
     "sdk/x/MAKEFILE": "kind",
 }
 
@@ -929,6 +942,9 @@ def test_every_reason_shown_is_one_of_the_table():
         (".github/workflows/x.yml", cg.WORKFLOWS),
         ("scripts/x.py", cg.SCRIPTS),
         ("backend/tests/unit/infrastructure/x.py", cg.SCRIPTS),
+        ("backend/__init__.py", cg.SCRIPTS),
+        ("backend/tests/unit/__init__.py", cg.SCRIPTS),
+        ("backend/docker/sitecustomize.py", cg.DEPENDENCIES),
         ("backend/scripts/x.py", cg.SCRIPTS),
         ("requirements/runtime.txt", cg.DEPENDENCIES),
         ("frontend/package.json", cg.DEPENDENCIES),
@@ -1232,14 +1248,14 @@ def _frozen() -> Dict[str, str]:
 #: How many paths of the frozen list each rule refuses first. A change to a
 #: rule moves these; change them in the same pull request, on purpose.
 COUNTS = {
-    "allowed": 2584,
+    "allowed": 2580,
     "chars": 0,
-    "location": 434,
+    "location": 437,
     "dot": 14,
     "scripts": 79,
     "claims": 125,
     "kind": 128,
-    "manifest": 25,
+    "manifest": 26,
     "mode": 0,
     "case": 0,
 }
@@ -1313,14 +1329,27 @@ def _imported(path: Path) -> Set[Path]:
     return {f for f in map(_module_file, names) if f is not None}
 
 
+def _parent_packages(path: Path) -> Set[Path]:
+    """The ``__init__.py`` of every package above `path`, up to the
+    repository root: the files Python runs before a module in them."""
+    found: Set[Path] = set()
+    directory = path.parent
+    while directory != REPO_ROOT and REPO_ROOT in directory.parents:
+        if (directory / "__init__.py").is_file():
+            found.add(directory / "__init__.py")
+        directory = directory.parent
+    return found
+
+
 def import_closure(roots: Iterable[Path]) -> Dict[Path, Path]:
-    """Each repository file reachable from `roots` by import statements ->
-    a file that imports it (a root maps to itself)."""
+    """Each repository file reachable from `roots` by import statements, and
+    the parent packages' ``__init__.py`` files of each -> a file that brings
+    it in (a root maps to itself)."""
     found = {root: root for root in roots}
     queue = list(found)
     while queue:
         current = queue.pop()
-        for target in _imported(current):
+        for target in _imported(current) | _parent_packages(current):
             if target not in found:
                 found[target] = current
                 queue.append(target)
@@ -1329,20 +1358,20 @@ def import_closure(roots: Iterable[Path]) -> Dict[Path, Path]:
 
 def test_what_the_gate_tests_import_only_a_maintainer_changes():
     """The guard's and the privileged-trigger pin's tests, the script they
-    load, and every repository file their import statements reach, lie in
-    paths the guard refuses: a fork cannot change a gate's test through a
-    helper it imports.
+    load, every repository file their import statements reach, and the
+    ``__init__.py`` of every package above each of those, lie in paths the
+    guard refuses: a fork cannot change what a gate's test runs through a
+    helper it imports or a package it sits in.
 
-    The walk follows import statements to the files they name. It does not
-    walk the packages Python initialises on the way (``backend``,
-    ``backend.tests``, ``backend.tests.unit``): pytest initialises those, as
-    it loads the conftests above a test, to collect any test under
-    ``backend/tests/unit/``, so they are not this test's to close."""
+    conftest.py files are loaded by pytest, not imported; they are outside
+    this walk."""
     closure = import_closure([Path(__file__).resolve(), G2_TEST, SCRIPT])
     rel = {p.relative_to(REPO_ROOT).as_posix(): i for p, i in closure.items()}
     assert "backend/tests/unit/infrastructure/_workflow_graph.py" in rel, sorted(rel)
     gate = "backend/tests/unit/infrastructure/test_docs_only_gate.py"
     assert gate in rel, sorted(rel)
+    for package in cg.REFUSED_FILES:
+        assert package in rel, f"the walk did not reach {package}: {sorted(rel)}"
     allowed = sorted(
         f"{importer.relative_to(REPO_ROOT).as_posix()} imports {path}"
         for path, importer in rel.items()

@@ -222,10 +222,14 @@ NOT_DOCS_TESTS = {
     ),
     # Hands the classifier path STRINGS such as "docs/a.py"; opens no file.
     "backend/tests/unit/scripts/test_classify_changes.py": "fixture strings only",
-    # Hands scripts/contributor_guard.py path STRINGS such as "docs/x.md", and
-    # walks the tree for the NAMES of its files; opens no file under docs/.
+    # Hands scripts/contributor_guard.py path STRINGS such as "docs/x.md";
+    # walks the tree, where docs/_claims/ and docs/security/ must each hold a
+    # file (it reads their names, opens none of them); and reads the headings
+    # of CONTRIBUTING.md, which is never docs-only (scripts/classify_changes.py),
+    # so a change to it runs this test. A docs-only change that emptied either
+    # directory would fail here on the next full run, not on its own.
     "backend/tests/unit/scripts/test_contributor_guard.py": (
-        "fixture strings and file names only"
+        "names under docs/_claims/ and docs/security/; CONTRIBUTING.md headings"
     ),
     # Gives storyboard narration claims a source STRING such as
     # "docs/getting-started/quick-start.md"; opens no file under docs/.
