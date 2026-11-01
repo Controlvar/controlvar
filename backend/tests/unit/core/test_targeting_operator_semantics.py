@@ -19,6 +19,7 @@ import pytest
 from backend.app.core.pattern_match import PatternUnevaluable
 from backend.app.core.rules_engine import TimeWindowUnreadable, evaluate_rule_group
 from backend.app.core.targeting_adapter import (
+    TargetingRulesError,
     match_targeting_rule,
     normalise_targeting_rules,
     validate_experiment_targeting,
@@ -361,7 +362,7 @@ def test_array_length_compares_the_length_as_additional_value_says(
 
 
 # ---------------------------------------------------------------------------
-# The operators the reference leaves out
+# json_path and percentage_bucket: experiments only (#1204)
 # ---------------------------------------------------------------------------
 
 LEFT_OUT = {
@@ -376,20 +377,34 @@ LEFT_OUT = {
 
 
 @pytest.mark.parametrize("name", sorted(LEFT_OUT))
-def test_the_native_shape_accepts_json_path_and_percentage_bucket(name):
+def test_experiment_targeting_accepts_json_path_and_percentage_bucket(name):
     condition, _ = LEFT_OUT[name]
     raw = _rules(condition).model_dump(mode="json", exclude_none=True)
-    assert validate_flag_targeting(raw) is not None
     assert validate_experiment_targeting(raw) is not None
 
 
-def test_flags_and_experiments_answer_json_path_and_percentage_bucket_differently():
-    differ = {
-        name
+@pytest.mark.regression
+@pytest.mark.parametrize("name", sorted(LEFT_OUT))
+def test_flag_targeting_refuses_json_path_and_percentage_bucket(name):
+    """#1204: refused with 422 on a flag, where it was accepted and never held."""
+    condition, _ = LEFT_OUT[name]
+    raw = _rules(condition).model_dump(mode="json", exclude_none=True)
+    with pytest.raises(TargetingRulesError) as refused:
+        validate_flag_targeting(raw)
+    assert str(refused.value) == (
+        "rules[0].rule.conditions[0].operator: not supported for feature flags; "
+        "json_path and percentage_bucket are for experiments only"
+    )
+
+
+def test_flag_evaluation_does_not_implement_json_path_or_percentage_bucket():
+    """Why a flag refuses them: a rule stored with one does not hold on a flag
+    for a context it holds for on an experiment."""
+    answers = {
+        name: _answers(_rules(condition), context)
         for name, (condition, context) in LEFT_OUT.items()
-        if len(set(_answers(_rules(condition), context))) == 2
     }
-    assert differ == {"json_path", "percentage_bucket"}
+    assert answers == {"json_path": (False, True), "percentage_bucket": (False, True)}
 
 
 # ---------------------------------------------------------------------------

@@ -39,7 +39,17 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple
 from pydantic import ValidationError
 
 from backend.app.core.log_once import EVALUATION_NOTES
-from backend.app.core.rules_engine import SEGMENT_OPERATORS, evaluate_rule
+from backend.app.core.rules_engine import (
+    ARRAY_LENGTH_COMPARISONS,
+    GEO_COMPARISONS,
+    GEO_UNITS,
+    OPERATORS_NOT_ON_FLAGS,
+    SEGMENT_OPERATORS,
+    SEMVER_COMPARISONS,
+    TimeWindowUnreadable,
+    check_time_window,
+    evaluate_rule,
+)
 from backend.app.schemas.targeting_rule import (
     Condition,
     LogicalOperator,
@@ -391,7 +401,11 @@ def validate_flag_targeting(value: Any) -> Optional[TargetingRules]:
     * ``rollout_percentage``, on dashboard rules and on a native rule, must be
       an integer from 0 to 100. A float with no fractional part (``100.0``)
       is accepted, as the native model accepts it; ``33.5``, ``true`` and
-      text are refused.
+      text are refused;
+    * the operators ``json_path`` and ``percentage_bucket``, which flag
+      evaluation does not implement, are refused (#1204; experiments accept
+      them). Both validators refuse the other words the engine does not know
+      (:func:`_check_supported_vocabulary`).
 
     For every value it accepts, what it returns is what
     :func:`normalise_targeting_rules` gives the flag evaluator (``None`` and
@@ -556,6 +570,8 @@ def _validate_targeting(value: Any, *, kind: str) -> Optional[TargetingRules]:
     _check_list_sizes(rules, groups_base)
     _check_segment_conditions(rules, groups_base)
     _check_rule_validator(rules, groups_base)
+    # Last, so a value refused before #1204 keeps its message.
+    _check_supported_vocabulary(rules, groups_base, kind)
     return rules
 
 
@@ -985,6 +1001,167 @@ def _check_rule_validator(rules: TargetingRules, groups_base: Optional[str]) -> 
             _rule_base(rules, issue.rule_id, groups_base), issue.condition_path
         )
         raise TargetingRulesError(path, code)
+
+
+# ---------------------------------------------------------------------------
+# Words the evaluator never matches (#1204)
+# ---------------------------------------------------------------------------
+
+#: The reason for each word :func:`_check_supported_vocabulary` refuses. Each is
+#: one line of at most 200 characters, the most the dashboard shows as one
+#: condition's problem (``describeTargetingIssue``), and none repeats a value.
+NOT_ON_FLAGS_REASON = (
+    "not supported for feature flags; json_path and percentage_bucket are for "
+    "experiments only"
+)
+VERSION_COMPARISON_REASON = (
+    "unknown version comparison; use eq, gt, gte, lt or lte, or leave it out for eq"
+)
+LENGTH_COMPARISON_REASON = (
+    "unknown length comparison; use eq, gt, gte, lt, lte or between, or leave it "
+    "out for eq"
+)
+DISTANCE_COMPARISON_REASON = (
+    "unknown distance comparison; use lte, lt, gte, gt or eq, or leave it out for lte"
+)
+DISTANCE_UNIT_REASON = "unknown distance unit; use km, mi or m, or leave it out for km"
+TIME_WINDOW_REASON = (
+    "unreadable time window; see the time_window example on the Targeting "
+    "Rules: Operator Reference page"
+)
+VOCABULARY_REASONS = (
+    NOT_ON_FLAGS_REASON,
+    VERSION_COMPARISON_REASON,
+    LENGTH_COMPARISON_REASON,
+    DISTANCE_COMPARISON_REASON,
+    DISTANCE_UNIT_REASON,
+    TIME_WINDOW_REASON,
+)
+
+
+def _silent(_operator: Any, _reason: str) -> None:
+    """A ``note`` for ``check_time_window`` that logs nothing (a save is not an
+    evaluation)."""
+
+
+def _known_comparison(word: Any, known: frozenset) -> bool:
+    """Whether the engine reads ``word`` as one of ``known``: a false-y word is
+    read as ``eq``, any other must be one of the strings."""
+    return not word or (isinstance(word, str) and word in known)
+
+
+def _unsupported_word(
+    condition: Condition, kind: str, dashboard: bool
+) -> Optional[Tuple[str, str]]:
+    """``(field, reason)`` for a word in ``condition`` its evaluator never
+    matches, or ``None``. ``field`` is the condition's key the path ends in."""
+    operator = condition.operator
+    extra = condition.additional_value
+    if kind == _FLAG and operator in OPERATORS_NOT_ON_FLAGS:
+        return "operator", NOT_ON_FLAGS_REASON
+    if operator == OperatorType.SEMANTIC_VERSION and not _known_comparison(
+        extra, SEMVER_COMPARISONS
+    ):
+        return "additional_value", VERSION_COMPARISON_REASON
+    if operator == OperatorType.ARRAY_LENGTH and not _known_comparison(
+        extra, ARRAY_LENGTH_COMPARISONS
+    ):
+        return "additional_value", LENGTH_COMPARISON_REASON
+    if operator == OperatorType.GEO_DISTANCE and isinstance(extra, dict):
+        # The engine reads an absent or null comparison as lte, and an absent
+        # unit as km; an explicit null unit matches nothing. The dashboard
+        # converter keeps only the unit, which the submitted value carries.
+        comparison = extra.get("comparison")
+        if comparison is not None and not (
+            isinstance(comparison, str) and comparison in GEO_COMPARISONS
+        ):
+            return "additional_value", DISTANCE_COMPARISON_REASON
+        if "unit" in extra:
+            unit = extra["unit"]
+            if not isinstance(unit, str) or unit.lower() not in GEO_UNITS:
+                return ("value" if dashboard else "additional_value"), (
+                    DISTANCE_UNIT_REASON
+                )
+    if operator == OperatorType.TIME_WINDOW and not dashboard:
+        # Native shape only (#1204, ruling 1): the engine's own check, so the
+        # two cannot drift. A dashboard window is converted first
+        # (``_time_window_value``), and that shape is not checked here.
+        try:
+            check_time_window(operator, condition.value, note=_silent)
+        except TimeWindowUnreadable:
+            return "value", TIME_WINDOW_REASON
+    return None
+
+
+def _check_supported_vocabulary(
+    rules: TargetingRules, groups_base: Optional[str], kind: str
+) -> None:
+    """Refuse a word the evaluator that will read the rules never matches (#1204).
+
+    Each condition of ``rules`` and of ``default_rule``, at any depth and
+    inside ``NOT`` too, in document order (a group's conditions, then its
+    nested groups):
+
+    * on a flag (``kind`` ``"flag"``), the operators ``json_path`` and
+      ``percentage_bucket``, which flag evaluation does not implement
+      (``rules_engine.OPERATORS_NOT_ON_FLAGS``); experiments implement both;
+    * a ``semantic_version`` or ``array_length`` ``additional_value`` outside
+      ``SEMVER_COMPARISONS`` or ``ARRAY_LENGTH_COMPARISONS`` (a false-y one is
+      read as ``eq``);
+    * a ``geo_distance`` ``comparison`` outside ``GEO_COMPARISONS`` (absent or
+      ``null`` is ``lte``), and a ``unit`` that is not text in ``GEO_UNITS``
+      once lowercased (absent is ``km``; an explicit ``null`` matches nothing);
+    * in the native shape (``groups_base`` ``None``), a ``time_window`` value
+      ``rules_engine.check_time_window`` cannot read.
+
+    Such a condition is accepted by the schema and never holds, or (the
+    window) abandons the whole ruleset. The path is in the submitted value's
+    terms: ``rules[i].rule.conditions[k].operator`` (or ``.additional_value``,
+    ``.value``) for the native shape, ``groups[i].conditions[j].value`` for a
+    dashboard unit. Called from :func:`_validate_targeting` and, for segments,
+    :func:`check_segment_vocabulary`, both on the write path only. Never from
+    :func:`validate_segment_rules` or :func:`_check_rule_validator`: those
+    also gate reads, and a stored segment that failed there would become
+    unavailable, every flag naming it answering ``error``.
+    """
+    dashboard = groups_base is not None
+    roots = [
+        (rule.rule, "" if dashboard else f"rules[{index}].rule")
+        for index, rule in enumerate(rules.rules)
+    ]
+    if rules.default_rule is not None:
+        roots.append((rules.default_rule.rule, "default_rule.rule"))
+    for root, root_path in roots:
+        stack = [(root, root_path)]
+        while stack:
+            group, path = stack.pop()
+            for ci, condition in enumerate(group.conditions):
+                problem = _unsupported_word(condition, kind, dashboard)
+                if problem is not None:
+                    field, reason = problem
+                    raise TargetingRulesError(
+                        _join(path, f"conditions[{ci}].{field}"), reason
+                    )
+            stack.extend(
+                (child, _join(path, f"groups[{gi}]"))
+                for gi, child in reversed(list(enumerate(group.groups or [])))
+            )
+
+
+def check_segment_vocabulary(rules: TargetingRules) -> None:
+    """Refuse segment rules with a word membership never matches (#1204).
+
+    ``rules`` are what :func:`validate_segment_rules` returned. Segment rules
+    are in the dashboard shape and evaluated as a flag's are, so the only
+    word that can be refused is a distance unit. Called on a segment's write
+    path (``schemas.segment``) and by ``check_targeting_rules``; never from
+    :func:`validate_segment_rules`, which also decides at read time whether a
+    stored segment can be evaluated.
+
+    Raises:
+        TargetingRulesError: with a fixed message keyed by path.
+    """
+    _check_supported_vocabulary(rules, "groups", _FLAG)
 
 
 # ---------------------------------------------------------------------------

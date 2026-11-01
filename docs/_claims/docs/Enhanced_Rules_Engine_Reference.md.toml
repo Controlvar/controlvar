@@ -239,12 +239,48 @@ by = [
 ]
 
 [[unit]]
-text = "The native shape also accepts json_path and percentage_bucket."
-by = ["test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_the_native_shape_accepts_json_path_and_percentage_bucket"]
+text = "Experiment targeting also accepts json_path and percentage_bucket, in the native shape; they are not documented here."
+by = [
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_experiment_targeting_accepts_json_path_and_percentage_bucket",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_an_experiment_still_accepts_json_path_and_percentage_bucket",
+]
 
 [[unit]]
-text = "Flag targeting and experiment targeting do not answer them alike, so they are not documented here."
-by = ["test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_flags_and_experiments_answer_json_path_and_percentage_bucket_differently"]
+text = "Flag targeting refuses them with 422, because flag evaluation does not implement them."
+by = [
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_flag_targeting_refuses_json_path_and_percentage_bucket",
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_flag_evaluation_does_not_implement_json_path_or_percentage_bucket",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_create_refuses_the_word",
+]
+
+[[unit]]
+text = "A distance unit, or a native-shape comparison, this page does not list is refused when rules are saved (422)."
+by = [
+    "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_refused_with_fixed_text",
+    "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_every_native_operator_is_refused_or_can_match",
+    "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_each_constant_is_the_words_the_engine_compares",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_create_refuses_the_word",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_experiment_create_refuses_the_word",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_segment_create_update_and_preview_refuse_an_unknown_unit",
+]
+
+[[unit]]
+text = "Rules saved earlier with one keep answering as they did: the condition does not hold, so under NOT it holds for every user."
+by = [
+    "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_a_stored_rule_using_a_refused_word_keeps_its_answer",
+    "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_a_stored_segment_with_an_unknown_unit_stays_available",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_a_stored_segment_with_an_unknown_unit_is_still_evaluated",
+]
+
+[[unit]]
+text = "python -m backend.scripts.check_targeting_rules lists the flags, experiments and segments that have such rules, and a save that sends them back is refused until they are corrected."
+by = [
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_the_check_script_lists_what_a_save_now_refuses",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_a_stored_flag_keeps_its_answer_and_cannot_be_sent_back",
+    "test:backend/tests/unit/scripts/test_check_targeting_rules.py::test_a_flag_with_a_word_flags_never_match_has_a_line",
+    "test:backend/tests/unit/scripts/test_check_targeting_rules.py::test_an_active_experiment_with_a_word_it_never_matches_has_a_line",
+    "test:backend/tests/unit/scripts/test_check_targeting_rules.py::test_a_segment_with_an_unknown_unit_has_a_line_without_not_valid",
+]
 
 [[unit]]
 text = "A native condition may also carry attribute_type."
@@ -346,6 +382,22 @@ text = "A native condition with no additional_value compares with eq."
 by = ["test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_a_semantic_version_with_no_comparison_is_eq"]
 
 [[unit]]
+text = "Any other additional_value is refused."
+by = [
+    "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_refused_with_fixed_text",
+    "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_accepted",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_experiment_create_refuses_the_word",
+]
+
+[[unit]]
+text = "There is no ne: put an eq condition in a NOT group instead."
+by = [
+    "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_no_sentinel_ever_matches",
+    "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_refused_with_fixed_text",
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_not_holds_when_not_all_of_its_conditions_hold",
+]
+
+[[unit]]
 text = "GEO_DISTANCE (geo_distance)"
 by = ["exempt:baseline"]
 
@@ -358,13 +410,34 @@ by = [
 ]
 
 [[unit]]
-text = "The condition holds when the great-circle distance from the rule's point is at most the radius, in kilometres unless the rule gives miles or meters."
+text = "The condition holds when the great-circle distance from the rule's point is at most the radius, in kilometres unless the rule gives a unit: km, kilometers, kilometre or kilometres; mi or miles; m, meters or metres, in any case."
 by = [
     "test:backend/tests/unit/core/test_rules_engine_geo_distance.py::TestGeoDistanceWithinRadius::test_exactly_on_radius_boundary",
     "test:backend/tests/unit/core/test_rules_engine_geo_distance.py::TestGeoDistanceWithinRadius::test_default_unit_kilometers",
     "test:backend/tests/unit/core/test_rules_engine_geo_distance.py::TestGeoDistanceUnits::test_miles_unit",
     "test:backend/tests/unit/core/test_rules_engine_geo_distance.py::TestGeoDistanceUnits::test_meters_unit",
+    "test:backend/tests/unit/core/test_rules_engine_geo_distance.py::TestGeoDistanceUnits::test_case_insensitive_units",
     "test:backend/tests/unit/core/test_rules_engine_geo_distance.py::TestGeoDistanceHaversineAccuracy::test_medium_distance_accuracy",
+    "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_the_engine_reads_the_words_the_contract_names",
+    "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_each_unit_matches_at_the_centre_in_any_case",
+]
+
+[[unit]]
+text = "In the native shape additional_value may also carry comparison: lte (the default, within the radius), lt, gt, gte, or eq (within 0.01 of the radius, in the rule's unit)."
+by = [
+    "test:backend/tests/unit/core/test_rules_engine_geo_distance.py::TestGeoDistanceComparisons::test_greater_than_distance",
+    "test:backend/tests/unit/core/test_rules_engine_geo_distance.py::TestGeoDistanceComparisons::test_less_than_distance",
+    "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_the_engine_reads_the_words_the_contract_names",
+    "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_each_distance_comparison_matches_some_point",
+    "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_eq_holds_within_0_01_of_the_radius_in_the_rules_unit",
+]
+
+[[unit]]
+text = "Any other unit or comparison is refused when the rules are saved."
+by = [
+    "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_refused_with_fixed_text",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_create_refuses_the_word",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_segment_create_update_and_preview_refuse_an_unknown_unit",
 ]
 
 [[unit]]
@@ -508,6 +581,23 @@ text = "So a window with ISO datetimes in start and end is refused, in either sh
 by = [
     "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowInvalidInputs::test_a_window_with_no_key_the_engine_reads_matches_nobody",
     "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_the_time_window_cases",
+]
+
+[[unit]]
+text = "In the native shape, a window that cannot be read is also refused when the rules of a flag or an experiment are saved (422); one saved before that is evaluated as above."
+by = [
+    "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_refused_with_fixed_text",
+    "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_every_native_operator_is_refused_or_can_match",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_create_refuses_the_word",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_experiment_create_refuses_the_word",
+    "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_an_unreadable_window_abandons_the_whole_ruleset",
+]
+
+[[unit]]
+text = "A window in the dashboard shape is not checked when it is saved."
+by = [
+    "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_accepted",
+    "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_the_ruleset_vectors_split_exactly",
 ]
 
 [[unit]]
@@ -655,6 +745,14 @@ text = "a flag or an experiment that names a segment whose rules hold the condit
 by = [
     "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_a_segment_whose_window_cannot_be_read_is_unavailable",
     "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_not_in_segment_over_a_segment_whose_window_cannot_be_read",
+]
+
+[[unit]]
+text = "A native time_window that cannot be read is now refused when the rules are saved, and one stored before that still abandons the ruleset as above."
+by = [
+    "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_refused_with_fixed_text",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_create_refuses_the_word",
+    "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_an_unreadable_window_abandons_the_whole_ruleset",
 ]
 
 [[unit]]

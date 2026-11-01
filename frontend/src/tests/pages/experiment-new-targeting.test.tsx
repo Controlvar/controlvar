@@ -25,6 +25,7 @@ import {
   TARGETING_REFUSED,
 } from '@/components/experiments/new/createErrors';
 import { checkTargeting } from '@/components/experiments/new/formState';
+import vocabularyRefusal from '@/tests/fixtures/targeting-vocabulary-refusal.json';
 import { makeRouter } from './helpers/apiMock';
 
 let mockRouter = makeRouter();
@@ -219,6 +220,21 @@ describe.each<View>(['guided', 'advanced'])('%s view: targeting rules', (view) =
     expect(document.body).not.toHaveTextContent('targeting_rules');
     expect(document.body).not.toHaveTextContent('Value error');
     expect(screen.queryByTestId('form-error')).not.toBeInTheDocument();
+  });
+
+  it('shows an unknown distance unit (#1204) as the API words it, in the builder’s words', async () => {
+    createReplies = [
+      {
+        status: 422,
+        body: { detail: [{ type: 'value_error', loc: ['body', 'targeting_rules'], msg: vocabularyRefusal.msg }] },
+      },
+    ];
+    await fillIn(view, addCountryCondition);
+
+    pressCreate(view);
+
+    const alert = await screen.findByTestId('targeting-error');
+    expect(within(alert).getAllByRole('listitem').map((li) => li.textContent)).toEqual([vocabularyRefusal.shown]);
   });
 
   it('shows both parts of a mixed 422: targeting at the rules, the rest at the foot of the form', async () => {

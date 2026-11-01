@@ -347,6 +347,101 @@ def test_a_segment_the_check_cannot_read_is_listed(monkeypatch):
     )
 
 
+# --- #1204: words the evaluator never matches --------------------------------
+
+JSON_PATH = {"attribute": "doc", "operator": "json_path", "value": "$.a"}
+SEMVER_NE = {
+    "attribute": "v",
+    "operator": "semantic_version",
+    "value": "1.2.0",
+    "additional_value": "ne",
+}
+#: Native, given only as start and end: the schema accepts it, the engine
+#: cannot read it.
+START_END = {
+    "attribute": "t",
+    "operator": "time_window",
+    "value": {"start": "09:00", "end": "17:00"},
+}
+FURLONG = {
+    "attribute": "loc",
+    "operator": "geo_within_radius",
+    "value": "37.7749,-122.4194,15,furlong",
+}
+NOT_ON_FLAGS = (
+    "not supported for feature flags; json_path and percentage_bucket are for "
+    "experiments only"
+)
+UNREADABLE_WINDOW = (
+    "unreadable time window; see the time_window example on the Targeting Rules: "
+    "Operator Reference page"
+)
+UNKNOWN_UNIT = "unknown distance unit; use km, mi or m, or leave it out for km"
+
+
+@pytest.mark.regression
+def test_a_flag_with_a_word_flags_never_match_has_a_line():
+    """(1g) The API's own path and reason, for the native shape too."""
+    rows = [
+        ("id-1", "doc-flag", _native({"operator": "and", "conditions": [JSON_PATH]})),
+        (
+            "id-2",
+            "office-hours",
+            _native({"operator": "and", "conditions": [START_END]}),
+        ),
+        ("id-3", "clean", _native({"operator": "and", "conditions": [EQ]})),
+    ]
+    assert [f.line() for f in check.findings_for(rows)] == [
+        f"feature_flag\tid-1\tdoc-flag\trules[0].rule.conditions[0].operator"
+        f"\t{NOT_ON_FLAGS}",
+        f"feature_flag\tid-2\toffice-hours\trules[0].rule.conditions[0].value"
+        f"\t{UNREADABLE_WINDOW}",
+    ]
+
+
+@pytest.mark.regression
+def test_an_active_experiment_with_a_word_it_never_matches_has_a_line():
+    """Experiments accept json_path; a version comparison they never match
+    and a native window they cannot read are listed."""
+    rows = [
+        (
+            "e-1",
+            "k1",
+            "ACTIVE",
+            _native({"operator": "and", "conditions": [SEMVER_NE]}),
+        ),
+        (
+            "e-2",
+            "k2",
+            "ACTIVE",
+            _native({"operator": "and", "conditions": [START_END]}),
+        ),
+        (
+            "e-3",
+            "k3",
+            "ACTIVE",
+            _native({"operator": "and", "conditions": [JSON_PATH]}),
+        ),
+    ]
+    assert [f.line() for f in check.experiment_findings_for(rows)] == [
+        "experiment\te-1\tk1\tACTIVE\trules[0].rule.conditions[0].additional_value"
+        "\tunknown version comparison; use eq, gt, gte, lt or lte, or leave it out "
+        "for eq",
+        f"experiment\te-2\tk2\tACTIVE\trules[0].rule.conditions[0].value"
+        f"\t{UNREADABLE_WINDOW}",
+    ]
+
+
+@pytest.mark.regression
+def test_a_segment_with_an_unknown_unit_has_a_line_without_not_valid():
+    """It is evaluated (its condition never holds), so it is not "rules not
+    valid"; the line carries the API's path and reason."""
+    found = check.segment_finding_for("id", "Bay Area", _dash(US, FURLONG))
+    assert found.line() == (
+        f"segment\tid\tBay Area\tgroups[0].conditions[1].value\t{UNKNOWN_UNIT}"
+    )
+
+
 @pytest.mark.regression
 def test_an_unreadable_database_exits_2(monkeypatch, capsys):
     """Not 0: a report that cannot read the database must not look clean."""
