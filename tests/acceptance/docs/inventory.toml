@@ -408,6 +408,10 @@ reason = "its compose commands run in Doc Examples in the API container of a fre
 class = "exec"
 reason = "its verification steps run in Doc Examples: cosign checks the newest final release's signature and SBOM on ghcr.io with no login, and its labels are read from the registry"
 
+[pages."self-hosting/proxies.md"]
+class = "reference"
+reason = "the proxies the API believes X-Forwarded-For from; its claims are held by the helper, start-up check, chart and CDK tests its registry names, and its two commands read a running API's logs, so they are skips whose pipelines test_proxies_docs.py runs on rendered access lines"
+
 [pages."self-hosting/upgrading-to-controlvar.md"]
 class = "reference"
 reason = "what a rename changes for a running install; its claims are held by the compose, chart and release tests its registry names, and the steps it gives are the ones the compose README and the Kubernetes page run"
@@ -694,7 +698,7 @@ note = "sign-in per role and a password change, a first API key used for an assi
 # above says what each field means.
 # ---------------------------------------------------------------------------
 [meta]
-walked = 152
+walked = 153
 
 # The front door, and the policy beside it.
 

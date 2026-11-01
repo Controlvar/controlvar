@@ -374,6 +374,8 @@ It prints the new account. Its `role` is `VIEWER`; change it with
 Limits are counted per client address and per path: most routes allow 300 requests a
 minute to each path from one address, and a path with an id in it, such as
 `/api/v1/experiments/{experiment_id}`, counts separately for each id.
+Behind a proxy, the client address is the one the proxy reports, when the API is set to
+believe it ([Users' addresses behind a proxy](../self-hosting/proxies.md)).
 AI design (`POST /api/v1/ai/design`) allows 10 a minute, and AI results
 interpretation (`POST /api/v1/ai/interpret/{experiment_id}`) 10 a minute for every
 experiment id together. For the other routes with a limit of their own, see

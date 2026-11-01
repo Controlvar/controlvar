@@ -1435,3 +1435,26 @@ by = [
     "test:infrastructure/tests/test_stack_graph.py::test_the_fargate_stack_holds_the_two_services_and_no_data_store",
     "test:infrastructure/tests/test_stack_graph.py::test_only_fargate_imports_the_cluster_and_only_migrations_depends_on_fargate",
 ]
+
+[[unit]]
+text = "Users' addresses"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Run cdk deploy for the Fargate stack (experimentation-fargate-<env>) from a release's checkout before you deploy that release's image: the stack is what sets FORWARDED_ALLOW_IPS on the API task."
+by = ["test:infrastructure/tests/test_api_task_forwarded_allow_ips.py::test_the_api_task_believes_exactly_the_vpc"]
+
+[[unit]]
+text = "The API task sets FORWARDED_ALLOW_IPS to the VPC's range, 10.0.0.0/16, so the API believes the X-Forwarded-For header the load balancer adds, counts its rate limits per user address and writes that address on its access lines."
+by = [
+    "test:infrastructure/tests/test_api_task_forwarded_allow_ips.py::test_the_api_task_believes_exactly_the_vpc",
+    "test:backend/tests/unit/infrastructure/test_proxy_headers_trust.py::test_the_list_each_topology_starts_with_believes_its_proxies_only",
+]
+
+[[unit]]
+text = "This CloudWatch Logs Insights query on /ecs/experimentation-backend-<env> counts the API requests from each address:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Your users' addresses mean it works; 10.0.x.x on every line is the load balancer's."
+by = ["exempt:advice"]

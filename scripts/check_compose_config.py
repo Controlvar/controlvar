@@ -20,6 +20,8 @@ Given a complete ``.env`` (``--env-file``), it asserts:
    service empty from a copy of the ``.env`` that does not set it, and with
    its value from a copy that does. The shell's variables are not passed to
    compose, so the value can only have come from the file.
+6. so does each optional setting in ``PASSED_SETTINGS``: FORWARDED_ALLOW_IPS,
+   the proxies the API believes besides its own network.
 
 Usage::
 
@@ -57,16 +59,23 @@ FEATURE_KEYS = (
     "GEMINI_API_KEY",
 )
 
+#: Optional settings that are not feature keys, passed to the api the same
+#: way, ``${NAME:-}``: empty unless ``.env`` sets them.
+PASSED_SETTINGS = ("FORWARDED_ALLOW_IPS",)
 
-def feature_key_failures(api_env: dict, given: dict) -> list[str]:
-    """What is wrong with the feature keys on the resolved api service.
+
+def feature_key_failures(
+    api_env: dict, given: dict, names: tuple = FEATURE_KEYS
+) -> list[str]:
+    """What is wrong with the feature keys (or *names*) on the resolved api
+    service.
 
     *given* maps each key the ``.env`` sets to its value; a key it does not
     set must arrive as the empty string. No value is ever printed: an
     operator's ``.env`` holds real keys.
     """
     failures = []
-    for name in FEATURE_KEYS:
+    for name in names:
         if name not in api_env:
             failures.append(f"{name} is not passed to the api service")
         elif name in given and api_env[name] != given[name]:
@@ -183,30 +192,36 @@ def main() -> int:
             else:
                 print(f"ok  {description}: refused naming {named[0]}")
 
-        # 5. The feature keys: empty when the .env leaves them out, and its
-        # value when it sets them.
-        base = [(k, v) for k, v in pairs if k not in FEATURE_KEYS]
-        markers = {
-            name: f"set-in-the-env-file-{n}" for n, name in enumerate(FEATURE_KEYS, 1)
-        }
-        for description, probe_pairs, given in (
-            ("feature keys not in .env", base, {}),
-            ("feature keys in .env", base + list(markers.items()), markers),
+        # 5-6. The feature keys and the passed settings: empty when the .env
+        # leaves them out, and its value when it sets them.
+        for label, names in (
+            ("feature keys", FEATURE_KEYS),
+            ("passed settings", PASSED_SETTINGS),
         ):
-            write_env(probe, probe_pairs)
-            resolved = compose_config(probe, "--format", "json")
-            if resolved.returncode != 0:
-                failures.append(
-                    f"{description}: docker compose config failed: "
-                    f"{resolved.stderr.strip()}"
+            base = [(k, v) for k, v in pairs if k not in names]
+            markers = {
+                name: f"set-in-the-env-file-{n}" for n, name in enumerate(names, 1)
+            }
+            for description, probe_pairs, given in (
+                (f"{label} not in .env", base, {}),
+                (f"{label} in .env", base + list(markers.items()), markers),
+            ):
+                write_env(probe, probe_pairs)
+                resolved = compose_config(probe, "--format", "json")
+                if resolved.returncode != 0:
+                    failures.append(
+                        f"{description}: docker compose config failed: "
+                        f"{resolved.stderr.strip()}"
+                    )
+                    continue
+                api = json.loads(resolved.stdout)["services"]["api"]
+                problems = feature_key_failures(
+                    api.get("environment") or {}, given, names
                 )
-                continue
-            api = json.loads(resolved.stdout)["services"]["api"]
-            problems = feature_key_failures(api.get("environment") or {}, given)
-            failures.extend(f"{description}: {problem}" for problem in problems)
-            if not problems:
-                arrived = "with the value .env sets" if given else "empty"
-                print(f"ok  {description}: each reaches the api {arrived}")
+                failures.extend(f"{description}: {problem}" for problem in problems)
+                if not problems:
+                    arrived = "with the value .env sets" if given else "empty"
+                    print(f"ok  {description}: each reaches the api {arrived}")
 
     for failure in failures:
         print(f"error: {failure}", file=sys.stderr)

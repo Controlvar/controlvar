@@ -3408,3 +3408,10 @@ by = [
     "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigOptionalFields::test_cookie_ttl_days_default_30",
     "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigOptionalFields::test_cookie_name_defaults_to_none",
 ]
+
+[[unit]]
+text = "Behind a proxy, the client address is the one the proxy reports, when the API is set to believe it (Users' addresses behind a proxy)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_proxy_headers_trust.py::TestUvicornItself::test_the_private_ranges_return_the_real_client",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestGetClientIp::test_it_uses_the_resolved_client_and_not_the_header",
+]

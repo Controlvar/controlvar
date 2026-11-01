@@ -102,6 +102,14 @@ SDK_RATE_LIMIT_PER_MINUTE=6000
 - `SDK_RATE_LIMIT_PER_MINUTE` is the per-IP ceiling for SDK traffic (`/api/v1/tracking/*`
   and flag evaluation). The default is 6000 a minute.
 
+#### Behind a proxy
+
+`FORWARDED_ALLOW_IPS` names proxies whose `X-Forwarded-For` the API believes, in
+addition to 127.0.0.1, ::1 and the networks its container is attached to: IP addresses
+and networks, separated by commas. The container's entrypoint reads it from the
+environment, not from `.env.prod`. See
+[Users' addresses behind a proxy](../self-hosting/proxies.md).
+
 #### Background Jobs
 ```dotenv
 BANDIT_UPDATE_INTERVAL_MINUTES=5

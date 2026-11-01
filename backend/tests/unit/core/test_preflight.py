@@ -506,6 +506,138 @@ def test_credential_keys_are_judged_as_the_modules_settings_judge_them(keys, ref
 
 
 # ---------------------------------------------------------------------------
+# FORWARDED_ALLOW_IPS: an entry that would match no proxy, in every
+# environment; one that covers every address, in staging and production
+# ---------------------------------------------------------------------------
+
+ENVIRONMENTS = ["development", "staging", "production"]
+
+#: uvicorn would keep each as a literal string no peer address equals (or, for
+#: a lone `*`, believe every peer); the list is added to, so `*` has no use.
+REFUSED_EVERYWHERE = [
+    "172.18.0.3/16",
+    "10.0.0.1/8",
+    "10.0.0.0/33",
+    "web",
+    "localhost",
+    "proxy.example.com",
+    "10.0.0.*",
+    "*.example.com",
+    "a b",
+    "a;b",
+    "10.0.0.5,*",
+    "*",
+]
+REFUSED_IN_STAGING_AND_PRODUCTION = ["0.0.0.0/0", "::/0", "10.0.0.5,::/0"]
+ACCEPTED = [None, "", "   ", "172.18.0.0/16", " 10.0.0.0/16 , 127.0.0.1 ", "10.0.0.5,"]
+
+
+def _forwarded(environment: str, value) -> list:
+    env = with_(ENVIRONMENT=environment, FORWARDED_ALLOW_IPS=value)
+    return [p for p in check(env) if p.startswith("FORWARDED_ALLOW_IPS")]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("environment", ENVIRONMENTS)
+@pytest.mark.parametrize("value", REFUSED_EVERYWHERE)
+def test_a_forwarded_allow_ips_entry_that_matches_no_proxy_is_refused(
+    environment, value
+):
+    problems = _forwarded(environment, value)
+    assert problems, f"no FORWARDED_ALLOW_IPS problem listed for {value!r}"
+    env = with_(ENVIRONMENT=environment, FORWARDED_ALLOW_IPS=value)
+    assert check(env) == problems, "something else was listed"
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("environment", ENVIRONMENTS)
+@pytest.mark.parametrize("value", REFUSED_IN_STAGING_AND_PRODUCTION)
+def test_an_entry_covering_every_address_is_refused_outside_development(
+    environment, value
+):
+    problems = _forwarded(environment, value)
+    assert bool(problems) is (environment != "development"), problems
+
+
+@pytest.mark.parametrize("environment", ENVIRONMENTS)
+@pytest.mark.parametrize("value", ACCEPTED)
+def test_a_usable_forwarded_allow_ips_is_accepted(environment, value):
+    assert _forwarded(environment, value) == []
+
+
+@pytest.mark.regression
+def test_each_refused_entry_is_one_line_naming_its_position():
+    """1-based over the raw comma split; the good entries are not echoed."""
+    value = "10.0.0.5, 172.18.0.3/16,web,10.0.0.0/16 127.0.0.1,,*,0.0.0.0/0"
+    assert _forwarded("production", value) == [
+        "FORWARDED_ALLOW_IPS entry 2 ('172.18.0.3/16') is an address with a mask, "
+        "which matches no proxy. Write the network, 172.18.0.0/16, or the address "
+        "alone, 172.18.0.3.",
+        "FORWARDED_ALLOW_IPS entry 3 ('web') is not an IP address or a network, so "
+        "it matches no proxy. Write addresses (10.0.0.5) or networks (10.0.0.0/16), "
+        "separated by commas.",
+        "FORWARDED_ALLOW_IPS entry 4 ('10.0.0.0/16 127.0.0.1') is not an IP address "
+        "or a network. Separate entries with commas, not spaces or semicolons.",
+        "FORWARDED_ALLOW_IPS entry 6 is '*', which is not accepted: this setting "
+        "adds proxies to the ones the API always believes, and * would believe "
+        "every connection. Name your proxy's addresses or networks.",
+        "FORWARDED_ALLOW_IPS entry 7 ('0.0.0.0/0') covers every address and is "
+        "refused in staging and production. Name your proxy's addresses or networks.",
+    ]
+
+
+@pytest.mark.regression
+def test_a_long_entry_is_echoed_cut_to_64_characters():
+    (problem,) = _forwarded("development", "a" * 300)
+    assert f"('{'a' * 64}...')" in problem, problem
+    assert "a" * 65 not in problem
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "value", REFUSED_EVERYWHERE + REFUSED_IN_STAGING_AND_PRODUCTION + ACCEPTED[1:]
+)
+def test_the_check_refuses_exactly_what_uvicorn_cannot_use(value):
+    """In development: refused exactly when the pinned uvicorn would keep an
+    entry as a literal, or believe every peer. Parse only, no header."""
+    from uvicorn.middleware.proxy_headers import _TrustedHosts
+
+    from backend.app.core import proxy_trust
+
+    # The empty entries are dropped (uvicorn would make `''` a literal).
+    entries = [e.strip() for e in value.split(",") if e.strip()]
+    hosts = _TrustedHosts(",".join(entries))
+    unusable = bool(entries) and (bool(hosts.trusted_literals) or hosts.always_trust)
+    refused = bool(_forwarded("development", value))
+    assert refused is unusable, (
+        f"preflight {'refuses' if refused else 'accepts'} {value!r}, uvicorn "
+        f"{'makes a literal of it' if unusable else 'reads it'}"
+    )
+    if not refused:
+        built = proxy_trust.build(value, [])
+        assert _TrustedHosts(built).trusted_literals == set(), built
+
+
+def test_forwarded_allow_ips_is_read_from_the_process_environment_only(tmp_path):
+    """The entrypoint reads the environment; a value in .env.prod never
+    reaches the list, so it is not judged either."""
+    (tmp_path / ".env.prod").write_text("FORWARDED_ALLOW_IPS=web\n")
+    assert preflight.check(GOOD, full_profile=True, root=tmp_path) == []
+
+
+@pytest.mark.regression
+def test_main_exits_78_for_a_refused_entry(capsys):
+    environ = with_(FORWARDED_ALLOW_IPS="172.18.0.3/16")
+    assert preflight.main(environ) == preflight.EX_CONFIG
+    assert capsys.readouterr().err == (
+        "[preflight] Controlvar cannot start: 1 setting needs attention.\n"
+        "  - FORWARDED_ALLOW_IPS entry 1 ('172.18.0.3/16') is an address with a "
+        "mask, which matches no proxy. Write the network, 172.18.0.0/16, or the "
+        "address alone, 172.18.0.3.\n"
+    )
+
+
+# ---------------------------------------------------------------------------
 # The entrypoint runs it first
 # ---------------------------------------------------------------------------
 
