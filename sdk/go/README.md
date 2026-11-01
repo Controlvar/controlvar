@@ -21,6 +21,22 @@ go get github.com/controlvar/controlvar/sdk/go
 import exp "github.com/controlvar/controlvar/sdk/go"
 ```
 
+## Changes
+
+If your `go.mod` holds a pseudo-version from before this note, the next `go get` brings three
+changes:
+
+- `EvaluateFlag` sends `User.Attributes` as `context`, as `GetAssignment` does, so a flag's
+  targeting rules on attributes now match from Go. Answers for a flag with such rules change: a
+  user a rule matches gets the rule's answer, where before the flag's rollout answered.
+- Attributes that cannot be encoded as JSON (a NaN or infinite number, a channel, a func) now make
+  `EvaluateFlag` return the disabled result and an error, and send nothing, as `GetAssignment`
+  does with them. Before, `EvaluateFlag` did not send attributes at all, so they caused no error.
+- Attributes over the server's targeting context limits (8,192 bytes, 10 levels), or a URL too
+  long for a server or proxy, now make `EvaluateFlag` return the disabled result and an
+  `*APIError` (422, or the 400, 414 or 431 of a server or proxy that refuses the URL), for any
+  flag. Before, they were not sent, and the flag answered without them.
+
 ## Quick Start
 
 ```go
@@ -42,7 +58,8 @@ if err == nil {
     fmt.Println(a.VariantName, a.IsControl, a.Configuration) // "treatment" false map[...]
 }
 
-// Feature flag — GET /api/v1/feature-flags/evaluate/new_search?user_id=user-123
+// Feature flag — GET /api/v1/feature-flags/evaluate/new_search?user_id=user-123&context=...
+// (the user's attributes as JSON)
 flag, err := client.EvaluateFlag(ctx, "new_search", user)
 if flag.Enabled { /* flag is off (and err != nil) on any failure */ }
 
@@ -87,7 +104,7 @@ Types (`types.go`):
 
 | Type | Fields |
 |---|---|
-| `User` | `ID string`, `Attributes map[string]interface{}` (sent as assignment `context`) |
+| `User` | `ID string`, `Attributes map[string]interface{}` (sent as `context` on assignment and on flag evaluation; Targeting attributes, below) |
 | `EvalResult` | `Key string`, `Enabled bool`, `Config map[string]any` (always `nil`: the evaluate endpoint returns `config: null` for every flag), `Value json.RawMessage` (what the flag serves this user; `nil` when the server sent none), `ValueType string` (`"boolean"`, `"string"`, `"number"` or `"json"`; `""` when the server sent none) |
 | `Assignment` | `ExperimentKey`, `UserID`, `VariantID`, `VariantName string`, `IsControl bool`, `Configuration map[string]any` |
 | `TrackEvent` | `UserID`, `EventName` (required), `EventType` (defaults to `EventName`), `ExperimentKey`, `FeatureFlagKey`, `Value *float64` (`exp.Float64(v)`), `Properties` (sent as `metadata`), `Timestamp time.Time` (ISO-8601 when non-zero) |
@@ -122,8 +139,24 @@ if err := hero.DecodeValue(&banner); err != nil {
   field the value does not name is zero, not your default.
 - `EvaluateFlag` returns a new copy on every call, cache hits included, so changing `Value`
   changes nothing the client has cached.
-- `EvaluateFlag` sends the user's ID only; `User.Attributes` are sent on assignment, not on flag
-  evaluation.
+
+## Targeting attributes
+
+`User.Attributes` are sent as `context` on both calls, so targeting rules can match them: in the
+`GetAssignment` body, and on `EvaluateFlag` as a `context` query parameter holding the attributes
+as compact JSON, URL-encoded. With nil or empty attributes, `EvaluateFlag` sends no `context`.
+
+- Attributes are assumed stable per user: the cache key is the user's ID and the flag or
+  experiment key, not the attributes. Within `CacheTTL`, a call for the same user and key gets
+  the cached answer and sends nothing, whatever attributes it carries.
+- Attributes must encode as JSON. With a NaN or infinite number, a channel or a func among them,
+  `EvaluateFlag` returns the disabled result and an error wrapping the `encoding/json` error,
+  and `GetAssignment` returns `nil` and that error; neither sends nor caches anything.
+- The SDK does not check the server's
+  [targeting context limits](https://github.com/Controlvar/controlvar/blob/main/docs/api/endpoints.md#targeting-context-limits).
+  A `context` over them is answered 422, and a server or proxy that refuses a long URL may answer
+  400, 414 or 431; `EvaluateFlag` then returns the disabled result and the `*APIError`, and
+  caches nothing.
 
 ## Caching and failure behaviour
 
@@ -167,7 +200,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `EvaluateFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, value, value_type, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
+| `EvaluateFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the user's attributes as URL-encoded JSON, only when there are any | `{key, enabled, value, value_type, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
 | `GetAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `Track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `Track` without keys, `TrackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |
