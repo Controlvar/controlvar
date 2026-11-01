@@ -234,7 +234,7 @@ python -m alembic -c backend/app/db/alembic.ini upgrade heads
 
 Downgrade the previous revision of one branch. With two heads a bare `downgrade -1` is ambiguous -- alembic warns and picks one -- so name the branch: `modules@-1` for a module's, the revision id for a core one. NOT `modules@base`: modules_0001_rbac is a child of core a7b8c9d0e1f2, not an alembic base, and `modules@base` resolves to the whole core chain, every table dropped:
 
-```{.bash skip reason="destructive: unapplies the newest modules revision and drops the tables it created"}
+```{.bash skip reason="destructive: unapplies the newest modules revision and drops what it added"}
 alembic -c backend/app/db/alembic.ini downgrade modules@-1
 ```
 
@@ -259,10 +259,12 @@ alembic -c backend/app/db/alembic.ini history
 <!-- expect: (modules) (head) -->
 <!-- expect: <base> -->
 
-The modules branch has two revisions, `modules_0001_rbac` and then
-`modules_0002_warehouse_analysis`: `downgrade modules@-1` unapplies
-`modules_0002_warehouse_analysis` only, and `downgrade modules@-2` the whole
-branch.
+The modules branch has three revisions, `modules_0001_rbac`,
+`modules_0002_warehouse_analysis` and then `modules_0003_lower_is_better`:
+`downgrade modules@-1` unapplies `modules_0003_lower_is_better` only, and
+`downgrade modules@-3` the whole branch. To stop anywhere in between, name the
+revision to end at, such as `downgrade modules_0002_warehouse_analysis`: a
+count in between names a different revision once the branch grows.
 
 ## Working with Experiments
 

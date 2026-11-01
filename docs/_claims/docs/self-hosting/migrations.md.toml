@@ -231,19 +231,29 @@ text = "With two heads a bare -1 is ambiguous — alembic warns and picks one, w
 by = ["test:backend/tests/unit/db/test_alembic_commands.py::test_a_bare_minus_one_with_two_heads_warns_and_picks_one_branch"]
 
 [[unit]]
-text = "modules@-1 unapplies the newest one only; modules@-2 unapplies both, newest first."
-by = ["exempt:baseline"]
+text = "The modules branch, back to a named revision:"
+by = ["exempt:label"]
 
 [[unit]]
-text = "The modules branch, one revision back (modules_0002_warehouse_analysis):"
-by = ["exempt:baseline"]
+text = "downgrade modules_0002_warehouse_analysis unapplies modules_0003_lower_is_better only, which drops the column warehouse_sources.lower_is_better, every metric source's lower-is-better setting."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_modules_0003_transitions.py::test_downgrade_drops_the_column_keeps_the_rows_and_an_upgrade_restores_false",
+]
+
+[[unit]]
+text = "downgrade modules_0001_rbac also unapplies modules_0002_warehouse_analysis, which drops the three warehouse tables it created, with their rows."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_modules_0002_transitions.py::test_modules_0002_downgrade_restores_the_earlier_shape",
+]
 
 [[unit]]
 text = "One step back on the core chain:"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Each modules revision downgrades only the objects its own upgrade() created (it marks them with a PostgreSQL COMMENT as it goes)."
+text = "modules_0001_rbac and modules_0002_warehouse_analysis downgrade only the objects their own upgrade() created (each marks them with a PostgreSQL COMMENT as it goes)."
 by = [
     "test:backend/tests/integration/database/test_profile_migrations.py::test_downgrade_keeps_the_tables_the_bootstrap_created",
     "test:backend/tests/integration/database/test_profile_migrations.py::test_downgrade_drops_the_tables_the_migration_created",
@@ -252,6 +262,13 @@ by = [
 [[unit]]
 text = "On a database whose tables came from the bootstrap rather than from those migrations, their downgrade is a no-op — it will not drop populated tables it never made."
 by = ["exempt:baseline"]
+
+[[unit]]
+text = "modules_0003_lower_is_better drops its column on every database, however the column was made."
+by = [
+    "test:backend/tests/integration/database/test_profile_migrations.py::test_downgrade_keeps_the_tables_the_bootstrap_created",
+    "test:backend/tests/integration/database/test_modules_0003_transitions.py::test_downgrade_drops_the_column_keeps_the_rows_and_an_upgrade_restores_false",
+]
 
 [[unit]]
 text = "modules_0002_warehouse_analysis removes saved warehouse connections"
@@ -265,8 +282,11 @@ by = [
 ]
 
 [[unit]]
-text = "Downgrading it cannot bring those rows back: downgrade modules@-1 drops the three tables it created and puts back an empty table of the earlier shape."
-by = ["test:backend/tests/integration/database/test_modules_0002_transitions.py::test_modules_0002_downgrade_restores_the_earlier_shape"]
+text = "Downgrading it cannot bring those rows back: downgrade modules_0001_rbac first unapplies modules_0003_lower_is_better, which drops each metric source's lower-is-better setting, then drops the three tables this revision created and puts back an empty table of the earlier shape."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_modules_0002_transitions.py::test_modules_0002_downgrade_restores_the_earlier_shape",
+]
 
 [[unit]]
 text = "If you need the rows, take a snapshot of the database before upgrading to the release that carries this revision, and restore that snapshot to go back."
@@ -275,6 +295,28 @@ by = ["exempt:baseline"]
 [[unit]]
 text = "The migration logs how many rows it removed:"
 by = ["exempt:baseline"]
+
+[[unit]]
+text = "modules_0003_lower_is_better gives each warehouse metric source a direction"
+by = ["test:backend/tests/integration/database/test_modules_0003_transitions.py::test_a_database_at_the_previous_release_upgrades_and_every_source_reads_false"]
+
+[[unit]]
+text = "This revision adds the column warehouse_sources.lower_is_better (boolean, NOT NULL, default false), and every source already stored gets false."
+by = [
+    "test:backend/tests/integration/database/test_modules_0003_transitions.py::test_a_database_at_the_previous_release_upgrades_and_every_source_reads_false",
+    "test:backend/tests/integration/database/test_modules_0003_transitions.py::test_the_column_is_boolean_not_null_with_server_default_false",
+]
+
+[[unit]]
+text = "The previous release runs against this schema unchanged: the sources it creates get false from the column's default."
+by = ["test:backend/tests/integration/database/test_modules_0003_transitions.py::test_the_previous_release_still_inserts_a_source_and_it_reads_false"]
+
+[[unit]]
+text = "Its downgrade drops the column on every database, however the column was made, and with it every metric source's setting; an upgrade afterwards sets each source back to false, not to what was stored."
+by = [
+    "test:backend/tests/integration/database/test_modules_0003_transitions.py::test_downgrade_drops_the_column_keeps_the_rows_and_an_upgrade_restores_false",
+    "test:backend/tests/integration/database/test_profile_migrations.py::test_downgrade_keeps_the_tables_the_bootstrap_created",
+]
 
 [[unit]]
 text = "1ab99332f0ba rewrites stored event times to UTC"
@@ -1048,8 +1090,8 @@ text = "alembic upgrade heads answers in one of two ways: when the core chain is
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "downgrade and stamp do not skip: they fail with alembic's own \"Can't locate revision identified by 'modules_0002_warehouse_analysis'\" (or modules_0001_rbac, on a database a release before the warehouse tables migrated), and the schema is untouched."
-by = ["exempt:baseline"]
+text = "downgrade and stamp do not skip: they fail with alembic's own \"Can't locate revision identified by '…'\", naming the modules revision the database records, and the schema is untouched."
+by = ["test:backend/tests/integration/database/test_profile_transitions.py::test_a_core_build_does_not_pretend_to_downgrade_or_stamp"]
 
 [[unit]]
 text = "The escape hatch, when you really do want the core image to own that database: take a backup, then from the core image"
@@ -1251,6 +1293,13 @@ text = "607c51a59bf5 is backward-compatible for a rollback too, and undoing it d
 by = [
     "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_previous_release_writes_and_lists_flags_on_this_schema",
     "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_downgrade_refuses_while_a_value_flag_exists",
+]
+
+[[unit]]
+text = "modules_0003_lower_is_better is backward-compatible for a rollback, and undoing it drops every warehouse metric source's lower-is-better setting; an upgrade afterwards sets each back to false, not to the choice."
+by = [
+    "test:backend/tests/integration/database/test_modules_0003_transitions.py::test_the_previous_release_still_inserts_a_source_and_it_reads_false",
+    "test:backend/tests/integration/database/test_modules_0003_transitions.py::test_downgrade_drops_the_column_keeps_the_rows_and_an_upgrade_restores_false",
 ]
 
 [[unit]]
@@ -1473,11 +1522,19 @@ text = "CI runs this page's exec blocks as written against the Quick Start stack
 by = ["mechanism:migration-pages-environments"]
 
 [[unit]]
-text = "The modules branch has two revisions: modules_0001_rbac and, after it, modules_0002_warehouse_analysis."
+text = "The modules branch has three revisions: modules_0001_rbac, then modules_0002_warehouse_analysis, then modules_0003_lower_is_better."
 by = [
     "mechanism:alembic-plan-branch",
     "mechanism:alembic-plan-unapply",
 ]
+
+[[unit]]
+text = "Name the modules revision to end at rather than counting back: a relative step such as modules@-2 counts from the newest revision the image has, so it unapplies a different revision once a release adds one."
+by = ["mechanism:alembic-plan-relative-downgrade"]
+
+[[unit]]
+text = "modules@-3 unapplies all three, newest first."
+by = ["mechanism:alembic-plan-unapply"]
 
 [[unit]]
 text = "Not modules@base."

@@ -53,8 +53,9 @@ CORE_HEAD = "607c51a59bf5"
 #: (#445) drops ``holdout_population``; ``37dcb2969766`` (#440) drops
 #: ``segment_members``.
 LATER_DOWNGRADE_TABLES = {"holdout_population", "segment_members"}
-#: The modules branch's head, in the previous release and in this one alike.
-MODULES_HEAD = "modules_0002_warehouse_analysis"
+#: The modules branch's head in this tree, recorded on both sides of every
+#: step here: this file is about the core chain.
+MODULES_HEAD = "modules_0003_lower_is_better"
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},

@@ -56,15 +56,18 @@ CORE_HEAD = tree_profiles.CORE_HEAD
 #: The modules branch's first revision: what the previous full release
 #: (0.9.x and earlier) records.
 MODULES_FIRST = "modules_0001_rbac"
-#: The modules branch's head: this revision.
-MODULES_HEAD = "modules_0002_warehouse_analysis"
+#: This revision: the branch's second.
+MODULES_0002 = "modules_0002_warehouse_analysis"
+#: The modules branch's head, which ``upgrade heads`` runs on to past this
+#: revision: ``modules_0003_lower_is_better`` (#1386).
+MODULES_HEAD = "modules_0003_lower_is_better"
 PREVIOUS_FULL_HEADS = {CORE_HEAD, MODULES_FIRST}
 FULL_HEADS = {CORE_HEAD, MODULES_HEAD}
 
 CONNECTIONS = "warehouse_connections"
 WAREHOUSE_TABLES = (CONNECTIONS, "warehouse_sources", "warehouse_analysis_runs")
 #: The COMMENT the revision leaves on the primary key of a table it created.
-CREATED_BY = f"created by alembic revision {MODULES_HEAD}"
+CREATED_BY = f"created by alembic revision {MODULES_0002}"
 #: A column only the earlier ``warehouse_connections`` has.
 EARLIER_SHAPE_COLUMN = "encrypted_credentials"
 
@@ -97,7 +100,9 @@ def core_tree(tmp_path):
 
 
 def _previous_full_release(tmp_path):
-    """The previous full release's migrations: this tree without this revision.
+    """The previous full release's migrations: this tree without its newest
+    modules revision, :data:`MODULES_HEAD` (not this one: the head's
+    ``down_revision`` would then name a revision that is not there).
 
     Built from parts, as ``tree_profiles`` builds its paths: a string literal
     naming a path under the modules would be a core -> module crossing.
@@ -438,11 +443,13 @@ def test_modules_0002_refuses_a_look_alike_table(
 def test_reupgrade_keeps_new_shape_rows(test_db, scratch_schema, full_tree):
     """The removal is decided by the table's shape, not by its existence.
 
-    A fresh full bootstrap builds the new tables from the models, so
-    ``modules@-1`` has nothing of its own to drop and leaves them -- with their
-    connections -- in place.  The next ``upgrade heads`` runs this revision
-    again, meets a ``warehouse_connections`` that already has the new shape,
-    and must leave it, and its rows, alone.
+    A fresh full bootstrap builds the new tables from the models, so this
+    revision's downgrade (``downgrade modules_0001_rbac``, which first runs
+    ``modules_0003_lower_is_better``'s and drops its column) has nothing of its
+    own to drop and leaves them -- with their connections -- in place.  The
+    next ``upgrade heads`` runs this revision again, meets a
+    ``warehouse_connections`` that already has the new shape, and must leave
+    it, and its rows, alone.
     """
     assert tree_profiles.bootstrap_schema(full_tree, scratch_schema).returncode == 0
     connection_id = uuid.uuid4()
@@ -457,7 +464,7 @@ def test_reupgrade_keeps_new_shape_rows(test_db, scratch_schema, full_tree):
             {"id": connection_id},
         )
 
-    down = tree_profiles.alembic(full_tree, scratch_schema, "downgrade", "modules@-1")
+    down = tree_profiles.alembic(full_tree, scratch_schema, "downgrade", MODULES_FIRST)
     assert down.returncode == 0, down.stderr[-3000:]
     assert _rows(test_db, scratch_schema) == PREVIOUS_FULL_HEADS
 
@@ -479,17 +486,20 @@ def test_reupgrade_keeps_new_shape_rows(test_db, scratch_schema, full_tree):
 def test_modules_0002_downgrade_restores_the_earlier_shape(
     test_db, scratch_schema, core_tree, full_tree
 ):
-    """``modules@-1`` drops what the revision made and puts the earlier table back.
+    """``downgrade modules_0001_rbac`` drops what the revision made and puts the
+    earlier table back.
 
-    Empty -- the rows the upgrade removed are not recoverable, which is why the
-    supported way back is the snapshot taken before upgrading -- but in exactly
-    the shape the previous release's model builds, so that release maps it.
+    It first unapplies ``modules_0003_lower_is_better``, whose column goes with
+    ``warehouse_sources``.  The table comes back empty -- the rows the upgrade
+    removed are not recoverable, which is why the supported way back is the
+    snapshot taken before upgrading -- but in exactly the shape the previous
+    release's model builds, so that release maps it.
     """
     assert tree_profiles.bootstrap_schema(core_tree, scratch_schema).returncode == 0
     upgrade = tree_profiles.alembic(full_tree, scratch_schema, "upgrade", "heads")
     assert upgrade.returncode == 0, upgrade.stderr[-3000:]
 
-    down = tree_profiles.alembic(full_tree, scratch_schema, "downgrade", "modules@-1")
+    down = tree_profiles.alembic(full_tree, scratch_schema, "downgrade", MODULES_FIRST)
     assert down.returncode == 0, down.stderr[-3000:]
 
     assert _rows(test_db, scratch_schema) == PREVIOUS_FULL_HEADS

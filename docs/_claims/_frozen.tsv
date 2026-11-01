@@ -941,7 +941,6 @@ exempt:baseline	docs/development/database/migrations.md	a9360e0212a4
 exempt:baseline	docs/development/database/migrations.md	aa40cfdd4f2b
 exempt:baseline	docs/development/database/migrations.md	ae8d126f2f60
 exempt:baseline	docs/development/database/migrations.md	b5179730b69f
-exempt:baseline	docs/development/database/migrations.md	b7ac44d4bf43
 exempt:baseline	docs/development/database/migrations.md	bae7460ceef2
 exempt:baseline	docs/development/database/migrations.md	bd26eb538fe2
 exempt:baseline	docs/development/database/migrations.md	bd6f4b582de3
@@ -1690,7 +1689,6 @@ exempt:baseline	docs/self-hosting/migrations.md	18351ec492df
 exempt:baseline	docs/self-hosting/migrations.md	18b40b61124a
 exempt:baseline	docs/self-hosting/migrations.md	1905dd86a36b
 exempt:baseline	docs/self-hosting/migrations.md	1945e0f7433b
-exempt:baseline	docs/self-hosting/migrations.md	195a54c38435
 exempt:baseline	docs/self-hosting/migrations.md	1a4972951575
 exempt:baseline	docs/self-hosting/migrations.md	1a8ef47a4773
 exempt:baseline	docs/self-hosting/migrations.md	1b92da167437
@@ -1797,7 +1795,6 @@ exempt:baseline	docs/self-hosting/migrations.md	acf69fc22bcd
 exempt:baseline	docs/self-hosting/migrations.md	ad17ea249f6a
 exempt:baseline	docs/self-hosting/migrations.md	b00b9e085838
 exempt:baseline	docs/self-hosting/migrations.md	b213b4d181e2
-exempt:baseline	docs/self-hosting/migrations.md	b218190631f0
 exempt:baseline	docs/self-hosting/migrations.md	b4f8235137a1
 exempt:baseline	docs/self-hosting/migrations.md	b7af654c7145
 exempt:baseline	docs/self-hosting/migrations.md	b834b045620a
@@ -1807,7 +1804,6 @@ exempt:baseline	docs/self-hosting/migrations.md	bbbddcac2e23
 exempt:baseline	docs/self-hosting/migrations.md	bc7e54ab4958
 exempt:baseline	docs/self-hosting/migrations.md	bce7d035e91c
 exempt:baseline	docs/self-hosting/migrations.md	be88aa179153
-exempt:baseline	docs/self-hosting/migrations.md	bf19bc39b3c9
 exempt:baseline	docs/self-hosting/migrations.md	c280cfc549b1
 exempt:baseline	docs/self-hosting/migrations.md	c2e56bca6fac
 exempt:baseline	docs/self-hosting/migrations.md	c4021b4bc8e6

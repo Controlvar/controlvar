@@ -29,7 +29,8 @@ ENV_PY = REPO_ROOT / "backend" / "app" / "db" / "migrations" / "env.py"
 
 #: The core chain's head (#1497).
 CORE_HEAD = "607c51a59bf5"
-MODULES_HEAD = "modules_0002_warehouse_analysis"
+#: The modules branch's head (#1386).
+MODULES_HEAD = "modules_0003_lower_is_better"
 #: The revision 1ab99332f0ba's re-run recipe downgrades to, and what lies past it.
 EVENTS_UTC = "1ab99332f0ba"
 BEFORE_EVENTS_UTC = "a89544fb1075"
@@ -133,7 +134,9 @@ def test_history_marks_the_newest_revision_of_each_branch_and_labels_the_modules
     ), marked
     labelled = [line for line in lines if "(modules)" in line]
     if FULL:
-        assert len(labelled) == 2, labelled
+        # modules_0001_rbac, modules_0002_warehouse_analysis and
+        # modules_0003_lower_is_better.
+        assert len(labelled) == 3, labelled
         assert all(" -> modules_" in line for line in labelled), labelled
     else:
         assert labelled == []

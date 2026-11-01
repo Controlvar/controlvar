@@ -61,7 +61,13 @@ NAMED_DOWNGRADES = {
         "d29a479daafe",
         "806901fb7735",
     ],
-    "modules_0001_rbac": ["modules_0002_warehouse_analysis"],
+    # docs/deployment/rollback-runbook.md, Step 2, and the operator page's
+    # Rolling Back: the modules branch, back to a named revision (#1386).
+    "modules_0002_warehouse_analysis": ["modules_0003_lower_is_better"],
+    "modules_0001_rbac": [
+        "modules_0003_lower_is_better",
+        "modules_0002_warehouse_analysis",
+    ],
 }
 BRANCH_POINT = "a7b8c9d0e1f2"
 MODULES_PREFIX = "modules_"
@@ -101,6 +107,40 @@ def test_every_revision_id_passes_the_workflow_allowlist():
     assert {"head", "base", "heads"}.isdisjoint(ids)
 
 
+def _version_num_width() -> int:
+    """The width of ``alembic_version.version_num``, as alembic creates it.
+
+    Read from alembic's own PostgreSQL implementation, not typed here: the
+    column is ``String(32)`` in alembic 1.20.0.
+    """
+    from alembic.ddl.impl import DefaultImpl
+    from sqlalchemy.dialects import postgresql
+
+    dialect = postgresql.dialect()
+    impl = DefaultImpl.get_by_dialect(dialect)(dialect, None, True, None, None, {})
+    table = impl.version_table_impl(
+        version_table="alembic_version",
+        version_table_schema=None,
+        version_table_pk=True,
+    )
+    return table.c.version_num.type.length
+
+
+@pytest.mark.regression
+def test_every_revision_id_fits_the_version_table():
+    """A revision id longer than ``version_num`` passes every check without a
+    database -- the allowlist above takes 64 characters -- and then fails the
+    stamp of every fresh install and the migration task's ``upgrade heads``
+    with ``value too long for type character varying(32)`` (#1386: a 45-character
+    id was planned and caught only by a database run)."""
+    width = _version_num_width()
+    assert width, "alembic's version table declares no width"
+    ids = [r.revision for r in _script().walk_revisions()]
+    assert len(ids) >= 30, f"found only {len(ids)} revisions: the scan is not reading"
+    too_long = [(i, len(i)) for i in ids if len(i) > width]
+    assert too_long == [], f"width {width} too long: {too_long}"
+
+
 @pytest.mark.regression
 @pytest.mark.modules
 @pytest.mark.parametrize("target", sorted(NAMED_DOWNGRADES))
@@ -120,9 +160,10 @@ def test_the_branch_point_also_unapplies_the_modules_branch():
     the modules branch"."""
     plan = _downgrade_plan(_script(), BRANCH_POINT)
     # The eleven core revisions above it (through 607c51a59bf5, #1497) and the
-    # modules branch's two.
-    assert len(plan) == 13, plan
+    # modules branch's three (through modules_0003_lower_is_better, #1386).
+    assert len(plan) == 14, plan
     assert [r for r in plan if r.startswith(MODULES_PREFIX)] == [
+        "modules_0003_lower_is_better",
         "modules_0002_warehouse_analysis",
         "modules_0001_rbac",
     ]

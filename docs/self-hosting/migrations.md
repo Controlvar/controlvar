@@ -117,7 +117,7 @@ Output, for a full install (a core install prints the first line only):
 
 ```text
 607c51a59bf5 (head)
-modules_0002_warehouse_analysis (head)
+modules_0003_lower_is_better (head)
 ```
 
 One line per head: the revision ID of the last migration applied on each
@@ -155,16 +155,25 @@ Roll back the most recent migration **of one branch**. With two heads a bare
 `-1` is ambiguous — alembic warns and picks one, which may not be the branch you
 meant — so name the branch:
 
-The modules branch has two revisions: `modules_0001_rbac` and, after it,
-`modules_0002_warehouse_analysis`. `modules@-1` unapplies the newest one only;
-`modules@-2` unapplies both, newest first.
+The modules branch has three revisions: `modules_0001_rbac`, then
+`modules_0002_warehouse_analysis`, then `modules_0003_lower_is_better`. Name
+the modules revision to end at rather than counting back: a relative step such
+as `modules@-2` counts from the newest revision the image has, so it unapplies
+a different revision once a release adds one.
 
-The modules branch, one revision back (modules_0002_warehouse_analysis):
+The modules branch, back to a named revision:
 
-```{.bash skip reason="destructive: unapplies modules revisions and drops the tables they created"}
-docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade modules@-1
-docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade modules@-2
+```{.bash skip reason="destructive: unapplies modules revisions; see what each drops"}
+docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade modules_0002_warehouse_analysis
+docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade modules_0001_rbac
 ```
+
+`downgrade modules_0002_warehouse_analysis` unapplies
+`modules_0003_lower_is_better` only, which drops the column
+`warehouse_sources.lower_is_better`, every metric source's lower-is-better
+setting. `downgrade modules_0001_rbac` also unapplies
+`modules_0002_warehouse_analysis`, which drops the three warehouse tables it
+created, with their rows. `modules@-3` unapplies all three, newest first.
 
 One step back on the core chain:
 
@@ -177,10 +186,12 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrad
 filter a downgrade by branch label: `downgrade modules@base` resolves to **the
 whole core chain** to base, and drops every table in the schema.
 
-Each modules revision downgrades only the objects its own `upgrade()` created
-(it marks them with a PostgreSQL COMMENT as it goes). On a database whose
-tables came from the bootstrap rather than from those migrations, their
-downgrade is a no-op — it will not drop populated tables it never made.
+`modules_0001_rbac` and `modules_0002_warehouse_analysis` downgrade only the
+objects their own `upgrade()` created (each marks them with a PostgreSQL
+COMMENT as it goes). On a database whose tables came from the bootstrap rather
+than from those migrations, their downgrade is a no-op — it will not drop
+populated tables it never made. `modules_0003_lower_is_better` drops its column
+on every database, however the column was made.
 
 ### `modules_0002_warehouse_analysis` removes saved warehouse connections
 
@@ -189,8 +200,10 @@ adds `warehouse_sources` and `warehouse_analysis_runs`. **Every row of the
 earlier `warehouse_connections` is deleted** — connections saved through the
 earlier warehouse endpoints — and nothing is copied into the new table.
 
-Downgrading it cannot bring those rows back: `downgrade modules@-1` drops the
-three tables it created and puts back an **empty** table of the earlier shape.
+Downgrading it cannot bring those rows back: `downgrade modules_0001_rbac`
+first unapplies `modules_0003_lower_is_better`, which drops each metric
+source's lower-is-better setting, then drops the three tables this revision
+created and puts back an **empty** table of the earlier shape.
 If you need the rows, take a snapshot of the database before upgrading to the
 release that carries this revision, and restore that snapshot to go back. The
 migration logs how many rows it removed:
@@ -198,6 +211,18 @@ migration logs how many rows it removed:
 ```text
 modules_0002: removing 3 legacy warehouse connection rows
 ```
+
+### `modules_0003_lower_is_better` gives each warehouse metric source a direction
+
+This revision adds the column `warehouse_sources.lower_is_better` (`boolean`,
+`NOT NULL`, default `false`), and every source already stored gets `false`.
+
+The previous release runs against this schema unchanged: the sources it
+creates get `false` from the column's default.
+
+**Its downgrade drops the column on every database**, however the column was
+made, and with it every metric source's setting; an upgrade afterwards sets
+each source back to `false`, not to what was stored.
 
 ### `1ab99332f0ba` rewrites stored event times to UTC
 
@@ -643,9 +668,8 @@ leaves the rows untouched and logs a WARNING naming the foreign revisions (exit
 0); when the core chain is *behind* — a newer core image against a database the
 full image built — it refuses with a message naming them. `downgrade` and
 `stamp` do not skip: they fail with alembic's own "Can't locate revision
-identified by 'modules_0002_warehouse_analysis'" (or `modules_0001_rbac`, on a
-database a release before the warehouse tables migrated), and the schema is
-untouched.
+identified by '…'", naming the modules revision the database records, and the
+schema is untouched.
 
 The escape hatch, when you really do want the core image to own that database:
 take a backup, then from the core image
@@ -749,6 +773,10 @@ What this means for you:
   is backward-compatible for a rollback too, and undoing it drops each flag's
   value type and values; it refuses while any flag is a string, number or json
   flag.
+  [`modules_0003_lower_is_better`](#modules_0003_lower_is_better-gives-each-warehouse-metric-source-a-direction)
+  is backward-compatible for a rollback, and undoing it drops every warehouse
+  metric source's lower-is-better setting; an upgrade afterwards sets each back
+  to `false`, not to the choice.
 - Compose runs one API container, which is the only writer and keeps `RUN_MIGRATIONS=true`.
   The chart already keeps the bootstrap out of the serving container: it runs
   it in an init container.

@@ -4,13 +4,16 @@ A warehouse metric source has no lower-is-better setting, so the estimators
 are never told a direction: a significant drop names no winner and a
 significant rise does.  This pins the documented limit until a source can say
 which way is better.
+
+``warehouse_sources.lower_is_better`` is stored (``modules_0003_lower_is_better``)
+but nothing reads or writes it yet: the source API refuses the field and
+``MetricRef`` carries no direction, which is what is pinned here.
 """
 
 import uuid
 
 import pytest
 
-from modules.backend.app.models.warehouse_source import WarehouseSource
 from modules.backend.app.schemas.warehouse_sources import MetricSourceCreate
 from modules.backend.app.services import warehouse_estimators as est
 
@@ -60,6 +63,5 @@ def test_a_warehouse_result_names_a_winner_only_for_a_significant_increase(kind)
 
 
 def test_a_warehouse_metric_source_has_no_lower_is_better_setting():
-    assert "lower_is_better" not in WarehouseSource.__table__.columns
     assert "lower_is_better" not in MetricSourceCreate.model_fields
     assert "lower_is_better" not in est.MetricRef.__dataclass_fields__

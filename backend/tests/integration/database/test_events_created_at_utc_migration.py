@@ -91,7 +91,7 @@ CORE_HEAD = "607c51a59bf5"
 #: The core head of the previous release (0.16.2), with ``d12cbd384bbe`` and
 #: ``a89544fb1075`` pending in front of this revision.
 RELEASED = "271f03a31742"
-MODULES_HEAD = "modules_0002_warehouse_analysis"
+MODULES_HEAD = "modules_0003_lower_is_better"
 WAREHOUSE_TABLES = {
     "warehouse_connections",
     "warehouse_sources",

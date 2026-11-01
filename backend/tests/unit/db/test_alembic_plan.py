@@ -75,13 +75,17 @@ CORE_MARKER = "b8c9d0e1f2a3"
 #: one that puts back the two ``workspace_id`` foreign keys.  Every assertion
 #: about the branch's *ordering against the core chain* is about this one.
 MODULES_FIRST = "modules_0001_rbac"
+#: The warehouse-analysis tables (#312): the branch's second revision, and its
+#: head until :data:`MODULES_HEAD` was added.
+MODULES_WAREHOUSE = "modules_0002_warehouse_analysis"
 #: The modules branch's HEAD: what ``heads`` names and ``modules@-1`` unapplies.
 #: Not the same revision as :data:`MODULES_FIRST` since the branch grew a second
 #: one (#312); an assertion that means "first" and says "head" silently changes
 #: meaning the day the branch grows, which is why the two are separate names.
-MODULES_HEAD = "modules_0002_warehouse_analysis"
+#: A warehouse metric source's lower-is-better column (#1386).
+MODULES_HEAD = "modules_0003_lower_is_better"
 #: The modules branch, in apply order.
-MODULES_BRANCH_PLAN = [MODULES_FIRST, MODULES_HEAD]
+MODULES_BRANCH_PLAN = [MODULES_FIRST, MODULES_WAREHOUSE, MODULES_HEAD]
 #: The core revision the branch must run *after*: it drops the two
 #: ``workspace_id`` foreign keys that ``modules_0001_rbac`` puts back.
 BRANCH_POINT = "a7b8c9d0e1f2"
@@ -230,9 +234,9 @@ def test_the_core_plan_is_the_full_plan_without_the_branch():
 # Rolling the branch back
 # ---------------------------------------------------------------------------
 #: What the documentation tells an operator to type to unapply the branch's
-#: newest revision, and the whole branch.
+#: newest revision, and the whole branch (its length back).
 UNAPPLY_MODULES_BRANCH = "modules@-1"
-UNAPPLY_WHOLE_MODULES_BRANCH = "modules@-2"
+UNAPPLY_WHOLE_MODULES_BRANCH = "modules@-3"
 
 #: Every file that spells a rollback command for this branch.
 ROLLBACK_DOCS = (
@@ -264,8 +268,8 @@ def test_unapplying_the_branch_is_one_revision_and_modules_at_base_is_all_of_the
     assert _downgrade_plan(script, UNAPPLY_WHOLE_MODULES_BRANCH) == list(
         reversed(MODULES_BRANCH_PLAN)
     )
-    # 37: the 35 core revisions (through 607c51a59bf5, #1497) and the branch's 2.
-    assert len(_downgrade_plan(script, "modules@base")) == len(FULL_PLAN) == 37
+    # 38: the 35 core revisions (through 607c51a59bf5, #1497) and the branch's 3.
+    assert len(_downgrade_plan(script, "modules@base")) == len(FULL_PLAN) == 38
 
 
 #: A command line, not a mention of one: the three documents all warn about
@@ -290,4 +294,57 @@ def test_no_document_tells_an_operator_to_downgrade_to_modules_at_base():
     assert offenders == [], (
         "`alembic downgrade modules@base` drops every table in the schema; "
         f"use `downgrade {UNAPPLY_MODULES_BRANCH}`"
+    )
+
+
+#: A ``downgrade modules@-N`` command line, as :data:`_MODULES_AT_BASE_COMMAND`
+#: reads one, with N captured.
+_MODULES_RELATIVE_DOWNGRADE_COMMAND = re.compile(
+    r"(?m)^\s*(?:\$ ?)?(?:docker compose exec (?:-\S+ ){0,4}api )?"
+    r"(?:python -m )?alembic\b.*downgrade modules@-(\d+)\b"
+)
+
+
+@pytest.mark.regression
+@pytest.mark.modules
+def test_a_documented_relative_modules_downgrade_is_one_revision_or_the_whole_branch():
+    """``modules@-N`` names a different revision each time the branch grows.
+
+    ``modules@-1`` is always the newest revision and ``modules@-<length>`` the
+    whole branch, but a count in between names whatever revision sits there in
+    the image that runs it: ``modules@-2`` was the whole branch until
+    ``modules_0003_lower_is_better`` (#1386), and from then on keeps the RBAC
+    tables.  So the documents name a partial rollback's target by its id, and
+    every relative command line they still give is one of those two counts --
+    the branch's length read from the revision files, not typed here.
+    """
+    script = _script()
+    length = len(
+        [
+            revision.revision
+            for revision in script.walk_revisions()
+            if revision.revision.startswith(MODULES_REVISION_PREFIX)
+        ]
+    )
+    allowed = {1, length}
+    found = 0
+    offenders = {}
+    for path in ROLLBACK_DOCS:
+        counts = [
+            int(count)
+            for count in _MODULES_RELATIVE_DOWNGRADE_COMMAND.findall(
+                path.read_text(encoding="utf-8")
+            )
+        ]
+        found += len(counts)
+        wrong = sorted(count for count in counts if count not in allowed)
+        if wrong:
+            offenders[str(path.relative_to(REPO_ROOT))] = wrong
+
+    # The pattern reads: the developer page gives `downgrade modules@-1`.
+    assert found, "no `downgrade modules@-N` command line found in ROLLBACK_DOCS"
+    assert offenders == {}, (
+        f"the modules branch has {length} revisions: a relative downgrade is "
+        f"modules@-1 or modules@-{length}; name any other target by its id: "
+        f"{offenders}"
     )
