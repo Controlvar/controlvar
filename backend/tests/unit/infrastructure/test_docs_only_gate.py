@@ -289,10 +289,11 @@ DOCS_READER = re.compile(r"""["']docs["']|["']docs/|mkdocs\.yml""")
 class _NoDuplicateKeys(yaml.SafeLoader):
     """safe_load keeps the LAST of two `if:` keys silently; this refuses.
 
-    It also refuses a mapping that holds the trigger key in both forms: this
-    loader reads a bare ``on`` as the boolean True and a quoted ``"on"`` as a
-    string, so it sees two keys where GitHub sees ``on`` twice, and which
-    value a reader takes would depend on the reader."""
+    It also refuses a mapping, at any depth, that holds both a bare ``on`` and
+    a quoted ``"on"``: this loader reads the first as the boolean True and the
+    second as a string, so it sees two keys where GitHub sees ``on`` twice,
+    and which value a reader takes would depend on the reader. At the top of a
+    workflow that key is the trigger key."""
 
     def construct_mapping(self, node, deep=False):
         seen = set()
@@ -305,8 +306,8 @@ class _NoDuplicateKeys(yaml.SafeLoader):
             seen.add(key)
         if "on" in seen and any(key is True for key in seen):
             raise AssertionError(
-                "both forms of the trigger key (bare and quoted `on`) in the "
-                f"mapping at line {node.start_mark.line + 1}"
+                "both a key read as True (a bare `on`, `true` or `yes`) and a "
+                f'quoted `"on"` in the mapping at line {node.start_mark.line + 1}'
             )
         return super().construct_mapping(node, deep=deep)
 

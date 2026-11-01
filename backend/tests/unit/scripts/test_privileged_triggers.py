@@ -17,16 +17,19 @@ with it, is pinned here rather than reviewed once:
   fails until it is classified here;
 * the workflows that use a PRIVILEGED trigger are exactly
   PRIVILEGED_WORKFLOWS;
-* a privileged workflow does not check out a ref or another repository, name
-  a pull request's head (or ``refs/pull``, ``git fetch ... pull/``, ``gh pr
-  checkout``) in a ``with:`` or ``run:``, fetch or check out code with
-  ``git`` or ``gh`` in a ``run:``, download an artifact, read any
-  secret but ``GITHUB_TOKEN`` (``toJSON(secrets)`` and ``secrets: inherit``
-  included), put an expression in a ``run:`` line or a github-script
-  ``script:`` (values arrive through ``env:``), use another repository's
-  action or workflow without pinning it to a 40-character commit SHA, ask for
-  ``write-all`` or ``id-token: write``, or name an ``environment:``. There is
-  no exemption for any file;
+* a privileged workflow uses only the job and step keys GitHub defines, in
+  their own case; it does not check out a ref or another repository (input
+  names compared in any case), name a pull request's head (or ``refs/pull``,
+  ``git fetch ... pull/``, ``gh pr checkout``) in a ``with:`` or ``run:``,
+  run ``git`` at all, or ``gh pr checkout`` or ``gh repo clone``, in a
+  ``run:``, download an artifact, read any secret but ``GITHUB_TOKEN``
+  (``toJSON(secrets)`` and ``secrets: inherit`` included), put an expression
+  in a ``run:`` line or a github-script ``script:`` (values arrive through
+  ``env:``), use another repository's action or workflow without pinning it
+  to a 40-character commit SHA, ask for ``write-all`` or ``id-token: write``,
+  or name an ``environment:``. There is no exemption for any file. The head
+  match is case-insensitive, so in shell it also catches ``--jq .head.sha``
+  on purpose, and a variable such as ``$HEAD_SHA``: rename it;
 * a reusable workflow or local action a privileged workflow calls is held to
   the same rules; one that cannot be read here (another repository's
   workflow, a JavaScript or Docker action) is refused;
@@ -45,7 +48,7 @@ import copy
 import os
 import re
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Set
+from typing import Any, Callable, Dict, FrozenSet, Iterator, List, Optional, Set
 
 import pytest
 
@@ -91,10 +94,57 @@ TOP_LEVEL_KEYS = frozenset(
     }
 )
 
+#: The keys GitHub defines for a job, and for a step. In a privileged workflow
+#: any other key, or one of these in another case, fails.
+JOB_KEYS = frozenset(
+    {
+        "name",
+        "permissions",
+        "needs",
+        "if",
+        "runs-on",
+        "environment",
+        "concurrency",
+        "outputs",
+        "env",
+        "defaults",
+        "steps",
+        "timeout-minutes",
+        "strategy",
+        "continue-on-error",
+        "container",
+        "services",
+        "uses",
+        "with",
+        "secrets",
+    }
+)
+STEP_KEYS = frozenset(
+    {
+        "id",
+        "if",
+        "name",
+        "uses",
+        "run",
+        "working-directory",
+        "shell",
+        "with",
+        "env",
+        "continue-on-error",
+        "timeout-minutes",
+    }
+)
+
 # The rules, as they are named in a failure.
+KEY = "has a key GitHub does not define"
 CHECKOUT = "checks out a ref or another repository"
 HEAD = "names a pull request head"
-FETCH = "fetches or checks out code"
+#: Added to HEAD in code: what trips it there most often, and the way out.
+HEAD_IN_CODE = (
+    " (a shell variable whose name begins with head, such as $HEAD_SHA, "
+    "matches too: rename the variable)"
+)
+GIT = "runs git, or checks out code with gh"
 DOWNLOAD = "downloads an artifact"
 SECRET = "reads a secret other than GITHUB_TOKEN"
 EXPRESSION = "has an expression in code (pass it through env:)"
@@ -115,18 +165,17 @@ _TOKEN_ONLY = re.compile(
 #: A pull request's head, by any of the names a payload or a command gives it:
 #: `head.sha`, `head.ref`, `head.repo`, `head_ref`, `workflow_run.head_sha`,
 #: `head_branch`, `head_repository`, `head_commit`; a pull ref; a fetch of
-#: one; the CLI's checkout.
+#: one; the CLI's checkout. Case-insensitive, as GitHub's expressions are; in
+#: shell text that also catches `--jq .head.sha` on purpose, and with it a
+#: variable such as $HEAD_SHA, which is renamed rather than excused.
 _HEAD = re.compile(
     r"refs/pull|\bhead[._]|\bgit\s+fetch\b[^\n]*\bpull/|\bgh\s+pr\s+checkout\b",
     re.I,
 )
-#: Code that fetches or checks out a tree. A head SHA may arrive through
-#: `env:`, where the rule above cannot see it, so the command itself is out.
-_FETCH = re.compile(
-    r"\bgit\s+(?:fetch|checkout|switch|clone|pull|worktree)\b"
-    r"|\bgh\s+(?:pr\s+checkout|repo\s+clone)\b",
-    re.I,
-)
+#: git in any form, and the gh commands that check code out. A head SHA can
+#: arrive through `env:`, where _HEAD cannot see it; no privileged workflow
+#: here runs git, so none may.
+_GIT = re.compile(r"\bgit\b|\bgh\s+(?:pr\s+checkout|repo\s+clone)\b", re.I)
 _EXPRESSION = re.compile(r"\$\{\{")
 _RUN_DOWNLOAD = re.compile(r"\bgh\s+run\s+download\b", re.I)
 
@@ -199,20 +248,44 @@ def _document_problems(where: str, document: Dict[str, Any]) -> List[str]:
         for match in _SECRETS.finditer(text):
             if not _TOKEN_ONLY.match(text, match.end()):
                 problems.append(f"{where}: {SECRET}: {text.strip()[:80]!r}")
-        if text.strip() == "write-all":
+        if text.strip().lower() == "write-all":
             problems.append(f"{where}: {WRITE_ALL}")
     return problems
 
 
 def _permission_problems(where: str, permissions: Any) -> List[str]:
-    if isinstance(permissions, dict) and permissions.get("id-token") == "write":
+    if isinstance(permissions, dict) and any(
+        str(key).lower() == "id-token" and str(value).lower() == "write"
+        for key, value in permissions.items()
+    ):
         return [f"{where}: {ID_TOKEN}"]
     return []
 
 
-def _step_problems(where: str, step: Dict[str, Any], seen: Set[Path]) -> List[str]:
-    problems = []
-    with_ = step.get("with") or {}
+def _key_problems(
+    where: str, mapping: Dict[Any, Any], allowed: FrozenSet[str]
+) -> List[str]:
+    return [
+        f"{where}: {KEY}: {key!r}"
+        for key in mapping
+        if not (isinstance(key, str) and key in allowed)
+    ]
+
+
+def _inputs(with_: Any) -> Dict[str, List[Any]]:
+    """An action's `with:` by lower-cased input name. An action reads an input
+    from the upper-cased ``INPUT_<NAME>``, so `Ref` and `ref` are one input."""
+    inputs: Dict[str, List[Any]] = {}
+    for key, value in (with_ if isinstance(with_, dict) else {}).items():
+        inputs.setdefault(str(key).lower(), []).append(value)
+    return inputs
+
+
+def _step_problems(where: str, step: Any, seen: Set[Path]) -> List[str]:
+    if not isinstance(step, dict):
+        return [f"{where}: is not a mapping"]
+    problems = _key_problems(where, step, STEP_KEYS)
+    inputs = _inputs(step.get("with"))
     code = [str(step["run"])] if step.get("run") is not None else []
     uses = step.get("uses")
     if uses is not None:
@@ -222,19 +295,19 @@ def _step_problems(where: str, step: Dict[str, Any], seen: Set[Path]) -> List[st
             problems += _local_action_problems(where, uses, seen)
         elif not _PINNED.fullmatch(uses):
             problems.append(f"{where}: {UNPINNED}: {uses}")
-        if action == "actions/checkout" and ("ref" in with_ or "repository" in with_):
+        if action == "actions/checkout" and ("ref" in inputs or "repository" in inputs):
             problems.append(f"{where}: {CHECKOUT}")
         if "download-artifact" in action:
             problems.append(f"{where}: {DOWNLOAD}: {uses}")
-        if action == "actions/github-script" and "script" in with_:
-            code.append(str(with_["script"]))
-    if any(_HEAD.search(text) for text in _strings(with_)):
+        if action == "actions/github-script":
+            code += [str(script) for script in inputs.get("script", [])]
+    if any(_HEAD.search(text) for text in _strings(step.get("with"))):
         problems.append(f"{where}: {HEAD} in with:")
     for text in code:
         if _HEAD.search(text):
-            problems.append(f"{where}: {HEAD} in code")
-        if _FETCH.search(text):
-            problems.append(f"{where}: {FETCH}")
+            problems.append(f"{where}: {HEAD} in code{HEAD_IN_CODE}")
+        if _GIT.search(text):
+            problems.append(f"{where}: {GIT}")
         if _EXPRESSION.search(text):
             problems.append(f"{where}: {EXPRESSION}")
         if _RUN_DOWNLOAD.search(text):
@@ -292,6 +365,10 @@ def privileged_problems(
     problems += _permission_problems(name, workflow.get("permissions"))
     for job_id, job in (workflow.get("jobs") or {}).items():
         where = f"{name}/{job_id}"
+        if not isinstance(job, dict):
+            problems.append(f"{where}: is not a mapping")
+            continue
+        problems += _key_problems(where, job, JOB_KEYS)
         problems += _permission_problems(where, job.get("permissions"))
         if "environment" in job:
             problems.append(f"{where}: {ENVIRONMENT}")
@@ -347,13 +424,13 @@ def test_every_file_in_the_directory_is_read_and_counted():
 
 
 def test_every_workflow_has_triggers_and_only_keys_github_defines(workflows, triggers):
+    """`triggers` refuses a workflow with no trigger as it is built."""
     problems = [
         problem
         for name, workflow in sorted(workflows.items())
         for problem in _top_level_problems(name, workflow)
     ]
     assert not problems, "\n".join(problems)
-    assert len([name for name, names in triggers.items() if names]) == WORKFLOW_COUNT
 
 
 def test_every_trigger_is_classified(triggers):
@@ -495,6 +572,12 @@ def _restore_tag(workflow: Dict[str, Any]) -> None:
     _steps(workflow)[0]["uses"] = "dependabot/fetch-metadata@v3"
 
 
+def _capitalise_uses(workflow: Dict[str, Any]) -> None:
+    step = _steps(workflow)[0]
+    del step["uses"]
+    step["Uses"] = "dependabot/fetch-metadata@v3"
+
+
 def _set(*keys: str, value: Any) -> Callable[[Dict[str, Any]], None]:
     def plant(workflow: Dict[str, Any]) -> None:
         target = workflow
@@ -532,9 +615,13 @@ PLANTS = {
         ),
         [CHECKOUT, HEAD],
     ),
+    "checkout with a capitalised input name": (
+        _add_step({"uses": f"actions/checkout@{SHA}", "with": {"Ref": "${{ env.X }}"}}),
+        [CHECKOUT],
+    ),
     "a fetch of a pull ref": (
         _add_step({"run": "git fetch origin pull/1/head:pr"}),
-        [HEAD, FETCH],
+        [HEAD, GIT],
     ),
     "a fetch of a head that arrives through env:": (
         _add_step(
@@ -543,9 +630,27 @@ PLANTS = {
                 "env": {"SHA": "${{ github.event.pull_request.head.sha }}"},
             }
         ),
-        [FETCH],
+        [GIT],
     ),
-    "the CLI's checkout": (_add_step({"run": 'gh pr checkout "$PR"'}), [HEAD, FETCH]),
+    "a plain git fetch": (_add_step({"run": 'git fetch origin "$SHA"'}), [GIT]),
+    "git with an option before its command": (
+        _add_step({"run": 'git -C . fetch origin "$SHA"'}),
+        [GIT],
+    ),
+    "git with a configuration option": (
+        _add_step({"run": 'git -c protocol.version=2 fetch origin "$SHA"'}),
+        [GIT],
+    ),
+    "the CLI's checkout": (_add_step({"run": 'gh pr checkout "$PR"'}), [HEAD, GIT]),
+    "a shell variable named after the head": (
+        _add_step(
+            {
+                "run": 'gh pr merge --auto --squash --match-head-commit "$HEAD_SHA"',
+                "env": {"HEAD_SHA": "${{ github.event.pull_request.head.sha }}"},
+            }
+        ),
+        [f"{HEAD} in code", "rename the variable"],
+    ),
     "a workflow_run head in with:": (
         _add_step(
             {
@@ -592,7 +697,23 @@ PLANTS = {
         ),
         [EXPRESSION],
     ),
+    "github-script with a capitalised input name": (
+        _add_step(
+            {
+                "uses": f"actions/github-script@{SHA}",
+                "with": {
+                    "Script": "core.info('${{ github.event.pull_request.title }}')"
+                },
+            }
+        ),
+        [EXPRESSION],
+    ),
     "the tag restored": (_restore_tag, [UNPINNED]),
+    "a step key in another case": (_capitalise_uses, [f"{KEY}: 'Uses'"]),
+    "a job key in another case": (
+        _set("jobs", "automerge", "Environment", value="staging"),
+        [f"{KEY}: 'Environment'"],
+    ),
     "write-all": (_set("permissions", value="write-all"), [WRITE_ALL]),
     "id-token": (_set("permissions", "id-token", value="write"), [ID_TOKEN]),
     "an environment": (
@@ -639,6 +760,19 @@ def test_each_rule_fires(plant, real):
     for part in expected:
         assert any(part in problem for problem in problems), (plant, part, problems)
     assert all(problem.startswith(REAL) for problem in problems), problems
+
+
+def test_a_variable_renamed_away_from_head_passes(real):
+    """The way out the head rule's message gives: the same value under a name
+    that does not begin with head."""
+    workflow = copy.deepcopy(real)
+    _steps(workflow).append(
+        {
+            "run": 'gh pr merge --auto --squash --match-head-commit "$PR_SHA"',
+            "env": {"PR_SHA": "${{ github.event.pull_request.head.sha }}"},
+        }
+    )
+    assert privileged_problems(REAL, workflow) == []
 
 
 def test_a_composite_action_that_keeps_the_rules_passes(real):
