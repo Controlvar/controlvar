@@ -44,7 +44,7 @@ def sdk_directories() -> set[str]:
     }
 
 
-def ecosystems() -> dict[str, str]:
+def _check_sdk_version():
     from importlib.util import module_from_spec, spec_from_file_location
 
     spec = spec_from_file_location(
@@ -53,7 +53,17 @@ def ecosystems() -> dict[str, str]:
     assert spec is not None and spec.loader is not None
     module = module_from_spec(spec)
     spec.loader.exec_module(module)
-    return dict(module.ECOSYSTEMS)
+    return module
+
+
+def ecosystems() -> dict[str, str]:
+    return dict(_check_sdk_version().ECOSYSTEMS)
+
+
+def manifest_version(sdk: str) -> str:
+    """The version sdk/<sdk>'s own manifest carries in this tree, read by the
+    function `resolve`'s gate uses, so no test here pins an SDK's version."""
+    return _check_sdk_version().read_manifest_version(sdk)[0]
 
 
 def test_every_sdk_directory_has_an_ecosystem() -> None:
@@ -1102,6 +1112,213 @@ def test_a_hyphen_in_the_sdk_name_does_not_make_a_prerelease(tmp_path: Path) -> 
     )
     assert classify.returncode == 0, classify.stdout + classify.stderr
     assert _outputs(tmp_path / "classify") == {"prerelease": "false"}
+
+
+# --------------------------------------------------------------------------
+# #1498 (PP-8): a dispatch at a release tag releases that tag and nothing
+# else. The `sdk-release` environment admits a run by its ref, so `resolve` is
+# what ties the SDK and version a dispatch builds to the tag it runs at.
+# --------------------------------------------------------------------------
+
+#: Read from the manifests, so P's version bumps never touch these tests.
+JS_VERSION = manifest_version("js")
+REACT_VERSION = manifest_version("react")
+OPENFEATURE_VERSION = manifest_version("openfeature")
+OPENFEATURE_PYTHON_VERSION = manifest_version("openfeature-python")
+
+
+def _parse(
+    tmp_path: Path, ref_type: str, ref_name: str, sdk: str, version: str
+) -> subprocess.CompletedProcess:
+    """`resolve`'s real parse step, at this tree, with the run's ref and the
+    dispatch's inputs (both empty on a tag push)."""
+    return _run_step(
+        _step("resolve", "Parse and check"),
+        {
+            "github.ref_name": ref_name,
+            "github.ref_type": ref_type,
+            "inputs.sdk": sdk,
+            "inputs.version": version,
+        },
+        tmp_path,
+        ROOT,
+    )
+
+
+#: (case, tag, inputs.sdk, inputs.version, the tag's SDK, the tag's version).
+#: Every case after the first names an SDK at a version its own manifest
+#: carries (go has none to compare), so without the comparison `resolve`
+#: accepts it and releases the inputs' SDK from the tag's commit.
+DISPATCH_REFUSALS = [
+    ("java at react's tag", "sdk/react/v0.1.0", "java", "0.1.0", "react", "0.1.0"),
+    (
+        "another SDK at its own version, at react's tag",
+        f"sdk/react/v{REACT_VERSION}",
+        "js",
+        JS_VERSION,
+        "react",
+        REACT_VERSION,
+    ),
+    (
+        "an SDK whose name begins the tag's",
+        f"sdk/openfeature-python/v{OPENFEATURE_VERSION}",
+        "openfeature",
+        OPENFEATURE_VERSION,
+        "openfeature-python",
+        OPENFEATURE_VERSION,
+    ),
+    (
+        "the tag's SDK at another version",
+        "sdk/js/v99.99.99",
+        "js",
+        JS_VERSION,
+        "js",
+        "99.99.99",
+    ),
+    (
+        "go, which has no manifest version, at another version",
+        "sdk/go/v99.99.99",
+        "go",
+        "0.1.0",
+        "go",
+        "99.99.99",
+    ),
+]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    ("case", "tag", "sdk", "version", "tag_sdk", "tag_version"),
+    DISPATCH_REFUSALS,
+    ids=[case[0] for case in DISPATCH_REFUSALS],
+)
+def test_a_dispatch_at_a_release_tag_must_name_that_tags_sdk_and_version(
+    case: str,
+    tag: str,
+    sdk: str,
+    version: str,
+    tag_sdk: str,
+    tag_version: str,
+    tmp_path: Path,
+) -> None:
+    """PP-8. On the old step the inputs won over the tag: `gh workflow run
+    sdk-release.yml --ref sdk/react/v0.1.0 -f sdk=java -f version=0.1.0`
+    resolved to java, and every case after the first resolved to the inputs'
+    SDK and exited 0. Now each is refused before the gate reads a manifest,
+    with a message naming the tag's SDK and version and the inputs', and
+    `resolve` outputs nothing."""
+    result = _parse(tmp_path, "tag", tag, sdk, version)
+    assert result.returncode == 1, (case, result.stdout, result.stderr)
+    assert (
+        f"::error::this run is at the tag {tag} (sdk {tag_sdk}, version "
+        f"{tag_version}), but its inputs ask for sdk {sdk}, version {version}. "
+        "A dispatch at a release tag must name that tag's own SDK and version"
+    ) in result.stdout, (case, result.stdout, result.stderr)
+    assert _outputs(tmp_path) == {}, case
+
+
+#: (case, ref type, ref name, inputs.sdk, inputs.version, released SDK, version)
+DISPATCH_ACCEPTED = [
+    (
+        "a dispatch naming its tag's SDK and version",
+        "tag",
+        f"sdk/js/v{JS_VERSION}",
+        "js",
+        JS_VERSION,
+        "js",
+        JS_VERSION,
+    ),
+    (
+        "the same, with the version spelt as the tag spells it",
+        "tag",
+        f"sdk/js/v{JS_VERSION}",
+        "js",
+        f"v{JS_VERSION}",
+        "js",
+        JS_VERSION,
+    ),
+    (
+        "a hyphenated SDK's dispatch at its own tag",
+        "tag",
+        f"sdk/openfeature-python/v{OPENFEATURE_PYTHON_VERSION}",
+        "openfeature-python",
+        OPENFEATURE_PYTHON_VERSION,
+        "openfeature-python",
+        OPENFEATURE_PYTHON_VERSION,
+    ),
+    (
+        "a dispatch from a branch, as before",
+        "branch",
+        "main",
+        "js",
+        JS_VERSION,
+        "js",
+        JS_VERSION,
+    ),
+    (
+        "a tag push, as before",
+        "tag",
+        f"sdk/js/v{JS_VERSION}",
+        "",
+        "",
+        "js",
+        JS_VERSION,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("case", "ref_type", "ref_name", "sdk", "version", "released", "at"),
+    DISPATCH_ACCEPTED,
+    ids=[case[0] for case in DISPATCH_ACCEPTED],
+)
+def test_resolve_accepts_a_dispatch_at_its_own_tag_a_branch_dispatch_and_a_tag_push(
+    case: str,
+    ref_type: str,
+    ref_name: str,
+    sdk: str,
+    version: str,
+    released: str,
+    at: str,
+    tmp_path: Path,
+) -> None:
+    result = _parse(tmp_path, ref_type, ref_name, sdk, version)
+    assert result.returncode == 0, (case, result.stdout, result.stderr)
+    outputs = _outputs(tmp_path)
+    assert (outputs["sdk"], outputs["version"]) == (released, at), (case, outputs)
+    assert outputs["ecosystem"] == ecosystems()[released], (case, outputs)
+
+
+def test_the_tag_check_gates_every_job_of_the_release() -> None:
+    """The step the tests above run is `resolve`'s parse step, bound to the
+    run's real ref and the dispatch's inputs through `env:` only; neither it
+    nor `resolve` can be skipped or allowed to fail; its outputs are the ones
+    `resolve` passes on; and every other job needs `resolve`."""
+    jobs = _workflow()["jobs"]
+    resolve = jobs["resolve"]
+    parse = _step("resolve", "Parse and check")
+    assert parse.get("id") == "parse"
+    assert parse.get("env") == {
+        "REF_NAME": "${{ github.ref_name }}",
+        "REF_TYPE": "${{ github.ref_type }}",
+        "INPUT_SDK": "${{ inputs.sdk }}",
+        "INPUT_VERSION": "${{ inputs.version }}",
+    }
+    assert "${{" not in _run_of(parse)
+    for key in ("if", "continue-on-error"):
+        assert key not in resolve, key
+        assert key not in parse, key
+    for key in ("sdk", "version", "ecosystem", "name"):
+        assert resolve["outputs"][key] == f"${{{{ steps.parse.outputs.{key} }}}}"
+
+    unguarded = []
+    for name, job in jobs.items():
+        if name == "resolve":
+            continue
+        needs = job.get("needs") or []
+        if "resolve" not in ([needs] if isinstance(needs, str) else needs):
+            unguarded.append(name)
+    assert not unguarded, f"jobs that do not need resolve: {unguarded}"
 
 
 def _tarball(path: Path, manifest: dict) -> bytes:

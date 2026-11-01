@@ -115,8 +115,9 @@ plans again from the experiment's own data, with the same formula as above:
   power is the power to detect the planned MDE at that size, not the effect observed so far.
 
 The tab plans a conversion rate (a two-proportion test) whatever the metric's type, and it
-says so. For a revenue metric, which the results analyse as a mean per user, the plan is for
-the share of users who buy. Nothing typed on the tab is saved.
+says so. For a revenue, count, duration or custom metric, which the results analyse as a mean
+per user, the plan is for the share of users who send its event. Nothing typed on the tab is
+saved.
 
 **Worked example**: a control rate of 12% so far, a 5% relative MDE, 80% power, 5%
 significance, two variants (so the correction changes nothing):

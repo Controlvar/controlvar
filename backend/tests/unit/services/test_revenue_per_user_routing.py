@@ -1,10 +1,12 @@
 """
 Which metric types ``/results`` analyses as a mean, and the pinned output.
 
-``AnalysisService.get_experiment_results`` analyses a revenue metric as its
-mean value per assigned user (Welch's t-test) and every other metric type as
-the share of users who converted (Fisher's exact test) (#439).  The routing is
-held over every ``MetricType``, through the real entry point with only the
+``AnalysisService.get_experiment_results`` analyses a revenue, count,
+duration or custom metric as its mean value per assigned user (Welch's
+t-test) and a conversion metric as the share of users who converted (Fisher's
+exact test) (#439).  A count metric's per-user value is read with
+``event_counts``, every other mean type's with ``value_totals``.  The routing
+is held over every ``MetricType``, through the real entry point with only the
 database replaced, as ``test_binomial_metric_result_characterisation.py``
 replaces it.
 
@@ -57,6 +59,11 @@ _TOTALS = {
     _CONTROL: [40.0 + (i % 9) * 5.0 for i in range(40)],
     _TREATMENT: [55.0 + (i % 13) * 4.0 for i in range(60)],
 }
+#: Events per user of the control's and the treatment's users who sent one.
+_COUNTS = {
+    _CONTROL: [float(1 + i % 3) for i in range(40)],
+    _TREATMENT: [float(1 + i % 4) for i in range(60)],
+}
 
 #: sha256 of the canonical ``get_experiment_results`` output for the revenue
 #: experiment below, per engine version.
@@ -64,6 +71,9 @@ REVENUE_RESULTS_FINGERPRINTS: Dict[str, str] = {
     "1.5.0": "5ade759aa8ce18ef518dfde1acc9d6a3c2a3eda4dc1d31d8898e68d62225ef06",
     # 1.6.0 (#1385) changes a lower-is-better bandit only: 1.5.0's.
     "1.6.0": "5ade759aa8ce18ef518dfde1acc9d6a3c2a3eda4dc1d31d8898e68d62225ef06",
+    # 1.7.0 (#439) routes count, duration and custom to the mean; this
+    # experiment's revenue and conversion results are 1.6.0's.
+    "1.7.0": "5ade759aa8ce18ef518dfde1acc9d6a3c2a3eda4dc1d31d8898e68d62225ef06",
 }
 
 
@@ -100,6 +110,7 @@ def _results(
     """``get_experiment_results`` with the counts and totals above."""
     fixture = characterisation._Fixture(units=_UNITS, converted={})
     totals_read: List[str] = []
+    counts_read: List[str] = []
 
     def converting(_db, _experiment_id, variant_id, _event):
         return _CONVERTED[str(variant_id)]
@@ -108,8 +119,13 @@ def _results(
         totals_read.append(event_name)
         return list(_TOTALS[str(variant_id)])
 
+    def event_counts(_self, _experiment_id, variant_id, event_name):
+        counts_read.append(event_name)
+        return list(_COUNTS[str(variant_id)])
+
     monkeypatch.setattr(analysis_module, "count_converting_users", converting)
     monkeypatch.setattr(AnalysisService, "value_totals", value_totals)
+    monkeypatch.setattr(AnalysisService, "event_counts", event_counts)
     monkeypatch.setattr(
         AnalysisService,
         "calculate_experiment_summary",
@@ -132,10 +148,17 @@ def _results(
     output.pop("computed_at")
     assert output.pop("srm") is None
     output["totals_read_for"] = sorted(totals_read)
+    if counts_read:
+        output["counts_read_for"] = sorted(counts_read)
     return output
 
 
-def test_the_results_analyse_only_a_revenue_metric_as_a_mean(monkeypatch):
+@pytest.mark.regression
+def test_the_results_analyse_every_type_but_conversion_as_a_mean(monkeypatch):
+    """#439: a count, duration or custom metric is its mean per assigned user,
+    as a revenue metric is; only a conversion metric is a share of users.  On
+    the code before #439 the count, duration and custom rows were
+    ``("proportion", "fisher_exact")``."""
     metrics = [_metric(t, is_primary=t is MetricType.CONVERSION) for t in MetricType]
     output = _results(metrics, monkeypatch)
 
@@ -149,20 +172,27 @@ def test_the_results_analyse_only_a_revenue_metric_as_a_mean(monkeypatch):
     assert routes == {
         "conversion": ("proportion", "fisher_exact"),
         "revenue": ("mean", "welch_t_test"),
-        "count": ("proportion", "fisher_exact"),
-        "duration": ("proportion", "fisher_exact"),
-        "custom": ("proportion", "fisher_exact"),
+        "count": ("mean", "welch_t_test"),
+        "duration": ("mean", "welch_t_test"),
+        "custom": ("mean", "welch_t_test"),
     }
-    # Only the revenue metric reads event values, once per variant.
-    assert output["totals_read_for"] == ["revenue_event", "revenue_event"]
+    # Revenue, duration and custom read event values, once per variant ...
+    assert output["totals_read_for"] == sorted(
+        ["revenue_event", "duration_event", "custom_event"] * 2
+    )
+    # ... and a count metric reads its number of events instead, never a sum.
+    assert output["counts_read_for"] == ["count_event", "count_event"]
     # Each result is the schema's, and says how it was analysed.
     analysis = {
         r["metric_type"]: MetricResult.model_validate(r).analysis
         for r in output["metrics"]
     }
-    assert analysis["revenue"] == "mean"
-    assert {analysis[t] for t in ("conversion", "count", "duration", "custom")} == {
-        "proportion"
+    assert analysis == {
+        "conversion": "proportion",
+        "revenue": "mean",
+        "count": "mean",
+        "duration": "mean",
+        "custom": "mean",
     }
 
 

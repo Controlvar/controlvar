@@ -46,23 +46,27 @@ text = "Experiments and results"
 by = ["exempt:label"]
 
 [[unit]]
-text = "A revenue, count or duration metric analysed by its values | A revenue metric is analysed as its mean value per assigned user: each user's event values added up, 0 for a user with none, compared with Welch's t-test. A count, duration or custom metric is analysed as a conversion: whether each user sent the metric's event; its events' values are not analysed."
+text = "Every event value counted in a revenue, duration or custom metric | A value that is not a number, is infinite, or is larger than 10^12 in size, in the unit it was sent in, adds nothing to its user's total; the event still counts its user in conversions. A count metric counts events and does not read their value."
 by = [
-    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
-    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_only_a_revenue_metric_as_a_mean",
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_values_that_are_not_finite_or_too_large_add_nothing",
+    "test:backend/tests/integration/api/test_value_metrics_results.py::test_duration_and_custom_add_up_each_users_values",
+    "test:backend/tests/integration/api/test_value_metrics_results.py::test_a_count_does_not_read_the_value",
 ]
 
 [[unit]]
-text = "Every event value counted in a revenue metric | A value that is not a number, is infinite, or is larger than 10^12 in size, in the unit it was sent in, adds nothing to its user's total; the event still counts its user as a buyer."
-by = ["test:backend/tests/integration/api/test_revenue_per_user_results.py::test_values_that_are_not_finite_or_too_large_add_nothing"]
-
-[[unit]]
-text = "A revenue metric's sequential analysis, Bayesian analysis, sample-size plan and daily series by its values | Each is of the share of users who sent the metric's event, as for a conversion. CUPED does not analyse a revenue metric."
+text = "A revenue, count, duration or custom metric's sequential analysis, Bayesian analysis, sample-size plan, daily series and Live tab by its values | Each is of the share of users who sent the metric's event, as for a conversion. CUPED does not analyse these metrics."
 by = ["test:backend/tests/integration/api/test_revenue_per_user_results.py::test_the_other_analyses_of_a_revenue_metric_stay_on_the_share_of_buyers"]
 
 [[unit]]
-text = "A revenue metric's breakdown by segment as revenue per user | The Breakdowns view of a revenue metric shows, in its column headed Mean, the share of users who sent the metric's event in each segment, not revenue per user. The metric's headline row is revenue per user."
+text = "A breakdown by segment of a revenue, count, duration or custom metric by its values | The Breakdowns view of such a metric shows, in its column headed Mean, the share of users who sent the metric's event in each segment. The metric's headline row is its mean per user."
 by = ["test:backend/tests/integration/api/test_revenue_breakdown_share_of_buyers.py::test_a_revenue_metric_breakdown_is_the_share_of_buyers"]
+
+[[unit]]
+text = "The average time one event takes, such as page load time | A duration metric is each user's total of its events' values, 0 for a user with none, averaged over every assigned user: a variant whose users send the event less often reads as less time. No metric averages over events rather than users."
+by = [
+    "test:backend/tests/unit/services/test_value_metrics_per_user.py::test_a_duration_is_time_per_assigned_user_not_per_event",
+    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_every_type_but_conversion_as_a_mean",
+]
 
 [[unit]]
 text = "A traffic allocation for the experiment as a whole | There is none. Variant weights must add up to exactly 100%, or the request is refused with 422. Users are left out only by targeting rules, a mutual exclusion group or the global holdout."

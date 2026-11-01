@@ -547,7 +547,7 @@ text = "GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment
 by = [
     "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
     "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_the_export_leaves_the_rate_empty_for_a_revenue_primary",
-    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_only_a_revenue_metric_as_a_mean",
+    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_revenue_results_are_pinned_for_the_running_engine",
     "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_a_revenue_primary_names_its_winner_in_the_summary",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
 ]
@@ -557,6 +557,23 @@ text = "GET /api/v1/bandit/{experiment_id}, POST /api/v1/bandit/{experiment_id}/
 by = [
     "test:backend/tests/unit/services/test_lower_is_better_direction.py::TestTheBanditReadsTheDirection",
     "test:backend/tests/unit/services/test_lower_is_better_direction.py::test_the_engine_whose_bandit_reads_the_direction_is_not_a_frozen_one",
+    "test:backend/tests/unit/services/test_engine_versions_frozen.py",
+    "test:backend/tests/unit/scripts/test_openapi_dump_and_stability.py::test_the_results_cache_key_names_the_engine_and_a_finished_answer_lasts_a_day",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results, GET /api/v1/export/variants, GET /api/v1/export/experiments, GET /api/v1/export/reports/experiments/{experiment_id}, GET/POST /api/v1/experiments/, GET/PUT /api/v1/experiments/{experiment_id}, POST /api/v1/experiments/{experiment_id}/start, POST /api/v1/experiments/{experiment_id}/pause, POST /api/v1/experiments/{experiment_id}/complete, POST /api/v1/experiments/{experiment_id}/archive, POST /api/v1/experiments/{experiment_id}/clone, PUT /api/v1/experiments/{experiment_id}/schedule, GET /api/v1/results/{experiment_id}/bayesian, GET /api/v1/bandit/{experiment_id}, POST /api/v1/bandit/{experiment_id}/update, PUT /api/v1/bandit/{experiment_id}/weights | #439 (count, duration and custom) | A metric of type count, duration or custom is analysed as its mean per assigned user, as a revenue metric is: for count each user's value is the number of the metric's events they sent, whatever their value; for duration and custom it is the total of those events' value; a user with none counts as 0. Such a metric's analysis is mean, mean is that value per user (it was the share of users who sent the event), statistical_test_used is welch_t_test, each treatment carries absolute_difference and absolute_difference_ci, and the winner and the recommendation follow the means. Experiments already running or completed show the new numbers from the upgrade on, and their winner and recommendation can change. conversions is still the number of users who sent the event. The export's conversion_rate is empty when the primary metric is of one of these types. aggregation_method and event_value_path are still accepted, stored and returned, and are described as not read; no analysis has read them. The engine version becomes 1.7.0, so the results routes do not serve an answer cached before the upgrade. The OpenAPI document changes only in descriptions, the two examples and the engine_version default. See Data export."
+by = [
+    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_every_type_but_conversion_as_a_mean",
+    "test:backend/tests/integration/api/test_value_metrics_results.py::test_a_count_metric_counts_events_sent_with_no_value",
+    "test:backend/tests/integration/api/test_value_metrics_results.py::test_a_count_does_not_read_the_value",
+    "test:backend/tests/integration/api/test_value_metrics_results.py::test_duration_and_custom_add_up_each_users_values",
+    "test:backend/tests/integration/api/test_value_metrics_results.py::test_a_count_primary_can_change_its_recommendation",
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_the_export_leaves_the_rate_empty_for_a_revenue_primary",
+    "test:backend/tests/unit/services/test_value_metrics_per_user.py::test_the_fields_nothing_reads_say_so",
+    "test:backend/tests/unit/services/test_value_metrics_per_user.py::test_aggregation_method_and_event_value_path_change_nothing",
+    "test:backend/tests/unit/services/test_value_metrics_per_user.py::test_the_value_metric_analysis_is_not_pinned_under_an_engine_that_shared_them",
     "test:backend/tests/unit/services/test_engine_versions_frozen.py",
     "test:backend/tests/unit/scripts/test_openapi_dump_and_stability.py::test_the_results_cache_key_names_the_engine_and_a_finished_answer_lasts_a_day",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",

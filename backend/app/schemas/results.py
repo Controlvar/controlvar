@@ -145,11 +145,13 @@ class VariantResult(BaseModel):
     ``statistical_test_used``) are ``None``.
 
     The metric's ``analysis`` says what ``mean`` is.  For a metric analysed
-    as a proportion (every type but revenue) ``mean`` is the share of the
-    variant's users who converted, in [0, 1].  For a revenue metric
-    (``analysis`` ``"mean"``) it is the mean value per assigned user: each
-    user's values added up, 0 for a user with none.  ``conversions`` is the
-    number of users who converted either way.
+    as a proportion (a conversion metric) ``mean`` is the share of the
+    variant's users who converted, in [0, 1].  For a revenue, count, duration
+    or custom metric (``analysis`` ``"mean"``) it is the mean per assigned
+    user of each user's value, 0 for a user with none: for a count metric the
+    number of the metric's events they sent, otherwise the total of those
+    events' value.  ``conversions`` is the number of users who converted
+    either way.
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -169,8 +171,8 @@ class VariantResult(BaseModel):
         description=(
             "Number of assigned users with at least one conversion event; a "
             "user who converts several times counts once, so this never "
-            "exceeds sample_size.  For a revenue metric too: the users who "
-            "sent the metric's event, whatever its value."
+            "exceeds sample_size.  For a metric analysed as a mean too: the "
+            "users who sent the metric's event, whatever its value."
         ),
     )
     mean: float = Field(
@@ -178,8 +180,10 @@ class VariantResult(BaseModel):
         description=(
             "When the metric's analysis is 'proportion': the share of the "
             "variant's users who converted, in [0, 1].  When it is 'mean' (a "
-            "revenue metric): the mean value per assigned user, each user's "
-            "values added up and 0 for a user with none."
+            "revenue, count, duration or custom metric): the mean per "
+            "assigned user of each user's value, 0 for a user with none: for "
+            "a count metric the number of the metric's events they sent, "
+            "otherwise the total of those events' value."
         ),
     )
     std_dev: Optional[float] = Field(
@@ -338,10 +342,11 @@ class MetricResult(BaseModel):
     analysis: Literal["proportion", "mean"] = Field(
         "proportion",
         description=(
-            "How the variants are compared.  'mean' for a revenue metric: the "
-            "mean value per assigned user, compared with Welch's t-test.  "
-            "'proportion' for every other metric type: the share of users who "
-            "converted, compared with Fisher's exact test."
+            "How the variants are compared.  'mean' for a revenue, count, "
+            "duration or custom metric: the mean per assigned user (see "
+            "VariantResult.mean), compared with Welch's t-test.  'proportion' "
+            "for a conversion metric: the share of users who converted, "
+            "compared with Fisher's exact test."
         ),
     )
     variants: List[VariantResult] = Field(

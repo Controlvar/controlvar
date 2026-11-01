@@ -356,10 +356,10 @@ text = "For three or more experiences, run a multivariate experiment."
 by = ["exempt:advice"]
 
 [[unit]]
-text = "Only a revenue metric is analysed by its values (its mean per assigned user); a count, duration or custom metric is analysed as a conversion: whether each user sent the metric's event."
+text = "A revenue, count, duration or custom metric's sequential, Bayesian, sample-size, breakdown and daily views are of the share of users who sent its event."
 by = [
-    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
-    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_only_a_revenue_metric_as_a_mean",
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_the_other_analyses_of_a_revenue_metric_stay_on_the_share_of_buyers",
+    "test:backend/tests/integration/api/test_revenue_breakdown_share_of_buyers.py::test_a_revenue_metric_breakdown_is_the_share_of_buyers",
 ]
 
 [[unit]]

@@ -1641,6 +1641,15 @@ text = "Metrics count events by event_name: a metric with event_name: \"purchase
 by = ["test:backend/tests/integration/services/test_conversion_event_matching.py"]
 
 [[unit]]
+text = "Which metrics read value: a revenue, duration or custom metric adds it up per user; a count metric counts the event and does not read it; a conversion metric does not read it."
+by = [
+    "test:backend/tests/integration/api/test_value_metrics_results.py::test_duration_and_custom_add_up_each_users_values",
+    "test:backend/tests/integration/api/test_value_metrics_results.py::test_a_count_does_not_read_the_value",
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
+    "test:backend/tests/unit/services/test_binomial_metric_result_characterisation.py::test_binomial_metric_result_characterisation",
+]
+
+[[unit]]
 text = "Body: {\"event_type\": string, \"event_name\": string?, \"user_id\": string, \"experiment_key\": string?, \"feature_flag_key\": string?, \"value\": number?, \"metadata\": object?, \"timestamp\": datetime?}"
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 

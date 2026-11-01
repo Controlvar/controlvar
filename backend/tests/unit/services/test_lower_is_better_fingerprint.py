@@ -191,6 +191,12 @@ LOWER_IS_BETTER_FINGERPRINTS: Dict[str, Dict[str, str]] = {
         "binomial_metric_result": "427251bbac41bc5f639179de2e55944d85bf2a7d831c71c538aecb2915208ab3",
         "mean_metric_result": "11b6c73a38a716f809bfeb2ef9735045459973fbaa457087c4409074456952df",
     },
+    # 1.7.0 (#439) routes count, duration and custom to the mean in /results;
+    # these estimators are unchanged: 1.6.0's.
+    "1.7.0": {
+        "binomial_metric_result": "427251bbac41bc5f639179de2e55944d85bf2a7d831c71c538aecb2915208ab3",
+        "mean_metric_result": "11b6c73a38a716f809bfeb2ef9735045459973fbaa457087c4409074456952df",
+    },
 }
 
 

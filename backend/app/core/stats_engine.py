@@ -42,6 +42,10 @@ import numpy as np
 #: user who did not convert as the success, so its weights, regret estimate
 #: and history alpha/beta favour the variant with fewer conversions; the
 #: stored and reported counts stay the converting users.
+#: 1.7.0 (#439): ``/results`` analyses a count, duration or custom metric as
+#: its mean per assigned user (a count metric's per-user value is its number of
+#: events), as a revenue metric is, where it was the share of users who sent
+#: the event.
 #:
 #: The rule: an engine-changing PR bumps ``ENGINE_VERSION`` to the next minor
 #: and appends it to ``RELEASED_ENGINE_VERSIONS`` ("frozen on main", in
@@ -53,7 +57,7 @@ import numpy as np
 #: path stamping ``engine_version`` returns, caches or persists: results and
 #: its snapshots, Bayesian, CUPED, sequential, and the bandit's state, history
 #: and status.  A revert of an engine-changing PR bumps again.
-ENGINE_VERSION: str = "1.6.0"
+ENGINE_VERSION: str = "1.7.0"
 
 #: Mask that keeps the derived seed inside the signed 64-bit range.
 _SEED_MASK = (1 << 63) - 1
