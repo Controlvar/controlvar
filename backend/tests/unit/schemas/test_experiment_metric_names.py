@@ -80,6 +80,29 @@ def test_a_repeat_is_refused_naming_the_first_repeated_pair(
     ]
 
 
+@pytest.mark.regression
+@pytest.mark.parametrize("schema", ["create", "update"])
+def test_a_repeated_name_with_another_event_is_a_repeat(schema):
+    """The name alone is compared, as the unique index on (experiment, name)
+    compares it: a different ``event_name`` does not make two metrics."""
+    metrics = [
+        {"name": "Signup", "event_name": "signup"},
+        {"name": "Signup", "event_name": "account_created"},
+    ]
+    if schema == "create":
+        errors = _errors(lambda: ExperimentCreate(**PAYLOAD, metrics=metrics))
+    else:
+        errors = _errors(lambda: ExperimentUpdate(metrics=metrics))
+
+    assert errors == [
+        {
+            "type": "value_error",
+            "loc": ("metrics",),
+            "msg": UX_TEXT.format(first=0, second=1),
+        }
+    ]
+
+
 @pytest.mark.parametrize(
     "names",
     [("Revenue", "revenue"), ("a", " a"), ("a", "a "), ("a",), ("a", "b", "c")],

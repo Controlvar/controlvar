@@ -240,6 +240,37 @@ def test_an_update_repeating_a_name_is_422_and_keeps_the_stored_metrics(
     assert _stored_names(db_session, experiment_id) == ["Conversion", "Revenue"]
 
 
+@pytest.mark.regression
+@pytest.mark.parametrize("route", ["create", "update"])
+def test_a_name_repeated_with_another_event_is_still_a_repeat(
+    route, client, db_session, developer
+):
+    """The unique index is on (experiment, name) alone, so two metrics with
+    one name are a repeat whatever their events. A check keyed on the name
+    and the event would let the pair reach the index again: update 500 and
+    create 400, as on main."""
+    metrics = [
+        {"name": "Signup", "event_name": "signup", "is_primary": True},
+        {"name": "Signup", "event_name": "account_created"},
+    ]
+    if route == "create":
+        owned = _experiments_owned_by(db_session, developer)
+        body = dict(_create_body(["unused"]), metrics=metrics)
+        response = client.post(f"{BASE}/", json=body, headers=_auth(developer))
+        assert response.status_code == 422, response.text
+        assert _experiments_owned_by(db_session, developer) == owned
+    else:
+        experiment_id = _create(client, developer, names=("Conversion", "Revenue"))
+        response = client.put(
+            f"{BASE}/{experiment_id}",
+            json={"metrics": metrics},
+            headers=_auth(developer),
+        )
+        assert response.status_code == 422, response.text
+        assert _stored_names(db_session, experiment_id) == ["Conversion", "Revenue"]
+    assert response.json() == _duplicate(0, 1)
+
+
 # --- 4b: an empty list on update -----------------------------------------------
 
 

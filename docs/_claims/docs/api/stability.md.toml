@@ -621,7 +621,7 @@ by = [
 ]
 
 [[unit]]
-text = "POST /api/v1/experiments/, PUT /api/v1/experiments/{experiment_id} | #1461 | Two metrics with the same name answer 422 at [\"body\", \"metrics\"] on create and on update, naming the two positions; create used to answer 400 Something went wrong while creating the experiment, and update answered 500. Names are compared exactly, so Revenue and revenue are different metrics, as before. metrics: [] on update answers 422 as create does, where it removed every metric; metrics absent or null still leaves the metrics unchanged. An experiment already left with no metrics stays so, and cannot be started. The OpenAPI document changes: metrics has a minimum of one item on update."
+text = "POST /api/v1/experiments/, PUT /api/v1/experiments/{experiment_id} | #1461 | Two metrics with the same name answer 422 at [\"body\", \"metrics\"] on create and on update, naming the two positions; create used to answer 400 Something went wrong while creating the experiment, and update answered 500. Names are compared exactly, so Revenue and revenue are different metrics, as before. metrics: [] on update answers 422 as create does, where it removed every metric; metrics absent or null still leaves the metrics unchanged. An experiment already left with no metrics stays so, and cannot be started. The OpenAPI document changes: metrics has a minimum of one item on update, and the descriptions of metrics on both requests and of the update operation say what is refused."
 by = [
     "test:backend/tests/integration/api/test_experiment_metric_names.py::test_create_and_update_answer_the_same_list_alike",
     "test:backend/tests/integration/api/test_experiment_metric_names.py::test_an_update_repeating_a_name_is_422_and_keeps_the_stored_metrics",
