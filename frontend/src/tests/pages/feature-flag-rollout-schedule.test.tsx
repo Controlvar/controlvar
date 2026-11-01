@@ -1161,6 +1161,10 @@ describe('a schedule that changed (409) and the schedule maximum', () => {
     const save = within(screen.getByTestId('rollout-schedule-form')).getAllByTestId('rollout-stage-save')[0];
     save.focus();
     fireEvent.click(save);
+    // Focus leaves Save before the refusal resolves (as it does in a browser, where a
+    // disabled button loses it), so only the return-focus step can put it back.
+    screen.getByRole('heading', { level: 3, name: 'Edit stages' }).focus();
+    expect(save).not.toHaveFocus();
     const alert = await screen.findByTestId('rollout-schedule-action-error');
     expect(alert).toHaveAttribute('role', 'alert');
     expect(alert.textContent).toBe(COPY_409);
