@@ -16,7 +16,10 @@ import (
 type User struct {
 	// ID is the stable identifier the server uses for bucketing.
 	ID string `json:"id"`
-	// Attributes are sent as the assignment "context" (used by targeting rules).
+	// Attributes are sent as "context" on assignment and on flag evaluation,
+	// where targeting rules match them. They must encode as JSON: a NaN or
+	// infinite number, a channel or a func makes either call fail without
+	// sending anything.
 	Attributes map[string]interface{} `json:"attributes,omitempty"`
 }
 

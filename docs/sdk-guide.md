@@ -43,7 +43,7 @@ A flag's targeting rules — as written in the dashboard rule editor — evaluat
 `reason` (`targeting_rule` / `rollout` / `inactive` / `error`) says which path decided. Attribute lookup is
 aliased: a top-level `country` also matches a rule on `user.country` (likewise `device.` / `app.` prefixes),
 and nested objects flatten to dotted keys (`{"app": {"version": "3.2.1"}}` answers `app.version`). The
-JavaScript, Python and React SDKs send it on both calls; each SDK's page says what that SDK sends.
+JavaScript, Python, React and Go SDKs send it on both calls; each SDK's page says what that SDK sends.
 
 ## SDK status
 

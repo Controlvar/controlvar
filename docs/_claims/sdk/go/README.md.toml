@@ -53,6 +53,45 @@ by = [
 ]
 
 [[unit]]
+text = "Changes"
+by = ["exempt:label"]
+
+[[unit]]
+text = "If your go.mod holds a pseudo-version from before this note, the next go get brings two changes:"
+by = [
+    "journey:sdk-go#quick-start-user-on",
+    "journey:sdk-go#quick-start-user-off",
+]
+
+[[unit]]
+text = "EvaluateFlag sends User.Attributes as context, as GetAssignment does, so a flag's targeting rules on attributes now match from Go."
+by = [
+    "test:sdk/go/context_test.go::TestEvaluateFlag_SendsAttributesAsCompactJSONContext",
+    "test:sdk/go/client_test.go::TestClient_GetAssignment_RequestAndMapping",
+    "test:sdk/go/context_test.go::TestEvaluateFlag_WithContext_ServerWithoutFlagValuesIsDecoded",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_matching_context_enables_flag_with_reason",
+]
+
+[[unit]]
+text = "Answers for a flag with such rules change: a user a rule matches gets the rule's answer, where before the flag's rollout answered."
+by = [
+    "test:sdk/go/context_test.go::TestEvaluateFlag_WithContext_ServerWithoutFlagValuesIsDecoded",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_matching_context_enables_flag_with_reason",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_no_context_keeps_existing_behaviour",
+]
+
+[[unit]]
+text = "Attributes that cannot be encoded as JSON (a NaN or infinite number, a channel, a func) now make EvaluateFlag return the disabled result and an error, and send nothing, as GetAssignment does with them."
+by = [
+    "test:sdk/go/context_test.go::TestEvaluateFlag_UnencodableAttributes_SendAndCacheNothing",
+    "test:sdk/go/context_test.go::TestClient_GetAssignment_UnencodableAttributes_SendAndCacheNothing",
+]
+
+[[unit]]
+text = "Before, EvaluateFlag did not send attributes at all, so they caused no error."
+by = ["test:sdk/go/context_test.go::TestEvaluateFlag_UnencodableAttributes_SendAndCacheNothing"]
+
+[[unit]]
 text = "Quick Start"
 by = ["exempt:label"]
 
@@ -175,8 +214,11 @@ text = "Type | Fields"
 by = ["exempt:label"]
 
 [[unit]]
-text = "User | ID string, Attributes map[string]interface{} (sent as assignment context)"
-by = ["test:sdk/go/client_test.go::TestClient_GetAssignment_RequestAndMapping"]
+text = "User | ID string, Attributes map[string]interface{} (sent as context on assignment and on flag evaluation; Targeting attributes, below)"
+by = [
+    "test:sdk/go/client_test.go::TestClient_GetAssignment_RequestAndMapping",
+    "test:sdk/go/context_test.go::TestEvaluateFlag_SendsAttributesAsCompactJSONContext",
+]
 
 [[unit]]
 text = "EvalResult | Key string, Enabled bool, Config map[string]any (always nil: the evaluate endpoint returns config: null for every flag), Value json.RawMessage (what the flag serves this user; nil when the server sent none), ValueType string (\"boolean\", \"string\", \"number\" or \"json\"; \"\" when the server sent none)"
@@ -266,10 +308,58 @@ by = [
 ]
 
 [[unit]]
-text = "EvaluateFlag sends the user's ID only; User.Attributes are sent on assignment, not on flag evaluation."
+text = "Targeting attributes"
+by = ["exempt:label"]
+
+[[unit]]
+text = "User.Attributes are sent as context on both calls, so targeting rules can match them: in the GetAssignment body, and on EvaluateFlag as a context query parameter holding the attributes as compact JSON, URL-encoded."
 by = [
-    "test:sdk/go/value_test.go::TestEvaluateFlag_RequestURLUnchangedForAUserWithAttributes",
+    "test:sdk/go/context_test.go::TestEvaluateFlag_SendsAttributesAsCompactJSONContext",
     "test:sdk/go/client_test.go::TestClient_GetAssignment_RequestAndMapping",
+    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_matching_context_enables_flag_with_reason",
+]
+
+[[unit]]
+text = "With nil or empty attributes, EvaluateFlag sends no context."
+by = ["test:sdk/go/context_test.go::TestEvaluateFlag_WithoutAttributes_URLIsUnchanged"]
+
+[[unit]]
+text = "Attributes are assumed stable per user: the cache key is the user's ID and the flag or experiment key, not the attributes."
+by = [
+    "test:sdk/go/context_test.go::TestEvaluateFlag_CacheKeyIgnoresAttributes",
+    "test:sdk/go/context_test.go::TestClient_GetAssignment_CacheKeyIgnoresAttributes",
+]
+
+[[unit]]
+text = "Within CacheTTL, a call for the same user and key gets the cached answer and sends nothing, whatever attributes it carries."
+by = [
+    "test:sdk/go/context_test.go::TestEvaluateFlag_CacheKeyIgnoresAttributes",
+    "test:sdk/go/context_test.go::TestClient_GetAssignment_CacheKeyIgnoresAttributes",
+]
+
+[[unit]]
+text = "Attributes must encode as JSON."
+by = [
+    "test:sdk/go/context_test.go::TestEvaluateFlag_UnencodableAttributes_SendAndCacheNothing",
+    "test:sdk/go/context_test.go::TestClient_GetAssignment_UnencodableAttributes_SendAndCacheNothing",
+]
+
+[[unit]]
+text = "With a NaN or infinite number, a channel or a func among them, EvaluateFlag returns the disabled result and an error wrapping the encoding/json error, and GetAssignment returns nil and that error; neither sends nor caches anything."
+by = [
+    "test:sdk/go/context_test.go::TestEvaluateFlag_UnencodableAttributes_SendAndCacheNothing",
+    "test:sdk/go/context_test.go::TestClient_GetAssignment_UnencodableAttributes_SendAndCacheNothing",
+]
+
+[[unit]]
+text = "The SDK does not check the server's targeting context limits."
+by = ["test:sdk/go/context_test.go::TestEvaluateFlag_ContextTheServerRefuses_IsAnErrorAndNotCached"]
+
+[[unit]]
+text = "A context over them is answered 422, and a proxy that refuses a long URL may answer 400 or 414; EvaluateFlag then returns the disabled result and the APIError, and caches nothing."
+by = [
+    "test:sdk/go/context_test.go::TestEvaluateFlag_ContextTheServerRefuses_IsAnErrorAndNotCached",
+    "test:backend/tests/integration/api/test_targeting_context_limits.py::test_a_real_server_answers_the_clean_422",
 ]
 
 [[unit]]
@@ -398,10 +488,11 @@ text = "SDK call | Method and path | Body / query | Response used"
 by = ["exempt:label"]
 
 [[unit]]
-text = "EvaluateFlag | GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=… | — | {key, enabled, value, value_type, config}; off with reason: \"inactive\" when the flag exists but is not ACTIVE; 404 only for an unknown key"
+text = "EvaluateFlag | GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=… | context: the user's attributes as URL-encoded JSON, only when there are any | {key, enabled, value, value_type, config}; off with reason: \"inactive\" when the flag exists but is not ACTIVE; 404 only for an unknown key"
 by = [
     "test:sdk/go/client_test.go::TestClient_EvaluateFlag_RequestAndMapping",
-    "test:sdk/go/value_test.go::TestEvaluateFlag_RequestURLUnchangedForAUserWithAttributes",
+    "test:sdk/go/context_test.go::TestEvaluateFlag_SendsAttributesAsCompactJSONContext",
+    "test:sdk/go/context_test.go::TestEvaluateFlag_WithoutAttributes_URLIsUnchanged",
     "test:sdk/go/value_test.go::TestEvalResult_StringValue_ReadsAStringFlag",
     "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
     "test:backend/tests/integration/api/test_feature_flag_kill_switch.py::TestKillSwitch::test_disabled_flag_evaluates_off_for_sdk_clients",
