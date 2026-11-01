@@ -619,3 +619,15 @@ by = [
     "test:backend/tests/integration/api/test_metrics_summary_dates.py::test_a_period_bounded_at_15_59_either_way_reads_the_stored_metrics",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
 ]
+
+[[unit]]
+text = "POST /api/v1/rollout-schedules/, POST /api/v1/rollout-schedules/{schedule_id}/stages, PUT /api/v1/rollout-schedules/stages/{stage_id} | #1462 | A stage start_date sent with a zone (Z or an offset) is stored as that moment in UTC, whatever the database session's time zone; one sent with no zone is taken as UTC, as before. On a session that was not in UTC, such a date used to be stored and served back shifted by the session's offset, and so were the times the scheduler records for a stage (completed_date, and the start it measures a stage's duration from): time-based stages started and completed early on a session west of UTC, and late east of it. Deployments whose database sessions run in UTC, as the ones this repository ships do, see no change. Dates stored before the upgrade are not changed; send a pending stage's start_date again to correct it. Editing an in-progress stage, a rename included, still restarts the clock the scheduler measures its duration from. The OpenAPI document does not change. See Time-Based Triggers."
+by = [
+    "test:backend/tests/integration/api/test_rollout_stage_dates_utc.py::test_the_route_session_is_in_los_angeles",
+    "test:backend/tests/integration/api/test_rollout_stage_dates_utc.py::test_a_stage_start_date_is_stored_and_served_in_utc",
+    "test:backend/tests/integration/api/test_rollout_stage_dates_utc.py::test_the_scheduler_starts_a_time_based_stage_at_its_utc_instant",
+    "test:backend/tests/integration/api/test_rollout_stage_dates_utc.py::test_min_stage_duration_and_completion_are_recorded_in_utc",
+    "test:backend/tests/integration/api/test_rollout_stage_dates_utc.py::test_editing_an_in_progress_stage_restarts_its_clock",
+    "test:backend/tests/unit/models/test_rollout_stage_column_types.py::test_a_stage_time_is_still_timestamp_without_time_zone",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
