@@ -173,6 +173,8 @@ URL_REFUSED = [
     ("open-brace", "https://shop.example/a{b", ENCODED),
     ("pipe", "https://shop.example/a|b", ENCODED),
     ("close-brace", "https://shop.example/a}b", ENCODED),
+    # Both path rules apply; the dot-segment rule answers first.
+    ("dot-segment-before-encoded", "https://shop.example/x/../café", DOT_SEGMENT),
 ]
 
 
@@ -210,6 +212,9 @@ URL_ACCEPTED = [
     "https://shop.example/a[b]",
     "https://shop.example/50%off",
     "https://shop.example/a'b",
+    # The path rules read the path only: the characters they refuse there are
+    # accepted in the query.
+    'https://shop.example/landing?q=café&c={adid}|^"<x>`',
 ]
 
 

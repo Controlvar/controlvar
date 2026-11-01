@@ -162,7 +162,7 @@ On create and update, `split_url_config` is checked for:
 
 - at least 2 URL variants, with unique names;
 - `traffic_allocation` values that are each from 0 to 100 and add up to 100 (within 0.01), none of them NaN or infinite;
-- a `url` for each that is an absolute `http://` or `https://` URL of at most 2048 characters with an ASCII host name without a `%` sign (an internationalised name in its `xn--` form), without a user name or password, a `#` fragment, a backslash, whitespace or control characters, and whose path has no `/./` or `/../` segment (also written with `%2e`) and no character a browser percent-encodes in a path: a non-ASCII character, `"`, `<`, `>`, `^`, a backquote, `{`, `|` or `}`, which you write percent-encoded, as the browser sends it (`é` as `%C3%A9`).
+- a `url` for each that is an absolute `http://` or `https://` URL of at most 2048 characters with an ASCII host name without a `%` sign (an internationalised name in its `xn--` form), without a user name or password, a `#` fragment, a backslash, whitespace or control characters, and whose path has no single-dot or double-dot segment (such as `/./` or `/../`, also written with `%2e`) and no character a browser percent-encodes in a path: a non-ASCII character, `"`, `<`, `>`, `^`, a backquote, `{`, `|` or `}`, which you write percent-encoded, as the browser sends it (`é` as `%C3%A9`).
 
 A URL is stored exactly as sent.
 
