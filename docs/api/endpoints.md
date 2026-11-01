@@ -842,9 +842,10 @@ Fisher's exact test can disagree either way: 128 of 1,000 against 100 of
 to +0.056, and 3 of 50 against 18 of 100 is significant (p 0.049) while its
 interval reaches +0.00003.
 
-For a proportion, `relative_improvement_pct_ci` is null only when the control
-has no conversions. The ratio is taken over values of 0 and above, so the
-lower end is never below -100%, and at low counts the interval is wide: a
+For a proportion, `relative_improvement_pct_ci` is null only when an arm has no
+users or the control has no conversions. The ratio is taken over values of 0
+and above, so the lower end is never below -100%, and at low counts the
+interval is wide: a
 treatment with 6 converting users out of 200 against a control with 2 out of
 200 gives -34.2% to +1,206.3% at 0.95. For a mean it is null when
 `absolute_difference_ci` is, when the control's mean is 0, and when the

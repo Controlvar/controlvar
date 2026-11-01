@@ -702,6 +702,18 @@ def test_katz_disagrees_with_mover_r_on_b1():
     assert katz.low < 1 < katz.high
 
 
+def test_a_treatment_with_no_users_has_no_intervals():
+    """Round 2's finding A: a proportion's arm with no users, against a
+    control that converted, has neither interval (the relative change is
+    still -100%)."""
+    row = _proportion(0, 0, 4, 200)
+    assert row["relative_improvement_pct"] == -100.0
+    assert (row["absolute_difference_ci"], row["relative_improvement_pct_ci"]) == (
+        None,
+        None,
+    )
+
+
 def test_a_control_at_0_has_no_relative_interval():
     assert _proportion(12, 400, 0, 500)["relative_improvement_pct_ci"] is None
     assert _proportion(0, 400, 0, 500)["relative_improvement_pct_ci"] is None

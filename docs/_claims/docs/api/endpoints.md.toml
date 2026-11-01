@@ -1218,8 +1218,9 @@ text = "For a proportion, near the threshold, the interval and Fisher's exact te
 by = ["test:backend/tests/unit/services/test_difference_intervals.py::test_named_boundary_tables"]
 
 [[unit]]
-text = "For a proportion, relative_improvement_pct_ci is null only when the control has no conversions."
+text = "For a proportion, relative_improvement_pct_ci is null only when an arm has no users or the control has no conversions."
 by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_treatment_with_no_users_has_no_intervals",
     "test:backend/tests/unit/services/test_difference_intervals.py::test_every_none_on_the_grids_is_counted",
     "test:backend/tests/unit/services/test_difference_intervals.py::test_every_none_on_the_architects_grid_is_counted",
     "test:backend/tests/unit/services/test_difference_intervals.py::test_a_control_at_0_has_no_relative_interval",
