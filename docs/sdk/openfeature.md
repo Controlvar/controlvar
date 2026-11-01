@@ -372,8 +372,10 @@ python -m pytest sdk/openfeature-python/tests -q -o addopts="" -p no:cacheprovid
 ## Backend API endpoints
 
 Both providers are thin adapters over the platform SDKs and use the same public endpoints as every
-other SDK. There are **no OpenFeature-specific endpoints in the SDK contract**: no flag definitions
-are downloaded, and no evaluation happens locally.
+other SDK. There are **no OpenFeature-specific endpoints in the SDK contract**: by default no flag
+definitions are downloaded, and no evaluation happens locally. A `client` you pass with local
+evaluation (`evaluation="local"` in Python, `evaluation: 'local'` in TypeScript) downloads the SDK
+ruleset (`GET /api/v1/sdk/ruleset`) and answers each flag it can from it.
 
 - `POST /api/v1/openfeature/evaluate` and `POST /api/v1/openfeature/bulk-evaluate` have been
   **removed**. They could not evaluate an existing flag (they read a `FeatureFlag.enabled`
