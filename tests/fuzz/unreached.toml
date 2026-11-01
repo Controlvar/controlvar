@@ -22,6 +22,13 @@
 # requests the seed generates for PUT /api/v1/rollout-schedules/{schedule_id},
 # and one of them is now a valid update of a seeded schedule (200), so the
 # superuser pass reaches it and its list is 99.
+#
+# Then #1514 gave the flag request schemas value_type, on_value and off_value.
+# That changed the requests the seed generates, and with them the ids
+# Schemathesis reuses from earlier answers: the superuser pass no longer sends
+# the PUT /api/v1/rollout-schedules/{schedule_id} that answered 200 or the
+# DELETE /api/v1/rollout-schedules/{schedule_id} that answered 204, so it
+# reaches neither, and its list is 101.
 
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
@@ -179,6 +186,16 @@ reason = "Generated ids never name a stored row (404); the other requests fail v
 pass = "superuser"
 operation = "POST /api/v1/rollout-schedules/"
 reason = "The handler refuses the generated values (400); ids that name no stored row answer 404 and invalid requests answer 422."
+
+[[unreached]]
+pass = "superuser"
+operation = "PUT /api/v1/rollout-schedules/{schedule_id}"
+reason = "The ids sent name no stored schedule (404), and the other requests fail validation (422) or, once, body parsing (400)."
+
+[[unreached]]
+pass = "superuser"
+operation = "DELETE /api/v1/rollout-schedules/{schedule_id}"
+reason = "The ids sent name no stored schedule (404), and the other requests fail validation (422)."
 
 [[unreached]]
 pass = "superuser"
