@@ -576,6 +576,119 @@ describe('evaluateFlag', () => {
   });
 });
 
+// ─── Request error messages (#1551) ──────────────────────────────────────────
+
+describe('request error messages name the path without its query string', () => {
+  const evaluatePath = '/api/v1/feature-flags/evaluate/my-flag';
+  /** What none of the messages may contain: the query and the attribute values in it. */
+  function expectNoQuery(message: string) {
+    expect(message).not.toContain('?');
+    expect(message).not.toContain('user_id=');
+    expect(message).not.toContain('context=');
+    expect(message).not.toContain('mobile');
+  }
+
+  it('an HTTP error', async () => {
+    mockFetch({ detail: 'bad context' }, 422);
+    const client = new ExperimentationClient(baseConfig);
+    const error = await captureError(client.evaluateFlag('my-flag', user));
+    expect(error.code).toBe('HTTP_ERROR');
+    expect(error.message).toBe(`API error 422: bad context (GET ${evaluatePath})`);
+    expectNoQuery(error.message);
+  });
+
+  it('an HTTP error from getAllFlags', async () => {
+    mockFetch({}, 500);
+    const client = new ExperimentationClient(baseConfig);
+    const error = await captureError(client.getAllFlags('user-123', user.attributes));
+    expect(error.message).toBe('API error 500 (GET /api/v1/feature-flags/user/user-123)');
+    expectNoQuery(error.message);
+  });
+
+  it('a network error', async () => {
+    mockFetchSequence(new Error('Network down'));
+    const client = new ExperimentationClient(baseConfig);
+    const error = await captureError(client.evaluateFlag('my-flag', user));
+    expect(error.code).toBe('NETWORK_ERROR');
+    expect(error.message).toBe(`Network error (GET ${evaluatePath}): Network down`);
+    expectNoQuery(error.message);
+  });
+
+  it('a network error whose own message names the full URL', async () => {
+    const url = `https://api.example.com${evaluatePath}?user_id=user-123&context=${userContext}`;
+    mockFetchSequence(new Error(`request to ${url} failed, reason: connect ECONNREFUSED`));
+    const client = new ExperimentationClient(baseConfig);
+    const error = await captureError(client.evaluateFlag('my-flag', user));
+    expect(error.message).toBe(
+      `Network error (GET ${evaluatePath}): request to https://api.example.com${evaluatePath} failed, reason: connect ECONNREFUSED`
+    );
+    expectNoQuery(error.message);
+  });
+
+  const asPassed = (input: string) => input;
+  const asParsed = (input: string) => new URL(input).href;
+  it.each([
+    ['as passed, an apostrophe in the attributes', asPassed, baseConfig.apiUrl, { name: "O'Brien" }],
+    ['as the URL parser writes it, an apostrophe in the attributes', asParsed, baseConfig.apiUrl, { name: "O'Brien" }],
+    ['as the URL parser writes it, an upper-case host and a default port', asParsed, 'https://API.example.com:443', { device: 'mobile' }],
+  ])('a network error whose own message names the URL %s', async (_label, form, apiUrl, attributes) => {
+    global.fetch = jest
+      .fn()
+      .mockImplementation((input: string) =>
+        Promise.reject(new Error(`request to ${form(input)} failed, reason: connect ECONNREFUSED`))
+      );
+    const client = new ExperimentationClient({ ...baseConfig, apiUrl });
+    const error = await captureError(client.evaluateFlag('my-flag', { userId: 'user-123', attributes }));
+    expect(error.message).toBe(
+      `Network error (GET ${evaluatePath}): request to https://api.example.com${evaluatePath} failed, reason: connect ECONNREFUSED`
+    );
+    expectNoQuery(error.message);
+    expect(error.message).not.toContain('Brien');
+  });
+
+  it('a timeout', async () => {
+    jest.useFakeTimers();
+    global.fetch = jest.fn().mockImplementation((_url: string, init: RequestInit) => {
+      return new Promise((_resolve, reject) => {
+        (init.signal as AbortSignal).addEventListener('abort', () => reject(new Error('The operation was aborted')));
+      });
+    });
+    const client = new ExperimentationClient({ ...baseConfig, timeoutMs: 50 });
+    const pending = client.evaluateFlag('my-flag', user);
+    jest.advanceTimersByTime(51);
+    const error = await captureError(pending);
+    expect(error.code).toBe('TIMEOUT');
+    expect(error.message).toBe(`Request timed out after 50 ms (GET ${evaluatePath})`);
+    expectNoQuery(error.message);
+  });
+
+  it('a 2xx body that is not JSON', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: () => Promise.reject(new SyntaxError('Unexpected token')),
+    });
+    const client = new ExperimentationClient(baseConfig);
+    const error = await captureError(client.evaluateFlag('my-flag', user));
+    expect(error.code).toBe('INVALID_RESPONSE');
+    expect(error.message).toBe(`Invalid JSON in response (GET ${evaluatePath})`);
+    expectNoQuery(error.message);
+  });
+
+  it('what onError receives', async () => {
+    mockFetch({ detail: 'bad context' }, 422);
+    const onError = jest.fn();
+    const client = new ExperimentationClient({ ...baseConfig, onError });
+    await expect(client.getStringValue('my-flag', user, 'fallback')).resolves.toBe('fallback');
+    expect(onError).toHaveBeenCalledTimes(1);
+    const [error, operation] = onError.mock.calls[0] as [ExperimentationError, string];
+    expect(operation).toBe('value');
+    expect(error.message).toBe(`API error 422: bad context (GET ${evaluatePath})`);
+    expectNoQuery(error.message);
+  });
+});
+
 // ─── isFeatureEnabled / getAllFlags ───────────────────────────────────────────
 
 describe('isFeatureEnabled', () => {
