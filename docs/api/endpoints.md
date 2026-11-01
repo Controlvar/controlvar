@@ -815,6 +815,49 @@ response.
   correction over segments, and sequential testing uses its own `alpha`.
   CUPED follows the stored level and applies the stored correction.
 
+### The difference from the control, its intervals and the impact
+
+Each treatment of each metric in `metrics` carries its difference from the
+control. `absolute_difference` is in the unit of `mean`: for a metric analysed
+as a proportion, the difference of the shares of users who converted,
+computed from `conversions` and `sample_size` (0.012 is 1.2 percentage
+points); for one analysed as a mean, the difference per assigned user.
+`absolute_difference_ci` is its interval, `relative_improvement_pct_ci` the
+interval of `relative_improvement_pct`, and `incremental_impact` with
+`incremental_impact_ci` the difference and its interval times the treatment's
+own `sample_size`. The control's are all null.
+
+The intervals are at the response's `confidence_level` and are not adjusted
+for multiple comparisons. For a proportion the difference's interval is
+Newcombe's, built from each variant's Wilson score interval; for a mean it is
+Welch's. The relative change's interval is the MOVER-R interval on the same
+per-variant limits (Fieller's interval, for a mean), so the three intervals
+agree on whether 0 is inside.
+
+`is_significant` is decided by the test, not by an interval. With two or more
+treatments under a correction, an interval can exclude 0 on a treatment that
+is not significant. For a proportion, near the threshold, the interval and
+Fisher's exact test can disagree either way: 128 of 1,000 against 100 of
+1,000 is not significant (p 0.057) while its interval runs from +0.0001
+to +0.056, and 3 of 50 against 18 of 100 is significant (p 0.049) while its
+interval reaches +0.00003.
+
+For a proportion, `relative_improvement_pct_ci` is null only when an arm has no
+users or the control has no conversions. The ratio is taken over values of 0
+and above, so the lower end is never below -100%, and at low counts the
+interval is wide: a
+treatment with 6 converting users out of 200 against a control with 2 out of
+200 gives -34.2% to +1,206.3% at 0.95. For a mean it is null when
+`absolute_difference_ci` is, when the control's mean is 0, and when the
+control's mean plus or minus its margin reaches 0, where Fieller's set of
+ratios is unbounded. `absolute_difference_ci` is null only when
+`absolute_difference` is, or for a mean when neither variant's values vary.
+
+The impact is a plain number over the treatment's own assigned users:
+converting users for a proportion, the total of the per-user values for a
+mean, with no currency or unit and no projection to other users or a later
+period.
+
 ### The planned effect
 
 A metric's `expected_effect` is the minimum detectable effect to plan the
