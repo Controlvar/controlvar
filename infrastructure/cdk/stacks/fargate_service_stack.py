@@ -425,6 +425,16 @@ class FargateServiceStack(Stack):
                 # both values exactly.
                 "RUN_MIGRATIONS": "false",
                 "SEED": "",
+                # The proxies the API believes X-Forwarded-For from, besides
+                # loopback and its own subnet: the load balancer, which sits
+                # in this VPC's public subnets. The whole VPC, because the
+                # task admits connections from the load balancer alone. The
+                # VPC's range from vpc_stack.py, as a literal: the start-up
+                # check reads it from this dict
+                # (backend/tests/unit/infrastructure/test_deployment_secrets.py),
+                # and infrastructure/tests/test_api_task_forwarded_allow_ips.py
+                # holds it to the synthesised VPC.
+                "FORWARDED_ALLOW_IPS": "10.0.0.0/16",
             },
             secrets={
                 # Both halves from the secret Aurora generated its master

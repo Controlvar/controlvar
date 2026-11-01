@@ -243,6 +243,43 @@ class TestFeatureKeys:
         )
 
 
+@pytest.mark.unit
+@pytest.mark.regression
+class TestForwardedAllowIps:
+    """The proxies the API believes besides its own network reach it from
+    `.env`. The file passed no such setting, so a value in `.env` never
+    reached the container. Exactly ``${FORWARDED_ALLOW_IPS:-}``: empty adds
+    nothing, and `-` without the colon would hand an unset value on as
+    unset rather than empty."""
+
+    def test_the_api_is_passed_the_setting_empty_by_default(self, services):
+        env = services["api"]["environment"]
+        assert env["FORWARDED_ALLOW_IPS"] == "${FORWARDED_ALLOW_IPS:-}"
+
+    def test_the_config_check_follows_it_through_compose(self):
+        """scripts/check_compose_config.py, which the Compose Production job
+        runs through `docker compose config`, checks it the way it checks the
+        feature keys: empty from a `.env` without it, its value from one
+        that sets it."""
+        import importlib.util
+
+        script = REPO_ROOT / "scripts" / "check_compose_config.py"
+        spec = importlib.util.spec_from_file_location("check_compose_config", script)
+        check = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(check)
+        names = check.PASSED_SETTINGS
+        assert names == ("FORWARDED_ALLOW_IPS",)
+        assert check.feature_key_failures({"FORWARDED_ALLOW_IPS": ""}, {}, names) == []
+        given = {"FORWARDED_ALLOW_IPS": "192.0.2.10"}
+        assert check.feature_key_failures(dict(given), given, names) == []
+        assert check.feature_key_failures({}, given, names) == [
+            "FORWARDED_ALLOW_IPS is not passed to the api service"
+        ]
+        assert check.feature_key_failures({"FORWARDED_ALLOW_IPS": "x"}, {}, names) == [
+            "FORWARDED_ALLOW_IPS on the api service is not empty, and .env does not set it"
+        ]
+
+
 class TestText:
     def test_no_secret_anywhere_has_a_default(self):
         """Every `${NAME:-default}` / `${NAME-default}` on a secret, in any service."""

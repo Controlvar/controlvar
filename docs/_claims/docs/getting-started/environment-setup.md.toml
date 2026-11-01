@@ -361,3 +361,25 @@ by = [
     "test:backend/tests/unit/core/test_environment_settings_classes.py::test_log_level_is_the_level_the_api_logs_at",
     "test:backend/tests/unit/core/test_logger.py::test_configure_logging_sets_level",
 ]
+
+[[unit]]
+text = "Behind a proxy"
+by = ["exempt:label"]
+
+[[unit]]
+text = "FORWARDED_ALLOW_IPS names proxies whose X-Forwarded-For the API believes, in addition to 127.0.0.1, ::1 and the networks its container is attached to: IP addresses and networks, separated by commas."
+by = [
+    "test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_the_own_networks_of_each_topology",
+    "test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_entries_add_to_the_own_networks_and_each_appears_once",
+]
+
+[[unit]]
+text = "The container's entrypoint reads it from the environment, not from .env.prod."
+by = [
+    "test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_an_operator_value_is_read_from_the_environment",
+    "test:backend/tests/unit/core/test_preflight.py::test_forwarded_allow_ips_is_read_from_the_process_environment_only",
+]
+
+[[unit]]
+text = "See Users' addresses behind a proxy."
+by = ["exempt:navigation"]

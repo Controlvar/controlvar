@@ -69,9 +69,46 @@ jq -n --arg email "$ADMIN_EMAIL" --arg password "$ADMIN_PASSWORD" \
   | jq -r .user.role
 ```
 
+## Users' addresses
+
+The API counts its rate limits per user address and writes that address on its
+access lines. Through the chart's Ingress it reads the address from the
+`X-Forwarded-For` header your ingress controller adds, and believes that header only
+from the API pod's own network and the addresses and networks in
+`api.forwardedAllowIps`. The chart's default is the private ranges,
+`10.0.0.0/8,172.16.0.0/12,192.168.0.0/16`, which covers an ingress controller on a
+private pod network.
+
+You can narrow it to the network your ingress controller's pods get their addresses
+from, your cluster's pod network: `10.244.0.0/16` on kind. A single pod's address is
+not enough, because a replaced pod gets another.
+`kubectl get pods -n ingress-nginx -o wide -l app.kubernetes.io/component=controller`
+lists ingress-nginx's controller pods with their addresses. Add
+`--set api.forwardedAllowIps=<that network>` to the install or upgrade command. For
+more than one network use a values file, or quote the whole argument and escape each
+comma: `--set 'api.forwardedAllowIps=10.0.0.0/8\,192.168.0.0/16'`. A controller that
+runs with `hostNetwork: true` connects from its node's address; give your nodes'
+network then.
+
+To check it once people have used the dashboard, count the addresses on the API's
+access lines, as [Users' addresses behind a proxy](proxies.md#checking-it) shows.
+Your users' addresses mean it works. One pod address on every line is your ingress
+controller's: `api.forwardedAllowIps` does not cover it. Node or load balancer
+addresses on every line mean the controller itself does not receive your users'
+addresses; its documentation says how to pass them on.
+
 ## Upgrade
 
 Point `CHART` at the new chart. The values given at install are kept.
+
+Upgrade the chart together with the image. Earlier charts left
+`api.forwardedAllowIps` empty, and under one of them a newer image believes
+`X-Forwarded-For` only from the API pod's own network. The chart now refuses an
+empty `api.forwardedAllowIps`: `--reset-then-reuse-values`, below, takes the new
+default, while `--reuse-values` can keep an earlier chart's empty value, and that
+upgrade fails naming `api.forwardedAllowIps`. If your own values set it to `""`,
+give it a network on this upgrade, such as `--set api.forwardedAllowIps=10.244.0.0/16`
+on kind.
 
 <!-- chart-kind: upgrade -->
 ```bash
