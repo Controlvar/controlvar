@@ -153,6 +153,7 @@ EXPECTED_VARIANTS = {"control", "treatment"}
 EXPOSURE_SDKS: frozenset[str] = frozenset(
     [
         # One line per SDK, in the form "js",
+        "js",
     ]
 )
 
