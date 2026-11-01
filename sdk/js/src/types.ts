@@ -6,7 +6,8 @@ import type { ExperimentationError } from './errors';
  * unexpected failure inside local evaluation; the call then goes to the server) occur only with
  * `evaluation: 'local'`. `'reportError'` is an error report the server did not store. `'value'`
  * is a typed getter (`getStringValue`, `getNumberValue`, `getJsonValue`) that returned the
- * caller's default.
+ * caller's default. `'exposure'` is an `onExposure` that threw or whose Promise rejected (the
+ * error's `code` is `'HOOK_ERROR'`).
  */
 export type SwallowedOperation =
   | 'track'
@@ -15,7 +16,23 @@ export type SwallowedOperation =
   | 'flush'
   | 'evaluate'
   | 'reportError'
-  | 'value';
+  | 'value'
+  | 'exposure';
+
+/**
+ * What `onExposure` receives: one experiment exposure the server recorded. A new object for every
+ * call; changing it changes nothing the client keeps.
+ */
+export interface Exposure {
+  /** The experiment's key. */
+  readonly experimentKey: string;
+  /** The user id the assignment was asked for. */
+  readonly userId: string;
+  /** The variant's id; `null` when the server sent none. */
+  readonly variantId: string | null;
+  /** The variant's name. */
+  readonly variantName: string;
+}
 
 /** Where flags are evaluated: by the server (the default) or in-process from its ruleset. */
 export type EvaluationMode = 'server' | 'local';
@@ -38,12 +55,24 @@ export interface ClientConfig {
   fetch?: typeof fetch;
   /**
    * Called with the error whenever `track` / `trackBatch` / `reportError` swallow a failure,
-   * whenever a typed getter returns the caller's default (`'value'`), and in local mode when a
-   * ruleset refresh (`'refresh'`), an evaluation-count report (`'flush'`) or a local evaluation
-   * (`'evaluate'`, which then goes to the server) fails.
+   * whenever a typed getter returns the caller's default (`'value'`), whenever `onExposure`
+   * throws or its Promise rejects (`'exposure'`), and in local mode when a ruleset refresh
+   * (`'refresh'`), an evaluation-count report (`'flush'`) or a local evaluation (`'evaluate'`,
+   * which then goes to the server) fails.
    * Those operations never reject; this is the only way to observe their failures.
    */
   onError?: (error: ExperimentationError, operation: SwallowedOperation) => void;
+  /**
+   * Called once each time the server enrols the user in an experiment and the answer did not come
+   * from this client's cache: when `POST /api/v1/tracking/assign` answers `assigned: true` and the
+   * client stores that answer. Not called for a cached answer, a call that shares a request
+   * already in flight, `assigned: false` or no `assigned`, a failed call, or a flag. It runs
+   * before `getAssignment` resolves; the client does not wait for a Promise it returns. If it
+   * throws or its Promise rejects, the answer is unchanged and the error goes to `onError` with
+   * `'exposure'`. `null` or `undefined` sets none; any other non-function makes the constructor
+   * throw.
+   */
+  onExposure?: ((exposure: Exposure) => void) | null;
   /**
    * `'server'` (default): every flag is evaluated by the server. `'local'`: flags are evaluated
    * in-process from `GET /api/v1/sdk/ruleset` (beta) whenever the answer is provably the

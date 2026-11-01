@@ -7,6 +7,7 @@ import dataclasses
 import inspect
 import json
 import threading
+import urllib.error
 from datetime import datetime, timezone
 from unittest import mock
 
@@ -1324,3 +1325,82 @@ class TestAssignmentsAndCache:
             for user in range(4):
                 client.get_feature_flag(f"flag-{i}", f"user-{user}")
         assert len(transport.requests) == seen  # everything is served from cache now
+
+
+# -------------------------------------------------------------------------- request error messages
+
+CANARY = "c4nary.attr"
+ATTRIBUTES = {"plan": CANARY}
+EVALUATE = "/api/v1/feature-flags/evaluate/f"
+
+
+def assert_no_query(message: str) -> None:
+    assert "?" not in message and "user_id=" not in message and "context=" not in message, message
+    assert CANARY not in message, message
+
+
+def refused():
+    """The default UrllibTransport, its ``urlopen`` failing as a closed port does."""
+    return mock.patch("urllib.request.urlopen", side_effect=urllib.error.URLError("connection refused"))
+
+
+@pytest.mark.regression
+class TestRequestErrorsNameThePathWithoutItsQuery:
+    """#1551: a failed request's message names the URL up to its ``?``. The query holds the
+    user's id and attributes. The client below uses the default UrllibTransport."""
+
+    def test_get_feature_flag(self):
+        client = ExperimentationClient(API_URL, API_KEY)
+        with refused(), pytest.raises(TransportError) as info:
+            client.get_feature_flag("f", "user-1", ATTRIBUTES)
+        assert str(info.value) == f"GET {API_URL}{EVALUATE} failed: <urlopen error connection refused>"
+
+    def test_get_all_flags(self):
+        client = ExperimentationClient(API_URL, API_KEY)
+        with refused(), pytest.raises(TransportError) as info:
+            client.get_all_flags("user-1", ATTRIBUTES)
+        assert str(info.value) == (
+            f"GET {API_URL}/api/v1/feature-flags/user/user-1 failed: <urlopen error connection refused>"
+        )
+
+    def test_the_warning_logged_for_a_failed_evaluation_and_what_on_error_receives(self, caplog):
+        errors = []
+        client = ExperimentationClient(API_URL, API_KEY, on_error=lambda error, operation: errors.append(error))
+        with refused(), caplog.at_level("WARNING", logger="controlvar.client"):
+            assert client.is_feature_enabled("f", "user-1", ATTRIBUTES) is False
+            assert client.get_string_value("f", "user-1", ATTRIBUTES, default="x") == "x"
+        assert [r.getMessage() for r in caplog.records] == [
+            f"is_feature_enabled(f, user-1) failed: GET {API_URL}{EVALUATE} failed: <urlopen error connection refused>",
+            f"get_string_value(f, user-1) failed: GET {API_URL}{EVALUATE} failed: <urlopen error connection refused>",
+        ]
+        assert CANARY not in caplog.text
+        [error] = errors
+        assert_no_query(str(error))
+
+    def test_a_custom_transports_failure(self, transport):
+        full_url = f"{API_URL}{EVALUATE}?user_id=user-1&context=%7B%22plan%22%3A%22{CANARY}%22%7D"
+        transport.fail(RuntimeError(f"cannot reach {full_url}"))
+        client = ExperimentationClient(API_URL, API_KEY, transport=transport)
+        with pytest.raises(ExperimentationError) as info:
+            client.get_feature_flag("f", "user-1", ATTRIBUTES)
+        assert transport.last.url == full_url  # what was sent is unchanged
+        assert str(info.value) == f"GET {API_URL}{EVALUATE} failed: cannot reach {API_URL}{EVALUATE}"
+
+    def test_an_api_url_without_a_scheme(self):
+        """urllib refuses the URL before sending, with the full URL in its own message."""
+        client = ExperimentationClient("api.example.com", API_KEY)
+        with pytest.raises(ExperimentationError) as info:
+            client.get_feature_flag("f", "user-1", ATTRIBUTES)
+        assert str(info.value) == f"GET api.example.com{EVALUATE} failed: unknown url type: 'api.example.com{EVALUATE}'"
+        assert_no_query(str(info.value))
+
+    def test_an_api_url_with_a_space(self):
+        """http.client refuses the request target, path and query, naming it in its own message."""
+        client = ExperimentationClient("http://127.0.0.1:1/base path", API_KEY)
+        with pytest.raises(TransportError) as info:
+            client.get_feature_flag("f", "user-1", {"name": f"O'{CANARY}"})
+        assert str(info.value) == (
+            f"GET http://127.0.0.1:1/base path{EVALUATE} failed: URL can't contain control characters. "
+            f"'/base path{EVALUATE}' (found at least ' ')"
+        )
+        assert_no_query(str(info.value))

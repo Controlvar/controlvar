@@ -2,6 +2,7 @@ import { AttributedKeys } from './attribution';
 import { UserKeyCache } from './cache';
 import { ExperimentationError, asExperimentationError } from './errors';
 import { DEFER, copyValue, isValueOfType } from './evaluator';
+import { callExposureHook, exposureError } from './exposure';
 import {
   DEFAULT_REFRESH_INTERVAL_MS,
   LocalEvaluation,
@@ -17,6 +18,7 @@ import type {
   BatchResult,
   ClientConfig,
   ErrorReport,
+  Exposure,
   FlagEvaluateResponse,
   FlagEvaluation,
   SwallowedOperation,
@@ -64,6 +66,25 @@ function encode(value: string): string {
 function contextQuery(attributes: Record<string, unknown> | undefined): string {
   if (!attributes || typeof attributes !== 'object' || Object.keys(attributes).length === 0) return '';
   return `&context=${encode(JSON.stringify(attributes))}`;
+}
+
+/**
+ * A request path without its query string, as a request error message names it:
+ * `/api/v1/feature-flags/evaluate/my-flag?user_id=…&context=…` gives
+ * `/api/v1/feature-flags/evaluate/my-flag`. The query holds the user's id and attributes.
+ */
+function withoutQuery(path: string): string {
+  const question = path.indexOf('?');
+  return question === -1 ? path : path.slice(0, question);
+}
+
+/** The query of `url` (`?…`) as the URL parser writes it, or `''` when it cannot be parsed. */
+function serialisedQuery(url: string): string {
+  try {
+    return new URL(url).search;
+  } catch {
+    return '';
+  }
 }
 
 function sleep(ms: number): Promise<void> {
@@ -135,6 +156,7 @@ export class ExperimentationClient {
   private readonly defaultVariant: string;
   private readonly customFetch: typeof fetch | undefined;
   private readonly onError: ClientConfig['onError'];
+  private readonly onExposure: ((exposure: Exposure) => void) | null;
   private readonly flags: UserKeyCache<FlagEvaluation>;
   private readonly assignments: UserKeyCache<Assignment>;
   /** The keys a key-less `track()` is sent to; outlives the cache entries. */
@@ -153,6 +175,11 @@ export class ExperimentationClient {
     this.defaultVariant = config.defaultVariant ?? DEFAULT_VARIANT;
     this.customFetch = config.fetch;
     this.onError = config.onError;
+    const onExposure = config.onExposure ?? null;
+    if (onExposure !== null && typeof onExposure !== 'function') {
+      throw new Error('onExposure must be a function');
+    }
+    this.onExposure = onExposure;
     const ttl = config.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
     this.flags = new UserKeyCache<FlagEvaluation>(ttl);
     this.assignments = new UserKeyCache<Assignment>(ttl);
@@ -223,7 +250,9 @@ export class ExperimentationClient {
 
   /**
    * Assign the user via `POST /api/v1/tracking/assign` (sticky on the server,
-   * records the exposure). `user.attributes` is sent as `context`.
+   * records the exposure). `user.attributes` is sent as `context`. When the
+   * server answers `assigned: true`, `onExposure` is called before this resolves;
+   * a cached answer calls nothing.
    * Throws `ExperimentationError` (404 when no experiment has the key, or for a
    * draft with no control variant). An experiment that is not ACTIVE resolves to
    * its control variant with `assigned: false` and `reason` its status.
@@ -269,6 +298,11 @@ export class ExperimentationClient {
       };
       this.assignments.set(userId, experimentKey, assignment);
       this.attributed.recordExperiment(userId, assignment.experimentKey, assignment.reason);
+      // Last, once the answer is stored and recorded. The server recorded an exposure for this
+      // request only if it said `assigned: true` (a missing field is not taken as true). This run
+      // starts only when the cache check above found no live answer, and concurrent callers share
+      // it, so each request that records an exposure reaches this line once.
+      if (data.assigned === true) this.exposed(assignment);
       return assignment;
     });
   }
@@ -611,6 +645,19 @@ export class ExperimentationClient {
     }
   }
 
+  /** Give `onExposure` a new object holding the four values; its failures go to `onError`. */
+  private exposed(assignment: Assignment): void {
+    const hook = this.onExposure;
+    if (!hook) return;
+    const exposure: Exposure = {
+      experimentKey: assignment.experimentKey,
+      userId: assignment.userId,
+      variantId: assignment.variantId,
+      variantName: assignment.variantName,
+    };
+    callExposureHook(hook, exposure, thrown => this.report(exposureError(thrown), 'exposure'));
+  }
+
   private report(err: unknown, operation: SwallowedOperation): void {
     if (!this.onError) return;
     try {
@@ -640,6 +687,8 @@ export class ExperimentationClient {
 
   private async request(path: string, init: RequestInitLite = {}): Promise<Response> {
     const method = init.method ?? 'GET';
+    const url = `${this.apiUrl}${path}`;
+    const shown = withoutQuery(path);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     let response: Response;
@@ -651,7 +700,7 @@ export class ExperimentationClient {
           code: 'NETWORK_ERROR',
         });
       }
-      response = await fetchImpl(`${this.apiUrl}${path}`, {
+      response = await fetchImpl(url, {
         method,
         headers: {
           ...(init.headers ?? {}),
@@ -666,12 +715,17 @@ export class ExperimentationClient {
       if (err instanceof ExperimentationError) throw err;
       if (controller.signal.aborted) {
         throw new ExperimentationError(
-          `Request timed out after ${this.timeoutMs} ms (${method} ${path})`,
+          `Request timed out after ${this.timeoutMs} ms (${method} ${shown})`,
           { code: 'TIMEOUT', cause: err }
         );
       }
-      const message = err instanceof Error ? err.message : String(err);
-      throw new ExperimentationError(`Network error (${method} ${path}): ${message}`, {
+      let message = err instanceof Error ? err.message : String(err);
+      // A fetch implementation may name the URL in its own message, as passed or as the URL
+      // parser writes it (`'` as `%27`, for one). The query is removed in both forms.
+      for (const query of [path.slice(shown.length), serialisedQuery(url)]) {
+        if (query.length > 1) message = message.split(query).join('');
+      }
+      throw new ExperimentationError(`Network error (${method} ${shown}): ${message}`, {
         code: 'NETWORK_ERROR',
         cause: err,
       });
@@ -698,7 +752,7 @@ export class ExperimentationClient {
     try {
       return (await response.json()) as T;
     } catch (err) {
-      throw new ExperimentationError(`Invalid JSON in response (${init.method ?? 'GET'} ${path})`, {
+      throw new ExperimentationError(`Invalid JSON in response (${init.method ?? 'GET'} ${withoutQuery(path)})`, {
         code: 'INVALID_RESPONSE',
         status: response.status,
         cause: err,
@@ -718,7 +772,7 @@ export class ExperimentationClient {
         ? String((body as { detail: unknown }).detail)
         : undefined;
     return new ExperimentationError(
-      `API error ${response.status}${detail ? `: ${detail}` : ''} (${method} ${path})`,
+      `API error ${response.status}${detail ? `: ${detail}` : ''} (${method} ${withoutQuery(path)})`,
       { code: 'HTTP_ERROR', status: response.status, body }
     );
   }

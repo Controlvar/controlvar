@@ -40,7 +40,7 @@ from .local import (
     LocalEvaluationStatus,
     ReadyResult,
 )
-from .transport import Response, Transport, UrllibTransport
+from .transport import Response, Transport, UrllibTransport, failure_message
 from .types import Assignment, BatchResult, ExperimentationError, FlagEvaluation
 from .version import __version__
 
@@ -292,7 +292,7 @@ class ExperimentationClient:
         except ExperimentationError:
             raise
         except Exception as exc:  # noqa: BLE001 - normalise any transport failure
-            raise ExperimentationError(f"{method} {url} failed: {exc}") from exc
+            raise ExperimentationError(failure_message(method, url, exc)) from exc
 
     def _exchange(
         self,
