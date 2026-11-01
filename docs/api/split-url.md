@@ -40,9 +40,9 @@ Set `experiment_type` to `split_url` when creating an experiment.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `variants` | `array` | Yes | The URL variants: at least 2 |
-| `variants[].name` | `string` | Yes | The variant's name |
-| `variants[].url` | `string` | Yes | The URL this variant is sent to (stored as given; not checked) |
-| `variants[].traffic_allocation` | `number` | Yes | Percentage of traffic: each from 0 to 100, and they must add up to 100 |
+| `variants[].name` | `string` | Yes | The name of the experiment variant this URL is for |
+| `variants[].url` | `string` | Yes | The URL for this variant: an absolute `http://` or `https://` URL (see [Validation Rules](#validation-rules)), stored as given |
+| `variants[].traffic_allocation` | `number` | Yes | Percentage of traffic: each from 0 to 100, they must add up to 100, and each equals its experiment variant's |
 | `cookie_name` | `string` | No | The router's cookie name; `null` means `split_url_{experiment_key}` |
 | `cookie_ttl_days` | `int` | No | How long the router's cookie lasts, in days (default `30`) |
 | `canonical_url` | `string` | No | Stored with the configuration; nothing reads it yet |
@@ -158,15 +158,52 @@ CloudFront distribution wired to a Lambda@Edge viewer-request function.
 
 ## Validation Rules
 
-On create, `split_url_config` is checked for:
+On create and update, `split_url_config` is checked for:
 
-- at least 2 URL variants;
-- `traffic_allocation` values that are each from 0 to 100 and add up to 100 (within 0.01), none of them NaN or infinite.
+- at least 2 URL variants, with unique names;
+- `traffic_allocation` values that are each from 0 to 100 and add up to 100 (within 0.01), none of them NaN or infinite;
+- a `url` for each that is an absolute `http://` or `https://` URL of at most 2048 characters with an ASCII host name without a `%` sign (an internationalised name in its `xn--` form), without a user name or password, a `#` fragment, a backslash, whitespace or control characters, and whose path has no single-dot or double-dot segment (such as `/./` or `/../`, also written with `%2e`) and no character a browser percent-encodes in a path: a non-ASCII character, `"`, `<`, `>`, `^`, a backquote, `{`, `|` or `}`, which you write percent-encoded, as the browser sends it (`é` as `%C3%A9`).
 
-Nothing else about it is checked: the URLs are stored as given, the number of URL variants
-need not match the experiment's variants, and an experiment of another type can carry a
-configuration, as a `split_url` experiment can be created without one (its preview then
-answers `400`).
+A URL is stored exactly as sent.
+
+In a `split_url` experiment the configuration must also match the experiment's variants:
+
+- each URL variant names one of the experiment's variants, and each of those has exactly one URL variant;
+- each URL variant's `traffic_allocation` equals its experiment variant's, within 0.01: the experiment's variants decide the split;
+- no URL variant but the control's has the control URL's host and path.
+
+The control URL is the URL variant named like the experiment's control variant. Hosts are
+compared without case or port, and paths without one trailing `/`; the query string is not
+compared. A variant whose URL has the control URL's path on another host is accepted.
+
+A refusal answers `422` at the rule's place, such as
+`["body", "split_url_config", "variants", 1, "name"]`, with a fixed message that names the
+variant and never repeats a URL. An update is checked on its result: a `PUT` that sends
+`variants`, `split_url_config` or `experiment_type` is checked with whatever it leaves out
+taken from what is stored, so `variants` sent alone are checked against the stored
+configuration, and the refusal is then at `["body", "variants"]` (or
+`["body", "experiment_type"]`).
+
+A configuration stored before a rule is kept as it was: a `PUT` that sends none of those
+three fields works, and one that sends the configuration back must correct it. An experiment
+of another type can carry a configuration, which is held to the first list only, and a
+`split_url` experiment can be created without one (its preview then answers `400`).
+
+### Starting a split URL experiment
+
+`POST /api/v1/experiments/{id}/start` answers `400`, with a `detail` that says what to change
+and that it is changed with `PUT /api/v1/experiments/{id}`, when the split URL experiment:
+
+1. has no `split_url_config`;
+2. has one that breaks a rule above;
+3. has the same control URL host and path as an active split URL experiment;
+4. would chain with an active split URL experiment: its control URL has the host and path of that experiment's variant URL, or one of its variant URLs has the host and path of that experiment's control URL.
+
+Refusing every such link refuses chains and loops of any length. The same path on another
+host is neither the same control URL nor a chain. An active split URL experiment whose
+stored configuration breaks a rule is left out of the last two checks. When the scheduler
+starts a draft at its `start_date`, it makes the first two checks and leaves a draft that
+fails them as a draft.
 
 ---
 
@@ -174,12 +211,12 @@ answers `400`).
 
 | Status | Meaning |
 |---|---|
-| `400 Bad Request` | Preview: the experiment is not a `split_url` experiment, or has no `split_url_config` |
+| `400 Bad Request` | Preview: the experiment is not a `split_url` experiment, or has no `split_url_config`. Start: see [Starting a split URL experiment](#starting-a-split-url-experiment) |
 | `401 Unauthorized` | Missing or invalid Bearer token |
 | `403 Forbidden` | Preview: the user is not ADMIN, DEVELOPER or a superuser |
 | `404 Not Found` | Preview: no experiment has this id |
-| `409 Conflict` | Preview: the stored `split_url_config` is not valid, such as an allocation outside 0 to 100 saved before it was checked; update it with `PUT /api/v1/experiments/{id}` |
-| `422 Unprocessable Entity` | Create: the body fails validation, such as allocations that do not sum to 100 |
+| `409 Conflict` | Preview: the stored `split_url_config` is not valid, such as an allocation outside 0 to 100 or a URL saved before it was checked; update it with `PUT /api/v1/experiments/{id}` |
+| `422 Unprocessable Entity` | Create or update: the body fails validation, such as allocations that do not sum to 100 or URL variants that do not match the experiment's variants |
 | `501 Not Implemented` | Preview, or creating a `split_url` experiment, in a core deployment |
 
 ```json

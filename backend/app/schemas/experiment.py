@@ -8,7 +8,7 @@ These models are used for request/response validation and documentation.
 from datetime import datetime, timedelta, timezone, tzinfo
 from enum import Enum
 from functools import lru_cache
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 from zoneinfo import ZoneInfo, available_timezones
 
 from pydantic import (
@@ -16,11 +16,12 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    ValidationError,
     ValidationInfo,
     field_validator,
     model_validator,
 )
-from pydantic_core import PydanticCustomError
+from pydantic_core import InitErrorDetails, PydanticCustomError
 
 from backend.app.core.targeting_adapter import (
     TargetingRulesError,
@@ -29,7 +30,11 @@ from backend.app.core.targeting_adapter import (
 from backend.app.schemas.bandit import OptimizationType
 from backend.app.schemas.bayesian import BayesianConfig
 from backend.app.schemas.results import CorrectionMethod
-from backend.app.schemas.split_url_config import SplitUrlConfig
+from backend.app.schemas.split_url_config import (
+    SPLIT_URL_CONFIG_ERROR,
+    SplitUrlConfig,
+    find_split_url_config_problem,
+)
 from backend.app.schemas.variance_reduction import VarianceReductionConfig
 
 
@@ -318,6 +323,23 @@ def _checked_targeting_rules(
     return value
 
 
+def split_url_config_error(
+    title: str, loc: Tuple[Union[str, int], ...], message: str
+) -> ValidationError:
+    """A refusal of ``split_url_config`` at *loc* inside it, raised from its
+    field validator so the 422 names the rule's place (#393)."""
+    return ValidationError.from_exception_data(
+        title,
+        [
+            InitErrorDetails(
+                type=PydanticCustomError(SPLIT_URL_CONFIG_ERROR, message),
+                loc=loc,
+                input=None,
+            )
+        ],
+    )
+
+
 class ExperimentBase(BaseModel):
     """Base model for experiment data."""
 
@@ -454,7 +476,8 @@ class ExperimentCreate(ExperimentBase):
         description="Traffic optimization algorithm (default: fixed A/B split).",
     )
 
-    # EP-036: Split URL testing configuration
+    # EP-036: Split URL testing configuration. Declared after `variants` and
+    # `experiment_type`, which its validator reads.
     split_url_config: Optional[SplitUrlConfig] = Field(
         default=None,
         description="Split URL experiment configuration (required when experiment_type=split_url).",
@@ -551,6 +574,29 @@ class ExperimentCreate(ExperimentBase):
         from the first one's dump, and the value is returned unchanged.
         """
         return _checked_targeting_rules(value)
+
+    @field_validator("split_url_config")
+    @classmethod
+    def validate_split_url_config(
+        cls, config: Optional[SplitUrlConfig], info: ValidationInfo
+    ) -> Optional[SplitUrlConfig]:
+        """A split_url experiment's URL variants match its variants (#393).
+
+        The 422 is at the rule's place inside ``split_url_config``. When
+        ``variants`` was refused on its own there is nothing to compare.
+        """
+        experiment_type = info.data.get("experiment_type")
+        variants = info.data.get("variants")
+        if (
+            config is None
+            or variants is None
+            or getattr(experiment_type, "value", experiment_type) != "split_url"
+        ):
+            return config
+        problem = find_split_url_config_problem(config, variants)
+        if problem is not None:
+            raise split_url_config_error(cls.__name__, problem.loc, problem.message)
+        return config
 
     @model_validator(mode="after")
     def default_bayesian_config(self):
