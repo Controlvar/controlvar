@@ -736,6 +736,26 @@ describe("the caller's own signal (#1040 D4)", () => {
     });
   });
 
+  it("D4 a caller's abort after the headers still cancels the body read", async () => {
+    mockFetch.mockImplementation((_url: unknown, init?: RequestInit) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: { get: (name: string) => (name.toLowerCase() === 'content-type' ? 'application/json' : null) },
+        json: () => hangUntilAborted(undefined, init),
+      }),
+    );
+    const controller = new AbortController();
+    const call = track(apiFetch('/api/v1/experiments', { signal: controller.signal }));
+    await jest.advanceTimersByTimeAsync(0);
+    expect(call.settled).toBe(false);
+    expect(lastInit().signal?.aborted).toBe(false);
+    controller.abort();
+    await jest.advanceTimersByTimeAsync(0);
+    expect(lastInit().signal?.aborted).toBe(true);
+    expect(call.settled).toBe(true);
+  });
+
   it("D4 the call stops listening to the caller's signal once it is over", async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse(200, { ok: 1 }));
     const controller = new AbortController();
