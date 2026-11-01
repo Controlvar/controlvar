@@ -8,7 +8,7 @@ which some shared fixtures install -- is shown not to bypass it.
 
 The last class stores every flag of ``tests/sdk-contract/ruleset-vectors.json``
 and checks the served ruleset entries, and the answers of the public evaluate
-endpoint, against the file.
+endpoint (each value flag's ``value`` among them, #1497), against the file.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from urllib.parse import quote
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.api import deps
@@ -388,6 +388,76 @@ class TestVersioning:
         db_session.commit()
         assert _get(client, scoped_key, **{"If-None-Match": second}).status_code == 200
 
+    @pytest.mark.regression
+    def test_a_value_change_moves_the_etag(
+        self, client, db_session, developer, scoped_key
+    ):
+        """#1497 (B6): a 304 never keeps an old value, on or off, and the
+        off value an inactive flag serves is in its entry too."""
+        flag = _store(
+            db_session,
+            developer,
+            value_type="string",
+            on_value="Buy now",
+            off_value="Purchase",
+        )
+        etag = _get(client, scoped_key).headers["etag"]
+        for field, value, status in (
+            ("on_value", "Pay now", FeatureFlagStatus.ACTIVE),
+            ("off_value", "Order", FeatureFlagStatus.ACTIVE),
+            ("off_value", "Checkout", FeatureFlagStatus.INACTIVE),
+        ):
+            flag.status = status
+            db_session.commit()
+            etag = _get(client, scoped_key).headers["etag"]
+            setattr(flag, field, value)
+            db_session.commit()
+            response = _get(client, scoped_key, **{"If-None-Match": etag})
+            assert response.status_code == 200, (field, status)
+            assert response.headers["etag"] != etag
+            (entry,) = [e for e in response.json()["flags"] if e["key"] == flag.key]
+            assert entry[field] == value and entry["value_type"] == "string", entry
+        assert set(entry) == {"key", "active", "value_type", "off_value"}
+
+
+class TestQueries:
+    @pytest.mark.regression
+    def test_value_flags_add_no_query(self, client, db_session, developer, scoped_key):
+        """PF-2: the route reads every column the builder needs in its one
+        query (``load_only``), so the statements one request issues do not grow
+        with the number of value flags: the same with 0, 1 and 20."""
+        engine = db_session.get_bind()
+        counts = {}
+        stored = 0
+        for total in (0, 1, 20):
+            while stored < total:
+                stored += 1
+                _store(
+                    db_session,
+                    developer,
+                    value_type="number",
+                    on_value=stored,
+                    off_value=-stored,
+                )
+            statements = []
+
+            def count(conn, cursor, statement, parameters, context, executemany):
+                statements.append(statement)
+
+            # Once unmeasured, so a write the first request makes (the key's
+            # last use) is not counted against one total only.
+            assert _get(client, scoped_key).status_code == 200
+            event.listen(engine, "before_cursor_execute", count)
+            try:
+                response = _get(client, scoped_key)
+            finally:
+                event.remove(engine, "before_cursor_execute", count)
+            assert response.status_code == 200
+            valued = [e for e in response.json()["flags"] if "on_value" in e]
+            assert len(valued) >= total
+            counts[total] = len(statements)
+        assert counts[0] == counts[1] == counts[20], counts
+
 
 # ---------------------------------------------------------------------------
 # Contents
@@ -510,6 +580,8 @@ class TestVectorsThroughTheRoutes:
             synchronize_session=False
         )
         for spec in vectors["stored_flags"]:
+            # A value flag's row carries its type and two values (#1497); a
+            # boolean flag's spec names none, and its row stores NULL/NULL.
             db_session.add(
                 FeatureFlag(
                     key=spec["key"],
@@ -518,6 +590,9 @@ class TestVectorsThroughTheRoutes:
                     owner_id=developer.id,
                     rollout_percentage=spec["rollout_percentage"],
                     targeting_rules=spec["targeting_rules"],
+                    value_type=spec.get("value_type", "boolean"),
+                    on_value=spec.get("on_value"),
+                    off_value=spec.get("off_value"),
                 )
             )
         # The segment the segment flags name, stored with the members the
@@ -574,7 +649,7 @@ class TestVectorsThroughTheRoutes:
         monkeypatch.setattr(
             MetricsService, "record_flag_evaluation", staticmethod(lambda **_: None)
         )
-        checked = 0
+        checked = values = 0
         wrong = []
         for case in stored_corpus["cases"]:
             if _has_lone_surrogate(case["user_id"]) or _has_lone_surrogate(
@@ -594,6 +669,15 @@ class TestVectorsThroughTheRoutes:
             answer = {k: response.json()[k] for k in ("enabled", "reason")}
             if answer != case["expected"]:
                 wrong.append((case["id"], answer, case["expected"]))
+            if "expected_value" in case:
+                # #1497: the value as the route answers it, compared as JSON
+                # text (so 1 is not true, and 10 is not 10.0).
+                values += 1
+                served = json.dumps(response.json()["value"], sort_keys=True)
+                if served != json.dumps(case["expected_value"], sort_keys=True):
+                    wrong.append((case["id"], served, case["expected_value"]))
             checked += 1
         assert not wrong, wrong[:10]
         assert checked >= stored_corpus["counts"]["must_local"]
+        # Every value flag's case, all 51 of them well-formed.
+        assert values == 51

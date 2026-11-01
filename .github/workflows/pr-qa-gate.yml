@@ -496,7 +496,9 @@ jobs:
         run: python tests/sdk-contract/hash_contract.py --list
 
       # pyproject.toml adds --cov flags; only pytest is installed here, so clear addopts.
-      - name: The comparison rejects a wrong answer (hash_contract.py self-tests)
+      # Also the published local evaluators (test_published_ruleset.py, #1497):
+      # downloaded from npm and PyPI, run under node and python; no skip.
+      - name: The comparison rejects a wrong answer; the published evaluators accept the ruleset
         run: python -m pytest tests/sdk-contract -v -o addopts=""
 
       - name: Python SDK hash (sdk/python)

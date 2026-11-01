@@ -241,11 +241,15 @@ jobs:
           extensions: json, curl
           tools: composer:v2
 
+      # The .NET 10 SDK builds; the tests run on the .NET 8 and .NET 10
+      # runtimes (sdk/dotnet targets netstandard2.1 and net8.0).
       - name: Set up .NET
         if: matrix.lang == 'dotnet'
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '6.0.x'
+          dotnet-version: |
+            8.0.x
+            10.0.x
 
       - name: Run unit tests
         env:
@@ -281,6 +285,11 @@ jobs:
               # META-INF/spring/...AutoConfiguration.imports on the test classpath and
               # ExperimentationStarterRegistrationTest passes when it should not.
               cd sdk/java && ./mvnw -B clean test
+              # The sources and javadoc jars Maven Central needs, built the way
+              # sdk-release.yml's maven-build job builds them (the `central`
+              # profile), so a javadoc error fails this pull request and not a
+              # release. `package` stops before the step that writes the bundle.
+              ./mvnw -B -Pcentral -DskipTests package
               ;;
             ruby)
               cd sdk/ruby && bundle install --jobs 4 && bundle exec rspec
@@ -289,7 +298,11 @@ jobs:
               cd sdk/php && composer install --no-interaction --no-progress && vendor/bin/phpunit
               ;;
             dotnet)
-              dotnet test sdk/dotnet/Controlvar.sln --nologo --verbosity minimal
+              # Three legs (the net8.0 build on .NET 8 and .NET 10, the
+              # netstandard2.1 build on .NET 8), each with the same number of
+              # tests, as sdk-release.yml's nuget-build checks them.
+              dotnet test sdk/dotnet/Controlvar.sln --nologo --verbosity minimal --logger trx --results-directory "$RUNNER_TEMP/trx"
+              python3 scripts/check_dotnet_test_legs.py "$RUNNER_TEMP/trx"
               ;;
             *)
               echo "::error::no test command for sdk '$SDK'"; exit 1 ;;

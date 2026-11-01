@@ -15,9 +15,9 @@ than fixed page by page:
    that is not ACTIVE.
 2. **config-payload.** The evaluate route returns ``"config": None`` for every
    flag, and the SDK ruleset carries no variants, so an SDK's flag ``config``
-   is always null. There is no config payload to read, and the OpenFeature
-   providers' string, number and object calls always return the caller's
-   default: only boolean flags carry a value.
+   is always null. A flag's value travels in ``value``, never in ``config``
+   (#1497), so a page that reads ``config.value`` or ``config.variant`` is
+   wrong.
 3. **aws-path.** No Lambda function serves a request or processes an event,
    the API writes nothing to Kinesis, and nothing writes to OpenSearch.
    Assignment, evaluation and event tracking are API calls, events are stored

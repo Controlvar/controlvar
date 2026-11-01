@@ -1,5 +1,6 @@
 import { TargetingRules } from '@/types/targeting';
 import type { SafetyCheckResponse } from '@/types/safety';
+import type { ValueFlagType } from '@/utils/flagValues';
 import { apiFetch } from '@/services/api';
 
 export type FeatureFlagStatus = 'active' | 'inactive' | 'archived';
@@ -26,6 +27,16 @@ export interface FeatureFlag {
   targeting_rules?: TargetingRules | Record<string, unknown> | null;
   rules?: TargetingRules | Record<string, unknown> | null;
   tags?: string[] | null;
+  /**
+   * What the flag serves (#1497): `boolean`, `string`, `number` or `json`,
+   * read as any string so a type a later release adds is still shown. Absent
+   * from a server without values: read it with `flagValueType()`.
+   */
+  value_type?: string;
+  /** What the users it is on for get; `true` for a boolean flag. */
+  on_value?: unknown;
+  /** What everyone else gets, and everyone while it is off; `false` for a boolean flag. */
+  off_value?: unknown;
   owner_id: string | null;
   created_at: string;
   updated_at: string;
@@ -50,9 +61,17 @@ export interface CreateFeatureFlagRequest {
   rollout_percentage?: number;
   targeting_rules?: TargetingRules | Record<string, unknown> | null;
   tags?: string[];
+  /** Left out for a boolean flag, which sends neither value. */
+  value_type?: ValueFlagType;
+  on_value?: unknown;
+  off_value?: unknown;
 }
 
-/** `FeatureFlagUpdate` — every field optional. */
+/**
+ * `FeatureFlagUpdate` — every field optional. It has no `value_type`: the
+ * type is set when a flag is created and the dashboard never sends it again
+ * (the API answers any other value with 422 `read_only`).
+ */
 export interface UpdateFeatureFlagRequest {
   name?: string;
   key?: string;
@@ -61,6 +80,8 @@ export interface UpdateFeatureFlagRequest {
   rollout_percentage?: number;
   targeting_rules?: TargetingRules | Record<string, unknown> | null;
   tags?: string[];
+  on_value?: unknown;
+  off_value?: unknown;
 }
 
 export interface FeatureFlagListResponse {

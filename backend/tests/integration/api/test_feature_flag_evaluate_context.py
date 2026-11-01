@@ -75,6 +75,8 @@ class TestGetEvaluateWithContext:
         assert resp.json() == {
             "key": targeted_flag.key,
             "enabled": True,
+            "value": True,
+            "value_type": "boolean",
             "config": None,
             "reason": "targeting_rule",
         }
@@ -97,7 +99,15 @@ class TestGetEvaluateWithContext:
         )
         assert resp.status_code == 200, resp.text
         data = resp.json()
-        assert set(data) == {"key", "enabled", "config", "reason"}
+        assert set(data) == {
+            "key",
+            "enabled",
+            "value",
+            "value_type",
+            "config",
+            "reason",
+        }
+        assert data["value"] is data["enabled"]
         assert data["enabled"] is False
         assert data["reason"] == "rollout"
 
@@ -135,6 +145,8 @@ class TestPostEvaluate:
         assert resp.json() == {
             "key": targeted_flag.key,
             "enabled": True,
+            "value": True,
+            "value_type": "boolean",
             "config": None,
             "reason": "targeting_rule",
         }

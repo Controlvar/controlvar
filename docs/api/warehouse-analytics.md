@@ -34,6 +34,12 @@ from what comes back. A metric is one of two types:
   and counted), optionally capped per unit with `cap_value`, and compared with
   Welch's t-test. Each variant reports its mean and a confidence interval.
 
+A proportion metric's results also give each treatment its difference from
+the control with an interval, the interval of its relative change and its
+impact over its own units, as `/results` does on the same counts. A mean
+metric's results give none of these three; each treatment's p-value and
+relative change are reported as before.
+
 Every run reports its sample-ratio check against the variants' traffic
 allocation (skipped for multi-armed bandit experiments, whose split moves on
 purpose).

@@ -3,6 +3,7 @@ import { CorrectionMethod, MetricResult, VariantResult } from '@/types/results';
 import { StatisticalBadge } from '@/components/results/shared/StatisticalBadge';
 import {
   NOT_ENOUGH_DATA,
+  analysedAsMean,
   analysedAsRate,
   buyersWithNoValue,
   changeVerdict,
@@ -13,7 +14,6 @@ import {
   formatRate,
   formatSignedPct,
   isFiniteNumber,
-  isRevenuePerUser,
   meanDescription,
   metricLowerIsBetter,
   rateDescription,
@@ -31,8 +31,8 @@ interface MetricComparisonTableProps {
   correctionMethod?: CorrectionMethod;
   /**
    * Each metric's event name by metric id, from the experiment, for the note
-   * on a revenue metric whose events carried no value. Without it the note
-   * says "its event".
+   * on a revenue, duration or custom metric whose events carried no value.
+   * Without it the note says "its event".
    */
   eventNames?: Record<string, string>;
 }
@@ -78,10 +78,64 @@ function RevenueFootnote() {
   );
 }
 
+/** Under a count metric's rows: what "events per user" counts. */
+function CountFootnote() {
+  return (
+    <p className="mt-3 text-xs text-slate-600" data-testid="count-per-user-footnote">
+      Events per user: how many times each user sent the metric&apos;s event, averaged over every
+      user assigned to the variant; a user with none counts as 0. The events&apos;{' '}
+      <code>value</code> is not read.
+    </p>
+  );
+}
+
 /**
- * Users sent a revenue metric's event, yet every user's total is 0: the
- * amounts did not arrive in the event's `value`. Says so, rather than
- * leaving a row of zeros to be read as "no revenue".
+ * Under a duration metric's rows. A duration is time per assigned user, so a
+ * variant whose users send the event less often reads as less time: the
+ * footnote says so, as the metrics editor does.
+ */
+function DurationFootnote() {
+  return (
+    <p className="mt-3 text-xs text-slate-600" data-testid="duration-per-user-footnote">
+      Duration per user: each user&apos;s total <code>value</code> on the metric&apos;s event,
+      averaged over every user assigned to the variant; a user with none counts as 0, so a variant
+      whose users send the event less often reads as less time. Values are added in the unit they
+      were sent in: no unit is read or converted, and no value is capped.
+    </p>
+  );
+}
+
+/** Under a custom metric's rows. */
+function CustomFootnote() {
+  return (
+    <p className="mt-3 text-xs text-slate-600" data-testid="custom-per-user-footnote">
+      Value per user: each user&apos;s total <code>value</code> on the metric&apos;s event,
+      averaged over every user assigned to the variant; a user with none counts as 0. Values are
+      added as sent, and no value is capped.
+    </p>
+  );
+}
+
+/** Each footnote, by the metric type it explains. */
+const MEAN_FOOTNOTES: Array<[string, () => React.ReactElement]> = [
+  ['revenue', RevenueFootnote],
+  ['count', CountFootnote],
+  ['duration', DurationFootnote],
+  ['custom', CustomFootnote],
+];
+
+/** What the note asks the integrator to put in `value`, by metric type. */
+function valueNoun(metricType: string): string {
+  if (metricType === 'duration') return 'duration';
+  if (metricType === 'custom') return 'number';
+  return 'amount';
+}
+
+/**
+ * Users sent a revenue, duration or custom metric's event, yet every user's
+ * total is 0: the numbers did not arrive in the event's `value`. Says so,
+ * rather than leaving a row of zeros to be read as a measured 0. Never for a
+ * count, which counts events and does not read `value`.
  */
 function NoValueNote({
   metric,
@@ -94,10 +148,10 @@ function NoValueNote({
 }) {
   const who = buyers === 1 ? '1 user' : `${buyers.toLocaleString()} users`;
   return (
-    <p className="mt-2 text-xs text-amber-800" data-testid="revenue-no-value-note">
+    <p className="mt-2 text-xs text-amber-800" data-testid="no-value-note">
       {metric.metric_name}: {who} sent {eventName ? <code>{eventName}</code> : 'its event'}, and
-      every user&apos;s total <code>value</code> is 0. Send the amount in the event&apos;s{' '}
-      <code>value</code> field, not in its properties.
+      every user&apos;s total <code>value</code> is 0. Send the {valueNoun(metric.metric_type)} in
+      the event&apos;s <code>value</code> field, not in its properties.
     </p>
   );
 }
@@ -381,7 +435,11 @@ export function MetricComparisonTable({
           {adjustedFootnote(correctedKs, correctionMethod, confidenceLevel)}
         </p>
       )}
-      {metrics.some(isRevenuePerUser) && <RevenueFootnote />}
+      {MEAN_FOOTNOTES.map(([type, Footnote]) =>
+        metrics.some((m) => m.metric_type === type && analysedAsMean(m)) ? (
+          <Footnote key={type} />
+        ) : null,
+      )}
       {metrics.map((m) => {
         const buyers = buyersWithNoValue(m);
         return buyers === null ? null : (

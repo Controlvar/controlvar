@@ -150,7 +150,7 @@ class ExperimentationClient:
         self._assignments: UserKeyCache[Assignment] = UserKeyCache(cache_ttl_seconds)
         self._flags: UserKeyCache[FlagEvaluation] = UserKeyCache(cache_ttl_seconds)
         # The keys a key-less track() is sent to; outlives the cache entries.
-        self._attributed = AttributedKeys()
+        self._attributed = AttributedKeys(cache_ttl_seconds)
         self._sleep = time.sleep
         self._headers: Dict[str, str] = {
             "X-API-Key": api_key,

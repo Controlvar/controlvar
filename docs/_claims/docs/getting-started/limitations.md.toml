@@ -25,10 +25,19 @@ by = ["exempt:label"]
 count = 7
 
 [[unit]]
-text = "A flag that serves one of several values | A flag is on or off for each user. Evaluation answers \"config\": null for every flag, a request that sends a flag a variants field is refused with 422, and default_value accepts only false. To serve one of several experiences, run a multivariate experiment: each variant carries a configuration, which POST /api/v1/tracking/assign returns."
+text = "A flag that serves one of several values | A flag serves two values: its on value to the users it is on for (a matching targeting rule's percentage, or the rollout percentage), and its off value to everyone else and to everyone while it is off. No rule or rollout splits users among three or more values. GET /api/v1/feature-flags/user/{user_id} answers every flag as on or off. For three or more experiences, run a multivariate experiment: each variant carries a configuration, which POST /api/v1/tracking/assign returns."
 by = [
     "test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_request_with_variants_is_refused",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_serves_false_when_off_and_nothing_else",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_boolean_flag_serves_false_when_off_and_a_value_flag_its_off_value",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_the_bulk_route_answers_true_or_false_for_a_value_flag",
+]
+
+[[unit]]
+text = "A flag's value in every SDK | An SDK reads a flag's value only where its page documents a value method; every other SDK reads a value flag as on or off (enabled is true when the user gets the on value). GET /api/v1/feature-flags/evaluate/{key} returns the value in value."
+by = [
+    "test:backend/tests/integration/api/test_ruleset_published_sdk_compat.py::test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
     "test:backend/tests/integration/api/test_front_door_behaviour.py::test_every_flag_evaluates_with_a_null_config",
 ]
 
@@ -37,23 +46,68 @@ text = "Experiments and results"
 by = ["exempt:label"]
 
 [[unit]]
-text = "A revenue, count or duration metric analysed by its values | A revenue metric is analysed as its mean value per assigned user: each user's event values added up, 0 for a user with none, compared with Welch's t-test. A count, duration or custom metric is analysed as a conversion: whether each user sent the metric's event; its events' values are not analysed."
+text = "Every event value counted in a revenue, duration or custom metric | A value that is not a number, is infinite, or is larger than 10^12 in size, in the unit it was sent in, adds nothing to its user's total; the event still counts its user in conversions. A count metric counts events and does not read their value."
 by = [
-    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
-    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_only_a_revenue_metric_as_a_mean",
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_values_that_are_not_finite_or_too_large_add_nothing",
+    "test:backend/tests/integration/api/test_value_metrics_results.py::test_duration_and_custom_add_up_each_users_values",
+    "test:backend/tests/integration/api/test_value_metrics_results.py::test_a_count_does_not_read_the_value",
 ]
 
 [[unit]]
-text = "Every event value counted in a revenue metric | A value that is not a number, is infinite, or is larger than 10^12 in size, in the unit it was sent in, adds nothing to its user's total; the event still counts its user as a buyer."
-by = ["test:backend/tests/integration/api/test_revenue_per_user_results.py::test_values_that_are_not_finite_or_too_large_add_nothing"]
-
-[[unit]]
-text = "A revenue metric's sequential analysis, Bayesian analysis, sample-size plan and daily series by its values | Each is of the share of users who sent the metric's event, as for a conversion. CUPED does not analyse a revenue metric."
+text = "A revenue, count, duration or custom metric's sequential analysis, Bayesian analysis, sample-size plan, daily series and Live tab by its values | Each is of the share of users who sent the metric's event, as for a conversion. CUPED does not analyse these metrics."
 by = ["test:backend/tests/integration/api/test_revenue_per_user_results.py::test_the_other_analyses_of_a_revenue_metric_stay_on_the_share_of_buyers"]
 
 [[unit]]
-text = "A revenue metric's breakdown by segment as revenue per user | The Breakdowns view of a revenue metric shows, in its column headed Mean, the share of users who sent the metric's event in each segment, not revenue per user. The metric's headline row is revenue per user."
+text = "A breakdown by segment of a revenue, count, duration or custom metric by its values | The Breakdowns view of such a metric shows, in its column headed Mean, the share of users who sent the metric's event in each segment. The metric's headline row is its mean per user."
 by = ["test:backend/tests/integration/api/test_revenue_breakdown_share_of_buyers.py::test_a_revenue_metric_breakdown_is_the_share_of_buyers"]
+
+[[unit]]
+text = "The average time one event takes, such as page load time | A duration metric is each user's total of its events' values, 0 for a user with none, averaged over every assigned user: a variant whose users send the event less often reads as less time. No metric averages over events rather than users."
+by = [
+    "test:backend/tests/unit/services/test_value_metrics_per_user.py::test_a_duration_is_time_per_assigned_user_not_per_event",
+    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_every_type_but_conversion_as_a_mean",
+]
+
+[[unit]]
+text = "Intervals on a treatment's difference adjusted for the experiment's correction | The intervals on a treatment's difference from the control, on its relative change and on its impact are not adjusted for comparing several treatments with the control, while is_significant is (Benjamini-Hochberg by default). With two or more treatments an interval can exclude 0 on a treatment that is not significant. For a metric analysed as a share of users, the interval and Fisher's exact test can also disagree near the threshold, either way."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_b5_an_adjusted_treatment_is_not_significant_although_its_interval_excludes_0",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_mean_interval_against_significance",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_proportion_interval_against_significance",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_named_boundary_tables",
+]
+
+[[unit]]
+text = "An interval on the relative change for every treatment | For a proportion, relative_improvement_pct_ci is null only when an arm has no users or the control has no conversions; at low counts it is wide: a treatment with 6 converting users out of 200 against a control with 2 out of 200 gives -34.2% to +1,206.3% at the 0.95 level. For a mean it is null when the control's mean plus or minus its margin reaches 0, where Fieller's set of ratios is unbounded. The interval on the difference is still reported."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_treatment_with_no_users_has_no_intervals",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_every_none_on_the_architects_grid_is_counted",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_low_count_control_has_a_bounded_relative_interval",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_mean_control_whose_interval_reaches_0_has_no_relative_interval",
+]
+
+[[unit]]
+text = "The impact projected to all traffic, to a later period, or in a currency | incremental_impact is the difference from the control times the treatment's own assigned users so far, as a plain number: nothing projects it further, and no currency or unit is read or added."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_proportion_impact_is_the_difference_times_the_treatments_users",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_mean_impact_is_the_difference_times_the_treatments_users",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_impact_is_a_plain_number",
+]
+
+[[unit]]
+text = "The intervals and the impact in the data export | The export has no interval or impact column; GET /api/v1/results/{experiment_id} reports them."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_export_has_no_interval_or_impact_column",
+    "test:backend/tests/integration/api/test_results_difference_intervals.py::test_a_proportion_with_a_control_at_0_has_a_difference_and_no_relative_change",
+]
+
+[[unit]]
+text = "An interval on the difference, or an impact, in a warehouse analysis of a mean | A warehouse analysis gives a proportion metric's treatments their difference from the control with its interval, the relative change's interval and the impact, as /results does. A mean metric's treatments get none of them; their p-value and relative change are reported as before."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_estimator_fields_parity.py::test_a_proportion_run_carries_the_difference_fields",
+    "test:modules/backend/tests/unit/warehouse/test_estimator_fields_parity.py::test_a_mean_run_carries_none_of_the_difference_fields",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_warehouse_mean_result_carries_none_of_the_new_fields",
+]
 
 [[unit]]
 text = "A traffic allocation for the experiment as a whole | There is none. Variant weights must add up to exactly 100%, or the request is refused with 422. Users are left out only by targeting rules, a mutual exclusion group or the global holdout."
@@ -72,10 +126,6 @@ by = [
     "test:backend/tests/unit/api/test_documented_limits.py::test_assignment_hashes_the_experiment_key_and_the_user",
     "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_assigns_user_to_a_variant_and_is_sticky",
 ]
-
-[[unit]]
-text = "A bandit that moves traffic toward the better variant of a lower-is-better metric | A bandit (an experiment whose optimization_type is not fixed) moves traffic toward the variant whose users send the primary metric's event most often. It does not read the metric's lower_is_better, so on a metric such as uninstalls or errors it moves traffic toward the worse variant. Use a fixed split for such a metric (#1385)."
-by = ["test:backend/tests/unit/services/test_lower_is_better_direction.py::TestTheBanditDoesNotReadTheDirection::test_traffic_moves_to_more_converting_users_on_a_lower_is_better_primary"]
 
 [[unit]]
 text = "An LLM experiment that picks the variant with the lowest value | An LLM experiment's winner is the variant with the highest mean of the metric it is compared on: the business metric when every variant has one, otherwise the judge score. There is no lower-is-better setting for it."

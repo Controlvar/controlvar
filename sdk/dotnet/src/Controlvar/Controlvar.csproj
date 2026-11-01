@@ -1,19 +1,38 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <TargetFrameworks>netstandard2.1;net6.0</TargetFrameworks>
+    <!-- net8.0 takes System.Text.Json from the framework; netstandard2.1 is
+         what .NET Core 3.0 to .NET 7, Mono and Unity get, with System.Text.Json
+         from NuGet. The tests run both: tests/Controlvar.Tests on net8.0 and
+         net10.0, tests/Controlvar.Tests.NetStandard against the netstandard2.1
+         build. -->
+    <TargetFrameworks>netstandard2.1;net8.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <LangVersion>10.0</LangVersion>
     <PackageId>Controlvar.SDK</PackageId>
-    <Version>0.2.0</Version>
+    <Version>0.1.0</Version>
     <Authors>Controlvar</Authors>
     <Description>Official .NET/C# SDK for Controlvar — server-decided feature flags, A/B experiment assignment and event tracking.</Description>
     <PackageTags>experimentation;feature-flags;ab-testing;sdk</PackageTags>
+    <PackageProjectUrl>https://github.com/Controlvar/controlvar/tree/main/sdk/dotnet#readme</PackageProjectUrl>
+    <!-- nuget.org shows this file as the package's page, for good, for each
+         version: scripts/check_packaged_readme.py checks it in the packed
+         bytes before a release uploads them. -->
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/Controlvar/controlvar</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <!-- Writes the repository and its commit into the nuspec. -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <!-- The PDB inside the DLL: one .nupkg and no .snupkg to upload. -->
+    <DebugType>embedded</DebugType>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.1'">
-    <!-- System.Text.Json is part of the shared framework on net6.0 but not on netstandard2.1. -->
+    <!-- System.Text.Json is part of the shared framework on net8.0 but not on netstandard2.1. -->
     <PackageReference Include="System.Text.Json" Version="8.0.6" />
   </ItemGroup>
 </Project>

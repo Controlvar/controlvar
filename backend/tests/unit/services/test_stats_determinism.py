@@ -60,7 +60,8 @@ POSTERIORS = [
 
 class TestStatsEngine:
     def test_engine_version_is_semver_string(self):
-        assert ENGINE_VERSION == "1.5.0"
+        # That it is the last frozen version is pinned by
+        # test_engine_versions_frozen.py, not by a literal here.
         assert len(ENGINE_VERSION.split(".")) == 3
 
     def test_derive_seed_is_stable_and_63_bit(self):

@@ -21,18 +21,18 @@ below then resolve from there.
 <dependency>
     <groupId>com.controlvar</groupId>
     <artifactId>controlvar-sdk</artifactId>          <!-- core client -->
-    <version>1.0.0</version>
+    <version>0.1.0</version>
 </dependency>
 <!-- or, for Spring Boot: -->
 <dependency>
     <groupId>com.controlvar</groupId>
     <artifactId>controlvar-spring-boot-starter</artifactId> <!-- pulls in the core -->
-    <version>1.0.0</version>
+    <version>0.1.0</version>
 </dependency>
 ```
 
 Gradle reads `~/.m2` only through `mavenLocal()`: add it to `repositories`, then
-`implementation 'com.controlvar:controlvar-sdk:1.0.0'`.
+`implementation 'com.controlvar:controlvar-sdk:0.1.0'`.
 
 ## Quick Start (core client)
 

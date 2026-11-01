@@ -15,6 +15,21 @@ by = [
 ]
 
 [[unit]]
+text = "Website: controlvar.com · Documentation: docs.controlvar.com"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The results page of a ShopLab demo experiment in the Controlvar dashboard: its users, the planned sample reached, the leading variant and the sample ratio check."
+by = [
+    "journey:experiment-results#results-page",
+    "journey:experiment-results#ratio-results-page",
+]
+
+[[unit]]
+text = "Watch the walkthrough videos on controlvar.com."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "The core, the optional modules and the dashboard are Apache-2.0; the client SDKs under sdk/ are MIT."
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_tree_is_apache_and_the_sdks_are_mit"]
 
@@ -42,7 +57,43 @@ text = "Clone the repository:"
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "Then start the stack from the repository root:"
+text = "On the published images"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Start the released images from deploy/compose/; nothing is built:"
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_nothing_is_built",
+]
+
+[[unit]]
+text = "Open http://localhost:8080 and sign in as admin@example.com with the FIRST_SUPERUSER_PASSWORD that generate-env.sh wrote to deploy/compose/.env."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestGenerator::test_without_inputs_it_writes_the_local_url_and_the_example_admin",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestGenerator::test_it_writes_every_required_setting_privately",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_only_the_dashboard_publishes_a_port_on_loopback_by_default",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_it_rehearses_in_the_compose_topology",
+]
+
+[[unit]]
+text = "This stack has no demo data and no demo account."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestApiEnvironment::test_production_with_no_seed_and_no_bypass",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestText::test_no_demo_material",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_it_refuses_the_demo_login_and_checks_only_the_dashboard_publishes",
+]
+
+[[unit]]
+text = "Its settings are in deploy/compose/README.md."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Built from source, with the demo data"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Start the stack from the repository root:"
 by = ["exempt:instruction"]
 
 [[unit]]
@@ -293,22 +344,22 @@ text = "What it does not do (yet)"
 by = ["exempt:label"]
 
 [[unit]]
-text = "A flag is on or off for each user: it carries no variants or values."
+text = "A flag serves two values, its on value and its off value; no rule or rollout splits users among three or more."
 by = [
     "test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_request_with_variants_is_refused",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_serves_false_when_off_and_nothing_else",
-    "test:backend/tests/integration/api/test_front_door_behaviour.py::test_every_flag_evaluates_with_a_null_config",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_boolean_flag_serves_false_when_off_and_a_value_flag_its_off_value",
+    "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestValueFields::test_no_third_value_or_split_is_accepted",
 ]
 
 [[unit]]
-text = "To serve one of several experiences, run a multivariate experiment."
+text = "For three or more experiences, run a multivariate experiment."
 by = ["exempt:advice"]
 
 [[unit]]
-text = "Only a revenue metric is analysed by its values (its mean per assigned user); a count, duration or custom metric is analysed as a conversion: whether each user sent the metric's event."
+text = "A revenue, count, duration or custom metric's sequential, Bayesian, sample-size, breakdown and daily views are of the share of users who sent its event."
 by = [
-    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
-    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_only_a_revenue_metric_as_a_mean",
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_the_other_analyses_of_a_revenue_metric_stay_on_the_share_of_buyers",
+    "test:backend/tests/integration/api/test_revenue_breakdown_share_of_buyers.py::test_a_revenue_metric_breakdown_is_the_share_of_buyers",
 ]
 
 [[unit]]

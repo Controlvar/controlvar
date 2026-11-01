@@ -123,7 +123,7 @@ export function disabledEvaluation(
  * - Successful evaluations/assignments are cached per user + key for
  *   `cacheTtlMs`; failures are never cached.
  * - Every successful answer also records its key for the key-less `trackEvent`
- *   fan-out, for 24 hours (see `attribution.ts`); `clearCache()` keeps that record.
+ *   fan-out, for 24 hours, or the cache lifetime if longer (see `attribution.ts`); `clearCache()` keeps that record.
  * - `evaluateFeatureFlag*` and `assignExperiment` throw on failure (hooks
  *   convert that into `error` state). `trackEvent` never throws.
  */
@@ -134,7 +134,7 @@ export class ExperimentationClient {
   private readonly flags: UserKeyCache<FeatureFlagEvaluation>;
   private readonly assignments: UserKeyCache<ExperimentAssignment>;
   /** The keys a key-less `trackEvent` is sent to; outlives the cache entries. */
-  private readonly attributed = new AttributedKeys();
+  private readonly attributed: AttributedKeys;
   /** Requests currently in flight, so concurrent callers share one fetch. */
   private readonly inflight = new Map<string, Promise<unknown>>();
 
@@ -147,6 +147,7 @@ export class ExperimentationClient {
     const ttl = config.cacheTtlMs ?? 300_000;
     this.flags = new UserKeyCache<FeatureFlagEvaluation>(ttl);
     this.assignments = new UserKeyCache<ExperimentAssignment>(ttl);
+    this.attributed = new AttributedKeys(ttl);
   }
 
   // ─── HTTP ──────────────────────────────────────────────────────────────────

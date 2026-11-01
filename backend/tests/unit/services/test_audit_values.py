@@ -97,6 +97,100 @@ def test_an_update_records_changed_values_and_names_only_fields():
     assert "secret" not in json.dumps([old, new])
 
 
+#: The feature-flag columns no audit entry records, each with its reason.
+#: B8 (#1497): every column is a value field, a name-only field or listed
+#: here, so a new column cannot be left unclassified.
+FLAG_COLUMNS_NOT_AUDITED = {
+    "id": "the entry's entity_id",
+    "created_at": "the entry's own timestamp records the create",
+    "updated_at": "the entry's own timestamp records the change",
+    "owner_id": "set once, to the creator, who is the entry's actor",
+    "default_value": "always false (D40); deprecated, dropped after launch",
+    "tags": "labels, not behaviour",
+    "workspace_id": "the workspaces module's column; nothing in the core reads it",
+}
+
+
+@pytest.mark.regression
+def test_every_feature_flag_column_is_classified():
+    columns = {c.name for c in FeatureFlag.__table__.columns}
+    value = set(AUDIT_VALUE_FIELDS[EntityType.FEATURE_FLAG])
+    name_only = set(AUDIT_NAME_ONLY_FIELDS[EntityType.FEATURE_FLAG])
+    unaudited = set(FLAG_COLUMNS_NOT_AUDITED)
+    assert not (value & name_only) and not ((value | name_only) & unaudited)
+    assert columns == value | name_only | unaudited, (
+        "unclassified feature_flags columns: "
+        f"{sorted(columns - value - name_only - unaudited)}; "
+        f"listed but not columns: {sorted((value | name_only | unaudited) - columns)}"
+    )
+
+
+@pytest.mark.regression
+def test_a_flag_records_its_value_type_and_its_values_by_name_only():
+    """Plan F ruling 3 (M2): ``value_type`` as a value, the two values by name."""
+    row = SimpleNamespace(
+        key="checkout-label",
+        name="Checkout label",
+        status="ACTIVE",
+        rollout_percentage=10,
+        value_type="string",
+        on_value="s3cr3t on copy",
+        off_value="s3cr3t off copy",
+        description=None,
+        targeting_rules=None,
+        variants=None,
+    )
+    identity = audit_identity(audit_snapshot(EntityType.FEATURE_FLAG, row))
+    assert identity == {
+        "key": "checkout-label",
+        "name": "Checkout label",
+        "status": "ACTIVE",
+        "rollout_percentage": 10,
+        "value_type": "string",
+    }
+    before = audit_snapshot(EntityType.FEATURE_FLAG, row)
+    row.on_value = "s3cr3t new copy"
+    row.rollout_percentage = 50
+    old, new = audit_changes(before, audit_snapshot(EntityType.FEATURE_FLAG, row))
+    assert old == {"rollout_percentage": 10}
+    assert new == {"rollout_percentage": 50, "changed_fields": ["on_value"]}
+    assert "s3cr3t" not in json.dumps([identity, old, new])
+
+
+def test_an_8_kib_value_does_not_cost_the_percentage_change():
+    """Why by name: a recorded 8 KiB value would truncate the whole entry."""
+    row = SimpleNamespace(
+        key="k",
+        name="n",
+        status="ACTIVE",
+        rollout_percentage=10,
+        value_type="json",
+        on_value={"a": "x" * 8000},
+        off_value=[],
+        description=None,
+        targeting_rules=None,
+        variants=None,
+    )
+    before = audit_snapshot(EntityType.FEATURE_FLAG, row)
+    row.on_value = {"a": "y" * 8000}
+    row.rollout_percentage = 20
+    _, new = audit_changes(before, audit_snapshot(EntityType.FEATURE_FLAG, row))
+    stored = AuditService.record(
+        _Session(),
+        actor=SimpleNamespace(id=None, email=None, username=None),
+        action="feature_flag_update",
+        entity_type="feature_flag",
+        entity_id=uuid4(),
+        entity_name="n",
+        before=None,
+        after=new,
+    )
+    assert json.loads(stored.new_value) == {
+        "rollout_percentage": 20,
+        "changed_fields": ["on_value"],
+    }
+
+
 def test_nothing_changed_records_no_values():
     row = SimpleNamespace(
         name="h", holdout_percentage=5, is_active=False, description=""
