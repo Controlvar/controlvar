@@ -57,15 +57,15 @@ text = "Several Experiences"
 by = ["exempt:label"]
 
 [[unit]]
-text = "A flag is on or off for each user: it carries no variants or values."
+text = "A flag serves two values: on or off, or a string, a number or a JSON value with an off value."
 by = [
     "test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_request_with_variants_is_refused",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_serves_false_when_off_and_nothing_else",
-    "test:backend/tests/integration/api/test_front_door_behaviour.py::test_every_flag_evaluates_with_a_null_config",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_boolean_flag_serves_false_when_off_and_a_value_flag_its_off_value",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
 ]
 
 [[unit]]
-text = "To serve one of several experiences, run a multivariate experiment instead."
+text = "To split users among three or more experiences, or to measure which one does better, run a multivariate experiment instead."
 by = ["exempt:advice"]
 
 [[unit]]

@@ -105,10 +105,11 @@ class FeatureFlag(Base, BaseModel):
     )
     targeting_rules = Column(JSONB)  # Rules for flag enablement
     rollout_percentage = Column(Integer, default=0, nullable=False)  # Gradual rollout
-    # What the flag serves when it is off.  The request schemas type it and
-    # accept only false for now (D40), so every row holds false; evaluation does
-    # not read it.  ``server_default`` is load-bearing: the previous release's
-    # image inserts rows without naming this column, and the database fills it.
+    # Deprecated in favour of ``off_value`` (#1497, DECISIONS T229).  The
+    # request schemas type it and accept only false, for every flag (D40), so
+    # every row holds false; evaluation does not read it.  ``server_default`` is
+    # load-bearing: the previous release's image inserts rows without naming
+    # this column, and the database fills it.
     default_value = Column(
         Boolean, nullable=False, default=False, server_default=false()
     )
@@ -116,8 +117,9 @@ class FeatureFlag(Base, BaseModel):
     # a string, number or json flag serves: ``on_value`` to the users it is on
     # for, ``off_value`` to everyone else (#1497).  A boolean flag keeps both
     # NULL.  ``check_flag_values`` in ``__table_args__`` holds the combinations;
-    # nothing reads or writes these columns yet.  ``server_default`` is
-    # load-bearing, as for ``default_value``.  ``none_as_null``: Python ``None``
+    # the API writes them through ``backend.app.core.flag_values``'s rules and
+    # the evaluate route serves them.  ``server_default`` is load-bearing, as
+    # for ``default_value``.  ``none_as_null``: Python ``None``
     # is stored as SQL NULL, not as JSON ``null``, which the check refuses.
     value_type = Column(
         String(16),

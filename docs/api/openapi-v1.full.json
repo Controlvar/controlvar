@@ -6839,7 +6839,7 @@
           },
           "default_value": {
             "default": false,
-            "description": "What the flag serves when it is off. Only false is accepted for now.",
+            "description": "Deprecated: `off_value` replaces it. Only `false` is accepted, for every flag.",
             "title": "Default Value",
             "type": "boolean"
           },
@@ -6877,6 +6877,14 @@
             "minLength": 1,
             "title": "Name",
             "type": "string"
+          },
+          "off_value": {
+            "description": "What everyone else gets, and what everyone gets while the flag is off. Required for a string, number or json flag, and of that type; a boolean flag's is `false`. At most 8192 bytes as compact JSON and 10 levels deep; every number in it finite and from -9007199254740991 to 9007199254740991; no NUL or unpaired surrogate character; the two values differ.",
+            "title": "Off Value"
+          },
+          "on_value": {
+            "description": "What a user the flag is on for gets: a user who matches a targeting rule and falls inside its percentage, or matches no rule and falls inside `rollout_percentage`. Required for a string, number or json flag, and of that type; a boolean flag's is `true`. At most 8192 bytes as compact JSON and 10 levels deep; every number in it finite and from -9007199254740991 to 9007199254740991; no NUL or unpaired surrogate character; the two values differ.",
+            "title": "On Value"
           },
           "owner_id": {
             "description": "Read-only; ignored.",
@@ -6923,6 +6931,18 @@
             "description": "Read-only; ignored.",
             "readOnly": true,
             "title": "Updated At"
+          },
+          "value_type": {
+            "default": "boolean",
+            "description": "What the flag serves: `boolean` (the default; `true` to users the flag is on for, `false` to everyone else), `string`, `number`, or `json` (an object or an array). Set when the flag is created; an update may send it back unchanged, and any other value answers 422.",
+            "enum": [
+              "boolean",
+              "string",
+              "number",
+              "json"
+            ],
+            "title": "Value Type",
+            "type": "string"
           }
         },
         "required": [
@@ -6944,10 +6964,13 @@
               "is_active": false,
               "key": "new_feature",
               "name": "New Feature Flag",
+              "off_value": false,
+              "on_value": true,
               "owner_id": "5f0c8a52-1d7e-4c3b-9a6f-2b8e4d1c7a90",
               "rollout_percentage": 0,
               "status": "inactive",
-              "updated_at": "2023-01-01T00:00:00Z"
+              "updated_at": "2023-01-01T00:00:00Z",
+              "value_type": "boolean"
             }
           ],
           "limit": 100,
@@ -6993,7 +7016,7 @@
             "type": "string"
           },
           "default_value": {
-            "description": "What the flag serves when it is off.",
+            "description": "Deprecated: always false. Read `off_value`.",
             "title": "Default Value",
             "type": "boolean"
           },
@@ -7025,6 +7048,14 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "off_value": {
+            "description": "What everyone else gets, and what everyone gets while the flag is off. Required for a string, number or json flag, and of that type; a boolean flag's is `false`.",
+            "title": "Off Value"
+          },
+          "on_value": {
+            "description": "What a user the flag is on for gets: a user who matches a targeting rule and falls inside its percentage, or matches no rule and falls inside `rollout_percentage`. Required for a string, number or json flag, and of that type; a boolean flag's is `true`.",
+            "title": "On Value"
           },
           "owner_id": {
             "anyOf": [
@@ -7081,6 +7112,11 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
+          },
+          "value_type": {
+            "description": "What the flag serves: `boolean` (the default; `true` to users the flag is on for, `false` to everyone else), `string`, `number`, or `json` (an object or an array). Set when the flag is created; an update may send it back unchanged, and any other value answers 422.",
+            "title": "Value Type",
+            "type": "string"
           }
         },
         "required": [
@@ -7093,6 +7129,9 @@
           "rollout_percentage",
           "targeting_rules",
           "default_value",
+          "value_type",
+          "on_value",
+          "off_value",
           "tags",
           "owner_id",
           "created_at",
@@ -7181,7 +7220,7 @@
       },
       "FeatureFlagUpdate": {
         "additionalProperties": false,
-        "description": "The body of a flag update.\n\nEvery field is optional, and a field left out keeps its value. key, name,\nis_active, rollout_percentage and default_value refuse null; description,\ntargeting_rules and tags accept null, which clears them. A field not\nlisted here answers 422.",
+        "description": "The body of a flag update.\n\nEvery field is optional, and a field left out keeps its value. key, name,\nis_active, rollout_percentage, default_value, value_type, on_value and\noff_value refuse null; description, targeting_rules and tags accept null,\nwhich clears them. A field not listed here answers 422.\n\n``value_type`` and the two values are checked against the stored flag, by\n``FeatureFlagService.update_feature_flag``: this model cannot see the\nstored type.",
         "properties": {
           "created_at": {
             "description": "Read-only; ignored.",
@@ -7189,7 +7228,7 @@
             "title": "Created At"
           },
           "default_value": {
-            "description": "What the flag serves when it is off. Only false is accepted for now.",
+            "description": "Deprecated: `off_value` replaces it. Only `false` is accepted, for every flag.",
             "title": "Default Value",
             "type": "boolean"
           },
@@ -7226,6 +7265,14 @@
             "minLength": 1,
             "title": "Name",
             "type": "string"
+          },
+          "off_value": {
+            "description": "What everyone else gets, and what everyone gets while the flag is off. Required for a string, number or json flag, and of that type; a boolean flag's is `false`. At most 8192 bytes as compact JSON and 10 levels deep; every number in it finite and from -9007199254740991 to 9007199254740991; no NUL or unpaired surrogate character; the two values differ.",
+            "title": "Off Value"
+          },
+          "on_value": {
+            "description": "What a user the flag is on for gets: a user who matches a targeting rule and falls inside its percentage, or matches no rule and falls inside `rollout_percentage`. Required for a string, number or json flag, and of that type; a boolean flag's is `true`. At most 8192 bytes as compact JSON and 10 levels deep; every number in it finite and from -9007199254740991 to 9007199254740991; no NUL or unpaired surrogate character; the two values differ.",
+            "title": "On Value"
           },
           "owner_id": {
             "description": "Read-only; ignored.",
@@ -7271,6 +7318,17 @@
             "description": "Read-only; ignored.",
             "readOnly": true,
             "title": "Updated At"
+          },
+          "value_type": {
+            "description": "What the flag serves: `boolean` (the default; `true` to users the flag is on for, `false` to everyone else), `string`, `number`, or `json` (an object or an array). Set when the flag is created; an update may send it back unchanged, and any other value answers 422.",
+            "enum": [
+              "boolean",
+              "string",
+              "number",
+              "json"
+            ],
+            "title": "Value Type",
+            "type": "string"
           }
         },
         "title": "FeatureFlagUpdate",
@@ -24850,7 +24908,7 @@
         ]
       },
       "post": {
-        "description": "Create a new feature flag.\n\nThis endpoint allows users to create a new feature flag. The current user\nis automatically set as the owner of the feature flag.\n\nThe request must include:\n- A unique key for the feature flag\n- A name for the feature flag\n- Optional description\n- Optional targeting rules for specific user segments\n- Optional rollout percentage\n\nThe flag is created off (INACTIVE) unless the request sends\n`is_active: true`. A field the API does not read answers 422. The read-only\nfields of a flag response (`id`, `owner_id`, `created_at`, `updated_at`,\n`status`) are accepted and ignored, except that a `status` must be the one\nthe flag is created with. `targeting_rules` the flag evaluator would not\napply as written answer 422, with the place and the reason in the message.\n\nReturns:\n    FeatureFlagRead: The newly created feature flag\n\nRaises:\n    HTTPException 409: Another flag already has this key\n    HTTPException 422: The body is not a valid flag",
+        "description": "Create a new feature flag.\n\nThis endpoint allows users to create a new feature flag. The current user\nis automatically set as the owner of the feature flag.\n\nThe request must include:\n- A unique key for the feature flag\n- A name for the feature flag\n- Optional description\n- Optional targeting rules for specific user segments\n- Optional rollout percentage\n- Optional `value_type` (`boolean` when left out) and, for a `string`,\n  `number` or `json` flag, its `on_value` and `off_value`\n\nThe flag is created off (INACTIVE) unless the request sends\n`is_active: true`. A field the API does not read answers 422. The read-only\nfields of a flag response (`id`, `owner_id`, `created_at`, `updated_at`,\n`status`) are accepted and ignored, except that a `status` must be the one\nthe flag is created with. `targeting_rules` the flag evaluator would not\napply as written answer 422, with the place and the reason in the message.\nA value that does not fit `value_type` or its limits answers 422 at that\nfield, with a message that names the field and never the value.\n\nReturns:\n    FeatureFlagRead: The newly created feature flag\n\nRaises:\n    HTTPException 409: Another flag already has this key\n    HTTPException 422: The body is not a valid flag",
         "operationId": "create_feature_flag_api_v1_feature_flags__post",
         "parameters": [
           {
@@ -25000,7 +25058,7 @@
     },
     "/api/v1/feature-flags/evaluate/{flag_key}": {
       "get": {
-        "description": "Evaluate a feature flag for a specific user.\n\nThis endpoint evaluates whether a feature flag is enabled for a specific user\nbased on the flag's status, targeting rules, and rollout percentage. Pass the\nuser's attributes as ``context=<url-encoded JSON object>`` so targeting rules\n(dashboard or native shape) can be matched.\n\nThis endpoint is intended to be called by client applications to determine\nif a feature should be enabled for a specific user.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.\n\nReturns:\n    ``{\"key\", \"enabled\", \"config\", \"reason\"}`` where ``reason`` is one of\n    ``targeting_rule`` (a rule matched and its rollout % decided),\n    ``rollout`` (the global rollout % decided), ``inactive`` (the flag exists\n    but is not ACTIVE: ``enabled`` is false) or ``error``. ``config`` is\n    always null.\n\nRaises:\n    HTTPException 401: If the API key is invalid\n    HTTPException 404: If no feature flag has this key. A flag that exists\n        but is not ACTIVE is not a 404: it answers 200 with ``enabled: false``\n        and ``reason: \"inactive\"``.\n    HTTPException 422: If ``context`` is not valid JSON object",
+        "description": "Evaluate a feature flag for a specific user.\n\nThis endpoint evaluates whether a feature flag is enabled for a specific user\nbased on the flag's status, targeting rules, and rollout percentage. Pass the\nuser's attributes as ``context=<url-encoded JSON object>`` so targeting rules\n(dashboard or native shape) can be matched.\n\nThis endpoint is intended to be called by client applications to determine\nif a feature should be enabled for a specific user.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.\n\nReturns:\n    ``{\"key\", \"enabled\", \"value\", \"value_type\", \"config\", \"reason\"}``\n    where ``reason`` is one of ``targeting_rule`` (a rule matched and its\n    rollout % decided), ``rollout`` (the global rollout % decided),\n    ``inactive`` (the flag exists but is not ACTIVE: ``enabled`` is false)\n    or ``error``. ``value`` is the flag's ``on_value`` when ``enabled`` is\n    true and its ``off_value`` otherwise (for a boolean flag, ``value``\n    equals ``enabled``); ``value_type`` is the flag's type. ``config`` is\n    always null.\n\nRaises:\n    HTTPException 401: If the API key is invalid\n    HTTPException 404: If no feature flag has this key. A flag that exists\n        but is not ACTIVE is not a 404: it answers 200 with ``enabled: false``\n        and ``reason: \"inactive\"``.\n    HTTPException 422: If ``context`` is not valid JSON object",
         "operationId": "evaluate_feature_flag_api_v1_feature_flags_evaluate__flag_key__get",
         "parameters": [
           {
@@ -25119,7 +25177,7 @@
         ]
       },
       "post": {
-        "description": "Evaluate a feature flag for a specific user, sending the targeting context\nin the request body instead of the query string.\n\nBody: ``{\"user_id\": \"...\", \"context\": {...}}``. Returns the same\n``{\"key\", \"enabled\", \"config\", \"reason\"}`` payload as the GET variant.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.\n\nRaises:\n    HTTPException 401: If the API key is invalid\n    HTTPException 404: If no feature flag has this key. A flag that exists\n        but is not ACTIVE is not a 404: it answers 200 with ``enabled: false``\n        and ``reason: \"inactive\"``.\n    HTTPException 422: If the body is invalid",
+        "description": "Evaluate a feature flag for a specific user, sending the targeting context\nin the request body instead of the query string.\n\nBody: ``{\"user_id\": \"...\", \"context\": {...}}``. Returns the same\n``{\"key\", \"enabled\", \"value\", \"value_type\", \"config\", \"reason\"}`` payload\nas the GET variant: ``value`` is the flag's ``on_value`` when ``enabled``\nis true and its ``off_value`` otherwise (for a boolean flag, ``value``\nequals ``enabled``); ``value_type`` is the flag's type. ``config`` is\nalways null.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.\n\nRaises:\n    HTTPException 401: If the API key is invalid\n    HTTPException 404: If no feature flag has this key. A flag that exists\n        but is not ACTIVE is not a 404: it answers 200 with ``enabled: false``\n        and ``reason: \"inactive\"``.\n    HTTPException 422: If the body is invalid",
         "operationId": "evaluate_feature_flag_post_api_v1_feature_flags_evaluate__flag_key__post",
         "parameters": [
           {
@@ -25538,7 +25596,7 @@
         ]
       },
       "put": {
-        "description": "Update a feature flag.\n\nThis endpoint allows users to update an existing feature flag.\nThe user must have access to the feature flag (be the owner or have permission).\n\nOnly the fields sent change. They include:\n- Key, name and description\n- `is_active`, which turns the flag on or off. An archived flag sent\n  `is_active: false` stays archived; sent `is_active: true` it answers\n  400, and nothing is changed: unarchive it first\n- Targeting rules\n- Rollout percentage\n\nA field the API does not read answers 422, and so does an explicit null on\n`key`, `name`, `is_active`, `rollout_percentage` or `default_value`. The\nread-only fields of a flag response (`id`, `owner_id`, `created_at`,\n`updated_at`, `status`) are accepted and ignored, so a GET body can be sent\nback unchanged unless its `targeting_rules` are ones PUT now refuses (422);\nomitting the field still works. A `status` must equal the flag's.\n\n`targeting_rules` the flag evaluator would not apply as written answer 422,\nwith the place and the reason in the message. Stored rules are not\nre-checked unless they are sent.\n\nReturns:\n    FeatureFlagRead: The updated feature flag\n\nRaises:\n    HTTPException 400: `is_active: true` on an archived flag\n    HTTPException 403: If the user doesn't have permission to update this feature flag\n    HTTPException 409: Another flag already has the key\n    HTTPException 422: The body is not a valid update",
+        "description": "Update a feature flag.\n\nThis endpoint allows users to update an existing feature flag.\nThe user must have access to the feature flag (be the owner or have permission).\n\nOnly the fields sent change. They include:\n- Key, name and description\n- `is_active`, which turns the flag on or off. An archived flag sent\n  `is_active: false` stays archived; sent `is_active: true` it answers\n  400, and nothing is changed: unarchive it first\n- Targeting rules\n- Rollout percentage\n- `on_value` and `off_value`, for a `string`, `number` or `json` flag\n\nA field the API does not read answers 422, and so does an explicit null on\n`key`, `name`, `is_active`, `rollout_percentage`, `default_value`,\n`value_type`, `on_value` or `off_value`. The read-only fields of a flag\nresponse (`id`, `owner_id`, `created_at`, `updated_at`, `status`) are\naccepted and ignored, so a GET body can be sent back unchanged unless its\n`targeting_rules` are ones PUT now refuses (422); omitting the field still\nworks. A `status` must equal the flag's, and a `value_type` the flag's type\n(422 `read_only` otherwise). A value is checked against the flag's type,\nand the two values as they will be stored must differ; a boolean flag's\n`on_value: true` and `off_value: false` are accepted and change nothing.\n\n`targeting_rules` the flag evaluator would not apply as written answer 422,\nwith the place and the reason in the message. Stored rules are not\nre-checked unless they are sent.\n\nReturns:\n    FeatureFlagRead: The updated feature flag\n\nRaises:\n    HTTPException 400: `is_active: true` on an archived flag\n    HTTPException 403: If the user doesn't have permission to update this feature flag\n    HTTPException 409: Another flag already has the key\n    HTTPException 422: The body is not a valid update",
         "operationId": "update_feature_flag_api_v1_feature_flags__flag_id__put",
         "parameters": [
           {
