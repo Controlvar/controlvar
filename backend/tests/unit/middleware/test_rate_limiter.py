@@ -1009,3 +1009,52 @@ class TestSdkRateLimitIsPerPath:
         assert rate_limit_key("203.0.113.7", path) != rate_limit_key(
             "203.0.113.8", path
         )
+
+
+@pytest.mark.unit
+@pytest.mark.regression
+class TestRateLimitWarningFields:
+    """The "Rate limit exceeded" line keeps its fields in the JSON log."""
+
+    async def test_warning_carries_client_ip_path_and_limit(self):
+        from starlette.requests import Request
+
+        class _Denies:
+            def is_allowed(self, key, limit, window_seconds):
+                return False, 0
+
+        middleware = RateLimitMiddleware(MagicMock(), enabled=False)
+        middleware._enabled = True
+        middleware._limiter = _Denies()
+        path = "/api/v1/auth/login"
+        request = Request(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": path,
+                "headers": [],
+                "query_string": b"",
+                "client": ("203.0.113.9", 4321),
+            }
+        )
+
+        async def _unreached(_request):
+            raise AssertionError("a denied request must not reach the app")
+
+        with _json_logs() as buffer:
+            response = await middleware.dispatch(request, _unreached)
+        assert response.status_code == 429
+
+        lines = [
+            line
+            for line in _limiter_lines(buffer)
+            if line.get("event") == "Rate limit exceeded"
+        ]
+        assert len(lines) == 1, lines
+        line = lines[0]
+        expected_limit = resolve_rate_limit(path, middleware._sdk_limit)[0]
+        assert line.get("client_ip") == "203.0.113.9", (
+            'client_ip missing from the rendered "Rate limit exceeded" line'
+        )
+        assert line.get("path") == path
+        assert line.get("limit") == expected_limit
