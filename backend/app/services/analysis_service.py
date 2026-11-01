@@ -40,6 +40,7 @@ from backend.app.services.srm_service import (
     sample_ratio_check,
 )
 from backend.app.services.sufficient_stats_analysis import (
+    EVENT_COUNT_METRIC_TYPES,
     MEAN_METRIC_TYPES,
     BinomialVariant,
     adjusted_p_values,
@@ -152,8 +153,9 @@ class AnalysisService:
 
         # Return formatted results
         # Schema-shaped results for the analytics API (schemas/results.py).
-        # A revenue metric is its mean per assigned user; every other metric
-        # type is the share of users who converted.
+        # A revenue, count, duration or custom metric (MEAN_METRIC_TYPES) is
+        # its mean per assigned user; a conversion metric is the share of
+        # users who converted.
         alpha = 1.0 - confidence_level
         metrics = [
             (
@@ -239,12 +241,21 @@ class AnalysisService:
         alpha: float,
         correction_method: str,
     ) -> Dict[str, Any]:
-        """A revenue metric's result: its mean value per assigned user.
+        """A revenue, count, duration or custom metric's result: its mean
+        value per assigned user.
 
         ``raw`` is the metric's ``calculate_metric_results`` output, which has
-        each variant's assigned users and converting users; the value totals
-        are read here (``value_totals``).
+        each variant's assigned users and converting users; each user's value
+        is read here.  A count metric's is the number of the metric's events
+        the user sent, whatever their value (``event_counts``); a revenue,
+        duration or custom metric's is the total of those events' value
+        (``value_totals``).
         """
+        read = (
+            self.event_counts
+            if metric_type_name(metric) in EVENT_COUNT_METRIC_TYPES
+            else self.value_totals
+        )
         return per_user_mean_metric_result(
             [
                 (
@@ -253,9 +264,7 @@ class AnalysisService:
                     ),
                     v["sample_size"],
                     v["conversions"],
-                    self.value_totals(
-                        experiment.id, v["variant_id"], metric.event_name
-                    ),
+                    read(experiment.id, v["variant_id"], metric.event_name),
                 )
                 for v in raw["variant_results"]
             ],
@@ -263,6 +272,41 @@ class AnalysisService:
             correction_method,
             metric=metric,
         )
+
+    def event_counts(
+        self, experiment_id: Any, variant_id: Any, event_name: Optional[str]
+    ) -> List[float]:
+        """The number of the metric's events of each user of ``variant_id``
+        who sent one.
+
+        The events counted are the ones ``count_converting_users`` counts for
+        the metric: matching ``conversion_event_filter(event_name)``, tagged
+        with ``variant_id``, from a user assigned to that variant
+        (``_assigned_pairs``; no SQL join, as there).  Every such event counts
+        1, whatever its value: none, 0, negative, not finite or beyond
+        ``VALUE_BOUND``.  ``value`` is not read, so there is deliberately no
+        value predicate here (the one ``value_totals`` has would make a user
+        whose events carry no value 0).  A stored event counts each time it
+        was stored.  A user with no such event is not listed, so their value
+        is 0.
+        """
+        rows = (
+            self.db.query(Event.user_id, func.count(Event.id))
+            .filter(
+                Event.experiment_id == experiment_id,
+                Event.variant_id == variant_id,
+                conversion_event_filter(event_name),
+            )
+            .group_by(Event.user_id)
+            .all()
+        )
+        pairs = _assigned_pairs(
+            self.db, experiment_id, (str(user_id) for user_id, _ in rows)
+        )
+        variant = str(variant_id)
+        return [
+            float(count) for user_id, count in rows if (variant, str(user_id)) in pairs
+        ]
 
     def value_totals(
         self, experiment_id: Any, variant_id: Any, event_name: Optional[str]

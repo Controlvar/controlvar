@@ -288,11 +288,12 @@ def vector_cases():
 
 def test_the_vectors_get_the_same_answer_from_both_evaluators():
     cases, with_time_window, not_compared = vector_cases()
-    # Exact, so a case cannot stop being compared unseen: 1988 of the 2191
+    # Exact, so a case cannot stop being compared unseen: 2039 of the 2242
     # cases have rules to evaluate, the time_window flag's two among them (it
-    # was left out until #1145), and the 203 others are NOT_COMPARED's.
+    # was left out until #1145) and the value flags' 51 (#1497), and the 203
+    # others are NOT_COMPARED's.
     assert not_compared == NOT_COMPARED
-    assert len(cases) == 1988, len(cases)
+    assert len(cases) == 2039, len(cases)
     assert with_time_window == 2, with_time_window
     found = disagreements(cases)
     assert not found, f"{len(found)} of {len(cases)} cases disagree:\n" + "\n".join(

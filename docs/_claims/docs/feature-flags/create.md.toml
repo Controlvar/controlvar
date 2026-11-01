@@ -136,6 +136,116 @@ text = "Description | What the flag controls, and when it should be removed. | R
 by = ["exempt:baseline"]
 
 [[unit]]
+text = "Optional: serve a value instead of on or off"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Under Values, the Type is Boolean unless you choose another: the flag is on or off, and your code reads whether it is on."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::is a group of four radios named Type, Boolean selected, each with its hint as its description",
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::sends exactly the body a flag had before values: no value_type, on_value or off_value",
+    "journey:feature-flag-create#value-new-flag",
+]
+
+[[unit]]
+text = "Choose String, Number or JSON to serve a value instead, and two fields appear:"
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::String: two text fields with their hints, and the two strings sent with value_type string",
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::Number: plain text fields (no type=number, no inputmode), required, sent as numbers",
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::JSON: monospace text areas that leave spelling alone, sent parsed",
+    "journey:feature-flag-create#value-type",
+]
+
+[[unit]]
+text = "Field | What it holds"
+by = ["exempt:label"]
+
+[[unit]]
+text = "On value | What users the flag is on for get: users who match a targeting rule, and the rollout percentage of everyone else."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::String: two text fields with their hints, and the two strings sent with value_type string",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
+    "journey:feature-flag-create#value-users",
+]
+
+[[unit]]
+text = "Off value | What everyone else gets, and what everyone gets while the flag is off."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::String: two text fields with their hints, and the two strings sent with value_type string",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
+    "journey:feature-flag-create#value-users",
+    "journey:feature-flag-create#value-off-users",
+]
+
+[[unit]]
+text = "A string may be empty."
+by = ["test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::String: an empty string is a value"]
+
+[[unit]]
+text = "A number is written as in JSON, such as 10, -3 or 2.5."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::Number: text that is not a number gets the example; focus moves to it",
+    "test:frontend/src/tests/utils/flagValues.test.ts::a number: %j reads %p",
+    "test:frontend/src/tests/utils/flagValues.test.ts::a number: %j is refused with the example",
+]
+
+[[unit]]
+text = "A JSON value is an object or an array, such as {\"color\": \"blue\"}."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::JSON: monospace text areas that leave spelling alone, sent parsed",
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::JSON: empty, and a single value, each in its own words; focus on the first",
+]
+
+[[unit]]
+text = "The two values must differ."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::equal values are refused at Off value in the API's words (3 and 3.0 are one number)",
+    "test:frontend/src/tests/pages/feature-flag-values-detail.test.tsx::a value made equal to the other one is refused at its field, and nothing is sent (EMF-5)",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_the_api_and_the_database_check_agree_on_equality",
+]
+
+[[unit]]
+text = "If a value can't be used, the reason is shown under its field and the flag is not created."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::JSON that does not parse: \"Not valid JSON:\" under the field, linked and focused, nothing sent",
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::is shown under the field it names, verbatim, and focused; not in the general alert",
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::values_equal from the API is shown at Off value, the field it names",
+]
+
+[[unit]]
+text = "The type can't be changed after the flag is created; the two values can, on the flag's page."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-detail.test.tsx::comes before Targeting Rules, shows the type as text, and offers no way to change it",
+    "test:frontend/src/tests/pages/feature-flag-values-detail.test.tsx::a changed value is sent alone, never with value_type, and the field then shows what was saved",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_value_type_is_read_only",
+]
+
+[[unit]]
+text = "A new flag starts off, so everyone gets its off value until you turn it on."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::String: two text fields with their hints, and the two strings sent with value_type string",
+    "journey:feature-flag-create#value-create",
+    "journey:feature-flag-create#value-off-users-before",
+]
+
+[[unit]]
+text = "Its page names its type beside the status, and reads Everyone gets the off value while it is off and Rules and rollout decide who gets the on value while it is on."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-detail.test.tsx::names the type after the status, and says who gets which value; the switch is unchanged",
+    "journey:feature-flag-create#value-create",
+    "journey:feature-flag-create#value-turn-on",
+    "journey:feature-flag-create#value-turn-off",
+]
+
+[[unit]]
+text = "Every application that evaluates the flag can read both values, so don't put secrets in them."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Serve a value creates the same kind of flag with the API."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "Step 3: Add targeting rules (optional)"
 by = ["exempt:baseline"]
 
@@ -372,12 +482,26 @@ text = "targeting_rules;"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "default_value: what the flag serves when it is off."
-by = ["exempt:baseline"]
+text = "value_type: boolean (the default), string, number or json (see Serve a value);"
+by = [
+    "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestValueFields::test_the_request_schemas_publish_the_four_types",
+    "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestValueFields::test_a_create_without_value_fields_is_a_boolean_flag",
+]
 
 [[unit]]
-text = "Only false is accepted for now, and it is the default; true answers 422;"
-by = ["test:backend/tests/integration/api/test_flag_contract.py::test_default_value_true_is_422"]
+text = "on_value and off_value: what a string, number or json flag serves;"
+by = ["test:backend/tests/integration/api/test_flag_values_api.py::test_a_value_flag_is_created_and_its_values_changed"]
+
+[[unit]]
+text = "default_value: deprecated, off_value replaces it."
+by = ["test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestDefaultValue::test_a_value_flag_sent_default_value_true_is_told_about_off_value"]
+
+[[unit]]
+text = "Only false is accepted, for every flag, and it is the default; true answers 422;"
+by = [
+    "test:backend/tests/integration/api/test_flag_contract.py::test_default_value_true_is_422",
+    "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestDefaultValue::test_a_value_flag_sent_default_value_true_is_told_about_off_value",
+]
 
 [[unit]]
 text = "tags."
@@ -391,10 +515,11 @@ by = [
 ]
 
 [[unit]]
-text = "null is refused for key, name, is_active, rollout_percentage and default_value."
+text = "null is refused for key, name, is_active, rollout_percentage, default_value, value_type, on_value and off_value."
 by = [
     "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestRequestModels::test_explicit_null_is_refused",
     "test:backend/tests/integration/api/test_flag_contract.py::test_put_null_on_a_not_null_field_is_422",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_a_create_outside_the_contract_is_422_and_stores_nothing",
 ]
 
 [[unit]]
@@ -827,6 +952,101 @@ text = "The key is shown only once, and this saves it in $KEY:"
 by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once"]
 
 [[unit]]
+text = "Serve a value"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A flag can serve a string, a number or a JSON value instead of on or off."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_a_value_flag_is_created_and_its_values_changed",
+    "docex:docs/feature-flags/create.md#\"on_value\": \"Complete purchase\"",
+]
+
+[[unit]]
+text = "Its value_type is set when it is created, and it has two values: on_value, what the users it is on for get, and off_value, what everyone else gets, and everyone while the flag is off."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_value_type_is_read_only",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
+]
+
+[[unit]]
+text = "This creates a string flag for a checkout button's label, on for enterprise-plan users, and turns it on:"
+by = ["docex:docs/feature-flags/create.md#\"off_value\": \"Buy now\""]
+
+[[unit]]
+text = "A user on the enterprise plan matches the rule, so the flag is on for them and they get the on value:"
+by = ["docex:docs/feature-flags/create.md#\"value\": \"Complete purchase\""]
+
+[[unit]]
+text = "A user on the free plan matches no rule, and the rollout percentage is 0, so they get the off value:"
+by = ["docex:docs/feature-flags/create.md#{\"enabled\":false,\"value\":\"Buy now\",\"reason\":\"rollout\"}"]
+
+[[unit]]
+text = "What the API checks."
+by = ["exempt:label"]
+
+[[unit]]
+text = "A string flag's two values are strings (an empty string is allowed), a number flag's are numbers (not true or false), and a json flag's are JSON objects or arrays."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_a_create_outside_the_contract_is_422_and_stores_nothing",
+    "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestValueFields::test_a_value_flag_with_two_values_of_its_type_is_accepted",
+]
+
+[[unit]]
+text = "A create sends both, and they must differ: 3 and 3.0 are the same number."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_a_create_outside_the_contract_is_422_and_stores_nothing",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_the_api_and_the_database_check_agree_on_equality",
+]
+
+[[unit]]
+text = "Each value is at most 8,192 bytes as compact JSON and 10 levels deep, every number in it is finite and from -9007199254740991 to 9007199254740991, and no string in it holds a NUL or an unpaired surrogate character."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_the_hostile_battery_is_422_on_create_never_500",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_each_limit_itself_is_accepted_and_stored_as_sent",
+]
+
+[[unit]]
+text = "A value outside these answers 422 at that field, and the message names the field, never the value."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_the_hostile_battery_is_422_on_create_never_500",
+    "test:backend/tests/unit/core/test_flag_values.py::test_no_message_repeats_the_value",
+]
+
+[[unit]]
+text = "This number flag is given text:"
+by = ["docex:docs/feature-flags/create.md#\"msg\":\"on_value must be a number, because value_type is number\""]
+
+[[unit]]
+text = "value_type cannot change once the flag exists: an update may send it back unchanged, and any other value answers 422 with \"type\": \"read_only\"."
+by = ["test:backend/tests/integration/api/test_flag_values_api.py::test_value_type_is_read_only"]
+
+[[unit]]
+text = "An update may send either value on its own; it is checked against the flag's type, and the two values as they will be stored must still differ."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_a_partial_put_is_checked_on_the_pair_as_it_will_be_stored",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_an_update_outside_the_contract_is_422_and_changes_nothing",
+]
+
+[[unit]]
+text = "A boolean flag's on_value is true and its off_value is false: a request may send those back, so a GET body still round-trips, and any other value answers 422."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_a_boolean_flags_get_body_put_back_is_200_and_stores_no_value",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_an_update_outside_the_contract_is_422_and_changes_nothing",
+]
+
+[[unit]]
+text = "default_value is deprecated and accepts only false, for every flag; read off_value."
+by = [
+    "test:backend/tests/integration/api/test_flag_contract.py::test_default_value_true_is_422",
+    "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestDefaultValue::test_a_value_flag_sent_default_value_true_is_told_about_off_value",
+]
+
+[[unit]]
+text = "Every application that evaluates the flag can read both of its values, so do not put secrets in them."
+by = ["exempt:advice"]
+
+[[unit]]
 text = "Flag Key Naming Conventions"
 by = ["exempt:baseline"]
 
@@ -846,16 +1066,15 @@ text = "When a Flag Evaluates to Off"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "A flag is on or off for each user."
-by = ["exempt:baseline"]
+text = "Every flag serves two values."
+by = ["test:backend/tests/unit/api/test_documented_limits.py::test_a_boolean_flag_serves_false_when_off_and_a_value_flag_its_off_value"]
 
 [[unit]]
-text = "Its default_value, what it serves when it is off, is false for every flag for now."
-by = ["test:backend/tests/integration/api/test_flag_contract.py::test_default_value_true_is_422"]
-
-[[unit]]
-text = "Evaluation returns enabled: false when:"
-by = ["exempt:baseline"]
+text = "Evaluation returns enabled: false, and value set to the flag's off_value (false for a boolean flag), when:"
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
+    "test:backend/tests/integration/api/test_flag_contract.py::test_evaluation_is_unchanged_an_inactive_flag_is_off",
+]
 
 [[unit]]
 text = "the flag is off (reason: \"inactive\"), which includes a flag that a safety rollback to 0% turned off (see Safety Monitoring);"
@@ -950,6 +1169,10 @@ by = ["test:backend/tests/integration/api/test_feature_flag_evaluate_context.py:
 [[unit]]
 text = "evaluates every active flag the same way and returns {\"flag-key\": true|false, ...}."
 by = ["test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestUserFlagsWithContext::test_context_query_param"]
+
+[[unit]]
+text = "A value flag answers true when the user gets its on value."
+by = ["test:backend/tests/integration/api/test_flag_values_api.py::test_the_bulk_route_answers_true_or_false_for_a_value_flag"]
 
 [[unit]]
 text = "Reporting client-side errors"

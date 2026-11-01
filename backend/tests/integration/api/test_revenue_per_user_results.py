@@ -22,12 +22,17 @@ in ``EXPOSURE_EVENT_TYPES`` that carries the metric's event name and a value.
 A refund, a negative value, is added to its buyer's total: that has its own
 small experiment.
 
+The export and the analyses that stay on the share of buyers are held for
+every type ``/results`` analyses as a mean (#439): the same events, with the
+metric's type set to each of ``MEAN_METRIC_TYPES``.
+
 Rows created here are deleted in fixture teardown because the shared test
 database is not truncated between tests.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 import uuid
@@ -47,6 +52,8 @@ from backend.app.models.experiment import (
     MetricType,
     Variant,
 )
+from backend.app.services.results_streaming_service import ResultsStreamingService
+from backend.app.services.sufficient_stats_analysis import MEAN_METRIC_TYPES
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db]
 
@@ -64,6 +71,19 @@ PURCHASES = [
 ]
 CONTROL_Y = np.array([20.0, 35.5] + [0.0] * 8)
 TREATMENT_Y = np.array([60.0, 60.0, 35.5, 12.25] + [0.0] * 6)
+#: The same purchases counted per user, for a count metric: every event is 1,
+#: the no-value one included.
+CONTROL_COUNTS = np.array([1.0, 1.0, 1.0] + [0.0] * 7)
+TREATMENT_COUNTS = np.array([2.0, 1.0, 1.0, 1.0] + [0.0] * 6)
+#: Each mean type's per-user arrays for the dataset above.
+PER_USER = {
+    metric_type: (
+        (CONTROL_COUNTS, TREATMENT_COUNTS)
+        if metric_type == "count"
+        else (CONTROL_Y, TREATMENT_Y)
+    )
+    for metric_type in MEAN_METRIC_TYPES
+}
 
 
 def _cleanup(db_session, exp):
@@ -82,7 +102,7 @@ def _user(exp, arm, i):
     return f"rpu-{exp.key}-{arm}-{i}"
 
 
-def _make(db_session, make_experiment, users):
+def _make(db_session, make_experiment, users, metric_type=MetricType.REVENUE):
     suffix = uuid.uuid4().hex[:8]
     exp = make_experiment(
         name=f"Checkout total {suffix}",
@@ -113,7 +133,7 @@ def _make(db_session, make_experiment, users):
                 experiment_id=exp.id,
                 name="Order value",
                 event_name="purchase",
-                metric_type=MetricType.REVENUE,
+                metric_type=metric_type,
                 is_primary=True,
                 minimum_sample_size=5,
             ),
@@ -161,7 +181,19 @@ def _variant_ids(exp):
 
 @pytest.fixture
 def experiment(admin_client, db_session, make_experiment):
-    exp = _make(db_session, make_experiment, USERS)
+    yield from _experiment(admin_client, db_session, make_experiment)
+
+
+@pytest.fixture(params=MEAN_METRIC_TYPES)
+def mean_experiment(request, admin_client, db_session, make_experiment):
+    """The same experiment with its metric of each type analysed as a mean."""
+    yield from _experiment(
+        admin_client, db_session, make_experiment, MetricType(request.param)
+    )
+
+
+def _experiment(admin_client, db_session, make_experiment, metric_type=None):
+    exp = _make(db_session, make_experiment, USERS, metric_type or MetricType.REVENUE)
     ids = _variant_ids(exp)
     for arm, i, value in PURCHASES:
         _track(admin_client, exp, _user(exp, arm, i), value)
@@ -268,11 +300,15 @@ def test_the_difference_interval_follows_the_requested_level(admin_client, exper
 
 
 def test_the_export_leaves_the_rate_empty_for_a_revenue_primary(
-    admin_client, experiment
+    admin_client, mean_experiment
 ):
-    """The export's rows for a revenue primary metric: no rate, the buyers,
-    and the Welch p-value."""
-    _, _, treatment = _arms(_results(admin_client, experiment))
+    """The export's rows for a primary metric analysed as a mean (a revenue,
+    count, duration or custom metric): no rate, the buyers, and the Welch
+    p-value."""
+    experiment = mean_experiment
+    metric, _, treatment = _arms(_results(admin_client, experiment))
+    assert metric["analysis"] == "mean"
+    control_y, treatment_y = PER_USER[metric["metric_type"]]
     response = admin_client.get("/api/v1/export/variants", params={"format": "json"})
     assert response.status_code == 200, response.text
     rows = {
@@ -286,17 +322,33 @@ def test_the_export_leaves_the_rate_empty_for_a_revenue_primary(
     assert rows["control"]["p_value"] is None
     assert rows["treatment"]["p_value"] == pytest.approx(treatment["p_value"])
     assert rows["treatment"]["p_value"] == pytest.approx(
-        stats.ttest_ind(TREATMENT_Y, CONTROL_Y, equal_var=False).pvalue, rel=1e-9
+        stats.ttest_ind(treatment_y, control_y, equal_var=False).pvalue, rel=1e-9
     )
 
 
+class _SharedSession:
+    """The test session, handed to the streaming service; close() is a no-op."""
+
+    def __init__(self, session):
+        self._session = session
+
+    def __getattr__(self, name):
+        return getattr(self._session, name)
+
+    def close(self):
+        pass
+
+
 def test_the_other_analyses_of_a_revenue_metric_stay_on_the_share_of_buyers(
-    admin_client, db_session, experiment
+    admin_client, db_session, mean_experiment
 ):
-    """The Bayesian and sequential analyses, CUPED, the sample-size plan and
-    the daily series of a revenue metric read the users who bought, as for a
-    conversion: 3 of 10 in the control and 4 of 10 in the treatment."""
+    """The Bayesian and sequential analyses, CUPED, the sample-size plan, the
+    daily series and the Live tab of a metric analysed as a mean (a revenue,
+    count, duration or custom metric) read the users who sent its event, as
+    for a conversion: 3 of 10 in the control and 4 of 10 in the treatment."""
+    experiment = mean_experiment
     body = _results(admin_client, experiment)
+    assert body["metrics"][0]["analysis"] == "mean"
 
     posteriors = {
         v["variant_key"]: v["posterior"]
@@ -326,6 +378,16 @@ def test_the_other_analyses_of_a_revenue_metric_stay_on_the_share_of_buyers(
         for series in daily.json()["series"]
     }
     assert buyers == {"control": 3, "treatment": 4}
+
+    # The Live tab's snapshot (GET /ws/experiments/{id}/results) is the share
+    # of users who sent the event too.
+    service = ResultsStreamingService(lambda: _SharedSession(db_session))
+    live = asyncio.run(service.get_live_snapshot(str(experiment.id)))
+    assert live.get("event") == "results_update", live
+    assert {
+        v["name"]: (v["conversion_count"], v["conversion_rate"])
+        for v in live["variants"]
+    } == {"control": (3, 0.3), "treatment": (4, 0.4)}
 
     # The sequential analysis is the one the same experiment gets with the
     # metric as a conversion.

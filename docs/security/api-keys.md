@@ -105,8 +105,8 @@ The `403` says
 `This API key does not have the 'sdk:ruleset' scope. Create a key with the 'sdk:ruleset' scope for server-side SDK use.`
 
 A key with `sdk:ruleset` can therefore download every feature flag's targeting rules,
-including the values in them, so keep such a key on a server and never ship it to a browser
-or a mobile app.
+including the values in them, and the values string, number and JSON flags serve, so keep
+such a key on a server and never ship it to a browser or a mobile app.
 
 - In the dashboard (**Admin → API Keys → Create API Key**), tick **Server-side local
   evaluation (sdk:ruleset)**; the same checkbox is the one for assigning lists of users.

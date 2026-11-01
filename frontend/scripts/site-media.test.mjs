@@ -645,4 +645,20 @@ describe('platformProblems', () => {
     }
     assert.match(platformProblems(join(tmpdir(), 'no-such-export-dir'))[0], /is missing/);
   });
+
+  // #1459 PE 2: the homepage's screenshots are the marketing build's only. The
+  // files are in every export (public/ is copied whole) and are allowed; a
+  // reference from the platform homepage is not.
+  it('fails a /screens/ reference, and passes the screenshot files alone', () => {
+    const dir = platform();
+    mkdirSync(join(dir, 'screens'));
+    writeFileSync(join(dir, 'screens', 'results-000000000000.webp'), 'RIFF');
+    assert.deepEqual(platformProblems(dir), []);
+    writeFileSync(join(dir, 'index.html'), '<a href="/login">Sign in to the dashboard</a><img src="/screens/results-000000000000.webp"/>');
+    assert.ok(platformProblems(dir).some((p) => /references \/screens\//.test(p)), platformProblems(dir).join('\n'));
+    // Not a path under some other root, like `/_next/static/screens/`.
+    writeFileSync(join(dir, 'index.html'), '<a href="/login">Sign in to the dashboard</a><link href="/_next/static/screens/a.css"/>');
+    assert.deepEqual(platformProblems(dir), []);
+    rmSync(dir, { recursive: true });
+  });
 });

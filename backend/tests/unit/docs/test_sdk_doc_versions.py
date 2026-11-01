@@ -13,13 +13,25 @@ manifest:
   0.1.0, beta) ``;
 * the sentence naming the registry, `` The `controlvar` package is on
   [PyPI](...). 0.1.0 is a beta release `` or `` ... on [npm](...) (0.1.0,
-  beta) ``.
+  beta) ``;
+* the Java SDK's Maven forms, held to the parent POM's version: ``
+  `com.controlvar:controlvar-sdk` (v0.1.0) ``, a Gradle coordinate
+  ``com.controlvar:controlvar-sdk:0.1.0``, and a ``<dependency>`` whose
+  ``<artifactId>controlvar-...</artifactId>`` is followed by its
+  ``<version>`` (a comment or a javadoc ``*`` may sit between them);
+* the .NET SDK's NuGet forms, held to its project's ``<Version>``:
+  `` `Controlvar.SDK` (v0.1.0) ``, ``dotnet add package Controlvar.SDK
+  --version 0.1.0``, ``<PackageReference Include="Controlvar.SDK"
+  Version="0.1.0" />``, and the .NET 10 SDK's ``dotnet package add
+  Controlvar.SDK@0.1.0`` and ``dotnet package add Controlvar.SDK --version
+  0.1.0``.
 
 The pages read are every SDK page, the SDK guide, the FAQ, the two SDK docs
-journeys and the README each published package carries to its registry
-(``PUBLISHED``): PyPI and npm show that README as the package's page, and a
-release that bumps the manifest but not the README publishes the old version's
-install line for good.
+journeys, the README each published package carries to its registry
+(``PUBLISHED``), and the Java SDK's README and the starter's javadoc example
+(javadoc.io shows it for each published version): PyPI and npm show that
+README as the package's page, and a release that bumps the manifest but not
+the README publishes the old version's install line for good.
 
 A quote in a form this file does not read would go stale unseen, so:
 
@@ -33,7 +45,7 @@ A quote in a form this file does not read would go stale unseen, so:
   below theirs must be one of the forms above.
 
 Every README a package ships (``readme`` in pyproject.toml; npm always ships
-README.md) links only to absolute URLs: a registry renders the README away
+README.md; a .NET project's ``PackageReadmeFile``) links only to absolute URLs: a registry renders the README away
 from this repository, where ``../../docs/x.md`` leads nowhere. A published
 package's README does not say it is unpublished, whatever its markup.
 
@@ -52,6 +64,7 @@ from __future__ import annotations
 import json
 import re
 import tomllib
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
@@ -80,6 +93,10 @@ PYTHON_PAGES = {
 
 VERSION = r"v?(\d+(?:\.\d+){1,2})"
 PACKAGE = r"@controlvar/[A-Za-z0-9_-]+|controlvar(?:-openfeature)?"
+#: A Maven artifactId of this repository's.
+ARTIFACT = r"controlvar-[a-z]+(?:-[a-z]+)*"
+#: The Java SDK's Maven group; every artefact of sdk/java is in it.
+MAVEN_GROUP = "com.controlvar"
 #: (form, pattern): group 1 the package, group 2 the version. Whitespace is
 #: folded before matching, so a line break may fall anywhere.
 FORMS: Tuple[Tuple[str, "re.Pattern[str]"], ...] = (
@@ -100,7 +117,86 @@ FORMS: Tuple[Tuple[str, "re.Pattern[str]"], ...] = (
             + VERSION
         ),
     ),
+    (
+        "maven quoted",
+        re.compile(r"`(com\.controlvar:" + ARTIFACT + r")` \(?" + VERSION),
+    ),
+    (
+        "maven coordinate",
+        re.compile(r"(?<![\w.-])(com\.controlvar:" + ARTIFACT + r"):" + VERSION),
+    ),
+    (
+        # group 1 is the artifactId; quotes() puts the group in front.
+        "maven dependency",
+        re.compile(
+            r"<artifactId>("
+            + ARTIFACT
+            + r")</artifactId>[ *]{0,8}(?:<!--[^<>]{0,80}-->[ *]{0,8})?<version>"
+            + VERSION
+            + r"</version>"
+        ),
+    ),
+    ("nuget quoted", re.compile(r"`(Controlvar\.SDK)` \(?" + VERSION)),
+    (
+        "nuget add",
+        re.compile(r"\bdotnet add package (Controlvar\.SDK) --version " + VERSION),
+    ),
+    (
+        "nuget reference",
+        re.compile(
+            r"<PackageReference Include=\"(Controlvar\.SDK)\" Version=\"" + VERSION
+        ),
+    ),
+    # The .NET 10 SDK's noun-first command, `dotnet package add <id>@<version>`
+    # or `... <id> --version <version>`.
+    (
+        "nuget package add, at",
+        re.compile(r"\bdotnet package add (Controlvar\.SDK)@" + VERSION),
+    ),
+    (
+        "nuget package add, version",
+        re.compile(r"\bdotnet package add (Controlvar\.SDK) --version " + VERSION),
+    ),
 )
+#: The NuGet forms that no page quotes yet: D's install line is the first.
+#: Each is held to a sample below instead, and the scan fails once a page
+#: quotes it, so that this set is emptied then.
+NOT_ON_A_PAGE_YET = {
+    "nuget add",
+    "nuget reference",
+    "nuget package add, at",
+    "nuget package add, version",
+}
+
+#: The .NET project whose ``<Version>`` and ``<PackageId>`` the package has.
+DOTNET_PROJECT = SDK_DIR / "dotnet" / "src" / "Controlvar" / "Controlvar.csproj"
+
+
+def dotnet_version() -> Tuple[str, str]:
+    """(package id, version) from the .NET project's properties."""
+    root = ET.parse(DOTNET_PROJECT).getroot()
+    properties = {
+        child.tag: (child.text or "").strip()
+        for group in root.iter("PropertyGroup")
+        for child in group
+    }
+    return properties["PackageId"], properties["Version"]
+
+
+POM_NAMESPACE = {"m": "http://maven.apache.org/POM/4.0.0"}
+
+
+def maven_versions() -> Dict[str, str]:
+    """groupId:artifactId -> version for the Java SDK's parent and modules,
+    which are released together at the parent's version."""
+    java = SDK_DIR / "java"
+    parent = ET.parse(java / "pom.xml").getroot()
+    version = parent.findtext("m:version", namespaces=POM_NAMESPACE)
+    artifacts = [parent.findtext("m:artifactId", namespaces=POM_NAMESPACE)]
+    for module in parent.findall("m:modules/m:module", POM_NAMESPACE):
+        child = ET.parse(java / module.text.strip() / "pom.xml").getroot()
+        artifacts.append(child.findtext("m:artifactId", namespaces=POM_NAMESPACE))
+    return {f"{MAVEN_GROUP}:{artifact}": version for artifact in artifacts}
 
 
 def manifest_versions() -> Dict[str, str]:
@@ -113,6 +209,9 @@ def manifest_versions() -> Dict[str, str]:
             (SDK_DIR / name / "pyproject.toml").read_text(encoding="utf-8")
         )
         versions[data["project"]["name"]] = data["project"]["version"]
+    versions.update(maven_versions())
+    package_id, version = dotnet_version()
+    versions[package_id] = version
     return versions
 
 
@@ -145,6 +244,8 @@ def quotes(rel: str, text: str) -> List[Tuple[str, str, Tuple[int, int]]]:
             package = match.group(1)
             if form == "tarball":
                 package = f"@controlvar/{package}"
+            if form == "maven dependency":
+                package = f"{MAVEN_GROUP}:{package}"
             if form == "quoted" and package == "controlvar" and rel not in PYTHON_PAGES:
                 continue
             found.append((package, match.group(2), match.span(2)))
@@ -222,12 +323,35 @@ def rel(path: Path) -> str:
     return path.relative_to(REPO_ROOT).as_posix()
 
 
+#: The starter's javadoc shows the Maven dependency, and javadoc.io publishes
+#: it with each version.
+STARTER_JAVADOC = (
+    SDK_DIR
+    / "java"
+    / "spring-boot-starter"
+    / "src"
+    / "main"
+    / "java"
+    / "com"
+    / "controlvar"
+    / "sdk"
+    / "spring"
+    / "ExperimentationAutoConfiguration.java"
+)
+#: The pages that quote the Java SDK in its Maven forms.
+JAVA_PAGES = [
+    DOCS / "sdk" / "java.md",
+    DOCS / "sdk-guide.md",
+    SDK_DIR / "java" / "README.md",
+    STARTER_JAVADOC,
+]
 #: Every page whose quotes are held to the manifests.
 PAGES = (
     sorted((DOCS / "sdk").glob("*.md"))
     + [DOCS / "sdk-guide.md", DOCS / "getting-started" / "faq.md"]
     + [SDK_DIR / directory / "README.md" for directory in PUBLISHED]
     + sorted(JOURNEYS.glob("sdk-*.yaml"))
+    + [SDK_DIR / "java" / "README.md", STARTER_JAVADOC]
 )
 #: The pages that quote nothing but the two published packages: every X.Y.Z on
 #: them is one of FORMS and its manifest's version exactly.
@@ -271,14 +395,53 @@ def test_the_scan_finds_the_quotes_it_exists_for():
             "tests/acceptance/docs/journeys/sdk-javascript.yaml",
             "@controlvar/js-sdk",
         ),
+        ("docs/sdk/java.md", "com.controlvar:controlvar-sdk"),
+        ("docs/sdk/java.md", "com.controlvar:controlvar-spring-boot-starter"),
+        ("docs/sdk-guide.md", "com.controlvar:controlvar-sdk"),
+        ("sdk/java/README.md", "com.controlvar:controlvar-sdk"),
+        ("sdk/java/README.md", "com.controlvar:controlvar-spring-boot-starter"),
+        (rel(STARTER_JAVADOC), "com.controlvar:controlvar-spring-boot-starter"),
+        ("docs/sdk/dotnet.md", "Controlvar.SDK"),
     } <= found
     forms = {
         form
         for form, pattern in FORMS
-        for page in ABOUT_PUBLISHED
+        for page in ABOUT_PUBLISHED + JAVA_PAGES + [DOCS / "sdk" / "dotnet.md"]
         if pattern.search(fold(page.read_text("utf-8")))
     }
-    assert forms == {form for form, _ in FORMS}, "a form matches nothing it exists for"
+    assert forms == {form for form, _ in FORMS} - NOT_ON_A_PAGE_YET, (
+        "a form matches nothing it exists for, or a page now quotes one in "
+        "NOT_ON_A_PAGE_YET (take it out of that set)"
+    )
+    on_any_page = {
+        form
+        for form, pattern in FORMS
+        for page in PAGES
+        if pattern.search(fold(page.read_text("utf-8")))
+    }
+    assert not NOT_ON_A_PAGE_YET & on_any_page, NOT_ON_A_PAGE_YET & on_any_page
+
+
+@pytest.mark.parametrize(
+    "sample",
+    [
+        "`Controlvar.SDK` (v{v}) provides feature flag evaluation",
+        "dotnet add package Controlvar.SDK --version {v}",
+        '<PackageReference Include="Controlvar.SDK" Version="{v}" />',
+        # The .NET 10 SDK's noun-first command, in both of its spellings.
+        "dotnet package add Controlvar.SDK@{v}",
+        "dotnet package add Controlvar.SDK --version {v}",
+    ],
+)
+def test_each_nuget_form_is_read_and_compared(sample):
+    """R1b: a NuGet quote left at another version than the project's is
+    refused, in each form."""
+    versions = manifest_versions()
+    package_id, version = dotnet_version()
+    assert mismatches("docs/x.md", sample.format(v="9.9.9"), versions) == [
+        f"{package_id} is quoted as 9.9.9; the manifest says {version}"
+    ]
+    assert mismatches("docs/x.md", sample.format(v=version), versions) == []
 
 
 @pytest.mark.parametrize("page", PAGES, ids=rel)
@@ -413,6 +576,113 @@ def test_faq_prose_with_an_old_version_is_refused():
     assert strict_problems(rel(page), planted, bumped)
 
 
+@pytest.mark.parametrize("part", ["patch", "minor"])
+@pytest.mark.parametrize("page", JAVA_PAGES, ids=rel)
+def test_a_java_page_left_behind_at_a_version_bump_is_refused(page, part):
+    """The POMs move to the next release and a page keeps the old version in
+    one of its Maven forms: refused. The Java README and the starter's
+    javadoc quoted 1.0.0 while nothing read those forms."""
+    versions = manifest_versions()
+    old = versions[f"{MAVEN_GROUP}:controlvar-sdk"]
+    major, minor, patch = (int(p) for p in old.split("."))
+    new = (
+        f"{major}.{minor}.{patch + 1}" if part == "patch" else f"{major}.{minor + 1}.0"
+    )
+    bumped = {
+        name: new if name.startswith(f"{MAVEN_GROUP}:") else version
+        for name, version in versions.items()
+    }
+    text = page.read_text(encoding="utf-8")
+    assert not mismatches(rel(page), text, versions), rel(page)
+    wrong = mismatches(rel(page), text, bumped)
+    assert wrong, f"{rel(page)} at the old version passed"
+    assert all(
+        line.endswith(f"is quoted as {old}; the manifest says {new}") for line in wrong
+    ), wrong
+
+
+@pytest.mark.parametrize(
+    "sample, package",
+    [
+        ("`com.controlvar:controlvar-sdk` (v{v}) is a client", "controlvar-sdk"),
+        ("`implementation 'com.controlvar:controlvar-sdk:{v}'`", "controlvar-sdk"),
+        (
+            'implementation("com.controlvar:controlvar-spring-boot-starter:{v}")',
+            "controlvar-spring-boot-starter",
+        ),
+        (
+            "<groupId>com.controlvar</groupId>\n"
+            "    <artifactId>controlvar-sdk</artifactId>          <!-- core client -->\n"
+            "    <version>{v}</version>",
+            "controlvar-sdk",
+        ),
+        (
+            " *     <artifactId>controlvar-spring-boot-starter</artifactId>\n"
+            " *     <version>{v}</version>",
+            "controlvar-spring-boot-starter",
+        ),
+    ],
+)
+def test_each_maven_form_is_read_and_compared(sample, package):
+    versions = manifest_versions()
+    assert mismatches("docs/x.md", sample.format(v="9.9.9"), versions) == [
+        f"{MAVEN_GROUP}:{package} is quoted as 9.9.9; the manifest says "
+        f"{versions[f'{MAVEN_GROUP}:{package}']}"
+    ]
+
+
+#: Every file in which the widened version grep of the first-publish plan found
+#: a Java quote of 1.0.0 (13 lines at main 9be67b23): the three POMs, the
+#: starter's javadoc, the Java README, the Java page, the SDK guide and a test
+#: sample. 1.0.0 was never released; the first release is 0.1.0.
+NEVER_RELEASED_JAVA_SITES = (
+    "sdk/java/pom.xml",
+    "sdk/java/core/pom.xml",
+    "sdk/java/spring-boot-starter/pom.xml",
+    rel(STARTER_JAVADOC),
+    "sdk/java/README.md",
+    "docs/sdk/java.md",
+    "docs/sdk-guide.md",
+    "backend/tests/unit/docs/test_deferred_sdk_pages.py",
+)
+#: The Java alternatives of that grep, as it ran in bash. The samples below
+#: are built from OLD so that this file is not itself a hit for the grep.
+NEVER_RELEASED_JAVA = re.compile(
+    r"com\.controlvar:controlvar-sdk:1\.0\.0"
+    r"|`com\.controlvar:controlvar-sdk` \(v1"
+    r"|<version>1\.0\.0</version>"
+)
+OLD = ".".join(("1", "0", "0"))
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        f"    <version>{OLD}</version>",
+        f" *     <version>{OLD}</version>",
+        f"`implementation 'com.controlvar:controlvar-sdk:{OLD}'`",
+        f"`com.controlvar:controlvar-sdk` (v{OLD}) is a Java 11+ client",
+    ],
+)
+def test_the_never_released_java_pattern_finds_each_old_site(line):
+    assert NEVER_RELEASED_JAVA.search(line), line
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("site", NEVER_RELEASED_JAVA_SITES)
+def test_no_java_site_names_the_never_released_1_0_0(site):
+    """The Java SDK's POMs said 1.0.0 before its first release, at 0.1.0, and
+    the pages and samples followed them. Reads files only."""
+    found = [
+        f"{site}:{number}: {line.strip()}"
+        for number, line in enumerate(
+            (REPO_ROOT / site).read_text(encoding="utf-8").splitlines(), start=1
+        )
+        if NEVER_RELEASED_JAVA.search(line)
+    ]
+    assert not found, found
+
+
 # ---------------------------------------------------------------------------
 # The READMEs packages carry to their registries
 # ---------------------------------------------------------------------------
@@ -427,9 +697,33 @@ LINK_TARGETS = (
 ABSOLUTE = re.compile(r"(?:https?|mailto):", re.I)
 
 
+def csproj_readme(project: Path) -> Optional[Path]:
+    """The README a .NET project packs as its ``PackageReadmeFile``: the
+    packed item (``Pack="true"``) with that file name, or None if it names
+    none. A name with no packed item is an error: ``dotnet pack`` refuses it."""
+    root = ET.parse(project).getroot()
+    names = [
+        (element.text or "").strip()
+        for element in root.iter("PackageReadmeFile")
+        if (element.text or "").strip()
+    ]
+    if not names:
+        return None
+    assert len(names) == 1, f"{rel(project)} names {names} as its README"
+    packed = [
+        item.get("Include", "").replace("\\", "/")
+        for item in root.iter()
+        if item.get("Pack", "").lower() == "true"
+        and item.get("Include", "").replace("\\", "/").rsplit("/", 1)[-1] == names[0]
+    ]
+    assert len(packed) == 1, f"{rel(project)} packs {packed} as {names[0]}"
+    return (project.parent / packed[0]).resolve()
+
+
 def packaged_readmes() -> List[Path]:
-    """Every README a package under sdk/ ships: npm always ships README.md, and
-    a pyproject.toml names its own."""
+    """Every README a package under sdk/ ships: npm always ships README.md, a
+    pyproject.toml names its own, and so does a .NET project
+    (``PackageReadmeFile``)."""
     found = []
     for manifest in sorted(SDK_DIR.glob("*/package.json")):
         if (manifest.parent / "README.md").is_file():
@@ -440,6 +734,10 @@ def packaged_readmes() -> List[Path]:
         )
         if isinstance(readme, str):
             found.append(manifest.parent / readme)
+    for project in sorted(SDK_DIR.glob("*/src/*/*.csproj")):
+        readme = csproj_readme(project)
+        if readme is not None:
+            found.append(readme)
     return found
 
 
@@ -463,6 +761,8 @@ def test_every_packaged_readme_links_only_to_absolute_urls():
     assert {rel(SDK_DIR / d / "README.md") for d in PUBLISHED} <= {
         rel(r) for r in readmes
     }
+    # The .NET project's PackageReadmeFile is read too (C3).
+    assert "sdk/dotnet/README.md" in {rel(r) for r in readmes}
     wrong = {rel(r): relative_links(r.read_text("utf-8")) for r in readmes}
     wrong = {page: links for page, links in wrong.items() if links}
     assert not wrong, (

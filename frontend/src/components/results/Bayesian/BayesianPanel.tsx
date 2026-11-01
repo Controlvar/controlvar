@@ -15,7 +15,8 @@ interface BayesianPanelProps {
   srmWarning?: boolean;
   /**
    * What the analysis compares, when that is not the primary metric's own
-   * value: for a revenue primary, the share of users who sent its event.
+   * value: for a primary analysed as a mean (revenue, count, duration or
+   * custom), the share of users who sent its event.
    * Shown under the heading.
    */
   note?: React.ReactNode;

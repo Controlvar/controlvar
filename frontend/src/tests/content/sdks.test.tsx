@@ -17,6 +17,7 @@ import React from 'react';
 import { render } from '@testing-library/react';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { SDK_GUIDES, SDKS } from '@/content/sdks';
+import { docsUrl } from '@/services/docs';
 import HomePage from '@/pages/index';
 import DocsIndex from '@/pages/docs/index';
 import { isMarketingSite } from '@/utils/site-mode';
@@ -125,6 +126,27 @@ describe('content/sdks.ts', () => {
 
   it("links each SDK's guide through a map with exactly its keys", () => {
     expect(Object.keys(SDK_GUIDES).sort()).toEqual(Object.keys(SDKS).sort());
+  });
+
+  /**
+   * Which guide each SDK links (#1459, Q round 1 NIT 2): its own. A guide is
+   * `docs/sdk/<directory>.md` but for these, whose guide has another name.
+   * The docs-links test checks only that a linked page exists, so `js`
+   * linking sdk/python passed it. And the guide's title names the SDK.
+   */
+  const GUIDE_PAGE: Readonly<Record<string, string>> = {
+    js: 'sdk/javascript',
+    'openfeature-python': 'sdk/openfeature',
+  };
+
+  it.each(Object.keys(SDKS))("links %s to its own guide, titled with the SDK's name", (key) => {
+    const page = GUIDE_PAGE[key] ?? `sdk/${key}`;
+    expect({ key, guide: SDK_GUIDES[key] }).toEqual({ key, guide: docsUrl(page) });
+    const file = path.join(REPO_ROOT, 'docs', `${page}.md`);
+    expect(fs.existsSync(file)).toBe(true);
+    const title = fs.readFileSync(file, 'utf8').split(/\r?\n/)[0];
+    const name = SDKS[key].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    expect(title).toMatch(new RegExp(`^# .*(?<![A-Za-z])${name}(?![A-Za-z])`));
   });
 });
 

@@ -8,9 +8,20 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple, Union
 from uuid import UUID
 
+from pydantic_core import PydanticCustomError
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from backend.app.core.flag_values import (
+    BOOLEAN,
+    VALUE_FIELDS,
+    VALUE_TYPE_READ_ONLY,
+    flag_value_type,
+    stored_values,
+    values_equal_refusal,
+    write_errors,
+)
 from backend.app.core.pattern_match import PatternUnevaluable, report_unevaluable
 from backend.app.core.rules_engine import (
     SegmentMembershipUnavailable,
@@ -23,6 +34,7 @@ from backend.app.core.targeting_adapter import (
     segment_ids_in,
 )
 from backend.app.models.feature_flag import (
+    FLAG_VALUES_CHECK,
     ArchivedFlagError,
     FeatureFlag,
     FeatureFlagStatus,
@@ -72,6 +84,69 @@ class FlagStatusReadOnly(Exception):
     the silent no-op #94 reported.  Not a ``ValueError``: the routes answer a
     ``ValueError`` with its text, and this one has a fixed 422.
     """
+
+
+class FlagValuesRefused(Exception):
+    """An update's ``value_type`` or values do not fit the stored flag (#1497).
+
+    ``errors`` holds ``(field, PydanticCustomError)`` pairs; the route answers
+    them as a 422 at ``["body", <field>]``, the shape of every request
+    validation error.  Raised before anything is written.  Not a
+    ``ValueError``, for the reason :class:`FlagStatusReadOnly` gives.
+    """
+
+    def __init__(self, errors: List[Tuple[str, PydanticCustomError]]) -> None:
+        super().__init__("flag values refused")
+        self.errors = errors
+
+
+def _check_sent_values(flag_data: FeatureFlagUpdate, flag: FeatureFlag) -> None:
+    """Raise :class:`FlagValuesRefused` when an update's values do not fit.
+
+    ``value_type`` is read-only: sent, it must equal the stored type, compared
+    exactly. Each sent value is checked against the stored type, and the pair
+    as it will be stored (each value as sent, otherwise as stored) must differ
+    (EMF-5). The update route reads *flag* with ``SELECT ... FOR UPDATE`` when
+    a value is sent, so the stored pair is the committed one and a concurrent
+    update of the same flag waits for this one. A check violation that still
+    reaches the commit -- a writer that does not take that lock -- is answered
+    as the same 422 by :meth:`FeatureFlagService.update_feature_flag`.
+    A boolean flag accepts ``on_value: true`` and ``off_value: false`` -- its
+    GET body sent back -- and stores neither.
+    """
+    fields_set = flag_data.model_fields_set
+    stored_type = flag_value_type(flag)
+    if "value_type" in fields_set and flag_data.value_type != stored_type:
+        raise FlagValuesRefused(
+            [("value_type", PydanticCustomError("read_only", VALUE_TYPE_READ_ONLY))]
+        )
+    sent = {
+        field: getattr(flag_data, field)
+        for field in VALUE_FIELDS
+        if field in fields_set
+    }
+    if not sent:
+        return
+    errors = write_errors(
+        stored_type,
+        sent,
+        {"on_value": flag.on_value, "off_value": flag.off_value},
+    )
+    if errors:
+        raise FlagValuesRefused(errors)
+
+
+#: PostgreSQL's SQLSTATE for a CHECK constraint violation.
+_CHECK_VIOLATION = "23514"
+
+
+def _violates_flag_values_check(exc: IntegrityError) -> bool:
+    """Whether *exc* is ``check_flag_values`` refusing a row, by SQLSTATE and
+    constraint name, never by parsing the message."""
+    orig = getattr(exc, "orig", None)
+    code = getattr(orig, "pgcode", None) or getattr(orig, "sqlstate", None)
+    constraint = getattr(getattr(orig, "diag", None), "constraint_name", None)
+    return code == _CHECK_VIOLATION and constraint == FLAG_VALUES_CHECK
 
 
 def _status_value(status: Any) -> str:
@@ -215,6 +290,9 @@ class FeatureFlagService:
         row would rewrite the primary key, the owner or a timestamp.  A sent
         ``status`` must equal the status ``is_active`` gives the new flag.
 
+        The values were checked by ``FeatureFlagCreate``; a boolean flag stores
+        neither (its ``true``/``false``, when sent, are not written).
+
         Raises:
             FlagStatusReadOnly: a sent ``status`` differs from that status.
         """
@@ -226,6 +304,9 @@ class FeatureFlagService:
         _check_sent_status(flag_data, status)
 
         flag_dict = flag_data.model_dump(exclude=READ_ONLY_FIELDS | {"is_active"})
+        flag_dict["on_value"], flag_dict["off_value"] = stored_values(
+            flag_dict["value_type"], flag_dict["on_value"], flag_dict["off_value"]
+        )
         try:
             flag = FeatureFlag(**flag_dict, status=status, owner_id=owner_id)
 
@@ -254,8 +335,13 @@ class FeatureFlagService:
         ARCHIVED, so its GET body can be sent back unchanged; sent true, it is
         refused before anything is written.
 
+        ``value_type`` is never written: sent, it must equal the stored type.
+        The values are checked against the stored flag
+        (:func:`_check_sent_values`), and a boolean flag's are not written.
+
         Raises:
             FlagStatusReadOnly: a sent ``status`` differs from the stored one.
+            FlagValuesRefused: ``value_type`` or a value does not fit the flag.
             ArchivedFlagError: ``is_active: true`` on an archived flag.
         """
         # Handle if a FeatureFlag object was passed instead of an ID
@@ -269,12 +355,18 @@ class FeatureFlagService:
 
         stored = FeatureFlagStatus(_status_value(flag.status))
         _check_sent_status(flag_data, stored)
+        _check_sent_values(flag_data, flag)
 
         update_data = flag_data.model_dump(exclude_unset=True, exclude=READ_ONLY_FIELDS)
+        update_data.pop("value_type", None)
+        if flag_value_type(flag) == BOOLEAN:
+            for field in VALUE_FIELDS:
+                update_data.pop(field, None)
         if "is_active" in update_data:
             verb = FlagVerb.ON if update_data.pop("is_active") else FlagVerb.OFF
             update_data["status"] = transition(stored, verb)
 
+        flag_id = flag.id
         try:
             for field, value in update_data.items():
                 setattr(flag, field, value)
@@ -284,6 +376,25 @@ class FeatureFlagService:
             self.db.refresh(flag)
 
             return flag
+        except IntegrityError as e:
+            self.db.rollback()
+            if _violates_flag_values_check(e):
+                # Another writer changed the other value after the check
+                # (only one that does not lock the row can). The database
+                # refused an equal pair; nothing was written. Answered as the
+                # check would have answered it, and logged without the
+                # exception's text, which carries both values.
+                logger.warning(
+                    "Feature flag %s: update refused by %s at commit; answered "
+                    "422 values_equal",
+                    flag_id,
+                    FLAG_VALUES_CHECK,
+                )
+                raise FlagValuesRefused(
+                    [values_equal_refusal(flag_data.model_fields_set)]
+                ) from None
+            logger.error(f"Error updating feature flag: {e!s}")
+            raise
         except Exception as e:
             logger.error(f"Error updating feature flag: {e!s}")
             self.db.rollback()

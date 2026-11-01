@@ -59,6 +59,16 @@
       "crop": null,
       "pad": null,
       "psnr_db": 41.68
+    },
+    {
+      "slug": "09-design-in-depth",
+      "mp4_sha256": "545d69341c2eb0adc5780883c2f0f84f14b8dd71fb38f41314254a8a038132c2",
+      "poster_sha256": "36d4077d171cea9ff82d0dea4c84f2948513cf71daf95b0bc2d36f078f492a88",
+      "t": 51,
+      "first_cue": 3.033,
+      "crop": [1920, 940, 0, 0],
+      "pad": "#f3fafe",
+      "psnr_db": 40.15
     }
   ]
 }

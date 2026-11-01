@@ -174,8 +174,8 @@ The results engine computes:
 ### Statistical Methods
 
 **Conversion metrics (Fisher's exact test):**
-- Every metric in the results but a revenue metric is analysed as a conversion; a revenue metric
-  is its mean per assigned user, compared with Welch's t-test
+- Only a conversion metric is analysed as a proportion; a revenue, count, duration or custom
+  metric is its mean per assigned user, compared with Welch's t-test
 - For each treatment against the control: a 2×2 table of users who converted and users who did
   not, from the users assigned to each variant
 - Two-sided Fisher's exact test (`scipy.stats.fisher_exact`); the response's
@@ -183,7 +183,8 @@ The results engine computes:
 - Effect size: Cohen's h
 
 **Mean metrics (Welch's t-test):**
-- Used by warehouse analysis (beta, the `warehouse` module) for a metric that is a mean
+- Used by the results for a revenue, count, duration or custom metric (its mean per assigned
+  user), and by warehouse analysis (beta, the `warehouse` module) for a metric that is a mean
 - Welch's t-test for unequal variances; `statistical_test_used` is `welch_t_test`
 - Effect size: Cohen's d
 

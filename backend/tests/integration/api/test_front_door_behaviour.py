@@ -3,7 +3,8 @@
 * any signed-in user, a VIEWER included, can create an API key for themselves,
   and that key assigns users and tracks their events;
 * an experiment with one variant cannot be started;
-* every flag evaluates with ``"config": null``.
+* every flag evaluates with ``"config": null``, a string flag included (its
+  value is in ``value``).
 
 The pages that say so are tied to these tests by their registries under
 ``docs/_claims/``.
@@ -182,3 +183,28 @@ def test_every_flag_evaluates_with_a_null_config(client, db_session):
     assert resp.status_code == 200, resp.text
     assert resp.json()["enabled"] is True
     assert resp.json()["config"] is None
+
+    # A string flag too (#1497): its value travels in ``value``, never in
+    # ``config``.
+    valued = client.post(
+        "/api/v1/feature-flags/",
+        json={
+            "key": f"front-value-{suffix}",
+            "name": "Front value",
+            "rollout_percentage": 100,
+            "is_active": True,
+            "value_type": "string",
+            "on_value": "Complete purchase",
+            "off_value": "Buy now",
+        },
+        headers=_auth(developer),
+    )
+    assert valued.status_code == 201, valued.text
+    resp = client.get(
+        f"/api/v1/feature-flags/evaluate/front-value-{suffix}",
+        params={"user_id": "anyone"},
+        headers=key,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["config"] is None
+    assert resp.json()["value"] == "Complete purchase"
