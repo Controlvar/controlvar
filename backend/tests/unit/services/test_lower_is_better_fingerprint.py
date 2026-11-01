@@ -219,6 +219,12 @@ LOWER_IS_BETTER_FINGERPRINTS: Dict[str, Dict[str, str]] = {
         "binomial_metric_result": "427251bbac41bc5f639179de2e55944d85bf2a7d831c71c538aecb2915208ab3",
         "mean_metric_result": "11b6c73a38a716f809bfeb2ef9735045459973fbaa457087c4409074456952df",
     },
+    # 1.8.0 (#1496): the binomial treatments carry the difference fields; the
+    # mean estimator is unchanged: 1.7.0's.
+    "1.8.0": {
+        "binomial_metric_result": "f32e707b71ccdf962c066949eb2ce4524fe6a22fbd5bc60fcce216a52e27a818",
+        "mean_metric_result": "11b6c73a38a716f809bfeb2ef9735045459973fbaa457087c4409074456952df",
+    },
 }
 
 

@@ -66,6 +66,9 @@ from backend.tests.unit.services import (
 from backend.tests.unit.services import (
     test_sufficient_stats_fingerprint as sufficient_stats,
 )
+from backend.tests.unit.services import (
+    test_value_metrics_per_user as value_metrics,
+)
 
 pytestmark = [pytest.mark.unit]
 
@@ -78,9 +81,9 @@ PROPORTION_TYPES_UNDER_TEST = tuple(
     t.value for t in MetricType if t.value not in MEAN_TYPES_UNDER_TEST
 )
 
-#: The last engine whose results carry none of the #1496 fields.  Set to the
-#: version before the one that adds them, in the commit that bumps it.
-BEFORE_DIFFERENCE_FIELDS = "1.5.0"
+#: The last engine whose results carry none of the #1496 fields (#439's);
+#: 1.8.0 adds them.
+BEFORE_DIFFERENCE_FIELDS = "1.7.0"
 
 #: The fields #1496 adds to a mean treatment, which already carried
 #: ``absolute_difference`` and its interval (#439).
@@ -784,9 +787,26 @@ def test_without_the_new_fields_the_revenue_results_are_the_ones_before_them(
     )
 
 
-def test_the_engine_before_the_new_fields_has_shipped_and_this_one_is_later():
-    """The fields change the results' output, so they cannot ship under a
-    version that had shipped without them."""
+def test_without_the_new_fields_the_value_metric_results_are_the_ones_before_them(
+    monkeypatch,
+):
+    """R6 for #439's mean types: a count, duration or custom metric's
+    difference and its interval do not move either."""
+    output = value_metrics._value_metrics_output(monkeypatch)
+    assert {m["analysis"] for m in output["metrics"]} == {"mean"}
+    for metric in output["metrics"]:
+        stripped = _without(metric, NEW_MEAN_FIELDS)
+        metric.clear()
+        metric.update(stripped)
+    assert (
+        routing._fingerprint(output)
+        == value_metrics.VALUE_RESULTS_FINGERPRINTS[BEFORE_DIFFERENCE_FIELDS]
+    )
+
+
+def test_the_engine_before_the_new_fields_is_frozen_and_this_one_is_later():
+    """The fields change the results' output, so they cannot be pinned under
+    a version frozen on main without them."""
     assert BEFORE_DIFFERENCE_FIELDS in sufficient_stats.RELEASED_ENGINE_VERSIONS
     assert sufficient_stats._key(ENGINE_VERSION) > sufficient_stats._key(
         BEFORE_DIFFERENCE_FIELDS

@@ -469,6 +469,10 @@ VALUE_SHARE_UNTIL = "1.6.0"
 #: version's entry here is frozen too.
 VALUE_RESULTS_FINGERPRINTS: Dict[str, str] = {
     "1.7.0": "989e0ff6d76177e6e675257634f16a18fb9b4b43a9e3dce919cdadff33be11e2",
+    # 1.8.0 (#1496): each treatment carries the relative change's interval and
+    # the impact; without them the output is 1.7.0's
+    # (test_difference_intervals.py).
+    "1.8.0": "01ce8332a03c5cf0032f72277011ac993875cd40c4a6b3c8d127c74e24da2e96",
 }
 
 
@@ -498,8 +502,7 @@ def test_the_value_metric_analysis_is_not_pinned_under_an_engine_that_shared_the
     """#439 changes the numbers of every count, duration and custom metric, so
     it runs under an engine version after ``VALUE_SHARE_UNTIL``, the last one
     that analysed them as a share of users.  ``VALUE_SHARE_UNTIL`` is frozen:
-    an engine that has shipped (or, under the rule, merged) cannot take a new
-    analysis under its number."""
+    an engine frozen on main cannot take a new analysis under its number."""
     released = sufficient_stats.RELEASED_ENGINE_VERSIONS
     key = sufficient_stats._key
     assert VALUE_SHARE_UNTIL in released, (
@@ -520,7 +523,21 @@ def test_the_value_metric_analysis_is_not_pinned_under_an_engine_that_shared_the
 
 def test_conversion_and_revenue_numbers_are_the_engine_befores(monkeypatch):
     """#439 moves count, duration and custom only: every other pinned output
-    under the running engine is the one ``VALUE_SHARE_UNTIL`` pinned."""
+    under the engine that introduced it is the one ``VALUE_SHARE_UNTIL``
+    pinned.
+
+    Anchored to #439's own version, the first in
+    ``VALUE_RESULTS_FINGERPRINTS``, not to the running engine, so a later
+    engine-changing PR (#1496 at 1.8.0) does not break it; and
+    ``VALUE_SHARE_UNTIL`` must be the frozen version immediately before that
+    one."""
+    released = sufficient_stats.RELEASED_ENGINE_VERSIONS
+    value_first = min(VALUE_RESULTS_FINGERPRINTS, key=sufficient_stats._key)
+    assert value_first in released
+    assert released[released.index(value_first) - 1] == VALUE_SHARE_UNTIL, (
+        f"VALUE_SHARE_UNTIL {VALUE_SHARE_UNTIL} is not the frozen version "
+        f"before {value_first}, the first with count, duration and custom pins"
+    )
     tables = {
         "characterisation": characterisation.CHARACTERISATIONS,
         "engine": engine_fingerprint.ENGINE_FINGERPRINTS,
@@ -531,4 +548,4 @@ def test_conversion_and_revenue_numbers_are_the_engine_befores(monkeypatch):
     }
     for name, table in tables.items():
         if VALUE_SHARE_UNTIL in table:
-            assert table[ENGINE_VERSION] == table[VALUE_SHARE_UNTIL], name
+            assert table[value_first] == table[VALUE_SHARE_UNTIL], name
