@@ -20,10 +20,11 @@ text = "OpenFeature provider for Controlvar."
 by = ["test:sdk/openfeature-python/tests/test_provider.py::TestOpenFeatureIntegration::test_provider_can_be_registered_with_api_set_provider"]
 
 [[unit]]
-text = "Flags are evaluated by the server through the controlvar Python SDK (GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targeting_key>&context=<attributes>) and cached per user + flag; nothing is bucketed locally."
+text = "Flags are evaluated by the server through the controlvar Python SDK (GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targeting_key>&context=<attributes>) and cached per user + flag; nothing is bucketed locally unless you pass a client= built with evaluation=\"local\"."
 by = [
     "test:sdk/openfeature-python/tests/test_provider.py::TestRequestShape::test_evaluate_request_url_headers_and_context",
     "test:sdk/openfeature-python/tests/test_provider.py::TestCache::test_cache_hit_makes_no_additional_requests",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestLocalClient::test_each_call_is_answered_from_the_ruleset_with_its_attributes_and_never_cached",
 ]
 
 [[unit]]
@@ -84,11 +85,11 @@ text = "OpenFeature call | Reads | Value"
 by = ["exempt:label"]
 
 [[unit]]
-text = "get_boolean_ | every flag | enabled"
+text = "get_boolean_ | a boolean flag | enabled"
 by = [
     "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_enabled_flag_returns_true",
     "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_disabled_flag_returns_false_even_with_true_default",
-    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_a_value_flag_answers_enabled",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_a_boolean_flag_or_an_answer_with_no_value_type_answers_enabled",
 ]
 
 [[unit]]
@@ -127,10 +128,11 @@ by = [
 ]
 
 [[unit]]
-text = "Nothing is coerced: a call of another type gets your default."
+text = "Nothing is coerced: a call of another type gets your default, a boolean call on a string, number or json flag included."
 by = [
     "test:sdk/openfeature-python/tests/test_provider.py::TestResolutionTable::test_another_type_answers_the_default_with_type_mismatch",
     "test:sdk/openfeature-python/tests/test_provider.py::TestResolutionTable::test_a_boolean_flag_answers_the_default_with_type_mismatch",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_a_value_flag_answers_the_default_with_type_mismatch",
 ]
 
 [[unit]]
@@ -168,7 +170,7 @@ by = [
 ]
 
 [[unit]]
-text = "no value (a server or an SDK without flag values) | your default | ERROR, GENERAL | not set"
+text = "no value (a string, integer, float or object call; a server or an SDK without flag values) | your default | ERROR, GENERAL | not set"
 by = [
     "test:sdk/openfeature-python/tests/test_provider.py::TestResolutionTable::test_an_answer_with_no_value_answers_the_default_with_general",
     "test:sdk/openfeature-python/tests/test_provider.py::TestAgainstA020Sdk::test_a_typed_call_answers_the_default_and_never_raises",
@@ -179,10 +181,19 @@ text = "a value that is not of the flag's type | your default | ERROR, PARSE_ERR
 by = ["test:sdk/openfeature-python/tests/test_provider.py::TestResolutionTable::test_a_value_that_is_not_of_the_flags_type_answers_the_default_with_parse_error"]
 
 [[unit]]
-text = "That table is for string, integer, float and object calls."
+text = "That table is for every call type."
 by = [
     "test:sdk/openfeature-python/tests/test_provider.py::TestResolutionTable::test_the_on_or_off_value_with_the_servers_reason",
-    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_a_value_flag_answers_enabled",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_enabled_with_the_servers_reason",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_the_servers_error_reason_answers_the_default_with_general",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_a_cached_answer_is_cached_with_the_value_and_variant_it_had",
+]
+
+[[unit]]
+text = "A boolean call reads enabled, so an answer with no value_type (a server or an SDK without flag values, where every flag is boolean) answers it rather than your default."
+by = [
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_a_boolean_flag_or_an_answer_with_no_value_type_answers_enabled",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestAgainstA020Sdk::test_boolean_answers_enabled",
 ]
 
 [[unit]]
@@ -194,22 +205,6 @@ text = "An integer call on a number with a fractional part (2.5) answers TYPE_MI
 by = [
     "test:sdk/openfeature-python/tests/test_provider.py::TestIntegerAndFloat::test_an_integer_call_on_a_fractional_number_is_a_type_mismatch",
     "test:sdk/openfeature-python/tests/test_provider.py::TestIntegerAndFloat::test_a_bool_is_never_a_number",
-]
-
-[[unit]]
-text = "A boolean call answers enabled for every flag, a string, number or json flag included: TARGETING_MATCH when the flag is on for the user, DISABLED when it is not, CACHED from the SDK's cache."
-by = [
-    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_a_value_flag_answers_enabled",
-    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_enabled_flag_returns_true",
-    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_disabled_flag_returns_false_even_with_true_default",
-    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_second_evaluation_is_served_from_cache",
-]
-
-[[unit]]
-text = "Its variant is not set, because config is always null."
-by = [
-    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_no_variant_when_config_is_null",
-    "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_matching_context_enables_flag_with_reason",
 ]
 
 [[unit]]
@@ -235,7 +230,7 @@ text = "A datetime, at any depth, goes as an ISO 8601 string (a naive one is tak
 by = ["test:sdk/openfeature-python/tests/test_provider.py::TestContext::test_a_datetime_at_any_depth_is_sent_as_iso_8601"]
 
 [[unit]]
-text = "The SDK caches an answer per user + flag key, and the attributes are not part of that key: within cache_ttl a second call for the same targeting_key and flag gets the first answer (reason CACHED), whatever its attributes."
+text = "By default the SDK caches an answer per user + flag key, and the attributes are not part of that key: within cache_ttl a second call for the same targeting_key and flag gets the first answer (reason CACHED), whatever its attributes."
 by = ["test:sdk/openfeature-python/tests/test_provider.py::TestContext::test_the_cache_key_is_user_and_flag_not_the_attributes"]
 
 [[unit]]
@@ -247,10 +242,15 @@ by = [
 ]
 
 [[unit]]
-text = "Errors never raise and are never cached: 404 (an unknown flag key) → FLAG_NOT_FOUND; anything else (401, 422, 5xx, timeout, network) → GENERAL."
+text = "A client= built with evaluation=\"local\" answers each call it can from its ruleset, using that call's attributes, and such an answer is never CACHED."
+by = ["test:sdk/openfeature-python/tests/test_provider.py::TestLocalClient::test_each_call_is_answered_from_the_ruleset_with_its_attributes_and_never_cached"]
+
+[[unit]]
+text = "Errors never raise and are never cached: 404 (an unknown flag key) → FLAG_NOT_FOUND; anything else (401, 422, 5xx, a 2xx whose body is not an evaluation, timeout, network) → GENERAL."
 by = [
     "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_not_found_returns_default_with_flag_not_found",
     "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_http_error_returns_default_with_general",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_a_2xx_body_that_is_not_an_evaluation_answers_the_default_with_general",
     "test:sdk/openfeature-python/tests/test_provider.py::TestResolveBooleanDetails::test_network_error_returns_default_with_general",
     "test:sdk/openfeature-python/tests/test_provider.py::TestCache::test_failed_evaluation_is_not_cached",
     "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_unknown_key_returns_404",

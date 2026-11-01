@@ -43,6 +43,7 @@ from openfeature.provider import TrackingEventDetails
 from openfeature.provider.no_op_provider import NoOpProvider
 
 from controlvar import ExperimentationClient, TransportError
+from controlvar.local import LocalEvaluation
 from controlvar.testing import FakeTransport
 from controlvar_openfeature import PROVIDER_NAME, ExperimentationProvider, ProviderConfig
 from controlvar_openfeature.evaluator import hash_user
@@ -64,11 +65,15 @@ def make_provider(**kwargs):
     return provider, transport
 
 
-def flag(transport: FakeTransport, key: str, enabled: bool = True, config=None, **fields) -> FakeTransport:
-    """A boolean flag's answer as a server from before flag values sends it, plus ``fields``."""
-    return transport.route(
-        "GET", f"{EVALUATE}/{key}", json={"key": key, "enabled": enabled, "config": config, **fields}
-    )
+def flag(
+    transport: FakeTransport, key: str, enabled: bool = True, config=None, reason: Any = "rollout", **fields
+) -> FakeTransport:
+    """A boolean flag's answer as a server from before flag values sends it (every release
+    since v0.2.0 sends a ``reason``), plus ``fields``. ``reason=None`` leaves it out."""
+    body = {"key": key, "enabled": enabled, "config": config, **fields}
+    if reason is not None:
+        body["reason"] = reason
+    return transport.route("GET", f"{EVALUATE}/{key}", json=body)
 
 
 def value_flag(
@@ -264,34 +269,94 @@ class TestResolveBooleanDetails:
         flag(transport, "feature-a", enabled=True)
         result = provider.resolve_boolean_details("feature-a", False, CTX)
         assert result.value is True
-        assert result.reason == Reason.TARGETING_MATCH
+        assert result.reason == Reason.SPLIT
         assert result.error_code is None
 
     def test_disabled_flag_returns_false_even_with_true_default(self):
         provider, transport = make_provider()
-        flag(transport, "feature-b", enabled=False)
+        flag(transport, "feature-b", enabled=False, reason="inactive")
         result = provider.resolve_boolean_details("feature-b", True, CTX)
         assert result.value is False
         assert result.reason == Reason.DISABLED
 
-    def test_variant_label_comes_from_config(self):
+    @pytest.mark.parametrize("config", [None, {"variant": "beta"}], ids=["null", "variant"])
+    def test_the_variant_is_on_or_off_whatever_the_config(self, config):
         provider, transport = make_provider()
-        flag(transport, "f", config={"variant": "beta"})
-        assert provider.resolve_boolean_details("f", False, CTX).variant == "beta"
+        flag(transport, "on", config=config)
+        flag(transport, "off", enabled=False, config=config)
+        assert provider.resolve_boolean_details("on", False, CTX).variant == "on"
+        assert provider.resolve_boolean_details("off", True, CTX).variant == "off"
 
-    def test_no_variant_when_config_is_null(self):
+    @pytest.mark.parametrize("value_type, value", [("string", "Buy now"), ("number", 10), ("json", {"a": 1})])
+    def test_a_value_flag_answers_the_default_with_type_mismatch(self, value_type, value):
         provider, transport = make_provider()
-        flag(transport, "f", config=None)
-        result = provider.resolve_boolean_details("f", False, CTX)
-        assert (result.value, result.variant) == (True, None)
+        value_flag(transport, "label", value_type, value)
+        result = provider.resolve_boolean_details("label", True, CTX)
+        assert (result.value, result.reason, result.error_code, result.variant) == (
+            True,
+            Reason.ERROR,
+            ErrorCode.TYPE_MISMATCH,
+            None,
+        )
+        served = {"string": "a string", "number": "a number", "json": "a JSON value"}[value_type]
+        assert result.error_message == f'Flag "label" serves {served}; it was resolved as a boolean'
 
-    @pytest.mark.parametrize("enabled, reason", [(True, Reason.TARGETING_MATCH), (False, Reason.DISABLED)])
-    def test_a_value_flag_answers_enabled(self, enabled, reason):
-        """Boolean resolution is ``enabled`` for every flag, a string, number or json flag included."""
+    @pytest.mark.parametrize(
+        "fields", [{"value": False, "value_type": "boolean"}, {}], ids=["boolean", "no-value-type"]
+    )
+    def test_a_boolean_flag_or_an_answer_with_no_value_type_answers_enabled(self, fields):
         provider, transport = make_provider()
-        value_flag(transport, "label", "string", "Complete purchase" if enabled else "Buy now", enabled=enabled)
-        result = provider.resolve_boolean_details("label", not enabled, CTX)
-        assert (result.value, result.reason, result.error_code) == (enabled, reason, None)
+        flag(transport, "f", enabled=False, **fields)
+        result = provider.resolve_boolean_details("f", True, CTX)
+        assert (result.value, result.reason, result.variant, result.error_code) == (False, Reason.SPLIT, "off", None)
+
+    @pytest.mark.parametrize(
+        "server_reason, enabled, reason, variant",
+        [
+            ("targeting_rule", True, Reason.TARGETING_MATCH, "on"),
+            ("targeting_rule", False, Reason.TARGETING_MATCH, "off"),
+            ("rollout", True, Reason.SPLIT, "on"),
+            ("rollout", False, Reason.SPLIT, "off"),
+            ("inactive", False, Reason.DISABLED, "off"),
+            (None, True, Reason.UNKNOWN, "on"),
+            ("a-newer-reason", False, Reason.UNKNOWN, "off"),
+        ],
+    )
+    def test_enabled_with_the_servers_reason(self, server_reason, enabled, reason, variant):
+        provider, transport = make_provider()
+        flag(transport, "f", enabled=enabled, reason=server_reason, value=enabled, value_type="boolean")
+        result = provider.resolve_boolean_details("f", not enabled, CTX)
+        assert (result.value, result.reason, result.variant, result.error_code) == (enabled, reason, variant, None)
+
+    def test_the_servers_error_reason_answers_the_default_with_general(self):
+        provider, transport = make_provider()
+        flag(transport, "f", enabled=False, reason="error", value=False, value_type="boolean")
+        result = provider.resolve_boolean_details("f", True, CTX)
+        assert (result.value, result.reason, result.error_code, result.variant) == (
+            True,
+            Reason.ERROR,
+            ErrorCode.GENERAL,
+            None,
+        )
+        assert result.error_message == 'The server could not evaluate flag "f" for this user'
+
+    @pytest.mark.parametrize("enabled", [True, False])
+    def test_a_cached_answer_is_cached_with_the_value_and_variant_it_had(self, enabled):
+        provider, transport = make_provider()
+        flag(transport, "f", enabled=enabled, reason="targeting_rule")
+        first = provider.resolve_boolean_details("f", not enabled, CTX)
+        second = provider.resolve_boolean_details("f", not enabled, CTX)
+        assert first.reason == Reason.TARGETING_MATCH
+        assert (second.value, second.reason, second.variant) == (enabled, Reason.CACHED, first.variant)
+        assert len(transport.requests) == 1
+
+    @pytest.mark.parametrize("body", [b"not json", b"[1, 2]", b""], ids=["invalid-json", "a-list", "empty"])
+    @pytest.mark.parametrize("method, default", [("resolve_boolean_details", True), ("resolve_string_details", "d")])
+    def test_a_2xx_body_that_is_not_an_evaluation_answers_the_default_with_general(self, body, method, default):
+        provider, transport = make_provider()
+        transport.respond(200, body=body)
+        result = getattr(provider, method)("f", default, CTX)
+        assert (result.value, result.reason, result.error_code) == (default, Reason.ERROR, ErrorCode.GENERAL)
 
     def test_not_found_returns_default_with_flag_not_found(self):
         provider, transport = make_provider()
@@ -332,7 +397,7 @@ class TestResolveBooleanDetails:
         flag(transport, "f")
         first = provider.resolve_boolean_details("f", False, CTX)
         second = provider.resolve_boolean_details("f", False, CTX)
-        assert (first.reason, second.reason) == (Reason.TARGETING_MATCH, Reason.CACHED)
+        assert (first.reason, second.reason) == (Reason.SPLIT, Reason.CACHED)
         assert second.value is True
         assert len(transport.requests) == 1
 
@@ -607,7 +672,57 @@ class TestAgainstA020Sdk:
     def test_boolean_answers_enabled(self):
         provider = ExperimentationProvider(client=Sdk020Client(FlagEvaluation020("f", True, None, "rollout")))
         result = provider.resolve_boolean_details("f", False, CTX)
-        assert (result.value, result.reason) == (True, Reason.TARGETING_MATCH)
+        assert (result.value, result.reason, result.variant, result.error_code) == (True, Reason.SPLIT, "on", None)
+
+
+# ---------------------------------------------------------------------------
+# A client with local evaluation, passed as client=
+# ---------------------------------------------------------------------------
+
+US_RULE = {
+    "id": "us",
+    "rollout_percentage": 100,
+    "match": {
+        "op": "and",
+        "conditions": [{"attribute": "user.country", "operator": "eq", "value": "US"}],
+        "groups": [],
+    },
+}
+US_ONLY = {"active": True, "evaluation": "local", "rollout_percentage": 0, "rules": [US_RULE], "default_rule": None}
+LOCAL_RULESET = {
+    "schema": 1,
+    "version": "v1",
+    "bucketing": "md5-mod100-v1",
+    "flags": [
+        dict(US_ONLY, key="label", value_type="string", on_value="Complete purchase", off_value="Buy now"),
+        dict(US_ONLY, key="us-only"),
+    ],
+}
+
+
+class TestLocalClient:
+    def test_each_call_is_answered_from_the_ruleset_with_its_attributes_and_never_cached(self, monkeypatch):
+        monkeypatch.setattr(LocalEvaluation, "_start_thread", lambda self: None)
+        transport = FakeTransport()
+        transport.route("GET", "/api/v1/sdk/ruleset", json=LOCAL_RULESET, headers={"ETag": '"v1"'})
+        client = ExperimentationClient("http://test", "k", transport=transport, evaluation="local")
+        client._local.refresh_once()
+        provider = ExperimentationProvider(client=client)
+        before = len(transport.requests)
+        fr, us = EvaluationContext("u1", {"country": "FR"}), EvaluationContext("u1", {"country": "US"})
+
+        labels = [provider.resolve_string_details("label", "d", ctx) for ctx in (fr, us, fr)]
+        assert [(a.value, a.reason, a.variant) for a in labels] == [
+            ("Buy now", Reason.SPLIT, "off"),
+            ("Complete purchase", Reason.TARGETING_MATCH, "on"),
+            ("Buy now", Reason.SPLIT, "off"),
+        ]
+        flags = [provider.resolve_boolean_details("us-only", True, ctx) for ctx in (us, fr)]
+        assert [(a.value, a.reason, a.variant) for a in flags] == [
+            (True, Reason.TARGETING_MATCH, "on"),
+            (False, Reason.SPLIT, "off"),
+        ]
+        assert len(transport.requests) == before  # every answer came from the ruleset
 
 
 # ---------------------------------------------------------------------------
@@ -634,7 +749,7 @@ class TestCache:
         provider, transport = make_provider(cache_ttl=0)
         flag(transport, "f1")
         for _ in range(3):
-            assert provider.resolve_boolean_details("f1", False, CTX).reason == Reason.TARGETING_MATCH
+            assert provider.resolve_boolean_details("f1", False, CTX).reason == Reason.SPLIT
         assert len(transport.requests) == 3
 
     def test_failed_evaluation_is_not_cached(self):
@@ -642,7 +757,7 @@ class TestCache:
         transport.respond(500, body=b"boom")
         flag(transport, "f")
         assert provider.resolve_boolean_details("f", False, CTX).error_code == ErrorCode.GENERAL
-        assert provider.resolve_boolean_details("f", False, CTX).reason == Reason.TARGETING_MATCH
+        assert provider.resolve_boolean_details("f", False, CTX).reason == Reason.SPLIT
         assert len(transport.requests) == 2
 
     def test_shutdown_clears_cache(self):
@@ -650,7 +765,7 @@ class TestCache:
         flag(transport, "f")
         provider.resolve_boolean_details("f", False, CTX)
         provider.shutdown()
-        assert provider.resolve_boolean_details("f", False, CTX).reason == Reason.TARGETING_MATCH
+        assert provider.resolve_boolean_details("f", False, CTX).reason == Reason.SPLIT
         assert len(transport.requests) == 2
 
     def test_shutdown_can_be_called_when_cache_empty(self):

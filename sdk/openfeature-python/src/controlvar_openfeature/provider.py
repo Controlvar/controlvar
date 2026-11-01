@@ -5,7 +5,9 @@ Every flag is evaluated **by the server**: the provider delegates to the
 ``controlvar`` Python SDK, which calls
 ``GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targeting_key>&context=<attributes>``
 and caches the answer per user + flag key for ``cache_ttl`` seconds. Nothing is
-bucketed locally and no flag definitions are downloaded.
+bucketed locally and no flag definitions are downloaded, unless ``client=`` is
+an SDK client built with ``evaluation="local"``: that client answers each call
+it can from its ruleset, with that call's attributes.
 
 Resolution rules
 ----------------
@@ -18,14 +20,14 @@ Resolution rules
   is taken as UTC). The SDK's cache key is user + flag key, not the attributes:
   within ``cache_ttl`` a user's answer is reused whatever attributes the next
   call brings.
-* boolean -> ``enabled``, for every flag (a string, number or json flag
-  included): reason ``CACHED`` from the SDK cache, otherwise
-  ``TARGETING_MATCH`` when on and ``DISABLED`` when off.
-* string, integer, float, object -> the flag's ``value`` when the flag serves
-  that type (``string``, ``number``, ``number``, ``json``): its on value when
-  the flag is on for the user, its off value otherwise, an inactive flag
-  included. The variant is ``"on"`` or ``"off"``; the reason is ``CACHED``
-  from the SDK cache, otherwise the server's: ``targeting_rule`` ->
+* Every call type follows one table. The value is the flag's when the flag is
+  of the type the call reads: a boolean call reads a boolean flag, whose value
+  is ``enabled`` (and every flag of a server or an SDK without flag values,
+  which sends no ``value_type``); a string call a string flag; an integer or a
+  float call a number flag; an object call a json flag. That is its on value
+  when the flag is on for the user, its off value otherwise, an inactive flag
+  included. The variant is ``"on"`` or ``"off"``; the reason is ``CACHED`` for
+  an answer from the SDK cache, otherwise the server's: ``targeting_rule`` ->
   ``TARGETING_MATCH``, ``rollout`` -> ``SPLIT``, ``inactive`` -> ``DISABLED``
   (anything else ``UNKNOWN``). An integer call accepts a number with no
   fractional part (``10`` or ``10.0`` answers ``10``); a float call accepts
@@ -36,12 +38,14 @@ Resolution rules
   integer call), ``GENERAL`` for the server's ``reason: "error"`` or an
   answer with no value (a server or an SDK from before flag values),
   ``PARSE_ERROR`` for a value that is not of the flag's type.
-* Failures never raise: 404 -> ``FLAG_NOT_FOUND``, anything else ->
-  ``GENERAL``; both return the default value with reason ``ERROR``.
+* Failures never raise: 404 -> ``FLAG_NOT_FOUND``, anything else (a 2xx with
+  a body that is not an evaluation included) -> ``GENERAL``; both return the
+  default value with reason ``ERROR``.
 
-``value`` and ``value_type`` are read from the SDK's ``FlagEvaluation`` with
-``getattr``: the 0.2.0 SDK has neither, and against it every string, number
-and object call answers the caller's default with ``GENERAL``.
+``value``, ``value_type``, ``reason`` and ``source`` are read from the SDK's
+``FlagEvaluation`` with ``getattr``: the 0.2.0 SDK has no ``value`` or
+``value_type``, and against it a boolean call answers ``enabled`` and every
+string, number and object call answers the caller's default with ``GENERAL``.
 """
 
 from __future__ import annotations
@@ -67,7 +71,7 @@ logger = logging.getLogger(__name__)
 
 PROVIDER_NAME = "controlvar-provider"
 
-#: OpenFeature's reason for the server's ``reason`` on a string, number or object call.
+#: OpenFeature's reason for the server's ``reason``.
 _SERVER_REASONS = {
     "targeting_rule": Reason.TARGETING_MATCH,
     "rollout": Reason.SPLIT,
@@ -80,8 +84,8 @@ class _NotAnInteger(ValueError):
 
 
 class _Call(NamedTuple):
-    """A typed resolution: the flag type it reads, how a message names it, and how it
-    turns a value of that type into the value OpenFeature expects."""
+    """A resolution: the flag type it reads, how a message names it, and how it turns a
+    value of that type into the value OpenFeature expects."""
 
     value_type: str
     name: str
@@ -96,6 +100,7 @@ def _to_int(value: Any) -> int:
     raise _NotAnInteger()
 
 
+_BOOLEAN = _Call("boolean", "a boolean", bool)
 _STRING = _Call("string", "a string", lambda value: value)
 _INTEGER = _Call("number", "an integer", _to_int)
 _FLOAT = _Call("number", "a float", float)
@@ -104,10 +109,17 @@ _OBJECT = _Call("json", "an object", copy.deepcopy)
 
 
 class _Lookup(NamedTuple):
-    """The SDK's answer for a flag, and whether its cache held it."""
+    """The SDK's answer for a flag, and whether it came from the SDK's cache."""
 
     evaluation: Any
     cached: bool
+
+
+class _Failure(NamedTuple):
+    """Why a call answers the caller's default."""
+
+    code: ErrorCode
+    message: str
 
 
 def _json_type_of(value: Any) -> Optional[str]:
@@ -164,10 +176,56 @@ def _attributes_of(evaluation_context: Optional[EvaluationContext]) -> dict:
     return {key: _plain(value) for key, value in (evaluation_context.attributes or {}).items()}
 
 
-def _variant_label(config: Any) -> Optional[str]:
-    if isinstance(config, dict) and isinstance(config.get("variant"), str):
-        return config["variant"]
-    return None
+def _boolean_value(evaluation: Any, flag: str) -> Any:
+    """A boolean call's value: ``enabled``, for a boolean flag or for an answer with no
+    ``value_type`` (a server or an SDK without flag values, where every flag is boolean)."""
+    # getattr: the 0.2.0 SDK's FlagEvaluation has no value_type.
+    value_type = getattr(evaluation, "value_type", None)
+    if isinstance(value_type, str) and value_type != "boolean":
+        return _Failure(
+            ErrorCode.TYPE_MISMATCH,
+            f"Flag {flag} serves {_describe_type(value_type)}; it was resolved as {_BOOLEAN.name}",
+        )
+    return bool(evaluation.enabled)
+
+
+def _typed_value(evaluation: Any, flag: str, call: _Call) -> Any:
+    """A string, integer, float or object call's value: the flag's ``value`` when it is of
+    the type ``call`` reads, converted as OpenFeature expects it; otherwise a :class:`_Failure`."""
+    no_value = _Failure(
+        ErrorCode.GENERAL,
+        f"Flag {flag} came back without a value (from a server or an SDK without flag values, "
+        f"or a server that cannot serve this flag's stored value)",
+    )
+    # getattr: the 0.2.0 SDK's FlagEvaluation has neither field.
+    value = getattr(evaluation, "value", None)
+    value_type = getattr(evaluation, "value_type", None)
+    served = value_type if isinstance(value_type, str) else _json_type_of(value)
+    if served is None:
+        return no_value
+    if served != call.value_type:
+        return _Failure(
+            ErrorCode.TYPE_MISMATCH, f"Flag {flag} serves {_describe_type(served)}; it was resolved as {call.name}"
+        )
+    if value is None:
+        return no_value
+    if not _is_value_of_type(value, call.value_type):
+        return _Failure(
+            ErrorCode.PARSE_ERROR,
+            f"Flag {flag} serves {_describe_type(call.value_type)}, but the server's value is not one",
+        )
+    try:
+        return call.convert(value)
+    except _NotAnInteger:
+        return _Failure(
+            ErrorCode.TYPE_MISMATCH,
+            f"Flag {flag} serves a number with a fractional part; it was resolved as an integer",
+        )
+    except (OverflowError, RecursionError) as exc:  # a value no supported write can store
+        return _Failure(
+            ErrorCode.PARSE_ERROR,
+            f"Flag {flag} serves {_describe_type(call.value_type)} that {call.name} cannot hold ({type(exc).__name__})",
+        )
 
 
 def _targeting_key(evaluation_context: Optional[EvaluationContext]) -> Optional[str]:
@@ -283,17 +341,7 @@ class ExperimentationProvider(AbstractProvider):
         default_value: bool,
         evaluation_context: Optional[EvaluationContext] = None,
     ) -> FlagResolutionDetails[bool]:
-        found = self._lookup(flag_key, default_value, evaluation_context)
-        if not isinstance(found, _Lookup):
-            return found
-        evaluation = found.evaluation
-        if found.cached:
-            reason = Reason.CACHED
-        elif evaluation.enabled:
-            reason = Reason.TARGETING_MATCH
-        else:
-            reason = Reason.DISABLED
-        return FlagResolutionDetails(value=evaluation.enabled, reason=reason, variant=_variant_label(evaluation.config))
+        return self._resolve(flag_key, default_value, evaluation_context, _BOOLEAN)
 
     def resolve_string_details(
         self,
@@ -301,7 +349,7 @@ class ExperimentationProvider(AbstractProvider):
         default_value: str,
         evaluation_context: Optional[EvaluationContext] = None,
     ) -> FlagResolutionDetails[str]:
-        return self._resolve_value(flag_key, default_value, evaluation_context, _STRING)
+        return self._resolve(flag_key, default_value, evaluation_context, _STRING)
 
     def resolve_integer_details(
         self,
@@ -309,7 +357,7 @@ class ExperimentationProvider(AbstractProvider):
         default_value: int,
         evaluation_context: Optional[EvaluationContext] = None,
     ) -> FlagResolutionDetails[int]:
-        return self._resolve_value(flag_key, default_value, evaluation_context, _INTEGER)
+        return self._resolve(flag_key, default_value, evaluation_context, _INTEGER)
 
     def resolve_float_details(
         self,
@@ -317,7 +365,7 @@ class ExperimentationProvider(AbstractProvider):
         default_value: float,
         evaluation_context: Optional[EvaluationContext] = None,
     ) -> FlagResolutionDetails[float]:
-        return self._resolve_value(flag_key, default_value, evaluation_context, _FLOAT)
+        return self._resolve(flag_key, default_value, evaluation_context, _FLOAT)
 
     def resolve_object_details(
         self,
@@ -325,7 +373,7 @@ class ExperimentationProvider(AbstractProvider):
         default_value: Union[dict, list],
         evaluation_context: Optional[EvaluationContext] = None,
     ) -> FlagResolutionDetails[Union[dict, list]]:
-        return self._resolve_value(flag_key, default_value, evaluation_context, _OBJECT)
+        return self._resolve(flag_key, default_value, evaluation_context, _OBJECT)
 
     # ------------------------------------------------------------------
     # Internal
@@ -348,8 +396,12 @@ class ExperimentationProvider(AbstractProvider):
             )
         try:
             attributes = _attributes_of(evaluation_context)
-            cached = any(entry.key == flag_key for entry in self._client.cached_flags(user_id))
+            held = any(entry.key == flag_key for entry in self._client.cached_flags(user_id))
             evaluation = self._client.get_feature_flag(flag_key, user_id, attributes)
+            # A client with local evaluation keeps its local answers in the same cache, but
+            # computes each one afresh from this call's attributes: only an answer it did not
+            # compute came from the cache.
+            cached = held and getattr(evaluation, "source", None) != "local"
         except ExperimentationError as exc:
             code = ErrorCode.FLAG_NOT_FOUND if exc.status == 404 else ErrorCode.GENERAL
             logger.warning("Flag %r could not be evaluated for %r: %s", flag_key, user_id, exc)
@@ -364,66 +416,28 @@ class ExperimentationProvider(AbstractProvider):
             )
         return _Lookup(evaluation, cached)
 
-    def _resolve_value(
+    def _resolve(
         self,
         flag_key: str,
         default_value: Any,
         evaluation_context: Optional[EvaluationContext],
         call: _Call,
     ) -> FlagResolutionDetails[Any]:
-        """The string, integer, float and object calls' one body: the flag's value when it
-        serves the type ``call`` reads, and otherwise ``default_value`` with an error."""
+        """Every call's one body: the flag's value when it serves the type ``call`` reads (a
+        boolean flag's is ``enabled``), and otherwise ``default_value`` with an error."""
         found = self._lookup(flag_key, default_value, evaluation_context)
         if not isinstance(found, _Lookup):
             return found
         evaluation = found.evaluation
         flag = json.dumps(str(flag_key), ensure_ascii=False)
-        no_value = (
-            f"Flag {flag} came back without a value (from a server or an SDK without flag values, "
-            f"or a server that cannot serve this flag's stored value)"
-        )
-
         server_reason = getattr(evaluation, "reason", None)
         if server_reason == "error":
             return _error(default_value, ErrorCode.GENERAL, f"The server could not evaluate flag {flag} for this user")
-        # getattr: the 0.2.0 SDK's FlagEvaluation has neither field.
-        value = getattr(evaluation, "value", None)
-        value_type = getattr(evaluation, "value_type", None)
-        served = value_type if isinstance(value_type, str) else _json_type_of(value)
-        if served is None:
-            return _error(default_value, ErrorCode.GENERAL, no_value)
-        if served != call.value_type:
-            return _error(
-                default_value,
-                ErrorCode.TYPE_MISMATCH,
-                f"Flag {flag} serves {_describe_type(served)}; it was resolved as {call.name}",
-            )
-        if value is None:
-            return _error(default_value, ErrorCode.GENERAL, no_value)
-        if not _is_value_of_type(value, call.value_type):
-            return _error(
-                default_value,
-                ErrorCode.PARSE_ERROR,
-                f"Flag {flag} serves {_describe_type(call.value_type)}, but the server's value is not one",
-            )
-        try:
-            resolved = call.convert(value)
-        except _NotAnInteger:
-            return _error(
-                default_value,
-                ErrorCode.TYPE_MISMATCH,
-                f"Flag {flag} serves a number with a fractional part; it was resolved as an integer",
-            )
-        except (OverflowError, RecursionError) as exc:  # a value no supported write can store
-            return _error(
-                default_value,
-                ErrorCode.PARSE_ERROR,
-                f"Flag {flag} serves {_describe_type(call.value_type)} that {call.name} cannot hold "
-                f"({type(exc).__name__})",
-            )
-
+        value = _boolean_value(evaluation, flag) if call is _BOOLEAN else _typed_value(evaluation, flag, call)
+        if isinstance(value, _Failure):
+            return _error(default_value, value.code, value.message)
         if found.cached:
             reason = Reason.CACHED
         else:
             reason = _SERVER_REASONS.get(server_reason, Reason.UNKNOWN)
-        return FlagResolutionDetails(value=resolved, reason=reason, variant="on" if evaluation.enabled else "off")
+        return FlagResolutionDetails(value=value, reason=reason, variant="on" if evaluation.enabled else "off")

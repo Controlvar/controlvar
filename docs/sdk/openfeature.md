@@ -194,8 +194,9 @@ npm run build
 evaluation to the [`controlvar` Python SDK](python.md), which calls
 `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targeting_key>&context=<attributes>` and
 caches the answer per user + flag. Flags are decided **by the server**; nothing is bucketed locally
-and no flag definitions are downloaded. Boolean, string, integer, float and object calls are
-answered. Requires Python 3.9+ and `openfeature-sdk >= 0.10.0`.
+and no flag definitions are downloaded, unless you pass a `client=` built with `evaluation="local"`.
+Boolean, string, integer, float and object calls are answered. Requires Python 3.9+ and
+`openfeature-sdk >= 0.10.0`.
 
 ### Installation
 
@@ -249,25 +250,24 @@ provider.client.track("user-12345", "purchase", event_value=49.99, experiment_ke
 | OpenFeature field | Platform concept | Notes |
 |---|---|---|
 | `targeting_key` | `user_id` | Required. Sent as `?user_id=` on the evaluate call; the server buckets on it. Missing or empty → default value with `TARGETING_KEY_MISSING`. |
-| `attributes` | the user's attributes | Passed to the Python SDK as `user_attributes`, which it sends on the evaluate call as `&context=<url-encoded JSON>`, so the flag's targeting rules are evaluated against them. A `datetime`, at any depth, is sent as an ISO 8601 string (a naive one is taken as UTC). A context with no attributes sends no `context`. The SDK caches an answer per user + flag key, and the attributes are not part of that key: within `cache_ttl`, a second call for the same `targeting_key` and flag gets the first answer (reason `CACHED`) whatever its attributes, so a changed attribute is seen once that answer expires. `cache_ttl=0` caches nothing; `provider.shutdown()` or `provider.client.clear_cache()` drops every cached answer. |
+| `attributes` | the user's attributes | Passed to the Python SDK as `user_attributes`, which it sends on the evaluate call as `&context=<url-encoded JSON>`, so the flag's targeting rules are evaluated against them. A `datetime`, at any depth, is sent as an ISO 8601 string (a naive one is taken as UTC). A context with no attributes sends no `context`. By default the SDK caches an answer per user + flag key, and the attributes are not part of that key: within `cache_ttl`, a second call for the same `targeting_key` and flag gets the first answer (reason `CACHED`) whatever its attributes, so a changed attribute is seen once that answer expires. `cache_ttl=0` caches nothing; `provider.shutdown()` or `provider.client.clear_cache()` drops every cached answer. A `client=` built with `evaluation="local"` answers each call it can from its ruleset, using that call's attributes, and such an answer is never `CACHED`. |
 
 ### Resolution rules
 
 | OpenFeature call | Reads | Value |
 |---|---|---|
-| `get_boolean_*` | every flag | `enabled` |
+| `get_boolean_*` | a boolean flag | `enabled` |
 | `get_string_*` | a string flag | the flag's value |
 | `get_integer_*` | a number flag | the flag's value when it has no fractional part (`10` or `10.0` answers `10`) |
 | `get_float_*` | a number flag | the flag's value as a float (`10` answers `10.0`) |
 | `get_object_*` | a json flag | a new copy of the flag's value (an object or an array) |
 
-A boolean call answers `enabled` for every flag, a string, number or json flag included: reason
-`TARGETING_MATCH` (or `CACHED`) when the flag is on for the user, `DISABLED` when it is not.
-
-A string, integer, float or object call reads the value the flag serves: its on value when the
-flag is on for the user, its off value otherwise. There is no coercion: a call of another type
-gets the caller's default, an integer call on a number with a fractional part (`2.5`) included,
-and `bool` is never a number.
+Every call reads the value the flag serves: its on value when the flag is on for the user, its
+off value otherwise; a boolean flag's is `enabled`. There is no coercion: a call of another type
+gets the caller's default, a boolean call on a string, number or json flag and an integer call
+on a number with a fractional part (`2.5`) included, and `bool` is never a number. A boolean call
+reads `enabled`, so an answer with no `value_type` (a server or an SDK without flag values, where
+every flag is boolean) answers it rather than the caller's default.
 
 | The server's answer | Value | Reason | Variant |
 |---|---|---|---|
@@ -277,13 +277,13 @@ and `bool` is never a number.
 | answered from the SDK's cache | as cached | `CACHED` | as cached |
 | `reason: "error"` | the caller's default | `ERROR`, `error_code` `GENERAL` | not set |
 | the flag serves another type than the call | the caller's default | `ERROR`, `error_code` `TYPE_MISMATCH` | not set |
-| no `value` (a server or an SDK without flag values) | the caller's default | `ERROR`, `error_code` `GENERAL` | not set |
+| no `value` (a string, integer, float or object call; a server or an SDK without flag values) | the caller's default | `ERROR`, `error_code` `GENERAL` | not set |
 | a `value` that is not of the flag's type | the caller's default | `ERROR`, `error_code` `PARSE_ERROR` | not set |
 
 - A server reason this provider does not know answers the value with reason `UNKNOWN`.
-- A boolean call's `variant` is not set, because `config` is always `null`.
 - Errors never raise: 404 (an unknown flag key) → `FLAG_NOT_FOUND`; anything else (401, 422,
-  5xx, timeout, network) → `GENERAL`. Both return the default with reason `ERROR`, and a failed
+  5xx, a 2xx whose body is not an evaluation, timeout, network) → `GENERAL`. Both return the
+  default with reason `ERROR`, and a failed
   request is never cached. The answers in the table above are successful requests, which the
   Python SDK caches like any other.
 - `provider.client`, the Python SDK client, has typed getters of its own:
@@ -300,11 +300,11 @@ and `bool` is never a number.
 
 | Reason | Meaning |
 |---|---|
-| `TARGETING_MATCH` | Fresh answer from the server. A boolean call: the flag is on for this user. A string, integer, float or object call: a targeting rule decided (`reason: "targeting_rule"`), on or off. |
-| `SPLIT` | A string, integer, float or object call: the rollout percentage decided (`reason: "rollout"`), on or off. |
-| `DISABLED` | A boolean call: the server reports the flag off for this user. A string, integer, float or object call: the flag is not ACTIVE (`reason: "inactive"`), and the value is its off value. |
-| `CACHED` | Served from the SDK's per-user cache (within `cache_ttl`). |
-| `UNKNOWN` | A string, integer, float or object call: a server reason this provider does not know; the value is the flag's. |
+| `TARGETING_MATCH` | A targeting rule decided (`reason: "targeting_rule"`), on or off. |
+| `SPLIT` | The rollout percentage decided (`reason: "rollout"`), on or off. |
+| `DISABLED` | The flag is not ACTIVE (`reason: "inactive"`), and the value is its off value. |
+| `CACHED` | Served from the SDK's per-user cache (within `cache_ttl`); never for an answer a client with local evaluation computed. |
+| `UNKNOWN` | A server reason this provider does not know; the value is the flag's. |
 | `ERROR` | Evaluation failed (see `error_code`); the caller's default was returned. |
 
 ### Constructor options

@@ -5,7 +5,8 @@
 [OpenFeature](https://openfeature.dev) provider for Controlvar. Flags are
 evaluated **by the server** through the [`controlvar`](https://github.com/Controlvar/controlvar/tree/main/sdk/python) Python SDK
 (`GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targeting_key>&context=<attributes>`) and cached per
-user + flag; nothing is bucketed locally. Boolean, string, integer, float and object calls are answered.
+user + flag; nothing is bucketed locally unless you pass a `client=` built with `evaluation="local"`.
+Boolean, string, integer, float and object calls are answered.
 
 ## Install
 
@@ -58,14 +59,15 @@ timeout=10, *, client=None, transport=None)`. Pass `client=` to share one
 
 | OpenFeature call | Reads | Value |
 |---|---|---|
-| `get_boolean_*` | every flag | `enabled` |
+| `get_boolean_*` | a boolean flag | `enabled` |
 | `get_string_*` | a string flag | the flag's value |
 | `get_integer_*` | a number flag | the flag's value when it has no fractional part (`10` or `10.0` answers `10`) |
 | `get_float_*` | a number flag | the flag's value as a float (`10` answers `10.0`) |
 | `get_object_*` | a json flag | a new copy of the flag's value (an object or an array) |
 
 The flag's value is its on value when the flag is on for the user, and its off value otherwise,
-an inactive flag included. Nothing is coerced: a call of another type gets your default.
+an inactive flag included. Nothing is coerced: a call of another type gets your default, a
+boolean call on a string, number or json flag included.
 
 | The server's answer | Value | Reason | Variant |
 |---|---|---|---|
@@ -75,27 +77,29 @@ an inactive flag included. Nothing is coerced: a call of another type gets your 
 | answered from the SDK's cache | as cached | `CACHED` | as cached |
 | `reason: "error"` | your default | `ERROR`, `GENERAL` | not set |
 | a flag of another type than the call | your default | `ERROR`, `TYPE_MISMATCH` | not set |
-| no value (a server or an SDK without flag values) | your default | `ERROR`, `GENERAL` | not set |
+| no value (a string, integer, float or object call; a server or an SDK without flag values) | your default | `ERROR`, `GENERAL` | not set |
 | a value that is not of the flag's type | your default | `ERROR`, `PARSE_ERROR` | not set |
 
-That table is for string, integer, float and object calls. A server reason the provider does not
-know answers the value with reason `UNKNOWN`. An integer call on a number with a fractional part
-(`2.5`) answers `TYPE_MISMATCH`, and `bool` is never a number.
+That table is for every call type. A boolean call reads `enabled`, so an answer with no
+`value_type` (a server or an SDK without flag values, where every flag is boolean) answers it
+rather than your default. A server reason the provider does not know answers the value with
+reason `UNKNOWN`. An integer call on a number with a fractional part (`2.5`) answers
+`TYPE_MISMATCH`, and `bool` is never a number.
 
-- A boolean call answers `enabled` for every flag, a string, number or json flag included:
-  `TARGETING_MATCH` when the flag is on for the user, `DISABLED` when it is not, `CACHED` from the
-  SDK's cache. Its `variant` is not set, because `config` is always `null`.
 - `targeting_key` → `user_id`. It is required: without it you get the default value with
   `TARGETING_KEY_MISSING`.
 - The context's attributes are the user's attributes: the evaluate call carries them as its
   `context`, for the flag's targeting rules. A `datetime`, at any depth, goes as an ISO 8601
   string (a naive one is taken as UTC).
-- The SDK caches an answer per user + flag key, and the attributes are not part of that key:
+- By default the SDK caches an answer per user + flag key, and the attributes are not part of that key:
   within `cache_ttl` a second call for the same `targeting_key` and flag gets the first answer
   (reason `CACHED`), whatever its attributes. A changed attribute is seen once that answer
   expires; `cache_ttl=0` caches nothing, and `provider.client.clear_cache()` drops every answer.
+- A `client=` built with `evaluation="local"` answers each call it can from its ruleset, using
+  that call's attributes, and such an answer is never `CACHED`.
 - Errors never raise and are never cached: 404 (an unknown flag key) → `FLAG_NOT_FOUND`; anything
-  else (401, 422, 5xx, timeout, network) → `GENERAL`. Both return your default with reason `ERROR`.
+  else (401, 422, 5xx, a 2xx whose body is not an evaluation, timeout, network) → `GENERAL`. Both
+  return your default with reason `ERROR`.
 - `client.track(event_name, ctx, TrackingEventDetails(value=…))` forwards to
   `ExperimentationClient.track` (an event with no key is fanned out by the Python SDK's rule).
 
