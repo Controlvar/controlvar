@@ -56,6 +56,9 @@ global holdout kept out, for example): holdout results count those users' events
 and nothing uses it to decide a flag or a variant; local evaluation (JavaScript and Python, opt-in) uses
 the server's `md5-mod100-v1` bucketing instead.
 
+How long a cached answer keeps a flag change from your users, SDK by SDK:
+[Turning a Flag Off](feature-flags/kill-switch.md).
+
 "Verified live" means the SDK's `contract_smoke` entry point passed
 `tests/sdk-contract/live/run_live_contract.py` against a running backend (see
 [tests/sdk-contract/README.md](https://github.com/Controlvar/controlvar/blob/main/tests/sdk-contract/README.md)); the `SDK Live Contract` CI job repeats

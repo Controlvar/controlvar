@@ -462,6 +462,10 @@ by = [
 ]
 
 [[unit]]
+text = "How long each client takes, in local evaluation and out of it: Turning a Flag Off."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "While the API is unreachable (errors, timeouts), the SDK keeps serving the last ruleset it received, so a flag turned off during an outage stays on in that process until the API is reachable again."
 by = [
     "test:sdk/js/__tests__/local.test.ts::5xx after a load keeps serving the last ruleset and reports each failure",

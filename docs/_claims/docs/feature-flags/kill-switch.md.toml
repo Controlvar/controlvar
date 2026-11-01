@@ -1,0 +1,305 @@
+# What verifies each unit of docs/feature-flags/kill-switch.md (#1519).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`. Every number on the page is held by
+# backend/tests/unit/sdk/test_kill_switch_numbers.py, which reads it from the
+# SDK's own source.
+document = "docs/feature-flags/kill-switch.md"
+
+[[unit]]
+text = "Turning a Flag Off"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Turning a flag off is the kill switch: the switch on the flag's page, \"is_active\": false (or POST …/deactivate), or a safety rollback to 0%."
+by = [
+    "journey:feature-flag-create#turn-off",
+    "test:backend/tests/integration/api/test_feature_flags_api.py::TestFeatureFlagsActivateDeactivate::test_deactivate_active_flag",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p8_p9_the_monitor_turns_the_flag_off_once",
+]
+
+[[unit]]
+text = "The server's answer changes at once: from the next evaluation it answers enabled: false with reason: \"inactive\", and it keeps no cache of flags."
+by = [
+    "test:backend/tests/integration/api/test_feature_flag_kill_switch.py::TestKillSwitch::test_disabled_flag_evaluates_off_for_sdk_clients",
+    "test:backend/tests/integration/api/test_flag_reads_after_writers.py::test_the_detail_and_list_show_the_writers_change",
+]
+
+[[unit]]
+text = "Each client, though, keeps serving an answer it already has until that answer expires."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::caches a success for 300000 ms by default",
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_cache_expires_after_ttl",
+    "test:sdk/react-native/__tests__/client.test.ts::re-fetches after the TTL expires",
+]
+
+[[unit]]
+text = "The same goes for any change to a flag: its rollout percentage, its rules, a rollback to a lower percentage."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::caches a success for 300000 ms by default",
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_cache_expires_after_ttl",
+]
+
+[[unit]]
+text = "How long each client takes"
+by = ["exempt:label"]
+
+[[unit]]
+text = "With the defaults, every client below serves the change within 5 minutes, the next time your code asks it for the flag, except the edge SDK: 1 minute, or about 2 with a KV store, plus the store's own propagation time (an instance can copy a KV entry up to 60 seconds old into its memory for another 60)."
+by = [
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_every_sdk_but_the_edge_sdk_keeps_an_answer_five_minutes_and_the_edge_sdk_one",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_the_edge_figure_with_a_kv_store_is_its_two_lifetimes_about_two_minutes",
+    "test:sdk/edge/__tests__/client.test.ts::writes successful results to the store with the cache TTL, keyed per user + key",
+]
+
+[[unit]]
+text = "SDK | Cache lifetime (default) | Clear it from your code"
+by = ["exempt:label"]
+
+[[unit]]
+text = "JavaScript | cacheTtlMs (300000 ms) | clearCache()"
+by = [
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_cache_lifetime_is_the_number_the_page_states",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_clears_its_cache_with_the_method_the_page_names",
+    "test:sdk/js/__tests__/client.test.ts::caches a success for 300000 ms by default",
+]
+
+[[unit]]
+text = "React | config.cacheTtlMs (300000 ms) | client.clearCache(), with client from useExperimentation()"
+by = [
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_cache_lifetime_is_the_number_the_page_states",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_clears_its_cache_with_the_method_the_page_names",
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::makes a fresh fetch after clearCache",
+]
+
+[[unit]]
+text = "React Native | cacheTtlMs (300000 ms) | clearCache(), and clearStorage() for the copy in AsyncStorage"
+by = [
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_cache_lifetime_is_the_number_the_page_states",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_clears_its_cache_with_the_method_the_page_names",
+    "test:sdk/react-native/__tests__/client.test.ts::clearCache empties both caches but leaves AsyncStorage intact",
+    "test:sdk/react-native/__tests__/client.test.ts::clearStorage removes only SDK-namespaced AsyncStorage keys",
+]
+
+[[unit]]
+text = "Python | cache_ttl_seconds (300) | clear_cache()"
+by = [
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_cache_lifetime_is_the_number_the_page_states",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_clears_its_cache_with_the_method_the_page_names",
+    "test:sdk/python/tests/test_client.py::TestConstruction::test_defaults_and_trailing_slash",
+]
+
+[[unit]]
+text = "Go | WithCacheTTL (5m); 0 or less never expires | none: create a new client"
+by = [
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_cache_lifetime_is_the_number_the_page_states",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_a_go_cache_ttl_of_zero_or_less_never_expires",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_the_go_sdk_has_no_method_that_clears_its_cache",
+]
+
+[[unit]]
+text = "Java | cacheTtlMs (300000); Spring experimentation.cache-ttl-seconds (300) | clearCache(), invalidateCache(userId, key)"
+by = [
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_cache_lifetime_is_the_number_the_page_states",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_clears_its_cache_with_the_method_the_page_names",
+]
+
+[[unit]]
+text = ".NET | CacheTtlSeconds (300) | ClearCache()"
+by = [
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_cache_lifetime_is_the_number_the_page_states",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_clears_its_cache_with_the_method_the_page_names",
+]
+
+[[unit]]
+text = "Ruby | cache_ttl (300) | clear_cache"
+by = [
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_cache_lifetime_is_the_number_the_page_states",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_clears_its_cache_with_the_method_the_page_names",
+]
+
+[[unit]]
+text = "PHP | cacheTtl (300), and never past the PHP process | clearCache()"
+by = [
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_cache_lifetime_is_the_number_the_page_states",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_the_php_cache_lives_in_the_process",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_clears_its_cache_with_the_method_the_page_names",
+]
+
+[[unit]]
+text = "Elixir | :cache_ttl (300) | clear_cache(client)"
+by = [
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_cache_lifetime_is_the_number_the_page_states",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_clears_its_cache_with_the_method_the_page_names",
+]
+
+[[unit]]
+text = "iOS | cacheTTL (300 seconds) | clearCache()"
+by = [
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_cache_lifetime_is_the_number_the_page_states",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_clears_its_cache_with_the_method_the_page_names",
+]
+
+[[unit]]
+text = "Android | cacheTtlMs (300000) | clearCache(), invalidateCache(userId, key)"
+by = [
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_cache_lifetime_is_the_number_the_page_states",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_clears_its_cache_with_the_method_the_page_names",
+]
+
+[[unit]]
+text = "Flutter | cacheTtl (5 minutes) | clearCache()"
+by = [
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_cache_lifetime_is_the_number_the_page_states",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_clears_its_cache_with_the_method_the_page_names",
+]
+
+[[unit]]
+text = "Edge | cacheTtlMs (60000 ms); with a KV store, kvTtlSeconds on Cloudflare (cacheTtlMs in seconds, at least 60) or kvTtlMs on Deno (cacheTtlMs) | clearCache() (this instance's memory only)"
+by = [
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_cache_lifetime_is_the_number_the_page_states",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_the_edge_figure_with_a_kv_store_is_its_two_lifetimes_about_two_minutes",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_clears_its_cache_with_the_method_the_page_names",
+    "test:sdk/edge/__tests__/adapters.test.ts::namespaces keys with \"ep:\" and rounds the TTL up to the 60 s minimum",
+    "test:sdk/edge/__tests__/adapters.test.ts::an explicit kvTtlSeconds wins over the cache TTL",
+    "test:sdk/edge/__tests__/adapters.test.ts::an explicit kvTtlMs wins over the cache TTL",
+]
+
+[[unit]]
+text = "OpenFeature provider (JavaScript, Python) | the provider's cacheTtlMs (300000 ms) / cache_ttl (300), passed to the SDK | —"
+by = ["test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_cache_lifetime_is_the_number_the_page_states"]
+
+[[unit]]
+text = "A React or React Native component already on screen does not ask again."
+by = [
+    "test:sdk/react/src/__tests__/useFeatureFlag.test.tsx::a mounted hook does not ask again: past the cache lifetime it keeps its answer, one request",
+    "test:sdk/react-native/__tests__/hooks.test.tsx::a mounted useFlag does not ask again: past the cache lifetime it keeps its answer, one request",
+]
+
+[[unit]]
+text = "It keeps the answer it rendered until it mounts again (the user comes back to the screen, reloads the page or restarts the app); the SDKs neither poll nor stream."
+by = [
+    "test:sdk/react/src/__tests__/useFeatureFlag.test.tsx::a mounted hook does not ask again: past the cache lifetime it keeps its answer, one request",
+    "test:sdk/react-native/__tests__/hooks.test.tsx::a mounted useFlag does not ask again: past the cache lifetime it keeps its answer, one request",
+]
+
+[[unit]]
+text = "Nothing reaches a screen that is already open until it mounts the component again."
+by = [
+    "test:sdk/react/src/__tests__/useFeatureFlag.test.tsx::does not re-fetch when the provider re-renders with the same user",
+    "test:sdk/react-native/__tests__/hooks.test.tsx::does not re-evaluate on a re-render with the same client, user and key",
+]
+
+[[unit]]
+text = "Local evaluation (JavaScript and Python, beta)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The SDK refreshes the ruleset every 30 seconds, give or take 10% (refreshIntervalMs / refresh_interval_seconds, at least 5 seconds), so a flag it answers locally serves the change within 33 seconds."
+by = [
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_local_evaluation_timings_are_the_numbers_the_page_states",
+    "test:sdk/js/__tests__/local.test.ts::defaults to 30 seconds",
+    "test:sdk/js/__tests__/local.test.ts::is at least 5 seconds",
+    "test:sdk/python/tests/test_local.py::test_only_the_regular_interval_is_jittered",
+    "test:sdk/python/tests/test_local.py::test_the_minimum_interval_is_five_seconds",
+    "test:sdk/python/tests/test_local.py::test_turning_a_value_flag_off_reaches_the_client_at_the_next_refresh",
+]
+
+[[unit]]
+text = "A flag it sends to the server (see what the server still evaluates) follows the cache lifetime above."
+by = [
+    "test:sdk/js/__tests__/local.test.ts::an unknown key and a remote flag are evaluated by the server",
+    "test:sdk/python/tests/test_local.py::test_an_unknown_key_and_a_remote_flag_go_to_the_server",
+]
+
+[[unit]]
+text = "While a client cannot reach the API"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Client | What it serves"
+by = ["exempt:label"]
+
+[[unit]]
+text = "React Native, iOS | The last answer it stored for that user and flag, with no time limit, also after the app restarts (offlineFallback / enableOfflineFallback, on by default). A flag turned off while a device is offline stays on there until the device reaches the API once. Turn the fallback off if serving off is safer than serving a stale on."
+by = [
+    "test:sdk/react-native/__tests__/client.test.ts::on API failure returns the last-known evaluation however long ago it expired",
+    "test:sdk/react-native/__tests__/client.test.ts::offlineFallback defaults to true",
+    "test:sdk/react-native/__tests__/client.test.ts::offlineFallback=false never touches AsyncStorage",
+    "test:sdk/ios/Tests/ControlvarTests/ExperimentationClientTests.swift::testEvaluateFlag_networkErrorFallsBackToOfflineStore",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_the_mobile_sdks_serve_their_stored_answer_offline_by_default",
+]
+
+[[unit]]
+text = "Android, Flutter | The same, from the offline store: in memory by default, so until the app's process ends; across restarts with a persistent store (a SharedPreferences adapter on Android, SharedPreferencesOfflineStore on Flutter)."
+by = [
+    "test:sdk/android/sdk/src/test/kotlin/ExperimentationClientTest.kt::evaluateFlag falls back to offline store on server error",
+    "test:sdk/flutter/test/client_test.dart::stores the evaluation and serves it when the network fails",
+    "test:sdk/flutter/test/shared_preferences_offline_store_test.dart::works end-to-end with the client on network failure",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_the_mobile_sdks_serve_their_stored_answer_offline_by_default",
+]
+
+[[unit]]
+text = "Every other SDK | The cached answer until its lifetime ends; then the call fails, and the SDK answers as for any failure (see its page)."
+by = [
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_cache_expires_after_ttl",
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_404_raises_and_is_not_cached",
+    "test:sdk/js/__tests__/client.test.ts::throws on a non-2xx response and does not populate the evaluation cache",
+]
+
+[[unit]]
+text = "Local evaluation | The last ruleset it loaded, with no time limit unless you set maxStaleMs / max_stale_seconds. A failed refresh is tried again later each time, up to 5 minutes apart, so once the API answers again a change can take up to 5 minutes more. A 401, 403 or 404 drops the ruleset at once: every flag then goes to the server, and the ruleset is asked for again every 10 minutes."
+by = [
+    "test:sdk/js/__tests__/local.test.ts::without maxStaleMs, a ruleset whose refreshes have failed for a day is still used",
+    "test:sdk/python/tests/test_local.py::test_without_max_stale_seconds_a_ruleset_whose_refreshes_failed_for_a_day_is_still_used",
+    "test:sdk/js/__tests__/local.test.ts::backs off exponentially to 5 minutes",
+    "test:sdk/python/tests/test_local.py::test_backs_off_exponentially_to_five_minutes",
+    "test:sdk/python/tests/test_local.py::test_a_refusal_after_a_load_discards_the_ruleset",
+    "test:sdk/python/tests/test_local.py::test_404_names_the_minimum_server_release_and_discards",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_local_evaluation_timings_are_the_numbers_the_page_states",
+]
+
+[[unit]]
+text = "Making it faster"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A shorter cache lifetime."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Each user and flag then asks again once per lifetime, and each SDK path, such as one flag's evaluate route, takes 6,000 requests a minute per IP address by default (SDK_RATE_LIMIT_PER_MINUTE)."
+by = [
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_custom_cache_ttl",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitConfig::test_the_sdk_paths_default_to_6000_a_minute",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestSdkRateLimitIsPerPath::test_sdk_paths_with_different_ids_are_counted_separately",
+]
+
+[[unit]]
+text = "Clearing the cache from your code when you know a flag changed."
+by = [
+    "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::makes a fresh fetch after clearCache",
+    "test:sdk/react-native/__tests__/client.test.ts::clearCache causes a re-fetch",
+]
+
+[[unit]]
+text = "A shorter refreshIntervalMs in local evaluation."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Safety rollbacks"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A safety rollback changes the flag on the server like any other change, and reaches clients on the same timetable."
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p8_p9_the_monitor_turns_the_flag_off_once",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_every_sdk_but_the_edge_sdk_keeps_an_answer_five_minutes_and_the_edge_sdk_one",
+]
+
+[[unit]]
+text = "The safety monitor looks for a breach every 5 minutes by default (SAFETY_CHECK_INTERVAL_MINUTES), so from a breach to every client serving the rolled-back answer can take that long plus the client's time above."
+by = [
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_settings_have_scheduler_interval_defaults",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_interval_defaults_come_from_settings",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_every_sdk_but_the_edge_sdk_keeps_an_answer_five_minutes_and_the_edge_sdk_one",
+]

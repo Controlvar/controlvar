@@ -144,6 +144,9 @@ accepted for signature compatibility but not sent.
 | `loading` | `boolean` | `true` until the first response |
 | `error` | `Error \| null` | Only set if the client promise rejects (the client itself never throws, so this is normally `null` — failures come back as `enabled: false`) |
 
+A component already on screen keeps the answer it rendered until it mounts again; the SDK neither
+polls nor streams. See [Turning a Flag Off](../feature-flags/kill-switch.md).
+
 ### `useExperiment(experimentKey): ExperimentState`
 
 Assigns the provider's user via `POST /api/v1/tracking/assign` (sticky on the server; the

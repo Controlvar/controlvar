@@ -8,7 +8,8 @@ endpoints are under `/api/v1/safety`.
 
 ## What Safety Monitoring Does
 
-The safety monitor runs every 5 minutes by default (`SAFETY_CHECK_INTERVAL_MINUTES`). For every
+The safety monitor runs every 5 minutes by default (`SAFETY_CHECK_INTERVAL_MINUTES`). A rollback
+reaches clients as any change to the flag does: see [Turning a Flag Off](kill-switch.md). For every
 `ACTIVE` flag, whatever its `rollout_percentage` (a flag at 0% still serves the users its targeting
 rules match), it:
 

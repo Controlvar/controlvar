@@ -170,7 +170,8 @@ of `"{userId}:{flagKey}"` read as a big-endian integer, mod 100). This is **not*
 
 A change made in the dashboard (turning a flag off, a rollout step, a safety rollback) reaches a
 process evaluating locally at its next successful refresh: within the refresh interval (30 seconds
-by default) while the API is reachable.
+by default) while the API is reachable. How long each client takes, in local evaluation and out of
+it: [Turning a Flag Off](../feature-flags/kill-switch.md).
 
 While the API is unreachable (errors, timeouts), the SDK keeps serving the last ruleset it received,
 so **a flag turned off during an outage stays on in that process until the API is reachable again**.

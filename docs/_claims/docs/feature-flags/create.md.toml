@@ -389,6 +389,14 @@ text = "The same switch turns it off again."
 by = ["exempt:baseline"]
 
 [[unit]]
+text = "Clients serve the change within their cache lifetime, 5 minutes by default, the next time they ask for the flag: see Turning a Flag Off."
+by = [
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_every_sdk_but_the_edge_sdk_keeps_an_answer_five_minutes_and_the_edge_sdk_one",
+    "test:sdk/js/__tests__/client.test.ts::caches a success for 300000 ms by default",
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_cache_expires_after_ttl",
+]
+
+[[unit]]
 text = "The dashboard's On/Off is the API's is_active (true/false), reported beside it as status (\"active\"/\"inactive\")."
 by = [
     "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestFeatureFlagReadStatus::test_inactive_model_reports_inactive",
@@ -1112,6 +1120,10 @@ by = [
 [[unit]]
 text = "So a flag your code can't reach behaves as off."
 by = ["exempt:baseline"]
+
+[[unit]]
+text = "How soon each client serves a change: Turning a Flag Off."
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Evaluating the Flag from Your Application"

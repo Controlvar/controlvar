@@ -97,7 +97,9 @@ takes none away.
 
 Click **Create Feature Flag**. The flag starts **off** (its page reads *Not serving*), so
 creating it never exposes anyone. When you're ready, turn it on with the switch beside
-*Not serving*, and the page then reads *Serving*. The same switch turns it off again.
+*Not serving*, and the page then reads *Serving*. The same switch turns it off again. Clients
+serve the change within their cache lifetime, 5 minutes by default, the next time they ask for the
+flag: see [Turning a Flag Off](kill-switch.md).
 
 The dashboard's **On**/**Off** is the API's `is_active` (`true`/`false`), reported
 beside it as `status` (`"active"`/`"inactive"`). You set it with `is_active`.
@@ -544,6 +546,8 @@ flag's `off_value` (`false` for a boolean flag), when:
 When the call itself fails (a network error or a wrong API key), the SDKs'
 `isFeatureEnabled` and `is_feature_enabled` return `false`. So a flag your code can't
 reach behaves as off.
+
+How soon each client serves a change: [Turning a Flag Off](kill-switch.md).
 
 ---
 

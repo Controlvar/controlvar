@@ -81,6 +81,7 @@ universe = [
     "docs/development/testing-guide.md",
     "docs/development/workflow-explanation.md",
     "docs/feature-flags/create.md",
+    "docs/feature-flags/kill-switch.md",
     "docs/feature-flags/rollouts.md",
     "docs/feature-flags/safety.md",
     "docs/getting-started/README.md",

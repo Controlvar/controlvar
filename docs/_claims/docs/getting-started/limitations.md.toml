@@ -42,6 +42,19 @@ by = [
 ]
 
 [[unit]]
+text = "A flag turned off for every user at once | Each client keeps the answer it has until its cache expires; a React or React Native component already on screen keeps its answer until it mounts again; and an iOS, Android, Flutter or React Native app that cannot reach the API keeps serving the last answer it stored. See Turning a Flag Off."
+by = [
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_cache_lifetime_is_the_number_the_page_states",
+    "test:sdk/js/__tests__/client.test.ts::caches a success for 300000 ms by default",
+    "test:sdk/react/src/__tests__/useFeatureFlag.test.tsx::a mounted hook does not ask again: past the cache lifetime it keeps its answer, one request",
+    "test:sdk/react-native/__tests__/hooks.test.tsx::a mounted useFlag does not ask again: past the cache lifetime it keeps its answer, one request",
+    "test:sdk/react-native/__tests__/client.test.ts::on API failure returns the last-known evaluation however long ago it expired",
+    "test:sdk/ios/Tests/ControlvarTests/ExperimentationClientTests.swift::testEvaluateFlag_networkErrorFallsBackToOfflineStore",
+    "test:sdk/android/sdk/src/test/kotlin/ExperimentationClientTest.kt::evaluateFlag falls back to offline store on server error",
+    "test:sdk/flutter/test/client_test.dart::stores the evaluation and serves it when the network fails",
+]
+
+[[unit]]
 text = "Experiments and results"
 by = ["exempt:label"]
 
