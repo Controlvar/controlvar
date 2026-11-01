@@ -195,6 +195,25 @@ class TestAuditLogModel:
 
             assert audit_log.action_description == expected_description
 
+    @pytest.mark.regression
+    def test_every_action_type_has_a_description(self):
+        """No database: the property reads only ``action_type``. Without an
+        entry the API and the CSV export show the raw type, as they did for the
+        custom role definition types when they were added (#891)."""
+        for action_type, expected in (
+            (ActionType.ROLE_CREATE, "created role"),
+            (ActionType.ROLE_UPDATE, "updated role"),
+            (ActionType.ROLE_DELETE, "deleted role"),
+            (ActionType.PERMISSION_GRANT, "granted permission"),
+            (ActionType.PERMISSION_REVOKE, "revoked permission"),
+        ):
+            assert (
+                AuditLog(action_type=action_type.value).action_description == expected
+            )
+        for action_type in ActionType:
+            entry = AuditLog(action_type=action_type.value)
+            assert entry.action_description != action_type.value, action_type
+
     def test_audit_log_to_dict_method(self, db_session: Session):
         """Test the to_dict method for converting audit log to dictionary."""
         # Create a test user first

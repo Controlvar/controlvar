@@ -683,3 +683,14 @@ by = [
     "test:backend/tests/unit/api/test_enum_filters.py::test_the_enum_filters_are_plain_strings_that_list_their_values",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
 ]
+
+[[unit]]
+text = "POST /api/v1/rbac/roles, PUT /api/v1/rbac/roles/{role_name}, POST /api/v1/rbac/users/{user_id}/grant (full profile) | #891 | A custom role or a direct grant can hold only experiment and feature_flag with create, read, update, delete and list, and audit_log with read. A request that sends any other resource or action answers 422 with \"type\": \"not_grantable\", at [\"body\", \"permissions\"] on the two role operations (on PUT only when permissions is sent) and at [\"body\"] on the grant, and nothing is written; every resource and action used to be accepted. Roles and grants stored before the change read back unchanged, a PUT that sends only description still answers 200, and DELETE /api/v1/rbac/users/{user_id}/grant/{resource} still deletes a grant of any resource. The OpenAPI document does not change. See RBAC."
+by = [
+    "test:modules/backend/tests/unit/schemas/test_rbac_schemas.py::test_exactly_the_eleven_pairs_are_accepted",
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_creating_a_role_with_a_pair_no_role_may_hold_is_refused",
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_changing_a_roles_permissions_to_a_pair_no_role_may_hold_is_refused",
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_granting_a_pair_no_grant_may_hold_is_refused",
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_a_role_and_a_grant_stored_before_the_check_read_and_clean_up",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]

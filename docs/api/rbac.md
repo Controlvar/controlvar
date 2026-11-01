@@ -108,11 +108,10 @@ Returns all custom roles. Any authenticated user can call this.
   {
     "id": "a1b2c3d4-...",
     "name": "data-scientist",
-    "description": "Read access to experiments plus export",
+    "description": "Reads experiments and creates them",
     "is_system_role": false,
     "permissions": [
-      {"resource": "experiment", "actions": ["read", "list"]},
-      {"resource": "export", "actions": ["read"]}
+      {"resource": "experiment", "actions": ["read", "list", "create"]}
     ],
     "created_at": "2026-03-01T10:00:00Z",
     "user_count": 5
@@ -148,7 +147,7 @@ Creates a new custom role. **ADMIN only.**
   "description": "Can view experiments and results but not create or modify",
   "permissions": [
     {"resource": "experiment", "actions": ["read", "list"]},
-    {"resource": "report", "actions": ["read", "list"]}
+    {"resource": "feature_flag", "actions": ["read", "list"]}
   ]
 }
 ```
@@ -159,9 +158,13 @@ Creates a new custom role. **ADMIN only.**
 - Only lowercase letters, digits, hyphens (`-`), and underscores (`_`) are allowed
 - Examples of valid names: `data-scientist`, `read_only_experiments`, `analyst2`
 
-**Available resources:** `experiment`, `feature_flag`, `user`, `role`, `permission`, `report`, `audit_log`, `export`
-
-**Available actions:** `create`, `read`, `update`, `delete`, `list`
+**What a role or a grant can hold:** `experiment` and `feature_flag`, each with `create`,
+`read`, `update`, `delete` and `list`, and `audit_log` with `read`. A request that gives a
+custom role or a direct grant any other resource or action (`user`, `role`, `permission`,
+`report`, `export`, or `audit_log` with anything but `read`) is refused with `422`, and
+nothing is written. Roles and grants stored before this check read back unchanged; see
+[Update Custom Role](#update-custom-role) and
+[Revoke Direct Permission](#revoke-direct-permission) for removing what they hold.
 
 **Response 201**
 
@@ -173,7 +176,7 @@ Creates a new custom role. **ADMIN only.**
   "is_system_role": false,
   "permissions": [
     {"resource": "experiment", "actions": ["read", "list"]},
-    {"resource": "report", "actions": ["read", "list"]}
+    {"resource": "feature_flag", "actions": ["read", "list"]}
   ],
   "created_at": "2026-03-01T10:00:00Z",
   "user_count": 0
@@ -183,7 +186,32 @@ Creates a new custom role. **ADMIN only.**
 **Error responses:**
 - `409 Conflict` — A role with this name already exists
 - `403 Forbidden` — Caller is not an admin
-- `422 Unprocessable Entity` — Invalid name format or empty actions list
+- `422 Unprocessable Entity` — Invalid name format or empty actions list, or a permission
+  a role cannot hold (`"type": "not_grantable"`, below)
+
+A permission a role cannot hold is refused with `"type": "not_grantable"` at
+`["body", "permissions"]`. The message names each refused resource once, with only its
+refused actions, then what a role or a grant can hold:
+
+```{.bash exec}
+curl -s -X POST http://localhost:8000/api/v1/rbac/roles \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "exporter",
+    "permissions": [
+      {"resource": "export", "actions": ["read"]},
+      {"resource": "audit_log", "actions": ["read", "list"]}
+    ]
+  }' | jq '.detail[0] | {type, loc, msg}'
+```
+<!-- expect: "type": "not_grantable" -->
+<!-- expect: "msg": "export (read) and audit_log (list) cannot be granted. A custom role or a direct grant -->
+<!-- expect: can hold only experiment (create, read, update, delete, list), feature_flag (create, read, update, delete, list) and audit_log (read)" -->
+
+It prints `"type": "not_grantable"`, the `loc` and the message
+`export (read) and audit_log (list) cannot be granted. A custom role or a direct grant can hold only experiment (create, read, update, delete, list), feature_flag (create, read, update, delete, list) and audit_log (read)`.
+No `exporter` role is created.
 
 **Example**
 
@@ -195,10 +223,9 @@ curl -s -X POST http://localhost:8000/api/v1/rbac/roles \
   -H "Content-Type: application/json" \
   -d '{
     "name": "data-scientist",
-    "description": "Read access to experiments plus export",
+    "description": "Reads experiments and creates them",
     "permissions": [
-      {"resource": "experiment", "actions": ["read", "list"]},
-      {"resource": "export", "actions": ["read"]}
+      {"resource": "experiment", "actions": ["read", "list", "create"]}
     ]
   }' | jq '{name, is_system_role, user_count}'
 ```
@@ -264,10 +291,17 @@ Update a custom role's description or permission set. **ADMIN only.** System rol
 
 **Response 200** — Updated role object (same shape as GET)
 
+`permissions`, when it is sent, replaces the role's whole set and is checked like
+Create's: a permission a role cannot hold is refused with `422`
+(`"type": "not_grantable"`), and nothing changes. A role stored before that check with
+other permissions still reads back with them, and an update that sends only
+`description` keeps them; to remove them, send the permissions the role should keep.
+
 **Error responses:**
 - `400 Bad Request` — Attempted to modify a system role
 - `403 Forbidden` — Caller is not an admin
 - `404 Not Found` — Role does not exist
+- `422 Unprocessable Entity` — A permission a role cannot hold (`"type": "not_grantable"`)
 
 ---
 
@@ -411,16 +445,16 @@ An admin viewing another user's permissions, here the analyst's:
 
 ```{.bash exec}
 curl -s -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:8000/api/v1/rbac/users/$ANALYST_ID/permissions" | jq '{base_role, custom_roles, export: .permissions.export}'
+  "http://localhost:8000/api/v1/rbac/users/$ANALYST_ID/permissions" | jq -c '{base_role, custom_roles, experiment: .permissions.experiment}'
 ```
-<!-- expect: "base_role": "analyst" -->
+<!-- expect: "base_role":"analyst" -->
 <!-- expect: "data-scientist" -->
-<!-- expect: "export": [ -->
-<!-- expect: "read" -->
+<!-- expect: "experiment":["create","list","read"] -->
 
-It prints the base role, `"analyst"`, the stored `data-scientist` role, and `export: ["read"]`
-from that role in the set shown. The `analyst` base role holds no export permission, and
-it is still the only thing that decides what the analyst can do.
+It prints the base role, `"analyst"`, the stored `data-scientist` role, and
+`"experiment":["create","list","read"]`: `create` comes from that role, in the set shown.
+The `analyst` base role cannot create experiments, and it is still the only thing that
+decides what the analyst can do.
 
 ---
 
@@ -437,14 +471,17 @@ Grant a specific resource permission directly to a user, without assigning a rol
 ```json
 {
   "user_id": "user-uuid",
-  "resource": "report",
-  "actions": ["create", "read"],
-  "reason": "Temporary access for Q1 reporting",
+  "resource": "feature_flag",
+  "actions": ["update"],
+  "reason": "Covering the release rotation",
   "expires_at": "2026-04-01T00:00:00Z"
 }
 ```
 
-`expires_at` is optional. If omitted, the grant never expires.
+`expires_at` is optional. If omitted, the grant never expires. `resource` and `actions`
+are checked as a role's permissions are (see
+[What a role or a grant can hold](#create-custom-role)): any other pair is refused with
+`422` (`"type": "not_grantable"`, at `["body"]`), and nothing is written.
 
 **Response 201**
 
@@ -452,19 +489,20 @@ Grant a specific resource permission directly to a user, without assigning a rol
 {
   "status": "granted",
   "user_id": "user-uuid",
-  "resource": "report",
-  "actions": ["create", "read"]
+  "resource": "feature_flag",
+  "actions": ["update"]
 }
 ```
 
 **Error responses:**
 - `403 Forbidden` — Caller is not an admin
+- `422 Unprocessable Entity` — A permission a grant cannot hold (`"type": "not_grantable"`)
 
 **Example — Temporary permission with expiry**
 
 `expires_at` must be in the future: a grant whose `expires_at` has already passed is
 stored, but Get Effective Permissions leaves it out from the start. This grants the
-analyst `report` access for a week from now:
+analyst `feature_flag` `update` for a week from now:
 
 ```{.bash exec}
 WEEK=$(jq -nr 'now + 7*86400 | todate')
@@ -474,17 +512,17 @@ curl -s -X POST "http://localhost:8000/api/v1/rbac/users/$ANALYST_ID/grant" \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": "'"$ANALYST_ID"'",
-    "resource": "report",
-    "actions": ["create", "read"],
-    "reason": "One-week access for reporting",
+    "resource": "feature_flag",
+    "actions": ["update"],
+    "reason": "One-week release rotation",
     "expires_at": "'"$WEEK"'"
   }' | jq .
 ```
 <!-- expect: "status": "granted" -->
-<!-- expect: "resource": "report" -->
+<!-- expect: "resource": "feature_flag" -->
 
-It prints `"status": "granted"` and `"resource": "report"`. The grant is stored and shown;
-it changes nothing the analyst can do.
+It prints `"status": "granted"` and `"resource": "feature_flag"`. The grant is stored and
+shown; it changes nothing the analyst can do.
 
 ---
 
@@ -501,7 +539,7 @@ Revoke all direct permission grants for a user+resource combination. **ADMIN onl
 | Parameter  | Type   | Description                |
 |------------|--------|----------------------------|
 | `user_id`  | UUID   | Target user's ID           |
-| `resource` | string | Resource name (e.g. `export`) |
+| `resource` | string | Resource name (e.g. `experiment`) |
 
 **Response 200**
 
@@ -512,7 +550,9 @@ Revoke all direct permission grants for a user+resource combination. **ADMIN onl
 }
 ```
 
-`count` is the number of grant records deleted.
+`count` is the number of grant records deleted, and includes inactive and expired grants.
+`resource` is any text, not only a resource a grant can hold now, so a grant stored before
+that check (of `report` or `export`, say) can still be deleted.
 
 ---
 
@@ -530,10 +570,9 @@ curl -s -X POST http://localhost:8000/api/v1/rbac/roles \
   -H "Content-Type: application/json" \
   -d '{
     "name": "read-only-experiments",
-    "description": "View-only access to experiments and reports",
+    "description": "View-only access to experiments and flags",
     "permissions": [
       {"resource": "experiment", "actions": ["read", "list"]},
-      {"resource": "report", "actions": ["read", "list"]},
       {"resource": "feature_flag", "actions": ["read", "list"]}
     ]
   }' | jq -r .name
@@ -569,9 +608,9 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 It prints the analyst's stored custom roles, `["data-scientist","read-only-experiments"]`
 after the examples above. What the analyst can do is unchanged.
 
-### Grant a Temporary Export Permission
+### Grant a Temporary Permission
 
-This records a week-long export grant for a data analyst without changing their role. The grant is stored and shown by Get Effective Permissions, but no permission check reads it: it does **not** let the analyst export anything their base role does not already allow ([#891](https://github.com/Controlvar/controlvar/issues/891)).
+This records a week-long grant to change experiments for a data analyst without changing their role. The grant is stored and shown by Get Effective Permissions, but no permission check reads it: it does **not** let the analyst change an experiment, which their base role does not allow ([#891](https://github.com/Controlvar/controlvar/issues/891)).
 
 ```{.bash exec}
 WEEK=$(jq -nr 'now + 7*86400 | todate')
@@ -581,9 +620,9 @@ curl -s -X POST "http://localhost:8000/api/v1/rbac/users/$ANALYST_ID/grant" \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": "'"$ANALYST_ID"'",
-    "resource": "export",
-    "actions": ["read", "list"],
-    "reason": "Q1 compliance audit access",
+    "resource": "experiment",
+    "actions": ["update"],
+    "reason": "Covering the experiment review",
     "expires_at": "'"$WEEK"'"
   }' | jq -r .status
 ```
@@ -595,12 +634,12 @@ To revoke early:
 
 ```{.bash exec}
 curl -s -X DELETE \
-  "http://localhost:8000/api/v1/rbac/users/$ANALYST_ID/grant/export" \
+  "http://localhost:8000/api/v1/rbac/users/$ANALYST_ID/grant/experiment" \
   -H "Authorization: Bearer $TOKEN" | jq -c .
 ```
 <!-- expect: {"status":"revoked","count":1} -->
 
-It prints `{"status":"revoked","count":1}`: the one `export` grant is deleted.
+It prints `{"status":"revoked","count":1}`: the one `experiment` grant is deleted.
 
 ### Show a User's Stored Permissions
 
@@ -672,7 +711,7 @@ print(effective.permissions)  # {"experiment": ["create", "list", "read", ...], 
 |-----------------|----------|-----------------------------------------------|
 | `id`            | UUID     | Primary key                                   |
 | `user_id`       | UUID FK  | Target user                                   |
-| `resource`      | string   | Resource name (e.g. `export`)                 |
+| `resource`      | string   | Resource name (e.g. `experiment`)             |
 | `actions`       | JSONB    | List of action strings (e.g. `["read"]`)      |
 | `granted_by_id` | UUID FK  | Admin who granted the permission              |
 | `reason`        | text     | Optional audit reason                         |

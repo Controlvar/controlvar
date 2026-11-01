@@ -24,7 +24,22 @@ describe('audit action labels (#221)', () => {
   });
 
   it('labels a removed custom role', () => {
-    expect(actionLabel('role_unassign')).toBe('Role removed');
+    expect(actionLabel('role_unassign')).toBe('Custom role removed');
+  });
+
+  it('labels the custom role and direct grant changes the rbac module records (#891)', () => {
+    const labelled = {
+      role_create: 'Custom role created',
+      role_update: 'Custom role changed',
+      role_delete: 'Custom role deleted',
+      permission_grant: 'Permission granted',
+      permission_revoke: 'Permission revoked',
+    };
+    for (const [type, label] of Object.entries(labelled)) {
+      expect(actionTypes).toContain(type);
+      expect(actionLabel(type)).toBe(label);
+      expect(ACTIONS[type].group).toBe('Users and access');
+    }
   });
 
   it('shows an unknown type as itself', () => {
@@ -59,6 +74,14 @@ describe('the action filter (#221)', () => {
     ).map((o) => o.value);
     expect(values).not.toContain('safety_config');
     expect(values[0]).toBe('');
+  });
+
+  it('offers the custom role entity the rbac module writes (#891)', () => {
+    render(<AuditLogFilter filters={{}} onFilterChange={jest.fn()} />);
+    const select = screen.getByTestId('filter-entity-type');
+    const role = Array.from(select.querySelectorAll('option')).find((o) => o.value === 'role');
+    expect(role).toBeDefined();
+    expect(role).toHaveTextContent('Custom role');
   });
 });
 

@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 from backend.app.main import app
 from backend.app.models.user import User
 from backend.tests.integration.conftest import make_client_for_user
-from modules.backend.app.models.custom_role import CustomRole
+from modules.backend.app.models.custom_role import CustomRole, DirectPermissionGrant
 
 # ---------------------------------------------------------------------------
 # Helper utilities
@@ -297,20 +297,37 @@ class TestCreateRole:
         resp = admin_client.post("/api/v1/rbac/roles", json=payload)
         assert resp.status_code == 422, resp.text
 
-    def test_create_role_with_all_valid_resources(self, admin_client):
-        """Creating a role with all valid resource types is accepted."""
+    def test_create_role_with_all_grantable_resources(self, admin_client):
+        """A role may hold experiment, feature_flag and audit_log read (#891)."""
         payload = {
             "name": _unique_role_name(),
             "description": "All resources role",
             "permissions": [
                 {"resource": "experiment", "actions": ["read"]},
                 {"resource": "feature_flag", "actions": ["read"]},
+                {"resource": "audit_log", "actions": ["read"]},
+            ],
+        }
+        resp = admin_client.post("/api/v1/rbac/roles", json=payload)
+        assert resp.status_code == 201, resp.text
+
+    def test_create_role_with_a_resource_no_role_may_hold_returns_422(
+        self, admin_client
+    ):
+        """``user`` and ``report`` are known resources, refused for a role (#891)."""
+        name = _unique_role_name()
+        payload = {
+            "name": name,
+            "permissions": [
+                {"resource": "experiment", "actions": ["read"]},
                 {"resource": "user", "actions": ["read"]},
                 {"resource": "report", "actions": ["read"]},
             ],
         }
         resp = admin_client.post("/api/v1/rbac/roles", json=payload)
-        assert resp.status_code == 201, resp.text
+        assert resp.status_code == 422, resp.text
+        assert resp.json()["detail"][0]["type"] == "not_grantable"
+        assert admin_client.get(f"/api/v1/rbac/roles/{name}").status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -425,7 +442,7 @@ class TestUpdateRole:
 
         new_permissions = [
             {"resource": "experiment", "actions": ["read", "update", "delete"]},
-            {"resource": "user", "actions": ["read"]},
+            {"resource": "audit_log", "actions": ["read"]},
         ]
         update_payload = {"permissions": new_permissions}
         resp = admin_client.put(f"/api/v1/rbac/roles/{name}", json=update_payload)
@@ -902,7 +919,7 @@ class TestDirectPermissionGrants:
         user_id = str(admin_user.id)
         payload = {
             "user_id": user_id,
-            "resource": "report",
+            "resource": "experiment",
             "actions": ["create", "read"],
             "reason": "Temporary grant for integration test",
         }
@@ -962,27 +979,58 @@ class TestDirectPermissionGrants:
         user_id = str(admin_user.id)
         payload = {
             "user_id": user_id,
-            "resource": "export",
+            "resource": "feature_flag",
             "actions": ["read"],
         }
-        admin_client.post(f"/api/v1/rbac/users/{user_id}/grant", json=payload)
+        granted = admin_client.post(f"/api/v1/rbac/users/{user_id}/grant", json=payload)
+        assert granted.status_code == 201, granted.text
 
-        resp = admin_client.delete(f"/api/v1/rbac/users/{user_id}/grant/export")
+        resp = admin_client.delete(f"/api/v1/rbac/users/{user_id}/grant/feature_flag")
         assert resp.status_code == 200, resp.text
-        assert "count" in resp.json()
+        assert resp.json()["count"] >= 1
+
+    def test_revoke_counts_inactive_and_expired_grants(
+        self, admin_client, admin_user, db_session
+    ):
+        """``count`` includes grants that are inactive or expired: the revoke
+        deletes every grant of the resource, whatever its state."""
+        db_session.add_all(
+            [
+                DirectPermissionGrant(
+                    user_id=admin_user.id,
+                    resource="experiment",
+                    actions=["update"],
+                    is_active=False,
+                ),
+                DirectPermissionGrant(
+                    user_id=admin_user.id,
+                    resource="experiment",
+                    actions=["delete"],
+                    is_active=True,
+                    expires_at=datetime.now(timezone.utc) - timedelta(days=1),
+                ),
+            ]
+        )
+        db_session.commit()
+        resp = admin_client.delete(
+            f"/api/v1/rbac/users/{admin_user.id}/grant/experiment"
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json() == {"status": "revoked", "count": 2}
 
     def test_grant_then_revoke_removes_from_effective_perms(
         self, admin_client, admin_user
     ):
         """After grant + revoke, the granted permission has been cleared."""
         user_id = str(admin_user.id)
-        resource = "role"
+        resource = "feature_flag"
         payload = {
             "user_id": user_id,
             "resource": resource,
             "actions": ["delete"],
         }
-        admin_client.post(f"/api/v1/rbac/users/{user_id}/grant", json=payload)
+        granted = admin_client.post(f"/api/v1/rbac/users/{user_id}/grant", json=payload)
+        assert granted.status_code == 201, granted.text
 
         # Revoke it
         revoke_resp = admin_client.delete(
@@ -1029,7 +1077,7 @@ class TestDirectPermissionGrants:
         expires = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
         payload = {
             "user_id": user_id,
-            "resource": "report",
+            "resource": "experiment",
             "actions": ["create"],
             "reason": "Temporary grant expiring in 7 days",
             "expires_at": expires,
@@ -1073,7 +1121,7 @@ class TestDirectPermissionGrants:
         user_id = str(admin_user.id)
         payload = {
             "user_id": user_id,
-            "resource": "user",
+            "resource": "feature_flag",
             "actions": ["list"],
         }
         resp = admin_client.post(f"/api/v1/rbac/users/{user_id}/grant", json=payload)
@@ -1085,7 +1133,7 @@ class TestDirectPermissionGrants:
         user_id = str(admin_user.id)
         payload = {
             "user_id": user_id,
-            "resource": "report",
+            "resource": "experiment",
             "actions": ["read", "create", "update", "delete", "list"],
         }
         resp = admin_client.post(f"/api/v1/rbac/users/{user_id}/grant", json=payload)

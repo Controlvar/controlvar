@@ -313,18 +313,24 @@ text = "Examples of valid names: data-scientist, read_only_experiments, analyst2
 by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_role_names_are_lower_case_slugs"]
 
 [[unit]]
-text = "Available resources: experiment, feature_flag, user, role, permission, report, audit_log, export"
+text = "What a role or a grant can hold: experiment and feature_flag, each with create, read, update, delete and list, and audit_log with read."
 by = [
-    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
-    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestCreateRole::test_create_role_with_all_valid_resources",
+    "test:modules/backend/tests/unit/schemas/test_rbac_schemas.py::test_exactly_the_eleven_pairs_are_accepted",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestCreateRole::test_create_role_with_all_grantable_resources",
 ]
 
 [[unit]]
-text = "Available actions: create, read, update, delete, list"
+text = "A request that gives a custom role or a direct grant any other resource or action (user, role, permission, report, export, or audit_log with anything but read) is refused with 422, and nothing is written."
 by = [
-    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
-    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestCreateRole::test_invalid_action_in_permissions_returns_422",
+    "test:modules/backend/tests/unit/schemas/test_rbac_schemas.py::test_exactly_the_eleven_pairs_are_accepted",
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_creating_a_role_with_a_pair_no_role_may_hold_is_refused",
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_changing_a_roles_permissions_to_a_pair_no_role_may_hold_is_refused",
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_granting_a_pair_no_grant_may_hold_is_refused",
 ]
+
+[[unit]]
+text = "Roles and grants stored before this check read back unchanged; see Update Custom Role and Revoke Direct Permission for removing what they hold."
+by = ["test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_a_role_and_a_grant_stored_before_the_check_read_and_clean_up"]
 
 [[unit]]
 text = "Response 201"
@@ -357,11 +363,44 @@ by = [
 count = 5
 
 [[unit]]
-text = "422 Unprocessable Entity — Invalid name format or empty actions list"
+text = "422 Unprocessable Entity — Invalid name format or empty actions list, or a permission a role cannot hold (\"type\": \"not_grantable\", below)"
 by = [
     "test:modules/backend/tests/integration/api/test_rbac_api.py::TestCreateRole::test_role_name_with_uppercase_fails_validation",
     "test:modules/backend/tests/unit/schemas/test_rbac_schemas.py::TestPermissionGrant::test_empty_actions_rejected",
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_creating_a_role_with_a_pair_no_role_may_hold_is_refused",
 ]
+
+[[unit]]
+text = "A permission a role cannot hold is refused with \"type\": \"not_grantable\" at [\"body\", \"permissions\"]."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_creating_a_role_with_a_pair_no_role_may_hold_is_refused",
+    "docex:docs/api/rbac.md#\"type\": \"not_grantable\"",
+]
+
+[[unit]]
+text = "The message names each refused resource once, with only its refused actions, then what a role or a grant can hold:"
+by = [
+    "test:modules/backend/tests/unit/schemas/test_rbac_schemas.py::test_the_refused_resources_are_named_once_in_request_order",
+    "test:modules/backend/tests/unit/schemas/test_rbac_schemas.py::test_the_message_names_only_the_refused_actions_in_request_order",
+]
+
+[[unit]]
+text = "It prints \"type\": \"not_grantable\", the loc and the message export (read) and audit_log (list) cannot be granted."
+by = [
+    "docex:docs/api/rbac.md#\"type\": \"not_grantable\"",
+    "docex:docs/api/rbac.md#\"msg\": \"export (read) and audit_log (list) cannot be granted. A custom role or a direct grant",
+]
+
+[[unit]]
+text = "A custom role or a direct grant can hold only experiment (create, read, update, delete, list), feature_flag (create, read, update, delete, list) and audit_log (read)."
+by = [
+    "docex:docs/api/rbac.md#can hold only experiment (create, read, update, delete, list), feature_flag (create, read, update, delete, list) and audit_log (read)\"",
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_creating_a_role_with_a_pair_no_role_may_hold_is_refused",
+]
+
+[[unit]]
+text = "No exporter role is created."
+by = ["test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_creating_a_role_with_a_pair_no_role_may_hold_is_refused"]
 
 [[unit]]
 text = "This creates the data-scientist role that the examples below assign:"
@@ -436,8 +475,23 @@ by = [
 ]
 
 [[unit]]
+text = "permissions, when it is sent, replaces the role's whole set and is checked like Create's: a permission a role cannot hold is refused with 422 (\"type\": \"not_grantable\"), and nothing changes."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestUpdateRole::test_admin_can_update_role_permissions",
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_changing_a_roles_permissions_to_a_pair_no_role_may_hold_is_refused",
+]
+
+[[unit]]
+text = "A role stored before that check with other permissions still reads back with them, and an update that sends only description keeps them; to remove them, send the permissions the role should keep."
+by = ["test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_a_role_and_a_grant_stored_before_the_check_read_and_clean_up"]
+
+[[unit]]
 text = "400 Bad Request — Attempted to modify a system role"
 by = ["test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestUpdateRole::test_update_system_role_returns_400"]
+
+[[unit]]
+text = "422 Unprocessable Entity — A permission a role cannot hold (\"type\": \"not_grantable\")"
+by = ["test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_changing_a_roles_permissions_to_a_pair_no_role_may_hold_is_refused"]
 
 [[unit]]
 text = "Delete Custom Role"
@@ -583,11 +637,14 @@ by = [
 ]
 
 [[unit]]
-text = "It prints the base role, \"analyst\", the stored data-scientist role, and export: [\"read\"] from that role in the set shown."
-by = ["docex:docs/api/rbac.md#\"export\": ["]
+text = "It prints the base role, \"analyst\", the stored data-scientist role, and \"experiment\":[\"create\",\"list\",\"read\"]: create comes from that role, in the set shown."
+by = [
+    "docex:docs/api/rbac.md#\"experiment\":[\"create\",\"list\",\"read\"]",
+    "docex:docs/api/rbac.md#\"base_role\":\"analyst\"",
+]
 
 [[unit]]
-text = "The analyst base role holds no export permission, and it is still the only thing that decides what the analyst can do."
+text = "The analyst base role cannot create experiments, and it is still the only thing that decides what the analyst can do."
 by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_a_custom_role_or_grant_is_shown_and_changes_nothing_the_user_can_do"]
 
 [[unit]]
@@ -628,6 +685,17 @@ by = [
 ]
 
 [[unit]]
+text = "resource and actions are checked as a role's permissions are (see What a role or a grant can hold): any other pair is refused with 422 (\"type\": \"not_grantable\", at [\"body\"]), and nothing is written."
+by = [
+    "test:modules/backend/tests/unit/schemas/test_rbac_schemas.py::test_exactly_the_eleven_pairs_are_accepted",
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_granting_a_pair_no_grant_may_hold_is_refused",
+]
+
+[[unit]]
+text = "422 Unprocessable Entity — A permission a grant cannot hold (\"type\": \"not_grantable\")"
+by = ["test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_granting_a_pair_no_grant_may_hold_is_refused"]
+
+[[unit]]
 text = "Example — Temporary permission with expiry"
 by = ["exempt:baseline"]
 
@@ -636,14 +704,14 @@ text = "expires_at must be in the future: a grant whose expires_at has already p
 by = ["test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_expired_direct_grant_not_included"]
 
 [[unit]]
-text = "This grants the analyst report access for a week from now:"
-by = ["exempt:baseline"]
+text = "This grants the analyst feature_flag update for a week from now:"
+by = ["exempt:example"]
 
 [[unit]]
-text = "It prints \"status\": \"granted\" and \"resource\": \"report\"."
+text = "It prints \"status\": \"granted\" and \"resource\": \"feature_flag\"."
 by = [
     "docex:docs/api/rbac.md#\"status\": \"granted\"",
-    "docex:docs/api/rbac.md#\"resource\": \"report\"",
+    "docex:docs/api/rbac.md#\"resource\": \"feature_flag\"",
 ]
 
 [[unit]]
@@ -669,16 +737,21 @@ text = "user_id | UUID | Target user's ID"
 by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_routes_name_roles_and_users_in_their_paths"]
 
 [[unit]]
-text = "resource | string | Resource name (e.g. export)"
+text = "resource | string | Resource name (e.g. experiment)"
 by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_routes_name_roles_and_users_in_their_paths"]
 count = 2
 
 [[unit]]
-text = "count is the number of grant records deleted."
+text = "count is the number of grant records deleted, and includes inactive and expired grants."
 by = [
     "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_revoke_returns_count_of_deleted_grants",
     "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_revoke_nonexistent_grant_returns_zero_count",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_revoke_counts_inactive_and_expired_grants",
 ]
+
+[[unit]]
+text = "resource is any text, not only a resource a grant can hold now, so a grant stored before that check (of report or export, say) can still be deleted."
+by = ["test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_a_role_and_a_grant_stored_before_the_check_read_and_clean_up"]
 
 [[unit]]
 text = "How-To Examples"
@@ -735,15 +808,15 @@ text = "What the analyst can do is unchanged."
 by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_a_custom_role_or_grant_is_shown_and_changes_nothing_the_user_can_do"]
 
 [[unit]]
-text = "Grant a Temporary Export Permission"
-by = ["exempt:baseline"]
+text = "Grant a Temporary Permission"
+by = ["exempt:label"]
 
 [[unit]]
-text = "This records a week-long export grant for a data analyst without changing their role."
+text = "This records a week-long grant to change experiments for a data analyst without changing their role."
 by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_a_custom_role_or_grant_is_shown_and_changes_nothing_the_user_can_do"]
 
 [[unit]]
-text = "The grant is stored and shown by Get Effective Permissions, but no permission check reads it: it does not let the analyst export anything their base role does not already allow (#891)."
+text = "The grant is stored and shown by Get Effective Permissions, but no permission check reads it: it does not let the analyst change an experiment, which their base role does not allow (#891)."
 by = [
     "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_no_permission_check_reads_custom_roles_or_direct_grants",
     "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_a_custom_role_or_grant_is_shown_and_changes_nothing_the_user_can_do",
@@ -762,7 +835,7 @@ text = "To revoke early:"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "It prints {\"status\":\"revoked\",\"count\":1}: the one export grant is deleted."
+text = "It prints {\"status\":\"revoked\",\"count\":1}: the one experiment grant is deleted."
 by = ["docex:docs/api/rbac.md#{\"status\":\"revoked\",\"count\":1}"]
 
 [[unit]]

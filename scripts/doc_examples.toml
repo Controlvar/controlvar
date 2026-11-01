@@ -13,7 +13,7 @@
 
 [meta]
 documents = 55
-exec = 309
+exec = 310
 universe = [
     ".github/pull_request_template.md",
     ".github/qa-templates/README.md",
@@ -573,9 +573,9 @@ expects = 12
 [[document]]
 path = "docs/api/rbac.md"
 environment = "stack-full"
-exec = 14
+exec = 15
 skip = 0
-expects = 25
+expects = 27
 
 # The operator's migration commands, run in the API container of the Quick
 # Start's stack (docker compose exec api ...), as a self-hoster runs them.

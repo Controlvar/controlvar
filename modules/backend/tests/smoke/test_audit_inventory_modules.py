@@ -44,11 +44,6 @@ pytestmark = [pytest.mark.smoke]
 V1 = "/api/v1"
 
 SSO_CONFIG = NotAudited("SSO configuration is not on the audited event list")
-CUSTOM_ROLE_DEFINITION = NotAudited(
-    "defining a custom role is not on the audited event list; assigning or "
-    "revoking one is (POST /rbac/roles/assign and /rbac/roles/revoke)"
-)
-DIRECT_GRANT = NotAudited("a direct permission grant is not on the audited event list")
 WORKSPACE = NotAudited("workspaces are not on the audited event list")
 MEMBERSHIP = NotAudited(
     "workspace membership is not on the audited event list; a member's role "
@@ -76,13 +71,17 @@ INVENTORY = {
     ("POST", f"{V1}/auth/sso/exchange"): Audited(A.USER_LOGIN),
     ("POST", f"{V1}/auth/sso/saml/{{config_id}}/acs"): Audited(A.USER_LOGIN),
     # --- custom roles (rbac) ------------------------------------------------
-    ("POST", f"{V1}/rbac/roles"): CUSTOM_ROLE_DEFINITION,
-    ("PUT", f"{V1}/rbac/roles/{{role_name}}"): CUSTOM_ROLE_DEFINITION,
-    ("DELETE", f"{V1}/rbac/roles/{{role_name}}"): CUSTOM_ROLE_DEFINITION,
+    # Defining a role, assigning one and granting directly are each recorded
+    # (#891); test_audit_module_events.py pins each entry.
+    ("POST", f"{V1}/rbac/roles"): Audited(A.ROLE_CREATE),
+    ("PUT", f"{V1}/rbac/roles/{{role_name}}"): Audited(A.ROLE_UPDATE),
+    ("DELETE", f"{V1}/rbac/roles/{{role_name}}"): Audited(A.ROLE_DELETE),
     ("POST", f"{V1}/rbac/roles/assign"): Audited(A.ROLE_ASSIGN),
     ("POST", f"{V1}/rbac/roles/revoke"): Audited(A.ROLE_UNASSIGN),
-    ("POST", f"{V1}/rbac/users/{{user_id}}/grant"): DIRECT_GRANT,
-    ("DELETE", f"{V1}/rbac/users/{{user_id}}/grant/{{resource}}"): DIRECT_GRANT,
+    ("POST", f"{V1}/rbac/users/{{user_id}}/grant"): Audited(A.PERMISSION_GRANT),
+    ("DELETE", f"{V1}/rbac/users/{{user_id}}/grant/{{resource}}"): Audited(
+        A.PERMISSION_REVOKE
+    ),
     # --- workspaces ---------------------------------------------------------
     ("POST", f"{V1}/workspaces/"): WORKSPACE,
     ("PUT", f"{V1}/workspaces/{{workspace_id}}"): WORKSPACE,
@@ -158,7 +157,7 @@ def test_the_inventory_is_exact():
     )
     assert len(INVENTORY) == 49
     audited = [k for k, e in INVENTORY.items() if isinstance(e, Audited)]
-    assert len(audited) == 5
+    assert len(audited) == 10
 
 
 @pytest.mark.parametrize("key", sorted(INVENTORY), ids=lambda k: f"{k[0]} {k[1]}")
@@ -197,4 +196,11 @@ def test_modules_only_action_types_are_what_the_modules_add():
         f"in MODULES_ONLY_ACTION_TYPES but not written by the modules: "
         f"{sorted(a.value for a in set(MODULES_ONLY_ACTION_TYPES) - added)}"
     )
-    assert {a.value for a in MODULES_ONLY_ACTION_TYPES} == {"role_unassign"}
+    assert {a.value for a in MODULES_ONLY_ACTION_TYPES} == {
+        "role_unassign",
+        "role_create",
+        "role_update",
+        "role_delete",
+        "permission_grant",
+        "permission_revoke",
+    }

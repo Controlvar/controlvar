@@ -93,7 +93,6 @@ exempt:baseline	docs/api/audit-logging.md	3c600ab6a11b
 exempt:baseline	docs/api/audit-logging.md	3d3cec18a327
 exempt:baseline	docs/api/audit-logging.md	3d5c308809a7
 exempt:baseline	docs/api/audit-logging.md	40a665bc9ef2
-exempt:baseline	docs/api/audit-logging.md	50f2258c3ed8
 exempt:baseline	docs/api/audit-logging.md	5a135d53b37f
 exempt:baseline	docs/api/audit-logging.md	5c79098bcd86
 exempt:baseline	docs/api/audit-logging.md	61a30bcebd13
@@ -563,7 +562,6 @@ exempt:baseline	docs/api/rbac.md	330fe51bcc04
 exempt:baseline	docs/api/rbac.md	35c71b87fd6d
 exempt:baseline	docs/api/rbac.md	482a21a4455d
 exempt:baseline	docs/api/rbac.md	4f3ce4eca06f
-exempt:baseline	docs/api/rbac.md	51b2fe0057cc
 exempt:baseline	docs/api/rbac.md	52393d8fca1f
 exempt:baseline	docs/api/rbac.md	571c323886af
 exempt:baseline	docs/api/rbac.md	5a2459d8846c
@@ -599,7 +597,6 @@ exempt:baseline	docs/api/rbac.md	d591ac7d7e76
 exempt:baseline	docs/api/rbac.md	d97b1a7788da
 exempt:baseline	docs/api/rbac.md	da7eeac2f2ac
 exempt:baseline	docs/api/rbac.md	eb1cc904be20
-exempt:baseline	docs/api/rbac.md	f0c708decc04
 exempt:baseline	docs/api/rbac.md	f8976ac62597
 exempt:baseline	docs/api/rbac.md	fce7fec2a58c
 exempt:baseline	docs/api/rbac.md	fdfa5a028b04

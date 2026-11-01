@@ -13,6 +13,7 @@ POST   /api/v1/rbac/users/{user_id}/grant    — grant direct permission (ADMIN 
 DELETE /api/v1/rbac/users/{user_id}/grant/{resource} — revoke direct permission
 """
 
+import json
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -67,12 +68,18 @@ def create_role(
 ):
     """Create a new custom role. ADMIN only."""
     _require_admin(current_user)
+    actor = AuditActor.of(current_user)
     try:
         role = RBACService.create_custom_role(db, data, current_user.id)
+        role_id, role_name = role.id, role.name
+        defined = _role_definition(role)
         db.commit()
     except ValueError as e:
         # The service's own sentence ("Role '<name>' already exists").
         raise HTTPException(status_code=409, detail=str(e))
+    _record_role_definition(
+        db, actor, ActionType.ROLE_CREATE, role_id, role_name, None, defined
+    )
     # Built outside the try: a response that fails to build is not a 409.
     return _role_to_response(role, db)
 
@@ -99,14 +106,31 @@ def update_role(
 ):
     """Update a custom role. ADMIN only."""
     _require_admin(current_user)
+    actor = AuditActor.of(current_user)
+    stored = RBACService.get_custom_role(db, role_name)
+    before = _role_definition(stored) if stored is not None else {}
     try:
         role = RBACService.update_custom_role(db, role_name, data)
+        role_id = role.id
+        after = _role_definition(role)
         db.commit()
     except ValueError as e:
         # The service's own sentences ("not found", "Cannot modify system roles").
         error_str = str(e)
         status_code = 404 if "not found" in error_str else 400
         raise HTTPException(status_code=status_code, detail=error_str)
+    # Only the fields that changed; a request that changes nothing writes none.
+    changed = [k for k in after if before.get(k) != after[k]]
+    if changed:
+        _record_role_definition(
+            db,
+            actor,
+            ActionType.ROLE_UPDATE,
+            role_id,
+            role_name,
+            {k: before.get(k) for k in changed},
+            {k: after[k] for k in changed},
+        )
     # Built outside the try: a response that fails to build is not a 4xx.
     return _role_to_response(role, db)
 
@@ -119,6 +143,13 @@ def delete_role(
 ):
     """Delete a custom role. ADMIN only. System roles cannot be deleted."""
     _require_admin(current_user)
+    actor = AuditActor.of(current_user)
+    # Read before the delete: the entry records what was deleted.
+    stored = RBACService.get_custom_role(db, role_name)
+    if stored is not None:
+        role_id = stored.id
+        before = _role_definition(stored)
+        before["assigned_users"] = _assigned_users(db, role_id)
     try:
         RBACService.delete_custom_role(db, role_name)
         db.commit()
@@ -126,6 +157,64 @@ def delete_role(
         error_str = str(e)
         status_code = 404 if "not found" in error_str else 400
         raise HTTPException(status_code=status_code, detail=error_str)
+    if stored is not None:
+        _record_role_definition(
+            db, actor, ActionType.ROLE_DELETE, role_id, role_name, before, None
+        )
+
+
+def _role_definition(role: "CustomRole") -> dict:
+    """What a role entry records of the role: its description and permissions.
+
+    A plain copy, taken now: the permissions as JSON stores them (an enum
+    member as its value), whatever their shape, so a role stored with an odd
+    entry is recorded rather than refused.
+    """
+    return {
+        "description": role.description,
+        "permissions": json.loads(json.dumps(role.permissions or [], default=str)),
+    }
+
+
+def _assigned_users(db: Session, role_id: UUID) -> int:
+    from modules.backend.app.models.custom_role import UserCustomRole
+
+    return db.query(UserCustomRole).filter(UserCustomRole.role_id == role_id).count()
+
+
+def _record_role_definition(
+    db: Session,
+    actor: AuditActor,
+    action: ActionType,
+    role_id: UUID,
+    role_name: str,
+    before: "dict | None",
+    after: "dict | None",
+) -> None:
+    """The audit entry for a committed custom role definition change.
+
+    Written after the change commits, as ``_record_custom_role`` is: a failed
+    entry is logged and does not undo it.
+    """
+    AuditService.record_after_commit(
+        db,
+        actor=actor,
+        action=action,
+        entity_type=EntityType.ROLE,
+        entity_id=role_id,
+        entity_name=role_name,
+        before=before,
+        after=after,
+        reason=_ROLE_DEFINITION_REASONS[action],
+    )
+
+
+#: The fixed ``reason`` of each role definition entry (as ``role_assign`` has).
+_ROLE_DEFINITION_REASONS = {
+    ActionType.ROLE_CREATE: "custom role created",
+    ActionType.ROLE_UPDATE: "custom role changed",
+    ActionType.ROLE_DELETE: "custom role deleted",
+}
 
 
 @router.post("/roles/assign", status_code=200)
@@ -175,6 +264,16 @@ def revoke_role(
     return {"status": "revoked", "user_id": data.user_id, "role": data.role_name}
 
 
+def _username(db: Session, user_id: UUID) -> str:
+    """The user's username for an entry's ``entity_name``, else the id."""
+    try:
+        target = db.get(User, user_id)
+        return (target.username if target is not None else None) or str(user_id)
+    except Exception:
+        db.rollback()
+        return str(user_id)
+
+
 def _record_custom_role(
     db: Session,
     actor: AuditActor,
@@ -190,12 +289,6 @@ def _record_custom_role(
     undo it. Only an actual change is recorded, so an assignment that was
     already there, or a revocation of one that was not, writes nothing.
     """
-    try:
-        target = db.get(User, user_id)
-        name = (target.username if target is not None else None) or str(user_id)
-    except Exception:
-        db.rollback()
-        name = str(user_id)
     value = {"custom_role": role_name}
     AuditService.record_after_commit(
         db,
@@ -203,7 +296,7 @@ def _record_custom_role(
         action=action,
         entity_type=EntityType.USER,
         entity_id=user_id,
-        entity_name=name,
+        entity_name=_username(db, user_id),
         before=None if assigned else value,
         after=value if assigned else None,
         reason="custom role assigned" if assigned else "custom role revoked",
@@ -240,7 +333,8 @@ def grant_permission(
 ):
     """Grant a direct permission to a user. ADMIN only. Supports expiry."""
     _require_admin(current_user)
-    RBACService.grant_direct_permission(
+    actor = AuditActor.of(current_user)
+    grant = RBACService.grant_direct_permission(
         db,
         user_id=user_id,
         resource=data.resource.value,
@@ -249,7 +343,18 @@ def grant_permission(
         reason=data.reason,
         expires_at=data.expires_at,
     )
+    granted = {
+        "resource": data.resource.value,
+        "actions": [a.value for a in data.actions],
+        "expires_at": data.expires_at.isoformat() if data.expires_at else None,
+        "grant_id": str(grant.id),
+        # The request's own reason; the entry's reason is fixed text.
+        "reason": data.reason,
+    }
     db.commit()
+    _record_direct_grant(
+        db, actor, ActionType.PERMISSION_GRANT, user_id, before=None, after=granted
+    )
     return {
         "status": "granted",
         "user_id": str(user_id),
@@ -267,9 +372,50 @@ def revoke_permission(
 ):
     """Revoke all direct grants for a user+resource. ADMIN only."""
     _require_admin(current_user)
+    actor = AuditActor.of(current_user)
     count = RBACService.revoke_direct_permission(db, user_id, resource)
     db.commit()
+    if count:
+        _record_direct_grant(
+            db,
+            actor,
+            ActionType.PERMISSION_REVOKE,
+            user_id,
+            before={"resource": resource, "count": count},
+            after=None,
+        )
     return {"status": "revoked", "count": count}
+
+
+def _record_direct_grant(
+    db: Session,
+    actor: AuditActor,
+    action: ActionType,
+    user_id: UUID,
+    *,
+    before: "dict | None",
+    after: "dict | None",
+) -> None:
+    """The audit entry for a committed direct grant or revocation.
+
+    Written after the change commits, as ``_record_custom_role`` is: a failed
+    entry is logged and does not undo it. The entity is the user.
+    """
+    AuditService.record_after_commit(
+        db,
+        actor=actor,
+        action=action,
+        entity_type=EntityType.USER,
+        entity_id=user_id,
+        entity_name=_username(db, user_id),
+        before=before,
+        after=after,
+        reason=(
+            "direct permission granted"
+            if action == ActionType.PERMISSION_GRANT
+            else "direct permission revoked"
+        ),
+    )
 
 
 def _role_to_response(role: "CustomRole", db: Session) -> CustomRoleResponse:
