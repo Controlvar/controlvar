@@ -296,6 +296,16 @@ provider's release refuses until the matching `@controlvar/js-sdk` is on
 npm. If a publish job fails after approval, use **Re-run failed jobs**, not
 **Re-run all jobs**.
 
+The Java SDK (`sdk/java/vX.Y.Z`: the parent POM, the core and the Spring Boot
+starter, at the parent's version) does not publish from the workflow. Its
+`maven` job signs the bundle with the `sdk-release` environment's GPG key and
+uploads it to the Central Portal for validation only, then prints the
+deployment id and its nine files. To publish it, open
+<https://central.sonatype.com/publishing/deployments>, check that the
+deployment's id is the one the run printed and that it lists those files, and
+press **Publish**; Maven Central cannot take a version back. To abandon it,
+press **Drop**.
+
 ## Layer map
 
 ```text

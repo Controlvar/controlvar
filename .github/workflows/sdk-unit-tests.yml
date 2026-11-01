@@ -281,6 +281,11 @@ jobs:
               # META-INF/spring/...AutoConfiguration.imports on the test classpath and
               # ExperimentationStarterRegistrationTest passes when it should not.
               cd sdk/java && ./mvnw -B clean test
+              # The sources and javadoc jars Maven Central needs, built the way
+              # sdk-release.yml's maven-build job builds them (the `central`
+              # profile), so a javadoc error fails this pull request and not a
+              # release. `package` stops before the step that writes the bundle.
+              ./mvnw -B -Pcentral -DskipTests package
               ;;
             ruby)
               cd sdk/ruby && bundle install --jobs 4 && bundle exec rspec

@@ -13,13 +13,19 @@ manifest:
   0.1.0, beta) ``;
 * the sentence naming the registry, `` The `controlvar` package is on
   [PyPI](...). 0.1.0 is a beta release `` or `` ... on [npm](...) (0.1.0,
-  beta) ``.
+  beta) ``;
+* the Java SDK's Maven forms, held to the parent POM's version: ``
+  `com.controlvar:controlvar-sdk` (v0.1.0) ``, a Gradle coordinate
+  ``com.controlvar:controlvar-sdk:0.1.0``, and a ``<dependency>`` whose
+  ``<artifactId>controlvar-...</artifactId>`` is followed by its
+  ``<version>`` (a comment or a javadoc ``*`` may sit between them).
 
 The pages read are every SDK page, the SDK guide, the FAQ, the two SDK docs
-journeys and the README each published package carries to its registry
-(``PUBLISHED``): PyPI and npm show that README as the package's page, and a
-release that bumps the manifest but not the README publishes the old version's
-install line for good.
+journeys, the README each published package carries to its registry
+(``PUBLISHED``), and the Java SDK's README and the starter's javadoc example
+(javadoc.io shows it for each published version): PyPI and npm show that
+README as the package's page, and a release that bumps the manifest but not
+the README publishes the old version's install line for good.
 
 A quote in a form this file does not read would go stale unseen, so:
 
@@ -52,6 +58,7 @@ from __future__ import annotations
 import json
 import re
 import tomllib
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
@@ -80,6 +87,10 @@ PYTHON_PAGES = {
 
 VERSION = r"v?(\d+(?:\.\d+){1,2})"
 PACKAGE = r"@controlvar/[A-Za-z0-9_-]+|controlvar(?:-openfeature)?"
+#: A Maven artifactId of this repository's.
+ARTIFACT = r"controlvar-[a-z]+(?:-[a-z]+)*"
+#: The Java SDK's Maven group; every artefact of sdk/java is in it.
+MAVEN_GROUP = "com.controlvar"
 #: (form, pattern): group 1 the package, group 2 the version. Whitespace is
 #: folded before matching, so a line break may fall anywhere.
 FORMS: Tuple[Tuple[str, "re.Pattern[str]"], ...] = (
@@ -100,7 +111,41 @@ FORMS: Tuple[Tuple[str, "re.Pattern[str]"], ...] = (
             + VERSION
         ),
     ),
+    (
+        "maven quoted",
+        re.compile(r"`(com\.controlvar:" + ARTIFACT + r")` \(?" + VERSION),
+    ),
+    (
+        "maven coordinate",
+        re.compile(r"(?<![\w.-])(com\.controlvar:" + ARTIFACT + r"):" + VERSION),
+    ),
+    (
+        # group 1 is the artifactId; quotes() puts the group in front.
+        "maven dependency",
+        re.compile(
+            r"<artifactId>("
+            + ARTIFACT
+            + r")</artifactId>[ *]{0,8}(?:<!--[^<>]{0,80}-->[ *]{0,8})?<version>"
+            + VERSION
+            + r"</version>"
+        ),
+    ),
 )
+
+POM_NAMESPACE = {"m": "http://maven.apache.org/POM/4.0.0"}
+
+
+def maven_versions() -> Dict[str, str]:
+    """groupId:artifactId -> version for the Java SDK's parent and modules,
+    which are released together at the parent's version."""
+    java = SDK_DIR / "java"
+    parent = ET.parse(java / "pom.xml").getroot()
+    version = parent.findtext("m:version", namespaces=POM_NAMESPACE)
+    artifacts = [parent.findtext("m:artifactId", namespaces=POM_NAMESPACE)]
+    for module in parent.findall("m:modules/m:module", POM_NAMESPACE):
+        child = ET.parse(java / module.text.strip() / "pom.xml").getroot()
+        artifacts.append(child.findtext("m:artifactId", namespaces=POM_NAMESPACE))
+    return {f"{MAVEN_GROUP}:{artifact}": version for artifact in artifacts}
 
 
 def manifest_versions() -> Dict[str, str]:
@@ -113,6 +158,7 @@ def manifest_versions() -> Dict[str, str]:
             (SDK_DIR / name / "pyproject.toml").read_text(encoding="utf-8")
         )
         versions[data["project"]["name"]] = data["project"]["version"]
+    versions.update(maven_versions())
     return versions
 
 
@@ -145,6 +191,8 @@ def quotes(rel: str, text: str) -> List[Tuple[str, str, Tuple[int, int]]]:
             package = match.group(1)
             if form == "tarball":
                 package = f"@controlvar/{package}"
+            if form == "maven dependency":
+                package = f"{MAVEN_GROUP}:{package}"
             if form == "quoted" and package == "controlvar" and rel not in PYTHON_PAGES:
                 continue
             found.append((package, match.group(2), match.span(2)))
@@ -222,12 +270,35 @@ def rel(path: Path) -> str:
     return path.relative_to(REPO_ROOT).as_posix()
 
 
+#: The starter's javadoc shows the Maven dependency, and javadoc.io publishes
+#: it with each version.
+STARTER_JAVADOC = (
+    SDK_DIR
+    / "java"
+    / "spring-boot-starter"
+    / "src"
+    / "main"
+    / "java"
+    / "com"
+    / "controlvar"
+    / "sdk"
+    / "spring"
+    / "ExperimentationAutoConfiguration.java"
+)
+#: The pages that quote the Java SDK in its Maven forms.
+JAVA_PAGES = [
+    DOCS / "sdk" / "java.md",
+    DOCS / "sdk-guide.md",
+    SDK_DIR / "java" / "README.md",
+    STARTER_JAVADOC,
+]
 #: Every page whose quotes are held to the manifests.
 PAGES = (
     sorted((DOCS / "sdk").glob("*.md"))
     + [DOCS / "sdk-guide.md", DOCS / "getting-started" / "faq.md"]
     + [SDK_DIR / directory / "README.md" for directory in PUBLISHED]
     + sorted(JOURNEYS.glob("sdk-*.yaml"))
+    + [SDK_DIR / "java" / "README.md", STARTER_JAVADOC]
 )
 #: The pages that quote nothing but the two published packages: every X.Y.Z on
 #: them is one of FORMS and its manifest's version exactly.
@@ -271,11 +342,17 @@ def test_the_scan_finds_the_quotes_it_exists_for():
             "tests/acceptance/docs/journeys/sdk-javascript.yaml",
             "@controlvar/js-sdk",
         ),
+        ("docs/sdk/java.md", "com.controlvar:controlvar-sdk"),
+        ("docs/sdk/java.md", "com.controlvar:controlvar-spring-boot-starter"),
+        ("docs/sdk-guide.md", "com.controlvar:controlvar-sdk"),
+        ("sdk/java/README.md", "com.controlvar:controlvar-sdk"),
+        ("sdk/java/README.md", "com.controlvar:controlvar-spring-boot-starter"),
+        (rel(STARTER_JAVADOC), "com.controlvar:controlvar-spring-boot-starter"),
     } <= found
     forms = {
         form
         for form, pattern in FORMS
-        for page in ABOUT_PUBLISHED
+        for page in ABOUT_PUBLISHED + JAVA_PAGES
         if pattern.search(fold(page.read_text("utf-8")))
     }
     assert forms == {form for form, _ in FORMS}, "a form matches nothing it exists for"
@@ -411,6 +488,113 @@ def test_faq_prose_with_an_old_version_is_refused():
     )
     assert planted != moved
     assert strict_problems(rel(page), planted, bumped)
+
+
+@pytest.mark.parametrize("part", ["patch", "minor"])
+@pytest.mark.parametrize("page", JAVA_PAGES, ids=rel)
+def test_a_java_page_left_behind_at_a_version_bump_is_refused(page, part):
+    """The POMs move to the next release and a page keeps the old version in
+    one of its Maven forms: refused. The Java README and the starter's
+    javadoc quoted 1.0.0 while nothing read those forms."""
+    versions = manifest_versions()
+    old = versions[f"{MAVEN_GROUP}:controlvar-sdk"]
+    major, minor, patch = (int(p) for p in old.split("."))
+    new = (
+        f"{major}.{minor}.{patch + 1}" if part == "patch" else f"{major}.{minor + 1}.0"
+    )
+    bumped = {
+        name: new if name.startswith(f"{MAVEN_GROUP}:") else version
+        for name, version in versions.items()
+    }
+    text = page.read_text(encoding="utf-8")
+    assert not mismatches(rel(page), text, versions), rel(page)
+    wrong = mismatches(rel(page), text, bumped)
+    assert wrong, f"{rel(page)} at the old version passed"
+    assert all(
+        line.endswith(f"is quoted as {old}; the manifest says {new}") for line in wrong
+    ), wrong
+
+
+@pytest.mark.parametrize(
+    "sample, package",
+    [
+        ("`com.controlvar:controlvar-sdk` (v{v}) is a client", "controlvar-sdk"),
+        ("`implementation 'com.controlvar:controlvar-sdk:{v}'`", "controlvar-sdk"),
+        (
+            'implementation("com.controlvar:controlvar-spring-boot-starter:{v}")',
+            "controlvar-spring-boot-starter",
+        ),
+        (
+            "<groupId>com.controlvar</groupId>\n"
+            "    <artifactId>controlvar-sdk</artifactId>          <!-- core client -->\n"
+            "    <version>{v}</version>",
+            "controlvar-sdk",
+        ),
+        (
+            " *     <artifactId>controlvar-spring-boot-starter</artifactId>\n"
+            " *     <version>{v}</version>",
+            "controlvar-spring-boot-starter",
+        ),
+    ],
+)
+def test_each_maven_form_is_read_and_compared(sample, package):
+    versions = manifest_versions()
+    assert mismatches("docs/x.md", sample.format(v="9.9.9"), versions) == [
+        f"{MAVEN_GROUP}:{package} is quoted as 9.9.9; the manifest says "
+        f"{versions[f'{MAVEN_GROUP}:{package}']}"
+    ]
+
+
+#: Every file in which the widened version grep of the first-publish plan found
+#: a Java quote of 1.0.0 (13 lines at main 9be67b23): the three POMs, the
+#: starter's javadoc, the Java README, the Java page, the SDK guide and a test
+#: sample. 1.0.0 was never released; the first release is 0.1.0.
+NEVER_RELEASED_JAVA_SITES = (
+    "sdk/java/pom.xml",
+    "sdk/java/core/pom.xml",
+    "sdk/java/spring-boot-starter/pom.xml",
+    rel(STARTER_JAVADOC),
+    "sdk/java/README.md",
+    "docs/sdk/java.md",
+    "docs/sdk-guide.md",
+    "backend/tests/unit/docs/test_deferred_sdk_pages.py",
+)
+#: The Java alternatives of that grep, as it ran in bash. The samples below
+#: are built from OLD so that this file is not itself a hit for the grep.
+NEVER_RELEASED_JAVA = re.compile(
+    r"com\.controlvar:controlvar-sdk:1\.0\.0"
+    r"|`com\.controlvar:controlvar-sdk` \(v1"
+    r"|<version>1\.0\.0</version>"
+)
+OLD = ".".join(("1", "0", "0"))
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        f"    <version>{OLD}</version>",
+        f" *     <version>{OLD}</version>",
+        f"`implementation 'com.controlvar:controlvar-sdk:{OLD}'`",
+        f"`com.controlvar:controlvar-sdk` (v{OLD}) is a Java 11+ client",
+    ],
+)
+def test_the_never_released_java_pattern_finds_each_old_site(line):
+    assert NEVER_RELEASED_JAVA.search(line), line
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("site", NEVER_RELEASED_JAVA_SITES)
+def test_no_java_site_names_the_never_released_1_0_0(site):
+    """The Java SDK's POMs said 1.0.0 before its first release, at 0.1.0, and
+    the pages and samples followed them. Reads files only."""
+    found = [
+        f"{site}:{number}: {line.strip()}"
+        for number, line in enumerate(
+            (REPO_ROOT / site).read_text(encoding="utf-8").splitlines(), start=1
+        )
+        if NEVER_RELEASED_JAVA.search(line)
+    ]
+    assert not found, found
 
 
 # ---------------------------------------------------------------------------
