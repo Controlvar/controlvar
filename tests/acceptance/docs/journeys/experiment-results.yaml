@@ -98,7 +98,7 @@
 #
 # Last, a revenue metric, which the results analyse as its mean value per
 # assigned user, each user's values added up and 0 for a user with none,
-# compared with Welch's t-test (getting-started/limitations.md). A fourth
+# compared with Welch's t-test (getting-started/concepts.md). A fourth
 # 50/50 experiment, created through the API, has the revenue metric "Order
 # value" on the event purchase as its primary, and a second metric on the same
 # event marked lower is better. Its traffic step sends Control 256 users of

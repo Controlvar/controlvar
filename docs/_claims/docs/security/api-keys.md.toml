@@ -241,7 +241,7 @@ text = "Create a key with the 'sdk:ruleset' scope for server-side SDK use."
 by = ["test:backend/tests/unit/api/test_route_surface_rules.py::test_the_scope_refusal_says_what_to_create_and_the_key_header_is_x_api_key"]
 
 [[unit]]
-text = "A key with sdk:ruleset can therefore download every feature flag's targeting rules, including the values in them, so keep such a key on a server and never ship it to a browser or a mobile app."
+text = "A key with sdk:ruleset can therefore download every feature flag's targeting rules, including the values in them, and the values string, number and JSON flags serve, so keep such a key on a server and never ship it to a browser or a mobile app."
 by = ["test:backend/tests/integration/api/test_sdk_ruleset_api.py"]
 
 [[unit]]

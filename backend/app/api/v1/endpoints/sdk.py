@@ -7,8 +7,8 @@ its rules are described in :mod:`backend.app.services.sdk_ruleset`.
 
 Authentication is an ``X-API-Key`` that carries the ``sdk:ruleset`` scope; any
 other valid key gets 403. The ruleset holds the values written into targeting
-rules, so a key with this scope belongs on a server, never in a browser or a
-mobile app.
+rules, and the values string, number and json flags serve, so a key with this
+scope belongs on a server, never in a browser or a mobile app.
 
 Each response carries ``ETag: "<version>"``. A poll that sends the ETag back in
 ``If-None-Match`` gets ``304 Not Modified`` with no body while nothing that
@@ -90,7 +90,8 @@ class SdkRulesetDefaultRule(BaseModel):
 
 
 class SdkRulesetFlag(BaseModel):
-    """One flag. Inactive flags carry only ``key`` and ``active``."""
+    """One flag. Inactive flags carry only ``key`` and ``active``, plus
+    ``value_type`` and ``off_value`` for a string, number or json flag."""
 
     key: str
     active: bool
@@ -98,12 +99,37 @@ class SdkRulesetFlag(BaseModel):
         None,
         description=(
             "local: the SDK may evaluate this flag; remote: it asks the server "
-            "(no rules are included)"
+            "(no rules or values are included)"
         ),
     )
     rollout_percentage: Optional[int] = None
     rules: Optional[List[SdkRulesetRule]] = None
     default_rule: Optional[SdkRulesetDefaultRule] = None
+    value_type: Optional[Literal["string", "number", "json"]] = Field(
+        None,
+        description=(
+            "What the flag serves: string, number, or json (an object or an "
+            "array). Present on the local and inactive entries of such a flag; "
+            "absent for a boolean flag, which serves true to the users it is on "
+            "for and false to everyone else. An SDK that does not know the type "
+            "asks the server for that flag's value."
+        ),
+    )
+    on_value: Optional[Any] = Field(
+        None,
+        description=(
+            "What a user the flag is on for gets: a user who matches a rule and "
+            "falls inside its percentage, or matches no rule and falls inside "
+            "rollout_percentage. Of value_type; on local entries only."
+        ),
+    )
+    off_value: Optional[Any] = Field(
+        None,
+        description=(
+            "What everyone else gets, and what everyone gets while the flag is "
+            "off. Of value_type; on local and inactive entries."
+        ),
+    )
 
 
 class SdkRuleset(BaseModel):
@@ -182,7 +208,8 @@ def get_ruleset(
 
     **Authentication**: an `X-API-Key` whose scopes include `sdk:ruleset`. A
     valid key without it gets 403. The ruleset contains the values written in
-    targeting rules: keep such a key on a server.
+    targeting rules, and the values string, number and json flags serve: keep
+    such a key on a server.
 
     **Caching**: the response carries `ETag`. Send it back in `If-None-Match`
     and an unchanged ruleset answers 304 with no body.
@@ -190,8 +217,12 @@ def get_ruleset(
     A flag the SDK may evaluate itself is `"evaluation": "local"` and carries
     its rollout percentage and rules; `"remote"` means ask
     `GET /api/v1/feature-flags/evaluate/{key}`; an inactive flag is
-    `{"key", "active": false}`.
+    `{"key", "active": false}`. A string, number or json flag also carries
+    `value_type` and its two values: `on_value` and `off_value` on a local
+    entry, `off_value` on an inactive one. A remote entry carries no value.
     """
+    # Every column the builder reads, loaded by this one query: a column left
+    # out would be loaded by one more query per flag (PF-2).
     flags = (
         db.query(FeatureFlag)
         .options(
@@ -200,6 +231,9 @@ def get_ruleset(
                 FeatureFlag.status,
                 FeatureFlag.rollout_percentage,
                 FeatureFlag.targeting_rules,
+                FeatureFlag.value_type,
+                FeatureFlag.on_value,
+                FeatureFlag.off_value,
             )
         )
         .all()

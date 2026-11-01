@@ -20,9 +20,7 @@
 # with dummy values in it; one commit's value was long enough to match. Later commits
 # shorten it, so only that commit's line is listed.
 7bc7741d63bf2fe637b5ca8184b571801b5c2b81:scripts/check_installer_cli.py:generic-api-key:402
-# A tree scan (core_build.sh's secrets step: gitleaks with --no-git, run from inside the
-# copy) reports no commit, so each of the same findings needs its own path:rule:line line.
-tests/sdk-contract/ruleset-vectors.json:generic-api-key:153
-tests/sdk-contract/ruleset-vectors.json:generic-api-key:154
-tests/sdk-contract/ruleset-vectors.json:generic-api-key:304
-tests/sdk-contract/ruleset-vectors.json:generic-api-key:305
+# No path:rule:line (tree-scan) line for tests/sdk-contract: the vectors are generated, so
+# such a line hides whatever the next regeneration puts there. The generator names its
+# flags so that none matches (#1497); core_build.sh's secrets step scans that directory
+# with no ignore file, and backend/tests/unit/scripts/test_gitleaksignore.py refuses one.

@@ -13,13 +13,16 @@
  * only so the old wording never appears in this file. A bare `\b14\b` is
  * deliberately absent: it matches the hub's correct "iOS 14+".
  *
- * Matched against `container.textContent`, so a claim split across nested
- * elements is still seen. The `<Head>` description is not in it; the
- * marketing build grep covers that.
+ * Matched against `claimText()` (tests/pages/helpers/claimText.ts): the
+ * container's `textContent`, so a claim split across nested elements is still
+ * seen, plus every `alt`, `aria-label` and `title`, and the `<Head>`
+ * description, which the marketing build copies into the link preview. No
+ * grep of the marketing build's HTML sweeps those (#1459, PE 11).
  */
 import React from 'react';
 import { render } from '@testing-library/react';
 import DocsIndex from '@/pages/docs/index';
+import { claimText, metaDescriptions } from './helpers/claimText';
 
 jest.mock('next/head', () => { const H=({children}:{children:React.ReactNode})=><>{children}</>; H.displayName='H'; return H; });
 jest.mock('next/router', () => ({ useRouter: () => ({ pathname:'/docs', asPath:'/docs', query:{}, push:jest.fn(), replace:jest.fn(), isReady:true }) }));
@@ -55,10 +58,18 @@ const retired: Array<[string[], string]> = [
 ];
 
 describe('/docs hub', () => {
+  it('sweeps the meta description too, so the sweep below reads it', () => {
+    const { container } = render(<DocsIndex />);
+    const descriptions = metaDescriptions(container);
+    expect(descriptions).toHaveLength(1);
+    expect(descriptions[0].length).toBeGreaterThan(50);
+    expect(claimText(container)).toContain(descriptions[0]);
+  });
+
   it.each(retired)('no longer says %s (%s)', (parts) => {
     const pattern = new RegExp((parts as string[]).join(''), 'i');
     const { container } = render(<DocsIndex />);
-    expect(container.textContent ?? '').not.toMatch(pattern);
+    expect(claimText(container)).not.toMatch(pattern);
   });
 });
 

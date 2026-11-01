@@ -16,9 +16,9 @@
         "sha256": "263886ca60e8ad2dddad93cc99361440fb8b3cefc1f195bb76017e9ae5689077"
       },
       "poster": {
-        "name": "01-getting-started-9cb480bae881-poster-ceebfc002e1c.jpg",
-        "bytes": 24156,
-        "sha256": "ceebfc002e1cf6c6bd06617e266f1498ab3c70d13818bfe32e6894f441f296d6"
+        "name": "01-getting-started-9cb480bae881-poster-fbe152dc6f04.jpg",
+        "bytes": 60648,
+        "sha256": "fbe152dc6f04ffdc92f5e191184fcc2ce837e763c8967e26b10e5d6ef658aafc"
       }
     },
     {
@@ -37,9 +37,9 @@
         "sha256": "d3975ed37b93a84a49458da7039ade017e36c003b5eb9799336204dc7a296015"
       },
       "poster": {
-        "name": "02-first-experiment-03d296e58df0-poster-f8d86ce208c9.jpg",
-        "bytes": 27410,
-        "sha256": "f8d86ce208c9101c0a3e1568f1b7c84a4033ecf788c4c742d6ffa637971d3eca"
+        "name": "02-first-experiment-03d296e58df0-poster-6581a80cd68f.jpg",
+        "bytes": 60855,
+        "sha256": "6581a80cd68f9f90398708c6267763757bc13c864135607a50a98709c6631d44"
       }
     },
     {
@@ -58,9 +58,9 @@
         "sha256": "cc8cfef1dfb58e34f8cd7e16dfdb1618f43430d5be10a9b8efc9ba422a8dc457"
       },
       "poster": {
-        "name": "03-flag-rollout-130574a2e973-poster-5763d75a50de.jpg",
-        "bytes": 27501,
-        "sha256": "5763d75a50de509500018a638b63d7361d04148d6e2a027dbad74b1d037543c8"
+        "name": "03-flag-rollout-130574a2e973-poster-c033987b9903.jpg",
+        "bytes": 53226,
+        "sha256": "c033987b9903ceb90b414e7fd462eadbd88178e80c99be15d2e223d32d1e3114"
       }
     },
     {
@@ -79,9 +79,9 @@
         "sha256": "b940eadbd7cbe9bdb985fc843c527cc5cc0fc7089f3d2fb08b75200e1fd118cf"
       },
       "poster": {
-        "name": "05-plan-and-team-5446fa6cdb04-poster-184862dd9bf0.jpg",
-        "bytes": 29584,
-        "sha256": "184862dd9bf0db363954ddc261d284ef7b7ac709257fb20d85394ffd7566de65"
+        "name": "05-plan-and-team-5446fa6cdb04-poster-ece0127a444c.jpg",
+        "bytes": 59849,
+        "sha256": "ece0127a444c3ed993fcb333fd025d0af7bdb90e8dd22c9443773054a6392561"
       }
     },
     {
@@ -100,9 +100,9 @@
         "sha256": "e11f49ddd2bf31fbf89127f4e1f8131869f53e0bb7479c666356ed7c370b5e21"
       },
       "poster": {
-        "name": "06-shoplab-ab-test-3c36550c491d-poster-1f411f8637cc.jpg",
-        "bytes": 31093,
-        "sha256": "1f411f8637cc4a4d065577b4b49929f68b46e8f3a0da944616271b7afa2a406f"
+        "name": "06-shoplab-ab-test-3c36550c491d-poster-c29952818e8b.jpg",
+        "bytes": 53305,
+        "sha256": "c29952818e8b29a8077b4cc7801204d681a2e74453994b2819a952b766608c67"
       }
     },
     {
@@ -124,6 +124,27 @@
         "name": "08-warehouse-explainer-8495d45e4d7f-poster-705c2c487bc1.jpg",
         "bytes": 56326,
         "sha256": "705c2c487bc1f29a437170b1efc5fd7639bcb9b0fb1f254b0c11115d6e5feb54"
+      }
+    },
+    {
+      "slug": "09-design-in-depth",
+      "title": "Design an experiment in depth",
+      "description": "Past the basics of guided setup: a second metric, a third version, who can join, the correction and sequential testing (beta); then a start date, a global holdout and an exclusion group.",
+      "duration_seconds": 138,
+      "mp4": {
+        "name": "09-design-in-depth-545d69341c2e.mp4",
+        "bytes": 6861216,
+        "sha256": "545d69341c2eb0adc5780883c2f0f84f14b8dd71fb38f41314254a8a038132c2"
+      },
+      "vtt": {
+        "name": "09-design-in-depth-545d69341c2e.vtt",
+        "bytes": 2245,
+        "sha256": "5e629ac9f268608ada631c6d44ddf407ae4f28391b2ff7698fe23abdba009722"
+      },
+      "poster": {
+        "name": "09-design-in-depth-545d69341c2e-poster-36d4077d171c.jpg",
+        "bytes": 64618,
+        "sha256": "36d4077d171cea9ff82d0dea4c84f2948513cf71daf95b0bc2d36f078f492a88"
       }
     }
   ]

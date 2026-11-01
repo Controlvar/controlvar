@@ -14,27 +14,37 @@
 * **Coherence.** A reference local evaluator, written from the ruleset
   contract and reading only the ``ruleset`` document in the file, answers
   exactly the ``must_local`` cases, and gives the server's answer on every one
-  of them. That proves each ruleset entry carries what an SDK needs, and that
-  the ``must_local`` marking and the contract agree.
+  of them -- its ``value`` too, for a string, number or json flag. That proves
+  each ruleset entry carries what an SDK needs, and that the ``must_local``
+  marking and the contract agree.
+* **Coverage of values** (#1497). Every value type but boolean is in the file
+  as an active local flag, an active remote flag, an inactive flag and an
+  archived flag, classified from the file itself, each entry carrying exactly
+  the value fields its class carries and each case its ``expected_value``.
 """
 
 from __future__ import annotations
 
 import difflib
 import hashlib
+import itertools
 import json
 from typing import Any, Dict, Optional
 
 import pytest
 
+from backend.app.core.flag_values import BOOLEAN, VALUE_TYPES
 from backend.app.services import sdk_ruleset
 from backend.scripts import generate_ruleset_vectors as generator
 
 pytestmark = pytest.mark.unit
 
 #: Pinned. A change here is a change to what the SDKs must answer locally:
-#: regenerate the vectors and say why in the pull request.
-EXPECTED_COUNTS = {"flags": 149, "cases": 2191, "must_local": 1294}
+#: regenerate the vectors and say why in the pull request. The same numbers
+#: are pinned in sdk/js/__tests__/evaluator.test.ts and
+#: sdk/python/tests/test_evaluator.py. #1497 (F5) added the 12 value flags:
+#: 51 cases, 39 of them must_local.
+EXPECTED_COUNTS = {"flags": 161, "cases": 2242, "must_local": 1333}
 
 #: The launch local-operator set (engine names).
 LAUNCH_LOCAL_OPERATORS = {
@@ -267,6 +277,163 @@ def test_the_generator_stubs_the_resolver():
     }
 
 
+# ---------------------------------------------------------------------------
+# Values (#1497): every value type, every way a flag reaches an SDK
+# ---------------------------------------------------------------------------
+
+#: Every type with a value of its own (a boolean flag's value is ``enabled``).
+VALUED_TYPES = [t for t in VALUE_TYPES if t != BOOLEAN]
+#: The ways a flag reaches an SDK, each a class of ruleset entry.
+VALUE_CLASSES = ("active-local", "active-remote", "inactive", "archived")
+#: The value fields each class of entry carries.
+ENTRY_VALUE_FIELDS = {
+    "active-local": {"value_type", "on_value", "off_value"},
+    "active-remote": set(),
+    "inactive": {"value_type", "off_value"},
+    "archived": {"value_type", "off_value"},
+}
+VALUE_FIELDS = {"value_type", "on_value", "off_value"}
+
+
+def _json(value: Any) -> str:
+    """A value as JSON text: ``1`` is not ``true``, and ``10`` is not ``10.0``."""
+    return json.dumps(value, sort_keys=True)
+
+
+def _value_class(stored: Dict[str, Any], entry: Dict[str, Any]) -> str:
+    """The class of a stored flag, read from the file: its status and entry."""
+    if stored["status"] == "INACTIVE":
+        return "inactive"
+    if stored["status"] == "ARCHIVED":
+        return "archived"
+    return f"active-{entry['evaluation']}"
+
+
+def _valued(vectors):
+    """``(stored, entry, cases)`` for every flag of a type with a value."""
+    entries = {entry["key"]: entry for entry in vectors["ruleset"]["flags"]}
+    for stored in vectors["stored_flags"]:
+        if stored.get("value_type", BOOLEAN) == BOOLEAN:
+            continue
+        cases = [case for case in vectors["cases"] if case["flag"] == stored["key"]]
+        yield stored, entries[stored["key"]], cases
+
+
+def test_every_value_type_reaches_an_sdk_every_way(vectors):
+    """The coverage assertion: each value type x each class, from the file.
+
+    Classified from the stored status and the served entry, not from the
+    generator's names, so a class the generator stops producing -- or one the
+    builder stops serving as it should -- fails here.
+    """
+    found = {}
+    for stored, entry, cases in _valued(vectors):
+        value_class = _value_class(stored, entry)
+        found.setdefault((stored["value_type"], value_class), []).append(stored["key"])
+        assert cases, f"{stored['key']} has no case"
+    expected = set(itertools.product(VALUED_TYPES, VALUE_CLASSES))
+    missing = sorted(expected - set(found))
+    extra = sorted(set(found) - expected)
+    assert not missing, f"no vector flag for {missing}"
+    assert not extra, f"value flags outside the classes: {extra}"
+    assert len(VALUED_TYPES) == 3 and len(expected) == 12
+
+
+def test_each_value_entry_carries_exactly_its_class_fields(vectors):
+    for stored, entry, _ in _valued(vectors):
+        value_class = _value_class(stored, entry)
+        fields = set(entry) & VALUE_FIELDS
+        assert fields == ENTRY_VALUE_FIELDS[value_class], (stored["key"], entry)
+        if "value_type" in fields:
+            assert entry["value_type"] == stored["value_type"]
+        for field in fields - {"value_type"}:
+            assert _json(entry[field]) == _json(stored[field]), (stored["key"], field)
+
+
+def test_a_boolean_flag_entry_and_case_carry_no_value(vectors):
+    """A boolean flag's entry is the one it had before #1497, byte for byte."""
+    boolean = {
+        stored["key"]
+        for stored in vectors["stored_flags"]
+        if "value_type" not in stored
+    }
+    assert len(boolean) == EXPECTED_COUNTS["flags"] - 12
+    for entry in vectors["ruleset"]["flags"]:
+        if entry["key"] in boolean:
+            assert not set(entry) & VALUE_FIELDS, entry
+    for case in vectors["cases"]:
+        assert ("expected_value" in case) is (case["flag"] not in boolean), case["id"]
+
+
+def test_each_value_case_carries_the_value_the_server_serves(vectors):
+    """``expected_value`` is the on value exactly when ``expected.enabled``;
+    the local class serves both values locally, the remote class none."""
+    for stored, entry, cases in _valued(vectors):
+        value_class = _value_class(stored, entry)
+        served = set()
+        for case in cases:
+            want = (
+                stored["on_value"]
+                if case["expected"]["enabled"]
+                else stored["off_value"]
+            )
+            assert _json(case["expected_value"]) == _json(want), case["id"]
+            if case["must_local"]:
+                served.add(_json(case["expected_value"]))
+        on, off = _json(stored["on_value"]), _json(stored["off_value"])
+        if value_class == "active-local":
+            assert served == {on, off}, (stored["key"], served)
+            assert not all(case["must_local"] for case in cases), stored["key"]
+        elif value_class == "active-remote":
+            assert served == set(), stored["key"]
+        else:
+            assert served == {off}, (stored["key"], served)
+
+
+@pytest.mark.parametrize(
+    "flag, context, user, must_local, reason, value",
+    [
+        (
+            "value-string-local",
+            {"plan": "pro"},
+            "user-1",
+            True,
+            "targeting_rule",
+            "on-copy",
+        ),
+        ("value-string-local", {"plan": "free"}, "user-1", True, "rollout", "off-copy"),
+        ("value-number-local", {"plan": "free"}, "user-2", True, "rollout", 2.5),
+        (
+            "value-json-local",
+            {"plan": "pro"},
+            "user-1",
+            True,
+            "targeting_rule",
+            {"color": "blue"},
+        ),
+        # a plan that is not a string: the SDK asks the server
+        ("value-number-local", {"plan": 5}, "user-1", False, "rollout", 10),
+        ("value-json-remote", None, "user-7", False, "rollout", ["fallback"]),
+        (
+            "value-string-inactive",
+            {"plan": "pro"},
+            "user-1",
+            True,
+            "inactive",
+            "off-copy",
+        ),
+        ("value-json-archived", None, "user-1", True, "inactive", ["fallback"]),
+    ],
+)
+def test_each_value_class_carries_its_answer(
+    vectors, flag, context, user, must_local, reason, value
+):
+    case = _find(vectors, flag, context, user)
+    assert case["must_local"] is must_local
+    assert case["expected"]["reason"] == reason
+    assert _json(case["expected_value"]) == _json(value)
+
+
 def test_every_local_operator_and_reason_is_exercised_locally(vectors):
     entries = {entry["key"]: entry for entry in vectors["ruleset"]["flags"]}
     operators = set()
@@ -463,10 +630,24 @@ class Reference:
             "reason": "rollout",
         }
 
+    def value(self, key: str, answer: Dict[str, Any]) -> Any:
+        """What the flag serves with *answer*, from its entry alone (#1497).
+
+        An entry with no ``value_type`` is a boolean flag: its value is
+        ``enabled``. Otherwise the on value when enabled, the off value when
+        not -- read from the entry, so an entry missing the field it needs
+        fails here.
+        """
+        entry = self.flags[key]
+        if "value_type" not in entry:
+            return answer["enabled"]
+        return entry["on_value"] if answer["enabled"] else entry["off_value"]
+
 
 def test_the_reference_evaluator_answers_exactly_the_must_local_cases(vectors):
     reference = Reference(vectors)
     wrong, missed, extra = [], [], []
+    values = 0
     for case in vectors["cases"]:
         answer = reference.evaluate(case["flag"], case["user_id"], case["context"])
         if answer is DEFER:
@@ -475,8 +656,16 @@ def test_the_reference_evaluator_answers_exactly_the_must_local_cases(vectors):
             continue
         if answer != case["expected"]:
             wrong.append((case["id"], answer, case["expected"]))
+        if "expected_value" in case:
+            values += 1
+            value = reference.value(case["flag"], answer)
+            if _json(value) != _json(case["expected_value"]):
+                wrong.append((case["id"], value, case["expected_value"]))
         if not case["must_local"]:
             extra.append(case["id"])
     assert not wrong, f"{len(wrong)} local answers differ from the server: {wrong[:5]}"
+    # Every value flag's must_local case was answered with its value: 13 per
+    # value type (9 local, 2 inactive, 2 archived).
+    assert values == 39
     assert not missed, f"{len(missed)} must_local cases deferred: {missed[:10]}"
     assert not extra, f"{len(extra)} cases answered but not must_local: {extra[:10]}"

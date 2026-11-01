@@ -2,6 +2,12 @@
 
 > **Open-source A/B testing and feature flags that you run yourself.**
 
+**Website:** [controlvar.com](https://controlvar.com) · **Documentation:** [docs.controlvar.com](https://docs.controlvar.com)
+
+![The results page of a ShopLab demo experiment in the Controlvar dashboard: its users, the planned sample reached, the leading variant and the sample ratio check.](frontend/public/screens/results-88c79d580b09.webp)
+
+Watch the [walkthrough videos](https://controlvar.com/#walkthroughs) on controlvar.com.
+
 The core, the optional modules and the dashboard are Apache-2.0; the client SDKs under `sdk/`
 are MIT. Controlvar is pre-1.0: see the
 [releases](https://github.com/Controlvar/controlvar/releases).
@@ -20,7 +26,24 @@ git clone https://github.com/Controlvar/controlvar.git
 cd controlvar
 ```
 
-Then start the stack from the repository root:
+### On the published images
+
+Start the released images from `deploy/compose/`; nothing is built:
+
+```{.bash skip reason="server: pulls the published images and starts them as a stack of their own"}
+cd deploy/compose
+./generate-env.sh
+docker compose up -d --wait
+```
+
+Open **http://localhost:8080** and sign in as **admin@example.com** with the
+`FIRST_SUPERUSER_PASSWORD` that `generate-env.sh` wrote to `deploy/compose/.env`.
+This stack has no demo data and no demo account. Its settings are in
+[deploy/compose/README.md](deploy/compose/README.md).
+
+### Built from source, with the demo data
+
+Start the stack from the repository root:
 
 ```{.bash exec timeout=1200}
 docker compose up -d --wait
@@ -100,10 +123,10 @@ step: [Guided examples](docs/guides/guided-examples.md).
 
 ## What it does not do (yet)
 
-- A flag is on or off for each user: it carries no variants or values. To serve one of several
-  experiences, run a multivariate experiment.
-- Only a revenue metric is analysed by its values (its mean per assigned user); a count, duration
-  or custom metric is analysed as a conversion: whether each user sent the metric's event.
+- A flag serves two values, its on value and its off value; no rule or rollout splits users
+  among three or more. For three or more experiences, run a multivariate experiment.
+- A revenue, count, duration or custom metric's sequential, Bayesian, sample-size, breakdown and
+  daily views are of the share of users who sent its event.
 - Variant weights must add up to exactly 100%; there is no separate experiment-level traffic
   allocation.
 - One deployment is one environment: run staging and production as separate deployments, each

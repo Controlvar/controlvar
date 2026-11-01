@@ -16,9 +16,19 @@ import path from 'path';
 import React from 'react';
 import { render } from '@testing-library/react';
 import { AuthProvider } from '@/contexts/AuthContext';
-import { SDKS } from '@/content/sdks';
+import { SDK_GUIDES, SDKS } from '@/content/sdks';
+import { docsUrl } from '@/services/docs';
 import HomePage from '@/pages/index';
 import DocsIndex from '@/pages/docs/index';
+import { isMarketingSite } from '@/utils/site-mode';
+import { claimText } from '../pages/helpers/claimText';
+
+// The platform build unless a test says otherwise; the count rule renders both.
+jest.mock('@/utils/site-mode', () => ({
+  ...jest.requireActual('@/utils/site-mode'),
+  isMarketingSite: jest.fn(),
+}));
+const mode = isMarketingSite as jest.Mock;
 
 jest.mock('next/head', () => { const H=({children}:{children:React.ReactNode})=><>{children}</>; H.displayName='H'; return H; });
 jest.mock('next/router', () => ({ useRouter: () => ({ pathname:'/', asPath:'/', query:{}, push:jest.fn(), replace:jest.fn(), isReady:true }) }));
@@ -75,8 +85,27 @@ function renderedText(container: HTMLElement): string {
   return parts.join(' ');
 }
 
+/**
+ * A number of SDKs, in digits: "14 SDKs", "14 native SDKs", "SDKs in 14
+ * languages". The spelled-out count is index.test.tsx's `retired` rule; this
+ * is the digit one, which the mockup's "14 SDKs" passed (#1459, QA 1g).
+ * Not a count: "iOS 14+" (no space after the digits), and the "0" of
+ * "Apache-2.0 and the SDKs" (a version, and two words before "SDKs").
+ */
+const SDK_COUNT = /(?<![\w.-])(\d+)\s+(?:[A-Za-z+-]+\s+)?(?:SDKs?|languages|client librar(?:y|ies))\b/gi;
+
+/** Each digit count of SDKs in `text`, as a number. */
+function sdkCounts(text: string): number[] {
+  const counts: number[] = [];
+  const re = new RegExp(SDK_COUNT.source, SDK_COUNT.flags);
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) counts.push(Number(m[1]));
+  return counts;
+}
+
 beforeEach(() => {
   localStorage.clear();
+  mode.mockReset().mockReturnValue(false);
   global.fetch = jest.fn(() => Promise.reject(new Error('no API'))) as unknown as typeof fetch;
 });
 
@@ -93,5 +122,59 @@ describe('content/sdks.ts', () => {
   it('every SDK is named on the docs hub', () => {
     const { container } = render(<DocsIndex />);
     expect(missingNames(renderedText(container))).toEqual([]);
+  });
+
+  it("links each SDK's guide through a map with exactly its keys", () => {
+    expect(Object.keys(SDK_GUIDES).sort()).toEqual(Object.keys(SDKS).sort());
+  });
+
+  /**
+   * Which guide each SDK links (#1459, Q round 1 NIT 2): its own. A guide is
+   * `docs/sdk/<directory>.md` but for these, whose guide has another name.
+   * The docs-links test checks only that a linked page exists, so `js`
+   * linking sdk/python passed it. And the guide's title names the SDK.
+   */
+  const GUIDE_PAGE: Readonly<Record<string, string>> = {
+    js: 'sdk/javascript',
+    'openfeature-python': 'sdk/openfeature',
+  };
+
+  it.each(Object.keys(SDKS))("links %s to its own guide, titled with the SDK's name", (key) => {
+    const page = GUIDE_PAGE[key] ?? `sdk/${key}`;
+    expect({ key, guide: SDK_GUIDES[key] }).toEqual({ key, guide: docsUrl(page) });
+    const file = path.join(REPO_ROOT, 'docs', `${page}.md`);
+    expect(fs.existsSync(file)).toBe(true);
+    const title = fs.readFileSync(file, 'utf8').split(/\r?\n/)[0];
+    const name = SDKS[key].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    expect(title).toMatch(new RegExp(`^# .*(?<![A-Za-z])${name}(?![A-Za-z])`));
+  });
+});
+
+/**
+ * The pages state no SDK count, or the one `SDKS` gives. A typed number
+ * drifted from `sdk/` before; with this rule a count that is not the size of
+ * `SDKS` fails at once, and one that is fails the day an SDK is added.
+ */
+describe('no SDK count but the one SDKS gives', () => {
+  const size = Object.keys(SDKS).length;
+
+  it('finds the count in a sentence that states one, so the rule can fire', () => {
+    expect(sdkCounts('There are 14 SDKs, plus 2 OpenFeature providers, in 12 languages.')).toEqual([14, 12]);
+    expect(sdkCounts('For iOS 14+ and macOS 11+.')).toEqual([]);
+    expect(sdkCounts('The whole platform is Apache-2.0 and the SDKs are MIT.')).toEqual([]);
+  });
+
+  it.each([
+    ['platform', false],
+    ['marketing', true],
+  ])('on the homepage (%s build)', (_build, marketing) => {
+    mode.mockReturnValue(marketing);
+    const { container } = render(<AuthProvider><HomePage /></AuthProvider>);
+    expect(sdkCounts(claimText(container)).filter((n) => n !== size)).toEqual([]);
+  });
+
+  it('on the docs hub', () => {
+    const { container } = render(<DocsIndex />);
+    expect(sdkCounts(claimText(container)).filter((n) => n !== size)).toEqual([]);
   });
 });

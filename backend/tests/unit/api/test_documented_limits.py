@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from backend.app.core.flag_values import served_value
 from backend.app.models.api_key import APIKey
 from backend.app.models.experiment import Experiment
 from backend.app.models.feature_flag import FeatureFlag
@@ -67,7 +68,7 @@ def routes():
 
 
 # ---------------------------------------------------------------------------
-# Feature flags are on or off
+# A feature flag serves two values, never a split among three or more (#1497)
 # ---------------------------------------------------------------------------
 @pytest.mark.parametrize("model", [FeatureFlagCreate, FeatureFlagUpdate])
 def test_a_flag_request_with_variants_is_refused(model):
@@ -76,12 +77,36 @@ def test_a_flag_request_with_variants_is_refused(model):
         model(**body)
 
 
-def test_a_flag_serves_false_when_off_and_nothing_else():
+def test_a_boolean_flag_serves_false_when_off_and_a_value_flag_its_off_value():
+    """Inverted by #1497 from "a flag serves false when off and nothing else".
+
+    ``default_value`` still accepts only false, for every flag (D40), and a
+    boolean flag still serves false when it is off. A string, number or json
+    flag serves its ``off_value``.
+    """
     assert FeatureFlagCreate(key="k", name="n").default_value is False
     with pytest.raises(ValidationError, match="default_value"):
         FeatureFlagCreate(key="k", name="n", default_value=True)
     with pytest.raises(ValidationError, match="default_value"):
         FeatureFlagCreate(key="k", name="n", default_value="blue")
+    with pytest.raises(ValidationError, match="off_value"):
+        FeatureFlagCreate(key="k", name="n", off_value="blue")
+    assert served_value(FeatureFlag(key="k", value_type="boolean"), False) == (
+        True,
+        False,
+    )
+
+    created = FeatureFlagCreate(
+        key="k", name="n", value_type="string", on_value="a", off_value="blue"
+    )
+    flag = FeatureFlag(
+        key="k",
+        value_type=created.value_type,
+        on_value=created.on_value,
+        off_value=created.off_value,
+    )
+    assert served_value(flag, False) == (True, "blue")
+    assert served_value(flag, True) == (True, "a")
 
 
 def test_flag_evaluation_reads_no_holdout():

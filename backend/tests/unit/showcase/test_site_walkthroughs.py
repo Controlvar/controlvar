@@ -532,6 +532,89 @@ DESCRIPTION_FACTS: dict[str, dict[str, Any]] = {
             "Admitted users are split by a deterministic hash",
         ],
     },
+    "09-design-in-depth": {
+        "description": (
+            "Past the basics of guided setup: a second metric, a third version, who "
+            "can join, the correction and sequential testing (beta); then a start "
+            "date, a global holdout and an exclusion group."
+        ),
+        "seed": "demo",
+        # The guided setup (New Experiment to Create): a second metric, a third
+        # version, a targeting rule, the correction, sequential testing; then,
+        # on their own pages, the draft's start date, a global holdout made and
+        # activated, and the draft added to an exclusion group.
+        "actions": [
+            ["click", {"testid": "new-experiment-btn"}],
+            ["click", {"testid": "add-metric"}],
+            ["click", {"testid": "add-variant"}],
+            ["click", {"testid": "add-group"}],
+            ["type", {"testid": "condition-value"}],
+            ["look", {"css": "div:has(> #analysis-correction)"}],
+            ["click", {"testid": "analysis-sequential"}],
+            ["click", {"testid": "wizard-create"}],
+            ["click", {"testid": "experiment-schedule"}],
+            ["click", {"testid": "schedule-save"}],
+            ["click", {"testid": "new-holdout-btn"}],
+            ["click", {"testid": "holdout-activate-now"}],
+            ["click", {"testid": "holdout-confirm-yes"}],
+            ["choose", {"testid": "exclusion-group-add-select"}],
+            ["click", {"testid": "exclusion-group-add"}],
+        ],
+        "said": [
+            "Add a second metric to track alongside it: add to cart.",
+            "Add a third version, and split the traffic so it reaches 100%.",
+            "Choose who can join from what your app sends: US or Canada.",
+            "Turn on sequential testing, in beta.",
+            "Give it a start date, and it starts on its own.",
+            "A global holdout keeps 5% of new users out of every experiment.",
+            "Add this draft to the group with Checkout Button Color.",
+        ],
+        # What the capture reads back through the API (gate 10): the draft with
+        # its two metrics, three versions, rule and analysis settings, its
+        # start, its group, and the one holdout, active.
+        "end_state": {
+            "design": {
+                "status": "draft",
+                "variants": [
+                    {"name": "Control", "allocation": 34, "control": True},
+                    {"name": "Treatment", "allocation": 33},
+                    {"name": "Variant 2", "allocation": 33},
+                ],
+                "metrics": [
+                    {
+                        "name": "Purchase",
+                        "event": "purchase",
+                        "type": "conversion",
+                        "primary": True,
+                    },
+                    {
+                        "name": "Add to cart",
+                        "event": "add_to_cart",
+                        "type": "conversion",
+                    },
+                ],
+                "targeting": {
+                    "logical_operator": "AND",
+                    "groups": [
+                        {
+                            "logical_operator": "AND",
+                            "conditions": [
+                                {
+                                    "attribute": "user.country",
+                                    "operator": "in",
+                                    "value": "US, CA",
+                                }
+                            ],
+                        }
+                    ],
+                },
+                "analysis": {"correction": "benjamini_hochberg", "sequential": True},
+                "scheduled_start": "scheduled-start",
+                "group": "Checkout tests",
+                "holdout": {"name": "Q4 holdout", "percentage": 5},
+            }
+        },
+    },
 }
 
 VERBS = ("click", "look", "type", "choose", "slide", "move")

@@ -98,6 +98,20 @@ text = "Each variant reports its mean and a confidence interval."
 by = ["test:modules/backend/tests/unit/warehouse/test_mean_runs.py"]
 
 [[unit]]
+text = "A proportion metric's results also give each treatment its difference from the control with an interval, the interval of its relative change and its impact over its own units, as /results does on the same counts."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_estimator_fields_parity.py::test_a_proportion_run_carries_the_difference_fields",
+    "test:modules/backend/tests/unit/warehouse/test_estimator_fields_parity.py::test_a_proportion_run_is_the_core_estimators_output_as_json",
+]
+
+[[unit]]
+text = "A mean metric's results give none of these three; each treatment's p-value and relative change are reported as before."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_estimator_fields_parity.py::test_a_mean_run_carries_none_of_the_difference_fields",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_warehouse_mean_result_carries_none_of_the_new_fields",
+]
+
+[[unit]]
 text = "Every run reports its sample-ratio check against the variants' traffic allocation (skipped for multi-armed bandit experiments, whose split moves on purpose)."
 by = ["test:modules/backend/tests/integration/warehouse/test_runs_api.py"]
 

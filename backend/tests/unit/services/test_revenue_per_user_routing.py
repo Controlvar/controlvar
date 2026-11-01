@@ -1,17 +1,27 @@
 """
 Which metric types ``/results`` analyses as a mean, and the pinned output.
 
-``AnalysisService.get_experiment_results`` analyses a revenue metric as its
-mean value per assigned user (Welch's t-test) and every other metric type as
-the share of users who converted (Fisher's exact test) (#439).  The routing is
-held over every ``MetricType``, through the real entry point with only the
+``AnalysisService.get_experiment_results`` analyses a revenue, count,
+duration or custom metric as its mean value per assigned user (Welch's
+t-test) and a conversion metric as the share of users who converted (Fisher's
+exact test) (#439).  A count metric's per-user value is read with
+``event_counts``, every other mean type's with ``value_totals``.  The routing
+is held over every ``MetricType``, through the real entry point with only the
 database replaced, as ``test_binomial_metric_result_characterisation.py``
 replaces it.
 
 The output for an experiment with a revenue primary metric is pinned per
-``ENGINE_VERSION`` with the fingerprints' rules: never edit the hash of a
-released version; a change after a release bumps the version and adds its
-entry.  The revenue analysis is new in 1.5.0, which has not shipped.
+``ENGINE_VERSION``.  The rule: an engine-changing PR bumps ``ENGINE_VERSION``
+to the next minor and appends it to ``RELEASED_ENGINE_VERSIONS`` ("frozen on
+main") in the same change.  A frozen version's entries are never edited, and
+no key is ever added under one.  A PR is engine-changing when, for the same
+database rows and request, it adds, removes or changes any number, decision
+(winner, recommendation, Bayesian decision, ``can_stop``) or allocation weight
+that a path stamping ``engine_version`` returns, caches or persists: results
+and its snapshots, Bayesian, CUPED, sequential, and the bandit's state,
+history and status.  A revert of an engine-changing PR bumps again.
+
+The revenue analysis is new in 1.5.0 (v0.38.0 and v0.39.0).
 """
 
 from __future__ import annotations
@@ -49,11 +59,24 @@ _TOTALS = {
     _CONTROL: [40.0 + (i % 9) * 5.0 for i in range(40)],
     _TREATMENT: [55.0 + (i % 13) * 4.0 for i in range(60)],
 }
+#: Events per user of the control's and the treatment's users who sent one.
+_COUNTS = {
+    _CONTROL: [float(1 + i % 3) for i in range(40)],
+    _TREATMENT: [float(1 + i % 4) for i in range(60)],
+}
 
 #: sha256 of the canonical ``get_experiment_results`` output for the revenue
 #: experiment below, per engine version.
 REVENUE_RESULTS_FINGERPRINTS: Dict[str, str] = {
     "1.5.0": "5ade759aa8ce18ef518dfde1acc9d6a3c2a3eda4dc1d31d8898e68d62225ef06",
+    # 1.6.0 (#1385) changes a lower-is-better bandit only: 1.5.0's.
+    "1.6.0": "5ade759aa8ce18ef518dfde1acc9d6a3c2a3eda4dc1d31d8898e68d62225ef06",
+    # 1.7.0 (#439) routes count, duration and custom to the mean; this
+    # experiment's revenue and conversion results are 1.6.0's.
+    "1.7.0": "5ade759aa8ce18ef518dfde1acc9d6a3c2a3eda4dc1d31d8898e68d62225ef06",
+    # 1.8.0 (#1496): each treatment carries the difference fields; without
+    # them the output is 1.7.0's (test_difference_intervals.py).
+    "1.8.0": "ac54b3b114353fad31c73c95e0e8513c579edee92538696ac5ce1c8cc2640071",
 }
 
 
@@ -90,6 +113,7 @@ def _results(
     """``get_experiment_results`` with the counts and totals above."""
     fixture = characterisation._Fixture(units=_UNITS, converted={})
     totals_read: List[str] = []
+    counts_read: List[str] = []
 
     def converting(_db, _experiment_id, variant_id, _event):
         return _CONVERTED[str(variant_id)]
@@ -98,8 +122,13 @@ def _results(
         totals_read.append(event_name)
         return list(_TOTALS[str(variant_id)])
 
+    def event_counts(_self, _experiment_id, variant_id, event_name):
+        counts_read.append(event_name)
+        return list(_COUNTS[str(variant_id)])
+
     monkeypatch.setattr(analysis_module, "count_converting_users", converting)
     monkeypatch.setattr(AnalysisService, "value_totals", value_totals)
+    monkeypatch.setattr(AnalysisService, "event_counts", event_counts)
     monkeypatch.setattr(
         AnalysisService,
         "calculate_experiment_summary",
@@ -122,10 +151,17 @@ def _results(
     output.pop("computed_at")
     assert output.pop("srm") is None
     output["totals_read_for"] = sorted(totals_read)
+    if counts_read:
+        output["counts_read_for"] = sorted(counts_read)
     return output
 
 
-def test_the_results_analyse_only_a_revenue_metric_as_a_mean(monkeypatch):
+@pytest.mark.regression
+def test_the_results_analyse_every_type_but_conversion_as_a_mean(monkeypatch):
+    """#439: a count, duration or custom metric is its mean per assigned user,
+    as a revenue metric is; only a conversion metric is a share of users.  On
+    the code before #439 the count, duration and custom rows were
+    ``("proportion", "fisher_exact")``."""
     metrics = [_metric(t, is_primary=t is MetricType.CONVERSION) for t in MetricType]
     output = _results(metrics, monkeypatch)
 
@@ -139,20 +175,27 @@ def test_the_results_analyse_only_a_revenue_metric_as_a_mean(monkeypatch):
     assert routes == {
         "conversion": ("proportion", "fisher_exact"),
         "revenue": ("mean", "welch_t_test"),
-        "count": ("proportion", "fisher_exact"),
-        "duration": ("proportion", "fisher_exact"),
-        "custom": ("proportion", "fisher_exact"),
+        "count": ("mean", "welch_t_test"),
+        "duration": ("mean", "welch_t_test"),
+        "custom": ("mean", "welch_t_test"),
     }
-    # Only the revenue metric reads event values, once per variant.
-    assert output["totals_read_for"] == ["revenue_event", "revenue_event"]
+    # Revenue, duration and custom read event values, once per variant ...
+    assert output["totals_read_for"] == sorted(
+        ["revenue_event", "duration_event", "custom_event"] * 2
+    )
+    # ... and a count metric reads its number of events instead, never a sum.
+    assert output["counts_read_for"] == ["count_event", "count_event"]
     # Each result is the schema's, and says how it was analysed.
     analysis = {
         r["metric_type"]: MetricResult.model_validate(r).analysis
         for r in output["metrics"]
     }
-    assert analysis["revenue"] == "mean"
-    assert {analysis[t] for t in ("conversion", "count", "duration", "custom")} == {
-        "proportion"
+    assert analysis == {
+        "conversion": "proportion",
+        "revenue": "mean",
+        "count": "mean",
+        "duration": "mean",
+        "custom": "mean",
     }
 
 
@@ -191,11 +234,25 @@ def test_the_revenue_results_are_pinned_for_the_running_engine(monkeypatch):
     assert _fingerprint(output) == REVENUE_RESULTS_FINGERPRINTS[ENGINE_VERSION]
 
 
-def test_the_revenue_analysis_is_not_in_a_released_engine():
-    """A revenue metric was a proportion in every released engine, so the
-    first engine with this entry must be one that has not shipped."""
-    first = min(REVENUE_RESULTS_FINGERPRINTS, key=sufficient_stats._key)
-    assert first not in sufficient_stats.RELEASED_ENGINE_VERSIONS
-    assert sufficient_stats._key(first) > max(
-        map(sufficient_stats._key, sufficient_stats.RELEASED_ENGINE_VERSIONS)
-    )
+#: The engine that introduced the revenue analysis (v0.38.0).
+REVENUE_FIRST_VERSION = "1.5.0"
+
+
+def test_the_revenue_analysis_is_pinned_only_from_the_version_that_added_it():
+    """A revenue metric was a proportion in every engine before 1.5.0, so the
+    revenue entry is absent from 1.1.0-1.4.0 and present under 1.5.0 (which
+    shipped, so it is in ``RELEASED_ENGINE_VERSIONS``) and the running version.
+    """
+    released = sufficient_stats.RELEASED_ENGINE_VERSIONS
+    assert REVENUE_FIRST_VERSION in released
+    for version in released:
+        pinned = version in REVENUE_RESULTS_FINGERPRINTS
+        if sufficient_stats._key(version) < sufficient_stats._key(
+            REVENUE_FIRST_VERSION
+        ):
+            assert not pinned, (
+                f"revenue is pinned under {version}, which shipped before it"
+            )
+        else:
+            assert pinned, f"revenue is missing from {version}"
+    assert ENGINE_VERSION in REVENUE_RESULTS_FINGERPRINTS

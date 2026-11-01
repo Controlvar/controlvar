@@ -1,13 +1,18 @@
 import React, { useEffect } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageTitle } from '@/components/PageTitle';
 import { SiteHeader } from '@/components/SiteHeader';
-import { LOGIN_PATH } from '@/services/api';
-import { CONTACT_EMAIL, isMarketingSite } from '@/utils/site-mode';
-import { docsUrl } from '@/services/docs';
+import { isMarketingSite } from '@/utils/site-mode';
 import { Walkthroughs } from '@/components/Walkthroughs';
+import { Hero } from '@/components/homepage/Hero';
+import { FactsStrip } from '@/components/homepage/FactsStrip';
+import { HowItWorks } from '@/components/homepage/HowItWorks';
+import { ProductRows } from '@/components/homepage/ProductRows';
+import { SdkChips } from '@/components/homepage/SdkChips';
+import { DeployCards } from '@/components/homepage/DeployCards';
+import { ClosingBand } from '@/components/homepage/ClosingBand';
+import { HomeFooter } from '@/components/homepage/HomeFooter';
 
 export const HOME_AFTER_LOGIN = '/experiments';
 
@@ -31,9 +36,16 @@ export const HOME_AFTER_LOGIN = '/experiments';
  * of the whole class. (The literals are deliberately not repeated here: this
  * file is scanned, and quoting a forbidden claim to explain it trips the gate.
  * That has now happened four times in four different files, most recently in
- * the commit message of the change that introduced leak_guard.py.) What is written
- * below is either checked by a test in this repository or is a statement about
- * the licence and the architecture.
+ * the commit message of the change that introduced leak_guard.py.)
+ *
+ * The sections are in `components/homepage/` (#1459). Every sentence they
+ * render, and every alt, aria-label and title, is a row of the inventory in
+ * `tests/pages/helpers/homeInventory.ts` with its source, and
+ * `tests/pages/home-page.test.tsx` fails a rendered sentence that is not a row
+ * and a row that is not rendered, in both builds. The two builds differ in
+ * three things only: the walkthroughs and the screenshots are the marketing
+ * build's, and its second hero button is the power calculator where a
+ * self-hosted platform build offers "Sign in to the dashboard".
  */
 export default function HomePage() {
   const router = useRouter();
@@ -66,157 +78,17 @@ export default function HomePage() {
         <SiteHeader />
 
         <main>
-          <section className="mx-auto max-w-5xl px-6 pb-16 pt-10">
-            <h1 className="max-w-3xl text-4xl font-semibold tracking-tight sm:text-5xl">
-              A/B testing and feature flags you run yourself.
-            </h1>
-            <p className="mt-5 max-w-2xl text-lg leading-relaxed text-slate-600">
-              Controlvar is an open-source experimentation platform: experiments, feature
-              flags, targeting rules and statistics, deployed on your own infrastructure so
-              the assignment data never leaves it.
-            </p>
-            <div className="mt-8 flex flex-wrap items-center gap-3">
-              <a
-                href={docsUrl('getting-started/quick-start')}
-                className="rounded-md bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700"
-              >
-                Get started
-              </a>
-              {marketing ? (
-                <Link
-                  href="/power-calculator"
-                  className="rounded-md border border-slate-300 px-4 py-2 font-medium hover:bg-slate-50"
-                >
-                  Try the power calculator
-                </Link>
-              ) : (
-                <Link
-                  href={LOGIN_PATH}
-                  className="rounded-md border border-slate-300 px-4 py-2 font-medium hover:bg-slate-50"
-                >
-                  Sign in to the dashboard
-                </Link>
-              )}
-            </div>
-            <p className="mt-6 text-sm text-slate-500">
-              Apache-2.0. Both build profiles are the same licence and the same price: none.
-            </p>
-          </section>
-
+          <Hero />
+          <FactsStrip />
+          <HowItWorks />
+          <ProductRows />
+          <SdkChips />
           {marketing && <Walkthroughs />}
-          <section className="border-t border-slate-200 bg-slate-50">
-            <div className="mx-auto grid max-w-5xl gap-8 px-6 py-14 sm:grid-cols-2 lg:grid-cols-3">
-              {[
-                {
-                  title: 'Experiments and feature flags',
-                  body: 'Sticky assignment, gradual rollouts with configurable stages, mutual-exclusion groups and a global holdout, and automated safety rollback on error-rate and latency thresholds.',
-                },
-                {
-                  title: 'Targeting that is actually expressive',
-                  body: '20+ operators — semantic version comparison, geo-distance, time windows, JSON path and array operations — compiled and cached, with throughput floors checked by a nightly benchmark job.',
-                },
-                {
-                  title: 'Statistics beyond a p-value',
-                  body: 'Frequentist and Bayesian analysis, sequential testing with mSPRT for early stopping, multi-armed bandits, and per-segment breakdowns with a Bonferroni correction across segments.',
-                },
-                {
-                  title: 'SDKs for the stack you have',
-                  body: "JavaScript, React, React Native, Edge, Python, Go, Java, Android, iOS, Flutter, Ruby, PHP, .NET and Elixir, plus OpenFeature providers for JavaScript and Python, all MIT-licensed. The JavaScript SDK is on npm (npm install @controlvar/js-sdk) and the Python SDK is on PyPI (pip install controlvar), both as betas; the others are not on npm or the other package registries yet, and each of their guides shows how to install it from the repository. By default, flag evaluation and experiment assignment happen on the server. The JavaScript and Python SDKs can also evaluate flags locally (beta), tested against cases generated by the server's own evaluator.",
-                },
-                {
-                  title: 'Deploy it yourself',
-                  body: 'Run the published container images with Docker Compose on one machine, install them on Kubernetes with the Helm chart attached to each release, or use the CDK app to deploy to ECS Fargate, Aurora PostgreSQL and ElastiCache in your own AWS account. There is no hosted tier, so there is nothing to be locked into.',
-                },
-                {
-                  title: 'Open, and checkable',
-                  body: 'The whole platform is Apache-2.0 and the SDKs are MIT. The test suites, the automated checks and the release pipeline are all in the repository, so you can read them rather than take our word for it.',
-                },
-              ].map((card) => (
-                <div key={card.title}>
-                  <h2 className="text-base font-semibold">{card.title}</h2>
-                  <p className="mt-2 text-sm leading-relaxed text-slate-600">{card.body}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="mx-auto max-w-5xl px-6 py-14">
-            <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-              <h2 className="text-2xl font-semibold tracking-tight">Run it locally</h2>
-              <a
-                href={docsUrl('self-hosting/kubernetes')}
-                className="text-sm text-blue-700 underline"
-              >
-                Self-host on Kubernetes
-              </a>
-            </div>
-            <p className="mt-3 max-w-2xl text-slate-600">
-              Four containers — Postgres, Redis, the API and the dashboard — with the
-              database created and seeded on the way up.
-            </p>
-            {/* It scrolls sideways on a phone, so it takes focus: a keyboard can then scroll it
-                (axe scrollable-region-focusable; tests/e2e/marketing-site.site.spec.ts). */}
-            <pre
-              tabIndex={0}
-              role="region"
-              aria-label="Run it locally"
-              className="mt-5 overflow-x-auto rounded-lg bg-slate-900 p-5 text-sm leading-relaxed text-slate-100"
-            >
-              <code>{`git clone https://github.com/Controlvar/controlvar.git
-cd controlvar
-docker compose up -d --wait`}</code>
-            </pre>
-            <p className="mt-4 text-sm text-slate-500">
-              Then open <span className="font-mono">localhost:3000</span>. The{' '}
-              <a href={docsUrl('getting-started/quick-start')} className="text-blue-700 underline">
-                quick start
-              </a>{' '}
-              has the default credentials and what to change before anyone else can reach it.
-            </p>
-          </section>
+          <DeployCards />
+          <ClosingBand />
         </main>
 
-        <footer className="border-t border-slate-200">
-          <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-6 py-8 text-sm text-slate-500">
-            <span>
-              Apache-2.0. SDKs MIT. Contact:{' '}
-              <a href={`mailto:${CONTACT_EMAIL}`} className="text-slate-700 underline hover:text-slate-900">
-                {CONTACT_EMAIL}
-              </a>
-              . Built by{' '}
-              <a
-                href="https://www.linkedin.com/in/ashish-markanday/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-slate-700 underline hover:text-slate-900"
-              >
-                Ashish Markanday
-              </a>
-              .
-            </span>
-            <nav className="flex gap-5">
-              <Link href="/docs" className="hover:text-slate-900">
-                Docs
-              </Link>
-              <a
-                href="https://github.com/Controlvar/controlvar"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-slate-900"
-              >
-                Source
-              </a>
-              <Link href="/privacy" className="hover:text-slate-900">
-                Privacy
-              </Link>
-              {!marketing && (
-                <Link href={LOGIN_PATH} className="hover:text-slate-900">
-                  Sign in
-                </Link>
-              )}
-            </nav>
-          </div>
-        </footer>
+        <HomeFooter />
       </div>
     </>
   );

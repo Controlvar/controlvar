@@ -44,7 +44,7 @@ def sdk_directories() -> set[str]:
     }
 
 
-def ecosystems() -> dict[str, str]:
+def _check_sdk_version():
     from importlib.util import module_from_spec, spec_from_file_location
 
     spec = spec_from_file_location(
@@ -53,7 +53,17 @@ def ecosystems() -> dict[str, str]:
     assert spec is not None and spec.loader is not None
     module = module_from_spec(spec)
     spec.loader.exec_module(module)
-    return dict(module.ECOSYSTEMS)
+    return module
+
+
+def ecosystems() -> dict[str, str]:
+    return dict(_check_sdk_version().ECOSYSTEMS)
+
+
+def manifest_version(sdk: str) -> str:
+    """The version sdk/<sdk>'s own manifest carries in this tree, read by the
+    function `resolve`'s gate uses, so no test here pins an SDK's version."""
+    return _check_sdk_version().read_manifest_version(sdk)[0]
 
 
 def test_every_sdk_directory_has_an_ecosystem() -> None:
@@ -102,11 +112,20 @@ def test_wired_sdks_report_a_version_and_unwired_ones_refuse(sdk: str) -> None:
         )
 
 
-@pytest.mark.parametrize(
-    "sdk", sorted(name for name, eco in ecosystems().items() if eco in {"pypi", "npm"})
+#: The SDKs whose tag the gate compares with a manifest: every ecosystem but
+#: `tag-only` (no manifest) and `unwired` (refused whatever the version), so a
+#: new ecosystem is in the parametrisation below without anyone adding it.
+COMPARED_SDKS = sorted(
+    name for name, eco in ecosystems().items() if eco not in {"tag-only", "unwired"}
 )
+
+
+@pytest.mark.parametrize("sdk", COMPARED_SDKS)
 def test_a_mismatched_tag_is_refused(sdk: str) -> None:
-    """The gate's whole job: a tag that does not match the manifest."""
+    """The gate's whole job: a tag that does not match the manifest.
+
+    It once listed pypi and npm by name, so wiring java to maven would have
+    left the maven reader's mismatch untested."""
     result = subprocess.run(
         [
             sys.executable,
@@ -384,23 +403,45 @@ def test_every_npm_sdk_names_its_repository(sdk: str) -> None:
 # publish job checks the package it uploads against the tag
 # --------------------------------------------------------------------------
 #
-# Two sets, both exact, so that neither split can be undone without a test
-# going red:
+# Exact sets, so that no split can be undone without a test going red:
 #
 #   UNSPLIT_TOKEN_JOBS  jobs that install or test while holding
 #                       `id-token: write`. None.
-#   PUBLISH_JOBS        jobs that hold the token and publish only.
+#   PUBLISH_JOBS        jobs that hold the OIDC token and publish only.
+#   ENVIRONMENT_JOBS    jobs in the `sdk-release` environment: the OIDC ones
+#                       and `maven`, which holds no token (Maven Central has
+#                       no trusted publishing) but reads the environment's
+#                       secrets. Its own set, so that splitting it from the
+#                       token set cannot drop `maven` from the checks that
+#                       loop over the environment.
 
 UNSPLIT_TOKEN_JOBS: set[str] = set()
 PUBLISH_JOBS = {"pypi", "npm"}
+ENVIRONMENT_JOBS = {"pypi", "npm", "maven"}
 RELEASE_ENVIRONMENT = "sdk-release"
+
+#: The secrets each job reads, exactly. Only `maven` reads any: npm and PyPI
+#: publish by OIDC, with no long-lived token.
+SECRETS_BY_JOB = {
+    "maven": {
+        "CENTRAL_TOKEN_USERNAME",
+        "CENTRAL_TOKEN_PASSWORD",
+        "GPG_PRIVATE_KEY",
+        "GPG_PASSPHRASE",
+    },
+}
+#: The configuration variables each job reads, exactly.
+VARIABLES_BY_JOB = {"maven": {"MAVEN_GPG_FINGERPRINT"}}
 
 #: A step whose `run:` installs packages, runs a test suite or builds one.
 INSTALLS_OR_TESTS = re.compile(
     r"\bnpm\s+(ci|install|test|run)\b"
     r"|\bpip3?\s+install\b|-m\s+pip\s+install\b"
     r"|\bpytest\b|-m\s+build\b|\btwine\b"
+    r"|\bmvnw?\b"
 )
+SECRET = re.compile(r"\$\{\{[^}]*?\bsecrets\.([A-Za-z_][A-Za-z0-9_]*)")
+VARIABLE = re.compile(r"\$\{\{[^}]*?\bvars\.([A-Za-z_][A-Za-z0-9_]*)")
 EXPRESSION = re.compile(r"\$\{\{\s*(.*?)\s*\}\}")
 PYPA_PIN = re.compile(r"pypa/gh-action-pypi-publish@([0-9a-f]{40})")
 
@@ -455,42 +496,114 @@ def test_no_job_that_installs_or_tests_can_request_an_oidc_token() -> None:
     )
 
 
-def test_the_release_environment_and_the_token_sit_on_the_publish_jobs_only() -> None:
-    """B3. The approval and the token belong to the jobs that publish."""
-    workflow = _workflow()
-    expected = PUBLISH_JOBS | UNSPLIT_TOKEN_JOBS
-    with_environment = set()
-    with_token = set()
+def _environment_jobs(workflow: dict) -> set[str]:
+    """The jobs that name an environment, read from the workflow itself."""
+    found = set()
     for name, job in workflow["jobs"].items():
         environment = job.get("environment")
         if isinstance(environment, dict):
             environment = environment.get("name")
         if environment is not None:
             assert environment == RELEASE_ENVIRONMENT, (name, environment)
-            with_environment.add(name)
-        if _can_request_oidc(_effective_permissions(workflow, job)):
-            with_token.add(name)
-    assert with_environment == expected, (
+            found.add(name)
+    return found
+
+
+def test_the_release_environment_and_the_token_sit_on_the_publish_jobs_only() -> None:
+    """B3. The approval belongs to the jobs that publish or upload, and the
+    OIDC token to the ones that publish by it. The two sets differ by `maven`
+    alone, which uploads with the environment's secrets."""
+    workflow = _workflow()
+    with_environment = _environment_jobs(workflow)
+    with_token = {
+        name
+        for name, job in workflow["jobs"].items()
+        if _can_request_oidc(_effective_permissions(workflow, job))
+    }
+    expected_environment = ENVIRONMENT_JOBS | UNSPLIT_TOKEN_JOBS
+    expected_token = PUBLISH_JOBS | UNSPLIT_TOKEN_JOBS
+    assert with_environment == expected_environment, (
         f"jobs in the {RELEASE_ENVIRONMENT!r} environment: {sorted(with_environment)}; "
-        f"expected exactly {sorted(expected)}"
+        f"expected exactly {sorted(expected_environment)}"
     )
-    assert with_token == expected, (
+    assert with_token == expected_token, (
         f"jobs that can request an OIDC token: {sorted(with_token)}; "
-        f"expected exactly {sorted(expected)}"
+        f"expected exactly {sorted(expected_token)}"
     )
+    assert ENVIRONMENT_JOBS - PUBLISH_JOBS == {"maven"}
 
 
 def test_no_publish_job_run_block_contains_an_expression() -> None:
-    """C3. In a publish job, values reach a script through `env:` only."""
-    jobs = _workflow()["jobs"]
-    assert PUBLISH_JOBS <= set(jobs), sorted(PUBLISH_JOBS - set(jobs))
+    """C3. In a job that holds the environment, values reach a script
+    through `env:` only. The loop is over the jobs the workflow puts in the
+    environment, not over the OIDC set, so `maven`, which holds the
+    environment and no token, is checked too."""
+    workflow = _workflow()
+    jobs = workflow["jobs"]
+    environment_jobs = _environment_jobs(workflow)
+    assert ENVIRONMENT_JOBS <= environment_jobs, sorted(
+        ENVIRONMENT_JOBS - environment_jobs
+    )
     found = [
         (name, step.get("name") or step.get("uses"))
-        for name in sorted(PUBLISH_JOBS)
+        for name in sorted(environment_jobs)
         for step in jobs[name]["steps"]
         if "${{" in _run_of(step)
     ]
     assert not found, f"a publish-job run: block contains ${{{{ }}}}: {found}"
+
+
+def _references(pattern: re.Pattern, node) -> set[str]:
+    """Every name `pattern` captures anywhere in a parsed YAML node."""
+    if isinstance(node, dict):
+        return set().union(
+            *(
+                _references(pattern, key) | _references(pattern, value)
+                for key, value in node.items()
+            )
+        )
+    if isinstance(node, list):
+        return set().union(*(_references(pattern, item) for item in node))
+    return set(pattern.findall(str(node)))
+
+
+def _by_job(pattern: re.Pattern) -> dict[str, set[str]]:
+    jobs = _workflow()["jobs"]
+    found = {name: _references(pattern, job) for name, job in jobs.items()}
+    return {name: names for name, names in found.items() if names}
+
+
+def test_each_job_reads_exactly_its_own_secrets() -> None:
+    """Only `maven` reads a secret, and exactly the Central token and the
+    signing key: npm and PyPI publish by OIDC, with no long-lived token, and
+    no build job, which runs tests and third-party plugins, holds a
+    credential. Nothing outside the jobs (a workflow-level `env:`) names
+    one either, every expression that reads one names it (no
+    `toJSON(secrets)`, no `secrets['X']`), and the secrets reach `maven`
+    through step `env:` only."""
+    workflow = _workflow()
+    assert _by_job(SECRET) == SECRETS_BY_JOB
+    assert _by_job(VARIABLE) == VARIABLES_BY_JOB
+    outside = {key: value for key, value in workflow.items() if key != "jobs"}
+    assert not _references(SECRET, outside), _references(SECRET, outside)
+
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert "secrets: inherit" not in text
+    for expression in EXPRESSION.findall(text):
+        for context in ("secrets", "vars"):
+            if re.search(rf"\b{context}\b", expression):
+                assert re.fullmatch(rf"{context}\.[A-Z][A-Z0-9_]*", expression), (
+                    f"${{{{ {expression} }}}} reads {context} other than by one name"
+                )
+
+    for name in SECRETS_BY_JOB:
+        job = workflow["jobs"][name]
+        assert not _references(SECRET, job.get("env") or {}), name
+        for step in job["steps"]:
+            label = step.get("name") or step.get("uses")
+            outside_env = {key: value for key, value in step.items() if key != "env"}
+            assert not _references(SECRET, outside_env), (name, label)
+            assert not _references(VARIABLE, outside_env), (name, label)
 
 
 def test_the_pypi_build_and_publish_jobs_are_a_pair() -> None:
@@ -562,6 +675,36 @@ def test_the_pypa_action_is_pinned_to_a_commit_with_its_version() -> None:
     assert re.search(
         r"uses: pypa/gh-action-pypi-publish@[0-9a-f]{40} # v\d+\.\d+\.\d+$", lines[0]
     ), lines[0]
+
+
+#: (job, action): actions pinned by full commit SHA, with the version in a
+#: comment for the reader, like the pypi job's publish action.
+PINNED_ACTIONS = [
+    ("pypi", "pypa/gh-action-pypi-publish"),
+    ("maven", "actions/download-artifact"),
+]
+
+
+@pytest.mark.parametrize(("job", "action"), PINNED_ACTIONS)
+def test_these_actions_are_pinned_to_a_commit_with_their_version(
+    job: str, action: str
+) -> None:
+    uses = [
+        str(step.get("uses"))
+        for step in _workflow()["jobs"][job]["steps"]
+        if str(step.get("uses", "")).startswith(f"{action}@")
+    ]
+    assert len(uses) == 1, (job, uses)
+    assert re.fullmatch(rf"{re.escape(action)}@[0-9a-f]{{40}}", uses[0]), uses[0]
+    lines = [
+        line
+        for line in WORKFLOW.read_text(encoding="utf-8").splitlines()
+        if f"uses: {uses[0]}" in line and not line.lstrip().startswith("#")
+    ]
+    assert len(lines) == 1, lines
+    assert re.search(rf"uses: {re.escape(uses[0])} # v\d+\.\d+\.\d+$", lines[0]), lines[
+        0
+    ]
 
 
 def test_the_publish_job_compares_with_the_digest_the_build_job_recorded() -> None:
@@ -1102,6 +1245,213 @@ def test_a_hyphen_in_the_sdk_name_does_not_make_a_prerelease(tmp_path: Path) -> 
     )
     assert classify.returncode == 0, classify.stdout + classify.stderr
     assert _outputs(tmp_path / "classify") == {"prerelease": "false"}
+
+
+# --------------------------------------------------------------------------
+# #1498 (PP-8): a dispatch at a release tag releases that tag and nothing
+# else. The `sdk-release` environment admits a run by its ref, so `resolve` is
+# what ties the SDK and version a dispatch builds to the tag it runs at.
+# --------------------------------------------------------------------------
+
+#: Read from the manifests, so P's version bumps never touch these tests.
+JS_VERSION = manifest_version("js")
+REACT_VERSION = manifest_version("react")
+OPENFEATURE_VERSION = manifest_version("openfeature")
+OPENFEATURE_PYTHON_VERSION = manifest_version("openfeature-python")
+
+
+def _parse(
+    tmp_path: Path, ref_type: str, ref_name: str, sdk: str, version: str
+) -> subprocess.CompletedProcess:
+    """`resolve`'s real parse step, at this tree, with the run's ref and the
+    dispatch's inputs (both empty on a tag push)."""
+    return _run_step(
+        _step("resolve", "Parse and check"),
+        {
+            "github.ref_name": ref_name,
+            "github.ref_type": ref_type,
+            "inputs.sdk": sdk,
+            "inputs.version": version,
+        },
+        tmp_path,
+        ROOT,
+    )
+
+
+#: (case, tag, inputs.sdk, inputs.version, the tag's SDK, the tag's version).
+#: Every case after the first names an SDK at a version its own manifest
+#: carries (go has none to compare), so without the comparison `resolve`
+#: accepts it and releases the inputs' SDK from the tag's commit.
+DISPATCH_REFUSALS = [
+    ("java at react's tag", "sdk/react/v0.1.0", "java", "0.1.0", "react", "0.1.0"),
+    (
+        "another SDK at its own version, at react's tag",
+        f"sdk/react/v{REACT_VERSION}",
+        "js",
+        JS_VERSION,
+        "react",
+        REACT_VERSION,
+    ),
+    (
+        "an SDK whose name begins the tag's",
+        f"sdk/openfeature-python/v{OPENFEATURE_VERSION}",
+        "openfeature",
+        OPENFEATURE_VERSION,
+        "openfeature-python",
+        OPENFEATURE_VERSION,
+    ),
+    (
+        "the tag's SDK at another version",
+        "sdk/js/v99.99.99",
+        "js",
+        JS_VERSION,
+        "js",
+        "99.99.99",
+    ),
+    (
+        "go, which has no manifest version, at another version",
+        "sdk/go/v99.99.99",
+        "go",
+        "0.1.0",
+        "go",
+        "99.99.99",
+    ),
+]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    ("case", "tag", "sdk", "version", "tag_sdk", "tag_version"),
+    DISPATCH_REFUSALS,
+    ids=[case[0] for case in DISPATCH_REFUSALS],
+)
+def test_a_dispatch_at_a_release_tag_must_name_that_tags_sdk_and_version(
+    case: str,
+    tag: str,
+    sdk: str,
+    version: str,
+    tag_sdk: str,
+    tag_version: str,
+    tmp_path: Path,
+) -> None:
+    """PP-8. On the old step the inputs won over the tag: `gh workflow run
+    sdk-release.yml --ref sdk/react/v0.1.0 -f sdk=java -f version=0.1.0`
+    resolved to java, and every case after the first resolved to the inputs'
+    SDK and exited 0. Now each is refused before the gate reads a manifest,
+    with a message naming the tag's SDK and version and the inputs', and
+    `resolve` outputs nothing."""
+    result = _parse(tmp_path, "tag", tag, sdk, version)
+    assert result.returncode == 1, (case, result.stdout, result.stderr)
+    assert (
+        f"::error::this run is at the tag {tag} (sdk {tag_sdk}, version "
+        f"{tag_version}), but its inputs ask for sdk {sdk}, version {version}. "
+        "A dispatch at a release tag must name that tag's own SDK and version"
+    ) in result.stdout, (case, result.stdout, result.stderr)
+    assert _outputs(tmp_path) == {}, case
+
+
+#: (case, ref type, ref name, inputs.sdk, inputs.version, released SDK, version)
+DISPATCH_ACCEPTED = [
+    (
+        "a dispatch naming its tag's SDK and version",
+        "tag",
+        f"sdk/js/v{JS_VERSION}",
+        "js",
+        JS_VERSION,
+        "js",
+        JS_VERSION,
+    ),
+    (
+        "the same, with the version spelt as the tag spells it",
+        "tag",
+        f"sdk/js/v{JS_VERSION}",
+        "js",
+        f"v{JS_VERSION}",
+        "js",
+        JS_VERSION,
+    ),
+    (
+        "a hyphenated SDK's dispatch at its own tag",
+        "tag",
+        f"sdk/openfeature-python/v{OPENFEATURE_PYTHON_VERSION}",
+        "openfeature-python",
+        OPENFEATURE_PYTHON_VERSION,
+        "openfeature-python",
+        OPENFEATURE_PYTHON_VERSION,
+    ),
+    (
+        "a dispatch from a branch, as before",
+        "branch",
+        "main",
+        "js",
+        JS_VERSION,
+        "js",
+        JS_VERSION,
+    ),
+    (
+        "a tag push, as before",
+        "tag",
+        f"sdk/js/v{JS_VERSION}",
+        "",
+        "",
+        "js",
+        JS_VERSION,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("case", "ref_type", "ref_name", "sdk", "version", "released", "at"),
+    DISPATCH_ACCEPTED,
+    ids=[case[0] for case in DISPATCH_ACCEPTED],
+)
+def test_resolve_accepts_a_dispatch_at_its_own_tag_a_branch_dispatch_and_a_tag_push(
+    case: str,
+    ref_type: str,
+    ref_name: str,
+    sdk: str,
+    version: str,
+    released: str,
+    at: str,
+    tmp_path: Path,
+) -> None:
+    result = _parse(tmp_path, ref_type, ref_name, sdk, version)
+    assert result.returncode == 0, (case, result.stdout, result.stderr)
+    outputs = _outputs(tmp_path)
+    assert (outputs["sdk"], outputs["version"]) == (released, at), (case, outputs)
+    assert outputs["ecosystem"] == ecosystems()[released], (case, outputs)
+
+
+def test_the_tag_check_gates_every_job_of_the_release() -> None:
+    """The step the tests above run is `resolve`'s parse step, bound to the
+    run's real ref and the dispatch's inputs through `env:` only; neither it
+    nor `resolve` can be skipped or allowed to fail; its outputs are the ones
+    `resolve` passes on; and every other job needs `resolve`."""
+    jobs = _workflow()["jobs"]
+    resolve = jobs["resolve"]
+    parse = _step("resolve", "Parse and check")
+    assert parse.get("id") == "parse"
+    assert parse.get("env") == {
+        "REF_NAME": "${{ github.ref_name }}",
+        "REF_TYPE": "${{ github.ref_type }}",
+        "INPUT_SDK": "${{ inputs.sdk }}",
+        "INPUT_VERSION": "${{ inputs.version }}",
+    }
+    assert "${{" not in _run_of(parse)
+    for key in ("if", "continue-on-error"):
+        assert key not in resolve, key
+        assert key not in parse, key
+    for key in ("sdk", "version", "ecosystem", "name"):
+        assert resolve["outputs"][key] == f"${{{{ steps.parse.outputs.{key} }}}}"
+
+    unguarded = []
+    for name, job in jobs.items():
+        if name == "resolve":
+            continue
+        needs = job.get("needs") or []
+        if "resolve" not in ([needs] if isinstance(needs, str) else needs):
+            unguarded.append(name)
+    assert not unguarded, f"jobs that do not need resolve: {unguarded}"
 
 
 def _tarball(path: Path, manifest: dict) -> bytes:

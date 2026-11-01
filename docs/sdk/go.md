@@ -145,6 +145,10 @@ type Client interface {
 func New(opts ...Option) (Client, error)
 func ConsistentHash(userID, key string) float64
 func Float64(v float64) *float64
+
+func (r *EvalResult) StringValue(def string) string
+func (r *EvalResult) NumberValue(def float64) float64
+func (r *EvalResult) DecodeValue(v any) error
 ```
 
 | Method | Endpoint | Returns | On failure |
@@ -154,13 +158,16 @@ func Float64(v float64) *float64
 | `Track` | `/tracking/track` or `/tracking/batch` | `error` | Never panics; validation errors (nil event, empty `UserID`, no `EventName`/`EventType`) are returned before any request |
 | `TrackBatch` | `/tracking/batch` (chunks of 100) | `error` | As `Track`; keyed events are batched as-is, unkeyed ones fanned out |
 | `Close` | — | `nil` | Clears the cache and idle connections; safe to call twice |
+| `(*EvalResult).StringValue(def)` | — | `string` | `def`; never panics (see [Flag values](#flag-values)) |
+| `(*EvalResult).NumberValue(def)` | — | `float64` | `def`; never panics (see [Flag values](#flag-values)) |
+| `(*EvalResult).DecodeValue(v)` | — | `error` | An error, with `v` left as it was; never panics (see [Flag values](#flag-values)) |
 
 ### Types
 
 | Type | Fields |
 |---|---|
 | `User` | `ID string` (required), `Attributes map[string]interface{}` — sent as `context` on assignment |
-| `EvalResult` | `Key string`, `Enabled bool`, `Config map[string]any` — always `nil`: the evaluate endpoint returns `config: null` for every flag |
+| `EvalResult` | `Key string`, `Enabled bool`, `Config map[string]any` — always `nil`: the evaluate endpoint returns `config: null` for every flag; `Value json.RawMessage` — what the flag serves this user, `nil` when the server sent none; `ValueType string` — `"boolean"`, `"string"`, `"number"` or `"json"`, `""` when the server sent none |
 | `Assignment` | `ExperimentKey`, `UserID`, `VariantID` (UUID), `VariantName` (`"control"`, `"treatment"`, …), `IsControl bool`, `Configuration map[string]any` |
 | `TrackEvent` | `UserID`, `EventName`, `EventType` (→ `event_type`, defaults to `EventName`), `ExperimentKey`, `FeatureFlagKey`, `Value *float64`, `Properties` (→ `metadata`), `Timestamp time.Time` (→ RFC 3339 when non-zero, else server-stamped) |
 | `APIError` | `StatusCode int`, `Message string` (response body), `RetryAfter string` (raw header on 429) |
@@ -171,6 +178,40 @@ if _, err := client.GetAssignment(ctx, "exp", user); errors.As(err, &apiErr) && 
     // no experiment has the key, or a draft has no control variant
 }
 ```
+
+---
+
+## Flag values
+
+`EvalResult.Value` is what the flag serves this user: its on value when `Enabled` is true, its
+off value otherwise (`true` or `false` for a boolean flag). `EvalResult.ValueType` is the flag's
+type. Read the value with the method for its type:
+
+```go
+label, _ := client.EvaluateFlag(ctx, "checkout-button-label", user) // a string flag
+fmt.Println(label.StringValue("Buy now"))
+
+limit, _ := client.EvaluateFlag(ctx, "max-items", user) // a number flag
+fmt.Println(limit.NumberValue(10))
+
+hero, _ := client.EvaluateFlag(ctx, "hero-banner", user) // a json flag
+banner := Banner{Title: "Welcome"}                       // your default
+if err := hero.DecodeValue(&banner); err != nil {
+	// banner is still your default
+}
+```
+
+- `StringValue` and `NumberValue` return your default, and `DecodeValue` returns an error and
+  leaves `v` as it was, when there is no value of that type to read: a nil result, a failed
+  evaluation, a flag of another type, or a value that does not decode.
+- Against a server that sends no `value`, `StringValue` returns your default.
+- None of them panics, on a nil `*EvalResult` included.
+- `DecodeValue` decodes into a new value of `v`'s type and stores it in `v` only on success, so a
+  field the value does not name is zero, not your default.
+- `EvaluateFlag` returns a new copy on every call, cache hits included, so changing `Value`
+  changes nothing the client has cached.
+- `EvaluateFlag` sends the user's ID only; `User.Attributes` are sent on assignment, not on flag
+  evaluation.
 
 ---
 
@@ -225,7 +266,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `EvaluateFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
+| `EvaluateFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, value, value_type, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
 | `GetAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `Track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `Track` without keys, `TrackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |

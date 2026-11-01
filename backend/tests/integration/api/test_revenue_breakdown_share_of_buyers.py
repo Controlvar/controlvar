@@ -1,6 +1,8 @@
 """
 The Breakdowns view of a revenue metric shows the share of users who sent the
-metric's event, not revenue per user.
+metric's event, not revenue per user.  So does the Breakdowns view of a count,
+duration or custom metric, which ``/results`` analyses as a mean too (#439):
+the test runs for each of ``MEAN_METRIC_TYPES``.
 
 ``GET /api/v1/results/{id}?breakdown=<dimension>`` counts, per segment and
 variant, the users with an event in the segment and the users among them who
@@ -39,6 +41,7 @@ from backend.app.models.experiment import (
     MetricType,
     Variant,
 )
+from backend.app.services.sufficient_stats_analysis import MEAN_METRIC_TYPES
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db]
 
@@ -60,8 +63,8 @@ def _user(exp, arm, i):
     return f"rbs-{exp.key}-{arm}-{i}"
 
 
-@pytest.fixture
-def experiment(db_session, make_experiment):
+@pytest.fixture(params=MEAN_METRIC_TYPES)
+def experiment(request, db_session, make_experiment):
     suffix = uuid.uuid4().hex[:8]
     exp = make_experiment(
         name=f"Breakdown revenue {suffix}",
@@ -88,7 +91,7 @@ def experiment(db_session, make_experiment):
                 experiment_id=exp.id,
                 name="Order value",
                 event_name="purchase",
-                metric_type=MetricType.REVENUE,
+                metric_type=MetricType(request.param),
                 is_primary=True,
                 minimum_sample_size=1,
             ),
@@ -139,9 +142,9 @@ def test_a_revenue_metric_breakdown_is_the_share_of_buyers(admin_client, experim
     assert response.status_code == 200, response.text
     body = response.json()
 
-    # The headline metric is revenue per assigned user ...
+    # The headline metric is its mean per assigned user ...
     [metric] = body["metrics"]
-    assert metric["metric_type"] == "revenue"
+    assert metric["metric_type"] in MEAN_METRIC_TYPES
     assert metric["analysis"] == "mean"
 
     # ... and the breakdown of the same experiment is the share of buyers.

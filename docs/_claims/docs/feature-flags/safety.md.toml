@@ -630,6 +630,10 @@ text = "The targeting rules are left as written."
 by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p11_the_documented_restore_steps_restore_every_user"]
 
 [[unit]]
+text = "For a string, number or json flag, every user then gets its off value."
+by = ["test:backend/tests/integration/api/test_flag_values_api.py::test_a_safety_rollback_serves_the_off_value"]
+
+[[unit]]
 text = "A rollback to 1–100% lowers only the global rollout_percentage."
 by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p4_a_partial_rollback_lowers_only_the_global_rollout"]
 
@@ -646,10 +650,11 @@ text = "Either way, the flag's active rollout schedules are paused, so a later s
 by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p10_a_tick_and_a_stage_advance_after_a_rollback_leave_users_off"]
 
 [[unit]]
-text = "So the flag's default value is served to every user after a rollback to 0%, and after a partial rollback to the users it removes, while users matched by a targeting rule keep their rule's percentage."
+text = "So the flag's off value is served to every user after a rollback to 0%, and after a partial rollback to the users it removes, while users matched by a targeting rule keep their rule's percentage."
 by = [
     "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p1_a_rule_matched_user_is_off_after_a_rollback_to_0",
     "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p4_a_partial_rollback_lowers_only_the_global_rollout",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_a_safety_rollback_serves_the_off_value",
 ]
 
 [[unit]]

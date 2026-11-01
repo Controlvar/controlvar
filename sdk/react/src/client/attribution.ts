@@ -40,6 +40,16 @@ export interface AttributedKeyList {
 }
 
 export class AttributedKeys {
+  /**
+   * How long a key is used after its latest answer: 24 hours, or the cache lifetime when
+   * that is longer, so a cached answer never outlives the record that tags its events (#1423).
+   */
+  private readonly horizonMs: number;
+
+  constructor(cacheTtlMs: number = 0) {
+    this.horizonMs = Math.max(ATTRIBUTION_HORIZON_MS, Number.isFinite(cacheTtlMs) ? cacheTtlMs : 0);
+  }
+
   /** Map order is answer order: the first user is the one answered least recently. */
   private readonly users = new Map<string, UserKeys>();
 
@@ -71,7 +81,7 @@ export class AttributedKeys {
     const keys = this.users.get(userId);
     if (!keys) return { experiments: [], flags: [] };
     const now = Date.now();
-    const list = { experiments: live(keys.experiments, now), flags: live(keys.flags, now) };
+    const list = { experiments: live(keys.experiments, now, this.horizonMs), flags: live(keys.flags, now, this.horizonMs) };
     if (keys.experiments.size === 0 && keys.flags.size === 0) this.users.delete(userId);
     return list;
   }
@@ -98,10 +108,10 @@ export class AttributedKeys {
   }
 }
 
-function live(answers: Map<string, Answer>, now: number): string[] {
+function live(answers: Map<string, Answer>, now: number, horizonMs: number): string[] {
   const out: string[] = [];
   for (const [key, answer] of answers) {
-    if (now - answer.answeredAt > ATTRIBUTION_HORIZON_MS) {
+    if (now - answer.answeredAt > horizonMs) {
       answers.delete(key);
     } else if (answer.reason === undefined || !LIFECYCLE_REASONS.has(answer.reason)) {
       out.push(key);

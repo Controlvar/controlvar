@@ -1,0 +1,50 @@
+{
+  "quotes": [
+    {
+      "id": "revenue-metric",
+      "parts": [
+        "Revenue, count, duration and custom metrics are analysed as their mean per assigned user, compared with Welch's t-test, and their results give the difference per user with its confidence interval."
+      ],
+      "sources": [
+        {
+          "page": "getting-started/concepts",
+          "phrases": [
+            "revenue, count, duration",
+            "mean per assigned user, compared with Welch's t-test"
+          ]
+        },
+        {
+          "page": "guides/user-guide",
+          "phrases": ["the difference per user with its confidence interval"]
+        }
+      ]
+    },
+    {
+      "id": "aws-installer",
+      "parts": [
+        "Or ",
+        { "link": "install on AWS with one command", "page": "self-hosting/aws-install" },
+        ", a beta that installs the core profile in us-west-2; as of v0.37.0 it has been run end to end once, in a test account, and it is not for production data."
+      ],
+      "sources": [
+        {
+          "page": "self-hosting/aws-install",
+          "phrases": [
+            "install on AWS with one command",
+            "installs the core profile in us-west-2",
+            "as of v0.37.0 it has been run end to end once, in a test account",
+            "it is not for production data"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sdk-snippet",
+      "code": [
+        "const assignment = await client.getAssignment('checkout_button_color', user);",
+        "await client.track('user-123', 'purchase', { value: 49.99, experimentKey: 'checkout_button_color' });"
+      ],
+      "sources": [{ "page": "sdk/javascript" }]
+    }
+  ]
+}

@@ -67,6 +67,30 @@ class MetricType(str, Enum):
 #: reaching the database (#559).
 INT32_MAX = 2**31 - 1
 
+#: What a metric's type means to the analysis (#439).  The same words on the
+#: request (``MetricBase``) and the response (``MetricResponse``).
+METRIC_TYPE_DESCRIPTION = (
+    "What the metric measures.  conversion: the share of assigned users who "
+    "sent event_name.  count: the number of event_name events per assigned "
+    "user; their value is not read.  revenue, duration and custom: the total "
+    "value of a user's event_name events, per assigned user.  In each mean a "
+    "user with none counts as 0."
+)
+
+#: ``aggregation_method`` and ``event_value_path`` are accepted, stored and
+#: returned, and no analysis reads them (#439).  Their descriptions say so.
+AGGREGATION_METHOD_DESCRIPTION = (
+    "Not read: the analysis does not use it, and how a metric is analysed "
+    "follows from metric_type (see analysis in the results).  Stored and "
+    "returned as sent."
+)
+EVENT_VALUE_PATH_DESCRIPTION = (
+    "Not read: the analysis does not use it.  A revenue, duration or custom "
+    "metric adds up each event's top-level value; a count or conversion "
+    "metric does not read value, and values inside an event's properties are "
+    "never read.  Stored and returned as sent."
+)
+
 
 #: The message for a ``time_zone`` that is not a known IANA zone name. Fixed:
 #: it names the field and never repeats the submitted value (#483).
@@ -196,10 +220,12 @@ class MetricBase(BaseModel):
     event_name: str = Field(
         ..., min_length=1, max_length=100, description="Event name to track"
     )
-    metric_type: MetricType = Field(MetricType.CONVERSION, description="Type of metric")
+    metric_type: MetricType = Field(
+        MetricType.CONVERSION, description=METRIC_TYPE_DESCRIPTION
+    )
     is_primary: bool = Field(False, description="Whether this is the primary metric")
     aggregation_method: str = Field(
-        "average", max_length=50, description="How to aggregate the metric"
+        "average", max_length=50, description=AGGREGATION_METHOD_DESCRIPTION
     )
     minimum_sample_size: int = Field(
         100,
@@ -219,7 +245,7 @@ class MetricBase(BaseModel):
     event_value_path: Optional[str] = Field(
         None,
         max_length=100,
-        description="JSON path to extract value from event payload",
+        description=EVENT_VALUE_PATH_DESCRIPTION,
     )
     lower_is_better: bool = Field(False, description="Whether lower values are better")
 
@@ -231,10 +257,8 @@ class MetricBase(BaseModel):
                 "event_name": "purchase_completed",
                 "metric_type": "conversion",
                 "is_primary": True,
-                "aggregation_method": "average",
                 "minimum_sample_size": 200,
                 "expected_effect": 0.05,
-                "event_value_path": "value",
                 "lower_is_better": False,
             }
         }
@@ -502,12 +526,14 @@ class ExperimentCreate(ExperimentBase):
                         "is_primary": True,
                     },
                     {
-                        "name": "Average Order Value",
-                        "description": "Average value of completed orders",
+                        "name": "Revenue per user",
+                        "description": (
+                            "Each user's purchase values added up, averaged "
+                            "over every assigned user"
+                        ),
                         "event_name": "purchase",
                         "metric_type": "revenue",
                         "is_primary": False,
-                        "event_value_path": "order_value",
                     },
                 ],
             }
@@ -757,12 +783,14 @@ class MetricResponse(BaseModel):
     name: str
     description: Optional[str] = None
     event_name: str
-    metric_type: str
+    metric_type: str = Field(..., description=METRIC_TYPE_DESCRIPTION)
     is_primary: bool
-    aggregation_method: str
+    aggregation_method: str = Field(..., description=AGGREGATION_METHOD_DESCRIPTION)
     minimum_sample_size: int
     expected_effect: Optional[float] = None
-    event_value_path: Optional[str] = None
+    event_value_path: Optional[str] = Field(
+        None, description=EVENT_VALUE_PATH_DESCRIPTION
+    )
     lower_is_better: bool
     experiment_id: UUID4
     created_at: datetime
