@@ -290,7 +290,16 @@ def _single_condition_flags(corpus: Corpus) -> None:
     }
     for op, rule_values in string_ops.items():
         for index, rule_value in enumerate(rule_values):
-            key = corpus.flag(f"str-{op}-{index}", dashboard(cond("a", op, rule_value)))
+            # Hyphens, not the operator's underscore: gitleaks' generic-api-key
+            # rule read two of the underscore keys as credentials (#1497). A
+            # false positive in this generated file is fixed here, never with a
+            # line pin in .gitleaksignore, which would mask whatever the next
+            # regeneration puts on that line. core_build.sh's secrets step
+            # scans tests/sdk-contract with no ignore file to keep it so.
+            key = corpus.flag(
+                f"str-{op.replace('_', '-')}-{index}",
+                dashboard(cond("a", op, rule_value)),
+            )
             corpus.values(key, "a", _string_battery())
 
     for op, dashboard_op in (("eq", "equals"), ("neq", "not_equals")):
