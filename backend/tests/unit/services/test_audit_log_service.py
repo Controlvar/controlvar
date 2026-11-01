@@ -106,6 +106,73 @@ class TestRedactSensitive:
         result = _redact_sensitive({"PASSWORD": "secret"})
         assert result["PASSWORD"] == "[REDACTED]"
 
+    @pytest.mark.regression
+    def test_sensitive_field_in_object_inside_list_is_redacted(self):
+        data = {"items": [{"password": "x", "name": "item-1"}]}
+        result = _redact_sensitive(data)
+        assert result == {"items": [{"password": "[REDACTED]", "name": "item-1"}]}
+
+    @pytest.mark.regression
+    def test_sensitive_field_inside_list_of_lists_is_redacted(self):
+        data = {"matrix": [[{"token": "jwt-123", "id": 1}], [{"api_key": "sk-1"}]]}
+        result = _redact_sensitive(data)
+        assert result == {
+            "matrix": [
+                [{"token": "[REDACTED]", "id": 1}],
+                [{"api_key": "[REDACTED]"}],
+            ]
+        }
+
+    @pytest.mark.regression
+    def test_sensitive_field_in_object_inside_list_inside_object_is_redacted(self):
+        data = {
+            "outer": {
+                "entries": [
+                    {"nested": {"secret": "top-secret", "label": "ok"}},
+                ]
+            }
+        }
+        result = _redact_sensitive(data)
+        assert result == {
+            "outer": {
+                "entries": [
+                    {"nested": {"secret": "[REDACTED]", "label": "ok"}},
+                ]
+            }
+        }
+
+    @pytest.mark.regression
+    def test_non_sensitive_list_items_are_unchanged(self):
+        data = {
+            "tags": ["alpha", "beta"],
+            "counts": [1, 2, 3],
+            "objects": [{"name": "safe", "enabled": True}],
+        }
+        result = _redact_sensitive(data)
+        assert result == data
+
+    @pytest.mark.regression
+    def test_input_structure_is_not_modified(self):
+        data = {
+            "password": "root-secret",
+            "items": [
+                {"token": "tok-1", "name": "first"},
+                [{"api_key": "key-2"}, "plain"],
+            ],
+        }
+        snapshot = {
+            "password": "root-secret",
+            "items": [
+                {"token": "tok-1", "name": "first"},
+                [{"api_key": "key-2"}, "plain"],
+            ],
+        }
+        result = _redact_sensitive(data)
+        assert data == snapshot
+        assert result["items"] is not data["items"]
+        assert result["items"][0] is not data["items"][0]
+        assert result["items"][1] is not data["items"][1]
+
 
 # ---------------------------------------------------------------------------
 # Tests: AuditLogService.log()
