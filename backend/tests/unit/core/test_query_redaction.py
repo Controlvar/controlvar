@@ -48,6 +48,10 @@ CALLBACK = "/api/v1/auth/sso/oidc/okta/callback"
         "%63ode",  # "code", percent-encoded
         "client%5Fsecret",
         "ID_TOKEN",
+        # The end user's attributes on the flag-evaluation routes (#1552).
+        pytest.param("context", marks=pytest.mark.regression),
+        pytest.param("Context", marks=pytest.mark.regression),
+        pytest.param("%63ontext", marks=pytest.mark.regression),
     ],
 )
 def test_a_listed_name_has_its_value_replaced_on_any_route(name):
