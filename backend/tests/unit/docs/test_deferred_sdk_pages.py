@@ -760,7 +760,6 @@ SENDS_NO_CONTEXT = {
     "flutter",
     "ios",
     "java",
-    "openfeature",
     "php",
     "react-native",
     "ruby",

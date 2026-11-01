@@ -22,16 +22,18 @@ async function main(): Promise<void> {
   // 2. Get a client.
   const client = OpenFeature.getClient('my-app');
 
-  // 3. Build user context. Only `targetingKey` reaches the server (as user_id);
-  //    other attributes are not used for flag evaluation.
-  const userContext: EvaluationContext = { targetingKey: 'user-12345' };
+  // 3. Build user context. `targetingKey` reaches the server as user_id; every other
+  //    key is sent as the user's attributes, for the flag's targeting rules.
+  const userContext: EvaluationContext = { targetingKey: 'user-12345', plan: 'pro', country: 'US' };
 
   // 4. Evaluate flags — application code is SDK-agnostic.
   const darkModeEnabled = await client.getBooleanValue('dark-mode', false, userContext);
   console.log('dark-mode enabled:', darkModeEnabled);
 
-  // Only boolean flags carry a value: the evaluate endpoint returns `config: null`
-  // for every flag, so string, number and object calls return the default you pass.
+  // A string, number or JSON flag serves its on value or its off value; a call of
+  // another type than the flag's gets the default you pass, with TYPE_MISMATCH.
+  const label = await client.getStringDetails('checkout-button-label', 'Buy now', userContext);
+  console.log('checkout-button-label:', label.value, label.reason, label.variant);
 
   // 5. Experiments and tracking are not OpenFeature concepts: use the JS SDK client.
   const assignment = await provider.client.getAssignment('checkout_flow', {
