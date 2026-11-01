@@ -216,12 +216,12 @@ def deliveries(db_session):
     return event_type, {member: str(entry.id) for member, entry in rows.items()}
 
 
-def _db_count(db_session, column, member) -> int:
+def _db_count(db_session, column, wanted) -> int:
     db_session.expire_all()
     return (
         db_session.query(func.count())
         .select_from(column.class_)
-        .filter(column == member)
+        .filter(column == wanted)
         .scalar()
     )
 
@@ -231,35 +231,35 @@ def _db_count(db_session, column, member) -> int:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("member", list(FeatureFlagStatus), ids=lambda m: m.value)
+@pytest.mark.parametrize("wanted", list(FeatureFlagStatus), ids=lambda m: m.value)
 @pytest.mark.parametrize("case", [0, 1, 2], ids=["lower", "UPPER", "Mixed"])
 def test_flag_status_any_case_filters_to_its_rows(
-    client, viewer_user, flags, member, case
+    client, viewer_user, flags, wanted, case
 ):
     suffix, ids = flags
-    sent = _cases(member.value)[case]
+    sent = _cases(wanted.value)[case]
     resp = _get(client, viewer_user, FLAGS, {"status": sent, "search": suffix})
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert [item["id"] for item in body["items"]] == [ids[member]]
+    assert [item["id"] for item in body["items"]] == [ids[wanted]]
     assert body["total"] == 1
-    assert body["items"][0]["status"] == member.value.lower()
+    assert body["items"][0]["status"] == wanted.value.lower()
 
 
-@pytest.mark.parametrize("member", list(LLMExperimentStatus), ids=lambda m: m.value)
+@pytest.mark.parametrize("wanted", list(LLMExperimentStatus), ids=lambda m: m.value)
 @pytest.mark.parametrize("case", [0, 1, 2], ids=["lower", "UPPER", "Mixed"])
 def test_llm_status_any_case_filters_to_its_rows(
-    client, db_session, viewer_user, llm_experiments, member, case
+    client, db_session, viewer_user, llm_experiments, wanted, case
 ):
-    sent = _cases(member.value)[case]
+    sent = _cases(wanted.value)[case]
     resp = _get(client, viewer_user, LLM, {"status": sent, "page_size": "100"})
     assert resp.status_code == 200, resp.text
     body = resp.json()
     got = {item["id"] for item in body["items"]}
-    assert {item["status"] for item in body["items"]} == {member.value}
+    assert {item["status"] for item in body["items"]} == {wanted.value}
     for other, (exp_id, _) in llm_experiments.items():
-        assert (exp_id in got) == (other is member), other
-    assert body["total"] == _db_count(db_session, LLMExperiment.status, member)
+        assert (exp_id in got) == (other is wanted), other
+    assert body["total"] == _db_count(db_session, LLMExperiment.status, wanted)
 
 
 @pytest.mark.parametrize("task_type", list(LLMTaskType), ids=lambda m: m.value)
@@ -279,38 +279,38 @@ def test_llm_task_type_any_case_filters_to_its_rows(
 
 
 @pytest.mark.parametrize(
-    "member", list(MutualExclusionGroupStatus), ids=lambda m: m.value
+    "wanted", list(MutualExclusionGroupStatus), ids=lambda m: m.value
 )
 @pytest.mark.parametrize("case", [0, 1, 2], ids=["lower", "UPPER", "Mixed"])
 def test_group_status_any_case_filters_to_its_rows(
-    client, db_session, developer_user, groups, member, case
+    client, db_session, developer_user, groups, wanted, case
 ):
-    sent = _cases(member.value)[case]
+    sent = _cases(wanted.value)[case]
     resp = _get(client, developer_user, GROUPS, {"status": sent, "limit": "1000"})
     assert resp.status_code == 200, resp.text
     body = resp.json()
     got = {item["id"] for item in body["items"]}
-    assert {item["status"] for item in body["items"]} == {member.value}
+    assert {item["status"] for item in body["items"]} == {wanted.value}
     for other, group_id in groups.items():
-        assert (group_id in got) == (other is member), other
-    assert body["total"] == _db_count(db_session, MutualExclusionGroup.status, member)
+        assert (group_id in got) == (other is wanted), other
+    assert body["total"] == _db_count(db_session, MutualExclusionGroup.status, wanted)
 
 
-@pytest.mark.parametrize("member", list(NotificationStatus), ids=lambda m: m.value)
+@pytest.mark.parametrize("wanted", list(NotificationStatus), ids=lambda m: m.value)
 @pytest.mark.parametrize("case", [0, 1, 2], ids=["lower", "UPPER", "Mixed"])
 def test_delivery_status_any_case_filters_to_its_rows(
-    client, admin_user, deliveries, member, case
+    client, admin_user, deliveries, wanted, case
 ):
     event_type, ids = deliveries
-    sent = _cases(member.value)[case]
+    sent = _cases(wanted.value)[case]
     resp = _get(
         client, admin_user, DELIVERY, {"status": sent, "event_type": event_type}
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert [item["id"] for item in body["items"]] == [ids[member]]
+    assert [item["id"] for item in body["items"]] == [ids[wanted]]
     assert body["total"] == 1
-    assert body["items"][0]["status"] == member.value
+    assert body["items"][0]["status"] == wanted.value
 
 
 # ---------------------------------------------------------------------------
