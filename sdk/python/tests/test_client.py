@@ -1056,6 +1056,17 @@ class TestTrackNeverRaises:
         transport.fail(TransportError("down"))
         assert client.track("user-1", "page_view") is False
 
+    def test_a_timeout_returns_false_although_the_event_was_sent(self, client, transport):
+        """The whole request went out, and then no answer came in time: the
+        default transport raises ``TransportError`` on a timeout
+        (``test_transport.py``). The server may have stored the event by then;
+        ``track`` cannot tell, and returns False."""
+        transport.fail(TransportError("POST /api/v1/tracking/track failed: timed out"))
+        assert client.track("user-1", "purchase", event_value=49.99, experiment_key="checkout_flow") is False
+        assert transport.calls() == ["POST /api/v1/tracking/track"]
+        sent = transport.last.json()
+        assert (sent["user_id"], sent["event_name"], sent["value"]) == ("user-1", "purchase", 49.99)
+
 
 # ---------------------------------------------------------------------------- track_batch
 

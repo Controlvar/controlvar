@@ -1,0 +1,192 @@
+# What verifies each unit of docs/guides/how-events-count.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/guides/how-events-count.md"
+
+[[unit]]
+text = "How events count"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Which of the events you send count in an experiment's results."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The rules are the same for every SDK, because each one sends its events through POST /api/v1/tracking/track and POST /api/v1/tracking/batch."
+by = [
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_every_sdk_directory_is_listed",
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_every_sdk_sends_its_events_through_track_and_batch",
+]
+
+[[unit]]
+text = "The event | Stored | Counts in its variant's results"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Sent again (with or without anything identifying it) | Yes, each time | Each time in count and revenue metrics; a conversion metric counts the user once (#1543)"
+by = ["test:backend/tests/integration/api/test_how_events_count.py::test_an_event_sent_again_is_stored_and_counted_again"]
+
+[[unit]]
+text = "Received before the user is assigned to the experiment | Yes, with no variant | No"
+by = ["test:backend/tests/integration/api/test_how_events_count.py::test_an_event_received_before_the_assignment_counts_in_no_variant"]
+
+[[unit]]
+text = "Received while the experiment is a draft, paused, completed or archived | Yes, with no variant | No"
+by = [
+    "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_each_status_and_route_stores_the_variant_only_while_active",
+    "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_converting_users_per_variant_across_pause_resume_and_complete",
+]
+
+[[unit]]
+text = "Received after the user is assigned, with an earlier timestamp | Yes | Yes"
+by = ["test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp"]
+
+[[unit]]
+text = "With a value larger than 10^12 in size | Yes | Its user counts as converting; the value adds nothing"
+by = ["test:backend/tests/integration/api/test_revenue_per_user_results.py::test_values_that_are_not_finite_or_too_large_add_nothing"]
+
+[[unit]]
+text = "Sent by a bot or a crawler | Yes | Yes"
+by = [
+    "test:backend/tests/integration/api/test_how_events_count.py::test_an_event_from_a_crawler_is_stored_and_counted",
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_the_event_path_reads_no_user_agent",
+]
+
+[[unit]]
+text = "Sending an event again"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A request that timed out may already have been stored."
+by = [
+    "test:sdk/python/tests/test_client.py::TestTrackNeverRaises::test_a_timeout_returns_false_although_the_event_was_sent",
+    "test:sdk/python/tests/test_transport.py::test_network_failures_raise_transport_error",
+]
+
+[[unit]]
+text = "An event you send again is stored again, and then a count metric counts it twice and a revenue metric adds its value twice."
+by = ["test:backend/tests/integration/api/test_how_events_count.py::test_an_event_sent_again_is_stored_and_counted_again"]
+
+[[unit]]
+text = "When sending fails"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The JavaScript and Python SDKs retry a 429 once, after Retry-After; the server stores nothing for a 429."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::retries once after Retry-After and returns the second response",
+    "test:sdk/js/__tests__/client.test.ts::also retries tracking requests",
+    "test:sdk/js/__tests__/client.test.ts::gives up after the single retry and surfaces status 429",
+    "test:sdk/python/tests/test_client.py::TestRateLimit::test_retries_once_after_retry_after",
+    "test:sdk/python/tests/test_client.py::TestRateLimit::test_track_returns_false_after_retry",
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_a_429_is_answered_before_the_route_runs",
+]
+
+[[unit]]
+text = "When an event counts"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An event counts for the variant the user is assigned to when the server receives it."
+by = [
+    "test:backend/tests/integration/api/test_how_events_count.py::test_an_event_received_before_the_assignment_counts_in_no_variant",
+    "test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp",
+]
+
+[[unit]]
+text = "Its timestamp does not change that."
+by = ["test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp"]
+
+[[unit]]
+text = "An event received before the user's assignment is stored with no variant, and counts in no variant's results, even after the user is assigned."
+by = ["test:backend/tests/integration/api/test_how_events_count.py::test_an_event_received_before_the_assignment_counts_in_no_variant"]
+
+[[unit]]
+text = "Track a user's events for an experiment once its assignment has answered."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "An event received while the experiment is a draft, paused, completed or archived is stored with no variant, and counts in no variant's results, even after the experiment is started again."
+by = [
+    "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_each_status_and_route_stores_the_variant_only_while_active",
+    "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_converting_users_per_variant_across_pause_resume_and_complete",
+    "test:backend/tests/integration/api/test_how_events_count.py::test_an_event_received_while_paused_counts_in_no_variant_after_the_start",
+]
+
+[[unit]]
+text = "POST /api/v1/tracking/events stores the variant_id it is sent, whatever the experiment's status; the event counts only for a user assigned to that variant."
+by = [
+    "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_events_by_ids_keep_the_variant_they_name_for_a_paused_experiment",
+    "test:backend/tests/integration/api/test_how_events_count.py::test_events_by_ids_count_only_for_a_user_assigned_to_that_variant",
+]
+
+[[unit]]
+text = "The results summary's Total Events counts every stored event of the experiment, the ones that count in no variant included."
+by = [
+    "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_converting_users_per_variant_across_pause_resume_and_complete",
+    "test:backend/tests/integration/api/test_how_events_count.py::test_an_event_received_before_the_assignment_counts_in_no_variant",
+    "test:backend/tests/integration/api/test_how_events_count.py::test_events_by_ids_count_only_for_a_user_assigned_to_that_variant",
+]
+
+[[unit]]
+text = "Holdout results and CUPED history have their own rules: see Mutual Exclusion Groups and CUPED."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Timestamps"
+by = ["exempt:label"]
+
+[[unit]]
+text = "timestamp is when the event happened, by the sender's clock."
+by = [
+    "test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp",
+    "test:backend/tests/integration/api/test_tracking_untagged_events.py::TestUntaggedTrack::test_an_event_with_no_key_is_stored_as_history",
+]
+
+[[unit]]
+text = "Without one it is the time the server received the event."
+by = ["test:backend/tests/integration/api/test_how_events_count.py::test_an_event_without_a_timestamp_is_dated_when_it_is_received"]
+
+[[unit]]
+text = "The Ruby, PHP and Elixir SDKs send the host's clock when you give none."
+by = [
+    "test:sdk/ruby/spec/controlvar/client_spec.rb::POSTs one /api/v1/tracking/track with the event body",
+    "test:sdk/php/tests/ExperimentationClientTest.php::testTrackWithExperimentKeyPostsOneTrackRequest",
+    "test:sdk/elixir/test/controlvar/client_test.exs::POSTs one /api/v1/tracking/track with the full body",
+]
+
+[[unit]]
+text = "Any timestamp is stored, however far in the past or the future."
+by = ["test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp"]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id} does not read it."
+by = ["test:backend/tests/integration/api/test_how_events_count.py::test_the_results_do_not_read_the_timestamp"]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id}/daily puts each user's first conversion on the UTC day of its timestamp."
+by = [
+    "test:backend/tests/integration/api/test_how_events_count.py::test_the_daily_series_dates_a_first_conversion_by_the_utc_day_of_its_timestamp",
+    "test:backend/tests/integration/api/test_converting_users_consistency.py::test_daily_series_counts_each_user_on_the_day_of_the_first_conversion",
+]
+
+[[unit]]
+text = "A day before the experiment's first day counts on that first day, and a day after its last day on that last day."
+by = ["test:backend/tests/integration/api/test_converting_users_consistency.py::test_daily_series_ends_at_the_results_count_when_users_convert_outside_the_window"]
+
+[[unit]]
+text = "Bots"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Nothing detects bots or crawlers, and nothing limits the events one user sends beyond the per-address rate limit."
+by = [
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_the_event_path_reads_no_user_agent",
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_the_rate_limit_counts_requests_per_address_not_per_user",
+    "test:backend/tests/integration/api/test_how_events_count.py::test_an_event_from_a_crawler_is_stored_and_counted",
+    "test:backend/tests/integration/api/test_how_events_count.py::test_one_user_can_send_any_number_of_events",
+]
+
+[[unit]]
+text = "Keep bots out where you assign them: do not request an assignment for a bot."
+by = ["exempt:advice"]

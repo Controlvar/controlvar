@@ -636,6 +636,10 @@ by = [
 ]
 
 [[unit]]
+text = "Which events count, and which do not, is on How events count."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "Experiment Summary Card"
 by = ["exempt:baseline"]
 

@@ -100,6 +100,7 @@ nav:
   - Safety Monitoring: feature-flags/safety.md
 - A/B Testing & Experiments:
   - Running Experiments: guides/user-guide.md
+  - How Events Count: guides/how-events-count.md
   - Guided Examples: guides/guided-examples.md
   - Dashboard and API: guides/dashboard-and-api.md
   - Statistical Methods: api/sequential-testing.md

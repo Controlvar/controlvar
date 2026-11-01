@@ -235,7 +235,7 @@ without checking it.
   window. With no evaluations in the window it reads 0, so an error-rate threshold cannot fire: in
   local mode the counts reach the server every 60 seconds and on `close()`.
 
-### Caching, dedupe and retries
+### Caching, shared requests and retries
 
 - Successful assignments and evaluations are cached per user + key for `cacheTtlMs`; failures are
   never cached, so the next call retries.
