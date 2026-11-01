@@ -334,7 +334,7 @@ by = [
 ]
 
 [[unit]]
-text = "no URL variant other than the control URL has the control URL's host and path."
+text = "no URL variant but the control's has the control URL's host and path."
 by = ["test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_config_that_does_not_match_its_variants_is_refused_at_its_loc"]
 
 [[unit]]

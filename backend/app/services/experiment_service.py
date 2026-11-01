@@ -1369,7 +1369,7 @@ class ExperimentService:
         # A split URL experiment needs a configuration whose URL variants
         # match its variants (#393). The checks against other experiments are
         # start's alone.
-        if experiment.experiment_type == ExperimentType.SPLIT_URL:
+        if getattr(experiment, "experiment_type", None) == ExperimentType.SPLIT_URL:
             if not experiment.split_url_config:
                 logger.warning(f"Experiment {experiment.id} has no split_url_config")
                 return False

@@ -170,7 +170,7 @@ In a `split_url` experiment the configuration must also match the experiment's v
 
 - each URL variant names one of the experiment's variants, and each of those has exactly one URL variant;
 - each URL variant's `traffic_allocation` equals its experiment variant's, within 0.01: the experiment's variants decide the split;
-- no URL variant other than the control URL has the control URL's host and path.
+- no URL variant but the control's has the control URL's host and path.
 
 The control URL is the URL variant named like the experiment's control variant. Hosts are
 compared without case or port, and paths without one trailing `/`; the query string is not
