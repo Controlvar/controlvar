@@ -254,9 +254,10 @@ Paths that need a maintainer:"""
 
 REFUSED_TAIL = """\
 What happens next:
-  - Leave the pull request open. A maintainer will follow up, either making
-    those changes themselves or taking the change over with credit to you.
-  - You do not need to remove these files or split your work.
+  - Leave the pull request open. A maintainer will follow up, usually by making
+    those changes themselves or by taking the change over with credit to you.
+  - You do not need to remove these files or split your work unless a
+    maintainer asks you to.
   - This check stays red on this pull request. That is expected; it does not
     mean the rest of the change is rejected.
 
@@ -272,6 +273,13 @@ confirm them. A maintainer will follow up. There is nothing you need to change.
 Reason: {reason}"""
 
 MORE = "  ...and {count} more paths."
+
+#: Two stop reasons a contributor is likely to meet, in plain words.
+MOVED = (
+    "the pull request changed while it was being checked; "
+    "the new commit gets its own run"
+)
+PARTIAL_TREE = "GitHub returned only part of the commit's list of files"
 
 # --------------------------------------------------------------------------
 # Rules 1-7: the name alone
@@ -544,7 +552,7 @@ def _head(get: Get, event: Event) -> Dict[str, Any]:
     except (KeyError, TypeError):
         raise Stop("API error (unreadable response)") from None
     if sha != event.sha:
-        raise Stop("head moved; result not attributable")
+        raise Stop(MOVED)
     return pull
 
 
@@ -574,7 +582,7 @@ def _tree(get: Get, event: Event) -> Dict[str, str]:
     if not isinstance(body, dict) or not isinstance(body.get("tree"), list):
         raise Stop("tree unreadable")
     if body.get("truncated") is not False:
-        raise Stop("tree truncated")
+        raise Stop(PARTIAL_TREE)
     tree: Dict[str, str] = {}
     for entry in body["tree"]:
         if not (

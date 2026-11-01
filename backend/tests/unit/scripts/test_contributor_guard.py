@@ -326,6 +326,33 @@ def test_a_name_that_differs_only_in_case_from_a_directory_is_refused():
     assert refused(added("docs/Guide/y.md"), tree=tree) == {"docs/Guide/y.md": "case"}
 
 
+def test_a_case_only_rename_is_refused_by_its_previous_name():
+    """Rule 9 reads previous and removed names too, not only the names that
+    are in the head tree."""
+    files = [
+        {"filename": "readme.md", "status": "renamed", "previous_filename": "README.md"}
+    ]
+    assert refused(files, tree={"readme.md": "100644"}) == {"README.md": "case"}
+
+
+def test_a_removed_name_that_differs_only_in_case_is_refused():
+    files = [{"filename": "docs/Guide.md", "status": "removed"}]
+    tree = {"docs/guide.md": "100644"}
+    assert refused(files, tree=tree) == {"docs/Guide.md": "case"}
+
+
+def test_removed_and_previous_names_unique_in_any_case_pass():
+    files = [
+        {"filename": "docs/old.md", "status": "removed"},
+        {
+            "filename": "docs/b.md",
+            "status": "renamed",
+            "previous_filename": "docs/a.md",
+        },
+    ]
+    assert refused(files, tree={"docs/new.md": "100644", "docs/b.md": "100644"}) == {}
+
+
 def test_a_case_variant_of_a_tracked_manifest_is_refused_by_its_name():
     tree = _tree_for(["frontend/package.json", "frontend/Package.json"])
     files = added("frontend/Package.json")
@@ -546,22 +573,62 @@ def test_no_changed_files_stops_the_check():
     assert result.stop.reason == "the pull request lists no changed files"
 
 
+PARTIAL_TREE = "GitHub returned only part of the commit's list of files"
+
+
 @pytest.mark.parametrize("truncated", [True, None, "false", 0])
 def test_a_tree_that_is_not_known_to_be_whole_stops_the_check(truncated):
     result = run(added("backend/x.py"), truncated=truncated)
-    assert (result.outcome, result.stop.reason) == ("stopped", "tree truncated")
+    assert (result.outcome, result.stop.reason) == ("stopped", PARTIAL_TREE)
+
+
+class _TreeBody(FakeApi):
+    """Serves `body` as the trees API's answer (a 200 with that JSON)."""
+
+    def __init__(self, files: List[Dict[str, Any]], body: Any) -> None:
+        super().__init__(files)
+        self.body = body
+
+    def __call__(self, path: str) -> Any:
+        answer = super().__call__(path)
+        return self.body if "/git/trees/" in path else answer
 
 
 def test_a_tree_without_a_key_stops_the_check():
-    class NoKey(FakeApi):
-        def __call__(self, path: str) -> Any:
-            body = super().__call__(path)
-            if "/git/trees/" in path:
-                del body["truncated"]
-            return body
+    body = {"sha": SHA, "tree": [{"path": "backend/x.py", "mode": "100644"}]}
+    result = cg.run(lambda: event(1), _TreeBody(added("backend/x.py"), body))
+    assert (result.outcome, result.stop.reason) == ("stopped", PARTIAL_TREE)
 
-    result = cg.run(lambda: event(1), NoKey(added("backend/x.py")))
-    assert (result.outcome, result.stop.reason) == ("stopped", "tree truncated")
+
+TREE_BODIES = {
+    "no tree list": {"sha": SHA, "truncated": False},
+    "a tree that is not a list": {"sha": SHA, "tree": {}, "truncated": False},
+    "an entry with no mode": {
+        "sha": SHA,
+        "tree": [{"path": "backend/x.py", "type": "blob"}],
+        "truncated": False,
+    },
+    "an entry with no path": {
+        "sha": SHA,
+        "tree": [{"mode": "100644", "type": "blob"}],
+        "truncated": False,
+    },
+    "an entry that is not a mapping": {
+        "sha": SHA,
+        "tree": ["backend/x.py"],
+        "truncated": False,
+    },
+    "a list for a body": [],
+}
+
+
+@pytest.mark.parametrize("shape", sorted(TREE_BODIES))
+def test_a_tree_that_cannot_be_read_stops_the_check(shape):
+    """Never read as an empty tree: the contributor sees the stop text, not a
+    refusal for a reason that is not theirs."""
+    api = _TreeBody(added("backend/x.py"), TREE_BODIES[shape])
+    result = cg.run(lambda: event(1), api)
+    assert (result.outcome, result.stop.reason) == ("stopped", "tree unreadable")
 
 
 @pytest.mark.parametrize("heads", [(OTHER, SHA), (SHA, OTHER)])
@@ -570,7 +637,8 @@ def test_a_head_that_moved_stops_the_check(heads):
     result = run(added("backend/x.py"), heads=heads)
     assert (result.outcome, result.stop.reason) == (
         "stopped",
-        "head moved; result not attributable",
+        "the pull request changed while it was being checked; "
+        "the new commit gets its own run",
     )
 
 
@@ -823,6 +891,8 @@ def _fixed_texts() -> List[str]:
         cg.REFUSED_TAIL,
         cg.STOPPED,
         cg.MORE,
+        cg.MOVED,
+        cg.PARTIAL_TREE,
         *cg.REASONS,
     ]
 
