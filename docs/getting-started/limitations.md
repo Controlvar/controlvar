@@ -28,7 +28,6 @@ the row links it.
 | A traffic allocation for the experiment as a whole | There is none. Variant weights must add up to exactly 100%, or the request is refused with `422`. Users are left out only by targeting rules, a mutual exclusion group or the global holdout. |
 | One user known by two ids, such as a visitor who signs in | No identify or alias call: a user who signs in under a new id mid-funnel gets a second assignment. Assign with the id you will track purchases with. |
 | An LLM experiment that picks the variant with the lowest value | An LLM experiment's winner is the variant with the highest mean of the metric it is compared on: the business metric when every variant has one, otherwise the judge score. There is no lower-is-better setting for it. |
-| A warehouse analysis of a metric where lower is better | A warehouse analysis treats every metric as higher is better: a warehouse metric source has no lower-is-better setting, so its results report `lower_is_better: false` and name a winner only for a significant increase ([#1386](https://github.com/Controlvar/controlvar/issues/1386)). |
 
 ## Deployments
 

@@ -34,6 +34,23 @@ from what comes back. A metric is one of two types:
   and counted), optionally capped per unit with `cap_value`, and compared with
   Welch's t-test. Each variant reports its mean and a confidence interval.
 
+A metric source can be marked lower is better (`lower_is_better`) for a metric
+where a fall is the improvement, such as an error rate or churn. A run then
+names a treatment the winner (`winning_variant_id`) only for a significant
+decrease, where without the setting only a significant increase wins. The
+p-values, the intervals and `relative_improvement_pct`, the signed change, are
+the same either way. The setting belongs to the source, not to an experiment's
+metrics, so a source has one direction in every experiment that analyses it.
+Each computed metric in a run's results carries the `lower_is_better` it was
+analysed with: the source's setting when the run started, which a later edit
+does not change.
+
+Every metric source stored before the setting existed reads `false`, which is
+how every earlier analysis read it. To change one, mark it, validate it again
+and start a new analysis; an analysis already run keeps its results. Undoing
+the migration that stores the setting deletes it from every source: see
+[Upgrading and migrations](../self-hosting/migrations.md#modules_0003_lower_is_better-gives-each-warehouse-metric-source-a-direction).
+
 A proportion metric's results also give each treatment its difference from
 the control with an interval, the interval of its relative change and its
 impact over its own units, as `/results` does on the same counts. A mean
@@ -194,7 +211,7 @@ When a limit is reached the API answers:
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `WAREHOUSE_CREDENTIALS_KEYS` | unset | Fernet keys, comma-separated, newest first, that encrypt stored warehouse credentials. While unset, storing or using a credential answers `503 credentials_unavailable`. In staging and production a malformed value is refused when the API starts, and the full profile's modules do not load until it is fixed. |
+| `WAREHOUSE_CREDENTIALS_KEYS` | unset | Fernet keys, comma-separated, newest first, that encrypt stored warehouse credentials. While unset or empty, storing or using a credential answers `503 credentials_unavailable`. In staging and production a malformed value is refused when the API starts, and the full profile's modules do not load until it is fixed. |
 | `WAREHOUSE_MAX_QUERY_TIMEOUT_SECONDS` | 1800 | The highest `query_timeout_seconds` a connection may set. |
 | `WAREHOUSE_MAX_BYTES_PER_QUERY` | 214748364800 (200 GiB) | The highest byte limit a connection may set. |
 | `WAREHOUSE_MAX_RUNS_PER_DAY` | 200 | The highest `max_runs_per_day` a connection may set. |
@@ -206,6 +223,12 @@ A stored credential that none of the configured keys can open answers
 `needs_new_credentials`; an admin replaces it. Deleting a connection deletes
 its row and its credentials; its sources go with it, and its past analyses
 keep their results and the connection's name.
+
+Both compose files pass `WAREHOUSE_CREDENTIALS_KEYS` to the API, empty by
+default, and an empty value is the same as one that is not set. Put it in the
+`.env` file next to the compose file: a value exported in another terminal does
+not reach the container, and one exported in the terminal that runs
+`docker compose up` does.
 
 ## API
 
@@ -248,6 +271,20 @@ identifier rules, and a filter's text value may contain only letters, digits,
 spaces and `_ . : @ / + -`; anything else is refused with 422, never escaped.
 A source must be validated before a preview or an analysis uses it, and
 editing it clears its validation.
+
+For a metric where a fall is better, add `"lower_is_better": true`. A PUT
+without `lower_is_better` sets it back to `false`, so send it on every PUT of a
+source marked lower is better. An assignment source has no direction: its
+`lower_is_better` is `null`, and a body that sends one is refused with 422.
+
+A source body refuses any field it does not know with 422
+(`extra_forbidden`). So during a deploy from a release without
+`lower_is_better`, while it serves both releases at once (the canary on AWS or
+a Helm rolling update), a request that sends `lower_is_better` and reaches an
+API task or pod still on that release is refused; retry once the deploy has
+finished. A dashboard opened before that deploy does not send
+`lower_is_better`, so saving a metric source from it can set the setting back
+to `false`: reload the dashboard after it.
 
 An analysis names the sources, and optionally the window and which warehouse
 variant label is which experiment variant (labels not listed are matched to a

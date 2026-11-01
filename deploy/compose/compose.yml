@@ -63,6 +63,13 @@ services:
       # The full profile refuses to start without it; the core profile ignores it.
       AUDIT_HMAC_KEY: ${AUDIT_HMAC_KEY:-}
       METRICS_TOKEN: ${METRICS_TOKEN:-}
+      # Optional, empty by default, and an empty key is the same as an unset
+      # one. Each turns a feature on when it is set: warehouse analysis (the
+      # full profile), then LLM experiment variants by provider.
+      WAREHOUSE_CREDENTIALS_KEYS: ${WAREHOUSE_CREDENTIALS_KEYS:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       POSTGRES_SERVER: ${POSTGRES_SERVER:-postgres}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_USER: ${POSTGRES_USER:-experimently}

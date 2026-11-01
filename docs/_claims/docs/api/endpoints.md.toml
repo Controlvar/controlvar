@@ -415,6 +415,7 @@ by = ["exempt:label"]
 [[unit]]
 text = "Limits are counted per client address and per path: most routes allow 300 requests a minute to each path from one address, and a path with an id in it, such as /api/v1/experiments/{experiment_id}, counts separately for each id."
 by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestSdkRateLimitIsPerPath::test_sdk_paths_with_different_ids_are_counted_separately",
     "test:backend/tests/unit/middleware/test_ai_rate_limits.py::test_the_neighbouring_paths_keep_their_limits",
     "test:backend/tests/unit/middleware/test_rate_limiter.py::TestExportRateLimit::test_neighbouring_paths_keep_their_limits",
 ]
@@ -1461,8 +1462,9 @@ text = "They address experiments and flags by their public key, except POST /api
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
-text = "They share the per-IP SDK_RATE_LIMIT_PER_MINUTE ceiling (default 6000/min), except POST /api/v1/tracking/assign/batch, which has its own limit of 60 requests a minute."
+text = "They use the same SDK_RATE_LIMIT_PER_MINUTE limit (default 6000/min), counted per client address and per path, so each flag key, user id or other id in a path is its own counter; the exception is POST /api/v1/tracking/assign/batch, which has its own limit of 60 requests a minute."
 by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestSdkRateLimitIsPerPath::test_sdk_paths_with_different_ids_are_counted_separately",
     "test:backend/tests/unit/middleware/test_rate_limiter.py::TestExportRateLimit::test_neighbouring_paths_keep_their_limits",
     "test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_limit_is_sixty_a_minute",
 ]

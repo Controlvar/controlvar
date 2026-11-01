@@ -958,7 +958,7 @@ Each 400 carries the detail `This flag is archived. Unarchive it before turning 
 ## Tracking Endpoints
 
 All tracking endpoints use API-key authentication (`X-API-Key`). They address experiments and flags by
-their public `key`, except `POST /api/v1/tracking/events`, which takes ids. They share the per-IP `SDK_RATE_LIMIT_PER_MINUTE` ceiling (default 6000/min), except
+their public `key`, except `POST /api/v1/tracking/events`, which takes ids. They use the same `SDK_RATE_LIMIT_PER_MINUTE` limit (default 6000/min), counted per client address and per path, so each flag key, user id or other id in a path is its own counter; the exception is
 `POST /api/v1/tracking/assign/batch`, which has its own limit of 60 requests a minute.
 
 ### Assign User to Experiment

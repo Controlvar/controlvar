@@ -32,6 +32,14 @@ text = "Steps 1, 2 and 6 need no key, and only they are commands to run here."
 by = ["docex:docs/llm-evaluation/quickstart.md#\"total_evaluations\": 0"]
 
 [[unit]]
+text = "On the stack from the Quick Start, put each key (ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY) in the .env file next to docker-compose.yml, then run docker compose up -d --wait again, which re-creates the API container with it."
+by = ["test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_api_is_passed_each_feature_key_empty_by_default"]
+
+[[unit]]
+text = "Supported providers says what each key turns on."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "1. Create an Experiment"
 by = ["exempt:baseline"]
 

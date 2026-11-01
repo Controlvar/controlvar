@@ -28,6 +28,8 @@ from urllib.parse import urlparse
 import pytest
 import yaml
 
+from backend.tests.unit.infrastructure._compose_feature_keys import FEATURE_KEYS
+
 REPO_ROOT = Path(__file__).resolve().parents[4]
 COMPOSE_DIR = REPO_ROOT / "deploy" / "compose"
 COMPOSE = COMPOSE_DIR / "compose.yml"
@@ -43,8 +45,10 @@ REQUIRED = (
     "POSTGRES_PASSWORD",
     "PUBLIC_BASE_URL",
 )
-#: Secret, but optional: the only default either may have is empty.
-OPTIONAL_SECRETS = ("AUDIT_HMAC_KEY", "METRICS_TOKEN")
+#: Secret, but optional: the only default any of them may have is empty. The
+#: feature keys (#1253, #256) are WAREHOUSE_CREDENTIALS_KEYS and the LLM
+#: provider keys, from ``_compose_feature_keys``.
+OPTIONAL_SECRETS = ("AUDIT_HMAC_KEY", "METRICS_TOKEN") + FEATURE_KEYS
 
 API_REPO = "ghcr.io/controlvar/controlvar"
 WEB_REPO = "ghcr.io/controlvar/controlvar-web"
@@ -217,6 +221,26 @@ class TestApiEnvironment:
     def test_the_host_allow_list_is_derived_not_set(self, env):
         """ALLOWED_HOSTS would take precedence and hide a wrong PUBLIC_BASE_URL."""
         assert "ALLOWED_HOSTS" not in env
+
+
+@pytest.mark.regression
+class TestFeatureKeys:
+    """The api is given each feature key, empty unless .env sets it (#1253, #256).
+
+    The file passed none of them, so a key put in `.env`, where the README
+    says settings go, never reached the container: saving a warehouse
+    connection answered 503 and every Anthropic, OpenAI and Gemini variant
+    failed. Exactly
+    ``${NAME:-}``: a default would be a value everyone can read.
+    """
+
+    @pytest.mark.parametrize("name", FEATURE_KEYS)
+    def test_the_api_is_passed_the_key_empty_by_default(self, services, name):
+        env = services["api"]["environment"]
+        assert name in env, f"{name} is not passed to the api service"
+        assert env[name] == f"${{{name}:-}}", (
+            f"{name} must be ${{{name}:-}}, got {env[name]!r}"
+        )
 
 
 class TestText:

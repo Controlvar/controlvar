@@ -60,6 +60,18 @@ curl -s -o /dev/null -w '%{http_code}\n' localhost:8000/api/v1/experiments/
 
 The first prints `"healthy"`. The second prints `401`, because the API requires a login.
 
+Some features stay off until they have a key: `WAREHOUSE_CREDENTIALS_KEYS` turns on
+warehouse analysis (the `full` profile), and `OPENAI_API_KEY` and `GEMINI_API_KEY` turn
+on the OpenAI and Gemini variants in LLM experiments. `ANTHROPIC_API_KEY` turns on
+Anthropic variants in LLM experiments and also Claude calls in `POST /api/v1/ai/design`
+and `POST /api/v1/ai/interpret/{experiment_id}` (limited to 10 requests a minute);
+without it those two routes answer from built-in templates.
+A key set to an empty value is the same as a key that is not set, and both compose files
+pass these keys empty by default. Put each key in the `.env` file next to the compose
+file: a key exported in another terminal does not reach the container, and one exported
+in the terminal that runs `docker compose up` does. If your shell exports
+`ANTHROPIC_API_KEY`, `docker compose up` passes it to the API.
+
 ---
 
 ## Step 2: Log in

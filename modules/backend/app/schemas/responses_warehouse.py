@@ -99,6 +99,13 @@ class SourceOut(BaseModel):
     metric_type: Optional[str] = None
     conversion_window_hours: Optional[int] = None
     cap_value: Optional[float] = None
+    lower_is_better: Optional[bool] = Field(
+        default=None,
+        description=(
+            "True for a metric source where a decrease is the improvement. "
+            "Null for an assignment source."
+        ),
+    )
     validated_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

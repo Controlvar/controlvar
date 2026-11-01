@@ -97,8 +97,21 @@ def check_definition(
     return parts
 
 
+def lower_is_better(source: WarehouseSource) -> Optional[bool]:
+    """A metric source's direction (#1386); None for an assignment source,
+    which has none, like its other metric-only fields."""
+    if source.kind != "metric":
+        return None
+    return source.lower_is_better is True
+
+
 def stored_definition(source: WarehouseSource) -> Dict[str, Any]:
-    """The full definition, as the audit log records it."""
+    """The full definition, as the audit log records it.
+
+    The audit trail is core, so it outlives a downgrade of the modules
+    branch: a source's latest entry still says whether it was marked lower
+    is better after ``modules_0003_lower_is_better`` has dropped the column.
+    """
     return {
         "connection_id": str(source.connection_id),
         "kind": source.kind,
@@ -109,6 +122,7 @@ def stored_definition(source: WarehouseSource) -> Dict[str, Any]:
         "metric_type": source.metric_type,
         "conversion_window_hours": source.conversion_window_hours,
         "cap_value": source.cap_value,
+        "lower_is_better": lower_is_better(source),
         "validated_at": source.validated_at.isoformat()
         if source.validated_at
         else None,
@@ -225,6 +239,7 @@ __all__ = [
     "assignment_mapping",
     "check_definition",
     "filters_from_json",
+    "lower_is_better",
     "mark_validated",
     "metric_mapping",
     "resolve_columns",
