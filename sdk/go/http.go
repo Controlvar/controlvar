@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
+	"strings"
 	"time"
 )
 
@@ -35,7 +38,7 @@ func NewHTTPClient(baseURL, apiKey string, timeout time.Duration) *HTTPClient {
 func (h *HTTPClient) Get(ctx context.Context, path string, result interface{}) error {
 	req, err := h.buildRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
-		return fmt.Errorf("build GET request: %w", err)
+		return fmt.Errorf("build GET request: %w", withoutQuery(err))
 	}
 	return h.do(req, result)
 }
@@ -58,6 +61,20 @@ func (h *HTTPClient) Post(ctx context.Context, path string, body interface{}, re
 		return fmt.Errorf("build POST request: %w", err)
 	}
 	return h.do(req, result)
+}
+
+// withoutQuery cuts the URL a *url.Error names (net/http's request errors and
+// url.Parse's) at its '?', so the error's text names the path without the
+// query string, which holds the user's id and attributes. The error keeps its
+// type: errors.As still finds the *url.Error, and its Timeout() still answers.
+func withoutQuery(err error) error {
+	var urlErr *neturl.Error
+	if errors.As(err, &urlErr) {
+		if i := strings.IndexByte(urlErr.URL, '?'); i >= 0 {
+			urlErr.URL = urlErr.URL[:i]
+		}
+	}
+	return err
 }
 
 // CloseIdleConnections closes any idle connections in the underlying pool.
@@ -93,7 +110,7 @@ func (h *HTTPClient) buildRequest(ctx context.Context, method, path string, body
 func (h *HTTPClient) do(req *http.Request, result interface{}) error {
 	resp, err := h.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("http request failed: %w", err)
+		return fmt.Errorf("http request failed: %w", withoutQuery(err))
 	}
 	defer resp.Body.Close() //nolint:errcheck
 

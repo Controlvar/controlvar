@@ -66,6 +66,16 @@ function contextQuery(attributes: Record<string, unknown> | undefined): string {
   return `&context=${encode(JSON.stringify(attributes))}`;
 }
 
+/**
+ * A request path without its query string, as a request error message names it:
+ * `/api/v1/feature-flags/evaluate/my-flag?user_id=…&context=…` gives
+ * `/api/v1/feature-flags/evaluate/my-flag`. The query holds the user's id and attributes.
+ */
+function withoutQuery(path: string): string {
+  const question = path.indexOf('?');
+  return question === -1 ? path : path.slice(0, question);
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -640,6 +650,8 @@ export class ExperimentationClient {
 
   private async request(path: string, init: RequestInitLite = {}): Promise<Response> {
     const method = init.method ?? 'GET';
+    const url = `${this.apiUrl}${path}`;
+    const shown = withoutQuery(path);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     let response: Response;
@@ -651,7 +663,7 @@ export class ExperimentationClient {
           code: 'NETWORK_ERROR',
         });
       }
-      response = await fetchImpl(`${this.apiUrl}${path}`, {
+      response = await fetchImpl(url, {
         method,
         headers: {
           ...(init.headers ?? {}),
@@ -666,12 +678,14 @@ export class ExperimentationClient {
       if (err instanceof ExperimentationError) throw err;
       if (controller.signal.aborted) {
         throw new ExperimentationError(
-          `Request timed out after ${this.timeoutMs} ms (${method} ${path})`,
+          `Request timed out after ${this.timeoutMs} ms (${method} ${shown})`,
           { code: 'TIMEOUT', cause: err }
         );
       }
-      const message = err instanceof Error ? err.message : String(err);
-      throw new ExperimentationError(`Network error (${method} ${path}): ${message}`, {
+      let message = err instanceof Error ? err.message : String(err);
+      // A fetch implementation may name the full URL in its own message.
+      if (shown !== path) message = message.split(url).join(`${this.apiUrl}${shown}`);
+      throw new ExperimentationError(`Network error (${method} ${shown}): ${message}`, {
         code: 'NETWORK_ERROR',
         cause: err,
       });
@@ -698,7 +712,7 @@ export class ExperimentationClient {
     try {
       return (await response.json()) as T;
     } catch (err) {
-      throw new ExperimentationError(`Invalid JSON in response (${init.method ?? 'GET'} ${path})`, {
+      throw new ExperimentationError(`Invalid JSON in response (${init.method ?? 'GET'} ${withoutQuery(path)})`, {
         code: 'INVALID_RESPONSE',
         status: response.status,
         cause: err,
@@ -718,7 +732,7 @@ export class ExperimentationClient {
         ? String((body as { detail: unknown }).detail)
         : undefined;
     return new ExperimentationError(
-      `API error ${response.status}${detail ? `: ${detail}` : ''} (${method} ${path})`,
+      `API error ${response.status}${detail ? `: ${detail}` : ''} (${method} ${withoutQuery(path)})`,
       { code: 'HTTP_ERROR', status: response.status, body }
     );
   }

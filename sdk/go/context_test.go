@@ -6,8 +6,11 @@ import (
 	"errors"
 	"math"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	exp "github.com/controlvar/controlvar/sdk/go"
 )
@@ -349,5 +352,84 @@ func TestClient_GetAssignment_UnencodableAttributes_SendAndCacheNothing(t *testi
 	}
 	if fb.Count() != 1 {
 		t.Errorf("requests = %d; want 1 (nothing was cached)", fb.Count())
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Request errors name the path without its query string (#1551)
+// ---------------------------------------------------------------------------
+
+// An attribute value: no error's text may contain it.
+const errorCanary = "c4nary.attr"
+
+// requireNoQuery fails when err's text holds the query string, and returns
+// the *url.Error it wraps (the error keeps its type).
+func requireNoQuery(t *testing.T, err error) *url.Error {
+	t.Helper()
+	if err == nil {
+		t.Fatal("EvaluateFlag error = nil; want an error")
+	}
+	text := err.Error()
+	for _, part := range []string{"?", "user_id=", "context=", errorCanary} {
+		if strings.Contains(text, part) {
+			t.Errorf("error %q contains %q", text, part)
+		}
+	}
+	var urlErr *url.Error
+	if !errors.As(err, &urlErr) {
+		t.Fatalf("errors.As(%v, *url.Error) = false; want true", err)
+	}
+	return urlErr
+}
+
+// A refused connection: net/http's *url.Error names the URL, cut at '?'.
+func TestEvaluateFlag_NetworkError_NamesThePathWithoutItsQuery(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	base := srv.URL
+	srv.Close()
+	c := mustNewClient(t, base)
+
+	got, err := c.EvaluateFlag(context.Background(), "checkout-label",
+		newTestUserWithAttrs("user-1", map[string]interface{}{"plan": errorCanary}))
+	urlErr := requireNoQuery(t, err)
+	if want := base + contextFlagPath; urlErr.URL != want {
+		t.Errorf("url.Error URL = %q; want %q", urlErr.URL, want)
+	}
+	if want := `Get "` + base + contextFlagPath + `": `; !strings.Contains(err.Error(), want) {
+		t.Errorf("error %q; want it to contain %q", err.Error(), want)
+	}
+	if got == nil || got.Enabled {
+		t.Errorf("EvalResult = %+v; want the flag reported off", got)
+	}
+}
+
+// A Client.Timeout: still a *url.Error whose Timeout() is true.
+func TestEvaluateFlag_Timeout_NamesThePathWithoutItsQuery(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-time.After(5 * time.Second):
+		}
+	}))
+	t.Cleanup(srv.Close)
+	c := mustNewClient(t, srv.URL, exp.WithTimeout(50*time.Millisecond))
+
+	_, err := c.EvaluateFlag(context.Background(), "checkout-label",
+		newTestUserWithAttrs("user-1", map[string]interface{}{"plan": errorCanary}))
+	urlErr := requireNoQuery(t, err)
+	if !urlErr.Timeout() {
+		t.Errorf("url.Error Timeout() = false; want true (error %v)", err)
+	}
+}
+
+// A base URL net/url cannot parse: url.Parse's *url.Error names the URL too.
+func TestEvaluateFlag_UnparsableBaseURL_NamesThePathWithoutItsQuery(t *testing.T) {
+	c := mustNewClient(t, "http://127.0.0.1:bad")
+
+	_, err := c.EvaluateFlag(context.Background(), "checkout-label",
+		newTestUserWithAttrs("user-1", map[string]interface{}{"plan": errorCanary}))
+	urlErr := requireNoQuery(t, err)
+	if want := "http://127.0.0.1:bad" + contextFlagPath; urlErr.URL != want {
+		t.Errorf("url.Error URL = %q; want %q", urlErr.URL, want)
 	}
 }
