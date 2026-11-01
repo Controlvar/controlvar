@@ -300,7 +300,7 @@ by = [
 ]
 
 [[unit]]
-text = "a url for each that is an absolute http:// or https:// URL of at most 2048 characters with an ASCII host name (an internationalised name in its xn-- form), without a user name or password, a # fragment, a backslash, whitespace or control characters."
+text = "a url for each that is an absolute http:// or https:// URL of at most 2048 characters with an ASCII host name without a % sign (an internationalised name in its xn-- form), without a user name or password, a # fragment, a backslash, whitespace or control characters, and whose path has no /./ or /../ segment (also written with %2e) and no character a browser percent-encodes in a path: a non-ASCII character, \", <, >, ^, a backquote, {, | or }, which you write percent-encoded, as the browser sends it (é as %C3%A9)."
 by = [
     "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_url_no_visitor_could_be_sent_to_is_refused_at_its_loc",
     "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_usable_url_is_accepted_and_stored_as_sent",

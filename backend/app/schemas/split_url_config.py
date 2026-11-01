@@ -14,9 +14,12 @@ preview endpoint — is the module's. The rules come in three layers:
 * **Per field**, wherever a configuration is parsed: at least two URL
   variants with unique names; each ``traffic_allocation`` from 0 to 100, the
   allocations summing to 100; each ``url`` an absolute ``http://`` or
-  ``https://`` URL of at most 2048 characters with an ASCII host name, and
-  without user information, a fragment, a backslash, whitespace or control
-  characters. A URL is stored exactly as sent.
+  ``https://`` URL of at most 2048 characters with an ASCII host name without
+  a ``%`` sign, and without user information, a fragment, a backslash,
+  whitespace or control characters; its path without a ``.`` or ``..``
+  segment (also written ``%2e``) and without a character a browser
+  percent-encodes in a path (a non-ASCII character or one of
+  ``" < > ^ ` { | }``). A URL is stored exactly as sent.
 * **Across fields**, for a ``split_url`` experiment only
   (:func:`split_url_config_problem`): the URL variants name the experiment's
   variants one to one with the same allocations, and no other URL variant has
@@ -77,8 +80,18 @@ URL_HAS_FORBIDDEN_CHARACTER = (
     "a space or a control character."
 )
 URL_HOST_NOT_ASCII = (
-    "The host name in the URL for variant '{name}' must be ASCII. Write an "
-    "internationalised name in its xn-- form."
+    "The host name in the URL for variant '{name}' must be ASCII, without a % "
+    "sign. Write an internationalised name in its xn-- form."
+)
+URL_PATH_HAS_DOT_SEGMENT = (
+    "The path in the URL for variant '{name}' must not contain a . or .. "
+    "segment, written as is or as %2e. A browser removes these segments, so "
+    "write the path the browser requests."
+)
+URL_PATH_HAS_ENCODED_CHARACTER = (
+    "The path in the URL for variant '{name}' must not contain a non-ASCII "
+    "character, a double quote, <, >, ^, a backquote, {{, | or }}. Write each "
+    "one percent-encoded (é as %C3%A9, | as %7C), as a browser sends it."
 )
 
 # The refusals across fields, for a split_url experiment. ``{names}`` is the
@@ -111,6 +124,13 @@ CHAIN = "chain"
 #: Characters no variant URL may contain, besides whitespace and controls.
 _FORBIDDEN_CHARACTERS = frozenset("#\\")
 
+#: The path segments a browser treats as ``.`` and ``..``, lower case.
+_DOT_SEGMENTS = frozenset({".", "..", "%2e", ".%2e", "%2e.", "%2e%2e"})
+
+#: ASCII characters a browser percent-encodes in a path. Every non-ASCII
+#: character is refused in a path too.
+_PATH_CHARACTERS_ENCODED = frozenset('"<>^`{|}')
+
 
 def _forbidden(character: str) -> bool:
     return (
@@ -135,8 +155,16 @@ def url_problem(url: str) -> Optional[str]:
         return URL_NOT_ABSOLUTE
     if "@" in parts.netloc:
         return URL_HAS_USER_INFO
-    if not parts.hostname.isascii():
+    if not parts.hostname.isascii() or "%" in parts.hostname:
         return URL_HOST_NOT_ASCII
+    # The path only: the query is never checked here.
+    if any(segment.lower() in _DOT_SEGMENTS for segment in parts.path.split("/")):
+        return URL_PATH_HAS_DOT_SEGMENT
+    if any(
+        not character.isascii() or character in _PATH_CHARACTERS_ENCODED
+        for character in parts.path
+    ):
+        return URL_PATH_HAS_ENCODED_CHARACTER
     return None
 
 
@@ -159,10 +187,13 @@ class SplitUrlVariant(BaseModel):
         ...,
         description=(
             "The page for this variant: an absolute http:// or https:// URL of "
-            "at most 2048 characters, with an ASCII host name (an "
-            "internationalised name in its xn-- form), and without a user name "
-            "or password, a # fragment, a backslash, whitespace or control "
-            "characters. Stored exactly as sent."
+            "at most 2048 characters, with an ASCII host name without a % sign "
+            "(an internationalised name in its xn-- form), and without a user "
+            "name or password, a # fragment, a backslash, whitespace or control "
+            "characters. Its path has no . or .. segment (also written %2e) and "
+            "no character a browser percent-encodes in a path (a non-ASCII "
+            'character or one of " < > ^ ` { | }): write those percent-encoded, '
+            "as the browser sends them. Stored exactly as sent."
         ),
     )
     # A percentage, from 0 to 100 inclusive (#1194): -50 and 150 used to pass

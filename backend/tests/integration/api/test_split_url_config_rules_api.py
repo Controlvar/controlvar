@@ -88,6 +88,31 @@ SKIPPED = (
     "Split URL start check skipped experiment {id}: its stored split_url_config "
     "is not valid"
 )
+
+
+def _not_ascii(name: str) -> str:
+    return (
+        f"The host name in the URL for variant '{name}' must be ASCII, without a "
+        "% sign. Write an internationalised name in its xn-- form."
+    )
+
+
+def _dot_segment(name: str) -> str:
+    return (
+        f"The path in the URL for variant '{name}' must not contain a . or .. "
+        "segment, written as is or as %2e. A browser removes these segments, so "
+        "write the path the browser requests."
+    )
+
+
+def _encoded(name: str) -> str:
+    return (
+        f"The path in the URL for variant '{name}' must not contain a non-ASCII "
+        "character, a double quote, <, >, ^, a backquote, {, | or }. Write each "
+        "one percent-encoded (é as %C3%A9, | as %7C), as a browser sends it."
+    )
+
+
 PREVIEW_409 = (
     "split_url_config is not valid; update it with PUT /api/v1/experiments/{id}"
 )
@@ -262,8 +287,43 @@ CREATE_REFUSED = [
         ],
         VARIANTS,
         ["split_url_config", "variants", 0, "url"],
-        "The host name in the URL for variant 'Control' must be ASCII. Write an "
-        "internationalised name in its xn-- form.",
+        _not_ascii("Control"),
+    ),
+    *[
+        (
+            f"F6-{label}",
+            [_uv("Control", "https://h.example/a"), _uv("Treatment", url)],
+            VARIANTS,
+            ["split_url_config", "variants", 1, "url"],
+            _not_ascii("Treatment"),
+        )
+        for label, url in (
+            ("percent-in-host", "https://h%2Eexample/b"),
+            ("percent-encoded-host", "https://caf%C3%A9.example/b"),
+            ("percent-escape-after-host", "https://h.example%00/b"),
+        )
+    ],
+    (
+        # Refused by the path rule, before the rule on the control page that
+        # a browser would make of it.
+        "F7-dot-segment-into-the-control-page",
+        [
+            _uv("Control", "https://h.example/checkout"),
+            _uv("Treatment", "https://h.example/x/../checkout"),
+        ],
+        VARIANTS,
+        ["split_url_config", "variants", 1, "url"],
+        _dot_segment("Treatment"),
+    ),
+    (
+        "F8-path-character-a-browser-encodes",
+        [
+            _uv("Control", "https://h.example/caf%C3%A9"),
+            _uv("Treatment", "https://h.example/café"),
+        ],
+        VARIANTS,
+        ["split_url_config", "variants", 1, "url"],
+        _encoded("Treatment"),
     ),
     (
         "X1-not-an-experiment-variant",
@@ -569,8 +629,17 @@ def test_start_refuses_a_split_url_experiment_with_no_config(admin_client, db_se
             "experiment variant of the same name. Make them equal; the "
             "experiment's variants decide the split.",
         ),
+        (
+            {
+                "variants": [
+                    _uv("Control", "https://{h}/checkout"),
+                    _uv("Treatment", "https://{h}/x/../checkout"),
+                ]
+            },
+            _dot_segment("Treatment"),
+        ),
     ],
-    ids=["names", "relative-url", "another-split"],
+    ids=["names", "relative-url", "another-split", "dot-segment"],
 )
 def test_start_refuses_a_config_that_cannot_split_saying_why(
     admin_client, db_session, stored, problem

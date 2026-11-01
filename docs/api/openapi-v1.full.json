@@ -15896,7 +15896,7 @@
             "type": "number"
           },
           "url": {
-            "description": "The page for this variant: an absolute http:// or https:// URL of at most 2048 characters, with an ASCII host name (an internationalised name in its xn-- form), and without a user name or password, a # fragment, a backslash, whitespace or control characters. Stored exactly as sent.",
+            "description": "The page for this variant: an absolute http:// or https:// URL of at most 2048 characters, with an ASCII host name without a % sign (an internationalised name in its xn-- form), and without a user name or password, a # fragment, a backslash, whitespace or control characters. Its path has no . or .. segment (also written %2e) and no character a browser percent-encodes in a path (a non-ASCII character or one of \" < > ^ ` { | }): write those percent-encoded, as the browser sends them. Stored exactly as sent.",
             "title": "Url",
             "type": "string"
           }

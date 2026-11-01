@@ -100,8 +100,18 @@ FORBIDDEN = (
     "space or a control character."
 )
 NOT_ASCII = (
-    "The host name in the URL for variant 'Control' must be ASCII. Write an "
-    "internationalised name in its xn-- form."
+    "The host name in the URL for variant 'Control' must be ASCII, without a % "
+    "sign. Write an internationalised name in its xn-- form."
+)
+DOT_SEGMENT = (
+    "The path in the URL for variant 'Control' must not contain a . or .. "
+    "segment, written as is or as %2e. A browser removes these segments, so "
+    "write the path the browser requests."
+)
+ENCODED = (
+    "The path in the URL for variant 'Control' must not contain a non-ASCII "
+    "character, a double quote, <, >, ^, a backquote, {, | or }. Write each one "
+    "percent-encoded (é as %C3%A9, | as %7C), as a browser sends it."
 )
 
 #: (id, the control URL, the text). Each is refused at the URL's own loc.
@@ -134,6 +144,35 @@ URL_REFUSED = [
     ("c1-control", "https://shop.example/check\x85out", FORBIDDEN),
     ("no-break-space", "https://shop.example/check out", FORBIDDEN),
     ("unicode-host", "https://bücher.example/checkout", NOT_ASCII),
+    ("percent-in-host", "https://shop%2Eexample/checkout", NOT_ASCII),
+    ("percent-encoded-host", "https://caf%C3%A9.example/checkout", NOT_ASCII),
+    ("percent-escape-after-host", "https://shop.example%00/checkout", NOT_ASCII),
+    # Measured on 2026-11-01 with Node 22.14.0's WHATWG URL and Chromium 153's
+    # URL API (headless): both resolve each of these paths without the segment,
+    # so the browser requests another path than the one written.
+    ("dot-dot", "https://shop.example/x/../checkout", DOT_SEGMENT),
+    ("dot", "https://shop.example/./checkout", DOT_SEGMENT),
+    ("dot-dot-at-the-root", "https://shop.example/../checkout", DOT_SEGMENT),
+    ("encoded-dot-dot", "https://shop.example/x/%2e%2e/checkout", DOT_SEGMENT),
+    ("encoded-dot-dot-upper", "https://shop.example/x/%2E%2E/checkout", DOT_SEGMENT),
+    ("dot-encoded-dot", "https://shop.example/x/.%2E/checkout", DOT_SEGMENT),
+    ("encoded-dot-dot-mixed", "https://shop.example/x/%2e./checkout", DOT_SEGMENT),
+    ("encoded-dot", "https://shop.example/%2e/checkout", DOT_SEGMENT),
+    ("trailing-dot", "https://shop.example/checkout/.", DOT_SEGMENT),
+    ("trailing-dot-dot", "https://shop.example/checkout/x/..", DOT_SEGMENT),
+    ("trailing-encoded-dot", "https://shop.example/checkout/%2E?a=1", DOT_SEGMENT),
+    ("only-dot-dot", "https://shop.example/..", DOT_SEGMENT),
+    # Measured the same way: Node percent-encodes " < > ` { } and every
+    # non-ASCII character in a path, and Chromium also ^ and |.
+    ("non-ascii-path", "https://shop.example/café", ENCODED),
+    ("double-quote", 'https://shop.example/a"b', ENCODED),
+    ("less-than", "https://shop.example/a<b", ENCODED),
+    ("greater-than", "https://shop.example/a>b", ENCODED),
+    ("caret", "https://shop.example/a^b", ENCODED),
+    ("backquote", "https://shop.example/a`b", ENCODED),
+    ("open-brace", "https://shop.example/a{b", ENCODED),
+    ("pipe", "https://shop.example/a|b", ENCODED),
+    ("close-brace", "https://shop.example/a}b", ENCODED),
 ]
 
 
@@ -158,7 +197,19 @@ URL_ACCEPTED = [
     "https://shop.example/" + "a" * 2027,  # exactly 2048 characters
     "https://shop.example/a@b",  # an @ in the path is not user information
     "https://[2001:db8::1]:8443/checkout",
-    "https://shop.example/café",  # only the host must be ASCII
+    # Measured on 2026-11-01 with Node 22.14.0's WHATWG URL and Chromium 153's
+    # URL API: neither rewrites these paths, and a dot in the query is not in
+    # the path.
+    "https://shop.example/.well-known/x",
+    "https://shop.example/a..b",
+    "https://shop.example/...",
+    "https://shop.example/%2e%2e%2e",
+    "https://shop.example/x/..%2Fcheckout",
+    "https://shop.example/landing?next=/../checkout",
+    "https://shop.example/caf%C3%A9",
+    "https://shop.example/a[b]",
+    "https://shop.example/50%off",
+    "https://shop.example/a'b",
 ]
 
 
