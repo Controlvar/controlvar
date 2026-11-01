@@ -10238,6 +10238,12 @@
             "title": "Kind",
             "type": "string"
           },
+          "lower_is_better": {
+            "default": false,
+            "description": "True for a metric where a decrease is the improvement, such as an error rate or churn: an analysis started afterwards names a winner only for a significant decrease. Omitted means false, on a PUT as on a POST.",
+            "title": "Lower Is Better",
+            "type": "boolean"
+          },
           "metric_type": {
             "enum": [
               "proportion",
@@ -10312,6 +10318,12 @@
             "const": "metric",
             "title": "Kind",
             "type": "string"
+          },
+          "lower_is_better": {
+            "default": false,
+            "description": "True for a metric where a decrease is the improvement, such as an error rate or churn: an analysis started afterwards names a winner only for a significant decrease. Omitted means false, on a PUT as on a POST.",
+            "title": "Lower Is Better",
+            "type": "boolean"
           },
           "metric_type": {
             "enum": [
@@ -15780,6 +15792,18 @@
             ],
             "title": "Kind",
             "type": "string"
+          },
+          "lower_is_better": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "True for a metric source where a decrease is the improvement. Null for an assignment source.",
+            "title": "Lower Is Better"
           },
           "metric_type": {
             "anyOf": [

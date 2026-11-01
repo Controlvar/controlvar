@@ -29,7 +29,7 @@ The branch has three revisions: modules_0001_rbac, then
 modules_0002_warehouse_analysis (the warehouse-analysis tables; it removes the
 earlier warehouse_connections table and its rows -- see its docstring), then
 modules_0003_lower_is_better (warehouse_sources.lower_is_better, false on
-every row).
+every existing row).
 
 Rolling back: name the revision to end at -- `alembic downgrade
 modules_0002_warehouse_analysis` unapplies modules_0003_lower_is_better only,

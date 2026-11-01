@@ -98,6 +98,50 @@ text = "Each variant reports its mean and a confidence interval."
 by = ["test:modules/backend/tests/unit/warehouse/test_mean_runs.py"]
 
 [[unit]]
+text = "A metric source can be marked lower is better (lower_is_better) for a metric where a fall is the improvement, such as an error rate or churn."
+by = [
+    "test:modules/backend/tests/integration/warehouse/test_sources_api.py::test_a_metric_source_stores_and_returns_its_direction",
+    "test:modules/frontend/src/tests/warehouse/sources.test.tsx::sends lower_is_better: true only when \"Lower is better\" is ticked",
+]
+
+[[unit]]
+text = "A run then names a treatment the winner (winning_variant_id) only for a significant decrease, where without the setting only a significant increase wins."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_runner_direction.py::test_a_run_names_the_winner_in_the_direction_of_its_source",
+    "test:modules/backend/tests/integration/warehouse/test_runs_api.py::test_a_lower_is_better_source_names_a_significant_drop_the_winner",
+]
+
+[[unit]]
+text = "The p-values, the intervals and relative_improvement_pct, the signed change, are the same either way."
+by = ["test:modules/backend/tests/unit/warehouse/test_runner_direction.py::test_the_direction_changes_only_the_winner_and_the_flag"]
+
+[[unit]]
+text = "The setting belongs to the source, not to an experiment's metrics, so a source has one direction in every experiment that analyses it."
+by = [
+    "test:modules/backend/tests/integration/warehouse/test_runs_api.py::test_the_direction_is_the_sources_not_the_experiments_metric",
+    "test:modules/backend/tests/integration/warehouse/test_runs_api.py::test_each_metric_takes_the_direction_of_its_own_source",
+]
+
+[[unit]]
+text = "Each computed metric in a run's results carries the lower_is_better it was analysed with: the source's setting when the run started, which a later edit does not change."
+by = ["test:modules/backend/tests/integration/warehouse/test_runs_api.py::test_an_edit_after_a_run_is_admitted_does_not_change_its_direction"]
+
+[[unit]]
+text = "Every metric source stored before the setting existed reads false, which is how every earlier analysis read it."
+by = ["test:backend/tests/integration/database/test_modules_0003_transitions.py::test_a_database_at_the_previous_release_upgrades_and_every_source_reads_false"]
+
+[[unit]]
+text = "To change one, mark it, validate it again and start a new analysis; an analysis already run keeps its results."
+by = [
+    "test:modules/backend/tests/integration/warehouse/test_sources_api.py::test_validate_returns_columns_and_types",
+    "test:modules/backend/tests/integration/warehouse/test_runs_api.py::test_an_edit_after_a_run_is_admitted_does_not_change_its_direction",
+]
+
+[[unit]]
+text = "Undoing the migration that stores the setting deletes it from every source: see Upgrading and migrations."
+by = ["test:backend/tests/integration/database/test_modules_0003_transitions.py::test_downgrade_drops_the_column_keeps_the_rows_and_an_upgrade_restores_false"]
+
+[[unit]]
 text = "A proportion metric's results also give each treatment its difference from the control with an interval, the interval of its relative change and its impact over its own units, as /results does on the same counts."
 by = [
     "test:modules/backend/tests/unit/warehouse/test_estimator_fields_parity.py::test_a_proportion_run_carries_the_difference_fields",
@@ -669,6 +713,40 @@ by = [
     "test:modules/backend/tests/integration/warehouse/test_sources_api.py",
     "test:modules/backend/tests/integration/warehouse/test_runs_api.py",
 ]
+
+[[unit]]
+text = "For a metric where a fall is better, add \"lower_is_better\": true."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A PUT without lower_is_better sets it back to false, so send it on every PUT of a source marked lower is better."
+by = ["test:modules/backend/tests/integration/warehouse/test_sources_api.py::test_a_put_without_lower_is_better_sets_it_back_to_false"]
+
+[[unit]]
+text = "An assignment source has no direction: its lower_is_better is null, and a body that sends one is refused with 422."
+by = [
+    "test:modules/backend/tests/integration/warehouse/test_sources_api.py::test_an_assignment_source_has_no_direction",
+    "test:modules/backend/tests/unit/warehouse/test_request_schemas.py::test_an_assignment_body_refuses_lower_is_better",
+]
+
+[[unit]]
+text = "A source body refuses any field it does not know with 422 (extra_forbidden)."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_request_schemas.py::test_every_request_model_forbids_unknown_fields",
+    "test:modules/backend/tests/integration/warehouse/test_sources_api.py::test_an_assignment_source_has_no_direction",
+]
+
+[[unit]]
+text = "So while a deploy serves two releases at once, during the canary on AWS or a Helm rolling update, a request that sends lower_is_better and reaches an API task or pod still on the previous release is refused; retry once the deploy has finished."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_request_schemas.py::test_every_request_model_forbids_unknown_fields",
+    "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_api_canary_is_fifteen_minutes",
+    "test:backend/tests/unit/infrastructure/test_upgrade_on_start.py::test_the_migrate_init_container_upgrades_while_the_old_pods_keep_serving",
+]
+
+[[unit]]
+text = "A dashboard opened before the deploy does not send lower_is_better, so saving a metric source from it can set the setting back to false: reload the dashboard after the deploy."
+by = ["test:modules/backend/tests/integration/warehouse/test_sources_api.py::test_a_put_without_lower_is_better_sets_it_back_to_false"]
 
 [[unit]]
 text = "An analysis names the sources, and optionally the window and which warehouse variant label is which experiment variant (labels not listed are matched to a variant by its name):"

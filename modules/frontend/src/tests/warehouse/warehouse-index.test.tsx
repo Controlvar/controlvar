@@ -205,6 +205,26 @@ describe('roles', () => {
 });
 
 describe('sources tabs', () => {
+  it('tags a metric source marked lower is better in the list, outside its link', async () => {
+    mockQuery = { tab: 'metric' };
+    setData({
+      srcs: [
+        source(),
+        metricSource({ id: 's-err', name: 'Checkout errors', lower_is_better: true }),
+        metricSource({ id: 's-buy', name: 'Purchases', lower_is_better: false }),
+      ],
+    });
+    renderPage();
+    const table = await screen.findByTestId('warehouse-metric-table');
+    const tags = within(table).getAllByTestId('warehouse-lower-is-better');
+    expect(tags).toHaveLength(1);
+    expect(tags[0]).toHaveTextContent('lower is better');
+    const [errors, purchases] = within(table).getAllByRole('row').slice(1);
+    expect(errors).toContainElement(tags[0]);
+    expect(within(errors).getByRole('link')).toHaveAccessibleName('Checkout errors');
+    expect(purchases).not.toHaveTextContent('lower is better');
+  });
+
   it('lists each kind on its own tab, with its validation state', async () => {
     mockQuery = { tab: 'metric' };
     setData({ srcs: [source(), metricSource({ validated_at: null })] });

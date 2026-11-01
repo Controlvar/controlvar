@@ -213,6 +213,11 @@ NOT_DOCS_TESTS = {
     "sdk/python/tests/test_readme.py": "reads sdk/python/README.md only",
     # Reads only docs/api/warehouse-analytics.md (same reason as above).
     "modules/backend/tests/unit/test_warehouse_docs_availability.py": "docs/api only",
+    # Reads only docs/api/openapi-v1.full.json, to hold the warehouse source
+    # components to the live document (same reason as above).
+    "modules/backend/tests/smoke/test_warehouse_source_direction_snapshot.py": (
+        "docs/api only"
+    ),
     # Runs the runbook SQL of docs/self-hosting/migrations.md against
     # PostgreSQL, which the docs-only lane does not have. It reads the page
     # through backend/tests/unit/docs/test_email_case_runbook.py, which is in
