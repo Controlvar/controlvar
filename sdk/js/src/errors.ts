@@ -6,7 +6,12 @@ export type ExperimentationErrorCode =
   /** The request exceeded `timeoutMs`. */
   | 'TIMEOUT'
   /** The server answered 2xx but the body was not what the SDK expects. */
-  | 'INVALID_RESPONSE';
+  | 'INVALID_RESPONSE'
+  /**
+   * A typed getter (`getStringValue`, `getNumberValue`, `getJsonValue`) was called for a flag
+   * that serves another type; it returned the caller's default.
+   */
+  | 'TYPE_MISMATCH';
 
 export interface ExperimentationErrorOptions {
   code: ExperimentationErrorCode;
@@ -15,7 +20,10 @@ export interface ExperimentationErrorOptions {
   cause?: unknown;
 }
 
-/** Error thrown by `getAssignment`, `evaluateFlag`, `getAllFlags` and `fetchAssignments`. */
+/**
+ * Error thrown by `getAssignment`, `evaluateFlag`, `getAllFlags` and `fetchAssignments`, and
+ * passed to `onError` for the failures the other methods swallow.
+ */
 export class ExperimentationError extends Error {
   readonly code: ExperimentationErrorCode;
   /** HTTP status code when the server answered; `undefined` for network errors and timeouts. */
