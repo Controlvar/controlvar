@@ -1109,6 +1109,108 @@ describe('a refused change shows fixed copy', () => {
 });
 
 // ---------------------------------------------------------------------------
+// D211-2c (#1460): a 409 is explained, and a target above the maximum is refused
+// ---------------------------------------------------------------------------
+describe('a schedule that changed (409) and the schedule maximum', () => {
+  beforeEach(() => signIn('ADMIN'));
+
+  const API = '/api/v1/rollout-schedules';
+  const COPY_409 =
+    "Something changed since the page loaded: a stage has started, or another schedule is now running this flag's rollout. Reload the page to see the rollout as it is now.";
+
+  const refuse409 = (path: string): Route => ({
+    method: path.includes('/stages/') && !path.endsWith('/advance') ? 'PUT' : 'POST',
+    path,
+    handler: () => {
+      throw apiError(409, PLANTED);
+    },
+  });
+
+  it('has the exact 409 copy', () => {
+    expect(ROLLOUT_ERROR_COPY[409]).toBe(COPY_409);
+  });
+
+  it('Activate: a 409 shows the copy, in the alert, and focus returns to Activate', async () => {
+    install({ schedules: [schedule()] }, [refuse409(`${API}/sched-1/activate`)]);
+    await renderPage();
+    fireEvent.click(screen.getByTestId('rollout-schedule-activate'));
+    fireEvent.click(screen.getByTestId('rollout-schedule-confirm-yes'));
+    const alert = await screen.findByTestId('rollout-schedule-action-error');
+    expect(alert).toHaveAttribute('role', 'alert');
+    expect(alert.textContent).toBe(COPY_409);
+    await waitFor(() => expect(screen.getByTestId('rollout-schedule-activate')).toHaveFocus());
+    expect(document.body).not.toHaveTextContent(PLANTED);
+  });
+
+  it('Advance: a 409 shows the copy, and focus returns to the stage button', async () => {
+    install({ schedules: [schedule({ status: 'active' })] }, [refuse409(`${API}/stages/s-1/advance`)]);
+    await renderPage();
+    fireEvent.click(screen.getByTestId('rollout-stage-start'));
+    fireEvent.click(screen.getByTestId('rollout-schedule-confirm-yes'));
+    const alert = await screen.findByTestId('rollout-schedule-action-error');
+    expect(alert).toHaveAttribute('role', 'alert');
+    expect(alert.textContent).toBe(COPY_409);
+    await waitFor(() => expect(screen.getByTestId('rollout-stage-start')).toHaveFocus());
+  });
+
+  it('Save: a 409 shows the copy, and focus returns to the Save button', async () => {
+    install({ schedules: [schedule({ status: 'paused' })] }, [refuse409(`${API}/stages/s-1`)]);
+    await renderPage();
+    fireEvent.click(screen.getByTestId('rollout-schedule-edit'));
+    fillStage(0, { target: '15' });
+    const save = within(screen.getByTestId('rollout-schedule-form')).getAllByTestId('rollout-stage-save')[0];
+    save.focus();
+    fireEvent.click(save);
+    const alert = await screen.findByTestId('rollout-schedule-action-error');
+    expect(alert).toHaveAttribute('role', 'alert');
+    expect(alert.textContent).toBe(COPY_409);
+    await waitFor(() =>
+      expect(within(screen.getByTestId('rollout-schedule-form')).getAllByTestId('rollout-stage-save')[0]).toHaveFocus(),
+    );
+  });
+
+  describe('a stage target above the schedule maximum', () => {
+    const capped = () =>
+      schedule({
+        status: 'paused',
+        max_percentage: 60,
+        stages: [
+          stage('s-1', 1, { name: 'Canary', target_percentage: 10 }),
+          stage('s-2', 2, { name: 'Expanded', target_percentage: 50 }),
+        ],
+      });
+
+    it('is refused with the exact message, before any request', async () => {
+      install({ schedules: [capped()] });
+      await renderPage();
+      fireEvent.click(screen.getByTestId('rollout-schedule-edit'));
+      fillStage(1, { target: '70' });
+      fireEvent.click(within(screen.getByTestId('rollout-schedule-form')).getAllByTestId('rollout-stage-save')[1]);
+      expect(await screen.findByTestId('rollout-schedule-form-error')).toHaveTextContent(
+        "Stage 2's target must be at most 60%, the schedule's maximum.",
+      );
+      expect(writes()).toEqual([]);
+    });
+
+    it('is accepted at the maximum (control)', async () => {
+      install({ schedules: [capped()] }, [
+        {
+          method: 'PUT',
+          path: `${API}/stages/s-2`,
+          handler: () => stage('s-2', 2, { target_percentage: 60 }),
+        },
+      ]);
+      await renderPage();
+      fireEvent.click(screen.getByTestId('rollout-schedule-edit'));
+      fillStage(1, { target: '60' });
+      fireEvent.click(within(screen.getByTestId('rollout-schedule-form')).getAllByTestId('rollout-stage-save')[1]);
+      await waitFor(() => expect(writes()).toHaveLength(1));
+      expect(screen.queryByTestId('rollout-schedule-form-error')).toBeNull();
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Accessibility (QA #28): axe in jsdom, colour contrast off (not computable here)
 // ---------------------------------------------------------------------------
 describe('accessibility of the section (axe-core in jsdom)', () => {
@@ -1145,6 +1247,45 @@ describe('accessibility of the section (axe-core in jsdom)', () => {
     await renderPage();
     fireEvent.click(screen.getByTestId('rollout-schedule-edit'));
     fireEvent.click(screen.getByTestId('rollout-stage-add'));
+    await expectNoViolations();
+  });
+
+  it('a paused schedule with the edit form open, a target above the maximum and a 409 shown', async () => {
+    signIn('DEVELOPER');
+    install(
+      {
+        schedules: [
+          schedule({
+            status: 'paused',
+            max_percentage: 60,
+            stages: [
+              stage('s-1', 1, { name: 'Canary', target_percentage: 10 }),
+              stage('s-2', 2, { name: 'Expanded', target_percentage: 50 }),
+              stage('s-3', 3, { name: 'Everyone', target_percentage: 60 }),
+            ],
+          }),
+        ],
+      },
+      [
+        {
+          method: 'PUT',
+          path: '/api/v1/rollout-schedules/stages/s-1',
+          handler: () => {
+            throw apiError(409, PLANTED);
+          },
+        },
+      ],
+    );
+    await renderPage();
+    fireEvent.click(screen.getByTestId('rollout-schedule-edit'));
+    fillStage(2, { target: '70' });
+    fireEvent.click(within(screen.getByTestId('rollout-schedule-form')).getAllByTestId('rollout-stage-save')[2]);
+    await screen.findByTestId('rollout-schedule-form-error');
+    await expectNoViolations();
+    fillStage(2, { target: '60' });
+    fillStage(0, { target: '15' });
+    fireEvent.click(within(screen.getByTestId('rollout-schedule-form')).getAllByTestId('rollout-stage-save')[0]);
+    await screen.findByTestId('rollout-schedule-action-error');
     await expectNoViolations();
   });
 
