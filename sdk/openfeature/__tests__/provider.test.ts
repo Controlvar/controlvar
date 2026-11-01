@@ -43,9 +43,26 @@ function response(step: Step) {
   } as unknown as Response;
 }
 
-/** Mock fetch that answers every call with the same flag evaluation. */
+/**
+ * Mock fetch that answers every call with the same flag evaluation. The reason defaults to
+ * `targeting_rule` (every server answer carries one); a test of a server without flag values
+ * leaves out `value` and `value_type`, as such a server does.
+ */
 function flagFetch(body: Partial<FlagEvaluateResponse> & { enabled: boolean }, status = 200): jest.MockedFunction<typeof fetch> {
-  return jest.fn().mockResolvedValue(response({ body: { key: 'flag', config: null, ...body }, status }));
+  return jest.fn().mockResolvedValue(response({ body: { key: 'flag', config: null, reason: 'targeting_rule', ...body }, status }));
+}
+
+/** Mock fetch whose 200 answer is not JSON. */
+function invalidJsonFetch(): jest.MockedFunction<typeof fetch> {
+  return jest.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    headers: { get: () => null },
+    json: async () => {
+      throw new SyntaxError('Unexpected token < in JSON at position 0');
+    },
+  } as unknown as Response);
 }
 
 /** Mock fetch that answers calls in order. */
@@ -267,29 +284,105 @@ describe('ExperimentationProvider — request', () => {
 // ---------------------------------------------------------------------------
 
 describe('ExperimentationProvider — resolveBooleanEvaluation()', () => {
-  test('returns true with TARGETING_MATCH for an enabled flag', async () => {
-    const provider = makeProvider(flagFetch({ key: 'my-feature', enabled: true }));
+  test('targeting_rule, on → true, TARGETING_MATCH, variant "on"', async () => {
+    const provider = makeProvider(valueFetch('boolean', true, { key: 'my-feature' }));
     const result = await provider.resolveBooleanEvaluation('my-feature', false, ctx);
     expect(result).toEqual({
       value: true,
       reason: StandardResolutionReasons.TARGETING_MATCH,
-      variant: undefined,
+      variant: 'on',
       flagMetadata: { flagKey: 'my-feature', enabled: true },
     });
   });
 
-  test('returns false with DISABLED for a disabled flag (ignores defaultValue)', async () => {
-    const provider = makeProvider(flagFetch({ enabled: false }));
-    const result = await provider.resolveBooleanEvaluation('off', true, ctx);
-    expect(result.value).toBe(false);
-    expect(result.reason).toBe(StandardResolutionReasons.DISABLED);
+  test('targeting_rule, off → false, TARGETING_MATCH, variant "off"', async () => {
+    const provider = makeProvider(valueFetch('boolean', false, { enabled: false }));
+    const result = await provider.resolveBooleanEvaluation('f', true, ctx);
+    expect(result).toEqual({
+      value: false,
+      reason: StandardResolutionReasons.TARGETING_MATCH,
+      variant: 'off',
+      flagMetadata: { flagKey: 'f', enabled: false },
+    });
+  });
+
+  test('rollout, on → true, SPLIT, variant "on"', async () => {
+    const provider = makeProvider(valueFetch('boolean', true, { reason: 'rollout' }));
+    const result = await provider.resolveBooleanEvaluation('f', false, ctx);
+    expect(result).toMatchObject({ value: true, reason: StandardResolutionReasons.SPLIT, variant: 'on' });
     expect(result.errorCode).toBeUndefined();
   });
 
-  test('reports config.variant as the variant when it is a string', async () => {
+  test('rollout, off → false, SPLIT, variant "off"', async () => {
+    const provider = makeProvider(valueFetch('boolean', false, { reason: 'rollout', enabled: false }));
+    const result = await provider.resolveBooleanEvaluation('f', true, ctx);
+    expect(result).toMatchObject({ value: false, reason: StandardResolutionReasons.SPLIT, variant: 'off' });
+  });
+
+  test('inactive → false (the off value, not the caller default), DISABLED, variant "off"', async () => {
+    const provider = makeProvider(valueFetch('boolean', false, { reason: 'inactive', enabled: false }));
+    const result = await provider.resolveBooleanEvaluation('off', true, ctx);
+    expect(result).toEqual({
+      value: false,
+      reason: StandardResolutionReasons.DISABLED,
+      variant: 'off',
+      flagMetadata: { flagKey: 'off', enabled: false },
+    });
+  });
+
+  test('served from the SDK cache → the cached value and variant, CACHED', async () => {
+    const fetchMock = valueFetch('boolean', false, { reason: 'rollout', enabled: false });
+    const provider = makeProvider(fetchMock);
+    await provider.resolveBooleanEvaluation('f', true, ctx);
+    const second = await provider.resolveBooleanEvaluation('f', true, ctx);
+    expect(second).toMatchObject({ value: false, reason: StandardResolutionReasons.CACHED, variant: 'off' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('reason "error" → the caller default, ERROR, GENERAL (not false)', async () => {
+    const provider = makeProvider(valueFetch('boolean', false, { reason: 'error', enabled: false }));
+    const result = await provider.resolveBooleanEvaluation('f', true, ctx);
+    expect(result).toEqual({
+      value: true,
+      reason: StandardResolutionReasons.ERROR,
+      errorCode: ErrorCode.GENERAL,
+      errorMessage: 'The server could not evaluate flag "f" for this user',
+    });
+  });
+
+  test.each([
+    ['string', 'Complete purchase', 'a string'],
+    ['number', 10, 'a number'],
+    ['json', { steps: 2 }, 'a JSON value'],
+  ])('a %s flag → the caller default, ERROR, TYPE_MISMATCH', async (type, value, described) => {
+    const provider = makeProvider(valueFetch(type, value));
+    const result = await provider.resolveBooleanEvaluation('f', false, ctx);
+    expect(result).toEqual({
+      value: false,
+      reason: StandardResolutionReasons.ERROR,
+      errorCode: ErrorCode.TYPE_MISMATCH,
+      errorMessage: `Flag "f" serves ${described}; it was resolved as a boolean`,
+    });
+  });
+
+  test('a server without flag values (no value_type) → enabled, with the server reason', async () => {
+    const provider = makeProvider(flagFetch({ enabled: true, reason: 'rollout' }));
+    const result = await provider.resolveBooleanEvaluation('f', false, ctx);
+    expect(result).toMatchObject({ value: true, reason: StandardResolutionReasons.SPLIT, variant: 'on' });
+    expect(result.errorCode).toBeUndefined();
+  });
+
+  test('a server reason this provider does not know, or none → UNKNOWN', async () => {
+    const unknown = await makeProvider(valueFetch('boolean', true, { reason: 'prerequisite' })).resolveBooleanEvaluation('f', false, ctx);
+    expect(unknown).toMatchObject({ value: true, reason: StandardResolutionReasons.UNKNOWN, variant: 'on' });
+    const none = await makeProvider(flagFetch({ enabled: false, reason: undefined })).resolveBooleanEvaluation('f', true, ctx);
+    expect(none).toMatchObject({ value: false, reason: StandardResolutionReasons.UNKNOWN, variant: 'off' });
+  });
+
+  test('the config is not read: the variant is "on" or "off"', async () => {
     const provider = makeProvider(flagFetch({ enabled: true, config: { variant: 'blue' } }));
     const result = await provider.resolveBooleanEvaluation('f', false, ctx);
-    expect(result.variant).toBe('blue');
+    expect(result.variant).toBe('on');
   });
 
   test('404 → defaultValue with FLAG_NOT_FOUND and reason ERROR', async () => {
@@ -317,22 +410,16 @@ describe('ExperimentationProvider — resolveBooleanEvaluation()', () => {
     expect(result.errorCode).toBe(ErrorCode.GENERAL);
   });
 
-  test('a boolean flag answers enabled whatever the server reason (unchanged)', async () => {
-    const provider = makeProvider(flagFetch({ enabled: false, reason: 'rollout', value: false, value_type: 'boolean' }));
-    const result = await provider.resolveBooleanEvaluation('f', true, ctx);
-    expect(result).toEqual({
-      value: false,
-      reason: StandardResolutionReasons.DISABLED,
-      variant: undefined,
-      flagMetadata: { flagKey: 'f', enabled: false },
-    });
+  test('a 2xx whose body is not JSON → the caller default, PARSE_ERROR', async () => {
+    const result = await makeProvider(invalidJsonFetch()).resolveBooleanEvaluation('f', true, ctx);
+    expect(result).toMatchObject({ value: true, reason: StandardResolutionReasons.ERROR, errorCode: ErrorCode.PARSE_ERROR });
+    expect(result.errorMessage).toContain('Invalid JSON in response');
   });
 
-  test('a string, number or json flag answers enabled to a boolean call (unchanged)', async () => {
-    const provider = makeProvider(valueFetch('string', 'Complete purchase'));
-    const result = await provider.resolveBooleanEvaluation('f', false, ctx);
-    expect(result.value).toBe(true);
-    expect(result.reason).toBe(StandardResolutionReasons.TARGETING_MATCH);
+  test('a 2xx whose JSON is not an evaluation → false, with no server reason UNKNOWN', async () => {
+    const fetchMock = jest.fn().mockResolvedValue(response({ body: [] }));
+    const result = await makeProvider(fetchMock).resolveBooleanEvaluation('f', true, ctx);
+    expect(result).toMatchObject({ value: false, reason: StandardResolutionReasons.UNKNOWN, variant: 'off' });
     expect(result.errorCode).toBeUndefined();
   });
 });
@@ -449,6 +536,19 @@ describe('ExperimentationProvider — resolveStringEvaluation()', () => {
     expect(result.value).toBe('fallback');
     expect(result.errorCode).toBe(ErrorCode.PARSE_ERROR);
     expect(result.errorMessage).toBe('Flag "f" serves a string, but the server\'s value is not one');
+  });
+
+  test('a 2xx whose body is not JSON → the caller default, PARSE_ERROR', async () => {
+    const result = await makeProvider(invalidJsonFetch()).resolveStringEvaluation('f', 'fallback', ctx);
+    expect(result).toMatchObject({ value: 'fallback', reason: StandardResolutionReasons.ERROR, errorCode: ErrorCode.PARSE_ERROR });
+    expect(result.errorMessage).toContain('Invalid JSON in response');
+  });
+
+  test('a 2xx whose JSON is not an evaluation → the caller default, GENERAL (no value)', async () => {
+    const fetchMock = jest.fn().mockResolvedValue(response({ body: [] }));
+    const result = await makeProvider(fetchMock).resolveStringEvaluation('f', 'fallback', ctx);
+    expect(result).toMatchObject({ value: 'fallback', reason: StandardResolutionReasons.ERROR, errorCode: ErrorCode.GENERAL });
+    expect(result.errorMessage).toContain('came back without a value');
   });
 
   test('an empty string is a value', async () => {
@@ -678,8 +778,61 @@ describe('ExperimentationProvider — cache', () => {
     expect(second.reason).toBe(StandardResolutionReasons.TARGETING_MATCH);
   });
 
+  test('a client with local evaluation answers each call from its ruleset with that call\'s attributes, never CACHED', async () => {
+    const ruleset = {
+      schema: 1,
+      version: 'v1',
+      bucketing: 'md5-mod100-v1',
+      flags: [
+        {
+          key: 'label',
+          active: true,
+          evaluation: 'local',
+          rollout_percentage: 0,
+          rules: [
+            {
+              id: 'enterprise',
+              rollout_percentage: 100,
+              match: { op: 'and', conditions: [{ attribute: 'user.plan', operator: 'eq', value: 'enterprise' }], groups: [] },
+            },
+          ],
+          default_rule: null,
+          value_type: 'string',
+          on_value: 'Complete purchase',
+          off_value: 'Buy now',
+        },
+      ],
+    };
+    const fetchMock = jest.fn(async (url: string) =>
+      url.includes('/api/v1/sdk/ruleset')
+        ? response({ body: ruleset })
+        : url.includes('/feature-flags/evaluate/')
+          ? response({ status: 500 })
+          : response({ status: 201, body: { accepted: 0, errors: [] } }),
+    );
+    const client = new ExperimentationClient({
+      apiUrl: 'http://localhost:8000',
+      apiKey: 'k',
+      fetch: fetchMock as unknown as typeof fetch,
+      evaluation: 'local',
+    });
+    try {
+      await expect(client.ready()).resolves.toMatchObject({ ok: true });
+      const provider = new ExperimentationProvider({ apiKey: '', client });
+      const free = await provider.resolveStringEvaluation('label', 'd', { targetingKey: 'u1', plan: 'free' });
+      const enterprise = await provider.resolveStringEvaluation('label', 'd', { targetingKey: 'u1', plan: 'enterprise' });
+      expect(free).toMatchObject({ value: 'Buy now', reason: StandardResolutionReasons.SPLIT, variant: 'off' });
+      expect(enterprise).toMatchObject({ value: 'Complete purchase', reason: StandardResolutionReasons.TARGETING_MATCH, variant: 'on' });
+      const again = await provider.resolveBooleanEvaluation('label', false, { targetingKey: 'u1', plan: 'enterprise' });
+      expect(again.errorCode).toBe(ErrorCode.TYPE_MISMATCH);
+      expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/feature-flags/evaluate/'))).toEqual([]);
+    } finally {
+      await client.close();
+    }
+  });
+
   test('failures are not cached — the next evaluation retries', async () => {
-    const fetchMock = sequenceFetch(new Error('down'), { body: { key: 'f', enabled: true, config: null } });
+    const fetchMock = sequenceFetch(new Error('down'), { body: { key: 'f', enabled: true, config: null, reason: 'targeting_rule' } });
     const provider = makeProvider(fetchMock);
     const first = await provider.resolveBooleanEvaluation('f', false, ctx);
     const second = await provider.resolveBooleanEvaluation('f', false, ctx);

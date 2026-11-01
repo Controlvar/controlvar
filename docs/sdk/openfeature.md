@@ -91,18 +91,17 @@ await provider.client.track('user-12345', 'page_view'); // no key → fanned out
 | OpenFeature field | Platform concept | Notes |
 |---|---|---|
 | `targetingKey` | `user_id` | Required. Sent as `?user_id=` on the evaluate call; the server buckets on it. Missing or empty → default value with `errorCode: TARGETING_KEY_MISSING`. |
-| every other key | the user's attributes | Passed to the JS SDK as `attributes`, which it sends on the evaluate call as `&context=<url-encoded JSON>`, so the flag's targeting rules are evaluated against them. A `Date`, at any depth, is sent as its ISO 8601 string. A context with only `targetingKey` sends no `context`. The JS SDK caches an answer per user + flag, and the attributes are not part of that key: within `cacheTtlMs`, a second call for the same `targetingKey` and flag gets the first answer (reason `CACHED`) whatever its attributes, so a changed attribute is seen once that answer expires. `cacheTtlMs: 0` caches nothing; `provider.onClose()` or `provider.client.clearCache()` drops every cached answer. |
+| every other key | the user's attributes | Passed to the JS SDK as `attributes`, which it sends on the evaluate call as `&context=<url-encoded JSON>`, so the flag's targeting rules are evaluated against them. A `Date`, at any depth, is sent as its ISO 8601 string. A context with only `targetingKey` sends no `context`. The JS SDK caches an answer per user + flag, and the attributes are not part of that key: within `cacheTtlMs`, a second call for the same `targetingKey` and flag gets the first answer (reason `CACHED`) whatever its attributes, so a changed attribute is seen once that answer expires. `cacheTtlMs: 0` caches nothing; `provider.onClose()` or `provider.client.clearCache()` drops every cached answer. A `client` you pass with `evaluation: 'local'` answers each call it can from its ruleset, using that call's attributes, and such an answer is never reported `CACHED`. |
 
 ### Resolution rules
 
-A boolean call (`getBooleanValue` / `getBooleanDetails`) answers `enabled` for every flag, a
-string, number or JSON flag included: reason `TARGETING_MATCH` (or `CACHED`) when the flag is on
-for the user, `DISABLED` when it is not.
-
-A string, number or object call (`getStringValue`, `getNumberValue`, `getObjectValue` and their
+Every call (`getBooleanValue`, `getStringValue`, `getNumberValue`, `getObjectValue` and their
 `…Details`) reads the value the flag serves: its on value when the flag is on for the user, its
-off value otherwise. An object call reads a JSON flag (an object or an array) and returns a new
-copy each time. There is no coercion: a call of another type gets the caller's default.
+off value otherwise. A boolean call reads a boolean flag (its value is `enabled`), a string or
+number call a string or number flag, and an object call a JSON flag (an object or an array),
+returned as a new copy each time. There is no coercion: a call of another type than the flag's
+gets the caller's default. A server without flag values sends no `value_type`; there a boolean
+call answers `enabled`, and a string, number or object call gets the caller's default.
 
 | The server's answer | Value | Reason | Variant |
 |---|---|---|---|
@@ -112,30 +111,32 @@ copy each time. There is no coercion: a call of another type gets the caller's d
 | answered from the JS SDK's cache | as cached | `CACHED` | as cached |
 | `reason: "error"` | the caller's default | `ERROR`, `errorCode: GENERAL` | not set |
 | the flag serves another type than the call | the caller's default | `ERROR`, `errorCode: TYPE_MISMATCH` | not set |
-| no `value` (a server without flag values) | the caller's default | `ERROR`, `errorCode: GENERAL` | not set |
-| a `value` that is not of the flag's type | the caller's default | `ERROR`, `errorCode: PARSE_ERROR` | not set |
+| a string, number or object call, and no `value` (a server without flag values) | the caller's default | `ERROR`, `errorCode: GENERAL` | not set |
+| a string, number or object call, and a `value` that is not of the flag's type | the caller's default | `ERROR`, `errorCode: PARSE_ERROR` | not set |
 
-- A server reason this provider does not know answers the value with reason `UNKNOWN`.
-- A boolean call's `variant` is not set, because `config` is always `null`; `flagMetadata` is
-  `{ flagKey, enabled }` on every successful resolution.
-- Errors never throw: 404 (an unknown flag key) → `FLAG_NOT_FOUND`; a 2xx with an unexpected body
+- A server reason this provider does not know, or none, answers the value with reason `UNKNOWN`.
+- `flagMetadata` is `{ flagKey, enabled }` on every successful resolution.
+- Errors never throw: 404 (an unknown flag key) → `FLAG_NOT_FOUND`; a 2xx whose body is not JSON
   → `PARSE_ERROR`; anything else (401, 422, 5xx, timeout, network) → `GENERAL`. All return the
-  default with reason `ERROR` and an `errorMessage`, and a failed request is never cached. The
-  answers in the table above are successful requests, which the JS SDK caches like any other.
+  default with reason `ERROR` and an `errorMessage`, and a failed request is never cached. A 2xx
+  whose JSON is not an evaluation is read as an answer with no `value_type`, `value`, `reason` or
+  `enabled`: a string, number or object call gets the default with `GENERAL`, and a boolean call
+  answers `false` with reason `UNKNOWN`. The answers in the table above are successful requests,
+  which the JS SDK caches like any other.
 - `provider.client`, the JS SDK client, has typed getters of its own: `getStringValue(flagKey,
   user, defaultValue)`, `getNumberValue` and `getJsonValue` take the user before the default,
   while OpenFeature's `client.getStringValue(flagKey, defaultValue, context)` takes the default
-  first. Swapping the two orders is a TypeScript error.
+  first. Swapping the user and the default on `provider.client` is a TypeScript error.
 
 ### Resolution reasons
 
 | Reason | Meaning |
 |---|---|
-| `TARGETING_MATCH` | Fresh answer from the server. A boolean call: the flag is on for this user. A string, number or object call: a targeting rule decided (`reason: "targeting_rule"`), on or off. |
-| `SPLIT` | A string, number or object call: the rollout percentage decided (`reason: "rollout"`), on or off. |
-| `CACHED` | Served from the JS SDK's per-user cache (within `cacheTtlMs`). |
-| `DISABLED` | A boolean call: the server reports the flag off for this user. A string, number or object call: the flag is not ACTIVE (`reason: "inactive"`), and the value is its off value. |
-| `UNKNOWN` | A string, number or object call: a server reason this provider does not know; the value is the flag's. |
+| `TARGETING_MATCH` | A targeting rule decided (`reason: "targeting_rule"`), on or off. |
+| `SPLIT` | The rollout percentage decided (`reason: "rollout"`), on or off. |
+| `CACHED` | Served from the JS SDK's per-user cache (within `cacheTtlMs`); never an answer a `client` with local evaluation computed. |
+| `DISABLED` | The flag is not ACTIVE (`reason: "inactive"`); the value is its off value. |
+| `UNKNOWN` | A server reason this provider does not know, or none; the value is the flag's. |
 | `ERROR` | Evaluation failed (see `errorCode`); the caller's default was returned. |
 
 ### Constructor options

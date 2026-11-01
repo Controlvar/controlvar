@@ -67,16 +67,17 @@ The JS SDK caches each answer per user + flag for `cacheTtlMs`. The attributes a
 that key: within `cacheTtlMs`, a second call for the same `targetingKey` and flag gets the first
 answer (reason `CACHED`) whatever its attributes, so a changed attribute is seen once that answer
 expires. `cacheTtlMs: 0` caches nothing; `provider.onClose()` or `provider.client.clearCache()`
-drops every cached answer.
+drops every cached answer. A `client` you pass with `evaluation: 'local'` answers each call it
+can from its ruleset, using that call's attributes, and such an answer is never reported `CACHED`.
 
 ## Resolution
 
-A boolean call answers `enabled` for every flag, a string, number or JSON flag included:
-`TARGETING_MATCH` (or `CACHED`) when the flag is on for the user, `DISABLED` when it is not.
-
-A string, number or object call reads the value the flag serves: its on value when the flag is on
-for the user, its off value otherwise. An object call reads a JSON flag (an object or an array) and
-returns a new copy each time. There is no coercion: a call of another type gets your default.
+Every call reads the value the flag serves: its on value when the flag is on for the user, its off
+value otherwise. A boolean call reads a boolean flag (its value is `enabled`), a string or number
+call a string or number flag, and an object call a JSON flag (an object or an array), returned as
+a new copy each time. There is no coercion: a call of another type than the flag's gets your
+default. A server without flag values sends no `value_type`; there a boolean call answers
+`enabled`, and a string, number or object call gets your default.
 
 | The server's answer | Value | Reason | Variant |
 |---|---|---|---|
@@ -86,21 +87,24 @@ returns a new copy each time. There is no coercion: a call of another type gets 
 | answered from the JS SDK's cache | as cached | `CACHED` | as cached |
 | `reason: "error"` | your default | `ERROR`, code `GENERAL` | none |
 | the flag serves another type than the call | your default | `ERROR`, code `TYPE_MISMATCH` | none |
-| no `value` (a server without flag values) | your default | `ERROR`, code `GENERAL` | none |
-| a `value` that is not of the flag's type | your default | `ERROR`, code `PARSE_ERROR` | none |
+| a string, number or object call, and no `value` (a server without flag values) | your default | `ERROR`, code `GENERAL` | none |
+| a string, number or object call, and a `value` that is not of the flag's type | your default | `ERROR`, code `PARSE_ERROR` | none |
 
-A server reason this provider does not know answers the value with reason `UNKNOWN`.
+A server reason this provider does not know, or none, answers the value with reason `UNKNOWN`.
 
-Errors never throw: 404 → `FLAG_NOT_FOUND`, bad body → `PARSE_ERROR`, missing `targetingKey` →
-`TARGETING_KEY_MISSING`, anything else (401, 422, 5xx, timeout, network) → `GENERAL`; the default
-is returned with reason `ERROR`, and a failed request is never cached. The answers in the table
-are successful requests, which the JS SDK caches like any other.
+Errors never throw: 404 → `FLAG_NOT_FOUND`, a 2xx whose body is not JSON → `PARSE_ERROR`, missing
+`targetingKey` → `TARGETING_KEY_MISSING`, anything else (401, 422, 5xx, timeout, network) →
+`GENERAL`; the default is returned with reason `ERROR`, and a failed request is never cached. A
+2xx whose JSON is not an evaluation is read as an answer with no `value_type`, `value`, `reason`
+or `enabled`: a string, number or object call gets your default with `GENERAL`, and a boolean
+call answers `false` with reason `UNKNOWN`. The answers in the table are successful requests,
+which the JS SDK caches like any other.
 `provider.hashUser(userId, flagKey)` exposes the cross-SDK MD5 hash as a compatibility utility only.
 
 `provider.client`, the JS SDK client, has typed getters of its own: `getStringValue(flagKey, user,
 defaultValue)`, `getNumberValue` and `getJsonValue` take the user before the default, while
 OpenFeature's `client.getStringValue(flagKey, defaultValue, context)` takes the default first.
-Swapping the two orders is a TypeScript error.
+Swapping the user and the default on `provider.client` is a TypeScript error.
 
 ## Backend endpoints used
 
