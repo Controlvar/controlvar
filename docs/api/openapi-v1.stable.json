@@ -10819,7 +10819,7 @@
         "type": "object"
       },
       "SdkRulesetFlag": {
-        "description": "One flag. Inactive flags carry only ``key`` and ``active``, plus\n``value_type`` and ``off_value`` for a string, number or json flag.",
+        "description": "One flag. Inactive flags carry only ``key`` and ``active``, plus\n``value_type`` and ``off_value`` for a string, number or json flag. The\nexception is a flag whose stored values cannot be served: it is a remote\nentry whatever its status, so turning it off reaches a local SDK through\nthe SDK's cache of the server's answer (up to 300 s by default).",
         "properties": {
           "active": {
             "title": "Active",
@@ -10903,11 +10903,6 @@
           "value_type": {
             "anyOf": [
               {
-                "enum": [
-                  "string",
-                  "number",
-                  "json"
-                ],
                 "type": "string"
               },
               {
@@ -25407,7 +25402,7 @@
     },
     "/api/v1/sdk/ruleset": {
       "get": {
-        "description": "Every feature flag in the deployment, for a server-side SDK that evaluates\nflags locally.\n\n**Authentication**: an `X-API-Key` whose scopes include `sdk:ruleset`. A\nvalid key without it gets 403. The ruleset contains the values written in\ntargeting rules, and the values string, number and json flags serve: keep\nsuch a key on a server.\n\n**Caching**: the response carries `ETag`. Send it back in `If-None-Match`\nand an unchanged ruleset answers 304 with no body.\n\nA flag the SDK may evaluate itself is `\"evaluation\": \"local\"` and carries\nits rollout percentage and rules; `\"remote\"` means ask\n`GET /api/v1/feature-flags/evaluate/{key}`; an inactive flag is\n`{\"key\", \"active\": false}`. A string, number or json flag also carries\n`value_type` and its two values: `on_value` and `off_value` on a local\nentry, `off_value` on an inactive one. A remote entry carries no value.",
+        "description": "Every feature flag in the deployment, for a server-side SDK that evaluates\nflags locally.\n\n**Authentication**: an `X-API-Key` whose scopes include `sdk:ruleset`. A\nvalid key without it gets 403. The ruleset contains the values written in\ntargeting rules, and the values string, number and json flags serve: keep\nsuch a key on a server.\n\n**Caching**: the response carries `ETag`. Send it back in `If-None-Match`\nand an unchanged ruleset answers 304 with no body.\n\nA flag the SDK may evaluate itself is `\"evaluation\": \"local\"` and carries\nits rollout percentage and rules; `\"remote\"` means ask\n`GET /api/v1/feature-flags/evaluate/{key}`; an inactive flag is\n`{\"key\", \"active\": false}`. A string, number or json flag also carries\n`value_type` and its two values: `on_value` and `off_value` on a local\nentry, `off_value` on an inactive one. A remote entry carries no value.\nA flag whose stored values cannot be served is a remote entry whatever its\nstatus, so switching it off reaches a local SDK only when its cached\nanswer from the server expires (up to 300 s by default in the 0.1.1 and\n0.2.0 SDKs); `getAllFlags` always asks the server.",
         "operationId": "get_ruleset_api_v1_sdk_ruleset_get",
         "responses": {
           "200": {

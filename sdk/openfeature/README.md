@@ -5,7 +5,8 @@
 [OpenFeature](https://openfeature.dev) provider for Controlvar
 (`@openfeature/server-sdk`, Node >= 18). Every evaluation is delegated to
 [`@controlvar/js-sdk`](https://github.com/Controlvar/controlvar/blob/main/sdk/js/README.md) and **decided by the server**; successful
-answers are cached per user + flag. Nothing is bucketed locally and no flag definitions are downloaded.
+answers are cached per user + flag. Nothing is bucketed locally and no flag definitions are downloaded,
+unless you pass a `client` built with `evaluation: 'local'`.
 Boolean, string, number and object calls are answered, and the evaluation context's attributes
 are sent with each evaluation.
 

@@ -10,7 +10,8 @@ the former names EXPERIMENTLY_API_URL / EXPERIMENTLY_API_KEY are read when these
 CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default sdk_contract_flag),
 CONTRACT_USER_ID (default: random "smoke-<uuid>").
 
-The flag is resolved through the OpenFeature API (boolean resolution); experiment assignment
+The flag is resolved through the OpenFeature API (boolean resolution, the context's attributes
+sent as the evaluate call's ``context``); experiment assignment
 and tracking — which OpenFeature does not model — go through the provider's underlying
 ``controlvar`` client. Prints exactly one JSON line on stdout and exits 0; on failure
 prints one line to stderr and exits 1.
