@@ -27,6 +27,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.enum_filters import enum_filter
 from backend.app.api.segment_rules import refuse_unusable_segments
 from backend.app.core.context_limits import (
     CONTEXT_TOO_DEEP,
@@ -82,6 +83,14 @@ logger = logging.getLogger(__name__)
 
 #: Postgres error code for a unique constraint violation.
 _UNIQUE_VIOLATION = "23505"
+
+#: The list's ``status`` filter values, as the flag responses spell them (#955).
+FLAG_STATUS_SPELLINGS = ("active", "inactive", "archived")
+
+FLAG_STATUS_FILTER_DESCRIPTION = (
+    "Only flags with this status: `active`, `inactive` or `archived`, in any "
+    "case. Any other value answers 422; an empty value means no filter."
+)
 
 
 def _flag_key_taken_detail(key: str) -> str:
@@ -256,7 +265,9 @@ async def list_feature_flags(
     # `status` in the URL only: a Python parameter called `status` hid the
     # `fastapi.status` module in this body, so reaching the 403 below raised
     # AttributeError and answered 500.
-    status_filter: Optional[str] = Query(None, alias="status"),
+    status_filter: Optional[str] = Query(
+        None, alias="status", description=FLAG_STATUS_FILTER_DESCRIPTION
+    ),
     search: Optional[str] = None,
     current_user=Depends(deps.get_current_active_user),
 ) -> FeatureFlagListResponse:
@@ -264,7 +275,7 @@ async def list_feature_flags(
     Retrieve feature flags.
     - **skip**: Number of feature flags to skip in pagination
     - **limit**: Maximum number of feature flags to return
-    - **status**: Filter by status (ACTIVE, INACTIVE)
+    - **status**: Filter by status (`active`, `inactive`, `archived`; any case)
     - **search**: Filter by name or key
     """
     # Check if user has permission to list feature flags
@@ -273,6 +284,12 @@ async def list_feature_flags(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You don't have permission to list feature flags",
         )
+
+    # After the permission check (#955): a caller who may not list is told
+    # nothing about the enum. The member goes to the query, never the text.
+    status_member = enum_filter(
+        status_filter, FeatureFlagStatus, "status", FLAG_STATUS_SPELLINGS
+    )
 
     # Everyone the LIST check above admitted sees the whole platform.
     #
@@ -287,9 +304,9 @@ async def list_feature_flags(
     # tenant (founder, 2026-09-21), and tenant isolation belongs to the
     # workspaces module rather than to row ownership. See #83.
     feature_flags_data = crud_feature_flag.get_multi(
-        db, skip=skip, limit=limit, status=status_filter, search=search
+        db, skip=skip, limit=limit, status=status_member, search=search
     )
-    total = crud_feature_flag.count(db, status=status_filter, search=search)
+    total = crud_feature_flag.count(db, status=status_member, search=search)
 
     # Create response with pagination
     response = FeatureFlagListResponse(
