@@ -693,9 +693,9 @@ def test_start_skips_an_active_experiment_whose_stored_config_breaks_the_rules(
         },
         # A relative control URL.
         {"variants": [_uv("Control", "/a"), _uv("Treatment", f"https://{host}/a")]},
-        # Not a configuration at all.
-        ["not", "a", "config"],
-        # None.
+        # None. (A configuration that is not an object at all is
+        # test_split_url_config_rules.py's: a row holding one would break
+        # listing the experiments for every later test in the session.)
         None,
     ]
     legacy_ids = [
