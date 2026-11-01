@@ -48,6 +48,7 @@ text = "With the defaults, every client below serves the change within 5 minutes
 by = [
     "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_every_sdk_but_the_edge_sdk_keeps_an_answer_five_minutes_and_the_edge_sdk_one",
     "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_the_edge_figure_with_a_kv_store_is_its_two_lifetimes_about_two_minutes",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_client_takes_the_pinned_constant_as_its_default",
     "test:sdk/edge/__tests__/client.test.ts::writes successful results to the store with the cache TTL, keyed per user + key",
 ]
 
@@ -75,6 +76,7 @@ by = [
 text = "React Native | cacheTtlMs (300000 ms) | clearCache(), and clearStorage() for the copy in AsyncStorage"
 by = [
     "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_cache_lifetime_is_the_number_the_page_states",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_client_takes_the_pinned_constant_as_its_default",
     "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_clears_its_cache_with_the_method_the_page_names",
     "test:sdk/react-native/__tests__/client.test.ts::clearCache empties both caches but leaves AsyncStorage intact",
     "test:sdk/react-native/__tests__/client.test.ts::clearStorage removes only SDK-namespaced AsyncStorage keys",
@@ -158,6 +160,7 @@ text = "Edge | cacheTtlMs (60000 ms); with a KV store, kvTtlSeconds on Cloudflar
 by = [
     "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_cache_lifetime_is_the_number_the_page_states",
     "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_the_edge_figure_with_a_kv_store_is_its_two_lifetimes_about_two_minutes",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_client_takes_the_pinned_constant_as_its_default",
     "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_clears_its_cache_with_the_method_the_page_names",
     "test:sdk/edge/__tests__/adapters.test.ts::namespaces keys with \"ep:\" and rounds the TTL up to the 60 s minimum",
     "test:sdk/edge/__tests__/adapters.test.ts::an explicit kvTtlSeconds wins over the cache TTL",
@@ -165,8 +168,12 @@ by = [
 ]
 
 [[unit]]
-text = "OpenFeature provider (JavaScript, Python) | the provider's cacheTtlMs (300000 ms) / cache_ttl (300), passed to the SDK | —"
-by = ["test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_cache_lifetime_is_the_number_the_page_states"]
+text = "OpenFeature provider (JavaScript, Python) | the provider's cacheTtlMs (300000 ms) / cache_ttl (300), passed to the SDK | provider.client.clearCache() / provider.client.clear_cache()"
+by = [
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_cache_lifetime_is_the_number_the_page_states",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_client_takes_the_pinned_constant_as_its_default",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_clears_its_cache_with_the_method_the_page_names",
+]
 
 [[unit]]
 text = "A React or React Native component already on screen does not ask again."
@@ -176,7 +183,7 @@ by = [
 ]
 
 [[unit]]
-text = "It keeps the answer it rendered until it mounts again (the user comes back to the screen, reloads the page or restarts the app); the SDKs neither poll nor stream."
+text = "It keeps the answer it rendered until it mounts again (a screen opened anew, a reloaded page or a restarted app), so a screen a navigator keeps mounted does not ask again until then; the SDKs neither poll nor stream."
 by = [
     "test:sdk/react/src/__tests__/useFeatureFlag.test.tsx::a mounted hook does not ask again: past the cache lifetime it keeps its answer, one request",
     "test:sdk/react-native/__tests__/hooks.test.tsx::a mounted useFlag does not ask again: past the cache lifetime it keeps its answer, one request",

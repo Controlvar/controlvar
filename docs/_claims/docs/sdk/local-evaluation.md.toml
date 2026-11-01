@@ -454,10 +454,12 @@ text = "Freshness"
 by = ["exempt:label"]
 
 [[unit]]
-text = "A change made in the dashboard (turning a flag off, a rollout step, a safety rollback) reaches a process evaluating locally at its next successful refresh: within the refresh interval (30 seconds by default) while the API is reachable."
+text = "A change made in the dashboard (turning a flag off, a rollout step, a safety rollback) reaches a process evaluating locally at its next successful refresh: by default within 33 seconds (the 30-second interval plus up to 10%) while the API is reachable."
 by = [
     "test:sdk/js/__tests__/local.test.ts::polls send the ETag, and a 304 keeps the ruleset",
     "test:sdk/js/__tests__/local.test.ts::defaults to 30 seconds",
+    "test:sdk/js/__tests__/local.test.ts::is jittered by ±10%",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_local_evaluation_timings_are_the_numbers_the_page_states",
     "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p6_the_ruleset_and_local_sdk_agree_with_the_server",
 ]
 

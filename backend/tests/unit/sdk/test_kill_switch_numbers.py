@@ -11,6 +11,10 @@ page with it, move too:
   the number as the page states it, in that SDK's own unit. Each expression
   must match exactly once: no match is a renamed or moved constant, and two is
   an expression that no longer says which one it reads.
+* ``USES`` holds the lines where a client takes a constant as its default
+  (``config.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS``) and where the edge adapters
+  pass the caller's KV lifetime on, so a default written in place of the
+  constant fails too.
 * The directories under ``sdk/`` are exactly the table's keys plus
   ``NO_CONSTANT_OF_ITS_OWN``, which is empty: both OpenFeature providers carry
   their own 300-second default, so each is a row. A new SDK fails here until
@@ -27,8 +31,9 @@ page with it, move too:
   the wait after a refusal.
 
 Plain file reads only: ``scripts/core_build.sh``'s copy has no ``.git``. The
-file names no page, so the docs-only gate does not class it as a reader of
-documentation, and a claim may name its tests with ``test:``.
+file reads no page and matches no ``DOCS_READER`` pattern, so the docs-only gate
+does not class it as a reader of documentation, and a claim may name its tests
+with ``test:``.
 """
 
 from __future__ import annotations
@@ -174,6 +179,12 @@ CACHE_DEFAULTS: Dict[str, Tuple[Pin, ...]] = {
             r"^ +cacheTTL: TimeInterval = (?P<value>[0-9]+),\n +enableOfflineFallback: Bool = true$",
             300,
         ),
+        # The deprecated initializer, which keeps a default of its own.
+        Pin(
+            "ios/Sources/Controlvar/Models.swift",
+            r"^ +cacheTTL: TimeInterval = (?P<value>[0-9]+),\n +enableLocalEval: Bool$",
+            300,
+        ),
     ),
     "android": (
         Pin(
@@ -286,9 +297,58 @@ CLEAR: Dict[str, Tuple[Tuple[str, str], ...]] = {
     ),
     "flutter": (("flutter/lib/src/client.dart", r"^  void clearCache\(\) \{$"),),
     "edge": (("edge/src/client.ts", r"^  clearCache\(\): void \{$"),),
-    "openfeature": (),
-    "openfeature-python": (),
+    # provider.client.clearCache(): the provider's public client, a JS SDK client.
+    "openfeature": (
+        (
+            "openfeature/src/ExperimentationProvider.ts",
+            r"^  readonly client: ExperimentationClient;$",
+        ),
+        ("js/src/client.ts", r"^  clearCache\(\): void \{$"),
+    ),
+    # provider.client.clear_cache(): the provider's client property, a Python SDK client.
+    "openfeature-python": (
+        (
+            "openfeature-python/src/controlvar_openfeature/provider.py",
+            r"^    @property\n    def client\(self\) -> ExperimentationClient:$",
+        ),
+        ("python/controlvar/client.py", r"^    def clear_cache\(self\) -> None:$"),
+    ),
 }
+
+#: Where each client takes its constant as the default, and where the edge
+#: adapters hand the caller's KV lifetime on (undefined unless set, so the
+#: store's default follows ``cacheTtlMs``): (id, file, line). A literal written
+#: in place of the constant at any of these would leave the constant, and the
+#: rows above, unchanged.
+USES: Tuple[Tuple[str, str, str], ...] = (
+    (
+        "react-native",
+        "react-native/src/client.ts",
+        r"^    this\.cacheTtlMs = config\.cacheTtlMs \?\? DEFAULT_CACHE_TTL_MS;$",
+    ),
+    (
+        "edge",
+        "edge/src/client.ts",
+        r"^    this\.cacheTtlMs = config\.cacheTtlMs \?\? DEFAULT_CACHE_TTL_MS;$",
+    ),
+    (
+        "openfeature",
+        "openfeature/src/ExperimentationProvider.ts",
+        r"^      cacheTtlMs: options\.cacheTtlMs \?\? DEFAULT_CACHE_TTL_MS,$",
+    ),
+    (
+        "edge-cloudflare-kv",
+        "edge/src/adapters/cloudflare.ts",
+        r"^      \(config\.kvNamespace \? new CloudflareKvStore\(config\.kvNamespace,"
+        r" config\.kvTtlSeconds\) : undefined\);$",
+    ),
+    (
+        "edge-deno-kv",
+        "edge/src/adapters/deno.ts",
+        r"^    const store = config\.store \?\? \(config\.kv \? new DenoKvStore\(config\.kv,"
+        r" config\.kvTtlMs\) : undefined\);$",
+    ),
+)
 
 #: What the page's headline states: every SDK but the edge SDK serves a change
 #: within 5 minutes, the edge SDK within 1.
@@ -423,6 +483,13 @@ def test_each_sdk_cache_lifetime_is_the_number_the_page_states(sdk):
 def test_each_sdk_clears_its_cache_with_the_method_the_page_names(sdk):
     for path, pattern in CLEAR[sdk]:
         read_once(path, pattern)
+
+
+@pytest.mark.parametrize(
+    ("path", "pattern"), [use[1:] for use in USES], ids=[use[0] for use in USES]
+)
+def test_each_client_takes_the_pinned_constant_as_its_default(path, pattern):
+    read_once(path, pattern)
 
 
 def test_the_go_sdk_has_no_method_that_clears_its_cache():

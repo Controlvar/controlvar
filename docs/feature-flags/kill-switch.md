@@ -30,12 +30,12 @@ another 60).
 | Android | `cacheTtlMs` (300000) | `clearCache()`, `invalidateCache(userId, key)` |
 | Flutter | `cacheTtl` (5 minutes) | `clearCache()` |
 | Edge | `cacheTtlMs` (60000 ms); with a KV store, `kvTtlSeconds` on Cloudflare (`cacheTtlMs` in seconds, at least 60) or `kvTtlMs` on Deno (`cacheTtlMs`) | `clearCache()` (this instance's memory only) |
-| OpenFeature provider (JavaScript, Python) | the provider's `cacheTtlMs` (300000 ms) / `cache_ttl` (300), passed to the SDK | — |
+| OpenFeature provider (JavaScript, Python) | the provider's `cacheTtlMs` (300000 ms) / `cache_ttl` (300), passed to the SDK | `provider.client.clearCache()` / `provider.client.clear_cache()` |
 
 **A React or React Native component already on screen does not ask again.** It keeps the answer it
-rendered until it mounts again (the user comes back to the screen, reloads the page or restarts the
-app); the SDKs neither poll nor stream. Nothing reaches a screen that is already open until it
-mounts the component again.
+rendered until it mounts again (a screen opened anew, a reloaded page or a restarted app), so a
+screen a navigator keeps mounted does not ask again until then; the SDKs neither poll nor stream.
+Nothing reaches a screen that is already open until it mounts the component again.
 
 ## Local evaluation (JavaScript and Python, beta)
 
