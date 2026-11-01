@@ -27,6 +27,24 @@ to request access, a role change, or superuser access.
 [What the dashboard does, and what is API only](dashboard-and-api.md) lists, row by row, what
 has a screen and what works through the API only, with the guide for each.
 
+### Request time-outs
+
+The dashboard gives up on a request when the API has not started to answer within 30 seconds:
+120 seconds for results, for the audit-log export and for warehouse connection and source
+checks, and 31 minutes for a warehouse preview. A read that times out says the API did not
+answer. A change that times out says the request may or may not have been carried out, because
+the API may still finish it: reload the page and check before you try again.
+
+Two things the deadline does not cover. First, it ends when the API starts to answer, so a
+response that begins and then stalls while its body arrives (a download or export that stops
+partway) is not timed out, and the page can keep waiting. Second, only the places that were
+checked show the time-out wording: some other error messages put the underlying message inside
+their own fixed sentence, so a time-out there can read as an ordinary failure. User deletion is
+fixed; the others were not audited one by one.
+
+If you raise `WAREHOUSE_MAX_QUERY_TIMEOUT_SECONDS` above 1800, the dashboard still gives up on a
+warehouse preview after 31 minutes.
+
 ---
 
 ## Experiments

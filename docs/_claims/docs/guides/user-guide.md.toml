@@ -84,6 +84,50 @@ text = "What the dashboard does, and what is API only lists, row by row, what ha
 by = ["exempt:navigation"]
 
 [[unit]]
+text = "Request time-outs"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The dashboard gives up on a request when the API has not started to answer within 30 seconds: 120 seconds for results, for the audit-log export and for warehouse connection and source checks, and 31 minutes for a warehouse preview."
+by = [
+    "test:frontend/src/tests/services/api.test.ts::D1 fires at exactly the default deadline, and aborts the request",
+    "test:frontend/src/tests/services/api.test.ts::D5 %s waits past the default, until its own deadline",
+    "test:modules/frontend/src/tests/services/request-timeouts.test.ts::D5 %s gives up at exactly its own deadline",
+    "test:modules/frontend/src/tests/services/request-timeouts.test.ts::a preview waits for the largest query limit plus both margins: 1860 seconds",
+]
+
+[[unit]]
+text = "A read that times out says the API did not answer."
+by = ["test:frontend/src/tests/services/api.test.ts::D3 a timed-out %s says only that the API did not answer"]
+
+[[unit]]
+text = "A change that times out says the request may or may not have been carried out, because the API may still finish it: reload the page and check before you try again."
+by = ["test:frontend/src/tests/services/api.test.ts::D3 a timed-out %s says the request may or may not have been carried out, once"]
+
+[[unit]]
+text = "Two things the deadline does not cover."
+by = [
+    "test:frontend/src/tests/services/api.test.ts::D2 a body that stalls after its headers is not aborted: the stated residual",
+    "test:frontend/src/tests/services/api.test.ts::D7 they find exactly the classified places (the control is this set, not a number)",
+]
+
+[[unit]]
+text = "First, it ends when the API starts to answer, so a response that begins and then stalls while its body arrives (a download or export that stops partway) is not timed out, and the page can keep waiting."
+by = ["test:frontend/src/tests/services/api.test.ts::D2 a body that stalls after its headers is not aborted: the stated residual"]
+
+[[unit]]
+text = "Second, only the places that were checked show the time-out wording: some other error messages put the underlying message inside their own fixed sentence, so a time-out there can read as an ordinary failure."
+by = ["test:frontend/src/tests/services/api.test.ts::D7 they find exactly the classified places (the control is this set, not a number)"]
+
+[[unit]]
+text = "User deletion is fixed; the others were not audited one by one."
+by = ["test:frontend/src/tests/services/api.test.ts::D10 shows that the user may or may not have been deleted, in exactly these words"]
+
+[[unit]]
+text = "If you raise WAREHOUSE_MAX_QUERY_TIMEOUT_SECONDS above 1800, the dashboard still gives up on a warehouse preview after 31 minutes."
+by = ["test:modules/frontend/src/tests/services/request-timeouts.test.ts::a preview waits for the largest query limit plus both margins: 1860 seconds"]
+
+[[unit]]
 text = "Experiments"
 by = ["exempt:baseline"]
 

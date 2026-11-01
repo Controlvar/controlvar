@@ -63,9 +63,13 @@ const STAGE_STATUS_COLORS: Record<string, string> = {
   failed: 'bg-red-100 text-red-800',
 };
 
-/** The fixed sentence for a failed request, chosen by the answer's status only. */
+/**
+ * The fixed sentence for a failed request, chosen by the answer's status only;
+ * a time-out shows the dashboard's own time-out sentence (#1040).
+ */
 export function rolloutErrorCopy(err: unknown): string {
   if (!isApiError(err)) return ROLLOUT_ERROR_COPY.fallback;
+  if (err.timedOut) return err.message;
   if (err.status === 0) return UNREACHABLE;
   return ROLLOUT_ERROR_COPY[err.status] ?? ROLLOUT_ERROR_COPY.fallback;
 }
