@@ -17,11 +17,21 @@ import {
   apiFetch,
   clearToken,
   getToken,
+  loginPathWithNext,
   setToken,
   unreachableMessage,
 } from '@/services/api';
 
 export type AuthStatus = 'loading' | 'authenticated' | 'anonymous';
+
+export interface LogoutOptions {
+  /**
+   * The page the next sign-in should open, for a caller that signs out on
+   * purpose to come back (an invitation meant for another account). Without
+   * it the next sign-in opens the default page.
+   */
+  next?: string;
+}
 
 export interface AuthContextValue {
   user: UserMe | null;
@@ -30,8 +40,19 @@ export interface AuthContextValue {
   isAuthenticated: boolean;
   /** `POST /api/v1/auth/login`; stores the token and resolves with the user. */
   login: (email: string, password: string) => Promise<UserMe>;
-  /** `POST /api/v1/auth/logout` (best effort), then clears the token. */
-  logout: () => Promise<void>;
+  /**
+   * Signs out at once: clears the token and the user before anything else,
+   * then sends `POST /api/v1/auth/logout` without waiting for it (best effort;
+   * its answer, failure or silence changes nothing). Resolves straight away.
+   */
+  logout: (options?: LogoutOptions) => Promise<void>;
+  /**
+   * Where a protected page sends this tab after `logout()`: `/login`, or
+   * `/login?next=` when the logout named a `next`. Never the page the
+   * signed-out user was on, so the next person to sign in does not land there
+   * (#1006). `null` until this tab logs out, and again after a sign-in.
+   */
+  afterLogoutPath: string | null;
   /** Re-fetch `/auth/me` (e.g. after a profile change). */
   refresh: () => Promise<UserMe | null>;
   /** True when the current user has one of the given roles. */
@@ -69,6 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserMe | null>(null);
   const [status, setStatus] = useState<AuthStatus>('loading');
   const [sessionError, setSessionError] = useState<string | null>(null);
+  const [afterLogoutPath, setAfterLogoutPath] = useState<string | null>(null);
   const mounted = useRef(true);
 
   const applyAnonymous = useCallback(() => {
@@ -88,6 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(me);
         setStatus('authenticated');
         setSessionError(null);
+        setAfterLogoutPath(null);
       }
       return me;
     } catch (err) {
@@ -139,22 +162,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(result.user);
       setStatus('authenticated');
       setSessionError(null);
+      setAfterLogoutPath(null);
     }
     return result.user;
   }, []);
 
-  const logout = useCallback(async (): Promise<void> => {
-    if (getToken()) {
-      try {
-        await apiFetch<void>(LOGOUT_PATH, { method: 'POST', redirectOn401: false });
-      } catch {
-        /* stateless logout — the token is discarded regardless */
-      }
-    }
-    clearToken();
-    setSessionError(null);
-    applyAnonymous();
-  }, [applyAnonymous]);
+  const logout = useCallback(
+    async (options: LogoutOptions = {}): Promise<void> => {
+      const token = getToken();
+      // Sign out here first (#1040): awaiting the server left the user signed
+      // in for as long as a stalled API took to answer. These updates are made
+      // together, so a protected page sees `anonymous` and `afterLogoutPath`
+      // in the same render and never redirects with this page as `next`.
+      clearToken();
+      setSessionError(null);
+      setAfterLogoutPath(loginPathWithNext(options.next));
+      applyAnonymous();
+      if (!token) return;
+      // Then tell the server, without waiting. The token is passed by hand
+      // with `auth: false`, so an answer arriving after the next sign-in
+      // (even a 401) cannot clear that session's token. The API revokes
+      // nothing at logout (tokens are stateless), so nothing depends on the
+      // request arriving.
+      void apiFetch<void>(LOGOUT_PATH, {
+        method: 'POST',
+        auth: false,
+        redirectOn401: false,
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => undefined);
+    },
+    [applyAnonymous],
+  );
 
   const hasRole = useCallback(
     (...roles: Role[]): boolean => !!user && roles.includes(user.role),
@@ -168,11 +206,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: status === 'authenticated',
       login,
       logout,
+      afterLogoutPath,
       refresh: loadMe,
       hasRole,
       sessionError,
     }),
-    [user, status, login, logout, loadMe, hasRole, sessionError],
+    [user, status, login, logout, afterLogoutPath, loadMe, hasRole, sessionError],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

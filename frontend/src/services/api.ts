@@ -276,14 +276,20 @@ export function safeNextPath(next: string | null | undefined, fallback = '/'): s
   return next;
 }
 
+/**
+ * The sign-in page, carrying `next` when it is a safe path other than `/` and
+ * the sign-in page itself: `/login` or `/login?next=<next>`.
+ */
+export function loginPathWithNext(next: string | null | undefined): string {
+  const target = safeNextPath(next);
+  return target === '/' || target === LOGIN_PATH || target.startsWith(`${LOGIN_PATH}?`)
+    ? LOGIN_PATH
+    : `${LOGIN_PATH}?next=${encodeURIComponent(target)}`;
+}
+
 /** Full-page navigation to `/login?next=<current path>`. */
 export function redirectToLogin(next?: string): void {
-  const target = safeNextPath(next ?? navigation.currentPath());
-  const url =
-    target === '/' || target === LOGIN_PATH || target.startsWith(`${LOGIN_PATH}?`)
-      ? LOGIN_PATH
-      : `${LOGIN_PATH}?next=${encodeURIComponent(target)}`;
-  navigation.assign(url);
+  navigation.assign(loginPathWithNext(next ?? navigation.currentPath()));
 }
 
 type LooseResponse = Partial<Response> & { ok: boolean; status?: number; statusText?: string };

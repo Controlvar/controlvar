@@ -151,13 +151,6 @@ by = [
 ]
 
 [[unit]]
-text = "A warehouse analysis of a metric where lower is better | A warehouse analysis treats every metric as higher is better: a warehouse metric source has no lower-is-better setting, so its results report lower_is_better: false and name a winner only for a significant increase (#1386)."
-by = [
-    "test:modules/backend/tests/unit/test_warehouse_lower_is_better.py::test_a_warehouse_result_names_a_winner_only_for_a_significant_increase",
-    "test:modules/backend/tests/unit/test_warehouse_lower_is_better.py::test_a_warehouse_metric_source_has_no_lower_is_better_setting",
-]
-
-[[unit]]
 text = "Deployments"
 by = ["exempt:label"]
 

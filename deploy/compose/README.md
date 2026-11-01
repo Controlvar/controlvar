@@ -78,8 +78,18 @@ Compose refuses to start while a required one is unset or empty, and names it.
 | `AUDIT_HMAC_KEY` | needed by the `full` profile |
 | `HTTP_BIND`, `HTTP_PORT` | where the dashboard listens: `127.0.0.1` and `8080` by default |
 | `POSTGRES_SERVER` | an external PostgreSQL instead of the bundled one; then start only `docker compose up -d api web` |
+| `WAREHOUSE_CREDENTIALS_KEYS` | turns on warehouse analysis in the `full` profile: Fernet keys, comma-separated, newest first, that encrypt the warehouse credentials the API stores; while it is empty, storing or using a credential answers `503 credentials_unavailable` |
+| `ANTHROPIC_API_KEY` | turns on Anthropic variants in LLM experiments and also Claude calls in `POST /api/v1/ai/design` and `POST /api/v1/ai/interpret/{experiment_id}` (limited to 10 requests a minute); without it those two routes answer from built-in templates |
+| `OPENAI_API_KEY` | turns on OpenAI variants in LLM experiments |
+| `GEMINI_API_KEY` | turns on Gemini (`google`) variants in LLM experiments |
 
 Run an external PostgreSQL server with its `TimeZone` set to UTC.
+
+The last four settings are optional. A key set to an empty value is the same
+as a key that is not set, and both compose files pass these keys empty by
+default. Put each key in the `.env` file next to the compose file: a key
+exported in another terminal does not reach the container, and one exported in
+the terminal that runs `docker compose up` does.
 
 The image lines name the images of this file's own release,
 `ghcr.io/controlvar/controlvar:<profile>-X.Y.Z` and

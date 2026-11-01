@@ -24,6 +24,13 @@ API with the key in `GEMINI_API_KEY`, and `GEMINI_BASE_URL` (default
 `GEMINI_API_KEY`, that variant's `/complete` answers
 `502 {"detail":"LLM provider error: GEMINI_API_KEY is not set"}`.
 
+Both compose files pass `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and
+`GEMINI_API_KEY` to the API. A key set to an empty value is the same as a key
+that is not set, and both compose files pass these keys empty by default. Put
+each key in the `.env` file next to the compose file: a key exported in another
+terminal does not reach the container, and one exported in the terminal that
+runs `docker compose up` does.
+
 ---
 
 ## Task types and evaluation metrics

@@ -135,6 +135,11 @@ export interface Source {
   metric_type: MetricType | null;
   conversion_window_hours: number | null;
   cap_value: number | null;
+  /**
+   * True when a decrease is the improvement for this metric (an error rate,
+   * churn). Null for an assignment source.
+   */
+  lower_is_better: boolean | null;
   validated_at: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -158,6 +163,12 @@ export interface MetricSourceBody {
   metric_type: MetricType;
   conversion_window_hours: number;
   cap_value?: number | null;
+  /**
+   * The body replaces the whole definition, so leaving this out sets false.
+   * The form sends it only when ticked: an API older than the field refuses
+   * it, and then only a ticked save fails.
+   */
+  lower_is_better?: boolean;
   filters: SourceFilter[];
 }
 

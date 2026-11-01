@@ -1,7 +1,7 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RequireAuth } from '@/components/RequireAuth';
-import { AuthProvider } from '@/contexts/AuthContext';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { TOKEN_STORAGE_KEY, UserMe } from '@/services/api';
 
 const mockReplace = jest.fn();
@@ -106,6 +106,101 @@ describe('RequireAuth', () => {
     mockFetch.mockResolvedValueOnce(meResponse({ ...viewer, role: 'ADMIN' }));
     renderGuarded(['ADMIN', 'DEVELOPER']);
     await waitFor(() => expect(screen.getByTestId('protected')).toBeInTheDocument());
+  });
+
+  describe('after a logout in this tab (#1006)', () => {
+    function LogoutButtons() {
+      const { logout, login } = useAuth();
+      return (
+        <>
+          <button onClick={() => void logout()}>logout</button>
+          <button onClick={() => void logout({ next: '/workspaces/invites/tok' })}>logout-to-invite</button>
+          <button onClick={() => void login('viewer@demo.com', 'pw')}>login</button>
+        </>
+      );
+    }
+
+    function okJson(body: unknown, status = 200): Response {
+      return {
+        ok: true,
+        status,
+        headers: { get: () => 'application/json' },
+        json: () => Promise.resolve(body),
+        text: () => Promise.resolve(body === undefined ? '' : JSON.stringify(body)),
+      } as unknown as Response;
+    }
+
+    function renderWithLogout() {
+      localStorage.setItem(TOKEN_STORAGE_KEY, 'tok');
+      mockFetch.mockImplementation((url: string) => {
+        if (url === '/api/v1/auth/login') {
+          return Promise.resolve(
+            okJson({ access_token: 'tok-2', token_type: 'bearer', expires_in: 60, user: viewer }),
+          );
+        }
+        if (url === '/api/v1/auth/logout') return Promise.resolve(okJson(undefined, 204));
+        return Promise.resolve(meResponse(viewer));
+      });
+      return render(
+        <AuthProvider>
+          <LogoutButtons />
+          <RequireAuth>
+            <div data-testid="protected">secret</div>
+          </RequireAuth>
+        </AuthProvider>,
+      );
+    }
+
+    const withNext = () => mockReplace.mock.calls.map(([url]) => url).filter((url) => url.includes('next='));
+
+    it('goes to plain /login, never /login?next=<the signed-out page> (#1006)', async () => {
+      renderWithLogout();
+      await waitFor(() => expect(screen.getByTestId('protected')).toBeInTheDocument());
+
+      await act(async () => {
+        fireEvent.click(screen.getByText('logout'));
+      });
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/login'));
+      expect(withNext()).toEqual([]);
+    });
+
+    it('goes to the next the logout named, the same path its caller navigates to (#1006)', async () => {
+      renderWithLogout();
+      await waitFor(() => expect(screen.getByTestId('protected')).toBeInTheDocument());
+
+      await act(async () => {
+        fireEvent.click(screen.getByText('logout-to-invite'));
+      });
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalled());
+      expect(mockReplace.mock.calls.map(([url]) => url)).toEqual([
+        '/login?next=%2Fworkspaces%2Finvites%2Ftok',
+      ]);
+    });
+
+    it('records the page as next again once someone has signed in (positive control)', async () => {
+      renderWithLogout();
+      await waitFor(() => expect(screen.getByTestId('protected')).toBeInTheDocument());
+      await act(async () => {
+        fireEvent.click(screen.getByText('logout'));
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByText('login'));
+      });
+      await waitFor(() => expect(screen.getByTestId('protected')).toBeInTheDocument());
+      mockReplace.mockReset();
+
+      // The new session ends without a logout here (another tab drops the token).
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      await act(async () => {
+        window.dispatchEvent(new StorageEvent('storage', { key: TOKEN_STORAGE_KEY, newValue: null }));
+      });
+
+      await waitFor(() =>
+        expect(mockReplace).toHaveBeenCalledWith('/login?next=%2Fexperiments%2Fabc%3Ftab%3Dresults'),
+      );
+    });
   });
 
   it('renders the inline 403 view when the role is not allowed', async () => {
