@@ -856,9 +856,12 @@ async def update_experiment(
         HTTPException 404: If the experiment doesn't exist
         HTTPException 422: If `targeting_rules` is not a valid rule set,
             `status` differs from the experiment's current status, the
-            request contains `schedule`, or a request sending `variants`,
+            request contains `schedule`, `metrics` is an empty list or repeats
+            a metric name, or a request sending `variants`,
             `split_url_config` or `experiment_type` would leave a split URL
-            experiment whose `split_url_config` does not match its variants
+            experiment whose `split_url_config` does not match its variants.
+            An empty or repeating `metrics` is refused before the caller's
+            role, the experiment's existence or its state is checked.
     """
     try:
         # Get experiment
