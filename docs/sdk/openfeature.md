@@ -22,9 +22,10 @@ If you set `EXPERIMENTLY_API_KEY` or `EXPERIMENTLY_API_URL` from an earlier vers
 `@controlvar/openfeature-provider` (v0.1.0 beta, source `sdk/openfeature`) implements the
 `@openfeature/server-sdk` `Provider` interface by delegating every evaluation to the
 [JavaScript SDK](javascript.md) (`@controlvar/js-sdk`), which calls
-`GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targetingKey>` and caches the answer per
-user + flag. Flags are decided **by the server**; nothing is bucketed locally and no flag
-definitions are downloaded. Requires Node >= 18 and `@openfeature/server-sdk >= 1.7`.
+`GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targetingKey>&context=<the other keys>`
+and caches the answer per user + flag. Flags are decided **by the server**; nothing is bucketed
+locally and no flag definitions are downloaded. Boolean, string, number and object calls are
+answered. Requires Node >= 18 and `@openfeature/server-sdk >= 1.7`.
 
 CI runs this SDK's contract smoke against a real API: `openfeature` is in the `sdks:` list of the
 SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
@@ -71,10 +72,13 @@ await OpenFeature.setProviderAndWait(provider);
 // 2. Get a client (reuse it throughout your application).
 const client = OpenFeature.getClient('my-service');
 
-// 3. Evaluate flags. targetingKey is the platform user_id and is required.
-const ctx = { targetingKey: 'user-12345' };
-const enabled = await client.getBooleanValue('dark-mode', false, ctx);              // → enabled
-// Only boolean flags carry a value: string, number and object calls return your default.
+// 3. Evaluate flags. targetingKey is the platform user_id and is required; every other key is
+//    sent to the server as the user's attributes, for the flag's targeting rules.
+const ctx = { targetingKey: 'user-12345', plan: 'enterprise' };
+const enabled = await client.getBooleanValue('dark-mode', false, ctx);                   // → enabled
+const label = await client.getStringValue('checkout-button-label', 'Buy now', ctx);      // → the flag's string value
+const limit = await client.getNumberValue('upload-limit-mb', 10, ctx);                   // → the flag's number value
+const theme = await client.getObjectValue('checkout-theme', { color: 'blue' }, ctx);     // → the flag's JSON value
 
 // 4. Experiments and event tracking are outside OpenFeature: use the JS SDK client underneath.
 const assignment = await provider.client.getAssignment('checkout_flow', { userId: 'user-12345', attributes: { plan: 'pro' } });
@@ -87,34 +91,51 @@ await provider.client.track('user-12345', 'page_view'); // no key → fanned out
 | OpenFeature field | Platform concept | Notes |
 |---|---|---|
 | `targetingKey` | `user_id` | Required. Sent as `?user_id=` on the evaluate call; the server buckets on it. Missing or empty → default value with `errorCode: TARGETING_KEY_MISSING`. |
-| `attributes.*` | — | **Not sent.** The evaluate call carries `user_id` alone, so the server evaluates the flag's targeting rules against an empty context; attributes stay available to your own hooks. Pass them as `attributes` on `provider.client.getAssignment(...)` if an experiment needs them. |
+| every other key | the user's attributes | Passed to the JS SDK as `attributes`, which it sends on the evaluate call as `&context=<url-encoded JSON>`, so the flag's targeting rules are evaluated against them. A `Date`, at any depth, is sent as its ISO 8601 string. A context with only `targetingKey` sends no `context`. The JS SDK caches an answer per user + flag, and the attributes are not part of that key: within `cacheTtlMs`, a second call for the same `targetingKey` and flag gets the first answer (reason `CACHED`) whatever its attributes, so a changed attribute is seen once that answer expires. `cacheTtlMs: 0` caches nothing; `provider.onClose()` or `provider.client.clearCache()` drops every cached answer. |
 
 ### Resolution rules
 
-| OpenFeature call | Value |
-|---|---|
-| `getBooleanValue` / `getBooleanDetails` | `enabled` |
-| `getStringValue`, `getNumberValue`, `getObjectValue` and their `…Details` | the caller's default, reason `DEFAULT` |
+A boolean call (`getBooleanValue` / `getBooleanDetails`) answers `enabled` for every flag, a
+string, number or JSON flag included: reason `TARGETING_MATCH` (or `CACHED`) when the flag is on
+for the user, `DISABLED` when it is not.
 
-Only boolean flags carry a value: the evaluate endpoint returns `config: null` for every flag, so
-a string, number or object call on a flag that is on returns the caller's default.
+A string, number or object call (`getStringValue`, `getNumberValue`, `getObjectValue` and their
+`…Details`) reads the value the flag serves: its on value when the flag is on for the user, its
+off value otherwise. An object call reads a JSON flag (an object or an array) and returns a new
+copy each time. There is no coercion: a call of another type gets the caller's default.
 
-- A disabled flag resolves boolean calls to `false` with reason `DISABLED`, and non-boolean calls
-  to the caller's default with reason `DISABLED`.
-- `variant` on the resolution details is not set, because `config` is always `null`; `flagMetadata` is
+| The server's answer | Value | Reason | Variant |
+|---|---|---|---|
+| `reason: "targeting_rule"`, on / off | the on value / the off value | `TARGETING_MATCH` | `"on"` / `"off"` |
+| `reason: "rollout"`, on / off | the on value / the off value | `SPLIT` | `"on"` / `"off"` |
+| `reason: "inactive"` | the off value, not the caller's default | `DISABLED` | `"off"` |
+| answered from the JS SDK's cache | as cached | `CACHED` | as cached |
+| `reason: "error"` | the caller's default | `ERROR`, `errorCode: GENERAL` | not set |
+| the flag serves another type than the call | the caller's default | `ERROR`, `errorCode: TYPE_MISMATCH` | not set |
+| no `value` (a server without flag values) | the caller's default | `ERROR`, `errorCode: GENERAL` | not set |
+| a `value` that is not of the flag's type | the caller's default | `ERROR`, `errorCode: PARSE_ERROR` | not set |
+
+- A server reason this provider does not know answers the value with reason `UNKNOWN`.
+- A boolean call's `variant` is not set, because `config` is always `null`; `flagMetadata` is
   `{ flagKey, enabled }` on every successful resolution.
-- Errors never throw and are never cached: 404 (an unknown flag key) → `FLAG_NOT_FOUND`;
-  a 2xx with an unexpected body → `PARSE_ERROR`; anything else (401, 5xx, timeout, network) →
-  `GENERAL`. All return the default with reason `ERROR` and an `errorMessage`.
+- Errors never throw: 404 (an unknown flag key) → `FLAG_NOT_FOUND`; a 2xx with an unexpected body
+  → `PARSE_ERROR`; anything else (401, 422, 5xx, timeout, network) → `GENERAL`. All return the
+  default with reason `ERROR` and an `errorMessage`, and a failed request is never cached. The
+  answers in the table above are successful requests, which the JS SDK caches like any other.
+- `provider.client`, the JS SDK client, has typed getters of its own: `getStringValue(flagKey,
+  user, defaultValue)`, `getNumberValue` and `getJsonValue` take the user before the default,
+  while OpenFeature's `client.getStringValue(flagKey, defaultValue, context)` takes the default
+  first. Swapping the two orders is a TypeScript error.
 
 ### Resolution reasons
 
 | Reason | Meaning |
 |---|---|
-| `TARGETING_MATCH` | Fresh answer from the server; the flag is on for this user. |
+| `TARGETING_MATCH` | Fresh answer from the server. A boolean call: the flag is on for this user. A string, number or object call: a targeting rule decided (`reason: "targeting_rule"`), on or off. |
+| `SPLIT` | A string, number or object call: the rollout percentage decided (`reason: "rollout"`), on or off. |
 | `CACHED` | Served from the JS SDK's per-user cache (within `cacheTtlMs`). |
-| `DISABLED` | The server reports the flag off for this user. |
-| `DEFAULT` | A string, number or object call on a flag that is on: `config` is always `null`, so the caller's default was returned. |
+| `DISABLED` | A boolean call: the server reports the flag off for this user. A string, number or object call: the flag is not ACTIVE (`reason: "inactive"`), and the value is its off value. |
+| `UNKNOWN` | A string, number or object call: a server reason this provider does not know; the value is the flag's. |
 | `ERROR` | Evaluation failed (see `errorCode`); the caller's default was returned. |
 
 ### Constructor options
@@ -123,7 +144,7 @@ a string, number or object call on a flag that is on returns the caller's defaul
 new ExperimentationProvider({
   apiKey: string,               // Required unless `client` is given. X-API-Key header value.
   baseUrl?: string,             // Backend origin; the SDK appends /api/v1/... Default: 'http://localhost:8000'
-  cacheTtlMs?: number,          // Default: 300_000 (5 minutes)
+  cacheTtlMs?: number,          // Default: 300_000 (5 minutes); per user + flag, not the attributes; 0 caches nothing
   timeout?: number,             // Per-request timeout in ms. Default: 5_000
   fetch?: typeof fetch,         // Custom fetch implementation (tests, polyfills)
   client?: ExperimentationClient, // Reuse your app's JS SDK client (and its cache); other options are then ignored
@@ -151,7 +172,7 @@ Every request carries `X-API-Key: <key>`, `Content-Type: application/json`, `Acc
 
 | Call | Method and path | Response used |
 |---|---|---|
-| every `resolve*Evaluation` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
+| every `resolve*Evaluation` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…[&context=…]` | `{key, enabled, value, value_type, config, reason}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
 | `provider.client.getAssignment` / `getVariant` | `POST /api/v1/tracking/assign` `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `provider.client.track` with a key | `POST /api/v1/tracking/track` | ignored |
 | `provider.client.track` without a key | `POST /api/v1/tracking/batch` `{events: [...]}` (max 100 per request), one entry per experiment and flag it reaches; with none, `POST /api/v1/tracking/track` with no key | ignored |
@@ -354,7 +375,7 @@ carries `X-API-Key: <key>`, `Content-Type: application/json`, `Accept: applicati
 
 | Purpose | Method and path | Body / query | 200 response |
 |---|---|---|---|
-| Evaluate one flag (every OpenFeature resolution) | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targetingKey>` | — | `{"key","enabled": bool,"config": any\|null}` |
+| Evaluate one flag (every OpenFeature resolution) | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targetingKey>` | `context=<url-encoded JSON object>`: the TypeScript provider sends the evaluation context's other keys; the Python provider sends none | `{"key","enabled": bool,"value","value_type","config": null,"reason"}` |
 | Assign user to experiment (`provider.client`) | `POST /api/v1/tracking/assign` | `{"experiment_key","user_id","context"?: object}` | `{"experiment_key","user_id","variant_id","variant_name","is_control": bool,"configuration": object\|null}` |
 | Track one event (`provider.client.track` with a key; a `track` without a key that reaches no experiment or flag) | `POST /api/v1/tracking/track` | `{"event_type","event_name"?,"user_id","experiment_key"?,"feature_flag_key"?,"value"?: number,"metadata"?: object,"timestamp"?: ISO-8601}`; both keys are optional, and an event with neither counts in no experiment's results | stored event (ignored) |
 | Fan out an event without a key (`track`: one entry per experiment and flag it reaches) | `POST /api/v1/tracking/batch` | `{"events":[<track body>...]}` (max 100 per request) | `{"success_count","failure_count","errors": list\|null}` (ignored) |
@@ -409,10 +430,11 @@ const client = OpenFeature.getClient();
 const value = await client.getBooleanValue('my-flag', false, { targetingKey: userId });
 ```
 
-For a boolean flag only the provider initialization changes. A string, number or object call
-returns its default through this provider, and the context's attributes are not sent (the evaluate
-call carries the targeting key alone), so a flag read as a string, number or object, or targeted on
-attributes, behaves differently.
+For a boolean, string, number or object call only the provider initialization changes, and the
+context's other keys reach the flag's targeting rules as the user's attributes. A flag here serves
+two values, its on value and its off value, so a flag with three or more variations has no
+single equivalent: run a multivariate experiment for that (see
+[Limitations](../getting-started/limitations.md)).
 
 ### Switching from Split.io
 
