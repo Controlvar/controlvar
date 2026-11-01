@@ -711,6 +711,18 @@ by = [
 ]
 
 [[unit]]
+text = "Impact on the primary metric: one line per treatment, its impact with its interval, for example \"One page: +124 converting users (95% CI +40 to +208)\", followed by \", not significant\" when the treatment is not significant."
+by = [
+    "test:frontend/src/tests/components/ExperimentSummary.impact.test.tsx::names the primary metric and gives each treatment its impact with its interval",
+    "test:frontend/src/tests/components/ExperimentSummary.impact.test.tsx::adds \", not significant\" to a treatment that is not",
+    "test:frontend/src/tests/components/ExperimentSummary.impact.test.tsx::is about the metric marked primary, not the first one",
+]
+
+[[unit]]
+text = "When the sample-ratio check fails, the same warning as on a leading variant follows the lines."
+by = ["test:frontend/src/tests/components/ExperimentSummary.impact.test.tsx::adds the SRM qualifier when the sample-ratio check failed"]
+
+[[unit]]
 text = "Analysis: the confidence level and correction the results use, which are the experiment's own settings."
 by = ["journey:experiment-results#results-page"]
 
@@ -855,13 +867,26 @@ by = [
 ]
 
 [[unit]]
-text = "Change | Relative change vs. control (e.g., +12.3%). A significant change also says better or worse in the metric's direction, so a fall is better when lower is better. For a revenue, count, duration or custom metric a second line gives the difference per user with its confidence interval, e.g. +1.19 per user (95% CI −0.47 to +2.84), marked unadjusted when the p-value beside it is adjusted"
+text = "Change | Relative change vs. control (e.g., +12.3%). A significant change also says better or worse in the metric's direction, so a fall is better when lower is better. A treatment's Change cell shows the change from the control, its confidence interval, and the difference with its interval. For a metric whose control's average is too uncertain around 0 to bound the relative change, the cell says so in place of the interval. For a conversion metric the difference is in percentage points; for a revenue, count, duration or custom metric it is the difference per user with its confidence interval, e.g. +1.19 per user (95% CI −0.47 to +2.84). Every interval on a row is marked unadjusted when the p-value beside it is adjusted"
 by = [
     "journey:experiment-results#results-page",
     "test:frontend/src/tests/components/MetricComparisonTable.lowerIsBetter.test.tsx::lower is better: a significant fall is green \"better\", a significant rise red \"worse\"",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::writes the relative interval with grouping and one decimal: +226.1% to +26,001.9%",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::gives the difference in percentage points and the impact in converting users",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::says why there is no interval, from the server: the change, then the sentence, then the difference",
     "test:frontend/src/tests/components/MetricComparisonTable.revenue.test.tsx::gives the difference per user and its interval in the change cell",
     "test:frontend/src/tests/components/MetricComparisonTable.valueMetrics.test.tsx::labels its value by what it is per user, with the difference per user",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::is on every interval of a row whose p-value is shown adjusted (three variants, Benjamini-Hochberg)",
     "test:frontend/src/tests/components/MetricComparisonTable.revenue.test.tsx::says \"unadjusted\" when the row shows an adjusted p-value (a correction with two treatments)",
+]
+
+[[unit]]
+text = "Impact | The difference times the treatment's own assigned users (converting users, events, or the total of the values sent), with its interval. It is not projected beyond those users and has no currency or unit."
+by = [
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::gives the difference in percentage points and the impact in converting users",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::groups whole numbers of events: +2,700 events (server: 10,000 users per arm)",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::writes values to 2 places with grouping and no currency: in revenue, in duration",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_proportion_impact_is_the_difference_times_the_treatments_users",
 ]
 
 [[unit]]
