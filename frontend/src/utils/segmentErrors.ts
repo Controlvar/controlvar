@@ -66,6 +66,8 @@ const UNPROCESSABLE: Partial<Record<SegmentAction, string>> = {
 export function segmentErrorCopy(err: unknown, action: SegmentAction): string {
   if (!isApiError(err)) return 'Something went wrong in the dashboard. Reload the page and try again.';
   const { status } = err;
+  // A time-out keeps the dashboard's own time-out sentence (#1040).
+  if (err.timedOut) return err.message;
   if (status === 0) return unreachableMessage();
   if (status === 401) return 'Your session has ended. Sign in again.';
   if (status === 403) return FORBIDDEN[action];

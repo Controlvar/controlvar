@@ -427,7 +427,10 @@ export function startRefusal(err: unknown, now: Date = new Date()): StartRefusal
     };
   }
   const detail = detailRecord(err);
-  const code = err.code ?? (err.isNetworkError ? 'unreachable' : `http_${err.status}`);
+  // A time-out is not "unreachable": the run may have started (#1040). Its
+  // message is the dashboard's own time-out sentence, shown by `default`.
+  const code =
+    err.code ?? (err.timedOut ? 'timed_out' : err.isNetworkError ? 'unreachable' : `http_${err.status}`);
   const apiMessage = typeof detail.message === 'string' ? detail.message : err.message;
 
   switch (code) {

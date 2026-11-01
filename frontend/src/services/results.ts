@@ -6,7 +6,11 @@ import {
   SampleSizeResult,
 } from '@/types/results';
 import { SequentialTestingResponse } from '@/types/sequential';
-import { apiFetch } from '@/services/api';
+import { LONG_REQUEST_TIMEOUT_MS, apiFetch } from '@/services/api';
+
+// Every results call waits LONG_REQUEST_TIMEOUT_MS: computing results on a
+// large experiment can take longer than the default, and each is a read or
+// safe to repeat.
 
 /** Query for `GET /results/{id}`. A setting left out is the experiment's stored one. */
 export interface ResultsQuery {
@@ -26,6 +30,7 @@ export class ResultsService {
         correction_method: params?.correction_method,
         confidence_level: params?.confidence_level,
       },
+      timeoutMs: LONG_REQUEST_TIMEOUT_MS,
     });
   }
 
@@ -35,6 +40,7 @@ export class ResultsService {
   ): Promise<DailyResultsResponse> {
     return apiFetch<DailyResultsResponse>(`/api/v1/results/${experimentId}/daily`, {
       query: { metric_id: metricId || undefined },
+      timeoutMs: LONG_REQUEST_TIMEOUT_MS,
     });
   }
 
@@ -57,13 +63,16 @@ export class ResultsService {
         confidence_level: overrides?.confidence_level,
         correction_method: overrides?.correction_method,
       },
+      timeoutMs: LONG_REQUEST_TIMEOUT_MS,
     });
   }
 
   static async getSequentialResults(
     experimentId: string
   ): Promise<SequentialTestingResponse> {
-    return apiFetch<SequentialTestingResponse>(`/api/v1/results/${experimentId}/sequential`);
+    return apiFetch<SequentialTestingResponse>(`/api/v1/results/${experimentId}/sequential`, {
+      timeoutMs: LONG_REQUEST_TIMEOUT_MS,
+    });
   }
 
   static async invalidateCache(
@@ -71,7 +80,7 @@ export class ResultsService {
   ): Promise<{ status: string; experiment_id: string }> {
     return apiFetch<{ status: string; experiment_id: string }>(
       `/api/v1/results/${experimentId}/invalidate-cache`,
-      { method: 'POST' }
+      { method: 'POST', timeoutMs: LONG_REQUEST_TIMEOUT_MS }
     );
   }
 }
