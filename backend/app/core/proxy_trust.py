@@ -238,7 +238,7 @@ def _route_network(line: str, byteorder: str) -> Optional[ipaddress.IPv4Network]
 
 
 def networks_from_route(
-    text: str, *, byteorder: str = sys.byteorder
+    text: str, *, byteorder: str = "big"
 ) -> List[ipaddress.IPv4Network]:
     """The directly attached IPv4 networks in *text*, a ``/proc/net/route``.
 
