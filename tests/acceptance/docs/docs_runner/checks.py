@@ -211,13 +211,25 @@ def describe_expect(step: Step) -> str:
     if step.do.evaluations is not None:
         plan = step.do.evaluations
         if plan.reason == "rollout":
-            return (
+            said = (
                 f"exactly the users the documented rollout hash puts below"
                 f" {plan.rollout}% get the flag, each with reason rollout"
             )
+        elif plan.reason == "targeting_rule":
+            said = "every user gets the flag, with reason targeting_rule"
+        else:
+            said = "no user gets the flag, each with reason inactive"
+        if plan.on_value is None or plan.off_value is None:
+            return said
         if plan.reason == "targeting_rule":
-            return "every user gets the flag, with reason targeting_rule"
-        return "no user gets the flag, each with reason inactive"
+            return f"{said}, and the on value {json.dumps(plan.on_value)}"
+        if plan.reason == "inactive":
+            return f"{said}, and the off value {json.dumps(plan.off_value)}"
+        return (
+            f"{said}; each user who gets it gets the on value"
+            f" {json.dumps(plan.on_value)}, and each other user the off value"
+            f" {json.dumps(plan.off_value)}"
+        )
     expect_ = step.expect
     if expect_ is None:
         return "Doc Examples runs this section's blocks"

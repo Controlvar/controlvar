@@ -341,7 +341,7 @@ A rollback, automatic or manual, does one of two things, depending on its target
   `rollout_percentage` becomes 0. Every user, including users matched by a targeting rule, gets
   `enabled: false` with `reason: "inactive"`, exactly as when the flag is turned off by hand (see
   [Creating Feature Flags](create.md#when-a-flag-evaluates-to-off)). The targeting rules are left
-  as written.
+  as written. For a string, number or json flag, every user then gets its off value.
 - **A rollback to 1–100% lowers only the global `rollout_percentage`.** A user who matches no
   targeting rule is bucketed by the new percentage. A user who matches a rule is bucketed by that
   rule's own `rollout_percentage` (100 unless the rule sets one), so the rollback does not change
@@ -350,7 +350,7 @@ A rollback, automatic or manual, does one of two things, depending on its target
 Either way, the flag's active rollout schedules are paused, so a later stage cannot raise the
 percentage again; they stay paused until you resume them.
 
-So the flag's default value is served to every user after a rollback to `0%`, and after a partial
+So the flag's off value is served to every user after a rollback to `0%`, and after a partial
 rollback to the users it removes, while users matched by a targeting rule keep their rule's
 percentage.
 

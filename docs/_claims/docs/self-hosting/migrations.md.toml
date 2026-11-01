@@ -543,6 +543,17 @@ text = "So it now stops while any id list has members: that downgrade refuses, p
 by = ["exempt:baseline"]
 
 [[unit]]
+text = "Past 607c51a59bf5 it also runs that revision's downgrade, which drops feature_flags.value_type, on_value and off_value."
+by = [
+    "test:backend/tests/unit/db/test_alembic_commands.py::test_past_1ab99332f0ba_its_rerun_downgrade_also_undoes_the_later_revisions",
+    "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_downgrade_removes_the_columns_and_the_check_and_nothing_else",
+]
+
+[[unit]]
+text = "So it also stops while any flag is a string, number or json flag: that downgrade refuses, names those flags, and changes nothing (see 607c51a59bf5)."
+by = ["test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_downgrade_refuses_while_a_value_flag_exists"]
+
+[[unit]]
 text = "d29a479daafe records who each global holdout covers"
 by = ["exempt:baseline"]
 
@@ -643,6 +654,13 @@ by = [
 ]
 
 [[unit]]
+text = "From a release that carries 607c51a59bf5, the same downgrade first runs that revision's downgrade, which drops each flag's value type and values and refuses while any flag is a string, number or json flag (see 607c51a59bf5)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_downgrade_refuses_while_a_value_flag_exists",
+]
+
+[[unit]]
 text = "4c2c09a2b3e8 keeps rollback records without a safety configuration"
 by = [
     "test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_an_sql_delete_of_a_configuration_took_its_records_and_now_keeps_them",
@@ -697,6 +715,59 @@ by = ["test:backend/tests/integration/database/test_rollback_record_config_link_
 [[unit]]
 text = "The rollback runbook undoes a migration while the release that contains it still serves, before the API is rolled back (Database Rollback Procedure), and this release records a null safety_config_id for each rollback of a flag on the defaults, which NOT NULL would refuse."
 by = ["test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_the_downgrade_changes_nothing_and_a_rollback_still_succeeds"]
+
+[[unit]]
+text = "607c51a59bf5 gives each flag a value type and two values"
+by = ["test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_a_database_at_the_previous_release_gains_the_columns_and_the_check"]
+
+[[unit]]
+text = "This revision adds three columns to feature_flags: value_type (boolean, string, number or json, default boolean), and on_value and off_value (jsonb), the values a string, number or json flag serves to the users it is on for and to everyone else."
+by = [
+    "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_a_database_at_the_previous_release_gains_the_columns_and_the_check",
+    "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_an_upgraded_database_and_a_bootstrapped_one_have_the_same_columns_and_checks",
+]
+
+[[unit]]
+text = "It also adds the check check_flag_values: a boolean flag stores neither value, a string or number flag stores two different values of its type, and a json flag stores two different objects or arrays."
+by = [
+    "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_check_refuses",
+    "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_check_accepts",
+]
+
+[[unit]]
+text = "Every flag already stored becomes a boolean flag, which is what it was."
+by = ["test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_a_database_at_the_previous_release_gains_the_columns_and_the_check"]
+
+[[unit]]
+text = "The previous release runs against this schema unchanged: the flags it creates get boolean from the column's default, and it reads and updates flags without touching the two values."
+by = ["test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_previous_release_writes_and_lists_flags_on_this_schema"]
+
+[[unit]]
+text = "The downgrade refuses while any flag is a string, number or json flag."
+by = ["test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_downgrade_refuses_while_a_value_flag_exists"]
+
+[[unit]]
+text = "607c51a59bf5's downgrade drops the check and the three columns, which would delete each such flag's value type and both of its values, and nothing could rebuild them."
+by = ["test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_downgrade_removes_the_columns_and_the_check_and_nothing_else"]
+
+[[unit]]
+text = "So while any flag's value_type is not boolean the downgrade refuses, names those flags, and changes nothing:"
+by = ["test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_downgrade_refuses_while_a_value_flag_exists"]
+
+[[unit]]
+text = "To go on, delete those flags or convert each to a boolean flag, or restore the backup taken before the upgrade."
+by = [
+    "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_downgrade_refuses_while_a_value_flag_exists",
+    "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_downgrade_removes_the_columns_and_the_check_and_nothing_else",
+]
+
+[[unit]]
+text = "With only boolean flags stored, the downgrade drops the check and the three columns, and nothing else."
+by = ["test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_downgrade_removes_the_columns_and_the_check_and_nothing_else"]
+
+[[unit]]
+text = "Neither the upgrade nor the downgrade can be emitted as SQL (--sql)."
+by = ["test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_downgrade_and_the_upgrade_refuse_offline_mode"]
 
 [[unit]]
 text = "Roll back to a specific revision:"
@@ -1173,6 +1244,13 @@ text = "4c2c09a2b3e8 is backward-compatible for a rollback, and undoing it chang
 by = [
     "test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_the_downgrade_changes_nothing_and_a_rollback_still_succeeds",
     "test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_a_database_at_the_previous_release_upgraded_with_heads",
+]
+
+[[unit]]
+text = "607c51a59bf5 is backward-compatible for a rollback too, and undoing it drops each flag's value type and values; it refuses while any flag is a string, number or json flag."
+by = [
+    "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_previous_release_writes_and_lists_flags_on_this_schema",
+    "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_downgrade_refuses_while_a_value_flag_exists",
 ]
 
 [[unit]]

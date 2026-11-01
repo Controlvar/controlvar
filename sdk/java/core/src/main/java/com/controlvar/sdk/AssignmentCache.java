@@ -37,7 +37,7 @@ public class AssignmentCache<V> {
      *
      * @param maxSize maximum number of entries before LRU eviction kicks in (must be >= 1)
      * @param ttlMs   time-to-live for entries in milliseconds (must be > 0)
-     * @throws IllegalArgumentException if maxSize <= 0 or ttlMs <= 0
+     * @throws IllegalArgumentException if {@code maxSize <= 0} or {@code ttlMs <= 0}
      */
     public AssignmentCache(int maxSize, long ttlMs) {
         if (maxSize <= 0) throw new IllegalArgumentException("maxSize must be positive");

@@ -192,7 +192,7 @@ The second command turns it on for 10% of users and prints `"active"`. The third
 evaluates it for `user-2` and prints `"enabled": true` with `"reason": "rollout"`:
 `user-2` is inside the 10%, `user-123` is not, and a user always gets the same answer.
 
-Evaluation returns `{key, enabled, config, reason}`. An inactive flag evaluates to
+Evaluation returns `{key, enabled, value, value_type, config, reason}`. An inactive flag evaluates to
 `enabled: false` with reason `inactive`; only an unknown key is a 404.
 
 ---

@@ -44,9 +44,10 @@ pytestmark = [pytest.mark.integration]
 REVISION = "806901fb7735"
 PREVIOUS_CORE_HEAD = "1ab99332f0ba"
 #: The core head of this tree, which ``upgrade heads`` runs on to past this
-#: revision, through ``d29a479daafe`` (#445) and ``37dcb2969766`` (#440):
-#: ``4c2c09a2b3e8`` (#1206).
-CORE_HEAD = "4c2c09a2b3e8"
+#: revision, through ``d29a479daafe`` (#445), ``37dcb2969766`` (#440) and
+#: ``4c2c09a2b3e8`` (#1206): ``607c51a59bf5`` (#1497), whose downgrade drops
+#: three ``feature_flags`` columns and no table.
+CORE_HEAD = "607c51a59bf5"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``d29a479daafe``
 #: (#445) drops ``holdout_population``; ``37dcb2969766`` (#440) drops

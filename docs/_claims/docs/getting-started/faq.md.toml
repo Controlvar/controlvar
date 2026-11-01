@@ -242,10 +242,11 @@ text = "Method | Description"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Frequentist (Fisher's exact test) | Each treatment against the control: a two-sided Fisher's exact test on the users who converted and the users who did not. A revenue metric is compared on its mean per assigned user with Welch's t-test instead; warehouse analysis (beta) compares a mean metric with Welch's t-test"
+text = "Frequentist (Fisher's exact test) | Each treatment against the control: a two-sided Fisher's exact test on the users who converted and the users who did not. A revenue, count, duration or custom metric is compared on its mean per assigned user with Welch's t-test instead; warehouse analysis (beta) compares a mean metric with Welch's t-test"
 by = [
     "test:backend/tests/unit/services/test_binomial_metric_result_characterisation.py::test_binomial_metric_result_characterisation",
     "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_a_revenue_metric_is_analysed_per_assigned_user",
+    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_every_type_but_conversion_as_a_mean",
     "test:modules/backend/tests/integration/warehouse/test_runs_api.py::test_mean_run_end_to_end",
 ]
 
@@ -408,7 +409,7 @@ text = "What is the difference between a feature flag and an experiment?"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Feature flags control whether a feature is visible to a user."
+text = "Feature flags control whether a feature is visible to a user, or which value they get."
 by = ["exempt:theory"]
 
 [[unit]]
@@ -417,6 +418,10 @@ by = ["exempt:theory"]
 
 [[unit]]
 text = "A flag has no statistical analysis attached to it."
+by = ["test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_has_no_results_route"]
+
+[[unit]]
+text = "A flag does not measure which value does better; an experiment does."
 by = ["test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_has_no_results_route"]
 
 [[unit]]

@@ -883,6 +883,22 @@ const BATCH_URL = 'https://api.example.com/api/v1/tracking/batch';
 const TRACK_URL = 'https://api.example.com/api/v1/tracking/track';
 
 describe('track after the cache TTL', () => {
+  it('#1423: a cached answer older than 24 hours still tags a keyless track() (cacheTtlMs above 24 h)', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(T0);
+    const fetchMock = mockFetchSequence({ body: assignment }, { body: { success_count: 1, failure_count: 0 } });
+    const client = new ExperimentationClient({ ...baseConfig, cacheTtlMs: 48 * HOUR });
+    await client.getAssignment('checkout', user);
+    now.mockReturnValue(T0 + 25 * HOUR); // past 24 hours, inside the 48 hour cache
+    expect(client.getAssignments('user-123')).toHaveLength(1);
+
+    await client.track('user-123', 'purchase', { value: 120 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(call(fetchMock, 1).url).toBe(BATCH_URL);
+    expect(batchKeys(call(fetchMock, 1).body)).toEqual(['checkout']);
+    now.mockRestore();
+  });
+
   it('sends an untagged purchase made 301 s after the assignment to the experiment', async () => {
     const now = jest.spyOn(Date, 'now').mockReturnValue(T0);
     const fetchMock = mockFetchSequence({ body: assignment }, { body: { success_count: 1, failure_count: 0 } });

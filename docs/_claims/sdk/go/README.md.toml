@@ -136,6 +136,30 @@ text = "Close() | error (always nil) | Clears the cache, closes idle connections
 by = ["test:sdk/go/client_test.go::TestClient_Close"]
 
 [[unit]]
+text = "(EvalResult).StringValue(def string) | string | def; never panics (Flag values, below)"
+by = [
+    "test:sdk/go/value_test.go::TestEvalResult_StringValue_ReadsAStringFlag",
+    "test:sdk/go/value_test.go::TestEvalResult_NilReceiver_ReturnsTheDefault",
+    "test:sdk/go/value_test.go::TestEvalResult_ServerWithoutFlagValues_ReturnsTheDefault",
+]
+
+[[unit]]
+text = "(EvalResult).NumberValue(def float64) | float64 | def; never panics (Flag values, below)"
+by = [
+    "test:sdk/go/value_test.go::TestEvalResult_NumberValue_ReadsANumberFlag",
+    "test:sdk/go/value_test.go::TestEvalResult_NilReceiver_ReturnsTheDefault",
+    "test:sdk/go/value_test.go::TestEvalResult_ServerWithoutFlagValues_ReturnsTheDefault",
+]
+
+[[unit]]
+text = "(EvalResult).DecodeValue(v any) | error | An error, with v left as it was; never panics (Flag values, below)"
+by = [
+    "test:sdk/go/value_test.go::TestEvalResult_DecodeValue_ReadsAJSONFlag",
+    "test:sdk/go/value_test.go::TestEvalResult_MismatchOrDecodeFailure_ReturnsTheDefault",
+    "test:sdk/go/value_test.go::TestEvalResult_NilReceiver_ReturnsTheDefault",
+]
+
+[[unit]]
 text = "ConsistentHash(userID, key) | float64 in [0, 1) | Pure function (parity utility, see below)"
 by = [
     "test:sdk/go/client_test.go::TestConsistentHash_RangeAndDistribution",
@@ -155,12 +179,17 @@ text = "User | ID string, Attributes map[string]interface{} (sent as assignment 
 by = ["test:sdk/go/client_test.go::TestClient_GetAssignment_RequestAndMapping"]
 
 [[unit]]
-text = "EvalResult | Key string, Enabled bool, Config map[string]any (always nil: the evaluate endpoint returns config: null for every flag)"
+text = "EvalResult | Key string, Enabled bool, Config map[string]any (always nil: the evaluate endpoint returns config: null for every flag), Value json.RawMessage (what the flag serves this user; nil when the server sent none), ValueType string (\"boolean\", \"string\", \"number\" or \"json\"; \"\" when the server sent none)"
 by = [
     "test:sdk/go/client_test.go::TestClient_EvaluateFlag_RequestAndMapping",
     "test:sdk/go/client_test.go::TestClient_EvaluateFlag_NonObjectConfig",
     "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_matching_context_enables_flag_with_reason",
     "test:backend/tests/integration/api/test_feature_flag_kill_switch.py::TestKillSwitch::test_disabled_flag_evaluates_off_for_sdk_clients",
+    "test:sdk/go/value_test.go::TestEvalResult_StringValue_ReadsAStringFlag",
+    "test:sdk/go/value_test.go::TestEvalResult_NumberValue_ReadsANumberFlag",
+    "test:sdk/go/value_test.go::TestEvalResult_DecodeValue_ReadsAJSONFlag",
+    "test:sdk/go/value_test.go::TestEvalResult_BooleanFlag_AccessorsReturnTheDefault",
+    "test:sdk/go/value_test.go::TestEvalResult_ServerWithoutFlagValues_ReturnsTheDefault",
 ]
 
 [[unit]]
@@ -177,6 +206,71 @@ by = [
 [[unit]]
 text = "APIError | StatusCode int, Message string, RetryAfter string (429); use errors.As"
 by = ["test:sdk/go/client_test.go::TestHTTPClient_Get_ServerError"]
+
+[[unit]]
+text = "Flag values"
+by = ["exempt:label"]
+
+[[unit]]
+text = "EvalResult.Value is what the flag serves this user: its on value when Enabled is true, its off value otherwise (true or false for a boolean flag)."
+by = [
+    "test:sdk/go/value_test.go::TestEvalResult_StringValue_ReadsAStringFlag",
+    "test:sdk/go/value_test.go::TestEvalResult_BooleanFlag_AccessorsReturnTheDefault",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
+]
+
+[[unit]]
+text = "EvalResult.ValueType is the flag's type."
+by = [
+    "test:sdk/go/value_test.go::TestEvalResult_StringValue_ReadsAStringFlag",
+    "test:sdk/go/value_test.go::TestEvalResult_NumberValue_ReadsANumberFlag",
+    "test:sdk/go/value_test.go::TestEvalResult_DecodeValue_ReadsAJSONFlag",
+    "test:sdk/go/value_test.go::TestEvalResult_BooleanFlag_AccessorsReturnTheDefault",
+]
+
+[[unit]]
+text = "Read the value with the method for its type:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "StringValue and NumberValue return your default, and DecodeValue returns an error and leaves v as it was, when there is no value of that type to read: a nil result, a failed evaluation, a flag of another type, or a value that does not decode."
+by = [
+    "test:sdk/go/value_test.go::TestEvalResult_MismatchOrDecodeFailure_ReturnsTheDefault",
+    "test:sdk/go/value_test.go::TestEvalResult_NilReceiver_ReturnsTheDefault",
+    "test:sdk/go/value_test.go::TestEvalResult_ServerWithoutFlagValues_ReturnsTheDefault",
+    "test:sdk/go/value_test.go::TestEvalResult_StringValue_ReadsAStringFlag",
+    "test:sdk/go/value_test.go::TestEvalResult_NumberValue_ReadsANumberFlag",
+    "test:sdk/go/value_test.go::TestEvalResult_DecodeValue_ReadsAJSONFlag",
+]
+
+[[unit]]
+text = "Against a server that sends no value, StringValue returns your default."
+by = ["test:sdk/go/value_test.go::TestEvalResult_ServerWithoutFlagValues_ReturnsTheDefault"]
+
+[[unit]]
+text = "None of them panics, on a nil EvalResult included."
+by = ["test:sdk/go/value_test.go::TestEvalResult_NilReceiver_ReturnsTheDefault"]
+
+[[unit]]
+text = "DecodeValue decodes into a new value of v's type and stores it in v only on success, so a field the value does not name is zero, not your default."
+by = [
+    "test:sdk/go/value_test.go::TestEvalResult_DecodeValue_ReadsAJSONFlag",
+    "test:sdk/go/value_test.go::TestEvalResult_MismatchOrDecodeFailure_ReturnsTheDefault",
+]
+
+[[unit]]
+text = "EvaluateFlag returns a new copy on every call, cache hits included, so changing Value changes nothing the client has cached."
+by = [
+    "test:sdk/go/value_test.go::TestEvaluateFlag_ValueIsCopiedOnReturn",
+    "test:sdk/go/value_test.go::TestEvaluateFlag_ConcurrentCallersOwnTheirValue",
+]
+
+[[unit]]
+text = "EvaluateFlag sends the user's ID only; User.Attributes are sent on assignment, not on flag evaluation."
+by = [
+    "test:sdk/go/value_test.go::TestEvaluateFlag_RequestURLUnchangedForAUserWithAttributes",
+    "test:sdk/go/client_test.go::TestClient_GetAssignment_RequestAndMapping",
+]
 
 [[unit]]
 text = "Caching and failure behaviour"
@@ -304,9 +398,12 @@ text = "SDK call | Method and path | Body / query | Response used"
 by = ["exempt:label"]
 
 [[unit]]
-text = "EvaluateFlag | GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=… | — | {key, enabled, config}; off with reason: \"inactive\" when the flag exists but is not ACTIVE; 404 only for an unknown key"
+text = "EvaluateFlag | GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=… | — | {key, enabled, value, value_type, config}; off with reason: \"inactive\" when the flag exists but is not ACTIVE; 404 only for an unknown key"
 by = [
     "test:sdk/go/client_test.go::TestClient_EvaluateFlag_RequestAndMapping",
+    "test:sdk/go/value_test.go::TestEvaluateFlag_RequestURLUnchangedForAUserWithAttributes",
+    "test:sdk/go/value_test.go::TestEvalResult_StringValue_ReadsAStringFlag",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
     "test:backend/tests/integration/api/test_feature_flag_kill_switch.py::TestKillSwitch::test_disabled_flag_evaluates_off_for_sdk_clients",
 ]
 

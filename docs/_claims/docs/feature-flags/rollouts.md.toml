@@ -610,6 +610,10 @@ by = [
 ]
 
 [[unit]]
+text = "For a string, number or json flag, every user then gets its off value."
+by = ["test:backend/tests/integration/api/test_flag_values_api.py::test_a_safety_rollback_serves_the_off_value"]
+
+[[unit]]
 text = "Common Gotchas"
 by = ["exempt:baseline"]
 

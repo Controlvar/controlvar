@@ -7,7 +7,10 @@
 // consistent hash is still exported as ConsistentHash for parity checks.
 package experimentation
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // User represents the user a flag or experiment is evaluated for.
 type User struct {
@@ -28,6 +31,17 @@ type EvalResult struct {
 	// holds the JSON object if the server ever sends one, and is nil for null
 	// or a non-object value.
 	Config map[string]any `json:"config,omitempty"`
+	// Value is what the flag serves this user, as the server sent it: the
+	// flag's on value when Enabled is true, its off value otherwise. For a
+	// boolean flag it is true or false, the same as Enabled. It is nil when
+	// the server sent no value: a server without flag values, or a failed
+	// evaluation. Read it with StringValue, NumberValue or DecodeValue.
+	// EvaluateFlag returns a new copy on every call, so changing it changes
+	// nothing the client has cached.
+	Value json.RawMessage `json:"value,omitempty"`
+	// ValueType is the flag's type: "boolean", "string", "number" or "json".
+	// It is "" when the server sent none.
+	ValueType string `json:"value_type,omitempty"`
 }
 
 // Assignment is the variant the server assigned a user to

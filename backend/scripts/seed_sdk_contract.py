@@ -7,6 +7,11 @@ Creates (idempotently):
 - an ACTIVE A/B experiment with public key ``sdk_contract_ab`` (variants
   ``control`` / ``treatment`` at 50/50, primary metric ``purchase``),
 - an ACTIVE feature flag ``sdk_contract_flag`` at 100% rollout,
+- one ACTIVE flag per value type at 100% rollout (#1497):
+  ``sdk_contract_value_string``, ``sdk_contract_value_number`` and
+  ``sdk_contract_value_json``, each with plain-word values; the live contract
+  turns them off and on again through the API to show a published SDK's
+  local evaluator receives the change (an existing one is turned back on),
 - an API key named ``sdk-contract-smoke``, with no ``sdk:ruleset`` scope,
   whose plaintext is written to ``tests/sdk-contract/live/.api_key``;
 - a second key of the same user, ``sdk-contract-local``, with the
@@ -77,6 +82,13 @@ from backend.scripts.seed_guard import require_development_environment
 
 EXPERIMENT_KEY = "sdk_contract_ab"
 FLAG_KEY = "sdk_contract_flag"
+#: One flag per value type (#1497): its key, and its on and off values (plain
+#: words, nothing the leak scan reads as a credential).
+VALUE_FLAGS = {
+    "string": ("sdk_contract_value_string", "on-copy", "off-copy"),
+    "number": ("sdk_contract_value_number", 10, 2.5),
+    "json": ("sdk_contract_value_json", {"color": "blue"}, ["fallback"]),
+}
 API_KEY_NAME = "sdk-contract-smoke"
 LOCAL_API_KEY_NAME = "sdk-contract-local"
 LOCAL_API_KEY_SCOPES = "sdk:ruleset"
@@ -170,6 +182,43 @@ def seed_flag(db, admin_user) -> FeatureFlag:
     return flag
 
 
+def seed_value_flags(db, admin_user) -> list[FeatureFlag]:
+    """One ACTIVE flag per value type, at 100%.
+
+    An existing one is kept and turned back on at 100% (the live contract
+    turns them off and on again; a run stopped in between leaves one off).
+    """
+    flags = []
+    for value_type, (key, on_value, off_value) in VALUE_FLAGS.items():
+        flag = db.query(FeatureFlag).filter(FeatureFlag.key == key).first()
+        if flag is not None:
+            flag.status = FeatureFlagStatus.ACTIVE
+            flag.rollout_percentage = 100
+            db.commit()
+            print(f"  Flag '{key}' already exists (id={flag.id}); on at 100%.")
+            flags.append(flag)
+            continue
+        flag = FeatureFlag(
+            key=key,
+            name=f"SDK contract {value_type} flag",
+            description=f"A {value_type} flag for the live SDK contract tests.",
+            status=FeatureFlagStatus.ACTIVE,
+            owner_id=admin_user.id,
+            rollout_percentage=100,
+            targeting_rules={},
+            tags=["sdk-contract"],
+            value_type=value_type,
+            on_value=on_value,
+            off_value=off_value,
+        )
+        db.add(flag)
+        db.commit()
+        db.refresh(flag)
+        print(f"  Created {value_type} flag '{key}' at 100% (id={flag.id}).")
+        flags.append(flag)
+    return flags
+
+
 def seed_api_key(
     db,
     admin_user,
@@ -257,10 +306,11 @@ def reset(db) -> None:
         db.query(Metric).filter(Metric.experiment_id == exp.id).delete()
         db.query(Variant).filter(Variant.experiment_id == exp.id).delete()
         db.delete(exp)
-    flag = db.query(FeatureFlag).filter(FeatureFlag.key == FLAG_KEY).first()
-    if flag:
-        db.query(Event).filter(Event.feature_flag_id == flag.id).delete()
-        db.delete(flag)
+    for key in [FLAG_KEY, *(key for key, _, _ in VALUE_FLAGS.values())]:
+        flag = db.query(FeatureFlag).filter(FeatureFlag.key == key).first()
+        if flag:
+            db.query(Event).filter(Event.feature_flag_id == flag.id).delete()
+            db.delete(flag)
     db.query(APIKey).filter(APIKey.name.in_([API_KEY_NAME, LOCAL_API_KEY_NAME])).delete(
         synchronize_session=False
     )
@@ -291,6 +341,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         admin = users["admin@demo.com"]
         seed_experiment(db, admin)
         seed_flag(db, admin)
+        seed_value_flags(db, admin)
         seed_api_key(db, admin)
         seed_local_api_key(db, admin)
     print("Done. Run: python tests/sdk-contract/live/run_live_contract.py")

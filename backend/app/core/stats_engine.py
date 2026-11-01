@@ -38,7 +38,30 @@ import numpy as np
 #: winner, the recommendation and the Bayesian decision read the metric's
 #: ``lower_is_better``, and ``/results`` analyses a revenue metric as its mean
 #: per assigned user.
-ENGINE_VERSION: str = "1.5.0"
+#: 1.6.0 (#1385): a bandit whose primary metric is lower-is-better counts a
+#: user who did not convert as the success, so its weights, regret estimate
+#: and history alpha/beta favour the variant with fewer conversions; the
+#: stored and reported counts stay the converting users.
+#: 1.7.0 (#439): ``/results`` analyses a count, duration or custom metric as
+#: its mean per assigned user (a count metric's per-user value is its number of
+#: events), as a revenue metric is, where it was the share of users who sent
+#: the event.
+#: 1.8.0 (#1496): each treatment of every metric carries an interval on its
+#: difference from the control, an interval on its relative change and the
+#: incremental impact; a proportion treatment's ``absolute_difference`` and its
+#: interval, null before, are filled.
+#:
+#: The rule: an engine-changing PR bumps ``ENGINE_VERSION`` to the next minor
+#: and appends it to ``RELEASED_ENGINE_VERSIONS`` ("frozen on main", in
+#: ``backend/tests/unit/services/test_sufficient_stats_fingerprint.py``) in the
+#: same change.  A frozen version's entries are never edited, and no key is
+#: ever added under one.  A PR is engine-changing when, for the same database
+#: rows and request, it adds, removes or changes any number, decision (winner,
+#: recommendation, Bayesian decision, ``can_stop``) or allocation weight that a
+#: path stamping ``engine_version`` returns, caches or persists: results and
+#: its snapshots, Bayesian, CUPED, sequential, and the bandit's state, history
+#: and status.  A revert of an engine-changing PR bumps again.
+ENGINE_VERSION: str = "1.8.0"
 
 #: Mask that keeps the derived seed inside the signed 64-bit range.
 _SEED_MASK = (1 << 63) - 1

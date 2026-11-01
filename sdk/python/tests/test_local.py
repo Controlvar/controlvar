@@ -174,7 +174,7 @@ def test_the_vectors_through_get_feature_flag(no_thread):
         client.clear_cache()
     assert wrong == []
     assert unsendable and all(not c["must_local"] and not is_well_formed(c["user_id"]) for c in unsendable)
-    assert local_answers == 1294
+    assert local_answers == 1333
 
 
 # ----------------------------------------------------------------------- answers
