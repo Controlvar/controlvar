@@ -1,6 +1,13 @@
 import { ExperimentationClient } from '../src/client';
 import { ExperimentationError } from '../src/errors';
-import type { AssignResponse, ClientConfig, ErrorReport, FlagEvaluateResponse, UserContext } from '../src/types';
+import type {
+  AssignResponse,
+  ClientConfig,
+  ErrorReport,
+  FlagEvaluateResponse,
+  SwallowedOperation,
+  UserContext,
+} from '../src/types';
 
 const baseConfig: ClientConfig = { apiUrl: 'https://api.example.com', apiKey: 'test-api-key' };
 
@@ -141,6 +148,33 @@ describe('constructor', () => {
     const error = await captureError(pending);
     expect(error.code).toBe('TIMEOUT');
     expect(error.message).toContain('5000 ms');
+  });
+
+  it('cacheTtlMs: 0 caches nothing, even within the same millisecond', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    const fetchMock = mockFetchSequence({ body: flagOn }, { body: flagOff }, { body: assignment }, { body: controlAssignment });
+    const client = new ExperimentationClient({ ...baseConfig, cacheTtlMs: 0 });
+    await expect(client.evaluateFlag('my-flag', user)).resolves.toMatchObject({ enabled: true });
+    await expect(client.evaluateFlag('my-flag', user)).resolves.toMatchObject({ enabled: false });
+    await expect(client.getAssignment('checkout', user)).resolves.toMatchObject({ variantName: 'one_page' });
+    await expect(client.getAssignment('checkout', user)).resolves.toMatchObject({ variantName: 'control' });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(client.getEvaluatedFlags('user-123')).toEqual([]);
+    expect(client.getAssignments('user-123')).toEqual([]);
+  });
+
+  it('a cached answer expires at exactly cacheTtlMs', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    const fetchMock = mockFetchSequence({ body: flagOn }, { body: flagOff });
+    const client = new ExperimentationClient({ ...baseConfig, cacheTtlMs: 1_000 });
+    await client.evaluateFlag('my-flag', user);
+    now.mockReturnValue(1_000_999);
+    await expect(client.evaluateFlag('my-flag', user)).resolves.toMatchObject({ enabled: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    now.mockReturnValue(1_001_000);
+    expect(client.getEvaluatedFlags('user-123')).toEqual([]);
+    await expect(client.evaluateFlag('my-flag', user)).resolves.toMatchObject({ enabled: false });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('caches a success for 300000 ms by default', async () => {
@@ -592,6 +626,209 @@ describe('getAllFlags', () => {
   });
 });
 
+// ─── Typed values ─────────────────────────────────────────────────────────────
+
+type Getter = 'getStringValue' | 'getNumberValue' | 'getJsonValue';
+const GETTERS: Getter[] = ['getStringValue', 'getNumberValue', 'getJsonValue'];
+/** A default of each getter's type, all different from every value served below. */
+const DEFAULTS: Record<Getter, unknown> = { getStringValue: 'the default', getNumberValue: -1, getJsonValue: { the: 'default' } };
+
+function getValue(client: ExperimentationClient, method: Getter, flagKey: string, who: UserContext, fallback: unknown) {
+  return (client[method] as (key: string, u: UserContext, d: unknown) => Promise<unknown>).call(client, flagKey, who, fallback);
+}
+
+/** An evaluate answer for flag `f`. */
+const served = (fields: Record<string, unknown>) => ({ key: 'f', enabled: true, config: null, reason: 'rollout', ...fields });
+
+function valueClient(extra: Partial<ClientConfig> = {}) {
+  const errors: Array<[ExperimentationError, SwallowedOperation]> = [];
+  const client = new ExperimentationClient({ ...baseConfig, onError: (error, operation) => errors.push([error, operation]), ...extra });
+  return { client, errors };
+}
+
+describe('evaluateFlag: value and valueType', () => {
+  it("copies the server's value and value_type", async () => {
+    mockFetch(served({ value: 'Complete purchase', value_type: 'string' }));
+    const client = new ExperimentationClient(baseConfig);
+    await expect(client.evaluateFlag('f', user)).resolves.toEqual({
+      key: 'f',
+      enabled: true,
+      config: null,
+      reason: 'rollout',
+      value: 'Complete purchase',
+      valueType: 'string',
+    });
+  });
+
+  it('leaves both undefined when an older server sends neither', async () => {
+    mockFetch(flagOn);
+    const client = new ExperimentationClient(baseConfig);
+    const evaluation = await client.evaluateFlag('my-flag', user);
+    expect(evaluation).not.toHaveProperty('value');
+    expect(evaluation).not.toHaveProperty('valueType');
+  });
+});
+
+describe('getStringValue, getNumberValue and getJsonValue', () => {
+  it.each([
+    ['getStringValue', { value: 'Complete purchase', value_type: 'string' }, 'Complete purchase'],
+    ['getStringValue', { value: '', value_type: 'string' }, ''],
+    ['getNumberValue', { value: 10, value_type: 'number' }, 10],
+    ['getNumberValue', { value: 2.5, value_type: 'number' }, 2.5],
+    ['getNumberValue', { value: 0, value_type: 'number' }, 0],
+    ['getJsonValue', { value: { color: 'blue' }, value_type: 'json' }, { color: 'blue' }],
+    ['getJsonValue', { value: ['a', 1], value_type: 'json' }, ['a', 1]],
+    ['getJsonValue', { value: {}, value_type: 'json' }, {}],
+  ] as Array<[Getter, Record<string, unknown>, unknown]>)('%s returns the value the flag serves: %j', async (method, fields, expected) => {
+    const fetchMock = mockFetch(served(fields));
+    const { client, errors } = valueClient();
+    await expect(getValue(client, method, 'f', user, DEFAULTS[method])).resolves.toEqual(expected);
+    expect(call(fetchMock).url).toBe(`https://api.example.com/api/v1/feature-flags/evaluate/f?user_id=user-123&context=${userContext}`);
+    expect(errors).toEqual([]);
+  });
+
+  it.each(['rollout', 'targeting_rule', 'inactive', 'error'])(
+    'returns the off value the server sends when the flag is off for the user (reason %s)',
+    async reason => {
+      mockFetch(served({ enabled: false, reason, value: 'Buy now', value_type: 'string' }));
+      const { client, errors } = valueClient();
+      await expect(client.getStringValue('f', user, 'the default')).resolves.toBe('Buy now');
+      expect(errors).toEqual([]);
+    }
+  );
+
+  it('is evaluated once per user and flag for cacheTtlMs, like evaluateFlag', async () => {
+    const fetchMock = mockFetch(served({ value: 10, value_type: 'number' }));
+    const client = new ExperimentationClient(baseConfig);
+    await client.getNumberValue('f', user, 0);
+    await client.getNumberValue('f', user, 0);
+    await client.evaluateFlag('f', user);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['a network failure', () => jest.fn().mockRejectedValue(new Error('Network down')), 'NETWORK_ERROR'],
+    ['an unknown flag (404)', () => jest.fn().mockResolvedValue(jsonResponse({ status: 404, body: { detail: 'not found' } })), 'HTTP_ERROR'],
+    ['a 500', () => jest.fn().mockResolvedValue(jsonResponse({ status: 500 })), 'HTTP_ERROR'],
+    [
+      'a body that is not JSON',
+      () => jest.fn().mockResolvedValue({ ok: true, status: 200, headers: { get: () => null }, json: () => Promise.reject(new SyntaxError('x')) }),
+      'INVALID_RESPONSE',
+    ],
+    ['an older server, which sends no value', () => jest.fn().mockResolvedValue(jsonResponse({ body: flagOn })), 'INVALID_RESPONSE'],
+    [
+      'a stored value the server cannot serve (value_type and no value)',
+      () => jest.fn().mockResolvedValue(jsonResponse({ body: served({ value_type: 'string' }) })),
+      'INVALID_RESPONSE',
+    ],
+  ])('each returns the default and reports %s to onError(err, "value")', async (_label, makeFetch, code) => {
+    for (const method of GETTERS) {
+      global.fetch = makeFetch() as unknown as typeof fetch;
+      const { client, errors } = valueClient();
+      await expect(getValue(client, method, 'f', user, DEFAULTS[method])).resolves.toBe(DEFAULTS[method]);
+      expect(errors.map(([error, operation]) => [error.code, operation])).toEqual([[code, 'value']]);
+      expect(errors[0][0]).toBeInstanceOf(ExperimentationError);
+    }
+  });
+
+  it('names what an older server lacks', async () => {
+    mockFetch(flagOn);
+    const { client, errors } = valueClient();
+    await client.getStringValue('my-flag', user, 'x');
+    expect(errors[0][0].message).toBe(
+      'Flag "my-flag" came back without a value (from a server without flag values, or one that cannot serve ' +
+        "this flag's stored value); getStringValue returned your default"
+    );
+  });
+
+  const STRING = { value: 'Buy now', value_type: 'string' };
+  const NUMBER = { value: 10, value_type: 'number' };
+  const JSON_VALUE = { value: { color: 'blue' }, value_type: 'json' };
+  const BOOLEAN = { value: true, value_type: 'boolean' };
+  /** Every getter against every type it does not read. */
+  const MISMATCHES: Array<[Getter, string, Record<string, unknown>]> = [
+    ['getNumberValue', 'a string', STRING],
+    ['getJsonValue', 'a string', STRING],
+    ['getStringValue', 'a number', NUMBER],
+    ['getJsonValue', 'a number', NUMBER],
+    ['getStringValue', 'a JSON value', JSON_VALUE],
+    ['getNumberValue', 'a JSON value', JSON_VALUE],
+    ['getStringValue', 'a boolean', BOOLEAN],
+    ['getNumberValue', 'a boolean', BOOLEAN],
+    ['getJsonValue', 'a boolean', BOOLEAN],
+  ];
+
+  it.each(MISMATCHES)('%s on a flag that serves %s: the default, and TYPE_MISMATCH', async (method, name, fields) => {
+    mockFetch(served({ key: 'checkout-button-label', ...fields }));
+    const { client, errors } = valueClient();
+    await expect(getValue(client, method, 'checkout-button-label', user, DEFAULTS[method])).resolves.toBe(DEFAULTS[method]);
+    expect(errors).toHaveLength(1);
+    const [error, operation] = errors[0];
+    expect(operation).toBe('value');
+    expect(error.code).toBe('TYPE_MISMATCH');
+    expect(error.message).toBe(`Flag "checkout-button-label" serves ${name}; ${method} returned your default`);
+  });
+
+  it('never coerces: "10" is not a number and 10 is not a string', async () => {
+    mockFetchSequence({ body: served({ key: 'a', value: '10', value_type: 'string' }) }, { body: served({ key: 'b', value: 10, value_type: 'number' }) });
+    const { client, errors } = valueClient();
+    await expect(client.getNumberValue('a', user, -1)).resolves.toBe(-1);
+    await expect(client.getStringValue('b', user, 'x')).resolves.toBe('x');
+    expect(errors.map(([error]) => error.code)).toEqual(['TYPE_MISMATCH', 'TYPE_MISMATCH']);
+  });
+
+  it("reads the value's own type when the server sends no value_type", async () => {
+    mockFetch(served({ value: 'Buy now' }));
+    const { client, errors } = valueClient();
+    await expect(client.getStringValue('f', user, 'x')).resolves.toBe('Buy now');
+    await expect(client.getNumberValue('f', user, -1)).resolves.toBe(-1);
+    expect(errors.map(([error]) => error.message)).toEqual(['Flag "f" serves a string; getNumberValue returned your default']);
+  });
+
+  it('a value that is not of the type the server names is the default too, never a wrong value', async () => {
+    mockFetchSequence(
+      { body: served({ key: 'a', value: '10', value_type: 'number' }) },
+      { body: served({ key: 'b', value: 'x', value_type: 'json' }) }
+    );
+    const { client, errors } = valueClient();
+    await expect(client.getNumberValue('a', user, -1)).resolves.toBe(-1);
+    await expect(client.getJsonValue('b', user, null)).resolves.toBeNull();
+    expect(errors.map(([error]) => error.code)).toEqual(['INVALID_RESPONSE', 'INVALID_RESPONSE']);
+  });
+
+  it('reports every call that returns the default, not only the first', async () => {
+    mockFetch(served({ value: 'Buy now', value_type: 'string' }));
+    const { client, errors } = valueClient();
+    await client.getNumberValue('f', user, 0);
+    await client.getNumberValue('f', user, 0);
+    expect(errors).toHaveLength(2);
+  });
+
+  it('never rejects: no userId, no onError, or a throwing onError handler', async () => {
+    mockFetch({}, 500);
+    const { client, errors } = valueClient();
+    await expect(client.getStringValue('f', { userId: '' }, 'x')).resolves.toBe('x');
+    expect(errors.map(([error, operation]) => [error.message, operation])).toEqual([['user.userId is required', 'value']]);
+    const quiet = new ExperimentationClient(baseConfig);
+    await expect(quiet.getNumberValue('f', user, 3)).resolves.toBe(3);
+    const throwing = new ExperimentationClient({ ...baseConfig, onError: () => { throw new Error('handler bug'); } });
+    await expect(throwing.getJsonValue('f', user, [])).resolves.toEqual([]);
+  });
+
+  it('getJsonValue returns a new copy on every call: changing one changes nothing the SDK keeps', async () => {
+    const fetchMock = mockFetch(served({ key: 'theme', value: { color: 'blue', sizes: [1, 2] }, value_type: 'json' }));
+    const client = new ExperimentationClient(baseConfig);
+    const first = await client.getJsonValue<{ color: string; sizes: number[] }>('theme', user, { color: '', sizes: [] });
+    first.color = 'red';
+    first.sizes.push(3);
+    const second = await client.getJsonValue('theme', user, {});
+    expect(second).toEqual({ color: 'blue', sizes: [1, 2] });
+    expect(second).not.toBe(first);
+    expect((await client.evaluateFlag('theme', user)).value).toEqual({ color: 'blue', sizes: [1, 2] });
+    expect(fetchMock).toHaveBeenCalledTimes(1); // both later answers came from the cache
+  });
+});
+
 // ─── getAssignments / getEvaluatedFlags / fetchAssignments ────────────────────
 
 describe('cache accessors', () => {
@@ -897,6 +1134,38 @@ describe('track after the cache TTL', () => {
     expect(call(fetchMock, 1).url).toBe(BATCH_URL);
     expect(batchKeys(call(fetchMock, 1).body)).toEqual(['checkout']);
     now.mockRestore();
+  });
+
+  it('cacheTtlMs: 0 caches nothing, and a key-less track() still reaches the experiment and flag just answered', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(T0);
+    const fetchMock = mockFetchSequence({ body: assignment }, { body: flagOn }, { body: { success_count: 2, failure_count: 0 } });
+    const client = new ExperimentationClient({ ...baseConfig, cacheTtlMs: 0 });
+    await client.getAssignment('checkout', user);
+    await client.evaluateFlag('new-search', user);
+    expect(client.getAssignments('user-123')).toEqual([]);
+    expect(client.getEvaluatedFlags('user-123')).toEqual([]);
+
+    await client.track('user-123', 'purchase');
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(call(fetchMock, 2).url).toBe(BATCH_URL);
+    expect(batchKeys(call(fetchMock, 2).body)).toEqual(['checkout', 'flag:new-search']);
+  });
+
+  it('the record outlives the cache entry: at exactly a cacheTtlMs above 24 h the entry has expired and a key-less track() is still tagged', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(T0);
+    const fetchMock = mockFetchSequence({ body: assignment }, { body: { success_count: 1, failure_count: 0 } });
+    const client = new ExperimentationClient({ ...baseConfig, cacheTtlMs: 48 * HOUR });
+    await client.getAssignment('checkout', user);
+    now.mockReturnValue(T0 + 48 * HOUR - 1);
+    expect(client.getAssignments('user-123')).toHaveLength(1);
+    now.mockReturnValue(T0 + 48 * HOUR);
+    expect(client.getAssignments('user-123')).toEqual([]);
+
+    await client.track('user-123', 'purchase');
+
+    expect(call(fetchMock, 1).url).toBe(BATCH_URL);
+    expect(batchKeys(call(fetchMock, 1).body)).toEqual(['checkout']);
   });
 
   it('sends an untagged purchase made 301 s after the assignment to the experiment', async () => {
