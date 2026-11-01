@@ -209,8 +209,10 @@ by = [
 ]
 
 [[unit]]
-text = "The JavaScript, Python and React SDKs send it on both calls; each SDK's page says what that SDK sends."
+text = "The JavaScript, Python, React and Go SDKs send it on both calls; each SDK's page says what that SDK sends."
 by = [
+    "test:sdk/go/client_test.go::TestClient_GetAssignment_RequestAndMapping",
+    "test:sdk/go/context_test.go::TestEvaluateFlag_SendsAttributesAsCompactJSONContext",
     "test:sdk/js/__tests__/client.test.ts::sends {experiment_key, user_id, context: attributes} as the JSON body",
     "test:sdk/js/__tests__/client.test.ts::appends context=<url-encoded JSON of user.attributes> when the user has attributes",
     "test:sdk/python/tests/test_client.py::TestGetAssignment::test_sends_post_with_context",

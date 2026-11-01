@@ -12,7 +12,8 @@ import (
 )
 
 // Typed flag values on EvalResult (#1497): Value, ValueType, StringValue,
-// NumberValue and DecodeValue. EvaluateFlag's request is unchanged.
+// NumberValue and DecodeValue. The request, with its context, is in
+// context_test.go.
 
 // serveValueFlag answers the evaluate route as a server with flag values does:
 // value, value_type, a null config and a reason.
@@ -408,32 +409,5 @@ func TestEvaluateFlag_ConcurrentCallersOwnTheirValue(t *testing.T) {
 	}
 	if got := mustEvaluate(t, c, "checkout-label").StringValue("fallback"); got != "Complete purchase" {
 		t.Errorf("after concurrent callers changed their values, StringValue = %q", got)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// EMF-3: the request is unchanged (attributes are not sent by this change)
-// ---------------------------------------------------------------------------
-
-func TestEvaluateFlag_RequestURLUnchangedForAUserWithAttributes(t *testing.T) {
-	fb := newFakeBackend(t)
-	fb.serveValueFlag("checkout-label", true, "string", "Complete purchase")
-	c := mustNewClient(t, fb.URL)
-
-	user := newTestUserWithAttrs("user-1", map[string]interface{}{"plan": "enterprise", "country": "US"})
-	if _, err := c.EvaluateFlag(context.Background(), "checkout-label", user); err != nil {
-		t.Fatalf("EvaluateFlag error: %v", err)
-	}
-
-	reqs := fb.Requests()
-	if len(reqs) != 1 {
-		t.Fatalf("requests = %d; want 1", len(reqs))
-	}
-	req := reqs[0]
-	if got := req.Method + " " + req.EscapedPath + "?" + req.RawQuery; got != "GET /api/v1/feature-flags/evaluate/checkout-label?user_id=user-1" {
-		t.Errorf("request = %q; want GET /api/v1/feature-flags/evaluate/checkout-label?user_id=user-1", got)
-	}
-	if len(req.RawBody) != 0 {
-		t.Errorf("GET should have no body; got %s", req.RawBody)
 	}
 }
