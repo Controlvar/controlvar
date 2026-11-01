@@ -1421,7 +1421,7 @@ jobs:
           # A FORWARDED_ALLOW_IPS entry that matches no proxy (an address
           # written with a mask): one line, naming the entry and both fixes.
           expect_refusal experimently-api:full fwd.log "${good[@]}" \
-            -e FORWARDED_ALLOW_IPS=172.18.0.3/16
+            -e FORWARDED_ALLOW_IPS=172.18.0.0/16
           grep -qxF "  - FORWARDED_ALLOW_IPS entry 1 ('172.18.0.3/16') is an address with a mask, which matches no proxy. Write the network, 172.18.0.0/16, or the address alone, 172.18.0.3." fwd.log
           grep -qF "cannot start: 1 setting needs attention." fwd.log
 

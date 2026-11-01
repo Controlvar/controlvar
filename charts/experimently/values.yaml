@@ -79,7 +79,7 @@ api:
   # from, e.g. 10.244.0.0/16 on kind. For more than one network in --set,
   # quote the whole argument and escape each comma:
   # --set 'api.forwardedAllowIps=10.0.0.0/8\,192.168.0.0/16'
-  forwardedAllowIps: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+  forwardedAllowIps: "10.0.0.0/8"
   resources:
     requests:
       cpu: 250m
