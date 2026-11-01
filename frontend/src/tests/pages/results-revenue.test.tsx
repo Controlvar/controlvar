@@ -23,6 +23,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import ResultDetailPage from '@/pages/results/[id]';
 import { ApiError, apiFetch } from '@/services/api';
 import { makeRouter, routedApi } from './helpers/apiMock';
+import { visibleText } from '@/tests/helpers/visibleText';
 
 // The shared recharts mock draws no axis or tooltip, so this file's mock
 // renders what the chart's formatters make of one value: the control's 5.66
@@ -342,7 +343,7 @@ describe('a revenue primary on the results page', () => {
     install(REVENUE);
     await renderLoaded();
     const table = screen.getByTestId('metric-comparison-table');
-    expect(table).toHaveTextContent('+21.0% +1.19 per user (95% CI −0.47 to +2.84)');
+    expect(visibleText(table)).toContain('+21.0% +1.19 per user (95% CI −0.47 to +2.84)');
     expect(within(table).getByTestId('revenue-per-user-footnote')).toBeInTheDocument();
     expect(screen.getByTestId('results-dashboard').textContent).not.toContain('$');
   });

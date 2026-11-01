@@ -246,6 +246,10 @@ Shows at a glance:
   change anything, while the recommendation uses its own minimum of 100 users per variant, so
   SHIP VARIANT beside a *Planned sample* of *Not yet* is not a contradiction.
 - **Recommendation**: SHIP VARIANT / KEEP CONTROL / CONTINUE TESTING / INCONCLUSIVE
+- **Impact on the primary metric**: one line per treatment, its impact with its interval, for
+  example "One page: +124 converting users (95% CI +40 to +208)", followed by ", not
+  significant" when the treatment is not significant. When the sample-ratio check fails, the
+  same warning as on a leading variant follows the lines.
 - **Analysis**: the confidence level and correction the results use, which are the
   experiment's own settings. For example "95% confidence · Benjamini-Hochberg correction for
   the 2 comparisons with the control on each metric", or, with one treatment, "one comparison
@@ -295,7 +299,8 @@ For each metric and variant pair:
 |--------|---------|
 | **Sample Size** | Users assigned to this variant |
 | **Value** | Conversion rate for this variant: the share of its users who sent the metric's event. For a revenue metric, revenue per user: each user's event values added up, averaged over every user assigned to the variant (0 for a user with none), as a plain number with no currency. A count metric reads events per user (how many times each user sent the event), a duration metric duration per user and a custom metric value per user, averaged the same way, with no unit |
-| **Change** | Relative change vs. control (e.g., +12.3%). A significant change also says *better* or *worse* in the metric's direction, so a fall is better when lower is better. For a revenue, count, duration or custom metric a second line gives the difference per user with its confidence interval, e.g. +1.19 per user (95% CI −0.47 to +2.84), marked *unadjusted* when the p-value beside it is adjusted |
+| **Change** | Relative change vs. control (e.g., +12.3%). A significant change also says *better* or *worse* in the metric's direction, so a fall is better when lower is better. A treatment's Change cell shows the change from the control, its confidence interval, and the difference with its interval. For a metric whose control's average is too uncertain around 0 to bound the relative change, the cell says so in place of the interval. For a conversion metric the difference is in percentage points; for a revenue, count, duration or custom metric it is the difference per user with its confidence interval, e.g. +1.19 per user (95% CI −0.47 to +2.84). Every interval on a row is marked *unadjusted* when the p-value beside it is adjusted |
+| **Impact** | The difference times the treatment's own assigned users (converting users, events, or the total of the values sent), with its interval. It is not projected beyond those users and has no currency or unit. |
 | **p-value** | Probability the difference is due to chance (lower = more confident). Headed **Adjusted p-value** when a correction applies and a metric has two or more treatments with a p-value: the p-value after the experiment's correction, with the unadjusted value beneath it. A footnote under the table names the correction. |
 | **Significance** | (adjusted) p-value < (1 - confidence level), e.g., < 0.05 for 95% confidence |
 
