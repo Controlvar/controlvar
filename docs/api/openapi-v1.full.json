@@ -1439,7 +1439,7 @@
             "type": "array"
           },
           "engine_version": {
-            "default": "1.7.0",
+            "default": "1.8.0",
             "description": "Statistics engine version that computed the current weights",
             "title": "Engine Version",
             "type": "string"
@@ -1825,7 +1825,7 @@
             ]
           },
           "engine_version": {
-            "default": "1.7.0",
+            "default": "1.8.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -3932,7 +3932,7 @@
             "title": "Covariate Lookback Days"
           },
           "engine_version": {
-            "default": "1.7.0",
+            "default": "1.8.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -16954,7 +16954,7 @@
         "type": "object"
       },
       "VariantResult": {
-        "description": "Statistical results for a single variant on a single metric.\n\nContains all per-variant statistics produced by the analysis engine,\nincluding sample counts, point estimates, confidence intervals,\nsignificance tests, and effect-size characterisation.\n\nFor the control variant, fields that represent a comparison vs. the\ncontrol (``p_value``, ``adjusted_p_value``, ``relative_improvement_pct``,\n``effect_size``, ``effect_size_label``, ``power``, and\n``statistical_test_used``) are ``None``.\n\nThe metric's ``analysis`` says what ``mean`` is.  For a metric analysed\nas a proportion (a conversion metric) ``mean`` is the share of the\nvariant's users who converted, in [0, 1].  For a revenue, count, duration\nor custom metric (``analysis`` ``\"mean\"``) it is the mean per assigned\nuser of each user's value, 0 for a user with none: for a count metric the\nnumber of the metric's events they sent, otherwise the total of those\nevents' value.  ``conversions`` is the number of users who converted\neither way.",
+        "description": "Statistical results for a single variant on a single metric.\n\nContains all per-variant statistics produced by the analysis engine,\nincluding sample counts, point estimates, confidence intervals,\nsignificance tests, and effect-size characterisation.\n\nFor the control variant, fields that represent a comparison vs. the\ncontrol (``p_value``, ``adjusted_p_value``, ``relative_improvement_pct``,\n``effect_size``, ``effect_size_label``, ``power``,\n``statistical_test_used``, ``absolute_difference`` and its interval,\n``relative_improvement_pct_ci``, ``incremental_impact`` and its\ninterval) are ``None``.\n\nThe metric's ``analysis`` says what ``mean`` is.  For a metric analysed\nas a proportion (a conversion metric) ``mean`` is the share of the\nvariant's users who converted, in [0, 1].  For a revenue, count, duration\nor custom metric (``analysis`` ``\"mean\"``) it is the mean per assigned\nuser of each user's value, 0 for a user with none: for a count metric the\nnumber of the metric's events they sent, otherwise the total of those\nevents' value.  ``conversions`` is the number of users who converted\neither way.",
         "properties": {
           "absolute_difference": {
             "anyOf": [
@@ -16965,7 +16965,7 @@
                 "type": "null"
               }
             ],
-            "description": "When the metric's analysis is 'mean': this variant's mean minus the control's, per assigned user.  None for the control, for a proportion metric, and when either variant has fewer than 2 users.",
+            "description": "This variant's mean minus the control's, in the unit of mean.  When the metric's analysis is 'proportion': the difference of the shares of users who converted, each computed as conversions / sample_size (0.012 is 1.2 percentage points).  When it is 'mean': the difference per assigned user.  None for the control; for a proportion, when either variant has no users; for a mean, when either variant has fewer than 2 users.",
             "title": "Absolute Difference"
           },
           "absolute_difference_ci": {
@@ -16987,7 +16987,7 @@
                 "type": "null"
               }
             ],
-            "description": "Two-sided Welch-Satterthwaite confidence interval of absolute_difference as (lower, upper), at the response's confidence_level and not adjusted for multiple comparisons.  None when absolute_difference is None, and when neither variant's per-user values vary.",
+            "description": "Two-sided confidence interval of absolute_difference as (lower, upper), at the response's confidence_level and not adjusted for multiple comparisons.  For a proportion, Newcombe's hybrid score interval, built from each variant's Wilson score interval; for a mean, the Welch-Satterthwaite interval.  is_significant is decided by statistical_test_used on adjusted_p_value (p_value when no correction applies), not by this interval: with two or more treatments under a correction the interval can exclude 0 on a variant that is not significant, and for a proportion near the threshold the interval and Fisher's exact test can disagree either way.  relative_improvement_pct_ci and incremental_impact_ci, when not None, contain 0 exactly when this interval does.  None when absolute_difference is None; for a mean, also when neither variant's per-user values vary.  For a proportion with users in both variants it is never None: 0 of 20 against 0 of 20 gives (-0.161, 0.161).",
             "title": "Absolute Difference Ci"
           },
           "adjusted_p_value": {
@@ -17052,6 +17052,40 @@
             ],
             "description": "Qualitative label derived from the Cohen's convention thresholds.  None for the control variant."
           },
+          "incremental_impact": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "absolute_difference times this variant's sample_size: how much more (or, when negative, less) this variant's assigned users had than as many users at the control's mean.  When the metric's analysis is 'proportion', converting users; when it is 'mean', the total of the users' values (see mean), in the unit they were sent in.  A plain number: no currency or unit is read or added, and nothing is projected beyond this variant's own assigned users.  None for the control and when absolute_difference is None.",
+            "title": "Incremental Impact"
+          },
+          "incremental_impact_ci": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "absolute_difference_ci times this variant's sample_size, as (lower, upper): at the response's confidence_level and not adjusted for multiple comparisons.  None when absolute_difference_ci is None.",
+            "title": "Incremental Impact Ci"
+          },
           "is_control": {
             "description": "True when this is the control (baseline) variant.",
             "title": "Is Control",
@@ -17102,6 +17136,28 @@
             ],
             "description": "Relative change in the metric mean compared with the control, expressed as a percentage: ((variant_mean - control_mean) / control_mean) * 100.  The sign is the raw change whatever the metric's direction: when the metric's lower_is_better is true, a negative value is the good direction.  None for the control variant, and for a mean when the control's mean is 0.",
             "title": "Relative Improvement Pct"
+          },
+          "relative_improvement_pct_ci": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Two-sided confidence interval of relative_improvement_pct as (lower, upper), in percent, at the response's confidence_level and not adjusted for multiple comparisons.  It is the MOVER-R interval of the ratio of this variant's mean to the control's, from the same per-variant limits as absolute_difference_ci (Wilson score limits for a proportion; for a mean, each mean plus or minus Welch's critical value times its standard error, which is Fieller's interval), so it contains 0 exactly when absolute_difference_ci does.  None for the control and when absolute_difference_ci is None.  For a proportion the ratio is taken over values of 0 and above, so the lower end is never below -100%, and the interval is None only when the control has no conversions; it can be wide: a treatment with 6 converting users out of 200 against a control with 2 out of 200 gives -34.2% to +1,206.3% at 0.95.  For a mean it is also None when the control's mean is 0, and when the control's mean plus or minus Welch's critical value times its standard error reaches 0, where Fieller's set of ratios is unbounded.",
+            "title": "Relative Improvement Pct Ci"
           },
           "sample_size": {
             "description": "Number of unique users assigned to this variant.",

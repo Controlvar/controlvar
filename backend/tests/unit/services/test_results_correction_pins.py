@@ -134,6 +134,14 @@ ONE_TREATMENT_PINS: Dict[str, Dict[str, str]] = {
             "0b23f7ba940954b161499973d2c8830487fa8c6fb4e8d0196c68f2d5191fb8b2"
         ),
     },
+    # 1.8.0 (#1496): each treatment carries its difference from the control,
+    # the intervals and the impact.
+    "1.8.0": {
+        "two_variants": "8bfbabfdd24cd7e64e3e4bc9f56635988dbc3e98cc851f1079009772880170ea",
+        "three_variants_one_null_p": (
+            "3e33c704c5588860bfcd8b6439181f9dd26c353f8b7f20f4bb0d8f8c1e789c63"
+        ),
+    },
 }
 
 #: The correction a request with no method gets, on every path: the stored

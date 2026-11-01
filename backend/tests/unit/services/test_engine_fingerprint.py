@@ -81,6 +81,9 @@ ENGINE_FINGERPRINTS: Dict[str, str] = {
     # 1.7.0 is #439: count, duration and custom metrics are means in
     # /results.  This dataset has none, so its output is 1.6.0's.
     "1.7.0": "003234aa770b7f48e4d42ee0e718895523371c24251dadb6e46dc8355b7e346c",
+    # 1.8.0 is #1496: the difference fields are added to the results' metric
+    # results, which this fingerprint does not hash: 1.7.0's.
+    "1.8.0": "003234aa770b7f48e4d42ee0e718895523371c24251dadb6e46dc8355b7e346c",
 }
 
 # Two ids where the control sorts AFTER the treatment, so an engine that

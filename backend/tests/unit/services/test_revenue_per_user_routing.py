@@ -74,6 +74,9 @@ REVENUE_RESULTS_FINGERPRINTS: Dict[str, str] = {
     # 1.7.0 (#439) routes count, duration and custom to the mean; this
     # experiment's revenue and conversion results are 1.6.0's.
     "1.7.0": "5ade759aa8ce18ef518dfde1acc9d6a3c2a3eda4dc1d31d8898e68d62225ef06",
+    # 1.8.0 (#1496): each treatment carries the difference fields; without
+    # them the output is 1.7.0's (test_difference_intervals.py).
+    "1.8.0": "ac54b3b114353fad31c73c95e0e8513c579edee92538696ac5ce1c8cc2640071",
 }
 
 

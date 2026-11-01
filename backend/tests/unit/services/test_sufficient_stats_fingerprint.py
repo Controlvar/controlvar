@@ -91,6 +91,15 @@ SUFFICIENT_STATS_FINGERPRINTS: Dict[str, Dict[str, str]] = {
         "cuped_metric_result": "29e33befe849a6cc36fd462b5d4e1f2a361efcff2f695a38c612653c11363f67",
         "mean_metric_result": "dbd894429d89e81cb669f5063a4e275452432696c904a180ca3d6e64ae6cbd41",
     },
+    # #1496: each binomial treatment carries its difference from the control,
+    # the intervals and the impact; without them it is 1.7.0's
+    # (test_difference_intervals.py).  CUPED and the mean estimator (warehouse
+    # mean runs) are unchanged: 1.7.0's.
+    "1.8.0": {
+        "binomial_metric_result": "e0e24aebc40aab2a12c60e9537057ec53f1aa554192f0ab189c7c547e485e7ad",
+        "cuped_metric_result": "29e33befe849a6cc36fd462b5d4e1f2a361efcff2f695a38c612653c11363f67",
+        "mean_metric_result": "dbd894429d89e81cb669f5063a4e275452432696c904a180ca3d6e64ae6cbd41",
+    },
 }
 
 #: The engine versions frozen on main, oldest first.  An engine-changing PR
@@ -108,6 +117,7 @@ RELEASED_ENGINE_VERSIONS = (
     "1.5.0",
     "1.6.0",
     "1.7.0",
+    "1.8.0",
 )
 
 _CONTROL = "ffffffff-0000-4000-8000-000000000002"
