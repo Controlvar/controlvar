@@ -467,8 +467,15 @@ cv_session_check() {
 
 # cv_deploy_wait <deploy pid> <watcher pid>: until cdk deploy ends; a watcher that gives up
 # stops the deploy (CloudFormation carries on by itself).
+# The wait itself runs no command substitution, $(...): bash (3.2 and 5.3, measured) drops
+# an INT that arrives while it waits for one whose command then ends normally, though INT is
+# trapped (not a TERM), so a Ctrl-C there never reached cv_on_signal and the deploy carried
+# on (#1558). An INT during a command run in the foreground runs the trap once that command
+# ends, and one during `wait` at once. So the clock is read through a file, the watcher's
+# EXIT line with read, and the heartbeat, whose reads use $(...), runs in a subshell the
+# wait runs in the foreground.
 cv_deploy_wait() {
-    local deploy_pid="$1" watch_pid="$2" rc=0 last=0 now exit_line
+    local deploy_pid="$1" watch_pid="$2" rc=0 last=0 now exit_line line
     while :; do
         if ! kill -0 "$deploy_pid" 2> /dev/null; then
             cv_wait "$deploy_pid" || rc=$?
@@ -477,7 +484,15 @@ cv_deploy_wait() {
         if [ -n "$watch_pid" ] && ! kill -0 "$watch_pid" 2> /dev/null; then
             cv_wait "$watch_pid" || :
             watch_pid=""
-            exit_line=$(grep '^EXIT ' "$CV_RECORD/tmp/watch.out" | sed -n 1p)
+            exit_line=""
+            while IFS= read -r line || [ -n "$line" ]; do
+                case "$line" in
+                    "EXIT "*)
+                        exit_line=$line
+                        break
+                        ;;
+                esac
+            done < "$CV_RECORD/tmp/watch.out"
             cv_log "watcher: $exit_line"
             case "$exit_line" in
                 "EXIT complete"*) ;;
@@ -488,10 +503,11 @@ cv_deploy_wait() {
                     ;;
             esac
         fi
-        now=$(date +%s)
+        date +%s > "$CV_RECORD/tmp/now" 2> /dev/null || :
+        read -r now < "$CV_RECORD/tmp/now" || :
         if [ $((now - last)) -ge "$CV_HEARTBEAT_SECONDS" ]; then
             last=$now
-            cv_heartbeat
+            (cv_heartbeat)
         fi
         cv_sleep "$CV_TICK_SECONDS"
     done

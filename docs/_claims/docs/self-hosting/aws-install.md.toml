@@ -631,6 +631,7 @@ by = ["exempt:instruction"]
 text = "If you press Ctrl-C, AWS carries on creating the stacks that it started, and the installer stops with exit code 130."
 by = [
     "test:backend/tests/installer_sweeps/test_install_checks.py::test_an_interrupt_leaves_a_usable_record_and_no_child",
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_an_interrupt_while_the_deploy_wait_reads_the_clock_stops_the_install",
     "test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules",
 ]
 

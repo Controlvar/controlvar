@@ -1068,6 +1068,92 @@ def test_an_interrupt_leaves_a_usable_record_and_no_child(ran, sig, target, when
         ran[f"e3-{when}-{target}-{sig}"].world,
         ran[f"e3-{when}-{target}-{sig}"].done,
     )
+    _stopped_and_usable(world, done, tool, op, step)
+
+
+#: The command substitutions the deploy step's wait ran while the deploy blocked, before
+#: #1558: its own reading of the clock on each pass (`now=$(date +%s)`), and the
+#: heartbeat's on its first pass (`$(date -u +%H:%M)`). Each is held here (the installer
+#: waiting for it to end) while the test sends INT, and then ends normally.
+CLOCK_READS = {
+    "its-own-clock-read": ("+%s", True),
+    "the-heartbeat-clock-read": ("-u +%H:%M", False),
+}
+
+
+def interrupt_while_the_clock_is_read(
+    world: InstallWorld, sig: int, group: bool
+) -> Result:
+    """An install signalled once cdk deploy has blocked and the deploy step's wait is
+    waiting for a held clock reading to end; the reading then ends, normally."""
+    process = world.start()
+    try:
+        deadline = time.time() + SAFETY_NET_SECONDS
+        while not (
+            world.clock_held()
+            and any(
+                line.split()[1:3] == ["cdk", "deploy"] for line in world.pid_lines()
+            )
+        ):
+            if process.poll() is not None or time.time() > deadline:
+                out, err = process.communicate()
+                raise AssertionError(
+                    f"the clock was never held with cdk deploy blocked: exit {process.returncode}\n"
+                    f"{as_text(out)}\n{as_text(err)}"
+                )
+            time.sleep(0.05)
+        if group:
+            os.killpg(process.pid, sig)
+        else:
+            os.kill(process.pid, sig)
+        world.release_the_clock()
+        out, err = process.communicate(timeout=SAFETY_NET_SECONDS)
+    except BaseException:
+        world.release_the_clock()
+        stop_group(process)
+        raise
+    return Result(process.returncode, as_text(out), as_text(err))
+
+
+def _deploy_blocked_and_the_clock_held(args: str, once_the_deploy_blocks: bool):
+    def prepare(world: InstallWorld) -> None:
+        world.edit(lambda state: state.update(SIGNAL_STEPS["during-the-deploy"][2]))
+        world.hold_a_clock_read(args, once_the_deploy_blocks=once_the_deploy_blocks)
+
+    return prepare
+
+
+for _read, (_args, _once_blocked) in CLOCK_READS.items():
+    for _target, _group in SIGNAL_TARGETS.items():
+        BATCH.add(
+            f"e3-while-{_read}-{_target}-INT",
+            prepare=_deploy_blocked_and_the_clock_held(_args, _once_blocked),
+            run=lambda w, g=_group: interrupt_while_the_clock_is_read(
+                w, signal.SIGINT, g
+            ),
+        )
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("target", sorted(SIGNAL_TARGETS))
+@pytest.mark.parametrize("read", sorted(CLOCK_READS))
+def test_an_interrupt_while_the_deploy_wait_reads_the_clock_stops_the_install(
+    ran, read, target
+):
+    """#1558: bash drops an INT (not a TERM) that arrives while it waits for a command
+    substitution whose command then ends normally, though INT is trapped. The deploy
+    step's wait ran one on every pass, so a Ctrl-C there was sometimes lost: the deploy
+    carried on and, in these tests, the fake's block ran out and was reported as
+    "FAILED: cdk deploy stopped with an error (exit code 1)". The wait now runs nothing
+    in a command substitution, and the INT stops the install as E3 says."""
+    tool, op, _, step = SIGNAL_STEPS["during-the-deploy"]
+    one = ran[f"e3-while-{read}-{target}-INT"]
+    _stopped_and_usable(one.world, one.done, tool, op, step)
+
+
+def _stopped_and_usable(
+    world: InstallWorld, done: Result, tool: str, op: str, step: str
+) -> None:
     assert done.code == 130, done.err
     assert done.err.startswith(f'STOPPED: Stopped by Ctrl-C or a signal at "{step}".')
     assert (
