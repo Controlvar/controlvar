@@ -83,6 +83,8 @@ SKIPPED_PARTS = frozenset(
     }
 )
 TEST_NAME = re.compile(r"(_test\.go|\.test\.tsx?|\.spec\.tsx?|_spec\.rb|Tests?\.\w+)$")
+#: An event route as a quoted string literal in an SDK's code.
+ROUTE_LITERAL = re.compile(r"""["']/api/v1/tracking/(track|batch)["']""")
 
 #: The modules on the event path: the routes that receive events, the service
 #: and model that store them, the analysis that counts them, and the limiter.
@@ -134,8 +136,10 @@ def test_every_sdk_sends_its_events_through_track_and_batch(sdk):
     source = _source(rel)
     assert "/tracking/events" not in source, f"{sdk} sends to /tracking/events"
     if wrapped is None:
-        assert "/tracking/track" in source, f"{sdk} names no /tracking/track"
-        assert "/tracking/batch" in source, f"{sdk} names no /tracking/batch"
+        # The quoted path a request is built from: a comment or a doc string
+        # that names the route does not count.
+        routes = set(ROUTE_LITERAL.findall(source))
+        assert routes == {"track", "batch"}, f"{sdk} has quoted routes {routes}"
     else:
         assert "/tracking/" not in source, f"{sdk} names a tracking route itself"
         assert wrapped in source, f"{sdk} does not use {wrapped!r}"

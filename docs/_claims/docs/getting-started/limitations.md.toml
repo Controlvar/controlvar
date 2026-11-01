@@ -54,7 +54,7 @@ by = [
 ]
 
 [[unit]]
-text = "An event sent twice counted once | It is stored and counted twice: a count metric counts it again and a revenue metric adds its value again. A request that timed out may have been stored, so sending it again can double it (#1543). A conversion rate counts each user once and is not affected. See How events count."
+text = "An event sent twice counted once | It is stored and counted twice: a count metric counts it again, and a revenue, duration or custom metric adds its value again. A request that timed out may have been stored, so sending it again can double it (#1543). A conversion rate counts each user once and is not affected. See How events count."
 by = [
     "test:backend/tests/integration/api/test_how_events_count.py::test_an_event_sent_again_is_stored_and_counted_again",
     "test:sdk/python/tests/test_client.py::TestTrackNeverRaises::test_a_timeout_returns_false_although_the_event_was_sent",

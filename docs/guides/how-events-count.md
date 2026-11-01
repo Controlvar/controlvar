@@ -6,7 +6,7 @@ SDK, because each one sends its events through `POST /api/v1/tracking/track` and
 
 | The event | Stored | Counts in its variant's results |
 |---|---|---|
-| Sent again (with or without anything identifying it) | Yes, each time | Each time in count and revenue metrics; a conversion metric counts the user once ([#1543](https://github.com/Controlvar/controlvar/issues/1543)) |
+| Sent again (with or without anything identifying it) | Yes, each time | Each time: a count metric counts it again, and a revenue, duration or custom metric adds its value again; a conversion metric counts the user once ([#1543](https://github.com/Controlvar/controlvar/issues/1543)) |
 | Received before the user is assigned to the experiment | Yes, with no variant | No |
 | Received while the experiment is a draft, paused, completed or archived | Yes, with no variant | No |
 | Received after the user is assigned, with an earlier `timestamp` | Yes | Yes |
@@ -16,7 +16,8 @@ SDK, because each one sends its events through `POST /api/v1/tracking/track` and
 ## Sending an event again
 
 A request that timed out may already have been stored. An event you send again is stored again,
-and then a count metric counts it twice and a revenue metric adds its value twice.
+and then a count metric counts it twice and a revenue, duration or custom metric adds its value
+twice.
 
 ### When sending fails
 

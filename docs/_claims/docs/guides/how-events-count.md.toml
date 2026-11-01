@@ -23,7 +23,7 @@ text = "The event | Stored | Counts in its variant's results"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Sent again (with or without anything identifying it) | Yes, each time | Each time in count and revenue metrics; a conversion metric counts the user once (#1543)"
+text = "Sent again (with or without anything identifying it) | Yes, each time | Each time: a count metric counts it again, and a revenue, duration or custom metric adds its value again; a conversion metric counts the user once (#1543)"
 by = ["test:backend/tests/integration/api/test_how_events_count.py::test_an_event_sent_again_is_stored_and_counted_again"]
 
 [[unit]]
@@ -64,7 +64,7 @@ by = [
 ]
 
 [[unit]]
-text = "An event you send again is stored again, and then a count metric counts it twice and a revenue metric adds its value twice."
+text = "An event you send again is stored again, and then a count metric counts it twice and a revenue, duration or custom metric adds its value twice."
 by = ["test:backend/tests/integration/api/test_how_events_count.py::test_an_event_sent_again_is_stored_and_counted_again"]
 
 [[unit]]
@@ -130,7 +130,10 @@ by = [
 
 [[unit]]
 text = "Holdout results and CUPED history have their own rules: see Mutual Exclusion Groups and CUPED."
-by = ["exempt:navigation"]
+by = [
+    "test:backend/tests/integration/api/test_cuped_history_sent_by_tracking.py::test_history_is_matched_by_exact_id_and_dated_in_utc",
+    "test:backend/tests/integration/api/test_holdout_results.py::TestWindow::test_an_event_received_before_first_seen_does_not_count",
+]
 
 [[unit]]
 text = "Timestamps"

@@ -5,12 +5,14 @@ routes and ``GET /api/v1/results/{id}`` on a real database.
 ``docs/guides/how-events-count.md`` states these rules, and its registry under
 ``docs/_claims/`` names each test here. Each test holds today's behaviour and
 none sends an ``event_id``, so each stays true once an event can carry one
-(#1543): an event sent again without one is stored again.
+(#1543): an event sent again without one is stored again. Answers are read
+field by field, never compared whole, so a field an answer gains does not
+change what a test holds.
 
 The experiment is ACTIVE, ten users are assigned to each of its two arms, and
-it has three metrics on the ``purchase`` event: a conversion (the primary), a
-revenue and a count metric. Every ``/results`` read passes
-``use_cache=false``.
+it has five metrics on the ``purchase`` event: a conversion (the primary), a
+revenue, a count, a duration and a custom metric. Every ``/results`` read
+passes ``use_cache=false``.
 
 Rows created here are deleted in teardown: the shared test database is not
 truncated between tests.
@@ -41,6 +43,7 @@ pytestmark = [pytest.mark.integration, pytest.mark.requires_db]
 USERS = 10
 #: The metric names, by type.
 CONVERSION, REVENUE, COUNT = "Buyers", "Order value", "Purchases"
+DURATION, CUSTOM = "Checkout time", "Basket score"
 #: Keys whose value is the time of the request, not a result.
 VOLATILE_KEYS = frozenset({"computed_at", "timestamp", "generated_at"})
 #: A crawler's User-Agent, as Google documents it.
@@ -90,6 +93,18 @@ def experiment(db_session, make_experiment):
                 name=COUNT,
                 event_name="purchase",
                 metric_type=MetricType.COUNT,
+            ),
+            Metric(
+                experiment_id=exp.id,
+                name=DURATION,
+                event_name="purchase",
+                metric_type=MetricType.DURATION,
+            ),
+            Metric(
+                experiment_id=exp.id,
+                name=CUSTOM,
+                event_name="purchase",
+                metric_type=MetricType.CUSTOM,
             ),
         ]
     )
@@ -177,8 +192,9 @@ def test_an_event_sent_again_is_stored_and_counted_again(
 ):
     """The same purchase sent twice, through ``/track`` and through
     ``/batch``, carrying an order id in its metadata: two rows each, each
-    answered as stored. The revenue and count metrics count both copies; the
-    conversion metric counts each user once."""
+    answered as stored. The count metric counts both copies, and the revenue,
+    duration and custom metrics add both values; the conversion metric counts
+    each user once."""
     exp = experiment
     first, second = _user(exp, "control", 0), _user(exp, "control", 1)
     body = {"value": 20.0, "metadata": {"order_id": "order-1001"}}
@@ -196,11 +212,11 @@ def test_an_event_sent_again_is_stored_and_counted_again(
     for _ in range(2):
         response = admin_client.post("/api/v1/tracking/batch", json={"events": [item]})
         assert response.status_code == 200, response.text
-        assert response.json() == {
-            "success_count": 1,
-            "failure_count": 0,
-            "errors": None,
-        }
+        # Field by field, not the whole answer: a field the answer gains
+        # later must not change what this test holds.
+        answer = response.json()
+        assert (answer["success_count"], answer["failure_count"]) == (1, 0)
+        assert answer["errors"] is None
 
     for user_id in (first, second):
         rows = _rows(db_session, exp, user_id)
@@ -208,8 +224,10 @@ def test_an_event_sent_again_is_stored_and_counted_again(
         assert {r.event_metadata["order_id"] for r in rows} == {"order-1001"}
 
     arms = _arms(_results(admin_client, exp))
-    # Two buyers of 2 x 20 among ten users: (40 + 40) / 10.
-    assert arms[REVENUE]["control"]["mean"] == pytest.approx(8.0)
+    # Two buyers of 2 x 20 among ten users: (40 + 40) / 10, in every metric
+    # that adds the events' values.
+    for name in (REVENUE, DURATION, CUSTOM):
+        assert arms[name]["control"]["mean"] == pytest.approx(8.0), name
     # Four purchases among ten users.
     assert arms[COUNT]["control"]["mean"] == pytest.approx(0.4)
     # Two converting users, each counted once.
