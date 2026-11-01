@@ -84,7 +84,7 @@ class TestListGroups:
     def test_list_with_status_filter(self, service, mock_db):
         groups = [MagicMock()]
         mock_db.query.return_value.filter.return_value.offset.return_value.limit.return_value.all.return_value = groups
-        result = service.list_groups(status="active")
+        result = service.list_groups(status=MutualExclusionGroupStatus.ACTIVE)
         assert result == groups
 
     def test_list_with_pagination(self, service, mock_db):

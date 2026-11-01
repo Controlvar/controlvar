@@ -961,6 +961,18 @@ def test_every_known_entry_names_an_issue_or_a_cause_and_nothing_else():
         assert len(entry["reason"]) <= 160, entry
 
 
+@pytest.mark.regression
+def test_no_known_entry_cites_955():
+    """#955 is fixed: the list status filters answer 422, not 500, for a value
+    outside the enum. An entry still citing it would be a stale waiver."""
+    import tomllib
+
+    data = tomllib.loads(fuzz_check.KNOWN_5XX.read_text(encoding="utf-8"))
+    citing = [e for e in data.get("known", []) if e.get("issue") == 955]
+    assert citing == []
+    assert "955" not in " ".join(e["reason"] for e in data.get("known", []))
+
+
 def test_the_sdk_prefixes_are_the_rate_limiters():
     from backend.app.middleware.rate_limiter import SDK_PATH_PREFIXES
 
