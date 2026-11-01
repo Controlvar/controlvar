@@ -56,8 +56,8 @@ EX_CONFIG = 78
 #: Always believed, first in the list.
 LOOPBACK = ("127.0.0.1", "::1")
 
-ROUTE = "/proc/net/route"
-IF_INET6 = "/proc/net/if_inet6"
+ROUTE = "/proc/net/route-planted"
+IF_INET6 = "/proc/net/if_inet6-planted"
 
 #: Read at most this much of each ``/proc`` file.
 MAX_BYTES = 64 * 1024
