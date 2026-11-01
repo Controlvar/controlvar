@@ -15,7 +15,9 @@
 * ``get_assignment``/``get_feature_flag``/``get_all_flags``/``get_assignments``
   raise :class:`~controlvar.ExperimentationError`; the convenience
   wrappers ``get_variant``/``is_feature_enabled`` swallow it and return a
-  default; ``track``/``track_batch``/``report_error`` never raise.
+  default; ``get_string_value``/``get_number_value``/``get_json_value`` return
+  the caller's ``default`` and pass the reason to ``on_error(error, "value")``;
+  ``track``/``track_batch``/``report_error`` never raise.
 * Safe to share between threads.
 """
 
@@ -25,12 +27,12 @@ import json
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Union
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Union, cast
 from urllib.parse import quote, urlencode
 
 from .attribution import AttributedKeys
 from .cache import UserKeyCache
-from .evaluator import DEFER
+from .evaluator import DEFER, copy_value, is_value_of_type
 from .local import (
     DEFAULT_REFRESH_INTERVAL_SECONDS,
     MIN_REFRESH_INTERVAL_SECONDS,
@@ -83,6 +85,53 @@ def _context_param(attributes: Optional[Mapping[str, Any]]) -> Optional[str]:
     return json.dumps(dict(attributes), separators=(",", ":"), default=_json_default)
 
 
+def _json_type_of(value: Any) -> str:
+    """The value type of a value the server sent without a ``value_type``."""
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, (int, float)):
+        return "number"
+    if isinstance(value, (dict, list)):
+        return "json"
+    return type(value).__name__
+
+
+def _describe_type(value_type: str) -> str:
+    """A value type as the typed getters' messages name it."""
+    names = {"boolean": "a boolean", "string": "a string", "number": "a number", "json": "a JSON value"}
+    if value_type in names:
+        return names[value_type]
+    return f"a value of type {json.dumps(value_type[:64], ensure_ascii=False)}"
+
+
+def _served_value(evaluation: FlagEvaluation, flag_key: str, value_type: str, method: str) -> Any:
+    """The value ``evaluation`` serves when it is of ``value_type`` (a copy); otherwise raises
+    :class:`ExperimentationError` with ``code`` ``"INVALID_RESPONSE"`` or ``"TYPE_MISMATCH"``."""
+    flag = json.dumps(str(flag_key), ensure_ascii=False)
+    value = evaluation.value
+    if value is None:
+        raise ExperimentationError(
+            f"Flag {flag} came back without a value (from a server without flag values, or one that "
+            f"cannot serve this flag's stored value); {method} returned your default",
+            code="INVALID_RESPONSE",
+        )
+    served = evaluation.value_type if isinstance(evaluation.value_type, str) else _json_type_of(value)
+    if served != value_type:
+        raise ExperimentationError(
+            f"Flag {flag} serves {_describe_type(served)}; {method} returned your default",
+            code="TYPE_MISMATCH",
+        )
+    if not is_value_of_type(value, value_type):
+        raise ExperimentationError(
+            f"Flag {flag} serves {_describe_type(value_type)}, but the server's value is not one; "
+            f"{method} returned your default",
+            code="INVALID_RESPONSE",
+        )
+    return copy_value(value)
+
+
 def _retry_after_seconds(response: Response) -> float:
     header = response.header("Retry-After")
     seconds = DEFAULT_RETRY_AFTER_SECONDS
@@ -118,8 +167,9 @@ class ExperimentationClient:
             refreshed (default 30, minimum 5, +/-10% jitter).
         max_stale_seconds: Local mode: stop answering locally once the ruleset
             has not been refreshed for this long (default: no limit).
-        on_error: Called as ``on_error(error, operation)`` when a local-mode
-            ruleset refresh (``"refresh"``), evaluation-count report
+        on_error: Called as ``on_error(error, operation)`` whenever a typed
+            getter returns the caller's default (``"value"``), and when a
+            local-mode ruleset refresh (``"refresh"``), evaluation-count report
             (``"flush"``) or local evaluation (``"evaluate"``; that call then
             goes to the server) fails. Those never raise.
     """
@@ -189,11 +239,15 @@ class ExperimentationClient:
 
     def _report(self, error: ExperimentationError, operation: str) -> None:
         logger.warning("local evaluation %s failed: %s", operation, error)
+        self._call_on_error(error, operation)
+
+    def _call_on_error(self, error: ExperimentationError, operation: str) -> None:
+        """Pass a swallowed failure to ``on_error``; a handler that raises is logged, never re-raised."""
         if self._on_error is None:
             return
         try:
             self._on_error(error, operation)
-        except Exception:  # noqa: BLE001 - a failing handler must not stop the poller
+        except Exception:  # noqa: BLE001 - a failing handler must not stop the poller or a getter
             logger.exception("on_error handler raised")
 
     def ready(self, timeout_seconds: Optional[float] = None) -> ReadyResult:
@@ -398,6 +452,12 @@ class ExperimentationClient:
         in-process from the attributes passed (no request, no cache read) with
         ``source="local"``; anything else is evaluated by the server as above,
         with ``source="server"``.
+
+        ``value`` and ``value_type`` are the server's ``value`` and
+        ``value_type`` when it sends them, and ``None`` otherwise. A local
+        answer takes them from the ruleset: the on or off value and its type, or
+        ``enabled`` and ``"boolean"`` for an entry that names no type (every
+        flag of a server from before flag values).
         """
         if self._local is not None:
             answer = self._local.answer(flag_key, user_id, user_attributes)
@@ -408,6 +468,9 @@ class ExperimentationClient:
                     config=None,
                     reason=answer["reason"],
                     source="local",
+                    # A copy: a caller changing it must not change the ruleset every user is answered from.
+                    value=copy_value(answer["value"]),
+                    value_type=answer["value_type"],
                 )
                 # Recorded for the key-less track() fan-out, as a server answer is.
                 self._flags.set(user_id, flag_key, local)
@@ -433,16 +496,96 @@ class ExperimentationClient:
                 body=json.dumps(data),
             )
         reason = data.get("reason")
+        value_type = data.get("value_type")
         evaluation = FlagEvaluation(
             key=str(data.get("key") or flag_key),
             enabled=bool(data.get("enabled", False)),
             config=data.get("config"),
             reason=reason if isinstance(reason, str) else None,
             source="server" if self._local is not None else None,
+            # Only taken when the server sent them: an older server's answer has neither.
+            value=data.get("value"),
+            value_type=value_type if isinstance(value_type, str) else None,
         )
         self._flags.set(user_id, flag_key, evaluation)
         self._attributed.record_flag(user_id, flag_key)
         return evaluation
+
+    def get_string_value(
+        self,
+        flag_key: str,
+        user_id: str,
+        user_attributes: Optional[Mapping[str, Any]] = None,
+        *,
+        default: str,
+    ) -> str:
+        """The string a string flag serves ``user_id``: its on value when the flag is on for
+        them, its off value otherwise. Evaluated as :meth:`get_feature_flag` does, locally
+        included, with the same cache.
+
+        Never raises. ``default`` is keyword-only. Returns ``default``, logs a warning and
+        passes the reason to ``on_error(error, "value")`` when the request fails, the flag is
+        unknown (404), the server sends no value (``error.code`` ``"INVALID_RESPONSE"``: a
+        server without flag values, in server mode), or the flag serves another type
+        (``error.code`` ``"TYPE_MISMATCH"``). Nothing is coerced: a boolean flag is another
+        type, and in local mode every flag of a server without flag values reads as one.
+        """
+        return cast(str, self._typed_value(flag_key, user_id, user_attributes, default, "string", "get_string_value"))
+
+    def get_number_value(
+        self,
+        flag_key: str,
+        user_id: str,
+        user_attributes: Optional[Mapping[str, Any]] = None,
+        *,
+        default: float,
+    ) -> float:
+        """The number a number flag serves ``user_id``: an ``int`` or a ``float``, as saved
+        (``10.0`` stays a ``float``), never a ``bool``. See :meth:`get_string_value` for when
+        it returns ``default`` instead. Never raises; ``default`` is keyword-only."""
+        return cast(float, self._typed_value(flag_key, user_id, user_attributes, default, "number", "get_number_value"))
+
+    def get_json_value(
+        self,
+        flag_key: str,
+        user_id: str,
+        user_attributes: Optional[Mapping[str, Any]] = None,
+        *,
+        default: Any,
+    ) -> Any:
+        """The ``dict`` or ``list`` a json flag serves ``user_id``, as a new copy on every call:
+        changing it changes nothing the SDK keeps. See :meth:`get_string_value` for when it
+        returns ``default`` instead. Never raises; ``default`` is keyword-only."""
+        return self._typed_value(flag_key, user_id, user_attributes, default, "json", "get_json_value")
+
+    def _typed_value(
+        self,
+        flag_key: str,
+        user_id: str,
+        user_attributes: Optional[Mapping[str, Any]],
+        default: Any,
+        value_type: str,
+        method: str,
+    ) -> Any:
+        """The typed getters' one body: the value the flag serves when it is of ``value_type``
+        (a copy), and otherwise ``default``, with the reason logged and passed to
+        ``on_error(error, "value")``."""
+        try:
+            evaluation = self.get_feature_flag(flag_key, user_id, user_attributes)
+            return _served_value(evaluation, flag_key, value_type, method)
+        except Exception as exc:  # noqa: BLE001 - a typed getter never raises
+            if isinstance(exc, ExperimentationError):
+                error = exc
+            else:
+                error = ExperimentationError(
+                    f"Flag {json.dumps(str(flag_key), ensure_ascii=False)} could not be evaluated "
+                    f"({type(exc).__name__}: {exc}); {method} returned your default"
+                )
+                error.__cause__ = exc
+            # Logged as is_feature_enabled logs, and passed to on_error.
+            logger.warning("%s(%s, %s) failed: %s", method, flag_key, user_id, error)
+            self._call_on_error(error, "value")
+            return default
 
     def is_feature_enabled(
         self,
