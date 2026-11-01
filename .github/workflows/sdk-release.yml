@@ -5,17 +5,21 @@
 #
 #   sdk/js/v1.2.3        @controlvar/js-sdk 1.2.3                  -> npm
 #   sdk/python/v1.2.3    controlvar 1.2.3                          -> PyPI
+#   sdk/java/v1.2.3      com.controlvar:controlvar-sdk-parent,
+#                        controlvar-sdk, controlvar-spring-boot-starter 1.2.3
+#                                                                  -> the Central
+#                        Portal, for validation; a person publishes it there
 #   sdk/dotnet/v1.2.3    Controlvar.SDK 1.2.3                      -> NuGet
-#   sdk/go/v1.2.3       github.com/controlvar/controlvar/sdk/go   -> the Go module proxy
+#   sdk/go/v1.2.3        github.com/controlvar/controlvar/sdk/go   -> the Go module proxy
 #                        (the module path is lower case; the repository it is
 #                        fetched from is github.com/Controlvar/controlvar)
 #
 # That shape is Go's requirement (a module in a subdirectory is released by a
 # `<subdir>/vX.Y.Z` tag), reused for every SDK so there is one convention.
 #
-# Publishing is by trusted publishing -- OIDC, no long-lived token in any
-# secret. Each registry must be told, once, to trust this repository and this
-# workflow file:
+# npm, PyPI and NuGet publish by trusted publishing -- OIDC, no long-lived
+# token in any secret. Each registry must be told, once, to trust this
+# repository and this workflow file:
 #
 #   PyPI   Manage project -> Publishing -> Add a GitHub publisher:
 #          owner + repository + workflow `sdk-release.yml` + environment `sdk-release`
@@ -31,21 +35,33 @@
 # That is intent, read from the npm and pypa sources; no run has shown it.
 # The founder owns this (tracked in P3.8, issue #140).
 #
+# Maven Central has no trusted publishing. A Central user token and the GPG
+# signing key are secrets of the `sdk-release` environment
+# (CENTRAL_TOKEN_USERNAME, CENTRAL_TOKEN_PASSWORD, GPG_PRIVATE_KEY,
+# GPG_PASSPHRASE; the key's fingerprint is the environment variable
+# MAVEN_GPG_FINGERPRINT), and only the `maven` job reads them, each in the
+# steps that use it. That job signs the bundle `maven-build` built and checked,
+# uploads it to the Central Portal for validation only (publishingType
+# USER_MANAGED) and waits until Central calls it VALIDATED. Nothing in this
+# file publishes it: a person presses Publish on that deployment in the
+# Central Portal, or Drop to abandon it.
+#
 # `environment: sdk-release` is also where a human approval belongs. NOTE, as
 # intent rather than a working gate: an environment with no protection rule is
 # created on first use and approves nothing. The required-reviewer rule is
 # repository configuration, not something this file can assert, so it is on the
 # P3.8 checklist beside the registry configuration above.
 #
-# Each registry has two jobs. `pypi-build`, `npm-build` and `nuget-build`
-# install, test and build, and cannot request an OIDC token. `pypi`, `npm` and
-# `nuget` hold the token and the environment, install nothing from this
-# repository, and check the package they upload against the tag before
-# uploading it. So the environment's approval is asked for
-# after the tests and checks have passed. An npm prerelease (a version with a
-# `-`, such as 1.0.0-rc.1) publishes under the `next` dist-tag; a stable
-# version gets `latest`. backend/tests/smoke/test_sdk_release_wiring.py pins
-# this shape.
+# Each registry has two jobs. `pypi-build`, `npm-build`, `maven-build` and
+# `nuget-build` install, test and build, read no secret and cannot request an
+# OIDC token. `pypi`, `npm`, `maven` and `nuget` hold the environment, install
+# nothing from this repository, and check the package they upload against the
+# tag before uploading it; `pypi`, `npm` and `nuget` hold the OIDC token,
+# `maven` the Central and signing secrets. So the environment's approval is
+# asked for after the tests and checks have passed. An npm prerelease (a
+# version with a `-`, such as 1.0.0-rc.1) publishes under the `next` dist-tag;
+# a stable version gets `latest`. backend/tests/smoke/test_sdk_release_wiring.py,
+# test_sdk_release_maven.py and test_sdk_release_nuget.py pin this shape.
 name: SDK Release
 
 on:
@@ -156,10 +172,11 @@ jobs:
           ecosystem="$(python scripts/check_sdk_version.py "$sdk" --print-ecosystem)"
           # The registry name, from the manifest. It is not derivable from the
           # directory: sdk/openfeature is @controlvar/openfeature-provider
-          # while sdk/js is @controlvar/js-sdk, and sdk/dotnet is
+          # while sdk/js is @controlvar/js-sdk, sdk/java is
+          # com.controlvar:controlvar-sdk-parent and sdk/dotnet is
           # Controlvar.SDK.
           name=""
-          if [ "$ecosystem" = "pypi" ] || [ "$ecosystem" = "npm" ] || [ "$ecosystem" = "nuget" ]; then
+          if [ "$ecosystem" = "pypi" ] || [ "$ecosystem" = "npm" ] || [ "$ecosystem" = "maven" ] || [ "$ecosystem" = "nuget" ]; then
             name="$(python scripts/check_sdk_version.py "$sdk" --print-name)"
           fi
 
@@ -693,6 +710,702 @@ jobs:
               exit 1
               ;;
           esac
+
+  # ---------------------------------------------------------------------------
+  # Maven Central: sdk/java (the parent POM, the core and the Spring Boot
+  # starter, released together at the parent's version)
+  #
+  # Two jobs, the same shape as the others. `maven-build` tests, builds the
+  # Central bundle, checks it, and checks that a consumer resolves the starter
+  # from it alone. It reads no secret and cannot request an OIDC token. `maven`
+  # holds the environment and the signing secrets, has no checkout and runs no
+  # build tool: it checks the bundle against the build job's digest and the
+  # tag, signs each file, verifies every signature, uploads the signed bundle
+  # to the Central Portal for validation only and waits for Central's verdict.
+  # Publishing it is a person's click on that deployment in the Central Portal.
+  # ---------------------------------------------------------------------------
+  maven-build:
+    name: test and build for Maven Central
+    needs: resolve
+    if: needs.resolve.outputs.ecosystem == 'maven'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      digest: ${{ steps.record.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # Java 17, as sdk-unit-tests.yml tests the SDK; Maven comes from
+      # ./mvnw. No dependency cache: the consumer check below starts from an
+      # empty local repository anyway, and a restored ~/.m2 is input nobody
+      # checked.
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Run the SDK's tests
+        working-directory: sdk/java
+        run: ./mvnw -B -ntp clean verify
+
+      # The plugin below would upload with the credentials of the Maven server
+      # `central`. setup-java writes a settings.xml whose only server is
+      # `github`; this refuses one that names `central`, so this job has no
+      # Central credential to upload with.
+      - name: No Central credentials in this job
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib, sys
+          import xml.etree.ElementTree as ET
+
+          def local(tag):
+              return tag.rsplit("}", 1)[-1]
+
+          settings = pathlib.Path.home() / ".m2" / "settings.xml"
+          servers = []
+          if settings.is_file():
+              root = ET.parse(settings).getroot()
+              servers = [
+                  (child.text or "").strip()
+                  for server in root.iter()
+                  if local(server.tag) == "server"
+                  for child in server
+                  if local(child.tag) == "id"
+              ]
+          print(f"Maven servers in {settings}: {servers}")
+          if "central" in servers:
+              print("::error::settings.xml holds credentials for the server 'central'; this job must have none")
+              sys.exit(1)
+          PY
+
+      # `deploy` with the `central` profile: the central-publishing plugin
+      # replaces the deploy step with its own, which writes
+      # target/central-publishing/central-bundle.zip. sdk/java/pom.xml fixes
+      # skipUpload, and the line grepped for is the plugin's own when it skips
+      # the upload (read from its PublishMojo, 0.12.0): a run without it is
+      # not the build this job means.
+      - name: Build the Central bundle
+        working-directory: sdk/java
+        run: |
+          set -euo pipefail
+          ./mvnw -B -ntp -Pcentral -DskipTests deploy 2>&1 | tee "$RUNNER_TEMP/deploy.log"
+          if ! grep -F "Skipping the upload of the bundle at user's request (skipUpload)" "$RUNNER_TEMP/deploy.log"; then
+            printf '%s\n' "::error::the central-publishing plugin did not report that it skipped the upload; this is not the build this job means"
+            exit 1
+          fi
+
+      # Standard library only. The bundle holds exactly the files Central
+      # needs for these artefacts at the tag's version, each with md5, sha1,
+      # sha256 and sha512 files whose contents match, and nothing else: no
+      # signature (the `maven` job signs), no maven-metadata file and no
+      # _remote.repositories. No jar carries com/controlvar/sdk/examples.
+      # The entries are then written out as a file:// repository for the
+      # consumer check.
+      - name: Check the bundle
+        env:
+          NAME: ${{ needs.resolve.outputs.name }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+          # groupId:artifactId:packaging, the parent first, then each module
+          # of sdk/java/pom.xml. test_sdk_release_maven.py holds this to the
+          # POMs and to the same list in the `maven` job.
+          ARTIFACTS: >-
+            com.controlvar:controlvar-sdk-parent:pom
+            com.controlvar:controlvar-sdk:jar
+            com.controlvar:controlvar-spring-boot-starter:jar
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, io, os, pathlib, re, sys, zipfile
+
+          def fail(problems):
+              for problem in problems:
+                  print(f"::error::{problem}")
+              sys.exit(1)
+
+          name = os.environ["NAME"]
+          version = os.environ["VERSION"]
+          artifacts = [entry.split(":") for entry in os.environ["ARTIFACTS"].split()]
+          bundle = pathlib.Path("sdk/java/target/central-publishing/central-bundle.zip")
+          repo = pathlib.Path(os.environ["RUNNER_TEMP"]) / "bundle-repo"
+
+          problems = []
+          if not re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z.-]*", version):
+              problems.append(f"the tag resolved no usable version: {version!r}")
+          if not artifacts or any(len(a) != 3 or a[2] not in ("pom", "jar") for a in artifacts):
+              problems.append(f"ARTIFACTS is not a list of groupId:artifactId:pom|jar: {artifacts}")
+          elif ":".join(artifacts[0][:2]) != name:
+              problems.append(f"the tag resolved {name!r}; the bundle's parent is {':'.join(artifacts[0][:2])!r}")
+          if bundle.is_symlink() or not bundle.is_file():
+              problems.append(f"{bundle} was not written")
+          if problems:
+              fail(problems)
+
+          primary = []
+          for group, artifact, packaging in artifacts:
+              base = f"{group.replace('.', '/')}/{artifact}/{version}/{artifact}-{version}"
+              primary.append(f"{base}.pom")
+              if packaging == "jar":
+                  primary += [f"{base}.jar", f"{base}-sources.jar", f"{base}-javadoc.jar"]
+          checksums = {"md5": "md5", "sha1": "sha1", "sha256": "sha256", "sha512": "sha512"}
+          expected = sorted(f"{p}{s}" for p in primary for s in ["", *(f".{c}" for c in checksums)])
+
+          with zipfile.ZipFile(bundle) as archive:
+              names = archive.namelist()
+              if len(names) != len(set(names)):
+                  problems.append("the bundle holds an entry twice")
+              problems += [f"the bundle holds an unexpected entry: {n}" for n in sorted(set(names) - set(expected))]
+              problems += [f"the bundle is missing {n}" for n in sorted(set(expected) - set(names))]
+              if problems:
+                  fail(problems)
+              for path in primary:
+                  data = archive.read(path)
+                  for suffix, algorithm in checksums.items():
+                      recorded = archive.read(f"{path}.{suffix}").decode("ascii", "replace").split()
+                      if not recorded or recorded[0].lower() != hashlib.new(algorithm, data).hexdigest():
+                          problems.append(f"{path}.{suffix} does not match {path}")
+                  if path.endswith(".jar"):
+                      with zipfile.ZipFile(io.BytesIO(data)) as jar:
+                          if any("com/controlvar/sdk/examples/" in n for n in jar.namelist()):
+                              problems.append(f"{path} carries com/controlvar/sdk/examples, which is not API")
+              if problems:
+                  fail(problems)
+              repo.mkdir()
+              for entry in expected:
+                  target = repo / entry
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  target.write_bytes(archive.read(entry))
+
+          print(
+              f"{len(names)} entries: {len(primary)} files, each with md5, sha1, sha256 "
+              "and sha512 files that match it; no signature, maven-metadata or "
+              "_remote.repositories file"
+          )
+          for entry in expected:
+              print(f"  {entry}")
+          PY
+
+      # Central shows each artefact's url and scm, for good. sdk/java/pom.xml
+      # sets them once and tells Maven not to append each module's
+      # artifactId to them; without that, core's url would be
+      # .../sdk/java#readme/controlvar-sdk. Each module's effective value
+      # must be the parent's.
+      - name: Each module's published links are the parent's
+        working-directory: sdk/java
+        run: |
+          set -euo pipefail
+          listing="$(python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+          for module in ET.parse("pom.xml").getroot().findall("m:modules/m:module", ns):
+              print(module.text.strip())
+          PY
+          )"
+          mapfile -t modules <<< "$listing"
+          if [ -z "${modules[0]:-}" ]; then
+            printf '%s\n' "::error::sdk/java/pom.xml lists no modules"
+            exit 1
+          fi
+          evaluate() {
+            ./mvnw -B -q -N -f "$1/pom.xml" org.apache.maven.plugins:maven-help-plugin:3.5.2:evaluate -Dexpression="$2" -DforceStdout
+          }
+          fail=0
+          for expression in project.url project.scm.url project.scm.connection project.scm.developerConnection; do
+            parent="$(evaluate . "$expression")"
+            printf 'parent %s = %s\n' "$expression" "$parent"
+            case "$parent" in
+              https://github.com/Controlvar/controlvar*|scm:git:https://github.com/Controlvar/controlvar*|scm:git:ssh://git@github.com/Controlvar/controlvar*) ;;
+              *)
+                printf '%s\n' "::error::sdk/java/pom.xml's $expression is '$parent'"
+                fail=1
+                ;;
+            esac
+            for module in "${modules[@]}"; do
+              value="$(evaluate "$module" "$expression")"
+              printf '%s %s = %s\n' "$module" "$expression" "$value"
+              if [ "$value" != "$parent" ]; then
+                printf '%s\n' "::error::$module's $expression is '$value', not the parent's '$parent'"
+                fail=1
+              fi
+            done
+          done
+          exit "$fail"
+
+      # A consumer that has only the bundle: an empty local repository, the
+      # bundle as a file:// repository, and Maven Central for everything else.
+      # It fails if the parent POM is missing from the bundle or a ${property}
+      # in a published POM does not resolve. It runs in an empty directory:
+      # run in sdk/java, Maven takes the parent POM from the checkout, not
+      # from the bundle (seen when this step was first run). Then each POM
+      # and jar ARTIFACTS names must be in the bundle and resolved by the
+      # consumer, byte for byte the bundle's: the list, not the bundle,
+      # says what to expect.
+      - name: A consumer resolves the starter from the bundle alone
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+          ARTIFACTS: >-
+            com.controlvar:controlvar-sdk-parent:pom
+            com.controlvar:controlvar-sdk:jar
+            com.controlvar:controlvar-spring-boot-starter:jar
+        run: |
+          set -euo pipefail
+          repo="$RUNNER_TEMP/bundle-repo"
+          local_repo="$RUNNER_TEMP/consumer-m2"
+          consumer="$RUNNER_TEMP/consumer"
+          if [ -e "$local_repo" ] || [ -e "$consumer" ]; then
+            printf '%s\n' "::error::$local_repo or $consumer exists; the consumer must start from an empty local repository in an empty directory"
+            exit 1
+          fi
+          mkdir "$consumer"
+          cd "$consumer"
+          "$GITHUB_WORKSPACE/sdk/java/mvnw" -B -ntp -Dmaven.repo.local="$local_repo" org.apache.maven.plugins:maven-dependency-plugin:3.11.0:get -DremoteRepositories="bundle::default::file://$repo" -Dartifact="com.controlvar:controlvar-spring-boot-starter:$VERSION" -Dtransitive=true
+          python3 - "$repo" "$local_repo" <<'PY'
+          import hashlib, os, pathlib, sys
+
+          bundle, local = (pathlib.Path(p) for p in sys.argv[1:3])
+          version = os.environ["VERSION"]
+          expected = []
+          for entry in os.environ["ARTIFACTS"].split():
+              group, artifact, packaging = entry.split(":")
+              base = f"{group.replace('.', '/')}/{artifact}/{version}/{artifact}-{version}"
+              expected.append(f"{base}.pom")
+              if packaging == "jar":
+                  expected.append(f"{base}.jar")
+          problems = []
+          resolved = []
+          for relative in expected:
+              source, copy = bundle / relative, local / relative
+              if not source.is_file():
+                  problems.append(f"the bundle has no {relative}")
+              elif not copy.is_file():
+                  problems.append(f"the consumer did not resolve {relative}")
+              elif hashlib.sha256(copy.read_bytes()).digest() != hashlib.sha256(source.read_bytes()).digest():
+                  problems.append(f"the consumer resolved a {relative} that is not the bundle's")
+              else:
+                  resolved.append(relative)
+          for problem in problems:
+              print(f"::error::{problem}")
+          if problems or not resolved:
+              sys.exit(1)
+          print(f"{len(resolved)} files resolved from the bundle, each equal to it:")
+          for name in resolved:
+              print(f"  {name}")
+          PY
+
+      # The sha256 of the bundle's bytes. The `maven` job recomputes it over
+      # what it downloaded and compares it with this job's output.
+      - name: Record the bundle
+        id: record
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, os, pathlib
+
+          bundle = pathlib.Path("sdk/java/target/central-publishing/central-bundle.zip")
+          digest = hashlib.sha256(bundle.read_bytes()).hexdigest()
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"digest={digest}\n")
+          print(f"{digest}  {bundle.name}")
+          PY
+
+      - name: Upload the checked bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: maven-bundle
+          path: sdk/java/target/central-publishing/central-bundle.zip
+          if-no-files-found: error
+          overwrite: false
+
+  maven:
+    name: sign and upload to Maven Central for validation
+    needs: [resolve, maven-build]
+    if: needs.resolve.outputs.ecosystem == 'maven'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment:
+      name: sdk-release
+      url: https://central.sonatype.com/publishing/deployments
+    permissions:
+      contents: read
+    steps:
+      # Pinned by full commit SHA, like the pypi job's publish action.
+      - name: Download the checked bundle
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: maven-bundle
+          path: ${{ github.workspace }}/bundle
+
+      # Standard library only. Exactly one file was downloaded, central-bundle.zip,
+      # its sha256 is the one the build job recorded, and it holds exactly the
+      # tag's files with matching checksums. Each entry is then written by its
+      # expected name (never by a name read from the archive) into
+      # $RUNNER_TEMP/bundle, with the list of files to sign beside it.
+      - name: Check the bundle against the tag
+        env:
+          NAME: ${{ needs.resolve.outputs.name }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+          DIGEST: ${{ needs.maven-build.outputs.digest }}
+          ARTIFACTS: >-
+            com.controlvar:controlvar-sdk-parent:pom
+            com.controlvar:controlvar-sdk:jar
+            com.controlvar:controlvar-spring-boot-starter:jar
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, io, os, pathlib, re, sys, zipfile
+
+          def fail(problems):
+              for problem in problems:
+                  print(f"::error::{problem}")
+              sys.exit(1)
+
+          name = os.environ["NAME"]
+          version = os.environ["VERSION"]
+          expected_digest = os.environ["DIGEST"]
+          artifacts = [entry.split(":") for entry in os.environ["ARTIFACTS"].split()]
+          folder = pathlib.Path(os.environ["GITHUB_WORKSPACE"]) / "bundle"
+          temp = pathlib.Path(os.environ["RUNNER_TEMP"])
+
+          problems = []
+          if not re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z.-]*", version):
+              problems.append(f"the tag resolved no usable version: {version!r}")
+          if not artifacts or any(len(a) != 3 or a[2] not in ("pom", "jar") for a in artifacts):
+              problems.append(f"ARTIFACTS is not a list of groupId:artifactId:pom|jar: {artifacts}")
+          elif ":".join(artifacts[0][:2]) != name:
+              problems.append(f"the tag resolved {name!r}; the bundle's parent is {':'.join(artifacts[0][:2])!r}")
+          if not re.fullmatch(r"[0-9a-f]{64}", expected_digest):
+              problems.append(f"the build job recorded no usable digest: {expected_digest!r}")
+          found = sorted(p.name for p in folder.iterdir()) if folder.is_dir() else []
+          if found != ["central-bundle.zip"]:
+              problems.append(f"expected exactly central-bundle.zip in {folder}, found {found}")
+          if problems:
+              fail(problems)
+          path = folder / "central-bundle.zip"
+          if path.is_symlink() or not path.is_file():
+              fail([f"{path} is not a regular file"])
+          data = path.read_bytes()
+          digest = hashlib.sha256(data).hexdigest()
+          if digest != expected_digest:
+              fail([f"central-bundle.zip has digest {digest}; the build job recorded {expected_digest}"])
+
+          primary = []
+          for group, artifact, packaging in artifacts:
+              base = f"{group.replace('.', '/')}/{artifact}/{version}/{artifact}-{version}"
+              primary.append(f"{base}.pom")
+              if packaging == "jar":
+                  primary += [f"{base}.jar", f"{base}-sources.jar", f"{base}-javadoc.jar"]
+          checksums = {"md5": "md5", "sha1": "sha1", "sha256": "sha256", "sha512": "sha512"}
+          expected = sorted(f"{p}{s}" for p in primary for s in ["", *(f".{c}" for c in checksums)])
+
+          with zipfile.ZipFile(io.BytesIO(data)) as archive:
+              names = archive.namelist()
+              if len(names) != len(set(names)):
+                  problems.append("the bundle holds an entry twice")
+              problems += [f"the bundle holds an unexpected entry: {n}" for n in sorted(set(names) - set(expected))]
+              problems += [f"the bundle is missing {n}" for n in sorted(set(expected) - set(names))]
+              if problems:
+                  fail(problems)
+              for entry in primary:
+                  content = archive.read(entry)
+                  for suffix, algorithm in checksums.items():
+                      recorded = archive.read(f"{entry}.{suffix}").decode("ascii", "replace").split()
+                      if not recorded or recorded[0].lower() != hashlib.new(algorithm, content).hexdigest():
+                          problems.append(f"{entry}.{suffix} does not match {entry}")
+              if problems:
+                  fail(problems)
+              out = temp / "bundle"
+              out.mkdir()
+              for entry in expected:
+                  target = out / entry
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  target.write_bytes(archive.read(entry))
+
+          (temp / "primary-files.txt").write_text("".join(f"{p}\n" for p in primary), encoding="utf-8")
+          print(f"{len(names)} entries for {name} {version}, digest {digest}; {len(primary)} files to sign:")
+          for entry in primary:
+              print(f"  {entry}")
+          PY
+
+      # The key arrives ASCII-armoured in a secret and is imported into a new
+      # keyring under $RUNNER_TEMP. Refused, by name: an empty secret or
+      # variable (a misnamed one reads as empty), a fingerprint that is not 40
+      # hex digits, a keyring holding other than exactly one secret key, and a
+      # key whose fingerprint is not MAVEN_GPG_FINGERPRINT.
+      - name: Import the signing key
+        id: key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          MAVEN_GPG_FINGERPRINT: ${{ vars.MAVEN_GPG_FINGERPRINT }}
+        run: |
+          set -euo pipefail
+          missing=""
+          for name in GPG_PRIVATE_KEY GPG_PASSPHRASE MAVEN_GPG_FINGERPRINT; do
+            if [ -z "${!name:-}" ]; then
+              missing="$missing $name"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            printf '%s\n' "::error::empty in the sdk-release environment:$missing (a secret or variable that does not exist reads as empty)"
+            exit 1
+          fi
+          fingerprint="$(printf '%s' "$MAVEN_GPG_FINGERPRINT" | tr -d ' ' | tr 'abcdef' 'ABCDEF')"
+          if ! [[ "$fingerprint" =~ ^[0-9A-F]{40}$ ]]; then
+            printf '%s\n' "::error::MAVEN_GPG_FINGERPRINT is not a 40-digit hex fingerprint: '$MAVEN_GPG_FINGERPRINT'"
+            exit 1
+          fi
+          export GNUPGHOME="$RUNNER_TEMP/gnupg"
+          mkdir -m 700 "$GNUPGHOME"
+          printf '%s\n' "$GPG_PRIVATE_KEY" | gpg --batch --no-tty --import
+          listing="$(gpg --batch --with-colons --list-secret-keys)"
+          count="$(printf '%s\n' "$listing" | awk -F: '$1 == "sec"' | wc -l | tr -d ' ')"
+          if [ "$count" != "1" ]; then
+            printf '%s\n' "::error::GPG_PRIVATE_KEY holds $count secret keys; it must hold exactly one"
+            exit 1
+          fi
+          # awk reads to the end (no `exit`), so printf never meets a closed
+          # pipe, which pipefail would turn into a silent failure here.
+          found="$(printf '%s\n' "$listing" | awk -F: '$1 == "sec" { primary = 1; next } $1 == "fpr" && primary { print $10; primary = 0 }')"
+          if [ "$found" != "$fingerprint" ]; then
+            printf '%s\n' "::error::GPG_PRIVATE_KEY is the key $found, but MAVEN_GPG_FINGERPRINT says $fingerprint"
+            exit 1
+          fi
+          printf 'fingerprint=%s\n' "$fingerprint" >> "$GITHUB_OUTPUT"
+          printf 'imported the signing key %s\n' "$fingerprint"
+
+      # Central verifies each signature against public keyservers. A key that
+      # is not on keyserver.ubuntu.com is refused here, before an upload that
+      # Central would fail with a less direct error.
+      - name: The key is on keyserver.ubuntu.com
+        env:
+          FINGERPRINT: ${{ steps.key.outputs.fingerprint }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$FINGERPRINT" =~ ^[0-9A-F]{40}$ ]]; then
+            printf '%s\n' "::error::the key step recorded no usable fingerprint: '$FINGERPRINT'"
+            exit 1
+          fi
+          export GNUPGHOME="$RUNNER_TEMP/gnupg"
+          published="$RUNNER_TEMP/published-key.asc"
+          if ! curl --fail -sS --max-time 60 --output "$published" "https://keyserver.ubuntu.com/pks/lookup?op=get&options=mr&search=0x$FINGERPRINT"; then
+            printf '%s\n' "::error::keyserver.ubuntu.com does not serve the key $FINGERPRINT; upload its public half there, then re-run this job"
+            exit 1
+          fi
+          listed="$(gpg --batch --with-colons --show-keys "$published" | awk -F: '$1 == "pub" { primary = 1; next } $1 == "fpr" && primary { print $10; primary = 0 }')"
+          if ! printf '%s\n' "$listed" | grep -x "$FINGERPRINT" > /dev/null; then
+            printf '%s\n' "::error::keyserver.ubuntu.com answered for $FINGERPRINT with the key(s) '$listed'"
+            exit 1
+          fi
+          printf 'keyserver.ubuntu.com serves %s\n' "$FINGERPRINT"
+
+      # A detached, ASCII-armoured signature beside each file (Central's
+      # requirements: .asc files need no checksum files). The passphrase
+      # reaches gpg on a pipe from printf, a shell builtin, so it is in no
+      # process's arguments.
+      - name: Sign each file
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          FINGERPRINT: ${{ steps.key.outputs.fingerprint }}
+        run: |
+          set -euo pipefail
+          export GNUPGHOME="$RUNNER_TEMP/gnupg"
+          bundle="$RUNNER_TEMP/bundle"
+          signed=0
+          while IFS= read -r file; do
+            printf '%s' "$GPG_PASSPHRASE" | gpg --batch --no-tty --yes --pinentry-mode loopback --passphrase-fd 0 --local-user "$FINGERPRINT" --armor --detach-sign --output "$bundle/$file.asc" "$bundle/$file"
+            signed=$((signed + 1))
+          done < "$RUNNER_TEMP/primary-files.txt"
+          if [ "$signed" -eq 0 ]; then
+            printf '%s\n' "::error::there was nothing to sign"
+            exit 1
+          fi
+          printf 'signed %s files\n' "$signed"
+
+      # Every signature verifies, and was made by the key MAVEN_GPG_FINGERPRINT
+      # names (the last field of gpg's VALIDSIG status line is the primary
+      # key's fingerprint, whichever subkey signed).
+      - name: Verify every signature
+        env:
+          FINGERPRINT: ${{ steps.key.outputs.fingerprint }}
+        run: |
+          set -euo pipefail
+          export GNUPGHOME="$RUNNER_TEMP/gnupg"
+          bundle="$RUNNER_TEMP/bundle"
+          bad=0
+          checked=0
+          while IFS= read -r file; do
+            if ! status="$(gpg --batch --no-tty --status-fd 1 --verify "$bundle/$file.asc" "$bundle/$file")"; then
+              printf '%s\n' "::error::$file: the signature does not verify"
+              bad=1
+              continue
+            fi
+            signer="$(printf '%s\n' "$status" | awk '$2 == "VALIDSIG" { print $NF }')"
+            if [ "$signer" != "$FINGERPRINT" ]; then
+              printf '%s\n' "::error::$file is signed by '$signer', not by $FINGERPRINT"
+              bad=1
+              continue
+            fi
+            checked=$((checked + 1))
+          done < "$RUNNER_TEMP/primary-files.txt"
+          if [ "$bad" -ne 0 ] || [ "$checked" -eq 0 ]; then
+            exit 1
+          fi
+          printf '%s signatures verify, each by %s\n' "$checked" "$FINGERPRINT"
+
+      # The checked files and their signatures, in a new zip with the entries
+      # in sorted order: what is uploaded is what was checked and signed.
+      - name: Zip the signed bundle
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, pathlib, sys, zipfile
+
+          temp = pathlib.Path(os.environ["RUNNER_TEMP"])
+          root = temp / "bundle"
+          primary = (temp / "primary-files.txt").read_text(encoding="utf-8").split()
+          entries = sorted((p.relative_to(root).as_posix(), p) for p in root.rglob("*") if p.is_file())
+          names = [name for name, _ in entries]
+          signatures = sorted(n for n in names if n.endswith(".asc"))
+          if not primary or signatures != sorted(f"{p}.asc" for p in primary):
+              print(f"::error::expected one signature for each of {primary}, found {signatures}")
+              sys.exit(1)
+          out = temp / "signed" / "central-bundle.zip"
+          out.parent.mkdir()
+          with zipfile.ZipFile(out, "x", zipfile.ZIP_DEFLATED) as archive:
+              for name, path in entries:
+                  archive.write(path, name)
+          print(f"{len(names)} entries, {len(signatures)} of them signatures")
+          PY
+
+      # The bearer value is base64("user:password"), from Python, which never
+      # wraps a line; GNU base64 wraps at 76 columns, and the second line of a
+      # wrapped value would be printed unmasked. It is masked before anything
+      # uses it, and reaches curl on stdin as a config line (`-K -`), so it is
+      # in no process's arguments. USER_MANAGED: Central validates the bundle
+      # and publishes nothing until a person presses Publish in the Portal.
+      - name: Upload for validation
+        id: upload
+        env:
+          CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CENTRAL_TOKEN_USERNAME" ] || [ -z "$CENTRAL_TOKEN_PASSWORD" ]; then
+            printf '%s\n' "::error::CENTRAL_TOKEN_USERNAME or CENTRAL_TOKEN_PASSWORD is empty in the sdk-release environment (a secret that does not exist reads as empty)"
+            exit 1
+          fi
+          if ! [[ "$VERSION" =~ ^[0-9A-Za-z][0-9A-Za-z.-]*$ ]]; then
+            printf '%s\n' "::error::the tag resolved no usable version: '$VERSION'"
+            exit 1
+          fi
+          bearer="$(python3 -c 'import base64, os; print(base64.b64encode((os.environ["CENTRAL_TOKEN_USERNAME"] + ":" + os.environ["CENTRAL_TOKEN_PASSWORD"]).encode()).decode())')"
+          printf '::add-mask::%s\n' "$bearer"
+          response="$RUNNER_TEMP/upload-response.txt"
+          if ! printf 'header = "Authorization: Bearer %s"\n' "$bearer" | curl --fail-with-body -sS --max-time 900 -K - --form "bundle=@$RUNNER_TEMP/signed/central-bundle.zip" --output "$response" "https://central.sonatype.com/api/v1/publisher/upload?publishingType=USER_MANAGED&name=controlvar-sdk-$VERSION"; then
+            printf '%s\n' "::error::the Central Portal refused the upload; its answer follows"
+            if [ -f "$response" ]; then
+              cat "$response"
+            fi
+            exit 1
+          fi
+          deployment="$(tr -d '[:space:]' < "$response")"
+          if ! [[ "$deployment" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+            printf '%s\n' "::error::the Central Portal answered the upload with something that is not a deployment id: '${deployment:0:500}'"
+            exit 1
+          fi
+          printf 'deployment=%s\n' "$deployment" >> "$GITHUB_OUTPUT"
+          printf 'uploaded for validation: deployment %s\n' "$deployment"
+
+      # Central validates the deployment: VALIDATED ends the job green and
+      # says, in this step's log, what to check before pressing Publish
+      # (the log, not the step summary: a workflow that writes a summary must
+      # be classified in test_qa_templates_public_text.py's WORKFLOW_POSTERS).
+      # FAILED prints Central's errors, and anything else after POLL_ATTEMPTS
+      # polls fails. PUBLISHING or PUBLISHED is a failure too: this job never
+      # asks for either, so something else did.
+      - name: Wait for Central's validation
+        env:
+          CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+          DEPLOYMENT: ${{ steps.upload.outputs.deployment }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+          POLL_ATTEMPTS: '180'
+          POLL_SECONDS: '10'
+        run: |
+          set -euo pipefail
+          if [ -z "$CENTRAL_TOKEN_USERNAME" ] || [ -z "$CENTRAL_TOKEN_PASSWORD" ]; then
+            printf '%s\n' "::error::CENTRAL_TOKEN_USERNAME or CENTRAL_TOKEN_PASSWORD is empty in the sdk-release environment"
+            exit 1
+          fi
+          if ! [[ "$DEPLOYMENT" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+            printf '%s\n' "::error::the upload step recorded no deployment id: '$DEPLOYMENT'"
+            exit 1
+          fi
+          bearer="$(python3 -c 'import base64, os; print(base64.b64encode((os.environ["CENTRAL_TOKEN_USERNAME"] + ":" + os.environ["CENTRAL_TOKEN_PASSWORD"]).encode()).decode())')"
+          printf '::add-mask::%s\n' "$bearer"
+          status="$RUNNER_TEMP/status.json"
+          state=""
+          attempt=0
+          while [ "$attempt" -lt "$POLL_ATTEMPTS" ]; do
+            attempt=$((attempt + 1))
+            if ! printf 'header = "Authorization: Bearer %s"\n' "$bearer" | curl --fail-with-body -sS --max-time 60 -K - --request POST --output "$status" "https://central.sonatype.com/api/v1/publisher/status?id=$DEPLOYMENT"; then
+              printf '%s\n' "::error::the Central Portal did not answer for deployment $DEPLOYMENT; its answer follows"
+              if [ -f "$status" ]; then
+                cat "$status"
+              fi
+              exit 1
+            fi
+            state="$(python3 -c 'import json, sys; answer = json.load(open(sys.argv[1], encoding="utf-8")); print(answer["deploymentState"])' "$status")" || state="unreadable"
+            printf 'poll %s of %s: %s\n' "$attempt" "$POLL_ATTEMPTS" "$state"
+            case "$state" in
+              PENDING|VALIDATING) sleep "$POLL_SECONDS" ;;
+              *) break ;;
+            esac
+          done
+          case "$state" in
+            VALIDATED) ;;
+            FAILED)
+              printf '%s\n' "::error::Central did not validate deployment $DEPLOYMENT; its errors follow"
+              python3 -c 'import json, sys; print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8")).get("errors"), indent=2))' "$status" || cat "$status"
+              exit 1
+              ;;
+            PENDING|VALIDATING)
+              printf '%s\n' "::error::deployment $DEPLOYMENT is still $state after $POLL_ATTEMPTS polls; look at it in the Central Portal"
+              exit 1
+              ;;
+            PUBLISHING|PUBLISHED)
+              printf '%s\n' "::error::deployment $DEPLOYMENT is $state; this job uploads for validation only, so something else published it"
+              exit 1
+              ;;
+            *)
+              printf '%s\n' "::error::the Central Portal gave deployment $DEPLOYMENT the state '$state'"
+              exit 1
+              ;;
+          esac
+          python3 - <<'PY'
+          import os, pathlib
+
+          deployment = os.environ["DEPLOYMENT"]
+          version = os.environ["VERSION"]
+          temp = pathlib.Path(os.environ["RUNNER_TEMP"])
+          files = (temp / "primary-files.txt").read_text(encoding="utf-8").split()
+          artifacts = sorted({f.split("/")[-3] for f in files})
+          lines = [
+              f"Deployment {deployment} is VALIDATED and NOT published.",
+              "",
+              f"To publish {', '.join(artifacts)} {version} (com.controlvar) to Maven Central "
+              "for good, open https://central.sonatype.com/publishing/deployments, check that "
+              f"the deployment id is {deployment} and that it lists these {len(files)} files:",
+              "",
+              *(f"- {name.rsplit('/', 1)[-1]}" for name in files),
+              "",
+              "then press Publish. To abandon it, press Drop.",
+          ]
+          print("\n".join(lines))
+          PY
 
   # ---------------------------------------------------------------------------
   # NuGet: sdk/dotnet (Controlvar.SDK)

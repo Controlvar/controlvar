@@ -14,13 +14,13 @@ import pytest
 import re2
 
 from backend.app.core import pattern_match
+from backend.app.core.flag_values import MAX_SAFE_INTEGER
 from backend.app.models import register_core_models
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.schemas.targeting_rule import Condition, OperatorType
 from backend.app.services import sdk_ruleset
 from backend.app.services.sdk_ruleset import (
     LOCAL_OPERATORS,
-    MAX_SAFE_INTEGER,
     build_flag_entry,
     build_ruleset,
     condition_is_local,

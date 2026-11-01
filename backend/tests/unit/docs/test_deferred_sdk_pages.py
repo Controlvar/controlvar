@@ -534,7 +534,7 @@ INSTALL_SAMPLES = (
     ),
     (
         "`./mvnw install`, then add `mavenLocal()` and\n"
-        "`implementation 'com.controlvar:controlvar-sdk:1.0.0'`",
+        "`implementation 'com.controlvar:controlvar-sdk:0.1.0'`",
         [],
     ),
 )
