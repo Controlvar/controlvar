@@ -42,6 +42,24 @@ by = [
 ]
 
 [[unit]]
+text = "A flag targeted on a value inside a JSON attribute | Flag targeting refuses the json_path operator with 422, because flag evaluation does not implement it. Experiment targeting accepts it."
+by = [
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_flag_targeting_refuses_json_path_and_percentage_bucket",
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_flag_evaluation_does_not_implement_json_path_or_percentage_bucket",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_create_refuses_the_word",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_an_experiment_still_accepts_json_path_and_percentage_bucket",
+]
+
+[[unit]]
+text = "A flag targeted on a percentage bucket of an attribute | Flag targeting refuses the percentage_bucket operator with 422, because flag evaluation does not implement it. Experiment targeting accepts it."
+by = [
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_flag_targeting_refuses_json_path_and_percentage_bucket",
+    "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_flag_evaluation_does_not_implement_json_path_or_percentage_bucket",
+    "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_refused_with_fixed_text",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_an_experiment_still_accepts_json_path_and_percentage_bucket",
+]
+
+[[unit]]
 text = "Experiments and results"
 by = ["exempt:label"]
 

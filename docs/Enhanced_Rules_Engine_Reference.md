@@ -50,8 +50,15 @@ A condition on an attribute the request's context does not carry does not hold, 
 | none | `before`, `after` | the attribute is a date before, or after, the value ([below](#before-before-after-after)). |
 | none | `array_length` | the attribute is a list, text or object whose length compares with the value as `additional_value` says: `eq` (the default), `gt`, `gte`, `lt`, `lte`, or `between` a `{"min", "max"}` value, both included. A number or `null` has no length and does not match. |
 
-The native shape also accepts `json_path` and `percentage_bucket`. Flag targeting and
-experiment targeting do not answer them alike, so they are not documented here.
+Experiment targeting also accepts `json_path` and `percentage_bucket`, in the native shape;
+they are not documented here. Flag targeting refuses them with `422`, because flag evaluation
+does not implement them.
+
+A comparison or unit this page does not list is refused when rules are saved (`422`). Rules
+saved earlier with one keep answering as they did: the condition does not hold, so under `NOT`
+it holds for every user. `python -m backend.scripts.check_targeting_rules` lists the flags,
+experiments and segments that have such rules, and a save that sends them back is refused until
+they are corrected.
 
 A native condition may also carry `attribute_type`. Neither flag targeting nor experiment
 targeting reads it: the condition is answered from the attribute's value alone.
@@ -88,13 +95,18 @@ the attribute is ignored. An attribute that is not a whole version, such as `"17
 dashboard shape a short value is filled in: `17` is `17.0.0` and `17.4` is `17.4.0`. A
 pre-release comes before its release (`1.2.3-beta.1` is lower than `1.2.3`), and `eq` ignores
 build metadata (`1.0.0+build.1` equals `1.0.0+build.2`). A native condition with no
-`additional_value` compares with `eq`.
+`additional_value` compares with `eq`. Any other `additional_value` is refused. There is no
+`ne`: put an `eq` condition in a `NOT` group instead.
 
 ### GEO_DISTANCE (`geo_distance`)
 
 The attribute is a point: `[latitude, longitude]`, or an object with `lat` and `lon` (or
 `latitude` and `longitude`). The condition holds when the great-circle distance from the
-rule's point is at most the radius, in kilometres unless the rule gives `miles` or `meters`.
+rule's point is at most the radius, in kilometres unless the rule gives a unit: `km`,
+`kilometers`, `kilometre` or `kilometres`; `mi` or `miles`; `m`, `meters` or `metres`, in any
+case. In the native shape `additional_value` may also carry `comparison`: `lte` (the default,
+within the radius), `lt`, `gt`, `gte`, or `eq` (within 0.01 of the radius, in the rule's unit).
+Any other unit or comparison is refused when the rules are saved.
 
 - Dashboard: `{"lat": 37.7749, "lon": -122.4194, "radius": 15, "unit": "km"}`, the list
   `[37.7749, -122.4194, 15, "km"]` or the text `"37.7749,-122.4194,15,km"`. The unit is
@@ -148,7 +160,10 @@ for that user, with reason `error`, the experiment does not enrol them, and a
 segment that holds the window cannot be decided for them. A user decided by an
 earlier rule never reaches it, and a window in `default_rule` is never read. So
 a window with ISO datetimes in `start` and `end` is refused, in either shape
-(accepting them is #1156). For a window between two moments, use `after` and
+(accepting them is #1156). In the native shape, a window that cannot be read is
+also refused when the rules of a flag or an experiment are saved (`422`); one
+saved before that is evaluated as above. A window in the dashboard shape is not
+checked when it is saved. For a window between two moments, use `after` and
 `before` (below) in an `AND` group.
 
 Flag targeting and experiment targeting read a window the same way.
@@ -197,6 +212,9 @@ no `default_rule` applies, and a `NOT` around the condition does not turn it int
 - the user is not eligible for the experiment;
 - a flag or an experiment that names a segment whose rules hold the condition answers as
   above, because the user's membership of that segment cannot be decided.
+
+A native `time_window` that cannot be read is now refused when the rules are saved, and one
+stored before that still abandons the ruleset as above.
 
 ## Usage examples
 

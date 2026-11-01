@@ -153,7 +153,9 @@ export const TYPED: readonly Row[] = [
   },
   {
     tag: 'li',
-    text: 'Targeting with 20+ operators: semantic version comparison, geo-distance, time windows, JSON path and array operations',
+    // #1204: flag targeting refuses json_path, so "JSON path" left this flags
+    // row; flags keep 26 of the 28 operators, so "20+" still holds.
+    text: 'Targeting with 20+ operators: semantic version comparison, geo-distance, time windows and array operations',
     source: `${MAIN}:116`,
   },
   { tag: 'li', text: 'Switch a flag on and off, and find each change in the audit log', source: `${UX} Row 1; videos.json 03` },
