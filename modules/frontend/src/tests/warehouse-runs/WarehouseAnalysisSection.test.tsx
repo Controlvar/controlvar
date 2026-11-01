@@ -10,6 +10,7 @@ import { ModulesProvider } from '@/contexts/ModulesContext';
 import { ApiError, apiFetch } from '@/services/api';
 import { routedApi, Route } from '@/tests/pages/helpers/apiMock';
 import WarehouseAnalysisSection from '@modules/components/warehouse/runs/WarehouseAnalysisSection';
+import RunResults from '@modules/components/warehouse/runs/RunResults';
 import {
   isKnownFailure,
   RESULTS_DIFFERENCE,
@@ -419,7 +420,7 @@ describe('results', () => {
     expect(screen.getByTestId('warehouse-cost')).toHaveTextContent('Billed 21.0 MB');
     const rows = screen.getAllByTestId('warehouse-variant-row');
     expect(rows[0]).toHaveTextContent('control (control)10,0001,00010.00%——Baseline');
-    expect(rows[1]).toHaveTextContent('blue10,0501,20612.00%+20.00%< 0.0001Significant');
+    expect(rows[1]).toHaveTextContent('blue10,0501,20612.00%+20.00% · better< 0.0001Significant');
     expect(screen.getByTestId('warehouse-results-difference')).toHaveTextContent(RESULTS_DIFFERENCE);
     expect(screen.getByTestId('warehouse-srm-ok')).toHaveTextContent('Sample ratio check: passed (p = 0.7200).');
   });
@@ -480,7 +481,7 @@ describe('results', () => {
     expect(headers).toEqual(['Variant', 'Units', 'Mean', '95% interval', 'Change', 'p-value', 'Result']);
     const rows = within(mean).getAllByTestId('warehouse-variant-row');
     expect(rows[0]).toHaveTextContent('control (control)10,00012.3512.26 to 12.43——Baseline');
-    expect(rows[1]).toHaveTextContent('blue10,05012.512.41 to 12.59+1.25%0.0120Significant');
+    expect(rows[1]).toHaveTextContent('blue10,05012.512.41 to 12.59+1.25% · better0.0120Significant');
     expect(mean).not.toHaveTextContent('%—');
   });
 
@@ -721,5 +722,111 @@ describe('View SQL', () => {
     expect(screen.getByTestId('warehouse-run-failed')).toBeInTheDocument();
     expect(screen.queryByTestId('warehouse-view-sql')).toBeNull();
     expect(screen.queryByTestId('warehouse-failed-view-sql')).toBeNull();
+  });
+});
+
+describe('the direction each metric was analysed in (#1386)', () => {
+  /** A computed proportion metric with the run's stored direction and one treatment change. */
+  function directed(lower: boolean | undefined, pct: number, significant = true) {
+    const metric = computedMetric();
+    const result = metric.result!;
+    if (lower === undefined) delete result.lower_is_better;
+    else result.lower_is_better = lower;
+    result.variants = [
+      result.variants[0],
+      { ...result.variants[1], relative_improvement_pct: pct, is_significant: significant },
+    ];
+    return metric;
+  }
+
+  async function shown(metric: ReturnType<typeof computedMetric>) {
+    install([{ path: RUNS_PATH, handler: () => ({ runs: [run({ results: results({ metrics: [metric] }) })] }) }]);
+    const view = renderSection();
+    const table = await screen.findByTestId('warehouse-metric');
+    const treatment = within(table).getAllByTestId('warehouse-variant-row')[1];
+    // Variant, then Units, Converted, Rate, Change: the fourth data cell.
+    const change = treatment.querySelectorAll('td')[3];
+    return { view, heading: within(table).getByRole('heading'), change };
+  }
+
+  it.each([
+    [true, -12.4, true, 'Purchased (primary) · lower is better', '-12.40% · better', 'text-green-700'],
+    [true, 20, true, 'Purchased (primary) · lower is better', '+20.00% · worse', 'text-red-700'],
+    [true, -12.4, false, 'Purchased (primary) · lower is better', '-12.40%', null],
+    [false, 20, true, 'Purchased (primary) · higher is better', '+20.00% · better', 'text-green-700'],
+    [false, -12.4, true, 'Purchased (primary) · higher is better', '-12.40% · worse', 'text-red-700'],
+  ] as const)(
+    'lower is better: %s, change %s%%, significant: %s -> "%s", "%s"',
+    async (lower, pct, significant, heading, change, colour) => {
+      const shownMetric = await shown(directed(lower, pct, significant));
+      expect(shownMetric.heading).toHaveTextContent(heading);
+      expect(shownMetric.change.textContent).toBe(change);
+      if (colour) expect(shownMetric.change).toHaveClass(colour);
+      else expect(shownMetric.change.className).not.toMatch(/text-(green|red)-700/);
+    },
+  );
+
+  it('says nothing about direction for a result stored before the field', async () => {
+    const { heading, change } = await shown(directed(undefined, 20));
+    expect(heading).toHaveTextContent('Purchased (primary)');
+    expect(heading).not.toHaveTextContent('is better');
+    expect(change.textContent).toBe('+20.00%');
+  });
+
+  it('gives a metric that was not computed no direction', async () => {
+    install([
+      {
+        path: RUNS_PATH,
+        handler: () => ({ runs: [run({ results: results({ metrics: [notComputedMetric('no_units')] }) })] }),
+      },
+    ]);
+    renderSection();
+    const box = await screen.findByTestId('warehouse-metric-not-computed');
+    expect(box).not.toHaveTextContent('is better');
+  });
+
+  it('a lower-is-better result has no axe violations', async () => {
+    // The component on its own: inside the section its h4 follows the
+    // section's h2, which axe's heading-order reports with or without a
+    // direction (the levels predate #1386).
+    const { container } = render(
+      <RunResults
+        run={run()}
+        results={results({
+          metrics: [
+            directed(true, -12.4),
+            { ...directed(true, 20), metric_source_id: 'src-e', name: 'Errors', is_primary: false },
+          ],
+        })}
+        experimentKey={EXPERIMENT.key}
+      />,
+    );
+    expect(screen.getAllByText(/lower is better/)).toHaveLength(2);
+    const result = await axe.run(container, { rules: { 'color-contrast': { enabled: false } } });
+    expect(result.violations.map((v) => v.id)).toEqual([]);
+  });
+
+  it('names a metric source marked lower is better as such when choosing metrics', async () => {
+    install([
+      { path: RUNS_PATH, handler: () => ({ runs: [] }) },
+      { path: CONNECTIONS_PATH, handler: () => ({ connections: [connection()] }) },
+      {
+        path: SOURCES_PATH,
+        handler: () => ({
+          sources: [
+            SOURCES[0],
+            { ...SOURCES[1], name: 'Checkout errors', lower_is_better: true },
+            SOURCES[2],
+          ],
+        }),
+      },
+    ]);
+    renderSection();
+    await openForm();
+    tick(/Checkout errors/);
+    expect(screen.getByRole('checkbox', { name: /Checkout errors/ })).toHaveAccessibleName(
+      'Checkout errors (proportion, lower is better, primary)',
+    );
+    expect(screen.getByRole('checkbox', { name: /Signed up/ })).toHaveAccessibleName('Signed up (proportion)');
   });
 });

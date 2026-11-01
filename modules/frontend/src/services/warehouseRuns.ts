@@ -67,6 +67,11 @@ export interface MetricResult {
   /** `conversion` for a proportion metric, `mean` for a mean metric. */
   metric_type: string;
   is_primary: boolean;
+  /**
+   * The direction this run analysed the metric in: its source's setting when
+   * the run started. Absent from a result stored before the field.
+   */
+  lower_is_better?: boolean;
   variants: VariantResult[];
   has_significant_result: boolean;
   winning_variant_id: string | null;
@@ -157,6 +162,8 @@ export interface WarehouseSourceSummary {
   name: string;
   table: string;
   metric_type: string | null;
+  /** Null for an assignment source; absent from an API older than the field. */
+  lower_is_better?: boolean | null;
   validated_at: string | null;
 }
 
