@@ -90,6 +90,35 @@ test.describe("Accessibility Audits", () => {
     expect(critical).toHaveLength(0);
   });
 
+  // The scan above runs against seeded data, where the first-run checklist
+  // never renders; its "SDK" link was told apart by colour alone (#1533,
+  // axe link-in-text-block, a minor-impact rule). The empty list is answered
+  // from here so the checklist shows, and every violation counts.
+  test("empty experiments page (first-run checklist) has no a11y violations", async ({
+    adminPage,
+  }) => {
+    const AxeBuilder = await getAxeBuilder();
+    if (!AxeBuilder) return;
+
+    await adminPage.route(/\/api\/v1\/experiments\/?(\?.*)?$/, async (route) => {
+      if (route.request().method() !== "GET") return route.fallback();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ items: [], total: 0, page: 1, size: 20, pages: 0 }),
+      });
+    });
+    await adminPage.goto("/experiments");
+    await expect(adminPage.getByTestId("first-run-checklist")).toBeVisible({ timeout: 15_000 });
+
+    const results = await new AxeBuilder({ page: adminPage })
+      .include('[data-testid="first-run-checklist"]')
+      .withTags(["wcag2a", "wcag2aa"])
+      .analyze();
+    const summary = results.violations.map((v) => `[${v.impact}] ${v.id}`).join("\n");
+    expect(results.violations, summary).toHaveLength(0);
+  });
+
   test("feature flags page has no critical a11y violations", async ({
     adminPage,
   }) => {

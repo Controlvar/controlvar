@@ -43,17 +43,23 @@ class VariantRef:
 
 @dataclass(frozen=True)
 class MetricRef:
-    """The metric's identity, which the result carries.
+    """The metric's identity and direction, which the result carries.
 
     ``metric_type`` is ``conversion`` for a proportion metric: the share of
     units with at least one event, what ``/results`` calls a conversion
     metric.  A mean metric carries ``mean``.
+
+    ``lower_is_better`` is the metric source's direction (#1386).  The core
+    estimators read it (``metric_lower_is_better``): when it is true, the
+    winner is a significant decrease, and the result reports it.  False, the
+    default, is how a metric with no direction has always been read.
     """
 
     id: UUID
     name: str
     is_primary: bool
     metric_type: str = "conversion"
+    lower_is_better: bool = False
 
 
 @dataclass(frozen=True)

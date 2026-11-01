@@ -2,8 +2,8 @@
 
 Adds ``warehouse_sources.lower_is_better`` (``boolean``, ``NOT NULL``,
 ``DEFAULT false``): whether a decrease is the improvement for that source's
-metric.  Nothing reads or writes the column yet -- the source API and the
-analysis run path (#1386) do that.
+metric.  The source API sets it and the analysis run path reads it (#1386);
+this revision only stores it.
 
 ``ADD COLUMN ... NOT NULL DEFAULT false`` fills every existing row with false
 in the same statement (PostgreSQL 11 and later store the default in the

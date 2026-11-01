@@ -9,7 +9,15 @@
  * or a test -- never in a URL. No response carries it back, and nothing here
  * keeps a copy: the caller's form owns the value and clears it after a save.
  */
-import { apiFetch } from '@/services/api';
+import { LONG_REQUEST_TIMEOUT_MS, apiFetch } from '@/services/api';
+
+/**
+ * How long the dashboard waits for a preview: the API's largest query limit
+ * by default (`WAREHOUSE_MAX_QUERY_TIMEOUT_SECONDS`, 1800 s), plus the API's
+ * 30 s preview margin (`PREVIEW_MARGIN_SECONDS`), plus 30 s for the trip.
+ * An operator who raises that limit gets a dashboard that gives up first.
+ */
+export const PREVIEW_REQUEST_TIMEOUT_MS = (1800 + 30 + 30) * 1000;
 
 
 export type WarehouseType = 'bigquery' | 'snowflake' | 'athena';
@@ -135,6 +143,11 @@ export interface Source {
   metric_type: MetricType | null;
   conversion_window_hours: number | null;
   cap_value: number | null;
+  /**
+   * True when a decrease is the improvement for this metric (an error rate,
+   * churn). Null for an assignment source.
+   */
+  lower_is_better: boolean | null;
   validated_at: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -158,6 +171,12 @@ export interface MetricSourceBody {
   metric_type: MetricType;
   conversion_window_hours: number;
   cap_value?: number | null;
+  /**
+   * The body replaces the whole definition, so leaving this out sets false.
+   * The form sends it only when ticked: an API older than the field refuses
+   * it, and then only a ticked save fails.
+   */
+  lower_is_better?: boolean;
   filters: SourceFilter[];
 }
 
@@ -210,13 +229,21 @@ export const warehouseService = {
   deleteConnection: (id: string) =>
     apiFetch<void>(`/api/v1/warehouse/analysis/connections/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
-  /** Test before saving (BigQuery, Athena). The body is held in memory by the API, not stored. */
+  /**
+   * Test before saving (BigQuery, Athena). The body is held in memory by the API, not stored.
+   * A test (and a validate) may use the API's whole 30 s budget, so it waits longer than that.
+   */
   testUnsavedConnection: (body: BigQueryBody | AthenaBody) =>
-    apiFetch<ConnectionTestResult>(`/api/v1/warehouse/analysis/connections/test`, { method: 'POST', json: body }),
+    apiFetch<ConnectionTestResult>(`/api/v1/warehouse/analysis/connections/test`, {
+      method: 'POST',
+      json: body,
+      timeoutMs: LONG_REQUEST_TIMEOUT_MS,
+    }),
 
   testConnection: (id: string) =>
     apiFetch<ConnectionTestResult>(`/api/v1/warehouse/analysis/connections/${encodeURIComponent(id)}/test`, {
       method: 'POST',
+      timeoutMs: LONG_REQUEST_TIMEOUT_MS,
     }),
 
   regenerateKey: (id: string) =>
@@ -242,11 +269,13 @@ export const warehouseService = {
   validateSource: (id: string) =>
     apiFetch<ValidateResult>(`/api/v1/warehouse/analysis/sources/${encodeURIComponent(id)}/validate`, {
       method: 'POST',
+      timeoutMs: LONG_REQUEST_TIMEOUT_MS,
     }),
 
   previewSource: (id: string, body: PreviewRequest = {}) =>
     apiFetch<PreviewResult>(`/api/v1/warehouse/analysis/sources/${encodeURIComponent(id)}/preview`, {
       method: 'POST',
       json: body,
+      timeoutMs: PREVIEW_REQUEST_TIMEOUT_MS,
     }),
 };

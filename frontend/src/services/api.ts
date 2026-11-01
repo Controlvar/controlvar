@@ -8,6 +8,9 @@
  *   `ApiError { status, detail, code? }` for non-2xx responses.
  * - A 401 clears the stored token and redirects to `/login?next=<path>`
  *   (skipped on `/login` itself and for requests sent without auth).
+ * - A request whose response headers have not arrived within `timeoutMs`
+ *   (default 30 s) is aborted and throws `ApiError { status: 0, timedOut }`.
+ *   Reading the body is not timed.
  *
  * `apiFetch` always calls the global `fetch` at call time so tests can keep
  * mocking `global.fetch`.
@@ -119,13 +122,20 @@ export interface ApiErrorInit {
   requestId?: string;
   /** The response's `Retry-After` in whole seconds, when it sent one (a 429). */
   retryAfter?: number;
+  /** The request was aborted because its deadline passed (see `timeoutMs`). */
+  timedOut?: boolean;
+  /** It timed out and was not a GET, HEAD or OPTIONS: the API may still have carried it out. */
+  outcomeUnknown?: boolean;
 }
 
 /**
  * Error thrown for every failed request. `detail` is the parsed `{"detail": …}`
  * body from FastAPI (string, object or validation list). When the backend
  * returns a typed error such as `{"detail": {"code": "workspace_role_required"}}`
- * the code is exposed as `code`. `status === 0` means the API was unreachable.
+ * the code is exposed as `code`. `status === 0` means no answer arrived: the
+ * API was unreachable, or (`timedOut`) it did not answer before the deadline.
+ * A timed-out write is `outcomeUnknown`: the API may still carry it out, so
+ * the message says so, and a page must not present it as a failure.
  * `requestId` is the response's `X-Request-ID` header (the API lists it in
  * CORS `expose_headers`, so a cross-origin dashboard can read it too); an
  * administrator finds the request in the API log by it.
@@ -136,12 +146,16 @@ export class ApiError extends Error {
   readonly code?: string;
   readonly requestId?: string;
   readonly retryAfter?: number;
+  readonly timedOut: boolean;
+  readonly outcomeUnknown: boolean;
 
   constructor(init: ApiErrorInit) {
     super(init.message ?? messageForDetail(init.status, init.detail));
     this.name = 'ApiError';
     this.status = init.status;
     this.detail = init.detail;
+    this.timedOut = init.timedOut === true;
+    this.outcomeUnknown = this.timedOut && init.outcomeUnknown === true;
     const code = detailCode(init.detail);
     if (code) this.code = code;
     if (init.requestId) this.requestId = init.requestId;
@@ -229,6 +243,116 @@ export interface ApiFetchOptions extends Omit<RequestInit, 'body' | 'headers'> {
   auth?: boolean;
   /** Redirect to `/login?next=` on 401 (default `true`). */
   redirectOn401?: boolean;
+  /**
+   * Milliseconds to wait for the response headers before aborting the
+   * request (default {@link DEFAULT_REQUEST_TIMEOUT_MS}). A finite number
+   * above 0 and at most {@link MAX_REQUEST_TIMEOUT_MS}; anything else rejects
+   * with a `TypeError` before anything is sent. There is no "no deadline"
+   * value. The body is not timed: a response that starts and then stalls is
+   * waited for.
+   */
+  timeoutMs?: number;
+}
+
+/** How long a request may wait for the API to start answering, by default. */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+
+/**
+ * For the routes that can take longer than the default and are reads, or
+ * safe to repeat: results, the audit-log export, and the warehouse
+ * connection and source checks.
+ */
+export const LONG_REQUEST_TIMEOUT_MS = 120_000;
+
+/** The longest delay `setTimeout` honours; a longer one fires at once. */
+export const MAX_REQUEST_TIMEOUT_MS = 2_147_483_647;
+
+/** Methods that change nothing, so a timed-out one has no outcome to check. */
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+/**
+ * Copy for a request that timed out. A write may still be carried out by the
+ * API after the dashboard gave up, so it is reported as possibly done.
+ */
+export function timeoutMessage(timeoutMs: number, outcomeUnknown: boolean): string {
+  const seconds = Math.round(timeoutMs / 1000);
+  return outcomeUnknown
+    ? `The API did not answer within ${seconds} seconds, and the request may or may not have been ` +
+        'carried out. Reload the page and check before you try again.'
+    : `The API did not answer within ${seconds} seconds. Try again, and if it keeps happening check ` +
+        'that the backend is healthy.';
+}
+
+/**
+ * The sign-in form's copy for a sign-in that timed out. Signing in changes
+ * nothing to check, so it says only that it did not finish.
+ */
+export function signInTimeoutMessage(timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS): string {
+  return (
+    `Sign-in did not finish: the API did not answer within ${Math.round(timeoutMs / 1000)} seconds. ` +
+    'Try again in a moment.'
+  );
+}
+
+function checkTimeout(timeoutMs: unknown): number {
+  if (
+    typeof timeoutMs !== 'number' ||
+    !Number.isFinite(timeoutMs) ||
+    timeoutMs <= 0 ||
+    timeoutMs > MAX_REQUEST_TIMEOUT_MS
+  ) {
+    throw new TypeError(
+      `timeoutMs must be a number of milliseconds above 0 and at most ${MAX_REQUEST_TIMEOUT_MS}, ` +
+        `not ${String(timeoutMs)}`,
+    );
+  }
+  return timeoutMs;
+}
+
+interface Deadline {
+  /** The signal to give `fetch`: aborted by the deadline or by the caller's signal. */
+  readonly signal: AbortSignal;
+  /** True once the deadline, not the caller, aborted the request. */
+  readonly expired: boolean;
+  /** Stop the timer; called once `fetch` resolves or rejects. */
+  stop(): void;
+  /** Stop following the caller's signal; called when the call is over. */
+  release(): void;
+}
+
+/**
+ * One `AbortController` per request, aborted by a timer or by the caller's
+ * own signal (forwarded by a listener; `AbortSignal.any` is not used, for
+ * browsers that lack it). `expired` is set only by the timer, so a caller's
+ * abort is never reported as a time-out.
+ */
+function startDeadline(timeoutMs: number, callerSignal?: AbortSignal | null): Deadline {
+  const controller = new AbortController();
+  let expired = false;
+  const forward = () => controller.abort(callerSignal?.reason);
+  if (callerSignal) {
+    if (callerSignal.aborted) forward();
+    else callerSignal.addEventListener('abort', forward);
+  }
+  const timer = setTimeout(() => {
+    if (controller.signal.aborted) return;
+    expired = true;
+    controller.abort();
+  }, timeoutMs);
+  return {
+    signal: controller.signal,
+    get expired() {
+      return expired;
+    },
+    stop: () => clearTimeout(timer),
+    release: () => callerSignal?.removeEventListener('abort', forward),
+  };
+}
+
+function timeoutError(timeoutMs: number, method: string, cause: unknown): ApiError {
+  const outcomeUnknown = !SAFE_METHODS.has(method.toUpperCase());
+  const message = timeoutMessage(timeoutMs, outcomeUnknown);
+  return new ApiError({ status: 0, detail: message, message, cause, timedOut: true, outcomeUnknown });
 }
 
 export function buildQuery(query?: Record<string, QueryValue>): string {
@@ -276,14 +400,20 @@ export function safeNextPath(next: string | null | undefined, fallback = '/'): s
   return next;
 }
 
+/**
+ * The sign-in page, carrying `next` when it is a safe path other than `/` and
+ * the sign-in page itself: `/login` or `/login?next=<next>`.
+ */
+export function loginPathWithNext(next: string | null | undefined): string {
+  const target = safeNextPath(next);
+  return target === '/' || target === LOGIN_PATH || target.startsWith(`${LOGIN_PATH}?`)
+    ? LOGIN_PATH
+    : `${LOGIN_PATH}?next=${encodeURIComponent(target)}`;
+}
+
 /** Full-page navigation to `/login?next=<current path>`. */
 export function redirectToLogin(next?: string): void {
-  const target = safeNextPath(next ?? navigation.currentPath());
-  const url =
-    target === '/' || target === LOGIN_PATH || target.startsWith(`${LOGIN_PATH}?`)
-      ? LOGIN_PATH
-      : `${LOGIN_PATH}?next=${encodeURIComponent(target)}`;
-  navigation.assign(url);
+  navigation.assign(loginPathWithNext(next ?? navigation.currentPath()));
 }
 
 type LooseResponse = Partial<Response> & { ok: boolean; status?: number; statusText?: string };
@@ -398,9 +528,11 @@ export function unreachableMessage(): string {
  * Perform an authenticated JSON request against the API.
  *
  * @param path  API path, e.g. `/api/v1/experiments`
- * @param options `fetch` init plus `query`, `json`, `auth`, `redirectOn401`
+ * @param options `fetch` init plus `query`, `json`, `auth`, `redirectOn401`,
+ *   `timeoutMs`
  * @returns the parsed JSON body (`undefined` for 204 / empty bodies)
- * @throws {ApiError} for non-2xx responses and network failures
+ * @throws {ApiError} for non-2xx responses, network failures and time-outs
+ * @throws {TypeError} for a `timeoutMs` that is not a usable number
  */
 export async function apiFetch<T = unknown>(
   path: string,
@@ -413,8 +545,11 @@ export async function apiFetch<T = unknown>(
     redirectOn401 = true,
     headers: extraHeaders,
     body: rawBody,
+    timeoutMs: rawTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+    signal: callerSignal,
     ...rest
   } = options;
+  const timeoutMs = checkTimeout(rawTimeoutMs);
 
   const url = apiUrl(path, query);
   const headers: Record<string, string> = { Accept: 'application/json', ...(extraHeaders ?? {}) };
@@ -435,18 +570,28 @@ export async function apiFetch<T = unknown>(
   const init: RequestInit = { ...rest, headers };
   if (body !== undefined) init.body = body;
 
-  let response: LooseResponse;
+  const deadline = startDeadline(timeoutMs, callerSignal);
+  init.signal = deadline.signal;
   try {
-    response = (await fetch(url, init)) as LooseResponse;
-  } catch (err) {
-    throw new ApiError({ status: 0, detail: unreachableMessage(), cause: err });
-  }
+    let response: LooseResponse;
+    try {
+      response = (await fetch(url, init)) as LooseResponse;
+    } catch (err) {
+      if (deadline.expired) throw timeoutError(timeoutMs, init.method ?? 'GET', err);
+      throw new ApiError({ status: 0, detail: unreachableMessage(), cause: err });
+    } finally {
+      deadline.stop();
+    }
 
-  if (response.ok) {
-    return readSuccessBody<T>(response, path);
-  }
+    if (response.ok) {
+      return await readSuccessBody<T>(response, path);
+    }
 
-  throw await failureFrom(response, auth, redirectOn401);
+    throw await failureFrom(response, auth, redirectOn401);
+  } finally {
+    // After the body is read, so a caller's abort still cancels the read.
+    deadline.release();
+  }
 }
 
 /** The `ApiError` for a non-2xx response; a 401 also clears the token. */
@@ -492,9 +637,11 @@ export interface ApiDownload {
 
 /**
  * Download a file from the API with the signed-in user's token. Unlike
- * `apiFetch` it does not parse the body, and it returns the headers.
+ * `apiFetch` it does not parse the body, and it returns the headers. It waits
+ * {@link LONG_REQUEST_TIMEOUT_MS} for the headers; the file itself is not
+ * timed.
  *
- * @throws {ApiError} for non-2xx responses and network failures
+ * @throws {ApiError} for non-2xx responses, network failures and time-outs
  */
 export async function apiDownload(
   path: string,
@@ -503,14 +650,20 @@ export async function apiDownload(
   const headers: Record<string, string> = {};
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
+  const deadline = startDeadline(LONG_REQUEST_TIMEOUT_MS);
   let response: Response;
   let text: string;
   try {
-    response = await fetch(apiUrl(path, query), { headers });
+    try {
+      response = await fetch(apiUrl(path, query), { headers, signal: deadline.signal });
+    } finally {
+      deadline.stop();
+    }
     if (!response.ok) throw await failureFrom(response as LooseResponse, true, true);
     text = await response.text();
   } catch (err) {
     if (err instanceof ApiError) throw err;
+    if (deadline.expired) throw timeoutError(LONG_REQUEST_TIMEOUT_MS, 'GET', err);
     throw new ApiError({ status: 0, detail: unreachableMessage(), cause: err });
   }
   return { text, headers: response.headers };

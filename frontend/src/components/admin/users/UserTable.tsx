@@ -1,6 +1,18 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AdminService } from '@/services/admin';
+import { DEFAULT_REQUEST_TIMEOUT_MS, isApiError } from '@/services/api';
 import { AdminUser, ROLE_COLORS, USER_ROLE_LABELS, UserListResponse } from '@/types/admin';
+
+/**
+ * A delete that timed out may still have been carried out, so it is not
+ * reported as "Couldn't delete" (#1040).
+ */
+export function deleteTimedOutMessage(username: string): string {
+  return (
+    `The API did not answer within ${DEFAULT_REQUEST_TIMEOUT_MS / 1000} seconds, so "${username}" ` +
+    'may or may not have been deleted. Reload the list and check before you try again.'
+  );
+}
 
 /** Rows per page. The API's `limit` maximum is 100. */
 export const USER_PAGE_SIZE = 50;
@@ -119,7 +131,11 @@ export function UserTable({
     try {
       await AdminService.deleteUser(user.id);
     } catch (err) {
-      setDeleteError(`Couldn't delete ${user.username}: ${(err as Error).message}`);
+      setDeleteError(
+        isApiError(err) && err.timedOut
+          ? deleteTimedOutMessage(user.username)
+          : `Couldn't delete ${user.username}: ${(err as Error).message}`,
+      );
       return;
     }
     // Deleting the only row on a later page would leave that page empty;

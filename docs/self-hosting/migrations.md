@@ -224,6 +224,14 @@ creates get `false` from the column's default.
 made, and with it every metric source's setting; an upgrade afterwards sets
 each source back to `false`, not to what was stored.
 
+Until someone marks them again, those metrics are analysed as higher is
+better. Before downgrading, note which metric sources are marked: the
+dashboard's Warehouse › Metric sources list tags each one "lower is better".
+The [compliance audit trail](../api/compliance.md#list-audit-events) keeps a
+record too, and a downgrade leaves it in place: each source's latest entry
+(`resource_type=warehouse_source`) carries its definition as last saved,
+`lower_is_better` included.
+
 ### `1ab99332f0ba` rewrites stored event times to UTC
 
 `events.created_at` is stored as text, so time windows, ordering and "the

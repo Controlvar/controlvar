@@ -67,6 +67,11 @@ export interface MetricResult {
   /** `conversion` for a proportion metric, `mean` for a mean metric. */
   metric_type: string;
   is_primary: boolean;
+  /**
+   * The direction this run analysed the metric in: its source's setting when
+   * the run started. Absent from a result stored before the field.
+   */
+  lower_is_better?: boolean;
   variants: VariantResult[];
   has_significant_result: boolean;
   winning_variant_id: string | null;
@@ -157,6 +162,8 @@ export interface WarehouseSourceSummary {
   name: string;
   table: string;
   metric_type: string | null;
+  /** Null for an assignment source; absent from an API older than the field. */
+  lower_is_better?: boolean | null;
   validated_at: string | null;
 }
 
@@ -420,7 +427,10 @@ export function startRefusal(err: unknown, now: Date = new Date()): StartRefusal
     };
   }
   const detail = detailRecord(err);
-  const code = err.code ?? (err.isNetworkError ? 'unreachable' : `http_${err.status}`);
+  // A time-out is not "unreachable": the run may have started (#1040). Its
+  // message is the dashboard's own time-out sentence, shown by `default`.
+  const code =
+    err.code ?? (err.timedOut ? 'timed_out' : err.isNetworkError ? 'unreachable' : `http_${err.status}`);
   const apiMessage = typeof detail.message === 'string' ? detail.message : err.message;
 
   switch (code) {
