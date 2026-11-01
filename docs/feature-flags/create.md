@@ -35,6 +35,28 @@ navigation, then click **+ New Flag**.
 | **Key** (required) | The identifier your code passes to the SDK. It's filled in from the name (`new_checkout_flow`), and you can edit it. Use lowercase letters, digits, `-` and `_`. The dashboard can't change it after the flag is created. | `new-checkout-flow` |
 | **Description** | What the flag controls, and when it should be removed. | `Redesigned single-page checkout experience` |
 
+### Optional: serve a value instead of on or off
+
+Under **Values**, the **Type** is **Boolean** unless you choose another: the flag is on or
+off, and your code reads whether it is on. Choose **String**, **Number** or **JSON** to
+serve a value instead, and two fields appear:
+
+| Field | What it holds |
+|-------|---------------|
+| **On value** | What users the flag is on for get: users who match a targeting rule, and the rollout percentage of everyone else. |
+| **Off value** | What everyone else gets, and what everyone gets while the flag is off. |
+
+A string may be empty. A number is written as in JSON, such as `10`, `-3` or `2.5`. A JSON
+value is an object or an array, such as `{"color": "blue"}`. The two values must differ.
+If a value can't be used, the reason is shown under its field and the flag is not created.
+The type can't be changed after the flag is created; the two values can, on the flag's page.
+
+A new flag starts off, so everyone gets its off value until you turn it on. Its page names
+its type beside the status, and reads *Everyone gets the off value* while it is off and
+*Rules and rollout decide who gets the on value* while it is on. Every application that
+evaluates the flag can read both values, so don't put secrets in them.
+[Serve a value](#serve-a-value) creates the same kind of flag with the API.
+
 ### Step 3: Add targeting rules (optional)
 
 Targeting rules turn the flag on for specific users, whatever the rollout percentage

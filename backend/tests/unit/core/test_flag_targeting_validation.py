@@ -20,7 +20,7 @@ Pinned here, without a database:
   "no rules" by ``normalise_targeting_rules`` (V7);
 * dashboard rules hold at most 1,000 groups and conditions in all, counted
   before any condition is converted (#828); experiments are not capped;
-* the SDK ruleset vectors split exactly 143 accepted / 4 refused / 2 legacy
+* the SDK ruleset vectors split exactly 155 accepted / 4 refused / 2 legacy
   rows the API now refuses (V12);
 * native rules: a key outside the schema is refused at every level -- the
   rule, its condition group, nested groups at any depth, conditions, and
@@ -763,7 +763,9 @@ def test_what_is_accepted_is_what_the_flag_evaluator_applies(monkeypatch):
     )
     service = ffs.FeatureFlagService(db=MagicMock())
     corpus = _accepted_corpus()
-    assert len(corpus) == len(ACCEPTED) + 143 + 529
+    # The vectors' 155 accepted rows: 143, and since #1497 (F5) the 12 value
+    # flags' (each value type, four ways a flag reaches an SDK).
+    assert len(corpus) == len(ACCEPTED) + 155 + 529
     with_rules = 0
     diverged = []
     for name, raw in corpus:
@@ -850,7 +852,7 @@ def test_the_ruleset_vectors_split_exactly():
             accepted.append(flag["key"])
         else:
             refused.append(flag["key"])
-    assert (len(accepted), len(refused), len(legacy)) == (143, 4, 2)
+    assert (len(accepted), len(refused), len(legacy)) == (155, 4, 2)
     assert sorted(refused) == [
         "empty-list",
         "unconvertible-attribute",

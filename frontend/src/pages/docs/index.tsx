@@ -69,7 +69,7 @@ const sections = [
       { label: 'Edge SDK', href: docsUrl('sdk/edge'), desc: 'For Cloudflare Workers, Vercel Edge and Deno Deploy. Zero runtime dependencies; results cached in memory or KV.' },
       { label: 'Ruby SDK', href: docsUrl('sdk/ruby'), desc: 'Ruby gem with zero runtime dependencies, a thread-safe TTL cache and Net::HTTP.' },
       { label: 'PHP SDK', href: docsUrl('sdk/php'), desc: 'For PHP 8.1+, installed with Composer; it needs only ext-curl and ext-json.' },
-      { label: '.NET SDK', href: docsUrl('sdk/dotnet'), desc: 'Targets netstandard2.1 and net6.0; System.Text.Json and HttpClient, no other dependencies.' },
+      { label: '.NET SDK', href: docsUrl('sdk/dotnet'), desc: 'Targets net8.0 and netstandard2.1; System.Text.Json and HttpClient, no other dependencies.' },
       { label: 'Elixir SDK', href: docsUrl('sdk/elixir'), desc: "For Elixir and Phoenix: OTP's :httpc and Jason, with a GenServer-backed ETS cache." },
     ],
   },

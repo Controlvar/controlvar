@@ -11,6 +11,7 @@ import {
   isFlagOn,
 } from '@/services/featureFlags';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
+import { flagValueType, typeLabel } from '@/utils/flagValues';
 
 const STATUS_FILTERS: Array<{ label: string; value: FeatureFlagStatus | 'all' }> = [
   { label: 'All', value: 'all' },
@@ -253,6 +254,7 @@ export default function FeatureFlagsPage() {
                 <tr>
                   <th className="text-left px-4 py-3 text-slate-600 font-medium">Key</th>
                   <th className="text-left px-4 py-3 text-slate-600 font-medium">Name</th>
+                  <th className="text-left px-4 py-3 text-slate-600 font-medium">Type</th>
                   <th className="text-left px-4 py-3 text-slate-600 font-medium">Status</th>
                   <th className="text-right px-4 py-3 text-slate-600 font-medium">Rollout</th>
                   <th className="text-left px-4 py-3 text-slate-600 font-medium">Updated</th>
@@ -286,6 +288,10 @@ export default function FeatureFlagsPage() {
                             {flag.description}
                           </p>
                         )}
+                      </td>
+                      {/* What the flag serves (#1497); a flag from a server without values is Boolean. */}
+                      <td className="px-4 py-3 text-slate-700" data-testid="flag-value-type">
+                        {typeLabel(flagValueType(flag))}
                       </td>
                       <td className="px-4 py-3">
                         <span

@@ -136,6 +136,116 @@ text = "Description | What the flag controls, and when it should be removed. | R
 by = ["exempt:baseline"]
 
 [[unit]]
+text = "Optional: serve a value instead of on or off"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Under Values, the Type is Boolean unless you choose another: the flag is on or off, and your code reads whether it is on."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::is a group of four radios named Type, Boolean selected, each with its hint as its description",
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::sends exactly the body a flag had before values: no value_type, on_value or off_value",
+    "journey:feature-flag-create#value-new-flag",
+]
+
+[[unit]]
+text = "Choose String, Number or JSON to serve a value instead, and two fields appear:"
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::String: two text fields with their hints, and the two strings sent with value_type string",
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::Number: plain text fields (no type=number, no inputmode), required, sent as numbers",
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::JSON: monospace text areas that leave spelling alone, sent parsed",
+    "journey:feature-flag-create#value-type",
+]
+
+[[unit]]
+text = "Field | What it holds"
+by = ["exempt:label"]
+
+[[unit]]
+text = "On value | What users the flag is on for get: users who match a targeting rule, and the rollout percentage of everyone else."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::String: two text fields with their hints, and the two strings sent with value_type string",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
+    "journey:feature-flag-create#value-users",
+]
+
+[[unit]]
+text = "Off value | What everyone else gets, and what everyone gets while the flag is off."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::String: two text fields with their hints, and the two strings sent with value_type string",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
+    "journey:feature-flag-create#value-users",
+    "journey:feature-flag-create#value-off-users",
+]
+
+[[unit]]
+text = "A string may be empty."
+by = ["test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::String: an empty string is a value"]
+
+[[unit]]
+text = "A number is written as in JSON, such as 10, -3 or 2.5."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::Number: text that is not a number gets the example; focus moves to it",
+    "test:frontend/src/tests/utils/flagValues.test.ts::a number: %j reads %p",
+    "test:frontend/src/tests/utils/flagValues.test.ts::a number: %j is refused with the example",
+]
+
+[[unit]]
+text = "A JSON value is an object or an array, such as {\"color\": \"blue\"}."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::JSON: monospace text areas that leave spelling alone, sent parsed",
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::JSON: empty, and a single value, each in its own words; focus on the first",
+]
+
+[[unit]]
+text = "The two values must differ."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::equal values are refused at Off value in the API's words (3 and 3.0 are one number)",
+    "test:frontend/src/tests/pages/feature-flag-values-detail.test.tsx::a value made equal to the other one is refused at its field, and nothing is sent (EMF-5)",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_the_api_and_the_database_check_agree_on_equality",
+]
+
+[[unit]]
+text = "If a value can't be used, the reason is shown under its field and the flag is not created."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::JSON that does not parse: \"Not valid JSON:\" under the field, linked and focused, nothing sent",
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::is shown under the field it names, verbatim, and focused; not in the general alert",
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::values_equal from the API is shown at Off value, the field it names",
+]
+
+[[unit]]
+text = "The type can't be changed after the flag is created; the two values can, on the flag's page."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-detail.test.tsx::comes before Targeting Rules, shows the type as text, and offers no way to change it",
+    "test:frontend/src/tests/pages/feature-flag-values-detail.test.tsx::a changed value is sent alone, never with value_type, and the field then shows what was saved",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_value_type_is_read_only",
+]
+
+[[unit]]
+text = "A new flag starts off, so everyone gets its off value until you turn it on."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-new.test.tsx::String: two text fields with their hints, and the two strings sent with value_type string",
+    "journey:feature-flag-create#value-create",
+    "journey:feature-flag-create#value-off-users-before",
+]
+
+[[unit]]
+text = "Its page names its type beside the status, and reads Everyone gets the off value while it is off and Rules and rollout decide who gets the on value while it is on."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-values-detail.test.tsx::names the type after the status, and says who gets which value; the switch is unchanged",
+    "journey:feature-flag-create#value-create",
+    "journey:feature-flag-create#value-turn-on",
+    "journey:feature-flag-create#value-turn-off",
+]
+
+[[unit]]
+text = "Every application that evaluates the flag can read both values, so don't put secrets in them."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Serve a value creates the same kind of flag with the API."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "Step 3: Add targeting rules (optional)"
 by = ["exempt:baseline"]
 
