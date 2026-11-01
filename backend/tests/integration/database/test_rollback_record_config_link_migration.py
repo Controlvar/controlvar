@@ -52,7 +52,7 @@ PREVIOUS_CORE_HEAD = "37dcb2969766"
 #: The core head of this tree: ``607c51a59bf5`` (#1497), the revision after
 #: this one.
 CORE_HEAD = "607c51a59bf5"
-MODULES_HEAD = "modules_0002_warehouse_analysis"
+MODULES_HEAD = "modules_0003_lower_is_better"
 #: The rows of a database at this revision, before the next one is applied.
 AT_REVISION_ROWS = {
     CORE: {REVISION},

@@ -1377,6 +1377,13 @@ text = "A core id at or below a7b8c9d0e1f2 also unapplies the modules branch."
 by = ["test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_the_branch_point_also_unapplies_the_modules_branch"]
 
 [[unit]]
+text = "On the modules branch, downgrade modules_0002_warehouse_analysis to undo modules_0003_lower_is_better: that drops warehouse_sources.lower_is_better, every warehouse metric source's lower-is-better setting, and an upgrade afterwards sets each back to false, not to the choice."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_modules_0003_transitions.py::test_downgrade_drops_the_column_keeps_the_rows_and_an_upgrade_restores_false",
+]
+
+[[unit]]
 text = "Once the downgrade has completed, roll the API back (Method 1)."
 by = ["exempt:instruction"]
 

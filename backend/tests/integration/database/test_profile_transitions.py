@@ -61,8 +61,10 @@ BRANCH_POINT = "a7b8c9d0e1f2"
 CORE_HEAD = "607c51a59bf5"
 #: The modules branch's HEAD.  Every use below means "the modules revision a
 #: full database at head records" -- none means the branch's first revision,
-#: ``modules_0001_rbac``, which stopped being the head in #312.
-MODULES_HEAD = "modules_0002_warehouse_analysis"
+#: ``modules_0001_rbac``, which stopped being the head in #312, nor its
+#: second, ``modules_0002_warehouse_analysis``, which stopped being the head
+#: when ``modules_0003_lower_is_better`` was added (#1386).
+MODULES_HEAD = "modules_0003_lower_is_better"
 CORE_HEADS = {CORE_HEAD}
 FULL_HEADS = {CORE_HEAD, MODULES_HEAD}
 
@@ -417,7 +419,8 @@ def test_a_core_build_does_not_pretend_to_downgrade_or_stamp(
     result = tree_profiles.alembic(core_tree, scratch_schema, *argv)
 
     assert result.returncode != 0, result.stdout[-2000:]
-    assert MODULES_HEAD in result.stderr
+    # The documented answer: alembic's own, naming the modules revision.
+    assert f"Can't locate revision identified by '{MODULES_HEAD}'" in result.stderr
     assert _rows(test_db, scratch_schema) == before
     assert _tables(test_db, scratch_schema) == tables_before
 

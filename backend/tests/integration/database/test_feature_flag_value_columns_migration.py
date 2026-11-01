@@ -62,8 +62,9 @@ REVISION = "607c51a59bf5"
 PREVIOUS_CORE_HEAD = "4c2c09a2b3e8"
 #: The core head of this tree.
 CORE_HEAD = "607c51a59bf5"
-#: The modules branch's head, in the previous release and in this one alike.
-MODULES_HEAD = "modules_0002_warehouse_analysis"
+#: The modules branch's head in this tree, recorded on both sides of every
+#: step here: this file is about the core chain.
+MODULES_HEAD = "modules_0003_lower_is_better"
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},

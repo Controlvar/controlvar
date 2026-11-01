@@ -54,7 +54,7 @@ CORE_HEAD = "607c51a59bf5"
 #: head to this test's target unapplies those revisions too.  ``37dcb2969766``
 #: (#440) drops ``segment_members``.
 LATER_DOWNGRADE_TABLES = {"segment_members"}
-MODULES_HEAD = "modules_0002_warehouse_analysis"
+MODULES_HEAD = "modules_0003_lower_is_better"
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},

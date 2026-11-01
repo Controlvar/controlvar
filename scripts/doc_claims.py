@@ -1650,13 +1650,13 @@ MECHANISMS: Dict[str, Mechanism] = {
             "This command applies all unapplied migrations in order.",
         ),
     ),
-    # The modules branch: its two revisions, in order.
+    # The modules branch: its three revisions, in order.
     "alembic-plan-branch": Mechanism(
         "backend/tests/unit/db/test_alembic_plan.py"
         "::test_the_core_plan_is_the_full_plan_without_the_branch",
         holds=_whole(
             "docs/self-hosting/migrations.md",
-            "The modules branch has two revisions: modules_0001_rbac and, after it, modules_0002_warehouse_analysis.",
+            "The modules branch has three revisions: modules_0001_rbac, then modules_0002_warehouse_analysis, then modules_0003_lower_is_better.",
         ),
     ),
     # modules_0001_rbac runs after a7b8c9d0e1f2.
@@ -1668,16 +1668,36 @@ MECHANISMS: Dict[str, Mechanism] = {
             "modules_0001_rbac is a child of the core revision a7b8c9d0e1f2, not an alembic base, and with a single tree root alembic cannot filter a downgrade by branch label: downgrade modules@base resolves to the whole core chain to base, and drops every table in the schema.",
         ),
     ),
-    # modules@-1 is one revision; modules@base is the whole chain.
+    # modules@-1 is one revision, modules@-<length> the whole branch;
+    # modules@base is the whole chain.
     "alembic-plan-unapply": Mechanism(
         "backend/tests/unit/db/test_alembic_plan.py"
         "::test_unapplying_the_branch_is_one_revision_and_modules_at_base_is_all_of_them",
         holds=_whole(
             "docs/self-hosting/migrations.md",
             "Roll back the most recent migration of one branch.",
-            "The modules branch has two revisions: modules_0001_rbac and, after it, modules_0002_warehouse_analysis.",
+            "The modules branch has three revisions: modules_0001_rbac, then modules_0002_warehouse_analysis, then modules_0003_lower_is_better.",
+            "modules@-3 unapplies all three, newest first.",
             "Not modules@base.",
             "modules_0001_rbac is a child of the core revision a7b8c9d0e1f2, not an alembic base, and with a single tree root alembic cannot filter a downgrade by branch label: downgrade modules@base resolves to the whole core chain to base, and drops every table in the schema.",
+        )
+        + _whole(
+            "docs/development/database/migrations.md",
+            "The modules branch has three revisions, modules_0001_rbac, modules_0002_warehouse_analysis and then modules_0003_lower_is_better: downgrade modules@-1 unapplies modules_0003_lower_is_better only, and downgrade modules@-3 the whole branch.",
+        ),
+    ),
+    # A relative modules downgrade the documents give is one revision or the
+    # whole branch; any other target is named by its id.
+    "alembic-plan-relative-downgrade": Mechanism(
+        "backend/tests/unit/db/test_alembic_plan.py"
+        "::test_a_documented_relative_modules_downgrade_is_one_revision_or_the_whole_branch",
+        holds=_whole(
+            "docs/self-hosting/migrations.md",
+            "Name the modules revision to end at rather than counting back: a relative step such as modules@-2 counts from the newest revision the image has, so it unapplies a different revision once a release adds one.",
+        )
+        + _whole(
+            "docs/development/database/migrations.md",
+            "To stop anywhere in between, name the revision to end at, such as downgrade modules_0002_warehouse_analysis: a count in between names a different revision once the branch grows.",
         ),
     ),
     # The page's holdout query orders rows as d29a479daafe keeps one.

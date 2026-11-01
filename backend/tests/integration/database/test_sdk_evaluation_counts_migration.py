@@ -51,11 +51,12 @@ CORE_HEAD = "607c51a59bf5"
 #: ``segment_members``.
 LATER_DOWNGRADE_TABLES = {"holdout_population", "segment_members"}
 #: The modules revision the previous full release (0.10.0) recorded, and the
-#: branch's head in this one.  This release also carries
-#: ``modules_0002_warehouse_analysis`` (#312), so a full database at the
-#: previous release has a revision to apply on each line.
+#: branch's head in this tree.  This tree also carries
+#: ``modules_0002_warehouse_analysis`` (#312) and
+#: ``modules_0003_lower_is_better`` (#1386), so a full database at the
+#: previous release has revisions to apply on each line.
 PREVIOUS_MODULES_REVISION = "modules_0001_rbac"
-MODULES_HEAD = "modules_0002_warehouse_analysis"
+MODULES_HEAD = "modules_0003_lower_is_better"
 #: Tables ``modules_0002_warehouse_analysis`` creates; the previous release has
 #: neither.
 WAREHOUSE_TABLES = {"warehouse_sources", "warehouse_analysis_runs"}

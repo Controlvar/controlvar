@@ -402,12 +402,13 @@ def test_pruning_leaves_a_healthy_version_table_alone(test_db, scratch_schema):
 # ---------------------------------------------------------------------------
 RBAC_TABLES = ("custom_roles", "user_custom_roles", "direct_permission_grants")
 
-#: Unapply the whole modules branch -- both of its revisions, so that
+#: Unapply the whole modules branch -- all three of its revisions, so that
 #: ``modules_0001_rbac``'s own downgrade runs.  Not ``modules@base``: the branch
 #: is no longer an alembic *base*, and with a single tree root alembic cannot
 #: filter by branch label, so ``modules@base`` downgrades the whole core chain
-#: instead.  (``modules@-1`` unapplies only the head, modules_0002.)
-UNAPPLY_MODULES_BRANCH = "modules@-2"
+#: instead.  (``modules@-1`` unapplies only the head, modules_0003, and
+#: ``modules@-2`` stops short of modules_0001.)
+UNAPPLY_MODULES_BRANCH = "modules@-3"
 
 #: The tables ``modules_0002_warehouse_analysis`` owns.
 WAREHOUSE_TABLES = (
@@ -415,18 +416,32 @@ WAREHOUSE_TABLES = (
     "warehouse_sources",
     "warehouse_analysis_runs",
 )
+#: The column ``modules_0003_lower_is_better`` adds.  Its downgrade drops it on
+#: every database, however it was made: the one exception to "drops only what
+#: its own upgrade created".
+LOWER_IS_BETTER = ("warehouse_sources", "lower_is_better")
+
+
+def _columns(engine, schema: str, table: str) -> set[str]:
+    from sqlalchemy import inspect
+
+    return {c["name"] for c in inspect(engine).get_columns(table, schema=schema)}
 
 
 @pytest.mark.regression
 def test_downgrade_keeps_the_tables_the_bootstrap_created(test_db, scratch_schema):
-    """The fresh-bootstrap case: `upgrade()` never ran, so nothing may be dropped."""
+    """The fresh-bootstrap case: `upgrade()` never ran, so no table may be
+    dropped.  ``modules_0003_lower_is_better``'s column is the exception."""
     assert _bootstrap(scratch_schema).returncode == 0
+    table, column = LOWER_IS_BETTER
+    assert column in _columns(test_db, scratch_schema, table)
 
     result = _alembic(scratch_schema, "downgrade", UNAPPLY_MODULES_BRANCH)
     assert result.returncode == 0, result.stderr[-2000:]
 
     assert set(RBAC_TABLES) <= _tables(test_db, scratch_schema)
     assert set(WAREHOUSE_TABLES) <= _tables(test_db, scratch_schema)
+    assert column not in _columns(test_db, scratch_schema, table)
     assert _workspace_fks(test_db, scratch_schema) == {
         "experiments_workspace_id_fkey",
         "feature_flags_workspace_id_fkey",

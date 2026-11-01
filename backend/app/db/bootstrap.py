@@ -579,7 +579,8 @@ def may_run_alembic(cfg: Config, recorded: set[str], schema: str) -> bool:
 
     * a **full database opened by a core build** -- the reverse profile
       switch.  ``alembic_version`` then holds the modules head
-      (``modules_0002_warehouse_analysis``, or ``modules_0001_rbac`` on a
+      (``modules_0003_lower_is_better``, or an earlier modules revision --
+      ``modules_0002_warehouse_analysis``, ``modules_0001_rbac`` -- on a
       database an older full release migrated), which a core tree has no file
       for.  ``deploy.yml`` runs the migration task with
       the image it is deploying, so the first ``profile=core`` deploy after an

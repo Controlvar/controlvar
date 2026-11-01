@@ -43,14 +43,17 @@ SCHEMA = "rollback_probe"
 BRANCH_POINT = "a7b8c9d0e1f2"
 #: The core chain's head.
 CORE_HEAD = "607c51a59bf5"
-#: The modules branch's first revision and its head.  A full database records
+#: The modules branch's revisions, first to head.  A full database records
 #: whichever one the full release that migrated it had -- 0.9.x and earlier
-#: record the first, later releases the head -- and a core build must read
-#: either as "the other profile".
+#: record the first, later releases the second, and releases from #1386 on
+#: the head -- and a core build must read any of them as "the other profile".
 MODULES_FIRST = "modules_0001_rbac"
-MODULES_HEAD = "modules_0002_warehouse_analysis"
+MODULES_SECOND = "modules_0002_warehouse_analysis"
+MODULES_HEAD = "modules_0003_lower_is_better"
 MODULES_REVISIONS = pytest.mark.parametrize(
-    "modules_revision", [MODULES_FIRST, MODULES_HEAD], ids=["first", "head"]
+    "modules_revision",
+    [MODULES_FIRST, MODULES_SECOND, MODULES_HEAD],
+    ids=["first", "second", "head"],
 )
 #: A core-chain id no build of this tree has: what a newer release records.
 NEWER_CORE_REVISION = "zz_newer_release_0001"
