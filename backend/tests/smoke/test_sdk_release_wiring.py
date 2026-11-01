@@ -667,7 +667,8 @@ def test_the_pypi_publish_job_runs_only_the_download_the_check_and_the_upload() 
     assert len(steps) == 3, [s.get("name") or s.get("uses") for s in steps]
 
     download, check, upload = steps
-    assert download.get("uses") == "actions/download-artifact@v8"
+    # Pinned to a commit: PINNED_ACTIONS below holds the pin.
+    assert str(download.get("uses")).startswith("actions/download-artifact@")
     assert download.get("with") == {
         "name": "pypi-dist",
         "path": "${{ github.workspace }}/dist",
@@ -702,6 +703,8 @@ def test_the_pypa_action_is_pinned_to_a_commit_with_its_version() -> None:
 #: comment for the reader, like the pypi job's publish action.
 PINNED_ACTIONS = [
     ("pypi", "pypa/gh-action-pypi-publish"),
+    ("pypi", "actions/download-artifact"),
+    ("npm", "actions/download-artifact"),
     ("maven", "actions/download-artifact"),
     ("nuget", "actions/download-artifact"),
     ("nuget", "actions/setup-dotnet"),
@@ -1060,7 +1063,8 @@ def test_the_npm_publish_job_runs_only_its_checks_and_the_publish() -> None:
     assert [s.get("name") or s.get("uses") for s in steps] == NPM_PUBLISH_STEPS
 
     download, name_check, manifest_check, setup, versions, publish = steps
-    assert download.get("uses") == "actions/download-artifact@v8"
+    # Pinned to a commit: PINNED_ACTIONS below holds the pin.
+    assert str(download.get("uses")).startswith("actions/download-artifact@")
     assert download.get("with") == {
         "name": "npm-tarball",
         "path": "${{ github.workspace }}/package",

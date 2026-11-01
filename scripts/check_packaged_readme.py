@@ -68,12 +68,18 @@ STATUS = (
 )
 
 #: Install commands that name one of this repository's packages on a
-#: registry. Refused anywhere in the README.
+#: registry. Refused anywhere in the README. The .NET 10 SDK adds noun-first
+#: commands (`dotnet package add`) and file-based apps (`#:package`).
 REGISTRY_INSTALLS = (
     re.compile(
         r"\bdotnet[ \t]{1,10}add\b[^\n`]{0,200}?\bpackage[ \t]{1,10}Controlvar\.",
         re.IGNORECASE,
     ),
+    re.compile(
+        r"\bdotnet[ \t]{1,10}package[ \t]{1,10}add[ \t]{1,10}Controlvar\.",
+        re.IGNORECASE,
+    ),
+    re.compile(r"#:package[ \t]{1,10}Controlvar\.", re.IGNORECASE),
     re.compile(r"\bInstall-Package[ \t]{1,10}Controlvar\.", re.IGNORECASE),
     re.compile(r"\bpaket[ \t]{1,10}add[ \t]{1,10}Controlvar\.", re.IGNORECASE),
     re.compile(
@@ -104,6 +110,16 @@ INSTALL_SECTION_REFUSED = (
         "dotnet add reference",
         re.compile(r"\bdotnet[ \t]{1,10}add\b[^\n]{0,200}?\breference\b"),
     ),
+    (
+        "dotnet package add",
+        re.compile(r"\bdotnet[ \t]{1,10}package[ \t]{1,10}add\b"),
+    ),
+    (
+        "dotnet reference add",
+        re.compile(r"\bdotnet[ \t]{1,10}reference[ \t]{1,10}add\b"),
+    ),
+    ("#:package", re.compile(r"#:package\b")),
+    ("#:project", re.compile(r"#:project\b")),
     ("Install-Package", re.compile(r"\bInstall-Package\b")),
     ("<PackageReference", re.compile(r"<PackageReference\b")),
     ("<ProjectReference", re.compile(r"<ProjectReference\b")),

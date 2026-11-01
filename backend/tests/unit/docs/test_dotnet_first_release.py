@@ -184,11 +184,39 @@ def test_the_docs_hub_states_the_projects_targets():
 @pytest.mark.parametrize("page", [README, PAGE], ids=["README", "page"])
 def test_the_compatibility_sentences_are_stated(page):
     """Ruling 10: compatibility, never a support claim: .NET Framework is
-    named as unable to use the package, and System.Text.Json 8's build warning
-    on .NET Core 3.0 to .NET 5 is stated."""
+    named as unable to use the package, and the build warning of System.Text.Json
+    8 and of its dependency System.Text.Encodings.Web on .NET Core 3.0 to .NET 5
+    is stated."""
     folded = " ".join(page.read_text(encoding="utf-8").split())
     assert ".NET Framework cannot use" in folded
     assert (
-        "On .NET Core 3.0 to .NET 5, System.Text.Json 8 warns at build time" in folded
+        "On .NET Core 3.0 to .NET 5, System.Text.Json 8 and its dependency "
+        "System.Text.Encodings.Web warn at build time" in folded
     )
     assert ".NET 8 and later use the `net8.0` build" in folded
+
+
+def system_text_json_version() -> str:
+    """The System.Text.Json version the project references for netstandard2.1."""
+    root = ET.parse(PROJECT).getroot()
+    (version,) = [
+        reference.get("Version", "")
+        for reference in root.iter("PackageReference")
+        if reference.get("Include") == "System.Text.Json"
+    ]
+    return version
+
+
+def test_the_readme_quotes_the_projects_system_text_json():
+    """The README nuget.org shows names the System.Text.Json version the
+    netstandard2.1 build depends on, and the major its compatibility sentence
+    names; both are the project's, so a bump of the reference alone fails
+    here and points at the README."""
+    version = system_text_json_version()
+    readme = " ".join(README.read_text(encoding="utf-8").split())
+    assert re.findall(r"System\.Text\.Json (\d+\.\d+\.\d+) from NuGet", readme) == [
+        version
+    ], readme[:600]
+    assert re.findall(r"System\.Text\.Json (\d+) and its dependency", readme) == [
+        version.split(".")[0]
+    ]

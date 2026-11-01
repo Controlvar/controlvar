@@ -21,8 +21,10 @@ manifest:
   ``<version>`` (a comment or a javadoc ``*`` may sit between them);
 * the .NET SDK's NuGet forms, held to its project's ``<Version>``:
   `` `Controlvar.SDK` (v0.1.0) ``, ``dotnet add package Controlvar.SDK
-  --version 0.1.0`` and ``<PackageReference Include="Controlvar.SDK"
-  Version="0.1.0" />``.
+  --version 0.1.0``, ``<PackageReference Include="Controlvar.SDK"
+  Version="0.1.0" />``, and the .NET 10 SDK's ``dotnet package add
+  Controlvar.SDK@0.1.0`` and ``dotnet package add Controlvar.SDK --version
+  0.1.0``.
 
 The pages read are every SDK page, the SDK guide, the FAQ, the two SDK docs
 journeys, the README each published package carries to its registry
@@ -145,11 +147,26 @@ FORMS: Tuple[Tuple[str, "re.Pattern[str]"], ...] = (
             r"<PackageReference Include=\"(Controlvar\.SDK)\" Version=\"" + VERSION
         ),
     ),
+    # The .NET 10 SDK's noun-first command, `dotnet package add <id>@<version>`
+    # or `... <id> --version <version>`.
+    (
+        "nuget package add, at",
+        re.compile(r"\bdotnet package add (Controlvar\.SDK)@" + VERSION),
+    ),
+    (
+        "nuget package add, version",
+        re.compile(r"\bdotnet package add (Controlvar\.SDK) --version " + VERSION),
+    ),
 )
 #: The NuGet forms that no page quotes yet: D's install line is the first.
 #: Each is held to a sample below instead, and the scan fails once a page
 #: quotes it, so that this set is emptied then.
-NOT_ON_A_PAGE_YET = {"nuget add", "nuget reference"}
+NOT_ON_A_PAGE_YET = {
+    "nuget add",
+    "nuget reference",
+    "nuget package add, at",
+    "nuget package add, version",
+}
 
 #: The .NET project whose ``<Version>`` and ``<PackageId>`` the package has.
 DOTNET_PROJECT = SDK_DIR / "dotnet" / "src" / "Controlvar" / "Controlvar.csproj"
@@ -411,6 +428,9 @@ def test_the_scan_finds_the_quotes_it_exists_for():
         "`Controlvar.SDK` (v{v}) provides feature flag evaluation",
         "dotnet add package Controlvar.SDK --version {v}",
         '<PackageReference Include="Controlvar.SDK" Version="{v}" />',
+        # The .NET 10 SDK's noun-first command, in both of its spellings.
+        "dotnet package add Controlvar.SDK@{v}",
+        "dotnet package add Controlvar.SDK --version {v}",
     ],
 )
 def test_each_nuget_form_is_read_and_compared(sample):

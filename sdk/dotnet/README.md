@@ -22,9 +22,9 @@ Full documentation: [the .NET SDK page](https://github.com/Controlvar/controlvar
 To install it, follow [the .NET SDK page](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/dotnet.md#installation).
 
 .NET 8 and later use the `net8.0` build, and .NET Core 3.0 to .NET 7 use the `netstandard2.1`
-build. On .NET Core 3.0 to .NET 5, System.Text.Json 8 warns at build time that it does not support
-that target framework and has not been tested with it. .NET Framework cannot use this package: it
-does not implement .NET Standard 2.1.
+build. On .NET Core 3.0 to .NET 5, System.Text.Json 8 and its dependency System.Text.Encodings.Web
+warn at build time that they do not support that target framework and have not been tested with
+it. .NET Framework cannot use this package: it does not implement .NET Standard 2.1.
 
 ---
 

@@ -16,8 +16,8 @@ Source: `sdk/dotnet`.
 
 - The library targets `net8.0` and `netstandard2.1`. .NET 8 and later use the `net8.0` build,
   and .NET Core 3.0 to .NET 7 use the `netstandard2.1` build. On .NET Core 3.0 to .NET 5,
-  System.Text.Json 8 warns at build time that it does not support that target framework and has
-  not been tested with it.
+  System.Text.Json 8 and its dependency System.Text.Encodings.Web warn at build time that they do
+  not support that target framework and have not been tested with it.
 - .NET Framework cannot use it: .NET Framework does not implement .NET Standard 2.1.
 - To build it from source and run its tests: the .NET 10 SDK and the .NET 8 runtime (see
   Development)

@@ -307,6 +307,14 @@ INSTALLS: Tuple[Tuple[str, "re.Pattern[str]"], ...] = (
             r"\bdotnet[ \t]{1,40}add[ \t]{1,40}(?:\S{1,200}[ \t]{1,40})?package[ \t]{1,40}(?P<name>[\w.]{1,60})"
         ),
     ),
+    # The .NET 10 SDK's noun-first command and a file-based app's directive.
+    (
+        "nuget",
+        re.compile(
+            r"\bdotnet[ \t]{1,40}package[ \t]{1,40}add[ \t]{1,40}(?P<name>[\w.]{1,60})"
+        ),
+    ),
+    ("nuget", re.compile(r"#:package[ \t]{1,40}(?P<name>[\w.]{1,60})")),
     ("nuget", re.compile(r"\bInstall-Package[ \t]{1,40}(?P<name>[\w.]{1,60})")),
     (
         "nuget",
@@ -496,6 +504,8 @@ INSTALL_SAMPLES = (
         [("packagist", "controlvar/sdk")],
     ),
     ("dotnet add package Controlvar.SDK", [("nuget", "Controlvar.SDK")]),
+    ("dotnet package add Controlvar.SDK@0.1.0", [("nuget", "Controlvar.SDK")]),
+    ("#:package Controlvar.SDK@0.1.0", [("nuget", "Controlvar.SDK")]),
     ("Install-Package Controlvar.SDK", [("nuget", "Controlvar.SDK")]),
     (
         '<PackageReference Include="Controlvar.SDK" Version="0.1.0" />',

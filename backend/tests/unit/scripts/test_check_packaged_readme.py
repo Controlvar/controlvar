@@ -211,6 +211,40 @@ REFUSALS = [
         "the Install section names an install command (/path/to)",
     ),
     (
+        ".NET 10: dotnet package add in the Install section",
+        _install("Or: dotnet package add Controlvar.SDK"),
+        "the Install section names an install command (dotnet package add)",
+    ),
+    (
+        ".NET 10: dotnet reference add in the Install section",
+        _install("Or: dotnet reference add ../src/Controlvar/Controlvar.csproj"),
+        "the Install section names an install command (dotnet reference add)",
+    ),
+    (
+        ".NET 10: #:package in the Install section",
+        _install("Or, in a file-based app: #:package Controlvar.SDK@*"),
+        "the Install section names an install command (#:package)",
+    ),
+    (
+        ".NET 10: #:project in the Install section",
+        _install(
+            "Or, in a file-based app: #:project ../src/Controlvar/Controlvar.csproj"
+        ),
+        "the Install section names an install command (#:project)",
+    ),
+    (
+        ".NET 10: dotnet package add outside the Install section",
+        GOOD.replace(
+            "dotnet test\n", "dotnet test\ndotnet package add Controlvar.SDK\n"
+        ),
+        "the README installs this repository's package from a registry",
+    ),
+    (
+        ".NET 10: #:package outside the Install section",
+        GOOD.replace("```csharp\n", "```csharp\n#:package Controlvar.SDK@*\n"),
+        "the README installs this repository's package from a registry",
+    ),
+    (
         "git clone in the Install section",
         _install("Run `git clone https://github.com/Controlvar/controlvar`."),
         "the Install section names an install command (git clone)",
