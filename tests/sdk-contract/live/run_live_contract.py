@@ -6,7 +6,8 @@ Runs every SDK's ``contract_smoke`` entry point against a running backend and
 checks that each one reports a sticky assignment, a flag evaluation and
 successful event tracking. This is the test that proves an SDK actually talks
 to the endpoints the backend serves (the golden-vector tests only cover
-hashing).
+hashing). An SDK listed in ``EXPOSURE_SDKS`` must also report what its
+exposure hook received, and no other SDK may report it.
 
 Before the SDKs, it checks the local-evaluation ruleset endpoint
 (``GET /api/v1/sdk/ruleset``) once: the seed's plain key gets 403, its
@@ -138,6 +139,23 @@ SDK_CONTRACT_DIR = Path(__file__).resolve().parents[1]
 
 EXPECTED_VARIANTS = {"control", "treatment"}
 
+# The SDKs whose contract smoke must report its exposure hook (#1499). A listed
+# SDK's smoke is to build a NEW client with a hook, assign the contract
+# experiment twice with no clear in between, and report
+#   "exposure": {"calls": <n>, "payload": {"experiment_key", "variant_name",
+#                                          "variant_id", "user_id"}}
+# validate() requires exactly one call, for the contract experiment and the
+# variant the smoke was assigned. It does not check the user id: only the smoke
+# knows the user it made, so that check is the smoke's. The check runs both
+# ways: a listed SDK whose smoke reports no "exposure" fails, and so does an
+# unlisted SDK whose smoke reports one. The pull request that gives an SDK the
+# hook is to add its line here.
+EXPOSURE_SDKS: frozenset[str] = frozenset(
+    [
+        # One line per SDK, in the form "js",
+    ]
+)
+
 
 def backend_healthy(api_url: str) -> bool:
     try:
@@ -147,7 +165,7 @@ def backend_healthy(api_url: str) -> bool:
         return False
 
 
-def validate(sdk: str, payload: dict) -> list[str]:
+def validate(sdk: str, payload: dict, experiment_key: str = "sdk_contract_ab") -> list[str]:
     problems: list[str] = []
     if payload.get("sdk") != sdk:
         problems.append(f"sdk field is {payload.get('sdk')!r}, expected {sdk!r}")
@@ -165,6 +183,29 @@ def validate(sdk: str, payload: dict) -> list[str]:
         problems.append("track failed")
     if (payload.get("fanout") or {}).get("ok") is not True:
         problems.append("fan-out track failed")
+    problems.extend(_exposure_problems(sdk, payload, experiment_key))
+    return problems
+
+
+def _exposure_problems(sdk: str, payload: dict, experiment_key: str) -> list[str]:
+    """What is wrong with the smoke's ``exposure`` report (see ``EXPOSURE_SDKS``)."""
+    if sdk not in EXPOSURE_SDKS:
+        return [f"exposure reported but {sdk} is not in EXPOSURE_SDKS"] if "exposure" in payload else []
+    exposure = payload.get("exposure")
+    if not isinstance(exposure, dict):
+        return [f"exposure missing ({sdk} is in EXPOSURE_SDKS)"]
+    problems: list[str] = []
+    calls = exposure.get("calls")
+    if type(calls) is not int or calls != 1:  # JSON true and 1.0 are not a count of 1
+        problems.append(f"exposure.calls={calls!r} (two assigns on one client; expected 1)")
+    received = exposure.get("payload") if isinstance(exposure.get("payload"), dict) else {}
+    if received.get("experiment_key") != experiment_key:
+        found = received.get("experiment_key")
+        problems.append(f"exposure.payload.experiment_key={found!r}, expected {experiment_key!r}")
+    assigned = (payload.get("assign") or {}).get("variant_name")
+    if received.get("variant_name") != assigned:
+        found = received.get("variant_name")
+        problems.append(f"exposure.payload.variant_name={found!r} != assign.variant_name={assigned!r}")
     return problems
 
 
@@ -542,7 +583,7 @@ def run_one(sdk: str, command: str, env: dict[str, str], timeout: int) -> tuple[
     status, detail, payload = _run_command(command, env, timeout)
     if status != "PASS":
         return status, detail
-    problems = validate(sdk, payload)
+    problems = validate(sdk, payload, env["CONTRACT_EXPERIMENT_KEY"])
     if problems:
         return "FAIL", "; ".join(problems)
     return "PASS", f"{payload['assign']['variant_name']} in {detail}"
