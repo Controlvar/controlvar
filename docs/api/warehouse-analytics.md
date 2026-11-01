@@ -272,12 +272,13 @@ source marked lower is better. An assignment source has no direction: its
 `lower_is_better` is `null`, and a body that sends one is refused with 422.
 
 A source body refuses any field it does not know with 422
-(`extra_forbidden`). So while a deploy serves two releases at once, during the
-canary on AWS or a Helm rolling update, a request that sends `lower_is_better`
-and reaches an API task or pod still on the previous release is refused; retry
-once the deploy has finished. A dashboard opened before the deploy does not send
+(`extra_forbidden`). So during a deploy from a release without
+`lower_is_better`, while it serves both releases at once (the canary on AWS or
+a Helm rolling update), a request that sends `lower_is_better` and reaches an
+API task or pod still on that release is refused; retry once the deploy has
+finished. A dashboard opened before that deploy does not send
 `lower_is_better`, so saving a metric source from it can set the setting back
-to `false`: reload the dashboard after the deploy.
+to `false`: reload the dashboard after it.
 
 An analysis names the sources, and optionally the window and which warehouse
 variant label is which experiment variant (labels not listed are matched to a

@@ -737,7 +737,7 @@ by = [
 ]
 
 [[unit]]
-text = "So while a deploy serves two releases at once, during the canary on AWS or a Helm rolling update, a request that sends lower_is_better and reaches an API task or pod still on the previous release is refused; retry once the deploy has finished."
+text = "So during a deploy from a release without lower_is_better, while it serves both releases at once (the canary on AWS or a Helm rolling update), a request that sends lower_is_better and reaches an API task or pod still on that release is refused; retry once the deploy has finished."
 by = [
     "test:modules/backend/tests/unit/warehouse/test_request_schemas.py::test_every_request_model_forbids_unknown_fields",
     "test:infrastructure/tests/test_codedeploy_alarms.py::test_the_api_canary_is_fifteen_minutes",
@@ -745,7 +745,7 @@ by = [
 ]
 
 [[unit]]
-text = "A dashboard opened before the deploy does not send lower_is_better, so saving a metric source from it can set the setting back to false: reload the dashboard after the deploy."
+text = "A dashboard opened before that deploy does not send lower_is_better, so saving a metric source from it can set the setting back to false: reload the dashboard after it."
 by = ["test:modules/backend/tests/integration/warehouse/test_sources_api.py::test_a_put_without_lower_is_better_sets_it_back_to_false"]
 
 [[unit]]

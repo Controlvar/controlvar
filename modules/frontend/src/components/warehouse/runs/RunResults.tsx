@@ -18,10 +18,6 @@
  */
 import React from 'react';
 import { changeVerdict } from '@/components/results/shared/resultFormat';
-import type {
-  MetricResult as CoreMetricResult,
-  VariantResult as CoreVariantResult,
-} from '@/types/results';
 import {
   MetricResult,
   RESULTS_DIFFERENCE,
@@ -229,12 +225,11 @@ export function directionText(result: MetricResult | null): string | null {
  * significant, finite, non-zero change, and nothing for a result without a
  * direction. The rule reads the metric's `lower_is_better` and the variant's
  * `is_control`, `is_significant` and `relative_improvement_pct`, which a
- * warehouse result carries with the same meaning; the cast is because the
- * rest of core's types do not fit one (its `metric_type` is `conversion` or
- * `mean`).
+ * warehouse result carries with the same types and meaning; core's signature
+ * names only those fields, so a type that drifts on either side fails tsc.
  */
 export function warehouseVerdict(result: MetricResult, variant: VariantResult): 'better' | 'worse' | null {
-  return changeVerdict(result as unknown as CoreMetricResult, variant as unknown as CoreVariantResult);
+  return changeVerdict(result, variant);
 }
 
 function changeClass(verdict: 'better' | 'worse' | null): string {
