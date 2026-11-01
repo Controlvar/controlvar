@@ -451,10 +451,11 @@ def test_the_published_wheel_reads_the_route_and_obeys_both_kill_switches(
         ).json()
         pair = VALUE_PAIRS[value_type] or {"on_value": True, "off_value": False}
         served = pair["on_value"] if answer["enabled"] else pair["off_value"]
-        assert answer["value"] == served and answer["value_type"] == value_type, (
-            shape,
-            answer,
-        )
+        # Compared as JSON text, so 1 does not pass for true.
+        assert json.dumps(answer["value"], sort_keys=True) == json.dumps(
+            served, sort_keys=True
+        ), (shape, answer)
+        assert answer["value_type"] == value_type, (shape, answer)
         assert answer["config"] is None, answer
         reached.add((shape, answer["enabled"], answer["reason"]))
     for value_type in VALUE_TYPES:

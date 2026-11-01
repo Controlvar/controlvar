@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import logging
 import math
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any, List, Optional, Tuple
 
 from pydantic_core import PydanticCustomError
@@ -222,8 +222,10 @@ def write_errors(
     absent). *stored* holds the flag's stored values on an update, ``None``
     on a create. The pair checked is the pair as it will be stored: each value
     as sent, otherwise as stored (EMF-5). So an update that sends only
-    ``on_value`` equal to the stored ``off_value`` is refused here, and never
-    reaches the database's check.
+    ``on_value`` equal to the stored ``off_value`` is refused here rather than
+    by the database's check. The update route locks the row while it checks,
+    so *stored* is the committed pair; ``FeatureFlagService`` answers a check
+    violation that still reaches the commit the same way.
     """
     errors: List[Tuple[str, PydanticCustomError]] = []
     if value_type == BOOLEAN:
@@ -255,19 +257,26 @@ def write_errors(
                 )
             )
     if not errors and values_equal(pair["on_value"], pair["off_value"]):
-        field = "off_value" if "off_value" in sent else "on_value"
-        other = "on_value" if field == "off_value" else "off_value"
-        errors.append(
-            (
-                field,
-                PydanticCustomError(
-                    "values_equal",
-                    f"{field} equals {other}; a flag serves a different value "
-                    "when it is off",
-                ),
-            )
-        )
+        errors.append(values_equal_refusal(sent))
     return errors
+
+
+def values_equal_refusal(sent: Iterable[str]) -> Tuple[str, PydanticCustomError]:
+    """The ``values_equal`` refusal of a write that sent the fields *sent*.
+
+    It sits at ``off_value`` when that was sent, otherwise at ``on_value``:
+    always a field the client sent.
+    """
+    field = "off_value" if "off_value" in sent else "on_value"
+    other = "on_value" if field == "off_value" else "off_value"
+    return (
+        field,
+        PydanticCustomError(
+            "values_equal",
+            f"{field} equals {other}; the two values must differ, or turning the "
+            "flag off changes nothing",
+        ),
+    )
 
 
 def stored_values(value_type: str, on_value: Any, off_value: Any) -> Tuple[Any, Any]:

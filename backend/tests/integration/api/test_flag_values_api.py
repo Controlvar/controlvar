@@ -33,6 +33,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+import threading
+import time
 import uuid
 
 import pytest
@@ -42,6 +45,7 @@ from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.api import deps
+from backend.app.api.v1.endpoints.feature_flags import _values_refused
 from backend.app.core.config import settings
 from backend.app.core.database_config import get_schema_name
 from backend.app.core.flag_values import BOOLEAN_VALUES, VALUE_TYPE_READ_ONLY
@@ -52,7 +56,15 @@ from backend.app.models.compliance_audit_event import ComplianceAuditEvent
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.models.metrics.metric import ErrorLog, RawMetric
 from backend.app.models.user import User, UserRole
-from backend.app.schemas.feature_flag import DEFAULT_VALUE_UNSUPPORTED
+from backend.app.schemas.feature_flag import (
+    DEFAULT_VALUE_UNSUPPORTED,
+    FeatureFlagUpdate,
+)
+from backend.app.services import feature_flag_service
+from backend.app.services.feature_flag_service import (
+    FeatureFlagService,
+    FlagValuesRefused,
+)
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db]
 
@@ -118,8 +130,18 @@ def _equal(field):
     return (
         "values_equal",
         field,
-        f"{field} equals {other}; a flag serves a different value when it is off",
+        f"{field} equals {other}; the two values must differ, or turning the flag "
+        "off changes nothing",
     )
+
+
+#: What the service logs when the database's check, not the API's, refused an
+#: update (#1514 review R2). A refusal the API check makes logs nothing.
+BACKSTOP_LOG = "update refused by check_flag_values at commit"
+
+
+def _backstop_lines(caplog):
+    return [r.getMessage() for r in caplog.records if BACKSTOP_LOG in r.getMessage()]
 
 
 @pytest.fixture(autouse=True)
@@ -412,7 +434,7 @@ PUT_REFUSED = [
     ids=[c[0] for c in PUT_REFUSED],
 )
 def test_an_update_outside_the_contract_is_422_and_changes_nothing(
-    client, developer, db_session, value_type, body, refusals
+    client, developer, db_session, caplog, value_type, body, refusals
 ):
     flag = _create(client, developer, value_type)
     before = _columns(db_session, flag["key"])
@@ -424,15 +446,18 @@ def test_an_update_outside_the_contract_is_422_and_changes_nothing(
     assert _detail(response) == refusals
     _locs_are_in_the_body(response)
     assert _columns(db_session, flag["key"]) == before
+    # The API's check refused it, not the database's.
+    assert _backstop_lines(caplog) == []
 
 
 @pytest.mark.regression
 def test_a_partial_put_is_checked_on_the_pair_as_it_will_be_stored(
-    client, developer, db_session
+    client, developer, db_session, caplog
 ):
     """EMF-5: stored on "a", off "b"; ``PUT {"on_value": "b"}`` would store an
     equal pair. Checked only when both are sent, this reached the database's
-    check and answered 500."""
+    check and answered 500 (now the backstop's 422, which the log tells
+    apart)."""
     flag = _create(client, developer, "string", on_value="a", off_value="b")
     before = _columns(db_session, flag["key"])
 
@@ -446,18 +471,148 @@ def test_a_partial_put_is_checked_on_the_pair_as_it_will_be_stored(
             {
                 "type": "values_equal",
                 "loc": ["body", "on_value"],
-                "msg": "on_value equals off_value; a flag serves a different "
-                "value when it is off",
+                "msg": "on_value equals off_value; the two values must differ, or "
+                "turning the flag off changes nothing",
             }
         ]
     }
     assert _columns(db_session, flag["key"]) == before
+    assert _backstop_lines(caplog) == []
+
+
+def _set_off_value(conn, flag_id, value_text):
+    conn.execute(
+        text(
+            f'UPDATE "{get_schema_name()}".feature_flags '
+            "SET off_value = CAST(:v AS jsonb) WHERE id = :id"
+        ),
+        {"v": value_text, "id": str(flag_id)},
+    )
+
+
+def _wait_until_a_session_waits_for_a_lock(engine, seconds=20.0):
+    """Block until some backend of this database waits on a lock, so the
+    interleaving below is decided by PostgreSQL, not by timing."""
+    deadline = time.monotonic() + seconds
+    with engine.connect() as probe:
+        while time.monotonic() < deadline:
+            waiting = probe.execute(
+                text(
+                    "SELECT count(*) FROM pg_stat_activity "
+                    "WHERE datname = current_database() AND wait_event_type = 'Lock'"
+                )
+            ).scalar()
+            probe.commit()
+            if waiting:
+                return
+            time.sleep(0.05)
+    raise AssertionError("the update never waited for the row")
+
+
+@pytest.mark.regression
+def test_a_concurrent_value_write_is_a_422_not_a_500(
+    client, developer, db_session, caplog
+):
+    """#1514 review R2: the PUT ``{"on_value": "c"}`` arrives while another
+    transaction holds the row and sets ``off_value`` to "c"; that one commits
+    while the PUT waits. The update reads the row ``FOR UPDATE``, so it checks
+    the committed pair and answers 422 ``values_equal``, storing nothing.
+
+    Unlocked, the PUT checked the old pair, its UPDATE then met
+    ``check_flag_values`` and it answered 500. With only the lock removed the
+    backstop answers 422, so the log tells which one refused it.
+    """
+    caplog.set_level(logging.INFO)
+    flag = _create(client, developer, "string", on_value="a", off_value="b")
+    engine = db_session.get_bind()
+    writer = engine.connect()
+    transaction = writer.begin()
+    _set_off_value(writer, flag["id"], '"c"')
+    outcome = {}
+
+    def put():
+        try:
+            outcome["response"] = client.put(
+                f"{COLLECTION}/{flag['id']}",
+                json={"on_value": "c"},
+                headers=_auth(developer),
+            )
+        except Exception as exc:  # pragma: no cover - reported below
+            outcome["error"] = exc
+
+    request = threading.Thread(target=put)
+    request.start()
+    try:
+        _wait_until_a_session_waits_for_a_lock(engine)
+        transaction.commit()
+    finally:
+        if transaction.is_active:
+            transaction.rollback()
+        writer.close()
+    request.join(timeout=60)
+    assert not request.is_alive(), "the PUT never finished"
+    assert "error" not in outcome, outcome.get("error")
+
+    response = outcome["response"]
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == [
+        {"type": t, "loc": ["body", f], "msg": m} for t, f, m in [_equal("on_value")]
+    ]
+    row = _columns(db_session, flag["key"])
+    assert (json.loads(row["on_text"]), json.loads(row["off_text"])) == ("a", "c")
+    assert _backstop_lines(caplog) == [], "the check, not the database, refused it"
+
+
+@pytest.mark.regression
+def test_a_check_violation_at_commit_is_answered_as_values_equal(
+    db_session, developer, client, caplog, monkeypatch
+):
+    """#1514 review R2, the backstop: a writer that does not lock the row (the
+    service called directly here) commits ``off_value = "SECRET-c"`` between the
+    check and the commit. The database refuses the equal pair; the service
+    answers ``values_equal`` at the field sent, the route's 422, instead of
+    re-raising (a 500), and logs the flag's id, never the values."""
+    caplog.set_level(logging.INFO)
+    flag = _create(
+        client, developer, "string", on_value="SECRET-a", off_value="SECRET-b"
+    )
+    engine = db_session.get_bind()
+    real_check = feature_flag_service._check_sent_values
+
+    def check_then_race(flag_data, row):
+        real_check(flag_data, row)
+        with engine.begin() as other:
+            _set_off_value(other, row.id, '"SECRET-c"')
+
+    monkeypatch.setattr(feature_flag_service, "_check_sent_values", check_then_race)
+    session = sessionmaker(bind=engine, autocommit=False, autoflush=False)()
+    try:
+        session.execute(text(f"SET search_path TO {get_schema_name()}"))
+        row = session.get(FeatureFlag, uuid.UUID(flag["id"]))
+        with pytest.raises(FlagValuesRefused) as refused:
+            FeatureFlagService(session).update_feature_flag(
+                row, FeatureFlagUpdate(on_value="SECRET-c")
+            )
+    finally:
+        session.close()
+
+    assert refused.value.__cause__ is None and refused.value.__suppress_context__
+    assert _values_refused(refused.value).errors() == [
+        {"type": t, "loc": ("body", f), "msg": m} for t, f, m in [_equal("on_value")]
+    ]
+    stored = _columns(db_session, flag["key"])
+    assert (json.loads(stored["on_text"]), json.loads(stored["off_text"])) == (
+        "SECRET-a",
+        "SECRET-c",
+    )
+    assert len(_backstop_lines(caplog)) == 1
+    assert not [r for r in caplog.records if "SECRET" in r.getMessage()]
 
 
 @pytest.mark.regression
 @pytest.mark.parametrize("value_type", ["string", "number", "json"])
 def test_a_value_flag_is_created_and_its_values_changed(
-    client, developer, db_session, value_type
+    client, developer, db_session, caplog, value_type
 ):
     on, off = PAIRS[value_type]
     flag = _create(client, developer, value_type)
@@ -473,6 +628,7 @@ def test_a_value_flag_is_created_and_its_values_changed(
         f"{COLLECTION}/{flag['id']}", json={"on_value": off}, headers=_auth(developer)
     )
     assert changed.status_code == 422, changed.text
+    assert _backstop_lines(caplog) == []
     swapped = client.put(
         f"{COLLECTION}/{flag['id']}",
         json={"on_value": off, "off_value": on},

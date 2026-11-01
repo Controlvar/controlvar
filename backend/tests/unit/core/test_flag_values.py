@@ -340,7 +340,8 @@ def test_an_update_checks_the_pair_as_it_will_be_stored():
         (
             "on_value",
             "values_equal",
-            "on_value equals off_value; a flag serves a different value when it is off",
+            "on_value equals off_value; the two values must differ, or turning the "
+            "flag off changes nothing",
         )
     ]
     assert write_errors("string", {"on_value": "c"}, stored) == []

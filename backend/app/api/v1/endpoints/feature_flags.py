@@ -539,8 +539,14 @@ async def update_feature_flag(
     # Create feature flag service
     feature_flag_service = FeatureFlagService(db)
 
-    # Get feature flag
-    flag = db.query(FeatureFlag).filter(FeatureFlag.id == flag_id).first()
+    # Get feature flag. An update that sends a value locks the row until it
+    # commits: its values are checked against the stored pair (EMF-5), so the
+    # stored pair must be the committed one, and a concurrent update of the
+    # same flag waits instead of storing an equal pair (#1514 review R2).
+    query = db.query(FeatureFlag).filter(FeatureFlag.id == flag_id)
+    if feature_flag_in.model_fields_set & {"on_value", "off_value"}:
+        query = query.with_for_update()
+    flag = query.first()
     if not flag:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Feature flag not found"

@@ -10,6 +10,7 @@ from uuid import UUID
 
 from pydantic_core import PydanticCustomError
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.core.flag_values import (
@@ -18,6 +19,7 @@ from backend.app.core.flag_values import (
     VALUE_TYPE_READ_ONLY,
     flag_value_type,
     stored_values,
+    values_equal_refusal,
     write_errors,
 )
 from backend.app.core.pattern_match import PatternUnevaluable, report_unevaluable
@@ -32,6 +34,7 @@ from backend.app.core.targeting_adapter import (
     segment_ids_in,
 )
 from backend.app.models.feature_flag import (
+    FLAG_VALUES_CHECK,
     ArchivedFlagError,
     FeatureFlag,
     FeatureFlagStatus,
@@ -103,7 +106,11 @@ def _check_sent_values(flag_data: FeatureFlagUpdate, flag: FeatureFlag) -> None:
     ``value_type`` is read-only: sent, it must equal the stored type, compared
     exactly. Each sent value is checked against the stored type, and the pair
     as it will be stored (each value as sent, otherwise as stored) must differ
-    (EMF-5), so the database's ``check_flag_values`` is never what refuses it.
+    (EMF-5). The update route reads *flag* with ``SELECT ... FOR UPDATE`` when
+    a value is sent, so the stored pair is the committed one and a concurrent
+    update of the same flag waits for this one. A check violation that still
+    reaches the commit -- a writer that does not take that lock -- is answered
+    as the same 422 by :meth:`FeatureFlagService.update_feature_flag`.
     A boolean flag accepts ``on_value: true`` and ``off_value: false`` -- its
     GET body sent back -- and stores neither.
     """
@@ -127,6 +134,19 @@ def _check_sent_values(flag_data: FeatureFlagUpdate, flag: FeatureFlag) -> None:
     )
     if errors:
         raise FlagValuesRefused(errors)
+
+
+#: PostgreSQL's SQLSTATE for a CHECK constraint violation.
+_CHECK_VIOLATION = "23514"
+
+
+def _violates_flag_values_check(exc: IntegrityError) -> bool:
+    """Whether *exc* is ``check_flag_values`` refusing a row, by SQLSTATE and
+    constraint name, never by parsing the message."""
+    orig = getattr(exc, "orig", None)
+    code = getattr(orig, "pgcode", None) or getattr(orig, "sqlstate", None)
+    constraint = getattr(getattr(orig, "diag", None), "constraint_name", None)
+    return code == _CHECK_VIOLATION and constraint == FLAG_VALUES_CHECK
 
 
 def _status_value(status: Any) -> str:
@@ -346,6 +366,7 @@ class FeatureFlagService:
             verb = FlagVerb.ON if update_data.pop("is_active") else FlagVerb.OFF
             update_data["status"] = transition(stored, verb)
 
+        flag_id = flag.id
         try:
             for field, value in update_data.items():
                 setattr(flag, field, value)
@@ -355,6 +376,25 @@ class FeatureFlagService:
             self.db.refresh(flag)
 
             return flag
+        except IntegrityError as e:
+            self.db.rollback()
+            if _violates_flag_values_check(e):
+                # Another writer changed the other value after the check
+                # (only one that does not lock the row can). The database
+                # refused an equal pair; nothing was written. Answered as the
+                # check would have answered it, and logged without the
+                # exception's text, which carries both values.
+                logger.warning(
+                    "Feature flag %s: update refused by %s at commit; answered "
+                    "422 values_equal",
+                    flag_id,
+                    FLAG_VALUES_CHECK,
+                )
+                raise FlagValuesRefused(
+                    [values_equal_refusal(flag_data.model_fields_set)]
+                ) from None
+            logger.error(f"Error updating feature flag: {e!s}")
+            raise
         except Exception as e:
             logger.error(f"Error updating feature flag: {e!s}")
             self.db.rollback()
