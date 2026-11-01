@@ -123,8 +123,8 @@ step: [Guided examples](docs/guides/guided-examples.md).
 
 ## What it does not do (yet)
 
-- A flag is on or off for each user: it carries no variants or values. To serve one of several
-  experiences, run a multivariate experiment.
+- A flag serves two values, its on value and its off value; no rule or rollout splits users
+  among three or more. For three or more experiences, run a multivariate experiment.
 - A revenue, count, duration or custom metric's sequential, Bayesian, sample-size, breakdown and
   daily views are of the share of users who sent its event.
 - Variant weights must add up to exactly 100%; there is no separate experiment-level traffic

@@ -21,7 +21,7 @@ Common uses: gradual rollouts, kill switches, beta programs, maintenance mode.
 
 ### Several Experiences
 
-A flag is on or off for each user: it carries no variants or values. To serve one of several experiences, run a multivariate experiment instead. Each of its variants carries a `configuration`, which `POST /api/v1/tracking/assign` returns.
+A flag serves two values: on or off, or a string, a number or a JSON value with an off value. To split users among three or more experiences, or to measure which one does better, run a multivariate experiment instead. Each of its variants carries a `configuration`, which `POST /api/v1/tracking/assign` returns.
 
 ### Why Use Feature Flags
 

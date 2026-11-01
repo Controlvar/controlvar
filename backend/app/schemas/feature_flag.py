@@ -12,8 +12,14 @@ The create/update contract (#94, D39 as narrowed by D40):
   are ignored -- removed by ``FeatureFlagService``, which is also where a sent
   ``status`` is compared with the stored one.
 * A new flag is inactive unless ``is_active: true`` is sent.
-* ``default_value`` is stored and type-checked; a boolean flag accepts only
-  ``false`` for now (D40).
+* A flag has a ``value_type`` (``boolean``, the default, ``string``,
+  ``number`` or ``json``), set on create and read-only afterwards, and two
+  values: ``on_value`` for the users it is on for, ``off_value`` for everyone
+  else (#1497, DECISIONS T229). A boolean flag's are ``true`` and ``false``.
+  The value rules are ``backend.app.core.flag_values``; a create is checked
+  here, an update by ``FeatureFlagService`` against the stored type.
+* ``default_value`` is stored and type-checked, and accepts only ``false``
+  for every flag (D40). It is deprecated in favour of ``off_value``.
 * ``targeting_rules`` the flag evaluator would not apply as written answer
   422 (#535). That includes rules sent back from a GET: a GET body can be sent
   back unchanged unless its ``targeting_rules`` are ones PUT now refuses (D41).
@@ -32,12 +38,22 @@ from pydantic import (
     ConfigDict,
     Field,
     StrictBool,
+    ValidationError,
     ValidationInfo,
     field_validator,
     model_validator,
 )
-from pydantic_core import PydanticCustomError
+from pydantic_core import InitErrorDetails, PydanticCustomError
 
+from backend.app.core.flag_values import (
+    BOOLEAN,
+    MAX_SAFE_INTEGER,
+    MAX_VALUE_BYTES,
+    MAX_VALUE_DEPTH,
+    VALUE_FIELDS,
+    read_values,
+    write_errors,
+)
 from backend.app.core.targeting_adapter import (
     TargetingRulesError,
     validate_flag_targeting,
@@ -48,14 +64,59 @@ from backend.app.core.targeting_adapter import (
 #: a ``status`` must equal the stored one (``FeatureFlagService``).
 READ_ONLY_FIELDS = frozenset({"id", "owner_id", "created_at", "updated_at", "status"})
 
-#: Fields stored in a NOT NULL column: an explicit null is refused, while
-#: leaving one out of an update keeps the stored value.
-NOT_NULL_FIELDS = ("key", "name", "is_active", "rollout_percentage", "default_value")
-
-DEFAULT_VALUE_UNSUPPORTED = (
-    "default_value can only be false for now; a flag that serves another value "
-    "when it is off is not supported yet."
+#: Fields stored in a NOT NULL column, or never null in a request: an explicit
+#: null is refused, while leaving one out of an update keeps the stored value.
+#: ``on_value`` and ``off_value`` are NULL columns for a boolean flag, but a
+#: request never sends null for them: JSON ``null`` is no flag's value.
+NOT_NULL_FIELDS = (
+    "key",
+    "name",
+    "is_active",
+    "rollout_percentage",
+    "default_value",
+    "value_type",
+    "on_value",
+    "off_value",
 )
+
+#: The answer to a ``default_value`` other than ``false`` (PF-4).
+DEFAULT_VALUE_UNSUPPORTED = (
+    "default_value is deprecated and accepts only false; to serve another value "
+    "when the flag is off, create a string, number or json flag and set off_value"
+)
+
+#: What a flag can serve.  A request names one of these; a response reads any
+#: string, so a row of a type a later release added is still answered.
+ValueType = Literal["boolean", "string", "number", "json"]
+
+VALUE_TYPE_DESCRIPTION = (
+    "What the flag serves: `boolean` (the default; `true` to users the flag is "
+    "on for, `false` to everyone else), `string`, `number`, or `json` (an object "
+    "or an array). Set when the flag is created; an update may send it back "
+    "unchanged, and any other value answers 422."
+)
+ON_VALUE_DESCRIPTION = (
+    "What a user the flag is on for gets: a user who matches a targeting rule "
+    "and falls inside its percentage, or matches no rule and falls inside "
+    "`rollout_percentage`. Required for a string, number or json flag, and of "
+    "that type; a boolean flag's is `true`."
+)
+OFF_VALUE_DESCRIPTION = (
+    "What everyone else gets, and what everyone gets while the flag is off. "
+    "Required for a string, number or json flag, and of that type; a boolean "
+    "flag's is `false`."
+)
+#: Added to the two value descriptions on a request.
+VALUE_LIMITS_DESCRIPTION = (
+    f" At most {MAX_VALUE_BYTES} bytes as compact JSON and {MAX_VALUE_DEPTH} "
+    f"levels deep; every number in it finite and from -{MAX_SAFE_INTEGER} to "
+    f"{MAX_SAFE_INTEGER}; no NUL or unpaired surrogate character; the two "
+    "values differ."
+)
+DEFAULT_VALUE_REQUEST_DESCRIPTION = (
+    "Deprecated: `off_value` replaces it. Only `false` is accepted, for every flag."
+)
+DEFAULT_VALUE_READ_DESCRIPTION = "Deprecated: always false. Read `off_value`."
 
 #: The answer to a ``status`` that differs from the stored one.
 STATUS_READ_ONLY = "status is read-only. Use is_active to turn a flag on or off."
@@ -148,16 +209,37 @@ class _FeatureFlagRequest(BaseModel):
     @field_validator("default_value", check_fields=False)
     @classmethod
     def only_false_for_now(cls, v: bool) -> bool:
-        """A boolean flag's ``default_value`` may only be false (D40).
+        """``default_value`` may only be false, for every flag (D40, T229).
 
-        A flag whose off-value is ``true`` would keep serving ``true`` when it
-        is turned off.  The message names no submitted value.
+        A boolean flag whose off-value is ``true`` would keep serving ``true``
+        when it is turned off.  The field is deprecated: a flag that serves
+        another value when it is off is a string, number or json flag with an
+        ``off_value``.  The message names no submitted value.
         """
         if v is True:
             raise PydanticCustomError(
                 "default_value_unsupported", DEFAULT_VALUE_UNSUPPORTED
             )
         return v
+
+
+def value_errors_to_raise(
+    title: str, errors: List[Any], prefix: tuple = ()
+) -> ValidationError:
+    """The ``ValidationError`` for ``flag_values.write_errors`` pairs.
+
+    Each error sits at its own field (``prefix`` + the field name), so a 422
+    names ``["body", "on_value"]`` rather than the body as a whole.  ``input``
+    is ``None``: the value is never repeated (and the 422 handler drops
+    ``input`` anyway).
+    """
+    return ValidationError.from_exception_data(
+        title,
+        [
+            InitErrorDetails(type=error, loc=(*prefix, field), input=None)
+            for field, error in errors
+        ],
+    )
 
 
 class FeatureFlagCreate(_FeatureFlagRequest):
@@ -174,21 +256,47 @@ class FeatureFlagCreate(_FeatureFlagRequest):
         None, description=TARGETING_RULES_DESCRIPTION
     )
     default_value: StrictBool = Field(
-        False,
-        description=(
-            "What the flag serves when it is off. Only false is accepted for now."
-        ),
+        False, description=DEFAULT_VALUE_REQUEST_DESCRIPTION
+    )
+    value_type: ValueType = Field(BOOLEAN, description=VALUE_TYPE_DESCRIPTION)
+    on_value: Any = Field(
+        None, description=ON_VALUE_DESCRIPTION + VALUE_LIMITS_DESCRIPTION
+    )
+    off_value: Any = Field(
+        None, description=OFF_VALUE_DESCRIPTION + VALUE_LIMITS_DESCRIPTION
     )
     tags: Optional[List[str]] = None
+
+    @model_validator(mode="after")
+    def values_fit_the_type(self) -> "FeatureFlagCreate":
+        """The two values follow the value rules for ``value_type``.
+
+        A string, number or json flag sends both, of its type and within the
+        limits, and different; a boolean flag sends neither, or ``true`` and
+        ``false``.  Each refusal is at its own field.
+        """
+        sent = {
+            field: getattr(self, field)
+            for field in VALUE_FIELDS
+            if field in self.model_fields_set
+        }
+        errors = write_errors(self.value_type, sent, None)
+        if errors:
+            raise value_errors_to_raise(type(self).__name__, errors)
+        return self
 
 
 class FeatureFlagUpdate(_FeatureFlagRequest):
     """The body of a flag update.
 
     Every field is optional, and a field left out keeps its value. key, name,
-    is_active, rollout_percentage and default_value refuse null; description,
-    targeting_rules and tags accept null, which clears them. A field not
-    listed here answers 422.
+    is_active, rollout_percentage, default_value, value_type, on_value and
+    off_value refuse null; description, targeting_rules and tags accept null,
+    which clears them. A field not listed here answers 422.
+
+    ``value_type`` and the two values are checked against the stored flag, by
+    ``FeatureFlagService.update_feature_flag``: this model cannot see the
+    stored type.
     """
 
     # The NOT_NULL_FIELDS default to None only to mean "not sent": pydantic
@@ -202,10 +310,14 @@ class FeatureFlagUpdate(_FeatureFlagRequest):
         None, description=TARGETING_RULES_DESCRIPTION
     )
     default_value: StrictBool = Field(
-        None,
-        description=(
-            "What the flag serves when it is off. Only false is accepted for now."
-        ),
+        None, description=DEFAULT_VALUE_REQUEST_DESCRIPTION
+    )
+    value_type: ValueType = Field(None, description=VALUE_TYPE_DESCRIPTION)
+    on_value: Any = Field(
+        None, description=ON_VALUE_DESCRIPTION + VALUE_LIMITS_DESCRIPTION
+    )
+    off_value: Any = Field(
+        None, description=OFF_VALUE_DESCRIPTION + VALUE_LIMITS_DESCRIPTION
     )
     tags: Optional[List[str]] = None
 
@@ -232,10 +344,13 @@ class FeatureFlagRead(BaseModel):
 
     # Create, get, update, activate, deactivate and the list items all answer
     # with this, and nothing else.  It holds types only -- no key pattern, no
-    # length limit -- because a response model that refuses a stored row turns
-    # a read into a 500.  The two normalisers below are the only logic:
-    # ``status`` is lower-cased and ``is_active`` is derived from it, so the
-    # two never disagree and ``is_active`` is never null.
+    # length limit, and ``value_type`` a ``str``, never a Literal -- because a
+    # response model that refuses a stored row turns a read into a 500, and an
+    # older image must answer a row of a type a later release added.  The
+    # normaliser below is the only logic: ``status`` is lower-cased and
+    # ``is_active`` is derived from it, so the two never disagree and
+    # ``is_active`` is never null; a boolean flag (both value columns NULL)
+    # reads ``on_value: true`` and ``off_value: false``.
     model_config = ConfigDict(
         from_attributes=True, json_schema_serialization_defaults_required=True
     )
@@ -252,7 +367,10 @@ class FeatureFlagRead(BaseModel):
     targeting_rules: Optional[Any] = Field(
         None, description="The flag's targeting rules, as stored."
     )
-    default_value: bool = Field(..., description="What the flag serves when it is off.")
+    default_value: bool = Field(..., description=DEFAULT_VALUE_READ_DESCRIPTION)
+    value_type: str = Field(..., description=VALUE_TYPE_DESCRIPTION)
+    on_value: Any = Field(..., description=ON_VALUE_DESCRIPTION)
+    off_value: Any = Field(..., description=OFF_VALUE_DESCRIPTION)
     tags: Optional[List[str]] = None
     owner_id: Optional[UUID] = Field(
         None, description="The user who created the flag; null once that user is gone."
@@ -263,8 +381,8 @@ class FeatureFlagRead(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _normalise(cls, data: Any) -> Any:
-        """Read a stored row (or a mapping), lower-case ``status`` and derive
-        ``is_active`` from it."""
+        """Read a stored row (or a mapping), lower-case ``status``, derive
+        ``is_active`` from it, and read a boolean flag's two values."""
         if isinstance(data, Mapping):
             values = dict(data)
         else:
@@ -279,6 +397,11 @@ class FeatureFlagRead(BaseModel):
             status = str(status).lower()
         values["status"] = status
         values["is_active"] = status == "active"
+        value_type = values.get("value_type") or BOOLEAN
+        values["value_type"] = value_type
+        values["on_value"], values["off_value"] = read_values(
+            value_type, values.get("on_value"), values.get("off_value")
+        )
         return values
 
 
@@ -311,6 +434,9 @@ class FeatureFlagListResponse(BaseModel):
                         "rollout_percentage": 0,
                         "targeting_rules": None,
                         "default_value": False,
+                        "value_type": "boolean",
+                        "on_value": True,
+                        "off_value": False,
                         "tags": None,
                         "owner_id": "5f0c8a52-1d7e-4c3b-9a6f-2b8e4d1c7a90",
                         "created_at": "2023-01-01T00:00:00Z",

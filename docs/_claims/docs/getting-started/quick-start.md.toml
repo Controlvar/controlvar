@@ -274,7 +274,7 @@ by = [
 ]
 
 [[unit]]
-text = "Evaluation returns {key, enabled, config, reason}."
+text = "Evaluation returns {key, enabled, value, value_type, config, reason}."
 by = ["test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_no_context_keeps_existing_behaviour"]
 
 [[unit]]

@@ -409,7 +409,7 @@ text = "What is the difference between a feature flag and an experiment?"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Feature flags control whether a feature is visible to a user."
+text = "Feature flags control whether a feature is visible to a user, or which value they get."
 by = ["exempt:theory"]
 
 [[unit]]
@@ -418,6 +418,10 @@ by = ["exempt:theory"]
 
 [[unit]]
 text = "A flag has no statistical analysis attached to it."
+by = ["test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_has_no_results_route"]
+
+[[unit]]
+text = "A flag does not measure which value does better; an experiment does."
 by = ["test:backend/tests/unit/api/test_documented_limits.py::test_a_flag_has_no_results_route"]
 
 [[unit]]
