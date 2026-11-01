@@ -74,6 +74,7 @@
     "api": {
       "type": "object",
       "additionalProperties": false,
+      "required": ["forwardedAllowIps"],
       "properties": {
         "replicaCount": {"type": "integer", "minimum": 1},
         "forwardedAllowIps": {"type": "string", "minLength": 1},
