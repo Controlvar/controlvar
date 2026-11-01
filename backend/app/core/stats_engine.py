@@ -46,6 +46,10 @@ import numpy as np
 #: its mean per assigned user (a count metric's per-user value is its number of
 #: events), as a revenue metric is, where it was the share of users who sent
 #: the event.
+#: 1.8.0 (#1496): each treatment of every metric carries an interval on its
+#: difference from the control, an interval on its relative change and the
+#: incremental impact; a proportion treatment's ``absolute_difference`` and its
+#: interval, null before, are filled.
 #:
 #: The rule: an engine-changing PR bumps ``ENGINE_VERSION`` to the next minor
 #: and appends it to ``RELEASED_ENGINE_VERSIONS`` ("frozen on main", in
@@ -57,7 +61,7 @@ import numpy as np
 #: path stamping ``engine_version`` returns, caches or persists: results and
 #: its snapshots, Bayesian, CUPED, sequential, and the bandit's state, history
 #: and status.  A revert of an engine-changing PR bumps again.
-ENGINE_VERSION: str = "1.7.0"
+ENGINE_VERSION: str = "1.8.0"
 
 #: Mask that keeps the derived seed inside the signed 64-bit range.
 _SEED_MASK = (1 << 63) - 1

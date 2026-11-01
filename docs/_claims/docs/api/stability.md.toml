@@ -597,3 +597,14 @@ by = [
     "test:backend/tests/integration/api/test_front_door_behaviour.py::test_every_flag_evaluates_with_a_null_config",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
 ]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results, GET /api/v1/results/{experiment_id}/bayesian, GET /api/v1/bandit/{experiment_id}, POST /api/v1/bandit/{experiment_id}/update, PUT /api/v1/bandit/{experiment_id}/weights | #1496 | Each treatment of a metric analysed as a proportion carries absolute_difference (the difference of the shares of users who converted, from the counts) and absolute_difference_ci (Newcombe's interval, from each variant's Wilson score interval), where they were null. Every treatment of every metric carries relative_improvement_pct_ci (the MOVER-R interval of the relative change: for a proportion over ratios of 0 and above, never below -100% and null only when an arm has no users or the control has no conversions; for a mean Fieller's, null when the control's mean plus or minus its margin reaches 0), incremental_impact and incremental_impact_ci (the difference and its interval times the treatment's sample_size, a plain number with no currency or unit). The control's are null. The intervals are at the response's confidence_level and are not adjusted for multiple comparisons. is_significant, the winner and the recommendation are decided as before, and a mean metric's absolute_difference and absolute_difference_ci do not change. For a mean with one treatment, or with no correction, is_significant is true exactly when absolute_difference_ci excludes 0; for a proportion, whose is_significant comes from Fisher's exact test, the two can disagree near the threshold. Every other field is unchanged, and so is the export. The engine version becomes 1.8.0, so the results routes do not serve an answer cached before the upgrade; the Bayesian and bandit operations change only in the OpenAPI engine_version default. The OpenAPI document gains the three properties and changes the descriptions of VariantResult, absolute_difference and absolute_difference_ci and the engine_version default."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py",
+    "test:backend/tests/integration/api/test_results_difference_intervals.py",
+    "test:backend/tests/unit/stats_validation/test_golden_interval_coverage.py",
+    "test:backend/tests/unit/services/test_engine_versions_frozen.py",
+    "test:backend/tests/unit/scripts/test_openapi_dump_and_stability.py::test_the_results_cache_key_names_the_engine_and_a_finished_answer_lasts_a_day",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]

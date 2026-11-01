@@ -69,6 +69,47 @@ by = [
 ]
 
 [[unit]]
+text = "Intervals on a treatment's difference adjusted for the experiment's correction | The intervals on a treatment's difference from the control, on its relative change and on its impact are not adjusted for comparing several treatments with the control, while is_significant is (Benjamini-Hochberg by default). With two or more treatments an interval can exclude 0 on a treatment that is not significant. For a metric analysed as a share of users, the interval and Fisher's exact test can also disagree near the threshold, either way."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_b5_an_adjusted_treatment_is_not_significant_although_its_interval_excludes_0",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_mean_interval_against_significance",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_proportion_interval_against_significance",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_named_boundary_tables",
+]
+
+[[unit]]
+text = "An interval on the relative change for every treatment | For a proportion, relative_improvement_pct_ci is null only when an arm has no users or the control has no conversions; at low counts it is wide: a treatment with 6 converting users out of 200 against a control with 2 out of 200 gives -34.2% to +1,206.3% at the 0.95 level. For a mean it is null when the control's mean plus or minus its margin reaches 0, where Fieller's set of ratios is unbounded. The interval on the difference is still reported."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_treatment_with_no_users_has_no_intervals",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_every_none_on_the_architects_grid_is_counted",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_low_count_control_has_a_bounded_relative_interval",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_mean_control_whose_interval_reaches_0_has_no_relative_interval",
+]
+
+[[unit]]
+text = "The impact projected to all traffic, to a later period, or in a currency | incremental_impact is the difference from the control times the treatment's own assigned users so far, as a plain number: nothing projects it further, and no currency or unit is read or added."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_proportion_impact_is_the_difference_times_the_treatments_users",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_mean_impact_is_the_difference_times_the_treatments_users",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_impact_is_a_plain_number",
+]
+
+[[unit]]
+text = "The intervals and the impact in the data export | The export has no interval or impact column; GET /api/v1/results/{experiment_id} reports them."
+by = [
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_export_has_no_interval_or_impact_column",
+    "test:backend/tests/integration/api/test_results_difference_intervals.py::test_a_proportion_with_a_control_at_0_has_a_difference_and_no_relative_change",
+]
+
+[[unit]]
+text = "An interval on the difference, or an impact, in a warehouse analysis of a mean | A warehouse analysis gives a proportion metric's treatments their difference from the control with its interval, the relative change's interval and the impact, as /results does. A mean metric's treatments get none of them; their p-value and relative change are reported as before."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_estimator_fields_parity.py::test_a_proportion_run_carries_the_difference_fields",
+    "test:modules/backend/tests/unit/warehouse/test_estimator_fields_parity.py::test_a_mean_run_carries_none_of_the_difference_fields",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_a_warehouse_mean_result_carries_none_of_the_new_fields",
+]
+
+[[unit]]
 text = "A traffic allocation for the experiment as a whole | There is none. Variant weights must add up to exactly 100%, or the request is refused with 422. Users are left out only by targeting rules, a mutual exclusion group or the global holdout."
 by = [
     "test:backend/tests/unit/api/test_documented_limits.py::test_the_experiment_has_no_traffic_allocation_of_its_own",

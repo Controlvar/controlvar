@@ -112,6 +112,9 @@ FROZEN_DIGESTS: Dict[str, str] = {
     # 1.7.0 (#439): 1.6.0's entries, plus the count, duration and custom
     # results in VALUE_RESULTS_FINGERPRINTS, a table whose first entry it is.
     "1.7.0": "1aab98b378814d91fe0c8644b0b240162fbf1d053e64f0da80a21c36cc2a148b",
+    # 1.8.0 (#1496): every treatment carries its difference from the control,
+    # the intervals and the impact.
+    "1.8.0": "91f5a1aa619dfced9f782544d9ddfefd5553c8323ccee13b43b374cf45b126fd",
 }
 
 
@@ -127,6 +130,7 @@ FROZEN_VERSIONS: Tuple[str, ...] = (
     "1.5.0",
     "1.6.0",
     "1.7.0",
+    "1.8.0",
 )
 
 

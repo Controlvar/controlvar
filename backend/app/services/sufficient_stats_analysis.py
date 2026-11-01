@@ -20,6 +20,12 @@ mean ``k``.  ``test_mean_metric_result.py`` holds it to an exact reference.
 ``per_user_mean_metric_result`` gives ``/results`` a revenue, count, duration
 or custom metric's mean per assigned user from each user's value, through
 ``mean_metric_result``.
+
+``binomial_metric_result`` and ``per_user_mean_metric_result`` give each
+treatment its difference from the control with an interval, the relative
+change's interval and the incremental impact (#1496);
+``test_difference_intervals.py`` holds them to independent oracles.
+``mean_metric_result``, which warehouse mean runs use, does not carry them.
 """
 
 import logging
@@ -134,6 +140,232 @@ def two_sided_z(confidence_level: float) -> float:
             f"confidence_level must be between 0 and 1, got {confidence_level!r}"
         )
     return float(stats.norm.ppf(1.0 - (1.0 - confidence_level) / 2.0))
+
+
+# ---------------------------------------------------------------------------
+# A treatment's difference from the control: intervals and impact (#1496)
+# ---------------------------------------------------------------------------
+#
+# One construction covers both analyses.  Each arm has a point estimate and
+# two-sided limits at the response's level: Wilson score limits for a
+# proportion, ``mean +/- c * se`` with Welch's critical value ``c`` for a mean.
+# The interval of the difference is the MOVER difference of those limits
+# (Newcombe's hybrid score interval for a proportion; for a mean it is
+# Welch's own interval), and the interval of the ratio of the means is the
+# MOVER ratio of the same limits (Fieller's interval for a mean).  The ratio's
+# bound equals 1 exactly where the difference's bound equals 0, so the
+# absolute interval, the relative one and the impact's agree on whether 0 is
+# inside.  None of these intervals is adjusted for multiple comparisons.
+
+
+class ArmLimits(NamedTuple):
+    """An arm's point estimate and its two-sided limits at one level."""
+
+    mean: float
+    lower: float
+    upper: float
+
+
+def wilson_limits(n_converted: int, n: int, z: float) -> ArmLimits:
+    """``n_converted / n`` and its Wilson score interval at critical value ``z``.
+
+    The lower limit is exactly 0 when nothing converted and the upper exactly
+    1 when everything did, as the interval's closed form gives in exact
+    arithmetic.  ``n`` must be at least 1.
+    """
+    p = n_converted / n
+    z2 = z * z
+    scale = 1.0 + z2 / n
+    centre = (p + z2 / (2.0 * n)) / scale
+    half = z * math.sqrt(p * (1.0 - p) / n + z2 / (4.0 * n * n)) / scale
+    lower = 0.0 if n_converted == 0 else centre - half
+    upper = 1.0 if n_converted == n else centre + half
+    return ArmLimits(p, lower, upper)
+
+
+def newcombe_interval(treatment: ArmLimits, control: ArmLimits) -> Tuple[float, float]:
+    """The MOVER interval of ``treatment.mean - control.mean`` from each arm's
+    limits: Newcombe's hybrid score interval when the limits are Wilson's.
+
+    ``d - sqrt((m_t - l_t)^2 + (u_c - m_c)^2)`` to
+    ``d + sqrt((u_t - m_t)^2 + (m_c - l_c)^2)``, with ``d = m_t - m_c``.
+    """
+    d = treatment.mean - control.mean
+    return (
+        d - math.hypot(treatment.mean - treatment.lower, control.upper - control.mean),
+        d + math.hypot(treatment.upper - treatment.mean, control.mean - control.lower),
+    )
+
+
+def _mover_ratio(
+    treatment: ArmLimits, control: ArmLimits, nonnegative: bool = False
+) -> Optional[Tuple[float, float]]:
+    """The MOVER-R interval of ``m_t / m_c`` for a control whose mean is above
+    0, or None in the two cases below (a proportion's control with no
+    conversions; a mean's control whose limits reach 0).
+
+    The lower bound ``L <= m_t / m_c`` solves
+    ``(m_t - L m_c)^2 = (m_t - l_t)^2 + L^2 (u_c - m_c)^2`` and the upper bound
+    ``U >= m_t / m_c`` solves ``(U m_c - m_t)^2 = (u_t - m_t)^2 + U^2 (m_c - l_c)^2``.
+    Each is the root of a quadratic whose leading coefficient is
+    ``u_c (2 m_c - u_c)`` (``l_c (2 m_c - l_c)`` for the upper bound).
+
+    ``nonnegative`` is true for a ratio of two proportions, which is never
+    below 0.  The lower bound's equation is then the MOVER limit on ratios of
+    0 and above only: its limit falls from ``l_t`` at 0 to at most 0 at
+    ``m_t / m_c``, so ``L`` is in ``[0, m_t / m_c]`` whatever the sign of
+    ``u_c (2 m_c - u_c)``, and ``L`` is 0 when the treatment has no
+    conversions.  ``U`` is finite exactly when ``l_c > 0``, so the answer is
+    None only when the control has no conversions.
+
+    For a mean (``nonnegative`` false) the limits are symmetric and a ratio of
+    either sign is possible.  The answer is None when ``l_c <= 0`` or
+    ``u_c >= 2 m_c`` (one condition when the limits are symmetric): the
+    control's mean plus or minus its margin reaches 0, and Fieller's set of
+    ratios is then unbounded.
+
+    The discriminants are written as sums of non-negative terms (the same
+    numbers as ``b^2 - a c``), and each root is taken in the form that does
+    not subtract two nearly equal numbers.
+    """
+    m_t, l_t, u_t = treatment
+    m_c, l_c, u_c = control
+    if not l_c > 0.0:
+        return None
+    if not nonnegative and not u_c < 2.0 * m_c:
+        return None
+    a_low = u_c * (2.0 * m_c - u_c)
+    a_high = l_c * (2.0 * m_c - l_c)
+    b = m_t * m_c
+    root_low = math.sqrt((m_t - l_t) ** 2 * a_low + m_t * m_t * (u_c - m_c) ** 2)
+    root_high = math.sqrt((u_t - m_t) ** 2 * a_high + m_t * m_t * (m_c - l_c) ** 2)
+    if b > 0.0:
+        low = l_t * (2.0 * m_t - l_t) / (b + root_low)
+    elif nonnegative:
+        low = 0.0
+    else:
+        low = (b - root_low) / a_low
+    if b < 0.0:
+        high = u_t * (2.0 * m_t - u_t) / (b - root_high)
+    else:
+        high = (b + root_high) / a_high
+    return low, high
+
+
+def relative_change_interval(
+    treatment: ArmLimits, control: ArmLimits, nonnegative: bool = False
+) -> Optional[Tuple[float, float]]:
+    """The interval of ``100 * (m_t - m_c) / |m_c|``, the relative change in
+    percent, from each arm's limits, or None in the cases below.
+
+    For a control whose mean is above 0 it is ``100 * (ratio - 1)`` over the
+    MOVER-R interval of ``m_t / m_c``.  For one below 0 both arms are negated
+    (their ratio is unchanged and the control's mean is then above 0) and the
+    change is ``100 * (1 - ratio)``, so the interval is reflected:
+    ``[100 * (1 - U), 100 * (1 - L)]``.
+
+    ``nonnegative`` is for two proportions, whose ratio is never below 0
+    (``_mover_ratio``): the interval is then None only when the control has
+    no conversions, and its lower end is never below -100%.  For a mean the
+    interval is also None when the control's limits, so oriented, reach 0
+    (the lower limit at or below 0, or the upper at or above twice the mean),
+    where Fieller's set of ratios is unbounded.  None when the control's mean
+    is 0 too.  None of these is unexpected, and none is logged.  A limit or a
+    bound that is not a finite number is unexpected: it is logged as a
+    warning, and gives None.
+    """
+    numbers = (*treatment, *control)
+    if not all(math.isfinite(value) for value in numbers):
+        logger.warning(
+            "The relative change's interval was not computed: an arm's limits "
+            "are not finite"
+        )
+        return None
+    if control.mean == 0.0:
+        return None
+    if control.mean > 0.0:
+        ratio = _mover_ratio(treatment, control, nonnegative=nonnegative)
+        if ratio is None:
+            return None
+        low, high = ratio
+        interval = (100.0 * (low - 1.0), 100.0 * (high - 1.0))
+    else:
+        ratio = _mover_ratio(
+            ArmLimits(-treatment.mean, -treatment.upper, -treatment.lower),
+            ArmLimits(-control.mean, -control.upper, -control.lower),
+        )
+        if ratio is None:
+            return None
+        low, high = ratio
+        interval = (100.0 * (1.0 - high), 100.0 * (1.0 - low))
+    if not all(math.isfinite(value) for value in interval):
+        logger.warning(
+            "The relative change's interval was not computed: a bound is not finite"
+        )
+        return None
+    return interval
+
+
+def _impact(
+    difference: Optional[float],
+    interval: Optional[Tuple[float, float]],
+    sample_size: int,
+) -> Dict[str, Any]:
+    """The incremental impact: the difference, and its interval, times the
+    treatment's own assigned users.  Each is None when what it scales is."""
+    return {
+        "incremental_impact": (
+            difference * sample_size if difference is not None else None
+        ),
+        "incremental_impact_ci": (
+            (interval[0] * sample_size, interval[1] * sample_size)
+            if interval is not None
+            else None
+        ),
+    }
+
+
+#: The keys every variant of ``binomial_metric_result`` and
+#: ``per_user_mean_metric_result`` carries for the difference from the
+#: control, all None on the control (#1496).
+DIFFERENCE_FIELDS = (
+    "absolute_difference",
+    "absolute_difference_ci",
+    "relative_improvement_pct_ci",
+    "incremental_impact",
+    "incremental_impact_ci",
+)
+
+
+def _no_difference() -> Dict[str, Any]:
+    return dict.fromkeys(DIFFERENCE_FIELDS)
+
+
+def _proportion_difference(
+    n_t: int, x_t: int, n_c: int, x_c: int, z: float
+) -> Dict[str, Any]:
+    """A proportion treatment's difference from the control and its intervals.
+
+    ``absolute_difference`` is ``x_t / n_t - x_c / n_c`` from the counts; its
+    interval is Newcombe's, from each arm's Wilson limits at ``z``, and the
+    relative change's interval is the MOVER-R interval on the same limits over
+    ratios of 0 and above, None only when the control has no conversions.
+    Everything is None when either arm has no users.
+    """
+    if n_t <= 0 or n_c <= 0:
+        return _no_difference()
+    treatment = wilson_limits(x_t, n_t, z)
+    control = wilson_limits(x_c, n_c, z)
+    difference = x_t / n_t - x_c / n_c
+    interval = newcombe_interval(treatment, control)
+    return {
+        "absolute_difference": difference,
+        "absolute_difference_ci": interval,
+        "relative_improvement_pct_ci": relative_change_interval(
+            treatment, control, nonnegative=True
+        ),
+        **_impact(difference, interval, n_t),
+    }
 
 
 def binomial_variant_results(
@@ -268,6 +500,17 @@ def binomial_metric_result(
             rate below the control's; otherwise the highest above it.
             ``relative_improvement_pct`` stays the signed change either way.
 
+    Each treatment also carries its difference from the control (#1496), at
+    the level ``1 - alpha`` and not adjusted for multiple comparisons:
+    ``absolute_difference`` (``x_t / n_t - x_c / n_c``, from the counts) with
+    Newcombe's interval from each arm's Wilson limits,
+    ``relative_improvement_pct_ci`` (MOVER-R on the same limits over ratios
+    of 0 and above; None only when the control has no conversions, and never
+    below -100%), and
+    ``incremental_impact`` and ``incremental_impact_ci``, the difference and
+    its interval times the treatment's ``sample_size``.  All five are None on
+    the control, and on a treatment when either arm has no users.
+
     Returns:
         A dict in the shape of ``schemas.results.MetricResult``, exactly what
         ``/results`` returns in ``metrics`` for the same counts.
@@ -277,6 +520,7 @@ def binomial_metric_result(
             strictly between 0 and 1.
     """
     variant_results = binomial_variant_results(variants, 1.0 - alpha)
+    z = two_sided_z(1.0 - alpha)
 
     control = next((v for v in variant_results if v["is_control"]), None)
     control_rate = (control["conversion_rate"] / 100.0) if control else 0.0
@@ -309,8 +553,19 @@ def binomial_metric_result(
             "relative_improvement_pct": None,
             "power": None,
             "statistical_test_used": None,
+            **_no_difference(),
         }
         if not v["is_control"]:
+            if control is not None:
+                entry.update(
+                    _proportion_difference(
+                        n,
+                        v["conversions"],
+                        control["sample_size"],
+                        control["conversions"],
+                        z,
+                    )
+                )
             p_value = v.get("p_value")
             adj = adjusted_by_id.get(v["variant_id"])
             decisive = adj if adj is not None else p_value
@@ -688,6 +943,31 @@ def welch_difference_intervals(
             the sums give a negative variance beyond rounding.
         ValueError: when no variant is the control.
     """
+    return {
+        variant_id: (welch.difference, welch.interval)
+        for variant_id, welch in _welch_differences(variants, alpha).items()
+    }
+
+
+class _WelchDifference(NamedTuple):
+    """One treatment's Welch difference from the control, with the pieces the
+    relative change's interval is built from."""
+
+    difference: Optional[float]
+    interval: Optional[Tuple[float, float]]
+    #: ``t(1 - alpha / 2, df)`` at the Welch-Satterthwaite df; None with
+    #: ``interval``.
+    critical: Optional[float]
+    #: Each arm's standard error of its mean, ``sqrt(var / n)``.
+    se_treatment: Optional[float]
+    se_control: Optional[float]
+
+
+def _welch_differences(
+    variants: Sequence[MeanSums], alpha: float
+) -> Dict[str, _WelchDifference]:
+    """``welch_difference_intervals``' numbers, keyed the same way, with the
+    critical value and the arms' standard errors it used."""
     arms: List[Tuple[Any, Optional[_MeanArm]]] = []
     for row in variants:
         try:
@@ -699,26 +979,58 @@ def welch_difference_intervals(
         raise ValueError("No variant is the control")
     control = controls[0]
 
-    intervals: Dict[str, Tuple[Optional[float], Optional[Tuple[float, float]]]] = {}
+    differences: Dict[str, _WelchDifference] = {}
     for variant, arm in arms:
         if variant.is_control:
             continue
         if arm is None or control is None:
-            intervals[str(variant.id)] = (None, None)
+            differences[str(variant.id)] = _WelchDifference(
+                None, None, None, None, None
+            )
             continue
         diff = arm.c - control.c
         share_t = arm.var / arm.n
         share_c = control.var / control.n
         se2 = share_t + share_c
         if not se2 > 0.0:
-            intervals[str(variant.id)] = (diff, None)
+            differences[str(variant.id)] = _WelchDifference(
+                diff, None, None, None, None
+            )
             continue
         df = 1.0 / (
             (share_t / se2) ** 2 / (arm.n - 1) + (share_c / se2) ** 2 / (control.n - 1)
         )
-        half_width = float(stats.t.ppf(1 - alpha / 2, df)) * math.sqrt(se2)
-        intervals[str(variant.id)] = (diff, (diff - half_width, diff + half_width))
-    return intervals
+        critical = float(stats.t.ppf(1 - alpha / 2, df))
+        half_width = critical * math.sqrt(se2)
+        differences[str(variant.id)] = _WelchDifference(
+            diff,
+            (diff - half_width, diff + half_width),
+            critical,
+            math.sqrt(share_t),
+            math.sqrt(share_c),
+        )
+    return differences
+
+
+def _mean_relative_change_interval(
+    welch: _WelchDifference, treatment_mean: float, control_mean: float
+) -> Optional[Tuple[float, float]]:
+    """A mean treatment's relative change interval: MOVER-R on each arm's
+    ``mean +/- c * se`` with Welch's ``c``, which is Fieller's interval at
+    that critical value.  None when the difference's interval is None."""
+    if (
+        welch.interval is None
+        or welch.critical is None
+        or welch.se_treatment is None
+        or welch.se_control is None
+    ):
+        return None
+    margin_t = welch.critical * welch.se_treatment
+    margin_c = welch.critical * welch.se_control
+    return relative_change_interval(
+        ArmLimits(treatment_mean, treatment_mean - margin_t, treatment_mean + margin_t),
+        ArmLimits(control_mean, control_mean - margin_c, control_mean + margin_c),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -785,8 +1097,7 @@ def _descriptive_mean_entry(
         "relative_improvement_pct": None,
         "power": None,
         "statistical_test_used": None,
-        "absolute_difference": None,
-        "absolute_difference_ci": None,
+        **_no_difference(),
     }
 
 
@@ -815,7 +1126,13 @@ def per_user_mean_metric_result(
     ``mean_metric_result``'s comparison, the winner in the metric's direction,
     ``relative_improvement_pct`` computed on the means (None when the
     control's mean is 0), and ``absolute_difference`` with its interval from
-    ``welch_difference_intervals``.
+    ``welch_difference_intervals``.  From the same Welch numbers (#1496):
+    ``relative_improvement_pct_ci``, MOVER-R on each arm's ``mean +/- c * se``
+    with ``c`` Welch's critical value (Fieller's interval; None when the
+    control's ``mean +/- c * se`` reaches 0), and ``incremental_impact`` and
+    ``incremental_impact_ci``, the difference and its interval times the
+    treatment's ``sample_size``.  None of the intervals is adjusted for
+    multiple comparisons.
 
     Nothing here raises for well-formed input:
 
@@ -875,13 +1192,13 @@ def per_user_mean_metric_result(
 
     compared = [row for row in sums if row[1] >= 2]
     result: Optional[Dict[str, Any]] = None
-    intervals: Dict[str, Tuple[Optional[float], Optional[Tuple[float, float]]]] = {}
+    welch: Dict[str, _WelchDifference] = {}
     if any(row[0].is_control for row in compared):
         try:
             result = mean_metric_result(
                 k, compared, alpha, correction_method, metric=metric
             )
-            intervals = welch_difference_intervals(compared, alpha)
+            welch = _welch_differences(compared, alpha)
         except SufficientStatsRefused as exc:
             logger.warning(
                 "Metric %s: the per-user sums were refused (%s); no variant is "
@@ -919,20 +1236,29 @@ def per_user_mean_metric_result(
             conversions=n_converted,
             mean=mean,
             confidence_interval=(low + shift, high + shift),
-            absolute_difference=None,
-            absolute_difference_ci=None,
+            **_no_difference(),
         )
         if not variant.is_control:
-            difference, interval = intervals.get(variant_id, (None, None))
+            pieces = welch.get(
+                variant_id, _WelchDifference(None, None, None, None, None)
+            )
+            difference, interval = pieces.difference, pieces.interval
             control_mean = means[control_id]
+            relative = (
+                difference / abs(control_mean) * 100
+                if difference is not None and control_mean != 0
+                else None
+            )
             entry.update(
                 absolute_difference=difference,
                 absolute_difference_ci=interval,
-                relative_improvement_pct=(
-                    difference / abs(control_mean) * 100
-                    if difference is not None and control_mean != 0
+                relative_improvement_pct=relative,
+                relative_improvement_pct_ci=(
+                    _mean_relative_change_interval(pieces, mean, control_mean)
+                    if relative is not None
                     else None
                 ),
+                **_impact(difference, interval, n),
             )
         entries.append(entry)
 
