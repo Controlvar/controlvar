@@ -103,13 +103,16 @@ def task_definition(
     containers: Sequence[dict] | None = None,
 ) -> dict:
     """A describe-task-definition `taskDefinition`. `run_migrations=None`
-    leaves the variable out; NO_ENVIRONMENT leaves the list out."""
+    leaves the variable out; NO_ENVIRONMENT leaves the list out. It sets the
+    FORWARDED_ALLOW_IPS the Fargate stack sets, so the job runs below also
+    pass Deploy's check of that setting, which runs after this one."""
     backend: dict[str, Any] = {"name": "backend", "image": image}
     if run_migrations is not NO_ENVIRONMENT:
         environment = [{"name": "APP_ENV", "value": ENV}, *extra_environment]
         if run_migrations is not None:
             environment.append({"name": "RUN_MIGRATIONS", "value": run_migrations})
         environment.append({"name": "SEED", "value": ""})
+        environment.append({"name": "FORWARDED_ALLOW_IPS", "value": "10.0.0.0/16"})
         backend["environment"] = environment
     if secrets:
         backend["secrets"] = list(secrets)
@@ -342,13 +345,16 @@ def _index(predicate) -> list[int]:
 
 @pytest.mark.regression
 def test_it_runs_after_the_registration_and_immediately_before_create_deployment():
+    """Only Deploy's FORWARDED_ALLOW_IPS read-back, which has no `if:`
+    either, sits between this check and create-deployment."""
     (check,) = _index(
         lambda s: "scripts/refuse_migrating_api_revision.py" in s.get("run", "")
     )
     (registered,) = _index(lambda s: s.get("id") == "api-td")
     (create,) = _index(lambda s: "aws deploy create-deployment" in s.get("run", ""))
-    assert registered + 1 == check == create - 1
-    for index in (check, create):
+    (proxy_check,) = _index(lambda s: s.get("id") == "api-td-proxy-check")
+    assert registered + 1 == check == proxy_check - 1 == create - 2
+    for index in (check, proxy_check, create):
         step = _steps(DEPLOY)[index]
         assert "if" not in step and "continue-on-error" not in step, step["name"]
     step = _steps(DEPLOY)[check]
@@ -493,7 +499,12 @@ def test_a_stored_false_goes_on_to_create_deployment(runner):
         stop_after="codedeploy",
     )
     assert status == "success", log
-    assert [key for key, _, _ in log] == ["api-td", "api-td-check", "codedeploy"]
+    assert [key for key, _, _ in log] == [
+        "api-td",
+        "api-td-check",
+        "api-td-proxy-check",
+        "codedeploy",
+    ]
     calls = runner.calls()
     readback = calls.index(
         [

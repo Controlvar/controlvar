@@ -1445,6 +1445,13 @@ text = "Run cdk deploy for the Fargate stack (experimentation-fargate-<env>) fro
 by = ["test:infrastructure/tests/test_api_task_forwarded_allow_ips.py::test_the_api_task_believes_exactly_the_vpc"]
 
 [[unit]]
+text = "The Deploy workflow refuses an API task definition that does not set it, and says which stack to deploy."
+by = [
+    "test:backend/tests/unit/infrastructure/test_refuse_api_revision_without_forwarded_allow_ips.py::test_the_family_step_refuses_a_stack_without_the_setting",
+    "test:backend/tests/unit/infrastructure/test_refuse_api_revision_without_forwarded_allow_ips.py::test_a_refused_revision_never_reaches_create_deployment",
+]
+
+[[unit]]
 text = "The API task sets FORWARDED_ALLOW_IPS to the VPC's range, 10.0.0.0/16, so the API believes the X-Forwarded-For header the load balancer adds, counts its rate limits per user address and writes that address on its access lines."
 by = [
     "test:infrastructure/tests/test_api_task_forwarded_allow_ips.py::test_the_api_task_believes_exactly_the_vpc",
