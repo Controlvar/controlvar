@@ -172,8 +172,8 @@ Each SDK is released by its own tag, such as `sdk/js/v1.2.3` or
 npm and PyPI publish by trusted publishing (OIDC), with no long-lived token.
 Maven Central has no trusted publishing: a Central user token and the GPG
 signing key are secrets of the `sdk-release` environment, read only by the job
-that signs and uploads, in a run the founder approves. That job uploads for
-validation and cannot publish; the founder publishes in the Central Portal.
+that signs and uploads, which runs in that environment. That job uploads for
+validation and does not publish; a maintainer publishes in the Central Portal.
 A prerelease — a version with a `-`, such as `1.0.0-rc.1` — publishes under
 the `next` dist-tag, so `npm install <package>` keeps resolving the last
 stable version and `npm install <package>@next` gets the prerelease.

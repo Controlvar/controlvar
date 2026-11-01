@@ -667,6 +667,36 @@ def test_the_pypa_action_is_pinned_to_a_commit_with_its_version() -> None:
     ), lines[0]
 
 
+#: (job, action): actions pinned by full commit SHA, with the version in a
+#: comment for the reader, like the pypi job's publish action.
+PINNED_ACTIONS = [
+    ("pypi", "pypa/gh-action-pypi-publish"),
+    ("maven", "actions/download-artifact"),
+]
+
+
+@pytest.mark.parametrize(("job", "action"), PINNED_ACTIONS)
+def test_these_actions_are_pinned_to_a_commit_with_their_version(
+    job: str, action: str
+) -> None:
+    uses = [
+        str(step.get("uses"))
+        for step in _workflow()["jobs"][job]["steps"]
+        if str(step.get("uses", "")).startswith(f"{action}@")
+    ]
+    assert len(uses) == 1, (job, uses)
+    assert re.fullmatch(rf"{re.escape(action)}@[0-9a-f]{{40}}", uses[0]), uses[0]
+    lines = [
+        line
+        for line in WORKFLOW.read_text(encoding="utf-8").splitlines()
+        if f"uses: {uses[0]}" in line and not line.lstrip().startswith("#")
+    ]
+    assert len(lines) == 1, lines
+    assert re.search(rf"uses: {re.escape(uses[0])} # v\d+\.\d+\.\d+$", lines[0]), lines[
+        0
+    ]
+
+
 def test_the_publish_job_compares_with_the_digest_the_build_job_recorded() -> None:
     """B4. The expected digest comes from the build job's output, not from a
     file that travels in the same artifact."""

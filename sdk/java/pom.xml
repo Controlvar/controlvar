@@ -52,6 +52,7 @@
          child.scm.developerConnection.inherit.append.path="false"
          child.scm.url.inherit.append.path="false">
         <connection>scm:git:https://github.com/Controlvar/controlvar.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/Controlvar/controlvar.git</developerConnection>
         <url>https://github.com/Controlvar/controlvar</url>
     </scm>
 

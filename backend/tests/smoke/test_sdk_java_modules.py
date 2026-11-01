@@ -75,6 +75,7 @@ def test_first_publish_manifests_are_0_1_0():
 URL = "https://github.com/Controlvar/controlvar/tree/main/sdk/java#readme"
 SCM_URL = "https://github.com/Controlvar/controlvar"
 SCM_CONNECTION = "scm:git:https://github.com/Controlvar/controlvar.git"
+SCM_DEVELOPER_CONNECTION = "scm:git:ssh://git@github.com/Controlvar/controlvar.git"
 
 
 def test_the_parent_pom_carries_what_maven_central_shows_for_good():
@@ -93,6 +94,11 @@ def test_the_parent_pom_carries_what_maven_central_shows_for_good():
         assert scm.get(f"child.scm.{field}.inherit.append.path") == "false", field
     assert scm.findtext("m:url", namespaces=NS) == SCM_URL
     assert scm.findtext("m:connection", namespaces=NS) == SCM_CONNECTION
+    # Central's requirements name connection and developerConnection as
+    # required scm elements.
+    assert (
+        scm.findtext("m:developerConnection", namespaces=NS) == SCM_DEVELOPER_CONNECTION
+    )
 
     developers = parent.findall("m:developers/m:developer", NS)
     assert len(developers) == 1

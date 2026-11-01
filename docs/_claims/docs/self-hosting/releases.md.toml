@@ -324,7 +324,7 @@ by = [
 ]
 
 [[unit]]
-text = "Maven Central has no trusted publishing: a Central user token and the GPG signing key are secrets of the sdk-release environment, read only by the job that signs and uploads, in a run the founder approves."
+text = "Maven Central has no trusted publishing: a Central user token and the GPG signing key are secrets of the sdk-release environment, read only by the job that signs and uploads, which runs in that environment."
 by = [
     "test:backend/tests/smoke/test_sdk_release_wiring.py::test_each_job_reads_exactly_its_own_secrets",
     "test:backend/tests/smoke/test_sdk_release_maven.py::test_each_secret_reaches_only_the_steps_that_use_it",
@@ -332,7 +332,7 @@ by = [
 ]
 
 [[unit]]
-text = "That job uploads for validation and cannot publish; the founder publishes in the Central Portal."
+text = "That job uploads for validation and does not publish; a maintainer publishes in the Central Portal."
 by = [
     "test:backend/tests/smoke/test_sdk_release_maven.py::test_nothing_in_the_workflow_can_publish_or_print_a_credential",
     "test:backend/tests/smoke/test_sdk_release_maven.py::test_the_only_central_calls_are_the_upload_for_validation_and_its_status",

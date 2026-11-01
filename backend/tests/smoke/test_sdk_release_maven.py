@@ -57,6 +57,7 @@ UUID = "28570f16-da32-4c14-bd2e-c1acc0782365"
 
 BUILD_CHECK = ("maven-build", "Check the bundle")
 PUBLISH_CHECK = ("maven", "Check the bundle against the tag")
+CONSUMER = ("maven-build", "A consumer resolves the starter from the bundle alone")
 
 
 # --------------------------------------------------------------------------
@@ -129,7 +130,10 @@ def test_the_maven_job_runs_only_its_checks_the_signing_and_the_upload() -> None
     steps = _workflow()["jobs"]["maven"]["steps"]
     assert _names(steps) == MAVEN_STEPS
     download = steps[0]
-    assert download.get("uses") == "actions/download-artifact@v8"
+    # Pinned by full commit SHA; test_sdk_release_wiring.py's
+    # test_these_actions_are_pinned_to_a_commit_with_their_version holds the
+    # form, so a Dependabot bump of the pin does not have to edit this.
+    assert str(download.get("uses")).startswith("actions/download-artifact@")
     assert download.get("with") == {
         "name": "maven-bundle",
         "path": "${{ github.workspace }}/bundle",
@@ -354,15 +358,16 @@ def _pom_artifacts() -> list[str]:
 
 
 def test_the_bundle_checks_expect_every_artefact_the_poms_build() -> None:
-    """V14. Both checks read a constant list; a module added to
-    sdk/java/pom.xml without it fails here, not at the release."""
+    """V14. The two bundle checks and the consumer check read a constant
+    list; a module added to sdk/java/pom.xml without it fails here, not at
+    the release."""
     expected = _pom_artifacts()
     assert expected == [
         "com.controlvar:controlvar-sdk-parent:pom",
         "com.controlvar:controlvar-sdk:jar",
         "com.controlvar:controlvar-spring-boot-starter:jar",
     ]
-    for job, name in (BUILD_CHECK, PUBLISH_CHECK):
+    for job, name in (BUILD_CHECK, PUBLISH_CHECK, CONSUMER):
         assert _step(job, name)["env"]["ARTIFACTS"].split() == expected, (job, name)
     assert NAME == ":".join(expected[0].split(":")[:2])
 
@@ -719,6 +724,99 @@ def test_the_publish_check_refuses_what_the_build_job_did_not_record(
         tmp_path, downloaded, recorded if digest == "recorded" else digest
     )
     assert result.returncode == 1, (case, result.stdout)
+    assert refusal in result.stdout, (case, result.stdout)
+
+
+#: What a consumer of the starter resolves from the bundle: the three POMs and
+#: the two jars.
+RESOLVED = [
+    f"com/controlvar/{artifact}/{VERSION}/{artifact}-{VERSION}.{extension}"
+    for artifact, packaging in ARTIFACTS
+    for extension in (("pom", "jar") if packaging == "jar" else ("pom",))
+]
+
+
+def _consumer(tmp_path: Path, bundle: dict[str, bytes], drop=(), change=()):
+    """The consumer step, with an `mvnw` that "resolves" by copying the
+    bundle's repository into the local one, then drops or changes files."""
+    for name, data in bundle.items():
+        path = tmp_path / "runner_temp" / "bundle-repo" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+    script = (
+        'local=""\n'
+        'for arg in "$@"; do\n'
+        '  case "$arg" in -Dmaven.repo.local=*) local="${arg#-Dmaven.repo.local=}" ;; esac\n'
+        "done\n"
+        'mkdir -p "$local"\n'
+        'cp -R "$RUNNER_TEMP/bundle-repo/." "$local/"\n'
+    )
+    script += "".join(f'rm -f "$local/{name}"\n' for name in drop)
+    script += "".join(f'printf x >> "$local/{name}"\n' for name in change)
+    _write_executable(tmp_path / "workspace" / "sdk" / "java" / "mvnw", script)
+    return _run_step(
+        _step(*CONSUMER), {"needs.resolve.outputs.version": VERSION}, tmp_path, tmp_path
+    )
+
+
+def test_the_consumer_check_accepts_the_five_files_from_the_bundle(
+    tmp_path: Path,
+) -> None:
+    assert len(RESOLVED) == 5
+    primary = _primary()
+    result = _consumer(tmp_path, {name: primary[name] for name in RESOLVED})
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "5 files resolved from the bundle, each equal to it" in result.stdout
+
+
+CORE_POM = f"com/controlvar/controlvar-sdk/{VERSION}/controlvar-sdk-{VERSION}.pom"
+STARTER_JAR = (
+    f"com/controlvar/controlvar-spring-boot-starter/{VERSION}/"
+    f"controlvar-spring-boot-starter-{VERSION}.jar"
+)
+PARENT_POM = f"com/controlvar/controlvar-sdk-parent/{VERSION}/controlvar-sdk-parent-{VERSION}.pom"
+
+
+@pytest.mark.parametrize(
+    ("case", "missing", "drop", "change", "refusal"),
+    [
+        (
+            "a module dropped from the bundle",
+            ("controlvar-sdk/",),
+            (),
+            (),
+            f"the bundle has no {CORE_POM}",
+        ),
+        (
+            "a file the consumer did not resolve",
+            (),
+            (STARTER_JAR,),
+            (),
+            f"the consumer did not resolve {STARTER_JAR}",
+        ),
+        (
+            "a file that is not the bundle's",
+            (),
+            (),
+            (PARENT_POM,),
+            f"the consumer resolved a {PARENT_POM} that is not the bundle's",
+        ),
+    ],
+)
+def test_the_consumer_check_expects_every_artefact_it_names(
+    case: str, missing, drop, change, refusal: str, tmp_path: Path
+) -> None:
+    """The list, not the bundle, says what to expect: a module missing from
+    both the bundle and the consumer is refused. The first version walked
+    the bundle's own files, so it could not notice one that was not there."""
+    primary = _primary()
+    bundle = {
+        name: primary[name]
+        for name in RESOLVED
+        if not any(f"/{part}" in f"/{name}" for part in missing)
+    }
+    result = _consumer(tmp_path, bundle, drop=drop, change=change)
+    assert result.returncode == 1, (case, result.stdout, result.stderr)
     assert refusal in result.stdout, (case, result.stdout)
 
 
