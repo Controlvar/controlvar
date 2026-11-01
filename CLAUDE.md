@@ -1101,16 +1101,20 @@ genuinely cannot be public lives in `getexperimently/experimently-internal`.
 What remains non-obvious, every item of which cost a wrong report or a failed
 deploy:
 
-### A `GITHUB_TOKEN` event triggers no workflow
+### A `GITHUB_TOKEN` event triggers no workflow, and the release pull request's checks wait for approval
 
 GitHub refuses to run workflows for events its own token created, to stop
 recursion. Two consequences, both certain to recur:
 
-- **The release-please pull request has ZERO checks.** With 20 required, it can
-  never satisfy branch protection. It is not blocked on anything you can fix in
-  the pull request; merge it with `--admin` after confirming the diff is only
-  the eight files it owns: CHANGELOG.md, VERSION, `.release-please-manifest.json`
-  and the five `extra-files` (see the next section).
+- **The release-please pull request's checks never run on their own.** Its
+  `pull_request` runs exist but sit at `action_required`, waiting for a
+  maintainer's approval like a fork's (measured on #1483: 15 runs, actor
+  `github-actions[bot]`, all `action_required`), so it shows no check results
+  and does not satisfy branch protection as it stands. It is not blocked on
+  anything you can fix in the pull request; merge it with `--admin` after
+  confirming the diff is only the eight files it owns: CHANGELOG.md, VERSION,
+  `.release-please-manifest.json` and the five `extra-files` (see the next
+  section).
 - **The tag it pushes triggers nothing -- but `release.yml` does not need it
   to.** `release-please.yml` calls `release.yml` itself (`uses:
   ./.github/workflows/release.yml`, a `workflow_call`) when `release_created`
