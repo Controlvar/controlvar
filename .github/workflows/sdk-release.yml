@@ -1252,7 +1252,7 @@ jobs:
             printf '%s\n' "::error::the tag resolved no usable version: '$VERSION'"
             exit 1
           fi
-          bearer="$(python3 -c 'import base64, os; print(base64.b64encode((os.environ["CENTRAL_TOKEN_USERNAME"] + ":" + os.environ["CENTRAL_TOKEN_PASSWORD"]).encode()).decode())')"
+          bearer="$(printf '%s:%s' "$CENTRAL_TOKEN_USERNAME" "$CENTRAL_TOKEN_PASSWORD" | base64)"
           printf '::add-mask::%s\n' "$bearer"
           response="$RUNNER_TEMP/upload-response.txt"
           if ! printf 'header = "Authorization: Bearer %s"\n' "$bearer" | curl --fail-with-body -sS --max-time 900 -K - --form "bundle=@$RUNNER_TEMP/signed/central-bundle.zip" --output "$response" "https://central.sonatype.com/api/v1/publisher/upload?publishingType=USER_MANAGED&name=controlvar-sdk-$VERSION"; then
