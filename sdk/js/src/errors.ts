@@ -11,7 +11,12 @@ export type ExperimentationErrorCode =
    * A typed getter (`getStringValue`, `getNumberValue`, `getJsonValue`) was called for a flag
    * that serves another type; it returned the caller's default.
    */
-  | 'TYPE_MISMATCH';
+  | 'TYPE_MISMATCH'
+  /**
+   * Only passed to `onError`, with the operation `'exposure'`: your `onExposure` threw, or the
+   * Promise it returned rejected. `cause` is what it threw; the answer is unchanged.
+   */
+  | 'HOOK_ERROR';
 
 export interface ExperimentationErrorOptions {
   code: ExperimentationErrorCode;

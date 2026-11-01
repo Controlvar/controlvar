@@ -2,6 +2,7 @@ import { AttributedKeys } from './attribution';
 import { UserKeyCache } from './cache';
 import { ExperimentationError, asExperimentationError } from './errors';
 import { DEFER, copyValue, isValueOfType } from './evaluator';
+import { callExposureHook, exposureError } from './exposure';
 import {
   DEFAULT_REFRESH_INTERVAL_MS,
   LocalEvaluation,
@@ -17,6 +18,7 @@ import type {
   BatchResult,
   ClientConfig,
   ErrorReport,
+  Exposure,
   FlagEvaluateResponse,
   FlagEvaluation,
   SwallowedOperation,
@@ -135,6 +137,7 @@ export class ExperimentationClient {
   private readonly defaultVariant: string;
   private readonly customFetch: typeof fetch | undefined;
   private readonly onError: ClientConfig['onError'];
+  private readonly onExposure: ((exposure: Exposure) => void) | null;
   private readonly flags: UserKeyCache<FlagEvaluation>;
   private readonly assignments: UserKeyCache<Assignment>;
   /** The keys a key-less `track()` is sent to; outlives the cache entries. */
@@ -153,6 +156,11 @@ export class ExperimentationClient {
     this.defaultVariant = config.defaultVariant ?? DEFAULT_VARIANT;
     this.customFetch = config.fetch;
     this.onError = config.onError;
+    const onExposure = config.onExposure ?? null;
+    if (onExposure !== null && typeof onExposure !== 'function') {
+      throw new Error('onExposure must be a function');
+    }
+    this.onExposure = onExposure;
     const ttl = config.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
     this.flags = new UserKeyCache<FlagEvaluation>(ttl);
     this.assignments = new UserKeyCache<Assignment>(ttl);
@@ -223,7 +231,9 @@ export class ExperimentationClient {
 
   /**
    * Assign the user via `POST /api/v1/tracking/assign` (sticky on the server,
-   * records the exposure). `user.attributes` is sent as `context`.
+   * records the exposure). `user.attributes` is sent as `context`. When the
+   * server answers `assigned: true`, `onExposure` is called before this resolves;
+   * a cached answer calls nothing.
    * Throws `ExperimentationError` (404 when no experiment has the key, or for a
    * draft with no control variant). An experiment that is not ACTIVE resolves to
    * its control variant with `assigned: false` and `reason` its status.
@@ -269,6 +279,11 @@ export class ExperimentationClient {
       };
       this.assignments.set(userId, experimentKey, assignment);
       this.attributed.recordExperiment(userId, assignment.experimentKey, assignment.reason);
+      // Last, once the answer is stored and recorded. The server recorded an exposure for this
+      // request only if it said `assigned: true` (a missing field is not taken as true). This run
+      // starts only when the cache check above found no live answer, and concurrent callers share
+      // it, so each request that records an exposure reaches this line once.
+      if (data.assigned === true) this.exposed(assignment);
       return assignment;
     });
   }
@@ -609,6 +624,19 @@ export class ExperimentationClient {
       this.report(err, 'value');
       return defaultValue;
     }
+  }
+
+  /** Give `onExposure` a new object holding the four values; its failures go to `onError`. */
+  private exposed(assignment: Assignment): void {
+    const hook = this.onExposure;
+    if (!hook) return;
+    const exposure: Exposure = {
+      experimentKey: assignment.experimentKey,
+      userId: assignment.userId,
+      variantId: assignment.variantId,
+      variantName: assignment.variantName,
+    };
+    callExposureHook(hook, exposure, thrown => this.report(exposureError(thrown), 'exposure'));
   }
 
   private report(err: unknown, operation: SwallowedOperation): void {
