@@ -442,15 +442,27 @@ text = "Plan your schedule with this buffer in mind."
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "All dates are in UTC."
+text = "A start_date with a zone, Z or an offset such as -08:00, is stored as that moment in UTC; one with no zone is taken as UTC."
 by = [
-    "test:backend/tests/unit/core/test_rollout_scheduler_tz.py::TestAsUtc::test_naive_is_assumed_utc",
-    "test:backend/tests/unit/core/test_rollout_scheduler_tz.py::TestAsUtc::test_aware_is_converted_to_utc",
+    "test:backend/tests/integration/api/test_rollout_stage_dates_utc.py::test_a_stage_start_date_is_stored_and_served_in_utc",
+    "test:backend/tests/integration/api/test_rollout_stage_dates_utc.py::test_the_route_session_is_in_los_angeles",
+    "test:backend/tests/unit/models/test_rollout_stage_column_types.py::test_utc_datetime_binds_every_shape_as_naive_utc",
 ]
 
 [[unit]]
-text = "If your business runs on a specific timezone, convert before setting dates."
-by = ["exempt:baseline"]
+text = "So 2027-01-08T00:00:00Z, 2027-01-07T16:00:00-08:00 and 2027-01-08T00:00:00 are the same moment."
+by = [
+    "test:backend/tests/integration/api/test_rollout_stage_dates_utc.py::test_a_stage_start_date_is_stored_and_served_in_utc",
+    "test:backend/tests/unit/models/test_rollout_stage_column_types.py::test_utc_datetime_binds_every_shape_as_naive_utc",
+]
+
+[[unit]]
+text = "Responses give stage dates in UTC with no zone (2027-01-08T00:00:00)."
+by = ["test:backend/tests/integration/api/test_rollout_stage_dates_utc.py::test_a_stage_start_date_is_stored_and_served_in_utc"]
+
+[[unit]]
+text = "Editing an in-progress stage, a rename included, restarts its clock: the scheduler measures time-based completion and min_stage_duration from the stage's last update."
+by = ["test:backend/tests/integration/api/test_rollout_stage_dates_utc.py::test_editing_an_in_progress_stage_restarts_its_clock"]
 
 [[unit]]
 text = "Manual Advancement"

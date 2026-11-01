@@ -66,9 +66,12 @@ REQUIRED_CHECKS=(
     "DCO"
 )
 
-# The branch protection body this script PUTs. `required_status_checks.strict`
-# makes a branch merge only when it is up to date with main, which is what
-# stops two independently green pull requests combining into a red main.
+# The branch protection body this script PUTs. It is what main has today:
+# `strict` is false (a branch need not be up to date with main to merge) and
+# there is no required pull request review (`required_pull_request_reviews` is
+# null, which the PUT endpoint requires to be present). Change either on
+# purpose, here and live together; check_required_checks.sh reports any
+# difference between this body and live.
 # The checks go in the deprecated `contexts` list, with no app id. GitHub
 # documents that a check sent that way is assigned to the app that most
 # recently posted it, and that only an explicit `app_id: -1` in `checks`
@@ -84,13 +87,9 @@ protection_payload() {
 import json, sys
 checks = [line.rstrip("\n") for line in sys.stdin if line.strip()]
 print(json.dumps({
-    "required_status_checks": {"strict": True, "contexts": checks},
+    "required_status_checks": {"strict": False, "contexts": checks},
     "enforce_admins": False,
-    "required_pull_request_reviews": {
-        "required_approving_review_count": 1,
-        "require_code_owner_reviews": True,
-        "dismiss_stale_reviews": True,
-    },
+    "required_pull_request_reviews": None,
     "restrictions": None,
     "required_linear_history": True,
     "allow_force_pushes": False,
@@ -187,7 +186,7 @@ else
 fi
 
 # CODEOWNERS is already in the tree; it does nothing unless code-owner review
-# is required, which live protection does not do today. Check GitHub can resolve
+# is required, which this script's body (and live protection) does not do. Check GitHub can resolve
 # every handle in it -- an owner without write access is silently IGNORED, so
 # a typo here is a rule that never fires rather than an error.
 errs=$(gh api "repos/$REPO/codeowners/errors" -q '.errors | length' 2>/dev/null || echo "?")

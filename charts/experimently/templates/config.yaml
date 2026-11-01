@@ -33,6 +33,11 @@ data:
   REDIS_SSL: {{ .Values.redis.ssl | quote }}
   {{- end }}
   REDIS_REQUIRED: "false"
-  {{- with .Values.api.forwardedAllowIps }}
-  FORWARDED_ALLOW_IPS: {{ . | quote }}
+  # Always rendered: the image believes only loopback and the pod's own
+  # network without it, and an ingress controller on another node is on
+  # neither. The schema refuses an empty or null value (null removes the key,
+  # and `api` requires it); this is for a render that skips the schema.
+  {{- if not (trim (toString (default "" .Values.api.forwardedAllowIps))) }}
+  {{- fail "api.forwardedAllowIps is empty: give the proxies the API believes X-Forwarded-For from, e.g. the network your ingress controller's pods get their addresses from (10.244.0.0/16 on kind). The chart's default is 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16." }}
   {{- end }}
+  FORWARDED_ALLOW_IPS: {{ .Values.api.forwardedAllowIps | quote }}

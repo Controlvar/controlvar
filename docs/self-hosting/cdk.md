@@ -426,6 +426,29 @@ Then sign in at `PUBLIC_BASE_URL` with that address and the password in the
 measured on 2026-10-21, the task took 70 seconds, and its address signed in
 as an `ADMIN` superuser.
 
+### Users' addresses
+
+Run `cdk deploy` for the Fargate stack (`experimentation-fargate-<env>`) from a
+release's checkout before you deploy that release's image: the stack is what
+sets `FORWARDED_ALLOW_IPS` on the API task.
+
+The API task sets `FORWARDED_ALLOW_IPS` to the VPC's range, `10.0.0.0/16`, so
+the API believes the `X-Forwarded-For` header the load balancer adds, counts
+its rate limits per user address and writes that address on its access lines.
+This CloudWatch Logs Insights query on `/ecs/experimentation-backend-<env>`
+counts the API requests from each address:
+
+```text
+fields event
+| filter logger = "uvicorn.access" and event like "/api/"
+| parse event /^(?<client>\S+):\d+ - /
+| stats count(*) as requests by client
+| sort requests desc
+```
+
+Your users' addresses mean it works; `10.0.x.x` on every line is the load
+balancer's.
+
 ### Which stacks you get: core or full
 
 The CDK app deploys the stacks your checkout has, the same way the API loads

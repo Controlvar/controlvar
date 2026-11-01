@@ -21,9 +21,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps, experiment_cache
+from backend.app.api.enum_filters import enum_filter
 from backend.app.core.permissions import Action, ResourceType, check_permission
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.experiment import Experiment
+from backend.app.models.mutual_exclusion_group import MutualExclusionGroupStatus
 from backend.app.models.user import User, UserRole
 from backend.app.schemas.mutual_exclusion_group import (
     AddExperimentToGroupRequest,
@@ -47,6 +49,14 @@ from backend.app.services.mutual_exclusion_service import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+#: The list's ``status`` filter values, as the responses spell them (#955).
+GROUP_STATUS_SPELLINGS = ("active", "archived")
+
+GROUP_STATUS_FILTER_DESCRIPTION = (
+    "Only groups with this status: `active` or `archived`, in any case. Any "
+    "other value answers 422; an empty value means no filter."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +123,9 @@ def _group_name(db: Session, group_id: UUID):
     tags=["Mutual Exclusion Groups"],
 )
 def list_groups(
-    status_filter: str = Query(default=None, alias="status"),
+    status_filter: str = Query(
+        default=None, alias="status", description=GROUP_STATUS_FILTER_DESCRIPTION
+    ),
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=1000),
     db: Session = Depends(deps.get_db),
@@ -121,9 +133,13 @@ def list_groups(
 ) -> MutualExclusionGroupListResponse:
     """List mutual exclusion groups with optional status filter."""
     _require_developer(current_user)
+    # After the permission check (#955); the member goes to the query.
+    status_member = enum_filter(
+        status_filter, MutualExclusionGroupStatus, "status", GROUP_STATUS_SPELLINGS
+    )
     service = MutualExclusionService(db)
-    items = service.list_groups(status=status_filter, skip=skip, limit=limit)
-    total = service.count_groups(status=status_filter)
+    items = service.list_groups(status=status_member, skip=skip, limit=limit)
+    total = service.count_groups(status=status_member)
     return MutualExclusionGroupListResponse(items=items, total=total)
 
 

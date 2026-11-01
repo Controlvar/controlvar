@@ -155,6 +155,7 @@ nav:
   - Kubernetes (Helm): self-hosting/kubernetes.md
   - Docker Compose (self-hosting stack): https://github.com/Controlvar/controlvar/blob/main/deploy/compose/README.md
   - Environment Variables: getting-started/environment-setup.md
+  - Users' Addresses Behind a Proxy: self-hosting/proxies.md
   - Database Migrations: self-hosting/migrations.md
   - Releases & Image Verification: self-hosting/releases.md
   - Upgrading to Controlvar: self-hosting/upgrading-to-controlvar.md

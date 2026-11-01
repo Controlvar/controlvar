@@ -201,8 +201,8 @@ export function localInputToDate(value: string): Date | null {
 
 /**
  * A `datetime-local` value as naive UTC, `YYYY-MM-DDTHH:MM:SS`, with no `Z` and
- * no offset: what a rollout stage's `start_date` takes (PE 2). An aware value
- * would be converted by the database session's zone before it is stored.
+ * no offset. Stage dates are sent as naive UTC; the API takes a value with no
+ * zone as UTC (`UTCDateTime`).
  */
 export function localInputToNaiveUtc(value: string): string | null {
   const d = localInputToDate(value);

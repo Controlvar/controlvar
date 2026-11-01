@@ -1,0 +1,185 @@
+# What verifies each unit of docs/self-hosting/proxies.md.
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/self-hosting/proxies.md"
+
+[[unit]]
+text = "Users' addresses behind a proxy"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The API counts its rate limits per user address and writes that address on its access lines."
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestGetClientIp::test_it_uses_the_resolved_client_and_not_the_header",
+    "test:backend/tests/unit/core/test_aws_settings_and_clients.py::test_each_request_reaches_the_access_log_with_its_path_and_status",
+]
+
+[[unit]]
+text = "Behind a proxy, every connection the API receives comes from the proxy, so the API reads the user's address from the X-Forwarded-For header the proxy adds."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "It believes that header only from the proxies below."
+by = ["test:backend/tests/unit/infrastructure/test_proxy_headers_trust.py::test_the_list_each_topology_starts_with_believes_its_proxies_only"]
+
+[[unit]]
+text = "The setting"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The API always believes 127.0.0.1, ::1 and the networks its container is directly attached to."
+by = [
+    "test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_the_own_networks_of_each_topology",
+    "test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_unset_empty_or_blank_adds_nothing",
+]
+
+[[unit]]
+text = "In Docker Compose that covers the dashboard container and a TLS proxy on the same host that connects to 127.0.0.1."
+by = ["test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_compose_believes_web_and_the_gateway_and_no_lan_client"]
+
+[[unit]]
+text = "FORWARDED_ALLOW_IPS adds proxies to that: IP addresses and networks, separated by commas, 10.0.0.5,10.0.0.0/16."
+by = ["test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_entries_add_to_the_own_networks_and_each_appears_once"]
+
+[[unit]]
+text = "Write a network with its host bits zero, 10.0.0.0/16, not 10.0.0.5/16."
+by = ["test:backend/tests/unit/core/test_preflight.py::test_each_refused_entry_is_one_line_naming_its_position"]
+
+[[unit]]
+text = "Host names are not accepted."
+by = ["test:backend/tests/unit/core/test_preflight.py::test_a_forwarded_allow_ips_entry_that_matches_no_proxy_is_refused"]
+
+[[unit]]
+text = "Unset or empty adds none."
+by = ["test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_unset_empty_or_blank_adds_nothing"]
+
+[[unit]]
+text = "Set it in the container's environment."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The entrypoint reads it there, not from .env.prod."
+by = [
+    "test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_an_operator_value_is_read_from_the_environment",
+    "test:backend/tests/unit/core/test_preflight.py::test_forwarded_allow_ips_is_read_from_the_process_environment_only",
+]
+
+[[unit]]
+text = "Do not pass --forwarded-allow-ips in the container's command: the entrypoint adds its own after it, and that one wins."
+by = ["test:backend/tests/unit/infrastructure/test_proxy_headers_trust.py::TestTheEntrypointStarts::test_uvicorn_gets_the_helpers_list_last_and_once"]
+
+[[unit]]
+text = "The API logs what it believes when it starts, for example: [entrypoint] trusted proxies: 127.0.0.1 ::1; this container's networks: 172.19.0.0/16; FORWARDED_ALLOW_IPS: (none)."
+by = ["test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_the_start_up_line_says_what_is_believed"]
+
+[[unit]]
+text = "When it cannot read its networks from /proc, the line begins [entrypoint] WARNING, and it believes 127.0.0.1, ::1 and the setting's entries only."
+by = ["test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_when_neither_file_can_be_read_the_line_is_a_warning"]
+
+[[unit]]
+text = "An entry that is not an address or a network stops the container at start-up, with a line that names the entry's position, for example: FORWARDED_ALLOW_IPS entry 2 ('10.0.0.5/16') is an address with a mask, which matches no proxy."
+by = [
+    "test:backend/tests/unit/core/test_preflight.py::test_each_refused_entry_is_one_line_naming_its_position",
+    "test:backend/tests/unit/core/test_preflight.py::test_main_exits_78_for_a_refused_entry",
+    "test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_a_refused_entry_exits_78_and_prints_no_list",
+]
+
+[[unit]]
+text = "Write the network, 10.0.0.0/16, or the address alone, 10.0.0.5."
+by = ["test:backend/tests/unit/core/test_preflight.py::test_each_refused_entry_is_one_line_naming_its_position"]
+
+[[unit]]
+text = "is refused in every environment."
+by = ["test:backend/tests/unit/core/test_preflight.py::test_a_forwarded_allow_ips_entry_that_matches_no_proxy_is_refused"]
+
+[[unit]]
+text = "0.0.0.0/0 and ::/0 believe the header from every connection, not only your proxy's, and staging and production refuse them."
+by = ["test:backend/tests/unit/core/test_preflight.py::test_an_entry_covering_every_address_is_refused_outside_development"]
+
+[[unit]]
+text = "By install"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Install | What to set"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Docker Compose (deploy/compose) | Nothing for a TLS proxy on the same host that connects to 127.0.0.1. For one on another machine, its address in .env; for one in a container on a Docker network of its own, that network's subnet: see Users' addresses in the Compose README."
+by = [
+    "test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_compose_believes_web_and_the_gateway_and_no_lan_client",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestForwardedAllowIps::test_the_api_is_passed_the_setting_empty_by_default",
+]
+
+[[unit]]
+text = "Helm | api.forwardedAllowIps, by default the private ranges; you can narrow it to your ingress controller's pod network: see Kubernetes (Helm)."
+by = [
+    "test:backend/tests/unit/chart/test_chart_render.py::test_the_proxies_the_api_believes_default_to_the_private_ranges",
+    "test:backend/tests/unit/chart/test_chart_render.py::test_a_set_value_is_rendered_exactly",
+]
+
+[[unit]]
+text = "AWS (CDK) | Run cdk deploy for the Fargate stack before you deploy the image; the stack sets the VPC's range, 10.0.0.0/16 (AWS CDK Deployment)."
+by = ["test:infrastructure/tests/test_api_task_forwarded_allow_ips.py::test_the_api_task_believes_exactly_the_vpc"]
+
+[[unit]]
+text = "The image behind another proxy | FORWARDED_ALLOW_IPS: the proxy's addresses or network, unless it is on a network the container is attached to."
+by = [
+    "test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_entries_add_to_the_own_networks_and_each_appears_once",
+    "test:backend/tests/unit/infrastructure/test_proxy_headers_trust.py::test_the_list_each_topology_starts_with_believes_its_proxies_only",
+]
+
+[[unit]]
+text = "Checking it"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Each API request writes an access line whose event begins with the address the API resolved."
+by = ["test:backend/tests/unit/core/test_aws_settings_and_clients.py::test_each_request_reaches_the_access_log_with_its_path_and_status"]
+
+[[unit]]
+text = "Count them for API requests, which leaves out the health checks."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "For the image on its own, with the container's name in API_CONTAINER:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "On Kubernetes, for the guide's release:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The Compose README and AWS CDK Deployment give the same count for their installs."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Each line is an address and the number of API requests from it."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Your users' addresses mean it works."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "If every request comes from one address that is a proxy's, the setting does not cover that proxy, or the proxy in front of it sends no X-Forwarded-For."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Signs that it is wrong"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Signing in fails with \"Too many attempts\" for people who tried once."
+by = [
+    "test:frontend/src/tests/pages/login.test.tsx::maps statuses to copy",
+    "test:backend/tests/unit/middleware/test_route_rate_limits.py::test_sign_in_takes_ten_requests_a_minute",
+]
+
+[[unit]]
+text = "The dashboard, or an SDK, is answered 429 Too Many Requests in ordinary use."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Every access line shows the same address."
+by = ["exempt:advice"]

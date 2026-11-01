@@ -19256,7 +19256,7 @@
     },
     "/api/v1/feature-flags/": {
       "get": {
-        "description": "Retrieve feature flags.\n- **skip**: Number of feature flags to skip in pagination\n- **limit**: Maximum number of feature flags to return\n- **status**: Filter by status (ACTIVE, INACTIVE)\n- **search**: Filter by name or key",
+        "description": "Retrieve feature flags.\n- **skip**: Number of feature flags to skip in pagination\n- **limit**: Maximum number of feature flags to return\n- **status**: Filter by status (`active`, `inactive`, `archived`; any case)\n- **search**: Filter by name or key",
         "operationId": "list_feature_flags_api_v1_feature_flags__get",
         "parameters": [
           {
@@ -19280,6 +19280,7 @@
             }
           },
           {
+            "description": "Only flags with this status: `active`, `inactive` or `archived`, in any case. Any other value answers 422; an empty value means no filter.",
             "in": "query",
             "name": "status",
             "required": false,
@@ -19292,6 +19293,7 @@
                   "type": "null"
                 }
               ],
+              "description": "Only flags with this status: `active`, `inactive` or `archived`, in any case. Any other value answers 422; an empty value means no filter.",
               "title": "Status"
             }
           },
@@ -21317,6 +21319,7 @@
         "operationId": "list_llm_experiments_api_v1_llm_experiments__get",
         "parameters": [
           {
+            "description": "Only experiments with this status: `DRAFT`, `ACTIVE`, `PAUSED` or `COMPLETED`, in any case. Any other value answers 422; an empty value means no filter.",
             "in": "query",
             "name": "status",
             "required": false,
@@ -21329,10 +21332,12 @@
                   "type": "null"
                 }
               ],
+              "description": "Only experiments with this status: `DRAFT`, `ACTIVE`, `PAUSED` or `COMPLETED`, in any case. Any other value answers 422; an empty value means no filter.",
               "title": "Status"
             }
           },
           {
+            "description": "Only experiments with this task type: `chat_completion`, `text_generation`, `classification`, `summarization`, `code_generation` or `embedding`, in any case. Any other value answers 422; an empty value means no filter.",
             "in": "query",
             "name": "task_type",
             "required": false,
@@ -21345,6 +21350,7 @@
                   "type": "null"
                 }
               ],
+              "description": "Only experiments with this task type: `chat_completion`, `text_generation`, `classification`, `summarization`, `code_generation` or `embedding`, in any case. Any other value answers 422; an empty value means no filter.",
               "title": "Task Type"
             }
           },
@@ -22651,10 +22657,12 @@
         "operationId": "list_groups_api_v1_mutual_exclusion_groups_get",
         "parameters": [
           {
+            "description": "Only groups with this status: `active` or `archived`, in any case. Any other value answers 422; an empty value means no filter.",
             "in": "query",
             "name": "status",
             "required": false,
             "schema": {
+              "description": "Only groups with this status: `active` or `archived`, in any case. Any other value answers 422; an empty value means no filter.",
               "title": "Status",
               "type": "string"
             }
@@ -23117,6 +23125,7 @@
             }
           },
           {
+            "description": "Only entries with this delivery status: `sent`, `failed` or `skipped`, in any case. Any other value answers 422; an empty value means no filter.",
             "in": "query",
             "name": "status",
             "required": false,
@@ -23129,6 +23138,7 @@
                   "type": "null"
                 }
               ],
+              "description": "Only entries with this delivery status: `sent`, `failed` or `skipped`, in any case. Any other value answers 422; an empty value means no filter.",
               "title": "Status"
             }
           }
