@@ -26,7 +26,7 @@ import org.springframework.context.annotation.Bean;
  * <dependency>
  *     <groupId>com.controlvar</groupId>
  *     <artifactId>controlvar-spring-boot-starter</artifactId>
- *     <version>1.0.0</version>
+ *     <version>0.1.0</version>
  * </dependency>
  * }</pre>
  *

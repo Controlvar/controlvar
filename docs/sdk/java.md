@@ -1,6 +1,6 @@
 # Java SDK
 
-`com.controlvar:controlvar-sdk` (v1.0.0) is a Java 11+ client for feature
+`com.controlvar:controlvar-sdk` (v0.1.0) is a Java 11+ client for feature
 flags, experiment assignment and event tracking, built on OkHttp 4 and Jackson.
 `controlvar-spring-boot-starter` adds Spring Boot auto-configuration (built and tested
 against Spring Boot 3.5.16, which needs Java 17+ at runtime).
@@ -25,19 +25,19 @@ below then resolve from there.
 <dependency>
     <groupId>com.controlvar</groupId>
     <artifactId>controlvar-sdk</artifactId>
-    <version>1.0.0</version>
+    <version>0.1.0</version>
 </dependency>
 
 <!-- Spring Boot: the starter depends on the core, so add only this -->
 <dependency>
     <groupId>com.controlvar</groupId>
     <artifactId>controlvar-spring-boot-starter</artifactId>
-    <version>1.0.0</version>
+    <version>0.1.0</version>
 </dependency>
 ```
 
 Gradle reads `~/.m2` only through `mavenLocal()`: add it to `repositories`, then
-`implementation 'com.controlvar:controlvar-sdk:1.0.0'` (or the starter).
+`implementation 'com.controlvar:controlvar-sdk:0.1.0'` (or the starter).
 
 ---
 
