@@ -262,8 +262,8 @@ text = "Conversion metrics (Fisher's exact test):"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Every metric in the results but a revenue metric is analysed as a conversion; a revenue metric is its mean per assigned user, compared with Welch's t-test"
-by = ["test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_only_a_revenue_metric_as_a_mean"]
+text = "Only a conversion metric is analysed as a proportion; a revenue, count, duration or custom metric is its mean per assigned user, compared with Welch's t-test"
+by = ["test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_every_type_but_conversion_as_a_mean"]
 
 [[unit]]
 text = "For each treatment against the control: a 2×2 table of users who converted and users who did not, from the users assigned to each variant"
@@ -285,8 +285,11 @@ text = "Mean metrics (Welch's t-test):"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Used by warehouse analysis (beta, the warehouse module) for a metric that is a mean"
-by = ["test:backend/tests/unit/services/test_mean_metric_result.py"]
+text = "Used by the results for a revenue, count, duration or custom metric (its mean per assigned user), and by warehouse analysis (beta, the warehouse module) for a metric that is a mean"
+by = [
+    "test:backend/tests/unit/services/test_revenue_per_user_routing.py::test_the_results_analyse_every_type_but_conversion_as_a_mean",
+    "test:backend/tests/unit/services/test_mean_metric_result.py",
+]
 
 [[unit]]
 text = "Welch's t-test for unequal variances; statistical_test_used is welch_t_test"

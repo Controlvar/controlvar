@@ -32,12 +32,13 @@ export function correctionLabel(method: CorrectionMethod | undefined): string | 
 }
 
 /**
- * True when the engine analysed this metric as a mean: a revenue metric's
- * value per assigned user, compared with Welch's t-test. The response's
- * `analysis` says so. A result without it, from a server older than the
- * field, is read from the test it ran: `welch_t_test` is a mean, anything
- * else a share. `analysis` comes first because before the first purchase no
- * treatment has a test to read.
+ * True when the engine analysed this metric as a mean: a revenue, count,
+ * duration or custom metric's value per assigned user, compared with Welch's
+ * t-test. The response's `analysis` says so, so the page reads what this
+ * server did, never a list of types. A result without it, from a server older
+ * than the field, is read from the test it ran: `welch_t_test` is a mean,
+ * anything else a share. `analysis` comes first because before the first
+ * event no treatment has a test to read.
  */
 export function analysedAsMean(metric: MetricResult): boolean {
   if (metric.analysis === 'mean') return true;
@@ -48,8 +49,8 @@ export function analysedAsMean(metric: MetricResult): boolean {
 
 /**
  * True when the engine analysed this metric as a share of users with an event
- * (a conversion test), whatever its declared type: every metric but a revenue
- * metric analysed as a mean (`analysedAsMean`).
+ * (a conversion test), whatever its declared type: every metric not analysed
+ * as a mean (`analysedAsMean`).
  */
 export function analysedAsRate(metric: MetricResult): boolean {
   return !analysedAsMean(metric);
@@ -61,14 +62,44 @@ export function rateDescription(metric: MetricResult): string {
   return 'share of users with at least one event';
 }
 
-/** What the value of a metric analysed as a mean is. */
-export function meanDescription(metric: MetricResult): string {
-  return metric.metric_type === 'revenue' ? 'revenue per user' : 'mean';
+/**
+ * What a mean of this metric type is per user: "revenue per user", "events
+ * per user" (a count: how many times each user sent the event), "duration per
+ * user", "value per user" (custom), and "mean per user" for a type this
+ * dashboard does not know.
+ */
+export function meanLabelForType(metricType: string): string {
+  switch (metricType) {
+    case 'revenue':
+      return 'revenue per user';
+    case 'count':
+      return 'events per user';
+    case 'duration':
+      return 'duration per user';
+    case 'custom':
+      return 'value per user';
+    default:
+      return 'mean per user';
+  }
 }
 
-/** True for a revenue metric whose value is revenue per user. */
-export function isRevenuePerUser(metric: MetricResult): boolean {
-  return metric.metric_type === 'revenue' && analysedAsMean(metric);
+/** What the value of a metric analysed as a mean is. */
+export function meanDescription(metric: MetricResult): string {
+  return meanLabelForType(metric.metric_type);
+}
+
+/** The same label with a capital, for a chart tooltip. */
+export function capitalised(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/**
+ * True for a metric analysed as a mean whose value is a total of its events'
+ * `value`: revenue, duration and custom. Not a count, which counts its events
+ * and does not read `value`.
+ */
+export function addsUpValues(metric: MetricResult): boolean {
+  return analysedAsMean(metric) && metric.metric_type !== 'count';
 }
 
 /**
@@ -118,13 +149,14 @@ export function formatDifferencePerUser(
 }
 
 /**
- * The users who sent a revenue metric's event when every user's total value
- * is 0 in every variant: the amounts were not sent in the event's `value`
- * (most often they went into its properties). Null otherwise, and for a
- * metric that is not revenue per user.
+ * The users who sent a revenue, duration or custom metric's event when every
+ * user's total value is 0 in every variant: the numbers were not sent in the
+ * event's `value` (most often they went into its properties). Null otherwise,
+ * for a count (which does not read `value`), and for a metric analysed as a
+ * share.
  */
 export function buyersWithNoValue(metric: MetricResult): number | null {
-  if (!isRevenuePerUser(metric) || metric.variants.length === 0) return null;
+  if (!addsUpValues(metric) || metric.variants.length === 0) return null;
   const allZero = metric.variants.every(
     (v) => v.mean === 0 && (v.std_dev === null || v.std_dev === undefined || v.std_dev === 0),
   );

@@ -6,12 +6,20 @@ metric's ``lower_is_better`` (#1377), and adds that field to every metric
 result.  For a metric that is higher-is-better, whether ``lower_is_better`` is
 False or the definition has no such attribute at all, the output is 1.4.0's
 plus the new field: these tests drop the field and compare with the hashes
-pinned for 1.4.0, which has shipped and is never edited.
+pinned for 1.4.0, which is frozen and never edited.  A proportion result's
+variants also carry the difference fields #1496 added later; those are dropped
+too (``test_difference_intervals.py`` holds them).
 
-The lower-is-better outputs are pinned here per ``ENGINE_VERSION``, with the
-same rules as ``test_sufficient_stats_fingerprint.py``: never edit the hash of
-a released version; a change after release bumps the version and adds its
-entries.
+The lower-is-better outputs are pinned here per ``ENGINE_VERSION``.  The rule:
+an engine-changing PR bumps ``ENGINE_VERSION`` to the next minor and appends it
+to ``RELEASED_ENGINE_VERSIONS`` ("frozen on main") in the same change.  A
+frozen version's entries are never edited, and no key is ever added under one.
+A PR is engine-changing when, for the same database rows and request, it adds,
+removes or changes any number, decision (winner, recommendation, Bayesian
+decision, ``can_stop``) or allocation weight that a path stamping
+``engine_version`` returns, caches or persists: results and its snapshots,
+Bayesian, CUPED, sequential, and the bandit's state, history and status.  A
+revert of an engine-changing PR bumps again.
 """
 
 import copy
@@ -24,6 +32,7 @@ import pytest
 
 from backend.app.core.stats_engine import ENGINE_VERSION
 from backend.app.services.sufficient_stats_analysis import (
+    DIFFERENCE_FIELDS,
     BinomialVariant,
     binomial_metric_result,
     mean_metric_result,
@@ -37,7 +46,7 @@ from backend.tests.unit.services import (
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
-#: The last engine before the direction was read; it has shipped.
+#: The last engine before the direction was read; it is frozen.
 BEFORE_DIRECTION = "1.4.0"
 
 #: Leave the attribute off the metric altogether.
@@ -52,12 +61,30 @@ def _with_direction(metric: Any, lower_is_better: Any) -> SimpleNamespace:
     return SimpleNamespace(**fields)
 
 
-def _without_the_field(outputs: Dict[str, Any]) -> Dict[str, Any]:
+#: The estimators whose results carry the #1496 fields, added after 1.5.0.
+_CARRY_DIFFERENCE_FIELDS = {"binomial_metric_result"}
+
+
+def _without_the_difference_fields(metric: Dict[str, Any]) -> None:
+    """Drop the fields #1496 added after 1.5.0 from a proportion result's
+    variants, after checking each carries them all.
+    ``test_difference_intervals.py`` holds those fields to their own oracles
+    and holds the rest of the output to the engine before them."""
+    for variant in metric["variants"]:
+        for field in DIFFERENCE_FIELDS:
+            assert field in variant, field
+            del variant[field]
+
+
+def _without_the_field(outputs: Dict[str, Any], function: str) -> Dict[str, Any]:
     """The estimator outputs less ``lower_is_better``, after checking that
-    every one of them carried it as False (so the strip is not vacuous)."""
+    every one of them carried it as False (so the strip is not vacuous), and
+    less the #1496 fields for an estimator that carries them."""
     stripped = copy.deepcopy(outputs)
     for output in stripped.values():
         assert output.pop("lower_is_better") is False
+        if function in _CARRY_DIFFERENCE_FIELDS:
+            _without_the_difference_fields(output)
     return stripped
 
 
@@ -87,7 +114,7 @@ def test_a_higher_is_better_metric_gives_the_output_of_1_4_0(
     )
     outputs = sufficient_stats._ESTIMATORS[function]()
     assert (
-        _hash(_without_the_field(outputs))
+        _hash(_without_the_field(outputs, function))
         == sufficient_stats.SUFFICIENT_STATS_FINGERPRINTS[BEFORE_DIRECTION][function]
     )
 
@@ -115,6 +142,7 @@ def test_results_for_higher_is_better_metrics_are_those_of_1_4_0(
     )
     for metric in output["metrics"]:
         assert metric.pop("lower_is_better") is False
+        _without_the_difference_fields(metric)
     actual, _payload = characterisation._fingerprint(output)
     assert actual == characterisation.CHARACTERISATIONS[BEFORE_DIRECTION][case]
 
@@ -180,6 +208,23 @@ LOWER_IS_BETTER_FINGERPRINTS: Dict[str, Dict[str, str]] = {
         "binomial_metric_result": "427251bbac41bc5f639179de2e55944d85bf2a7d831c71c538aecb2915208ab3",
         "mean_metric_result": "11b6c73a38a716f809bfeb2ef9735045459973fbaa457087c4409074456952df",
     },
+    # 1.6.0 (#1385) changes a lower-is-better bandit only: 1.5.0's.
+    "1.6.0": {
+        "binomial_metric_result": "427251bbac41bc5f639179de2e55944d85bf2a7d831c71c538aecb2915208ab3",
+        "mean_metric_result": "11b6c73a38a716f809bfeb2ef9735045459973fbaa457087c4409074456952df",
+    },
+    # 1.7.0 (#439) routes count, duration and custom to the mean in /results;
+    # these estimators are unchanged: 1.6.0's.
+    "1.7.0": {
+        "binomial_metric_result": "427251bbac41bc5f639179de2e55944d85bf2a7d831c71c538aecb2915208ab3",
+        "mean_metric_result": "11b6c73a38a716f809bfeb2ef9735045459973fbaa457087c4409074456952df",
+    },
+    # 1.8.0 (#1496): the binomial treatments carry the difference fields; the
+    # mean estimator is unchanged: 1.7.0's.
+    "1.8.0": {
+        "binomial_metric_result": "f32e707b71ccdf962c066949eb2ce4524fe6a22fbd5bc60fcce216a52e27a818",
+        "mean_metric_result": "11b6c73a38a716f809bfeb2ef9735045459973fbaa457087c4409074456952df",
+    },
 }
 
 
@@ -202,8 +247,8 @@ def test_lower_is_better_fingerprint(function):
     )
 
 
-def test_the_engine_that_reads_the_direction_is_not_a_released_one():
-    """1.4.0 has shipped without the direction, so the engine that reads it
+def test_the_engine_that_reads_the_direction_is_not_a_frozen_one():
+    """1.4.0 is frozen without the direction, so the engine that reads it
     must be a later version."""
     assert BEFORE_DIRECTION in sufficient_stats.RELEASED_ENGINE_VERSIONS
     assert sufficient_stats._key(ENGINE_VERSION) > sufficient_stats._key(

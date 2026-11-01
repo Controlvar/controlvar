@@ -492,3 +492,154 @@ class TestWorkflow:
             'TOPOLOGY="${TOPOLOGY:-alb}"'
             in (REPO_ROOT / "tests" / "alb" / "rehearse.sh").read_text()
         )
+
+
+def _backup_section() -> str:
+    """The README's "Back up and restore" section, up to the next `## `."""
+    text = README.read_text(encoding="utf-8")
+    start = text.index("\n## Back up and restore\n")
+    end = text.index("\n## ", start + 1)
+    return text[start:end]
+
+
+def _backup_commands() -> list:
+    """Every command in the section's bash blocks, continuation lines joined."""
+    blocks = re.findall(r"```bash\n(.*?)```", _backup_section(), re.S)
+    return [
+        line.strip()
+        for block in blocks
+        for line in block.replace("\\\n", " ").splitlines()
+        if line.strip()
+    ]
+
+
+class TestBackupAndRestore:
+    """The commands in the README's backup and restore section (#1500).
+
+    They run `docker compose ... exec` against the stack's own service, with
+    the project named, so each name they use is held to compose.yml here: the
+    project, the service, the database user and database. A rename that left
+    the README behind would back up nothing, or the wrong stack, and the
+    commands would still look right.
+    """
+
+    def _compose_commands(self) -> list:
+        return [c for c in _backup_commands() if c.startswith("docker compose")]
+
+    def test_the_section_has_the_four_compose_commands(self):
+        assert len(self._compose_commands()) == 4
+
+    def test_every_compose_command_names_the_stacks_project(self, compose):
+        for command in self._compose_commands():
+            assert command.startswith(f"docker compose -p {compose['name']} "), command
+
+    def test_the_project_in_the_prose_is_the_composes(self, compose):
+        section = _backup_section().replace("`", "")
+        assert f"the Compose project, {compose['name']}, which is the name: in" in (
+            " ".join(section.split())
+        )
+        assert f"docker compose -p {compose['name']} stop" in section
+
+    def test_exec_runs_in_the_postgres_service_without_a_terminal(self, services):
+        execs = [c for c in self._compose_commands() if " exec " in c]
+        assert len(execs) == 2
+        for command in execs:
+            assert " exec -T postgres " in command, command
+        assert "postgres" in services
+
+    def test_the_tools_read_the_database_user_and_name_the_service_has(self, services):
+        environment = services["postgres"]["environment"]
+        assert set(environment) >= {"POSTGRES_USER", "POSTGRES_DB"}
+        for tool in ("pg_dump", "pg_restore"):
+            (command,) = [c for c in self._compose_commands() if tool in c]
+            assert '-U "$POSTGRES_USER" -d "$POSTGRES_DB"' in command
+        # The names the prose gives for those defaults.
+        assert environment["POSTGRES_USER"] == DATABASE_USER_BEFORE_THE_RENAME
+        assert environment["POSTGRES_DB"] == "${POSTGRES_DB:-experimentation}"
+        assert "(the defaults in compose.yml, unless" in " ".join(
+            _backup_section().replace("`", "").split()
+        )
+
+    def test_the_restore_warns_before_the_block_about_a_running_stack(self):
+        section = " ".join(_backup_section().replace("`", "").split())
+        warning = (
+            "Do not run the commands below in the directory of a stack that is running"
+        )
+        assert warning in section
+        assert section.index(warning) < section.index(
+            "cp ~/controlvar-backups/controlvar.env"
+        )
+        # The two reasons it gives are the two commands' effects.
+        assert "the first replaces its .env" in section
+        assert "whatever database its postgres service holds" in section
+
+    def test_the_dump_is_custom_format_and_the_restore_reads_it(self):
+        (dump,) = [c for c in self._compose_commands() if "pg_dump" in c]
+        (restore,) = [c for c in self._compose_commands() if "pg_restore" in c]
+        assert "--format=custom" in dump
+        assert dump.rstrip().endswith("controlvar.dump")
+        assert "> ~/controlvar-backups/controlvar.dump" in dump
+        assert "< ~/controlvar-backups/controlvar.dump" in restore
+
+    def test_postgres_alone_is_started_first_and_nothing_waits_on_it(
+        self, compose, services
+    ):
+        assert (
+            f"docker compose -p {compose['name']} up -d --wait postgres"
+            in self._compose_commands()
+        )
+        assert "depends_on" not in services["postgres"]
+        assert "depends_on" not in services["api"]
+
+    def test_the_api_creates_the_schema_when_it_starts(self, services):
+        assert services["api"]["environment"]["RUN_MIGRATIONS"] == "true"
+
+    def test_the_env_file_is_restored_beside_compose_yml(self):
+        assert "cp ~/controlvar-backups/controlvar.env .env" in _backup_commands()
+        assert "cp .env ~/controlvar-backups/controlvar.env" in _backup_commands()
+
+    def test_nothing_in_the_section_deletes_a_volume(self):
+        section = _backup_section()
+        forbidden = (
+            r"\bdown\b",
+            r"(^|\s)-v\b",
+            r"--volumes",
+            r"\bvolume\s+(rm|prune)\b",
+            r"\bprune\b",
+            r"\brm\b",
+            r"\bkill\b",
+        )
+        for pattern in forbidden:
+            assert not re.search(pattern, section), pattern
+
+    def test_the_volumes_take_their_names_from_the_project(self, compose):
+        """So a different `-p` starts with empty volumes, and keeps the old ones."""
+        for key, spec in compose["volumes"].items():
+            assert not (isinstance(spec, dict) and spec.get("name")), key
+
+    def test_redis_is_optional_and_persists(self, services):
+        environment = services["api"]["environment"]
+        assert environment["REDIS_REQUIRED"] == "false"
+        command = services["redis"]["command"]
+        assert command[command.index("--appendonly") + 1] == "yes"
+        assert services["redis"]["volumes"] == ["redis_data:/data"]
+
+    @pytest.mark.skipif(shutil.which("sh") is None, reason="no POSIX sh")
+    def test_the_generated_env_says_its_secrets_cannot_be_regenerated(self, tmp_path):
+        """The README sends the reader to this note, and says a second run makes
+        different keys: both are read from the file the generator writes."""
+        generator = TestGenerator()
+        files = [tmp_path / "one.env", tmp_path / "two.env"]
+        for file in files:
+            result = generator._run(file)
+            assert result.returncode == 0, result.stderr
+        first, second = (f.read_text(encoding="utf-8") for f in files)
+        lines = first.splitlines()
+        assert lines[0].startswith("# Written by generate-env.sh.")
+        assert "the secrets below cannot be regenerated" in " ".join(
+            line.lstrip("# ") for line in lines[:2]
+        )
+        for name in ("SECRET_KEY", "AUDIT_HMAC_KEY"):
+            (one,) = [x for x in first.splitlines() if x.startswith(f"{name}=")]
+            (two,) = [x for x in second.splitlines() if x.startswith(f"{name}=")]
+            assert one != two, name

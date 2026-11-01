@@ -13,7 +13,7 @@
 
 [meta]
 documents = 55
-exec = 305
+exec = 309
 universe = [
     ".github/pull_request_template.md",
     ".github/qa-templates/README.md",
@@ -199,9 +199,9 @@ expects = 0
 [[document]]
 path = "docs/feature-flags/create.md"
 environment = "stack"
-exec = 10
+exec = 14
 skip = 1
-expects = 15
+expects = 22
 
 [[document]]
 path = "docs/sdk/local-evaluation.md"
@@ -214,7 +214,7 @@ expects = 10
 path = "README.md"
 environment = "bare"
 exec = 2
-skip = 1
+skip = 2
 expects = 1
 
 [[document]]

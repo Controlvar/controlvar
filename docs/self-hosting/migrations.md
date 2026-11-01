@@ -91,8 +91,8 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini history
 Output, for example:
 
 ```text
-37dcb2969766 -> 4c2c09a2b3e8 (head), Safety rollback records: safety_config_id nullable, its foreign key ON DELETE SET NULL
-d29a479daafe -> 37dcb2969766, Segments: a kind (rules or id_list), and the members of an id list
+4c2c09a2b3e8 -> 607c51a59bf5 (head), Feature flags: a value type and two values, held by one check
+37dcb2969766 -> 4c2c09a2b3e8, Safety rollback records: safety_config_id nullable, its foreign key ON DELETE SET NULL
 ...
 <base> -> 84a772608a6e, Initial schema
 ```
@@ -116,7 +116,7 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini current
 Output, for a full install (a core install prints the first line only):
 
 ```text
-4c2c09a2b3e8 (head)
+607c51a59bf5 (head)
 modules_0002_warehouse_analysis (head)
 ```
 
@@ -332,6 +332,12 @@ nothing, because nothing could put the members back and every id-list segment
 would return as a rules segment with no rules (see
 [`37dcb2969766`](#37dcb2969766-adds-segments-made-from-a-list-of-user-ids)).
 
+Past `607c51a59bf5` it also runs that revision's downgrade, which drops
+`feature_flags.value_type`, `on_value` and `off_value`. **So it also stops while
+any flag is a string, number or json flag**: that downgrade refuses, names those
+flags, and changes nothing (see
+[`607c51a59bf5`](#607c51a59bf5-gives-each-flag-a-value-type-and-two-values)).
+
 ### `d29a479daafe` records who each global holdout covers
 
 This revision adds `activated_at`, `deactivated_at` and `hash_salt` to
@@ -398,6 +404,11 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini -x allow
 The Database Migration workflow does not pass `-x`, so on AWS it stops at this
 revision while any id list has members.
 
+From a release that carries `607c51a59bf5`, the same downgrade first runs that
+revision's downgrade, which drops each flag's value type and values and refuses
+while any flag is a string, number or json flag (see
+[`607c51a59bf5`](#607c51a59bf5-gives-each-flag-a-value-type-and-two-values)).
+
 ### `4c2c09a2b3e8` keeps rollback records without a safety configuration
 
 This revision makes `safety_rollback_records.safety_config_id` nullable and
@@ -423,6 +434,36 @@ still serves, before the API is rolled back
 ([Database Rollback Procedure](../deployment/rollback-runbook.md#database-rollback-procedure)),
 and this release records a null `safety_config_id` for each rollback of a flag
 on the defaults, which NOT NULL would refuse.
+
+### `607c51a59bf5` gives each flag a value type and two values
+
+This revision adds three columns to `feature_flags`: `value_type` (`boolean`,
+`string`, `number` or `json`, default `boolean`), and `on_value` and
+`off_value` (`jsonb`), the values a string, number or json flag serves to the
+users it is on for and to everyone else. It also adds the check
+`check_flag_values`: a boolean flag stores neither value, a string or number
+flag stores two different values of its type, and a json flag stores two
+different objects or arrays. Every flag already stored becomes a boolean flag,
+which is what it was.
+
+The previous release runs against this schema unchanged: the flags it creates
+get `boolean` from the column's default, and it reads and updates flags without
+touching the two values.
+
+**The downgrade refuses while any flag is a string, number or json flag.**
+`607c51a59bf5`'s downgrade drops the check and the three columns, which would
+delete each such flag's value type and both of its values, and nothing could
+rebuild them. So while any flag's `value_type` is not `boolean` the downgrade
+refuses, names those flags, and changes nothing:
+
+```text
+607c51a59bf5: refusing to downgrade: 2 feature flag(s) serve a string, number or json value (checkout-copy, price-tier). ...
+```
+
+To go on, delete those flags or convert each to a boolean flag, or restore the
+backup taken before the upgrade. With only boolean flags stored, the downgrade
+drops the check and the three columns, and nothing else. Neither the upgrade
+nor the downgrade can be emitted as SQL (`--sql`).
 
 Roll back to a specific revision:
 
@@ -704,6 +745,10 @@ What this means for you:
   `segment_members` and its rows; it refuses while that table has any.
   [`4c2c09a2b3e8`](#4c2c09a2b3e8-keeps-rollback-records-without-a-safety-configuration)
   is backward-compatible for a rollback, and undoing it changes nothing.
+  [`607c51a59bf5`](#607c51a59bf5-gives-each-flag-a-value-type-and-two-values)
+  is backward-compatible for a rollback too, and undoing it drops each flag's
+  value type and values; it refuses while any flag is a string, number or json
+  flag.
 - Compose runs one API container, which is the only writer and keeps `RUN_MIGRATIONS=true`.
   The chart already keeps the bootstrap out of the serving container: it runs
   it in an init container.

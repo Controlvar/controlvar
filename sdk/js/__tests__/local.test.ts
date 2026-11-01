@@ -204,7 +204,7 @@ describe('the vectors through evaluateFlag', () => {
     expect(unsendable.filter(id => isWellFormedString(userIdOf(id)))).toEqual([]);
     expect(server.requests('/feature-flags/evaluate/')).toHaveLength(expectedRemote);
     // Every must_local case except the three whose context holds 10**400 (see above).
-    expect(localAnswers).toBe(1294 - 3);
+    expect(localAnswers).toBe(1333 - 3);
   });
 });
 

@@ -26,6 +26,16 @@ computed over the local traffic. It then reports one error itself with the
 seed's unscoped key and requires that it is stored but not counted
 (``error_count`` +0, ``uncounted_error_count`` +1).
 
+Last, each release in ``PUBLISHED_LOCAL`` -- the published JavaScript and
+Python 0.2.0, fetched from npm and PyPI and verified by digest through
+``tests/sdk-contract/published_sdks.py`` -- runs in local mode against this
+server (#1497, G3): it loads the ruleset and answers each of the seed's value
+flags (string, number and json) locally as on; the runner turns those flags
+off through the API, as a DEVELOPER; within one refresh each answers
+``inactive``, still locally; the runner turns them back on. A release that
+cannot read the ruleset the server sends would answer from the server, or
+keep answering on.
+
 Prerequisites
     1. A backend at ``$CONTROLVAR_API_URL`` (default http://localhost:8000)
        seeded with ``python backend/scripts/seed_sdk_contract.py`` (creates the
@@ -44,13 +54,18 @@ Usage
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
+import queue
 import shutil
 import subprocess
 import sys
+import tempfile
+import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -103,6 +118,23 @@ LOCAL_MANIFEST: dict[str, tuple[str, tuple[str, ...]]] = {
     "python": ("python sdk/python/examples/local_eval_smoke.py", ("python",)),
     "js": ("cd sdk/js && npm run build --silent && node examples/local_eval_smoke.mjs", ("node", "npm")),
 }
+
+#: Published releases with a local evaluator, run against this server (#1497,
+#: G3): sdk name -> the version pinned in tests/sdk-contract/published-sdks.json.
+#: Each runs after LOCAL_MANIFEST, under the name "<sdk> <version> (published,
+#: local)", when its sdk is selected.
+PUBLISHED_LOCAL: dict[str, str] = {"python": "0.2.0", "js": "0.2.0"}
+#: The seed's value flags (backend/scripts/seed_sdk_contract.py VALUE_FLAGS).
+VALUE_FLAG_KEYS = ("sdk_contract_value_string", "sdk_contract_value_number", "sdk_contract_value_json")
+#: Who turns them off and on: the seed's DEVELOPER (a non-superuser role that
+#: can change any flag, D11), signing in through the API.
+TOGGLE_USER = ("dev@demo.com", "Demo1234!")
+#: 0.2.0's shortest refresh interval; the change must arrive within the wait.
+PUBLISHED_REFRESH_SECONDS = 5
+PUBLISHED_WAIT_SECONDS = 30
+PUBLISHED_ON = {"enabled": True, "reason": "rollout", "source": "local"}
+PUBLISHED_OFF = {"enabled": False, "reason": "inactive", "source": "local"}
+SDK_CONTRACT_DIR = Path(__file__).resolve().parents[1]
 
 EXPECTED_VARIANTS = {"control", "treatment"}
 
@@ -302,6 +334,178 @@ def _report_error(api_url: str, key: str, flag_key: str, sdk: str) -> int:
         return exc.code
 
 
+def _published_sdks():
+    """tests/sdk-contract/published_sdks.py, imported by path (stdlib only)."""
+    spec = importlib.util.spec_from_file_location("published_sdks", SDK_CONTRACT_DIR / "published_sdks.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules.setdefault("published_sdks", module)  # dataclasses look their module up here
+    spec.loader.exec_module(module)
+    return module
+
+
+def _api(api_url: str, method: str, path: str, token: str = "", body: dict | None = None) -> tuple[int, object]:
+    """One API call with a user's bearer token; (status, parsed JSON body or None)."""
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    request = urllib.request.Request(f"{api_url}{path}", data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(request, timeout=10) as resp:  # noqa: S310
+            status, payload = resp.status, resp.read()
+    except urllib.error.HTTPError as exc:
+        status, payload = exc.code, exc.read()
+    try:
+        return status, json.loads(payload) if payload else None
+    except ValueError:
+        return status, None
+
+
+def _sign_in(api_url: str) -> str:
+    email, password = TOGGLE_USER
+    status, body = _api(api_url, "POST", "/api/v1/auth/login", body={"email": email, "password": password})
+    if status != 200 or not isinstance(body, dict) or not body.get("access_token"):
+        raise RuntimeError(f"POST /api/v1/auth/login as {email} answered {status}")
+    return str(body["access_token"])
+
+
+def _flag_ids(api_url: str, token: str, keys: tuple[str, ...]) -> dict[str, str]:
+    ids = {}
+    for key in keys:
+        status, body = _api(api_url, "GET", f"/api/v1/feature-flags/?search={urllib.parse.quote(key)}", token)
+        items = body.get("items", []) if isinstance(body, dict) else []
+        found = [item["id"] for item in items if item.get("key") == key]
+        if status != 200 or len(found) != 1:
+            raise RuntimeError(f"flag {key!r} is not in GET /api/v1/feature-flags/ ({status}); run the seed")
+        ids[key] = found[0]
+    return ids
+
+
+def _turn(api_url: str, token: str, ids: dict[str, str], on: bool) -> None:
+    action = "activate" if on else "deactivate"
+    for key, flag_id in ids.items():
+        status, _ = _api(api_url, "POST", f"/api/v1/feature-flags/{flag_id}/{action}", token)
+        if status != 200:
+            raise RuntimeError(f"POST /api/v1/feature-flags/{{id}}/{action} for {key!r} answered {status}")
+
+
+def _published_harness(language: str, root: Path, config: dict) -> list[str]:
+    argument = json.dumps(config)
+    if language == "js":
+        return [shutil.which("node") or "node", str(SDK_CONTRACT_DIR / "harness" / "published_js_live.cjs"), str(root), argument]
+    # -I -S: only the verified extraction on sys.path (see published_python_live.py).
+    return [sys.executable, "-I", "-S", str(SDK_CONTRACT_DIR / "harness" / "published_python_live.py"), str(root), argument]
+
+
+def _shown(answers: dict) -> str:
+    return ", ".join(f"{key}: {json.dumps(answer, sort_keys=True)}" for key, answer in sorted(answers.items()))
+
+
+def run_published_local(sdk: str, version: str, api_url: str, local_key: str, timeout: int) -> tuple[str, str]:
+    """A published release's own client, in local mode, against this server (G3).
+
+    It must load the server's ruleset (its version is the one the route serves)
+    and answer every value flag locally as on; after the runner turns them off
+    through the API it must answer each ``inactive``, locally, within
+    PUBLISHED_WAIT_SECONDS. The flags are turned back on whatever happens.
+    """
+    try:
+        ps = _published_sdks()
+        (artefact,) = [a for a in ps.load_pins() if a.language == sdk and a.version == version]
+    except Exception as exc:  # a missing or ambiguous pin is a failure of this row
+        return "FAIL", f"no single pin for {sdk} {version} in published-sdks.json: {exc}"
+    work = Path(tempfile.mkdtemp(prefix=f"live-published-{sdk}-"))
+    process = None
+    token, ids, turned_off = "", {}, False
+    try:
+        extraction = work / "artefact"
+        root = ps.extract(artefact, ps.fetch(artefact, work / "cache"), extraction)
+        (work / "cwd").mkdir()
+        config = {
+            "api_url": api_url,
+            "api_key": local_key,
+            "flags": list(VALUE_FLAG_KEYS),
+            "user_id": f"published-{sdk}-{version}",
+            "refresh_seconds": PUBLISHED_REFRESH_SECONDS,
+            "ready_seconds": 30,
+            "wait_seconds": PUBLISHED_WAIT_SECONDS,
+        }
+        process = subprocess.Popen(
+            _published_harness(artefact.language, root, config),
+            cwd=work / "cwd",
+            env={"PATH": os.environ.get("PATH", ""), "LANG": "C.UTF-8"},
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        lines: "queue.Queue[str]" = queue.Queue()
+        threading.Thread(target=lambda: [lines.put(line) for line in process.stdout], daemon=True).start()
+
+        def report(phase: str) -> dict:
+            try:
+                line = lines.get(timeout=timeout)
+            except queue.Empty:
+                raise RuntimeError(f"no '{phase}' report within {timeout}s") from None
+            payload = json.loads(line)
+            if payload.get("phase") != phase:
+                raise RuntimeError(f"expected the '{phase}' report, got {line[:200]}")
+            return payload
+
+        loaded = report("loaded")
+        module = ps.check_identity(artefact, extraction, loaded)
+        _status, headers, _body = _ruleset_request(api_url, local_key)
+        served = headers.get("etag", "").strip('"')
+        problems = []
+        if not loaded["ready"].get("ok") or loaded["status"].get("version") != served:
+            problems.append(
+                f"it did not load the ruleset the server serves ({served}): ready {loaded['ready']}, "
+                f"version {loaded['status'].get('version')!r}"
+            )
+        if any(answer != PUBLISHED_ON for answer in loaded["answers"].values()):
+            problems.append(f"before the change it answered {_shown(loaded['answers'])}; expected each {PUBLISHED_ON}")
+        if problems:
+            return "FAIL", "; ".join(problems + loaded.get("errors", [])[:3])
+
+        token = _sign_in(api_url)
+        ids = _flag_ids(api_url, token, VALUE_FLAG_KEYS)
+        turned_off = True
+        _turn(api_url, token, ids, on=False)
+        process.stdin.write("turned off\n")
+        process.stdin.flush()
+        after = report("after")
+        if any(answer != PUBLISHED_OFF for answer in after["answers"].values()):
+            return "FAIL", (
+                f"answer unchanged after the flags were turned off: after {after['seconds']:.1f}s it answered "
+                f"{_shown(after['answers'])}; expected each {PUBLISHED_OFF}"
+            )
+        return "PASS", (
+            f"{artefact.digest[:19]}... at {module}: loaded ruleset {served[:12]}, the {len(ids)} value flags "
+            f"answered locally; turned off through the API, each answered inactive locally after "
+            f"{after['seconds']:.1f}s"
+        )
+    except Exception as exc:  # the row fails and says why; the next row still runs
+        stderr = ""
+        if process is not None and process.poll() is not None and process.stderr is not None:
+            stderr = process.stderr.read()[-300:]
+        return "FAIL", f"{type(exc).__name__}: {exc} {stderr}".strip()
+    finally:
+        if turned_off:
+            try:
+                _turn(api_url, token, ids, on=True)
+            except Exception as exc:  # reported; the next run's seed turns them back on too
+                print(f"could not turn the value flags back on: {exc}", file=sys.stderr)
+        if process is not None:
+            if process.poll() is None:
+                try:
+                    process.stdin.close()
+                    process.wait(timeout=15)
+                except Exception:
+                    process.kill()
+            process.wait()
+        shutil.rmtree(work, ignore_errors=True)
+
+
 def _run_command(command: str, env: dict[str, str], timeout: int) -> tuple[str, str, dict]:
     """Run a smoke command; (status, detail, the JSON object on its last stdout line)."""
     started = time.time()
@@ -428,6 +632,22 @@ def main() -> int:
             continue
         local_env = dict(env, CONTROLVAR_LOCAL_API_KEY=local_key, EXPERIMENTLY_LOCAL_API_KEY=DECOY_KEY)
         status, detail = run_local(sdk, command, local_env, args.timeout, env["CONTRACT_FLAG_KEY"])
+        results.append((name, status, detail))
+        print(f"{status:4} {name:<20} {detail}", flush=True)
+
+    # The published releases, last (they turn the seed's value flags off and on).
+    for sdk in [s for s in selected if s in PUBLISHED_LOCAL]:
+        version = PUBLISHED_LOCAL[sdk]
+        name = f"{sdk} {version} (published, local)"
+        tools = ("node",) if sdk == "js" else ()
+        missing = [t for t in tools if shutil.which(t) is None]
+        if missing:
+            results.append((name, "FAIL" if args.strict else "SKIP", f"missing toolchain: {', '.join(missing)}"))
+            continue
+        if not local_key:
+            results.append((name, "FAIL" if args.strict else "SKIP", "no sdk:ruleset key"))
+            continue
+        status, detail = run_published_local(sdk, version, args.api_url, local_key, args.timeout)
         results.append((name, status, detail))
         print(f"{status:4} {name:<20} {detail}", flush=True)
 

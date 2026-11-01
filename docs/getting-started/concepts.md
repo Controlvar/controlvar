@@ -21,7 +21,7 @@ Common uses: gradual rollouts, kill switches, beta programs, maintenance mode.
 
 ### Several Experiences
 
-A flag is on or off for each user: it carries no variants or values. To serve one of several experiences, run a multivariate experiment instead. Each of its variants carries a `configuration`, which `POST /api/v1/tracking/assign` returns.
+A flag serves two values: on or off, or a string, a number or a JSON value with an off value. To split users among three or more experiences, or to measure which one does better, run a multivariate experiment instead. Each of its variants carries a `configuration`, which `POST /api/v1/tracking/assign` returns.
 
 ### Why Use Feature Flags
 
@@ -90,8 +90,11 @@ A metric is the measurable outcome you use to evaluate whether a variant is bett
 |------|-------------|---------|
 | **Conversion** | Binary: did the event happen or not? | Clicked button, completed checkout, signed up |
 | **Revenue** | The amount on each user's events, as revenue per user | Order total sent as the `value` of `purchase` |
+| **Count** | How many times each user sends the event, as events per user | Articles read: one `article_read` event each |
+| **Duration** | Time each user spends, added up, as duration per user | Seconds watched sent as the `value` of `watch_session` |
+| **Custom** | A number each user's events add up to, as value per user | Points sent as the `value` of `points_earned` |
 
-A metric can also be created with the type `revenue`, `count` or `duration`. A revenue metric is analysed as its mean value per assigned user: each user's event values added up, 0 for a user with none. A count or duration metric is analysed as a conversion: whether each user sent the metric's event, not the event's value. See [Limitations](limitations.md).
+A conversion metric is analysed as the share of assigned users who sent its event. A revenue, count, duration or custom metric is analysed as its mean per assigned user, compared with Welch's t-test: for a count metric each user's value is the number of the metric's events they sent, whatever their `value`; for a revenue, duration or custom metric it is the total of those events' `value`; a user with none counts as 0. So a duration metric is time spent per assigned user, not the time one event takes. See [Limitations](limitations.md).
 
 ### Primary vs Secondary Metrics
 

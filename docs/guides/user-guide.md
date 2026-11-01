@@ -53,8 +53,8 @@ API (`POST /api/v1/experiments/`).
 Then choose what to measure. Mark one metric as the **primary metric** (the one you decide
 on); any others are tracked alongside it.
 
-A revenue metric's results report its mean value per assigned user; every other metric reports
-the share of users who sent the metric's event.
+A conversion metric's results report the share of users who sent the metric's event; a revenue,
+count, duration or custom metric's report its mean per assigned user.
 
 The metric's **event name** must match exactly what your engineers track in code (e.g., `checkout_complete`).
 
@@ -294,8 +294,8 @@ For each metric and variant pair:
 | Column | Meaning |
 |--------|---------|
 | **Sample Size** | Users assigned to this variant |
-| **Value** | Conversion rate for this variant: the share of its users who sent the metric's event. For a revenue metric, revenue per user: each user's event values added up, averaged over every user assigned to the variant (0 for a user with none), as a plain number with no currency |
-| **Change** | Relative change vs. control (e.g., +12.3%). A significant change also says *better* or *worse* in the metric's direction, so a fall is better when lower is better. For a revenue metric a second line gives the difference per user with its confidence interval, e.g. +1.19 per user (95% CI −0.47 to +2.84), marked *unadjusted* when the p-value beside it is adjusted |
+| **Value** | Conversion rate for this variant: the share of its users who sent the metric's event. For a revenue metric, revenue per user: each user's event values added up, averaged over every user assigned to the variant (0 for a user with none), as a plain number with no currency. A count metric reads events per user (how many times each user sent the event), a duration metric duration per user and a custom metric value per user, averaged the same way, with no unit |
+| **Change** | Relative change vs. control (e.g., +12.3%). A significant change also says *better* or *worse* in the metric's direction, so a fall is better when lower is better. For a revenue, count, duration or custom metric a second line gives the difference per user with its confidence interval, e.g. +1.19 per user (95% CI −0.47 to +2.84), marked *unadjusted* when the p-value beside it is adjusted |
 | **p-value** | Probability the difference is due to chance (lower = more confident). Headed **Adjusted p-value** when a correction applies and a metric has two or more treatments with a p-value: the p-value after the experiment's correction, with the unadjusted value beneath it. A footnote under the table names the correction. |
 | **Significance** | (adjusted) p-value < (1 - confidence level), e.g., < 0.05 for 95% confidence |
 
@@ -309,9 +309,10 @@ For each variant, `GET /api/v1/results/{experiment_id}` also returns `effect_siz
 The words *better* and *worse* in the cell say the same as the colour, so colour is never the
 only signal.
 
-Under the table, a revenue metric has a footnote saying what revenue per user is. If users sent
-a revenue metric's event but every user's total value is 0, a note says so: send the amount in
-the event's `value` field, not in its properties.
+Under the table, a revenue, count, duration or custom metric has a footnote saying what its value
+per user is. If users sent a revenue, duration or custom metric's event but every user's total
+value is 0, a note says so: send the amount, duration or number in the event's `value` field, not
+in its properties.
 
 A metric marked lower is better (`lower_is_better`), such as a guardrail, is listed like any other
 metric, with its users and conversions. No guardrail verdict is produced: the recommendation follows
@@ -357,7 +358,8 @@ The tab also says when:
 - **no users have been assigned yet**, or there is no rate to plan from (no control conversions,
   or every control user converted): type the rate you expect;
 - **the metric is not a conversion**: the plan is for a conversion rate whatever the metric's
-  type, so a revenue metric's plan is for the share of users who buy. The Power Calculator plans conversion rates only too, and the
+  type, so a revenue, count, duration or custom metric's plan is for the share of users who send
+  its event. The Power Calculator plans conversion rates only too, and the
   tab says so;
 - **a fixed sample size is a guide only**: a bandit, an uneven split, sequential testing or
   Bayesian analysis.

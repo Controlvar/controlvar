@@ -141,15 +141,19 @@ class VariantResult(BaseModel):
 
     For the control variant, fields that represent a comparison vs. the
     control (``p_value``, ``adjusted_p_value``, ``relative_improvement_pct``,
-    ``effect_size``, ``effect_size_label``, ``power``, and
-    ``statistical_test_used``) are ``None``.
+    ``effect_size``, ``effect_size_label``, ``power``,
+    ``statistical_test_used``, ``absolute_difference`` and its interval,
+    ``relative_improvement_pct_ci``, ``incremental_impact`` and its
+    interval) are ``None``.
 
     The metric's ``analysis`` says what ``mean`` is.  For a metric analysed
-    as a proportion (every type but revenue) ``mean`` is the share of the
-    variant's users who converted, in [0, 1].  For a revenue metric
-    (``analysis`` ``"mean"``) it is the mean value per assigned user: each
-    user's values added up, 0 for a user with none.  ``conversions`` is the
-    number of users who converted either way.
+    as a proportion (a conversion metric) ``mean`` is the share of the
+    variant's users who converted, in [0, 1].  For a revenue, count, duration
+    or custom metric (``analysis`` ``"mean"``) it is the mean per assigned
+    user of each user's value, 0 for a user with none: for a count metric the
+    number of the metric's events they sent, otherwise the total of those
+    events' value.  ``conversions`` is the number of users who converted
+    either way.
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -169,8 +173,8 @@ class VariantResult(BaseModel):
         description=(
             "Number of assigned users with at least one conversion event; a "
             "user who converts several times counts once, so this never "
-            "exceeds sample_size.  For a revenue metric too: the users who "
-            "sent the metric's event, whatever its value."
+            "exceeds sample_size.  For a metric analysed as a mean too: the "
+            "users who sent the metric's event, whatever its value."
         ),
     )
     mean: float = Field(
@@ -178,8 +182,10 @@ class VariantResult(BaseModel):
         description=(
             "When the metric's analysis is 'proportion': the share of the "
             "variant's users who converted, in [0, 1].  When it is 'mean' (a "
-            "revenue metric): the mean value per assigned user, each user's "
-            "values added up and 0 for a user with none."
+            "revenue, count, duration or custom metric): the mean per "
+            "assigned user of each user's value, 0 for a user with none: for "
+            "a count metric the number of the metric's events they sent, "
+            "otherwise the total of those events' value."
         ),
     )
     std_dev: Optional[float] = Field(
@@ -266,19 +272,80 @@ class VariantResult(BaseModel):
     absolute_difference: Optional[float] = Field(
         None,
         description=(
-            "When the metric's analysis is 'mean': this variant's mean minus "
-            "the control's, per assigned user.  None for the control, for a "
-            "proportion metric, and when either variant has fewer than 2 users."
+            "This variant's mean minus the control's, in the unit of mean.  "
+            "When the metric's analysis is 'proportion': the difference of the "
+            "shares of users who converted, each computed as conversions / "
+            "sample_size (0.012 is 1.2 percentage points).  When it is 'mean': "
+            "the difference per assigned user.  None for the control; for a "
+            "proportion, when either variant has no users; for a mean, when "
+            "either variant has fewer than 2 users."
         ),
     )
     absolute_difference_ci: Optional[tuple[float, float]] = Field(
         None,
         description=(
-            "Two-sided Welch-Satterthwaite confidence interval of "
-            "absolute_difference as (lower, upper), at the response's "
-            "confidence_level and not adjusted for multiple comparisons.  "
-            "None when absolute_difference is None, and when neither variant's "
-            "per-user values vary."
+            "Two-sided confidence interval of absolute_difference as (lower, "
+            "upper), at the response's confidence_level and not adjusted for "
+            "multiple comparisons.  For a proportion, Newcombe's hybrid score "
+            "interval, built from each variant's Wilson score interval; for a "
+            "mean, the Welch-Satterthwaite interval.  is_significant is "
+            "decided by statistical_test_used on adjusted_p_value (p_value "
+            "when no correction applies), not by this interval: with two or "
+            "more treatments under a correction the interval can exclude 0 on "
+            "a variant that is not significant, and for a proportion near the "
+            "threshold the interval and Fisher's exact test can disagree "
+            "either way.  relative_improvement_pct_ci and "
+            "incremental_impact_ci, when not None, contain 0 exactly when "
+            "this interval does.  None when absolute_difference is None; for "
+            "a mean, also when neither variant's per-user values vary.  For a "
+            "proportion with users in both variants it is never None: 0 of "
+            "20 against 0 of 20 gives (-0.161, 0.161)."
+        ),
+    )
+    relative_improvement_pct_ci: Optional[tuple[float, float]] = Field(
+        None,
+        description=(
+            "Two-sided confidence interval of relative_improvement_pct as "
+            "(lower, upper), in percent, at the response's confidence_level "
+            "and not adjusted for multiple comparisons.  It is the MOVER-R "
+            "interval of the ratio of this variant's mean to the control's, "
+            "from the same per-variant limits as absolute_difference_ci "
+            "(Wilson score limits for a proportion; for a mean, each mean "
+            "plus or minus Welch's critical value times its standard error, "
+            "which is Fieller's interval), so it contains 0 exactly when "
+            "absolute_difference_ci does.  None for the control and when "
+            "absolute_difference_ci is None.  For a proportion the ratio is "
+            "taken over values of 0 and above, so the lower end is never "
+            "below -100%, and the interval is None only when the control has "
+            "no conversions; it can be wide: a treatment with 6 converting "
+            "users out of 200 against a control with 2 out of 200 gives -34.2% "
+            "to +1,206.3% at 0.95.  For a mean it is also None when the control's mean is 0, "
+            "and when the control's mean plus or minus Welch's critical value "
+            "times its standard error reaches 0, where Fieller's set of "
+            "ratios is unbounded."
+        ),
+    )
+    incremental_impact: Optional[float] = Field(
+        None,
+        description=(
+            "absolute_difference times this variant's sample_size: how much "
+            "more (or, when negative, less) this variant's assigned users had "
+            "than as many users at the control's mean.  When the metric's "
+            "analysis is 'proportion', converting users; when it is 'mean', "
+            "the total of the users' values (see mean), in the unit they were "
+            "sent in.  A plain number: no currency or unit is read or added, "
+            "and nothing is projected beyond this variant's own assigned "
+            "users.  None for the control and when absolute_difference is "
+            "None."
+        ),
+    )
+    incremental_impact_ci: Optional[tuple[float, float]] = Field(
+        None,
+        description=(
+            "absolute_difference_ci times this variant's sample_size, as "
+            "(lower, upper): at the response's confidence_level and not "
+            "adjusted for multiple comparisons.  None when "
+            "absolute_difference_ci is None."
         ),
     )
 
@@ -338,10 +405,11 @@ class MetricResult(BaseModel):
     analysis: Literal["proportion", "mean"] = Field(
         "proportion",
         description=(
-            "How the variants are compared.  'mean' for a revenue metric: the "
-            "mean value per assigned user, compared with Welch's t-test.  "
-            "'proportion' for every other metric type: the share of users who "
-            "converted, compared with Fisher's exact test."
+            "How the variants are compared.  'mean' for a revenue, count, "
+            "duration or custom metric: the mean per assigned user (see "
+            "VariantResult.mean), compared with Welch's t-test.  'proportion' "
+            "for a conversion metric: the share of users who converted, "
+            "compared with Fisher's exact test."
         ),
     )
     variants: List[VariantResult] = Field(

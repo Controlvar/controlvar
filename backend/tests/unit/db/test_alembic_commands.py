@@ -27,8 +27,8 @@ ALEMBIC_INI = REPO_ROOT / "backend" / "app" / "db" / "alembic.ini"
 CORE_VERSIONS = REPO_ROOT / "backend" / "app" / "db" / "migrations" / "versions"
 ENV_PY = REPO_ROOT / "backend" / "app" / "db" / "migrations" / "env.py"
 
-#: The core chain's head (#1206).
-CORE_HEAD = "4c2c09a2b3e8"
+#: The core chain's head (#1497).
+CORE_HEAD = "607c51a59bf5"
 MODULES_HEAD = "modules_0002_warehouse_analysis"
 #: The revision 1ab99332f0ba's re-run recipe downgrades to, and what lies past it.
 EVENTS_UTC = "1ab99332f0ba"
@@ -179,6 +179,8 @@ def test_past_1ab99332f0ba_its_rerun_downgrade_also_undoes_the_later_revisions()
     ]
     assert from_head[-1] == EVENTS_UTC and len(from_head) > 1, from_head
     assert "806901fb7735" in from_head
+    # And the value columns' (#1497), which drops three feature_flags columns.
+    assert "607c51a59bf5" in from_head
 
 
 def _bootstrap_url(env: dict[str, str]) -> str:

@@ -84,8 +84,16 @@ _ONE_NULL_P = characterisation._FIXTURES["three_variants"]
 
 #: sha256 of the output less ``computed_at``, ``correction_method`` and every
 #: ``adjusted_p_value``: the same under every method when ``k = 1``. Recorded
-#: on main at ENGINE_VERSION 1.2.0; the characterisation's rules apply, so a
-#: new ENGINE_VERSION adds its own entry and never edits a released one.
+#: on main at ENGINE_VERSION 1.2.0.  The rule: an engine-changing PR bumps
+#: ``ENGINE_VERSION`` to the next minor and appends it to
+#: ``RELEASED_ENGINE_VERSIONS`` ("frozen on main") in the same change; a frozen
+#: version's entries are never edited, and no key is ever added under one.  A
+#: PR is engine-changing when, for the same database rows and request, it adds,
+#: removes or changes any number, decision (winner, recommendation, Bayesian
+#: decision, ``can_stop``) or allocation weight that a path stamping
+#: ``engine_version`` returns, caches or persists: results and its snapshots,
+#: Bayesian, CUPED, sequential, and the bandit's state, history and status.  A
+#: revert of an engine-changing PR bumps again.
 ONE_TREATMENT_PINS: Dict[str, Dict[str, str]] = {
     "1.2.0": {
         "two_variants": "ecd8090f0b63152209a0fc370137017fb3026ee0a629665302efc1206e33abbe",
@@ -109,6 +117,29 @@ ONE_TREATMENT_PINS: Dict[str, Dict[str, str]] = {
         "two_variants": "9e41155e9bf3433659bc62c1af0f86371613da5ce204d16108a258f037a71be6",
         "three_variants_one_null_p": (
             "0b23f7ba940954b161499973d2c8830487fa8c6fb4e8d0196c68f2d5191fb8b2"
+        ),
+    },
+    # 1.6.0 (#1385) changes a lower-is-better bandit only: 1.5.0's.
+    "1.6.0": {
+        "two_variants": "9e41155e9bf3433659bc62c1af0f86371613da5ce204d16108a258f037a71be6",
+        "three_variants_one_null_p": (
+            "0b23f7ba940954b161499973d2c8830487fa8c6fb4e8d0196c68f2d5191fb8b2"
+        ),
+    },
+    # 1.7.0 (#439) routes count, duration and custom to the mean; these
+    # fixtures have none: 1.6.0's.
+    "1.7.0": {
+        "two_variants": "9e41155e9bf3433659bc62c1af0f86371613da5ce204d16108a258f037a71be6",
+        "three_variants_one_null_p": (
+            "0b23f7ba940954b161499973d2c8830487fa8c6fb4e8d0196c68f2d5191fb8b2"
+        ),
+    },
+    # 1.8.0 (#1496): each treatment carries its difference from the control,
+    # the intervals and the impact.
+    "1.8.0": {
+        "two_variants": "8bfbabfdd24cd7e64e3e4bc9f56635988dbc3e98cc851f1079009772880170ea",
+        "three_variants_one_null_p": (
+            "3e33c704c5588860bfcd8b6439181f9dd26c353f8b7f20f4bb0d8f8c1e789c63"
         ),
     },
 }
