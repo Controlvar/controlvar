@@ -167,3 +167,20 @@ def test_no_run_of_the_required_check_is_ever_cancelled():
     assert "concurrency" not in doc
     for job in doc["jobs"].values():
         assert "concurrency" not in job
+
+
+def test_the_template_does_not_ask_an_author_to_add_a_label():
+    """A fork author cannot add labels, so the pull request template must ask for
+    a reason and leave the waiver label to a maintainer (D216, V77)."""
+    template = (REPO / ".github" / "pull_request_template.md").read_text()
+    text = " ".join(template.split())  # line breaks and indentation do not count
+    assert "add the `skip-regression-guard` label" not in text
+    assert "a maintainer decides whether to waive the check" in text
+
+
+def test_contributing_has_the_what_to_expect_section():
+    """The contributor-facing explanation of the approval wait lives under this
+    exact heading; other text points at it by name (D216)."""
+    lines = (REPO / "CONTRIBUTING.md").read_text().splitlines()
+    assert "## What to expect" in lines
+    assert "### Why your checks are waiting" in lines
