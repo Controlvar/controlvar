@@ -49,7 +49,11 @@ from backend.app.core.permissions import (
 from backend.app.core.scheduler import experiment_scheduler
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.compliance_audit_event import AuditAction, AuditOutcome
-from backend.app.models.experiment import Experiment, ExperimentStatus
+from backend.app.models.experiment import (
+    Experiment,
+    ExperimentStatus,
+    ExperimentType,
+)
 from backend.app.models.user import User, UserRole
 from backend.app.schemas.experiment import (
     ExperimentCreate,
@@ -60,6 +64,16 @@ from backend.app.schemas.experiment import (
     ScheduleConfig,
 )
 from backend.app.schemas.results import ExperimentResultsResponse
+from backend.app.schemas.split_url_config import (
+    CHAIN,
+    SAME_ENTRY,
+    SPLIT_URL_CONFIG_ERROR,
+    SplitUrlConfig,
+    find_split_url_config_problem,
+    split_url_config_problem,
+    split_url_conflict,
+    split_url_entries,
+)
 from backend.app.services.analysis_service import AnalysisService
 from backend.app.services.audit_log_service import AuditLogService
 from backend.app.services.audit_service import (
@@ -98,6 +112,42 @@ STATUS_THROUGH_LIFECYCLE = (
 STATUS_ON_CREATE = (
     "a new experiment is created as draft; status changes through "
     "POST /api/v1/experiments/{id}/start, /pause, /complete or /archive."
+)
+
+# Start refuses a split URL experiment whose configuration cannot split (#393).
+# Each text says what to change and where; none carries a URL or names the
+# other experiment. ``{id}`` is literal.
+SPLIT_URL_START_FIX_HINT = (
+    "Change it with PUT /api/v1/experiments/{id}; the dashboard cannot edit "
+    "split_url_config."
+)
+SPLIT_URL_START_NO_CONFIG = (
+    "This split URL experiment has no split_url_config, so it cannot start. "
+    "Add one with PUT /api/v1/experiments/{id}; the dashboard cannot edit "
+    "split_url_config."
+)
+#: Followed by the configuration's first problem, then the hint.
+SPLIT_URL_START_NOT_VALID = "The split_url_config is not valid: "
+SPLIT_URL_START_SAME_ENTRY = (
+    "Another active split URL experiment already uses the same control page "
+    "(host and path) as this experiment. Two active split URL experiments "
+    "cannot share a control page. Pause or complete the other one, or change "
+    "this experiment's control URL with PUT /api/v1/experiments/{id}; the "
+    "dashboard cannot edit split_url_config."
+)
+SPLIT_URL_START_CHAIN = (
+    "Split URL experiments must not chain: this experiment's control page is a "
+    "variant page of another active split URL experiment, or one of its "
+    "variant pages is the other's control page, so a visitor could be sent "
+    "from one test into the other. Pause or complete the other experiment, or "
+    "change the URLs here with PUT /api/v1/experiments/{id}; the dashboard "
+    "cannot edit split_url_config."
+)
+#: The one warning for another active split URL experiment that start's
+#: checks pass over. The experiment id is the only value in it.
+SPLIT_URL_START_CHECK_SKIPPED = (
+    "Split URL start check skipped experiment %s: its stored split_url_config "
+    "is not valid"
 )
 
 # Create router with tag for documentation grouping
@@ -265,6 +315,102 @@ def _reject_unroutable_split_url(experiment_type: Any) -> None:
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
         detail=SPLIT_URL_UNAVAILABLE_DETAIL,
     )
+
+
+def _is_split_url(experiment_type: Any) -> bool:
+    return getattr(experiment_type, "value", experiment_type) == "split_url"
+
+
+def _refuse_split_url_update(
+    experiment: Experiment, experiment_in: ExperimentUpdate, fields_sent: set
+) -> None:
+    """Refuse an update whose result is a split URL experiment that cannot
+    split (#393).
+
+    The result is what the request sent, and what is stored for every field
+    it left out (a ``variants`` of null changes nothing, so the stored ones
+    count). Only a request that sends ``variants``, ``split_url_config`` or
+    ``experiment_type`` is checked. The 422 is at the rule's place inside
+    ``split_url_config`` when that was sent, else at ``variants``, else at
+    ``experiment_type``, with the text create gives.
+    """
+    if not fields_sent & {"variants", "split_url_config", "experiment_type"}:
+        return
+    experiment_type = (
+        experiment_in.experiment_type
+        if "experiment_type" in fields_sent
+        else experiment.experiment_type
+    )
+    if not _is_split_url(experiment_type):
+        return
+    config = (
+        experiment_in.split_url_config
+        if "split_url_config" in fields_sent
+        else experiment.split_url_config
+    )
+    if not isinstance(config, SplitUrlConfig) and not config:
+        return
+    variants = experiment_in.variants if "variants" in fields_sent else None
+    if variants is None:
+        variants = experiment.variants
+    problem = find_split_url_config_problem(config, variants)
+    if problem is None:
+        return
+    if "split_url_config" in fields_sent:
+        loc = ["body", "split_url_config", *problem.loc]
+    elif "variants" in fields_sent:
+        loc = ["body", "variants"]
+    else:
+        loc = ["body", "experiment_type"]
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=[{"loc": loc, "msg": problem.message, "type": SPLIT_URL_CONFIG_ERROR}],
+    )
+
+
+def _split_url_start_refusal(db: Session, experiment: Experiment) -> Optional[str]:
+    """Why a split URL experiment cannot start, as start's 400 text, or None.
+
+    In order: it has no configuration; its configuration fails
+    ``split_url_config_problem``; another active split URL experiment has the
+    same entry (control URL host and path); the two would chain. Another
+    active split URL experiment whose stored configuration fails the rules is
+    skipped, with one warning, and never makes this raise.
+    """
+    if not _is_split_url(experiment.experiment_type):
+        return None
+    if not experiment.split_url_config:
+        return SPLIT_URL_START_NO_CONFIG
+    problem = split_url_config_problem(experiment.split_url_config, experiment.variants)
+    if problem is not None:
+        return SPLIT_URL_START_NOT_VALID + problem + " " + SPLIT_URL_START_FIX_HINT
+    mine = split_url_entries(experiment.split_url_config, experiment.variants)
+    if mine is None:
+        # No control variant: start has already refused that.
+        return None
+
+    others = (
+        db.query(Experiment)
+        .filter(
+            Experiment.experiment_type == ExperimentType.SPLIT_URL,
+            Experiment.status == ExperimentStatus.ACTIVE,
+            Experiment.id != experiment.id,
+        )
+        .order_by(Experiment.id)
+        .all()
+    )
+    conflicts = set()
+    for other in others:
+        theirs = split_url_entries(other.split_url_config, other.variants)
+        if theirs is None:
+            logger.warning(SPLIT_URL_START_CHECK_SKIPPED, other.id)
+            continue
+        conflicts.add(split_url_conflict(mine, theirs))
+    if SAME_ENTRY in conflicts:
+        return SPLIT_URL_START_SAME_ENTRY
+    if CHAIN in conflicts:
+        return SPLIT_URL_START_CHAIN
+    return None
 
 
 @router.get(
@@ -709,8 +855,10 @@ async def update_experiment(
             a PAUSED experiment; variants or metrics outside DRAFT
         HTTPException 404: If the experiment doesn't exist
         HTTPException 422: If `targeting_rules` is not a valid rule set,
-            `status` differs from the experiment's current status, or the
-            request contains `schedule`
+            `status` differs from the experiment's current status, the
+            request contains `schedule`, or a request sending `variants`,
+            `split_url_config` or `experiment_type` would leave a split URL
+            experiment whose `split_url_config` does not match its variants
     """
     try:
         # Get experiment
@@ -823,6 +971,10 @@ async def update_experiment(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail=f"Cannot update {field} for experiments in {experiment.status.value} status",
                     )
+
+        # A split URL experiment's URL variants match its variants (#393), on
+        # the result of this update.
+        _refuse_split_url_update(experiment, experiment_in, fields_sent)
 
         # Capture pre-update snapshot for audit trail. The update below
         # rebinds targeting_rules (setattr) rather than changing the dict,
@@ -1133,6 +1285,11 @@ async def start_experiment(
     - An experiment with no start date must not have an end date that has
       passed: set a later one, or clear it, with
       PUT /{experiment_id}/schedule first
+    - A split URL experiment must have a `split_url_config` whose URL
+      variants match its variants. Its control URL's host and path must not
+      be those of an active split URL experiment's control URL or of one of
+      that experiment's variant URLs, and none of its variant URLs may have
+      the host and path of an active split URL experiment's control URL
 
     Returns:
         ExperimentResponse: The updated experiment with ACTIVE status
@@ -1183,6 +1340,15 @@ async def start_experiment(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Experiment must have at least one metric defined",
+            )
+
+        # A split URL experiment whose configuration cannot split (#393).
+        # Here, before the service: a check the service fails raises
+        # ValueError, which the except below turns into a 500.
+        split_url_refusal = _split_url_start_refusal(db, experiment)
+        if split_url_refusal is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=split_url_refusal
             )
 
         before_audit = audit_snapshot(EntityType.EXPERIMENT, experiment)

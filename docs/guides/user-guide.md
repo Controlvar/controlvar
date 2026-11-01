@@ -162,8 +162,8 @@ on a `DRAFT` experiment, with an ADMIN or DEVELOPER token. The experiment activa
 `start_date` and completes at `end_date`, which must be at least an hour later. The scheduler
 checks every 15 minutes by default (`EXPERIMENT_SCHEDULER_INTERVAL_MINUTES`), so it can start
 or complete up to that much later. A draft that
-is not ready to start (it needs two variants, a control and a metric) stays a draft until it
-is. A date you leave out of the request is left as it is, and `null` clears it. A date written without a
+is not ready to start (it needs two variants, a control and a metric, and a split URL
+experiment needs a valid `split_url_config`) stays a draft until it is. A date you leave out of the request is left as it is, and `null` clears it. A date written without a
 UTC offset is read in `time_zone`, an IANA name such as `America/Los_Angeles` (default
 `UTC`); a date with an offset, like the ones below, keeps it. Dates are stored in UTC.
 The experiment's page shows these dates in your browser's time zone, as "Starts" and "Ends"

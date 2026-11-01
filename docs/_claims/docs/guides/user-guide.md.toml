@@ -457,11 +457,12 @@ by = [
 ]
 
 [[unit]]
-text = "A draft that is not ready to start (it needs two variants, a control and a metric) stays a draft until it is."
+text = "A draft that is not ready to start (it needs two variants, a control and a metric, and a split URL experiment needs a valid split_url_config) stays a draft until it is."
 by = [
     "test:backend/tests/integration/services/test_scheduler_draft_validation.py::test_d1_a_one_variant_draft_stays_a_draft_until_it_has_two",
     "test:backend/tests/integration/services/test_scheduler_draft_validation.py::test_d2_a_draft_whose_metrics_were_removed_after_scheduling_stays_a_draft",
     "test:backend/tests/integration/services/test_scheduler_draft_validation.py::test_d3_a_valid_draft_starts_in_the_same_tick_as_one_that_cannot",
+    "test:backend/tests/integration/services/test_scheduler_draft_validation.py::test_d7_a_split_url_draft_that_cannot_split_stays_a_draft",
 ]
 
 [[unit]]

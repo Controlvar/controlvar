@@ -30,6 +30,7 @@ from backend.app.schemas.experiment import (
     ExperimentUpdate,
     SequentialTestingConfigInput,
 )
+from backend.app.schemas.split_url_config import split_url_config_problem
 from backend.app.schemas.variance_reduction import VarianceReductionConfig
 
 logger = logging.getLogger(__name__)
@@ -1364,6 +1365,25 @@ class ExperimentService:
                 f"Experiment {experiment.id} does not have any metrics defined"
             )
             return False
+
+        # A split URL experiment needs a configuration whose URL variants
+        # match its variants (#393). The checks against other experiments are
+        # start's alone.
+        if experiment.experiment_type == ExperimentType.SPLIT_URL:
+            if not experiment.split_url_config:
+                logger.warning(f"Experiment {experiment.id} has no split_url_config")
+                return False
+            if (
+                split_url_config_problem(
+                    experiment.split_url_config, experiment.variants
+                )
+                is not None
+            ):
+                logger.warning(
+                    f"Experiment {experiment.id} has a split_url_config that is "
+                    "not valid"
+                )
+                return False
 
         # All checks passed
         return True

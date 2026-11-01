@@ -240,6 +240,15 @@ def test_a_put_can_correct_the_stored_config(admin_client, db_session, make_expe
 
 DETAIL = "split_url_config is not valid; update it with PUT /api/v1/experiments/{id}"
 
+#: A configuration a split_url experiment with ``_create_body``'s variants can
+#: be created with: its URL variants name those variants (#393).
+MATCHING = {
+    "variants": [
+        {"name": "Control", "url": "https://example.com/0", "traffic_allocation": 50},
+        {"name": "Treatment", "url": "https://example.com/1", "traffic_allocation": 50},
+    ]
+}
+
 
 @pytest.mark.modules
 @pytest.mark.regression
@@ -249,7 +258,7 @@ def test_the_preview_of_a_stored_out_of_range_config_answers_409(
     created = admin_client.post(
         f"{EXPERIMENTS}/",
         json=_create_body(
-            _name(), experiment_type="split_url", split_url_config=_split_url(50, 50)
+            _name(), experiment_type="split_url", split_url_config=MATCHING
         ),
     )
     assert created.status_code == 201, created.text

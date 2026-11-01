@@ -134,16 +134,25 @@ by = [
 ]
 
 [[unit]]
-text = "variants[].name | string | Yes | The variant's name"
-by = ["test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlVariant::test_variant_missing_name_raises"]
-
-[[unit]]
-text = "variants[].url | string | Yes | The URL this variant is sent to (stored as given; not checked)"
-by = ["test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlVariant::test_variant_missing_url_raises"]
-
-[[unit]]
-text = "variants[].traffic_allocation | number | Yes | Percentage of traffic: each from 0 to 100, and they must add up to 100"
+text = "variants[].name | string | Yes | The name of the experiment variant this URL is for"
 by = [
+    "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlVariant::test_variant_missing_name_raises",
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_config_that_does_not_match_its_variants_is_refused_at_its_loc",
+]
+
+[[unit]]
+text = "variants[].url | string | Yes | The URL for this variant: an absolute http:// or https:// URL (see Validation Rules), stored as given"
+by = [
+    "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlVariant::test_variant_missing_url_raises",
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_url_no_visitor_could_be_sent_to_is_refused_at_its_loc",
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_usable_url_is_accepted_and_stored_as_sent",
+]
+
+[[unit]]
+text = "variants[].traffic_allocation | number | Yes | Percentage of traffic: each from 0 to 100, they must add up to 100, and each equals its experiment variant's"
+by = [
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_config_that_does_not_match_its_variants_is_refused_at_its_loc",
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_an_allocation_within_0_01_matches",
     "test:backend/tests/unit/schemas/test_split_url_allocation_range.py::test_an_allocation_outside_0_to_100_is_refused_though_the_sum_is_right",
     "test:backend/tests/unit/schemas/test_split_url_allocation_range.py::test_an_allocation_from_0_to_100_is_accepted",
     "test:backend/tests/unit/schemas/test_split_url_allocation_range.py::test_the_limits_are_inclusive_and_exact",
@@ -266,15 +275,21 @@ text = "Validation Rules"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "On create, split_url_config is checked for:"
-by = ["exempt:baseline"]
+text = "On create and update, split_url_config is checked for:"
+by = [
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_create_refuses_a_config_that_can_never_split_at_its_loc",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_a_put_resending_a_stored_config_that_breaks_the_rules_answers_422",
+]
 
 [[unit]]
-text = "at least 2 URL variants;"
-by = ["test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlValidation::test_single_variant_rejected"]
+text = "at least 2 URL variants, with unique names;"
+by = [
+    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlValidation::test_single_variant_rejected",
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_url_variant_names_are_unique",
+]
 
 [[unit]]
-text = "traffic_allocation values that are each from 0 to 100 and add up to 100 (within 0.01), none of them NaN or infinite."
+text = "traffic_allocation values that are each from 0 to 100 and add up to 100 (within 0.01), none of them NaN or infinite;"
 by = [
     "test:backend/tests/unit/schemas/test_split_url_allocation_range.py::test_an_allocation_outside_0_to_100_is_refused_though_the_sum_is_right",
     "test:backend/tests/unit/schemas/test_split_url_allocation_range.py::test_the_sum_must_still_be_100_within_the_tolerance",
@@ -285,11 +300,150 @@ by = [
 ]
 
 [[unit]]
-text = "Nothing else about it is checked: the URLs are stored as given, the number of URL variants need not match the experiment's variants, and an experiment of another type can carry a configuration, as a split_url experiment can be created without one (its preview then answers 400)."
+text = "a url for each that is an absolute http:// or https:// URL of at most 2048 characters with an ASCII host name (an internationalised name in its xn-- form), without a user name or password, a # fragment, a backslash, whitespace or control characters."
 by = [
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_url_no_visitor_could_be_sent_to_is_refused_at_its_loc",
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_usable_url_is_accepted_and_stored_as_sent",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_create_refuses_a_config_that_can_never_split_at_its_loc",
+]
+
+[[unit]]
+text = "A URL is stored exactly as sent."
+by = ["test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_usable_url_is_accepted_and_stored_as_sent"]
+
+[[unit]]
+text = "In a split_url experiment the configuration must also match the experiment's variants:"
+by = [
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_config_that_does_not_match_its_variants_is_refused_at_its_loc",
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_the_per_field_rules_hold_on_an_experiment_of_another_type",
+]
+
+[[unit]]
+text = "each URL variant names one of the experiment's variants, and each of those has exactly one URL variant;"
+by = [
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_config_that_does_not_match_its_variants_is_refused_at_its_loc",
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_url_variant_names_are_unique",
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_the_url_variants_may_be_listed_in_any_order",
+]
+
+[[unit]]
+text = "each URL variant's traffic_allocation equals its experiment variant's, within 0.01: the experiment's variants decide the split;"
+by = [
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_config_that_does_not_match_its_variants_is_refused_at_its_loc",
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_an_allocation_within_0_01_matches",
+]
+
+[[unit]]
+text = "no URL variant other than the control URL has the control URL's host and path."
+by = ["test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_config_that_does_not_match_its_variants_is_refused_at_its_loc"]
+
+[[unit]]
+text = "The control URL is the URL variant named like the experiment's control variant."
+by = [
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_config_that_does_not_match_its_variants_is_refused_at_its_loc",
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_the_url_variants_may_be_listed_in_any_order",
+]
+
+[[unit]]
+text = "Hosts are compared without case or port, and paths without one trailing /; the query string is not compared."
+by = [
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_normalize_host",
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_normalize_path",
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_an_entry_is_the_host_and_path_without_the_query",
+]
+
+[[unit]]
+text = "A variant whose URL has the control URL's path on another host is accepted."
+by = [
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_destination_with_the_entrys_path_on_another_host_is_accepted",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_update_accepts_a_variant_with_the_control_path_on_another_host",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_create_accepts_a_variant_with_the_control_path_on_another_host",
+]
+
+[[unit]]
+text = "A refusal answers 422 at the rule's place, such as [\"body\", \"split_url_config\", \"variants\", 1, \"name\"], with a fixed message that names the variant and never repeats a URL."
+by = ["test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_create_refuses_a_config_that_can_never_split_at_its_loc"]
+
+[[unit]]
+text = "An update is checked on its result: a PUT that sends variants, split_url_config or experiment_type is checked with whatever it leaves out taken from what is stored, so variants sent alone are checked against the stored configuration, and the refusal is then at [\"body\", \"variants\"] (or [\"body\", \"experiment_type\"])."
+by = [
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_update_refuses_a_config_that_does_not_match_and_writes_nothing",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_update_of_variants_alone_is_checked_against_the_stored_config",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_update_of_variants_and_config_together_is_accepted",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_changing_the_type_to_split_url_checks_the_stored_config",
+]
+
+[[unit]]
+text = "A configuration stored before a rule is kept as it was: a PUT that sends none of those three fields works, and one that sends the configuration back must correct it."
+by = ["test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_a_put_resending_a_stored_config_that_breaks_the_rules_answers_422"]
+
+[[unit]]
+text = "An experiment of another type can carry a configuration, which is held to the first list only, and a split_url experiment can be created without one (its preview then answers 400)."
+by = [
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_the_per_field_rules_hold_on_an_experiment_of_another_type",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_an_experiment_of_another_type_is_held_to_the_per_field_rules_only",
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_split_url_experiment_may_still_be_created_without_a_config",
     "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestPreviewSplitUrlAssignment::test_preview_split_url_without_config_returns_400",
     "test:modules/backend/tests/unit/api/test_split_url_experiment_api.py::TestExperimentCreateWithSplitUrlConfig::test_experiment_create_split_url_type_without_config_is_allowed",
 ]
+
+[[unit]]
+text = "Starting a split URL experiment"
+by = ["exempt:label"]
+
+[[unit]]
+text = "POST /api/v1/experiments/{id}/start answers 400, with a detail that says what to change and that it is changed with PUT /api/v1/experiments/{id}, when the split URL experiment:"
+by = [
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_refuses_a_split_url_experiment_with_no_config",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_refuses_a_config_that_cannot_split_saying_why",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_refuses_the_same_control_page_as_an_active_experiment",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_refuses_a_chain_either_way",
+]
+
+[[unit]]
+text = "has no split_url_config;"
+by = ["test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_refuses_a_split_url_experiment_with_no_config"]
+
+[[unit]]
+text = "has one that breaks a rule above;"
+by = ["test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_refuses_a_config_that_cannot_split_saying_why"]
+
+[[unit]]
+text = "has the same control URL host and path as an active split URL experiment;"
+by = [
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_refuses_the_same_control_page_as_an_active_experiment",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_a_paused_experiment_does_not_hold_its_control_page",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_says_same_page_before_chain",
+]
+
+[[unit]]
+text = "would chain with an active split URL experiment: its control URL has the host and path of that experiment's variant URL, or one of its variant URLs has the host and path of that experiment's control URL."
+by = [
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_refuses_a_chain_either_way",
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_chain_either_way_conflicts",
+]
+
+[[unit]]
+text = "Refusing every such link refuses chains and loops of any length."
+by = [
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_chain_either_way_conflicts",
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_two_way_crossing_is_a_chain",
+]
+
+[[unit]]
+text = "The same path on another host is neither the same control URL nor a chain."
+by = [
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_accepts_the_same_path_on_another_host",
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_the_same_path_on_another_host_does_not_conflict",
+]
+
+[[unit]]
+text = "An active split URL experiment whose stored configuration breaks a rule is left out of the last two checks."
+by = ["test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_skips_an_active_experiment_whose_stored_config_breaks_the_rules"]
+
+[[unit]]
+text = "When the scheduler starts a draft at its start_date, it makes the first two checks and leaves a draft that fails them as a draft."
+by = ["test:backend/tests/integration/services/test_scheduler_draft_validation.py::test_d7_a_split_url_draft_that_cannot_split_stays_a_draft"]
 
 [[unit]]
 text = "Error Responses"
@@ -300,10 +454,11 @@ text = "Status | Meaning"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "400 Bad Request | Preview: the experiment is not a split_url experiment, or has no split_url_config"
+text = "400 Bad Request | Preview: the experiment is not a split_url experiment, or has no split_url_config. Start: see Starting a split URL experiment"
 by = [
     "test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlPreview::test_preview_for_regular_experiment_returns_400",
     "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestPreviewSplitUrlAssignment::test_preview_split_url_without_config_returns_400",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_refuses_a_split_url_experiment_with_no_config",
 ]
 
 [[unit]]
@@ -322,12 +477,19 @@ text = "404 Not Found | Preview: no experiment has this id"
 by = ["test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlPreview::test_preview_nonexistent_experiment_returns_404"]
 
 [[unit]]
-text = "409 Conflict | Preview: the stored split_url_config is not valid, such as an allocation outside 0 to 100 saved before it was checked; update it with PUT /api/v1/experiments/{id}"
-by = ["test:backend/tests/integration/api/test_split_url_allocation_range_api.py::test_the_preview_of_a_stored_out_of_range_config_answers_409"]
+text = "409 Conflict | Preview: the stored split_url_config is not valid, such as an allocation outside 0 to 100 or a URL saved before it was checked; update it with PUT /api/v1/experiments/{id}"
+by = [
+    "test:backend/tests/integration/api/test_split_url_allocation_range_api.py::test_the_preview_of_a_stored_out_of_range_config_answers_409",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_the_preview_of_a_stored_config_breaking_a_url_rule_answers_409",
+]
 
 [[unit]]
-text = "422 Unprocessable Entity | Create: the body fails validation, such as allocations that do not sum to 100"
-by = ["test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlValidation::test_traffic_not_summing_to_100_rejected"]
+text = "422 Unprocessable Entity | Create or update: the body fails validation, such as allocations that do not sum to 100 or URL variants that do not match the experiment's variants"
+by = [
+    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlValidation::test_traffic_not_summing_to_100_rejected",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_create_refuses_a_config_that_can_never_split_at_its_loc",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_update_refuses_a_config_that_does_not_match_and_writes_nothing",
+]
 
 [[unit]]
 text = "501 Not Implemented | Preview, or creating a split_url experiment, in a core deployment"
