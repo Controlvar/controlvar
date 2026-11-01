@@ -46,7 +46,7 @@ PREVIOUS_CORE_HEAD = "d29a479daafe"
 #: The core head of this tree: ``607c51a59bf5`` (#1497), after
 #: ``4c2c09a2b3e8`` (#1206), the revision after this one.
 CORE_HEAD = "607c51a59bf5"
-MODULES_HEAD = "modules_0002_warehouse_analysis"
+MODULES_HEAD = "modules_0003_lower_is_better"
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},

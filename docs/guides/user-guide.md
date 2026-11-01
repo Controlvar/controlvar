@@ -222,6 +222,8 @@ while the experiment is a draft), or go to http://localhost:3000/results/EXPERIM
 
 To follow one result from a visitor's click to this page on the demo stack, see [Guided examples](guided-examples.md#ab-test).
 
+Which events count, and which do not, is on [How events count](how-events-count.md).
+
 #### Experiment Summary Card
 
 Shows at a glance:

@@ -228,8 +228,12 @@ text = "Show migration history, newest first, down to the first revision (<base>
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "The modules branch has two revisions, modules_0001_rbac and then modules_0002_warehouse_analysis: downgrade modules@-1 unapplies modules_0002_warehouse_analysis only, and downgrade modules@-2 the whole branch."
-by = ["exempt:baseline"]
+text = "The modules branch has three revisions, modules_0001_rbac, modules_0002_warehouse_analysis and then modules_0003_lower_is_better: downgrade modules@-1 unapplies modules_0003_lower_is_better only, and downgrade modules@-3 the whole branch."
+by = ["mechanism:alembic-plan-unapply"]
+
+[[unit]]
+text = "To stop anywhere in between, name the revision to end at, such as downgrade modules_0002_warehouse_analysis: a count in between names a different revision once the branch grows."
+by = ["mechanism:alembic-plan-relative-downgrade"]
 
 [[unit]]
 text = "Creating an Experiment"

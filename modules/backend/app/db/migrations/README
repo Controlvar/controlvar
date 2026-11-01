@@ -25,18 +25,26 @@ which lands the file here.  A core revision names the core head instead
 (`--head <id from alembic heads>`) and lands in
 backend/app/db/migrations/versions.
 
-The branch has two revisions: modules_0001_rbac and, after it,
+The branch has three revisions: modules_0001_rbac, then
 modules_0002_warehouse_analysis (the warehouse-analysis tables; it removes the
-earlier warehouse_connections table and its rows -- see its docstring).
+earlier warehouse_connections table and its rows -- see its docstring), then
+modules_0003_lower_is_better (warehouse_sources.lower_is_better, false on
+every row).
 
-Rolling back: `alembic downgrade modules@-1` unapplies the newest revision,
-`modules@-2` the whole branch; a bare `-1` is ambiguous with two heads.  NOT
-`modules@base` -- modules_0001_rbac is not an alembic base any more, and with a
-single tree root alembic cannot filter a downgrade by branch label, so
-`modules@base` resolves to 27 revisions: the whole core chain to base, every
-table dropped.  Each revision's downgrade drops only the objects its own
-upgrade() created -- it marks each one with a PostgreSQL COMMENT -- so it never
-drops the tables a fresh full-profile bootstrap built from the models.
+Rolling back: name the revision to end at -- `alembic downgrade
+modules_0002_warehouse_analysis` unapplies modules_0003_lower_is_better only,
+`downgrade modules_0001_rbac` modules_0002_warehouse_analysis as well.  A
+relative step counts from the newest revision the tree has, so it names a
+different revision each time the branch grows: `modules@-1` is the newest
+revision, `modules@-3` the whole branch.  A bare `-1` is ambiguous with two
+heads.  NOT `modules@base` -- modules_0001_rbac is not an alembic base any
+more, and with a single tree root alembic cannot filter a downgrade by branch
+label, so `modules@base` resolves to the whole core chain to base, every table
+dropped.  modules_0001_rbac's and modules_0002_warehouse_analysis's downgrades
+drop only the objects their own upgrade() created -- each marks them with a
+PostgreSQL COMMENT -- so they never drop the tables a fresh full-profile
+bootstrap built from the models.  modules_0003_lower_is_better's downgrade
+drops its column on every database, however the column was made.
 
 Moving to the core profile: nothing to do.  `db/bootstrap.py` leaves the rows
 of this branch alone and skips alembic when the core chain is already at its
