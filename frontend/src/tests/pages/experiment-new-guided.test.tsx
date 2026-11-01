@@ -1101,7 +1101,9 @@ describe('how results will be judged', () => {
     api();
     await toEstimate();
     const group = screen.getByRole('group', { name: 'How results will be judged' });
-    expect(group).toHaveTextContent('Saved with the experiment. You cannot change these after it starts.');
+    expect(group).toHaveTextContent(
+      'Saved with the experiment. The confidence level and the correction cannot be changed after it starts.'
+    );
     expect(screen.getByLabelText('Confidence level')).toHaveValue('0.95');
     expect(screen.getByLabelText('Correction for several variants')).toHaveValue('benjamini_hochberg');
     expect(screen.getByLabelText('Confidence level')).toHaveAccessibleDescription(
