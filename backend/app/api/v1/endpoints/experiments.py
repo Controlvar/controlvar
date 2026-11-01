@@ -709,8 +709,11 @@ async def update_experiment(
             a PAUSED experiment; variants or metrics outside DRAFT
         HTTPException 404: If the experiment doesn't exist
         HTTPException 422: If `targeting_rules` is not a valid rule set,
-            `status` differs from the experiment's current status, or the
-            request contains `schedule`
+            `status` differs from the experiment's current status, the
+            request contains `schedule`, or `metrics` is an empty list or
+            repeats a metric name. An empty or repeating `metrics` is refused
+            before the caller's role, the experiment's existence or its state
+            is checked.
     """
     try:
         # Get experiment

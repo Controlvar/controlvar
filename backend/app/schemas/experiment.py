@@ -265,6 +265,53 @@ class MetricBase(BaseModel):
     )
 
 
+#: The 422 message for a metric name that repeats in one request (#1461). It
+#: gives the 0-based positions of the first repeated pair and never a name, so
+#: nothing from the request is echoed.
+DUPLICATE_METRIC_MESSAGE = (
+    "duplicate metric name; each name may appear once per experiment "
+    "(first seen at metrics[{first}], repeated at metrics[{second}])"
+)
+
+#: What ``metrics`` takes on a create and an update, in their descriptions.
+METRIC_NAMES_DESCRIPTION = (
+    "Each name may appear once: names are compared exactly, so case and spaces "
+    "count (`Revenue` and `revenue` are two metrics), and a repeated name is "
+    "refused with 422."
+)
+
+
+def refuse_duplicate_metric_names(
+    metrics: Optional[List[MetricBase]],
+) -> Optional[List[MetricBase]]:
+    """Refuse a metric list in which a name repeats (#1461).
+
+    Names are compared exactly, as the unique index on (experiment, name)
+    compares them: nothing is trimmed or case-folded, so a pair the database
+    stores side by side (``Revenue`` and ``revenue``) is still accepted.
+
+    The error is ``value_error`` with :data:`DUPLICATE_METRIC_MESSAGE` filled
+    in for the first name that repeats, scanning in order: the position where
+    it was first seen and the position where it repeats.
+
+    Pure: it reads the list and returns it unchanged, so a second run over the
+    same list gives the same answer. The create route builds
+    ``ExperimentCreate`` twice, and the wizard builds it once from its own
+    payload. ``None`` (an update that leaves the metrics as they are) passes.
+    """
+    if metrics is None:
+        return None
+    first_seen: Dict[str, int] = {}
+    for position, metric in enumerate(metrics):
+        first = first_seen.setdefault(metric.name, position)
+        if first != position:
+            raise PydanticCustomError(
+                "value_error",
+                DUPLICATE_METRIC_MESSAGE.format(first=first, second=position),
+            )
+    return metrics
+
+
 class VariantBase(BaseModel):
     """Base model for variant data."""
 
@@ -418,7 +465,11 @@ class ExperimentCreate(ExperimentBase):
     variants: List[VariantBase] = Field(
         ..., min_length=1, description="Experiment variants"
     )
-    metrics: List[MetricBase] = Field(..., min_length=1, description="Metrics to track")
+    metrics: List[MetricBase] = Field(
+        ...,
+        min_length=1,
+        description="Metrics to track, at least one. " + METRIC_NAMES_DESCRIPTION,
+    )
 
     # EP-021: Sequential testing
     sequential_testing_enabled: bool = Field(
@@ -552,6 +603,12 @@ class ExperimentCreate(ExperimentBase):
         """
         return _checked_targeting_rules(value)
 
+    @field_validator("metrics")
+    @classmethod
+    def validate_metric_names(cls, value: List[MetricBase]) -> List[MetricBase]:
+        """Refuse a repeated metric name (#1461); the list is returned as is."""
+        return refuse_duplicate_metric_names(value)
+
     @model_validator(mode="after")
     def default_bayesian_config(self):
         """Turning Bayesian analysis on without a config stores the defaults."""
@@ -631,7 +688,17 @@ class ExperimentUpdate(BaseModel):
     variants: Optional[List[VariantBase]] = Field(
         None, description="Experiment variants"
     )
-    metrics: Optional[List[MetricBase]] = Field(None, description="Metrics to track")
+    metrics: Optional[List[MetricBase]] = Field(
+        None,
+        min_length=1,
+        description=(
+            "Metrics to track, replacing the stored ones: at least one, so an "
+            "empty list is refused with 422. "
+            + METRIC_NAMES_DESCRIPTION
+            + " Left out or null, the metrics are not changed. Changeable only "
+            "while the experiment is a draft."
+        ),
+    )
     # Declared only so a request carrying it is refused (#595). Without the
     # declaration pydantic's default ``extra="ignore"`` would drop the key and
     # answer 200, which is the defect: the update never applied a schedule.
@@ -740,6 +807,18 @@ class ExperimentUpdate(BaseModel):
     ) -> Optional[Dict[str, Any]]:
         """Refuse rules assignment would not apply as they read."""
         return _checked_targeting_rules(value)
+
+    @field_validator("metrics")
+    @classmethod
+    def validate_metric_names(
+        cls, value: Optional[List[MetricBase]]
+    ) -> Optional[List[MetricBase]]:
+        """Refuse a repeated metric name (#1461), as a create does.
+
+        Runs after ``min_length``, so an empty list keeps the ``too_short``
+        error a create gives it; null passes and changes nothing.
+        """
+        return refuse_duplicate_metric_names(value)
 
     @model_validator(mode="after")
     def validate_variants(self):

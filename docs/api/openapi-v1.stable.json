@@ -3765,7 +3765,7 @@
             "title": "Key"
           },
           "metrics": {
-            "description": "Metrics to track",
+            "description": "Metrics to track, at least one. Each name may appear once: names are compared exactly, so case and spaces count (`Revenue` and `revenue` are two metrics), and a repeated name is refused with 422.",
             "items": {
               "$ref": "#/components/schemas/MetricBase"
             },
@@ -4885,13 +4885,14 @@
                 "items": {
                   "$ref": "#/components/schemas/MetricBase"
                 },
+                "minItems": 1,
                 "type": "array"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Metrics to track",
+            "description": "Metrics to track, replacing the stored ones: at least one, so an empty list is refused with 422. Each name may appear once: names are compared exactly, so case and spaces count (`Revenue` and `revenue` are two metrics), and a repeated name is refused with 422. Left out or null, the metrics are not changed. Changeable only while the experiment is a draft.",
             "title": "Metrics"
           },
           "name": {
@@ -17504,7 +17505,7 @@
         ]
       },
       "put": {
-        "description": "Update experiment.\n\nThis endpoint allows users to update an existing experiment.\nThe caller's role must hold UPDATE on experiments; who created the\nexperiment is not considered.\n\nFields that can be updated:\n- Basic properties: name, description, hypothesis\n- Variants: if experiment is in DRAFT status\n- Metrics: if experiment is in DRAFT status\n- Targeting (`targeting_rules`): while the experiment is DRAFT or PAUSED,\n  for every role including superusers. On a PAUSED experiment it must be\n  the only field in the request. On an ACTIVE, COMPLETED or ARCHIVED\n  experiment a request that includes `targeting_rules` is refused, even\n  when the value equals the stored one; pause the experiment first.\n  People already assigned keep their variant; the new rules apply to\n  people not yet in the experiment once it is resumed.\n\n`status` is not changed by an update, for any role including superusers.\nA `status` equal to the current one is accepted and changes nothing, so an\nexperiment fetched with GET can be sent back. Any other value is refused\nwith 422; status changes through `POST /api/v1/experiments/{id}/start`,\n`/pause`, `/complete` or `/archive`. `status` still counts as a field\nsent, so on a PAUSED experiment `targeting_rules` must be sent without it.\n\n`schedule` is not applied here: a request that contains it, with any\nvalue including null, is refused with 422. Schedule an experiment with\n`PUT /api/v1/experiments/{experiment_id}/schedule`.\n\nReturns:\n    ExperimentResponse: The updated experiment\n\nRaises:\n    HTTPException 403: If the caller's role does not hold UPDATE on\n        experiments. This is checked before the experiment's state.\n    HTTPException 400: If the experiment's state does not allow the change\n        (the detail names the state): any change to a non-DRAFT experiment\n        by a non-superuser, other than targeting alone on a PAUSED one;\n        targeting outside DRAFT or PAUSED; targeting with other fields on\n        a PAUSED experiment; variants or metrics outside DRAFT\n    HTTPException 404: If the experiment doesn't exist\n    HTTPException 422: If `targeting_rules` is not a valid rule set,\n        `status` differs from the experiment's current status, or the\n        request contains `schedule`",
+        "description": "Update experiment.\n\nThis endpoint allows users to update an existing experiment.\nThe caller's role must hold UPDATE on experiments; who created the\nexperiment is not considered.\n\nFields that can be updated:\n- Basic properties: name, description, hypothesis\n- Variants: if experiment is in DRAFT status\n- Metrics: if experiment is in DRAFT status\n- Targeting (`targeting_rules`): while the experiment is DRAFT or PAUSED,\n  for every role including superusers. On a PAUSED experiment it must be\n  the only field in the request. On an ACTIVE, COMPLETED or ARCHIVED\n  experiment a request that includes `targeting_rules` is refused, even\n  when the value equals the stored one; pause the experiment first.\n  People already assigned keep their variant; the new rules apply to\n  people not yet in the experiment once it is resumed.\n\n`status` is not changed by an update, for any role including superusers.\nA `status` equal to the current one is accepted and changes nothing, so an\nexperiment fetched with GET can be sent back. Any other value is refused\nwith 422; status changes through `POST /api/v1/experiments/{id}/start`,\n`/pause`, `/complete` or `/archive`. `status` still counts as a field\nsent, so on a PAUSED experiment `targeting_rules` must be sent without it.\n\n`schedule` is not applied here: a request that contains it, with any\nvalue including null, is refused with 422. Schedule an experiment with\n`PUT /api/v1/experiments/{experiment_id}/schedule`.\n\nReturns:\n    ExperimentResponse: The updated experiment\n\nRaises:\n    HTTPException 403: If the caller's role does not hold UPDATE on\n        experiments. This is checked before the experiment's state.\n    HTTPException 400: If the experiment's state does not allow the change\n        (the detail names the state): any change to a non-DRAFT experiment\n        by a non-superuser, other than targeting alone on a PAUSED one;\n        targeting outside DRAFT or PAUSED; targeting with other fields on\n        a PAUSED experiment; variants or metrics outside DRAFT\n    HTTPException 404: If the experiment doesn't exist\n    HTTPException 422: If `targeting_rules` is not a valid rule set,\n        `status` differs from the experiment's current status, the\n        request contains `schedule`, or `metrics` is an empty list or\n        repeats a metric name. An empty or repeating `metrics` is refused\n        before the caller's role, the experiment's existence or its state\n        is checked.",
         "operationId": "update_experiment_api_v1_experiments__experiment_id__put",
         "parameters": [
           {
