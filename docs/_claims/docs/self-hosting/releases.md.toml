@@ -316,7 +316,7 @@ text = "Each SDK is released by its own tag, such as sdk/js/v1.2.3 or sdk/python
 by = ["test:backend/tests/smoke/test_sdk_release_wiring.py::test_a_mismatched_tag_is_refused"]
 
 [[unit]]
-text = "npm and PyPI publish by trusted publishing (OIDC), with no long-lived token."
+text = "npm, PyPI and NuGet publish by trusted publishing (OIDC), with no long-lived token."
 by = [
     "test:backend/tests/smoke/test_sdk_release_wiring.py::test_the_release_environment_and_the_token_sit_on_the_publish_jobs_only",
     "test:backend/tests/smoke/test_sdk_release_wiring.py::test_no_job_that_installs_or_tests_can_request_an_oidc_token",

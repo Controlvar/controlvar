@@ -287,9 +287,9 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("for PHP 8.1+ applications. It depends only on ext-curl and ext-json"),
         says("Composer for installation"),
     ),
-    "Targets netstandard2.1 and net6.0; System.Text.Json and HttpClient, no other dependencies.": (
+    "Targets net8.0 and netstandard2.1; System.Text.Json and HttpClient, no other dependencies.": (
         lede(
-            "It targets netstandard2.1 and net6.0, uses System.Text.Json and HttpClient, and has no other dependencies"
+            "It targets net8.0 and netstandard2.1, uses System.Text.Json and HttpClient, and has no other dependencies"
         ),
     ),
     "For Elixir and Phoenix: OTP's :httpc and Jason, with a GenServer-backed ETS cache.": (

@@ -120,12 +120,20 @@ COMPARED_SDKS = sorted(
 )
 
 
+def test_the_compared_sdks_include_every_wired_registry() -> None:
+    """The parametrisation is read from ECOSYSTEMS, so this is what it holds."""
+    assert {"pypi", "npm", "maven", "nuget"} <= {
+        ecosystems()[sdk] for sdk in COMPARED_SDKS
+    }
+    assert {"java", "dotnet"} <= set(COMPARED_SDKS)
+
+
 @pytest.mark.parametrize("sdk", COMPARED_SDKS)
 def test_a_mismatched_tag_is_refused(sdk: str) -> None:
     """The gate's whole job: a tag that does not match the manifest.
 
-    It once listed pypi and npm by name, so wiring java to maven would have
-    left the maven reader's mismatch untested."""
+    It once listed pypi and npm by name, so wiring java to maven and dotnet
+    to nuget would have left those readers' mismatches untested."""
     result = subprocess.run(
         [
             sys.executable,
@@ -416,12 +424,12 @@ def test_every_npm_sdk_names_its_repository(sdk: str) -> None:
 #                       loop over the environment.
 
 UNSPLIT_TOKEN_JOBS: set[str] = set()
-PUBLISH_JOBS = {"pypi", "npm"}
-ENVIRONMENT_JOBS = {"pypi", "npm", "maven"}
+PUBLISH_JOBS = {"pypi", "npm", "nuget"}
+ENVIRONMENT_JOBS = {"pypi", "npm", "maven", "nuget"}
 RELEASE_ENVIRONMENT = "sdk-release"
 
-#: The secrets each job reads, exactly. Only `maven` reads any: npm and PyPI
-#: publish by OIDC, with no long-lived token.
+#: The secrets each job reads, exactly. Only `maven` reads any: npm, PyPI and
+#: NuGet publish by OIDC, with no long-lived token.
 SECRETS_BY_JOB = {
     "maven": {
         "CENTRAL_TOKEN_USERNAME",
@@ -430,8 +438,12 @@ SECRETS_BY_JOB = {
         "GPG_PASSPHRASE",
     },
 }
-#: The configuration variables each job reads, exactly.
-VARIABLES_BY_JOB = {"maven": {"MAVEN_GPG_FINGERPRINT"}}
+#: The configuration variables each job reads, exactly. NUGET_USER is the
+#: nuget.org account the trusted publishing policy belongs to.
+VARIABLES_BY_JOB = {
+    "maven": {"MAVEN_GPG_FINGERPRINT"},
+    "nuget": {"NUGET_USER"},
+}
 
 #: A step whose `run:` installs packages, runs a test suite or builds one.
 INSTALLS_OR_TESTS = re.compile(
@@ -439,6 +451,7 @@ INSTALLS_OR_TESTS = re.compile(
     r"|\bpip3?\s+install\b|-m\s+pip\s+install\b"
     r"|\bpytest\b|-m\s+build\b|\btwine\b"
     r"|\bmvnw?\b"
+    r"|\bdotnet\s+(restore|build|test|pack|add|new|run)\b"
 )
 SECRET = re.compile(r"\$\{\{[^}]*?\bsecrets\.([A-Za-z_][A-Za-z0-9_]*)")
 VARIABLE = re.compile(r"\$\{\{[^}]*?\bvars\.([A-Za-z_][A-Za-z0-9_]*)")
@@ -575,17 +588,20 @@ def _by_job(pattern: re.Pattern) -> dict[str, set[str]]:
 
 def test_each_job_reads_exactly_its_own_secrets() -> None:
     """Only `maven` reads a secret, and exactly the Central token and the
-    signing key: npm and PyPI publish by OIDC, with no long-lived token, and
-    no build job, which runs tests and third-party plugins, holds a
-    credential. Nothing outside the jobs (a workflow-level `env:`) names
-    one either, every expression that reads one names it (no
-    `toJSON(secrets)`, no `secrets['X']`), and the secrets reach `maven`
-    through step `env:` only."""
+    signing key: npm, PyPI and NuGet publish by OIDC, with no long-lived
+    token, and no build job, which runs tests and third-party plugins, holds
+    a credential. Only `maven` and `nuget` read a variable, each its own.
+    Nothing outside the jobs (a workflow-level `env:`) names either, every
+    expression that reads one names it (no `toJSON(secrets)`, no
+    `secrets['X']`), the secrets reach `maven` through step `env:` only, and
+    a variable reaches its job through `env:` only (the job's or a step's),
+    never through `with:` or a `run:` line."""
     workflow = _workflow()
     assert _by_job(SECRET) == SECRETS_BY_JOB
     assert _by_job(VARIABLE) == VARIABLES_BY_JOB
     outside = {key: value for key, value in workflow.items() if key != "jobs"}
     assert not _references(SECRET, outside), _references(SECRET, outside)
+    assert not _references(VARIABLE, outside), _references(VARIABLE, outside)
 
     text = WORKFLOW.read_text(encoding="utf-8")
     assert "secrets: inherit" not in text
@@ -596,9 +612,14 @@ def test_each_job_reads_exactly_its_own_secrets() -> None:
                     f"${{{{ {expression} }}}} reads {context} other than by one name"
                 )
 
-    for name in SECRETS_BY_JOB:
+    for name in set(SECRETS_BY_JOB) | set(VARIABLES_BY_JOB):
         job = workflow["jobs"][name]
-        assert not _references(SECRET, job.get("env") or {}), name
+        job_level = {key: value for key, value in job.items() if key != "steps"}
+        assert not _references(SECRET, job_level), name
+        outside_env = {
+            key: value for key, value in job.items() if key not in ("env", "steps")
+        }
+        assert not _references(VARIABLE, outside_env), name
         for step in job["steps"]:
             label = step.get("name") or step.get("uses")
             outside_env = {key: value for key, value in step.items() if key != "env"}
@@ -646,7 +667,8 @@ def test_the_pypi_publish_job_runs_only_the_download_the_check_and_the_upload() 
     assert len(steps) == 3, [s.get("name") or s.get("uses") for s in steps]
 
     download, check, upload = steps
-    assert download.get("uses") == "actions/download-artifact@v8"
+    # Pinned to a commit: PINNED_ACTIONS below holds the pin.
+    assert str(download.get("uses")).startswith("actions/download-artifact@")
     assert download.get("with") == {
         "name": "pypi-dist",
         "path": "${{ github.workspace }}/dist",
@@ -681,7 +703,12 @@ def test_the_pypa_action_is_pinned_to_a_commit_with_its_version() -> None:
 #: comment for the reader, like the pypi job's publish action.
 PINNED_ACTIONS = [
     ("pypi", "pypa/gh-action-pypi-publish"),
+    ("pypi", "actions/download-artifact"),
+    ("npm", "actions/download-artifact"),
     ("maven", "actions/download-artifact"),
+    ("nuget", "actions/download-artifact"),
+    ("nuget", "actions/setup-dotnet"),
+    ("nuget", "NuGet/login"),
 ]
 
 
@@ -696,15 +723,16 @@ def test_these_actions_are_pinned_to_a_commit_with_their_version(
     ]
     assert len(uses) == 1, (job, uses)
     assert re.fullmatch(rf"{re.escape(action)}@[0-9a-f]{{40}}", uses[0]), uses[0]
+    # Two jobs may pin the same commit (maven and nuget both download with
+    # actions/download-artifact): every line that names it carries the version.
     lines = [
         line
         for line in WORKFLOW.read_text(encoding="utf-8").splitlines()
         if f"uses: {uses[0]}" in line and not line.lstrip().startswith("#")
     ]
-    assert len(lines) == 1, lines
-    assert re.search(rf"uses: {re.escape(uses[0])} # v\d+\.\d+\.\d+$", lines[0]), lines[
-        0
-    ]
+    assert lines, (job, uses[0])
+    for line in lines:
+        assert re.search(rf"uses: {re.escape(uses[0])} # v\d+\.\d+\.\d+$", line), line
 
 
 def test_the_publish_job_compares_with_the_digest_the_build_job_recorded() -> None:
@@ -749,8 +777,14 @@ def test_the_distributions_are_uploaded_once_and_never_overwritten() -> None:
 
 
 def _run_step(
-    step: dict, values: dict[str, str], tmp_path: Path, cwd: Path
+    step: dict,
+    values: dict[str, str],
+    tmp_path: Path,
+    cwd: Path,
+    runner_env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess:
+    """`runner_env` is what the runner itself sets beside the step's `env:`
+    (`GITHUB_SHA`, say)."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
     for name in ("python3", "python"):
@@ -772,6 +806,7 @@ def _run_step(
         "GITHUB_WORKSPACE": str(tmp_path / "workspace"),
         "RUNNER_TEMP": str(runner_temp),
         "HOME": str(tmp_path),
+        **(runner_env or {}),
     }
     for key, value in (step.get("env") or {}).items():
         env[key] = EXPRESSION.sub(resolve, str(value))
@@ -1028,7 +1063,8 @@ def test_the_npm_publish_job_runs_only_its_checks_and_the_publish() -> None:
     assert [s.get("name") or s.get("uses") for s in steps] == NPM_PUBLISH_STEPS
 
     download, name_check, manifest_check, setup, versions, publish = steps
-    assert download.get("uses") == "actions/download-artifact@v8"
+    # Pinned to a commit: PINNED_ACTIONS below holds the pin.
+    assert str(download.get("uses")).startswith("actions/download-artifact@")
     assert download.get("with") == {
         "name": "npm-tarball",
         "path": "${{ github.workspace }}/package",

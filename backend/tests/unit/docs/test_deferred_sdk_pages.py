@@ -19,7 +19,9 @@ until then three things are held here for every one of them, read from files:
    same block, a Maven coordinate on a page that installs it into ``~/.m2``
    (and, for Gradle, reads it there with ``mavenLocal()``). A page with an
    install section says "not yet published" exactly when its SDK is not
-   published.
+   published, except a README a registry shows (``PACKAGED``): that one
+   states no status at all, and keeps the packaged-README contract of
+   ``scripts/check_packaged_readme.py`` instead (DECISIONS T230).
 3. **Attribute targeting on flags.** Which SDKs send a ``context`` on flag
    evaluation is read from each SDK's source: the line that builds the
    evaluate path and the three code lines after it, or, for the two
@@ -305,6 +307,14 @@ INSTALLS: Tuple[Tuple[str, "re.Pattern[str]"], ...] = (
             r"\bdotnet[ \t]{1,40}add[ \t]{1,40}(?:\S{1,200}[ \t]{1,40})?package[ \t]{1,40}(?P<name>[\w.]{1,60})"
         ),
     ),
+    # The .NET 10 SDK's noun-first command and a file-based app's directive.
+    (
+        "nuget",
+        re.compile(
+            r"\bdotnet[ \t]{1,40}package[ \t]{1,40}add[ \t]{1,40}(?P<name>[\w.]{1,60})"
+        ),
+    ),
+    ("nuget", re.compile(r"#:package[ \t]{1,40}(?P<name>[\w.]{1,60})")),
     ("nuget", re.compile(r"\bInstall-Package[ \t]{1,40}(?P<name>[\w.]{1,60})")),
     (
         "nuget",
@@ -494,9 +504,11 @@ INSTALL_SAMPLES = (
         [("packagist", "controlvar/sdk")],
     ),
     ("dotnet add package Controlvar.SDK", [("nuget", "Controlvar.SDK")]),
+    ("dotnet package add Controlvar.SDK@0.1.0", [("nuget", "Controlvar.SDK")]),
+    ("#:package Controlvar.SDK@0.1.0", [("nuget", "Controlvar.SDK")]),
     ("Install-Package Controlvar.SDK", [("nuget", "Controlvar.SDK")]),
     (
-        '<PackageReference Include="Controlvar.SDK" Version="0.2.0" />',
+        '<PackageReference Include="Controlvar.SDK" Version="0.1.0" />',
         [("nuget", "Controlvar.SDK")],
     ),
     (
@@ -555,7 +567,9 @@ def test_a_deferred_page_installs_no_unpublished_package_from_a_registry(page):
 @pytest.mark.parametrize("page", DEFERRED)
 def test_a_deferred_install_section_says_whether_it_is_published(page):
     page_text = text(page)
-    if not INSTALL_HEADING.search(page_text):
+    if not INSTALL_HEADING.search(page_text) or page in PACKAGED:
+        # A README a registry shows says nothing about its status: the
+        # packaged-README contract below holds it instead (T230).
         return
     unpublished = [sdk for sdk in sdks_of(page) if sdk not in PUBLISHED]
     assert says_unpublished(page_text) == bool(unpublished), (
@@ -565,8 +579,122 @@ def test_a_deferred_install_section_says_whether_it_is_published(page):
 
 
 def test_every_deferred_page_with_an_install_section_is_read():
+    """Exact counts, at this tree: the deferred pages with an install
+    section, the ones the says-unpublished rule above holds, and the
+    packaged READMEs the contract below holds instead. Each Plan P pull
+    request that packs a README moves the second and third."""
     with_section = [page for page in DEFERRED if INSTALL_HEADING.search(text(page))]
-    assert len(with_section) >= 20, with_section
+    under_the_rule = [page for page in with_section if page not in PACKAGED]
+    assert (len(with_section), len(under_the_rule), len(PACKAGED)) == (24, 23, 1), (
+        with_section,
+        sorted(PACKAGED),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 2b. The READMEs a registry shows (DECISIONS T230)
+# ---------------------------------------------------------------------------
+
+#: Each README a registry shows, with its SDK: an explicit list, not
+#: ``DEFERRED`` (a packaged README need not be a deferred page). It is held
+#: exactly to the SDKs scripts/check_packaged_readme.py has rules for, and to
+#: the READMEs the packages actually ship.
+PACKAGED: Dict[str, str] = {
+    "sdk/dotnet/README.md": "dotnet",
+}
+
+
+def _script(name: str):
+    from importlib.util import module_from_spec, spec_from_file_location
+
+    spec = spec_from_file_location(name, REPO_ROOT / "scripts" / f"{name}.py")
+    assert spec is not None and spec.loader is not None
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_packaged_readmes_are_the_ones_the_gate_and_the_packages_name():
+    from backend.tests.unit.docs.test_sdk_doc_versions import packaged_readmes, rel
+
+    assert set(PACKAGED.values()) == set(_script("check_packaged_readme").I_README)
+    assert set(PACKAGED) <= {rel(readme) for readme in packaged_readmes()}
+
+
+def _contract_problems(page: str, page_text: str) -> List[str]:
+    sdk = PACKAGED[page]
+    version = _script("check_sdk_version").read_manifest_version(sdk)[0]
+    return _script("check_packaged_readme").problems(sdk, page_text, version)
+
+
+@pytest.mark.parametrize("page", sorted(PACKAGED))
+def test_a_packaged_readme_keeps_the_contract(page):
+    """The contract the release checks on the packed bytes, on the file in
+    the tree: no status, no registry install, no own version, no relative
+    link, and an Install section that links the SDK's page."""
+    assert _contract_problems(page, text(page)) == []
+
+
+@pytest.mark.parametrize("page", sorted(PACKAGED))
+def test_a_packaged_readme_installs_nothing_from_a_registry(page):
+    assert registry_installs(text(page)) == []
+
+
+@pytest.mark.parametrize("page", sorted(PACKAGED))
+def test_a_packaged_readme_claims_no_attribute_targeting_its_client_does_not_send(page):
+    if PACKAGED[page] in SENDS_NO_CONTEXT:
+        assert attribute_claims(text(page)) == []
+
+
+@pytest.mark.parametrize("page", sorted(PACKAGED))
+def test_a_registry_install_anywhere_in_a_packaged_readme_is_refused(page):
+    """PP-3's plant, in memory: an install line in the Quick Start, outside
+    the Install section, fails both the contract and the registry sweep."""
+    original = text(page)
+    planted = original.replace(
+        "## Quick Start\n", "## Quick Start\n\n`dotnet add package Controlvar.SDK`\n", 1
+    )
+    assert planted != original
+    assert any(
+        "installs this repository's package from a registry" in p
+        for p in _contract_problems(page, planted)
+    )
+    assert registry_installs(planted) == [("nuget", "Controlvar.SDK")]
+
+
+#: A link to a page of this repository on GitHub, with a fragment.
+BLOB_LINK = re.compile(
+    r"https://github\.com/Controlvar/controlvar/blob/main/(?P<path>[\w./-]{1,200}?)#(?P<frag>[\w-]{1,100})"
+)
+
+
+def github_slug(heading: str) -> str:
+    """The anchor GitHub gives a Markdown heading: lower case, markup and
+    punctuation other than hyphens and underscores dropped, spaces as hyphens."""
+    heading = re.sub(r"[`*]", "", heading.strip()).lower()
+    return re.sub(r"[^\w\- ]", "", heading).replace(" ", "-")
+
+
+@pytest.mark.parametrize("page", sorted(PACKAGED))
+def test_each_fragment_a_packaged_readme_links_is_a_heading(page):
+    """C4. A registry README is frozen at its tag; a fragment that names no
+    heading leaves its reader at the top of a long page."""
+    links = list(BLOB_LINK.finditer(text(page)))
+    assert links, f"{page} links no page of this repository with a fragment"
+    for link in links:
+        target = REPO_ROOT / link.group("path")
+        assert target.is_file(), link.group(0)
+        slugs = {
+            github_slug(m.group(1))
+            for m in re.finditer(r"^#{1,6}[ \t]+(.+)$", target.read_text("utf-8"), re.M)
+        }
+        assert link.group("frag") in slugs, (link.group(0), sorted(slugs))
+
+
+def test_the_slug_is_github_s():
+    assert github_slug("Installation") == "installation"
+    assert github_slug("TypeScript / Node.js Provider") == "typescript--nodejs-provider"
+    assert github_slug("`useFlag(flagKey)`: FlagState") == "useflagflagkey-flagstate"
 
 
 # ---------------------------------------------------------------------------

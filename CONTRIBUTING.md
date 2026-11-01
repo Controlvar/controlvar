@@ -306,6 +306,13 @@ deployment's id is the one the run printed and that it lists those files, and
 press **Publish**; Maven Central cannot take a version back. To abandon it,
 press **Drop**.
 
+The .NET SDK (`sdk/dotnet/vX.Y.Z`, the package `Controlvar.SDK`) publishes
+from the workflow: its `nuget` job exchanges the OIDC token for a short-lived
+nuget.org API key and pushes the package `nuget-build` checked. A version
+nuget.org already has fails the push. nuget.org does not delete a published
+version: it can only be unlisted, which hides it from search, and a restore
+that names that version still gets it.
+
 ## Layer map
 
 ```text
