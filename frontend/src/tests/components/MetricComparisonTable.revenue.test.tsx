@@ -23,6 +23,7 @@ import { render, screen, within } from '@testing-library/react';
 import axe from 'axe-core';
 import { MetricComparisonTable } from '@/components/results/MetricComparison/MetricComparisonTable';
 import { MetricResult, VariantResult } from '@/types/results';
+import { spokenText, visibleText } from '@/tests/helpers/visibleText';
 
 function variant(overrides: Partial<VariantResult>): VariantResult {
   return {
@@ -112,10 +113,11 @@ function row(name: RegExp): HTMLElement {
   return screen.getByRole('row', { name });
 }
 
+/** Each cell's text as it is seen: an interval's screen-reader twin left out. */
 function cells(r: HTMLElement): string[] {
   return within(r)
     .getAllByRole('cell')
-    .map((c) => c.textContent ?? '');
+    .map((c) => visibleText(c));
 }
 
 describe('a revenue row reads as revenue per user', () => {
@@ -134,6 +136,10 @@ describe('a revenue row reads as revenue per user', () => {
     render(<MetricComparisonTable metrics={[revenueMetric()]} confidenceLevel={0.95} />);
     const change = cells(row(/one_page/))[4];
     expect(change).toBe('+21.0% +1.19 per user (95% CI −0.47 to +2.84)');
+    // A screen reader hears the abbreviation spelled out (#1496).
+    expect(spokenText(within(row(/one_page/)).getAllByRole('cell')[4])).toBe(
+      '+21.0% +1.19 per user (95% confidence interval −0.47 to +2.84)',
+    );
     // The control has no difference of its own.
     expect(cells(row(/Control/))[4]).toBe('—');
   });
@@ -213,7 +219,7 @@ describe('a revenue row reads as revenue per user', () => {
       />,
     );
     const change = within(row(/one_page/)).getAllByRole('cell')[4];
-    expect(change).toHaveTextContent('−27.6% · worse −1.56 per user (95% CI −2.90 to −0.22)');
+    expect(visibleText(change)).toBe('−27.6% · worse −1.56 per user (95% CI −2.90 to −0.22)');
     expect(change).toHaveClass('text-red-700');
     expect(change.textContent).not.toContain('-');
   });

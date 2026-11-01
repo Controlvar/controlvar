@@ -2,26 +2,37 @@ import React, { useState } from 'react';
 import { CorrectionMethod, MetricResult, VariantResult } from '@/types/results';
 import { StatisticalBadge } from '@/components/results/shared/StatisticalBadge';
 import {
+  DifferenceLine,
+  ImpactLine,
   NOT_ENOUGH_DATA,
+  RelativeLine,
   analysedAsMean,
   analysedAsRate,
   buyersWithNoValue,
+  carriesImpact,
+  changeText,
   changeVerdict,
   correctionLabel,
   decisivePValue,
+  differenceLine,
   formatAmount,
-  formatDifferencePerUser,
   formatRate,
-  formatSignedPct,
+  impactLine,
   isFiniteNumber,
   meanDescription,
   metricLowerIsBetter,
   rateDescription,
+  reconciliationNote,
+  relativeLine,
+  reportsImpact,
+  showsAdjusted,
 } from '@/components/results/shared/resultFormat';
+import { IntervalText, LeadWithInterval } from '@/components/results/shared/IntervalText';
 import {
   comparisonsOf,
   correctionName,
   formatAlpha,
+  formatConfidence,
 } from '@/components/results/shared/analysisSettings';
 
 interface MetricComparisonTableProps {
@@ -52,12 +63,6 @@ function changeClass(verdict: 'better' | 'worse' | null, variant: VariantResult)
     return 'text-slate-700';
   }
   return 'text-slate-500';
-}
-
-function formatImprovement(v: number | null | undefined, isControl: boolean): string {
-  if (isControl) return '—';
-  if (!isFiniteNumber(v)) return NOT_ENOUGH_DATA;
-  return formatSignedPct(v);
 }
 
 function formatValue(metric: MetricResult, variant: VariantResult): string {
@@ -156,25 +161,56 @@ function NoValueNote({
   );
 }
 
+/**
+ * Under a table whose server reports the intervals on the change (#1496),
+ * when any interval is shown: what they are, that they are not adjusted, and
+ * that a percentage interval can be very wide.
+ */
+export function intervalFootnote(confidenceLevel: number): string {
+  return (
+    `Intervals are ${formatConfidence(confidenceLevel)} confidence intervals (CI) of the ` +
+    'difference from the control. They are not adjusted for comparing several variants with ' +
+    'the control; significance is, so the two can disagree, and the row says so when they do. ' +
+    'A percentage interval can be very wide when counts are small.'
+  );
+}
+
+/** Under a table with the Impact column: what the impact is. */
+export const IMPACT_FOOTNOTE =
+  "Impact: the difference per user times the variant's users (its Sample Size): how many more " +
+  "converting users, events or value the variant's users had than as many users at the " +
+  "control's rate or mean. Users and events are rounded to whole numbers. Values are added as " +
+  'sent; no currency or unit is read.';
+
 /** Sort key for a possibly non-finite number: unknowns sort first ascending. */
 function sortable(v: number | null | undefined): number {
   return isFiniteNumber(v) ? v : -Infinity;
 }
 
-/**
- * Whether this row shows an adjusted p-value: a correction applies and the
- * metric has two or more treatments with a p-value (#580). With one, the
- * correction changes nothing, so the p-value is shown plainly.
- */
-function showsAdjusted(
-  variant: VariantResult,
-  comparisons: number,
-  correctionMethod?: CorrectionMethod,
-): boolean {
+/** The change cell's second line: the relative interval, or why a mean has none. */
+function RelativeIntervalLine({ line }: { line: RelativeLine }) {
+  if (line.kind === 'unbounded') {
+    return (
+      <p className="text-xs font-normal text-slate-600" data-testid="change-no-interval">
+        {line.text}
+      </p>
+    );
+  }
   return (
-    correctionLabel(correctionMethod) !== null &&
-    comparisons >= 2 &&
-    isFiniteNumber(variant.adjusted_p_value)
+    <span className="block text-xs font-normal text-slate-600" data-testid="change-interval">
+      {' '}
+      <IntervalText interval={line.interval} />
+    </span>
+  );
+}
+
+function ImpactCell({ variant, line }: { variant: VariantResult; line: ImpactLine | null }) {
+  if (variant.is_control) return <>—</>;
+  if (!line) return <span data-testid="impact">{NOT_ENOUGH_DATA}</span>;
+  return (
+    <span data-testid="impact">
+      <LeadWithInterval lead={`${line.value} ${line.noun}`} interval={line.interval} />
+    </span>
   );
 }
 
@@ -256,6 +292,54 @@ interface FlatRow {
   variant: VariantResult;
 }
 
+/** What one row shows, worked out once so the footnotes can ask what is on the page. */
+interface RowView extends FlatRow {
+  decisive: number | null | undefined;
+  comparisons: number;
+  adjustedShown: boolean;
+  verdict: 'better' | 'worse' | null;
+  change: string;
+  relative: RelativeLine | null;
+  difference: DifferenceLine | null;
+  impact: ImpactLine | null;
+  note: string | null;
+}
+
+function rowView(
+  row: FlatRow,
+  comparisons: number,
+  confidenceLevel: number,
+  correctionMethod: CorrectionMethod | undefined,
+): RowView {
+  const { metric, variant } = row;
+  const adjustedShown = showsAdjusted(variant, comparisons, correctionMethod);
+  return {
+    ...row,
+    decisive: decisivePValue(variant),
+    comparisons,
+    adjustedShown,
+    verdict: changeVerdict(metric, variant),
+    change: changeText(metric, variant, confidenceLevel),
+    relative: relativeLine(metric, variant, confidenceLevel, adjustedShown),
+    difference: differenceLine(metric, variant, confidenceLevel, adjustedShown),
+    impact: impactLine(metric, variant, confidenceLevel, adjustedShown),
+    // The notes #1496 added appear only where the server reports the
+    // impact; a response from an older server renders as it did before.
+    note: carriesImpact(variant)
+      ? reconciliationNote(variant, confidenceLevel, adjustedShown, correctionMethod, comparisons)
+      : null,
+  };
+}
+
+/** True when the row shows at least one interval: the interval footnote then explains them. */
+function showsInterval(view: RowView): boolean {
+  return (
+    view.relative?.kind === 'interval' ||
+    Boolean(view.difference?.interval) ||
+    Boolean(view.impact?.interval)
+  );
+}
+
 export function MetricComparisonTable({
   metrics,
   confidenceLevel,
@@ -335,27 +419,42 @@ export function MetricComparisonTable({
     return sortDir === 'asc' ? '↑' : '↓';
   }
 
+  // The Impact column, only when the server reports the impact (#1496): a
+  // response from an older server has no such field, and no column.
+  const impactShown = reportsImpact(metrics);
+  const views = ordered.map((row) =>
+    rowView(row, comparisons.get(row.metric.metric_id) ?? 0, confidenceLevel, correctionMethod),
+  );
+  const intervalNoted = views.some((v) => carriesImpact(v.variant) && showsInterval(v));
+
   return (
     <div className="overflow-x-auto" data-testid="metric-comparison-table">
       <table className="min-w-full divide-y divide-slate-200 text-sm">
         <thead className="bg-slate-50">
           <tr>
             {columns(adjustedHeader).map(([key, label]) => (
-              <th
-                key={key}
-                scope="col"
-                className="px-4 py-3 text-left font-medium text-slate-600"
-                aria-sort={ariaSort(key)}
-              >
-                <button
-                  type="button"
-                  onClick={() => handleSort(key)}
-                  className="inline-flex items-center gap-1 rounded hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              <React.Fragment key={key}>
+                <th
+                  scope="col"
+                  className="px-4 py-3 text-left font-medium text-slate-600"
+                  aria-sort={ariaSort(key)}
                 >
-                  {label}
-                  <span aria-hidden="true">{sortIcon(key)}</span>
-                </button>
-              </th>
+                  <button
+                    type="button"
+                    onClick={() => handleSort(key)}
+                    className="inline-flex items-center gap-1 rounded hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  >
+                    {label}
+                    <span aria-hidden="true">{sortIcon(key)}</span>
+                  </button>
+                </th>
+                {/* Not sortable: impacts of metrics in different units do not compare. */}
+                {key === 'improvement' && impactShown && (
+                  <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600">
+                    Impact
+                  </th>
+                )}
+              </React.Fragment>
             ))}
             <th scope="col" className="px-4 py-3 text-left font-medium text-slate-600">
               Significance
@@ -363,18 +462,15 @@ export function MetricComparisonTable({
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100 bg-white">
-          {ordered.map((row, i) => {
-            const { metric, variant } = row;
-            const decisive = decisivePValue(variant);
-            const k = comparisons.get(metric.metric_id) ?? 0;
-            const adjustedShown = showsAdjusted(variant, k, correctionMethod);
-            const verdict = changeVerdict(metric, variant);
-            const difference = analysedAsRate(metric)
-              ? null
-              : formatDifferencePerUser(variant, confidenceLevel, adjustedShown);
+          {views.map((view, i) => {
+            const { metric, variant, decisive, adjustedShown, verdict, relative, difference } =
+              view;
+            const k = view.comparisons;
             return (
               <tr
                 key={`${metric.metric_id}-${variant.variant_id}`}
+                data-metric-id={metric.metric_id}
+                data-variant-id={variant.variant_id}
                 className={`${i % 2 === 0 ? '' : 'bg-slate-50/50'} ${
                   metric.is_primary ? 'ring-1 ring-inset ring-blue-100' : ''
                 }`}
@@ -408,12 +504,24 @@ export function MetricComparisonTable({
                   </span>
                 </td>
                 <td className={`px-4 py-3 font-medium ${changeClass(verdict, variant)}`}>
-                  <span>{formatImprovement(variant.relative_improvement_pct, variant.is_control)}</span>
+                  <span data-testid="change">{view.change}</span>
                   {verdict && <span> · {verdict}</span>}
+                  {relative && <RelativeIntervalLine line={relative} />}
                   {difference && (
-                    <span className="block text-xs font-normal text-slate-600"> {difference}</span>
+                    <span
+                      className="block text-xs font-normal text-slate-600"
+                      data-testid="change-difference"
+                    >
+                      {' '}
+                      <LeadWithInterval lead={difference.lead} interval={difference.interval} />
+                    </span>
                   )}
                 </td>
+                {impactShown && (
+                  <td className="px-4 py-3 text-slate-700" data-testid="impact-cell">
+                    <ImpactCell variant={variant} line={view.impact} />
+                  </td>
+                )}
                 <td className="px-4 py-3 text-slate-700">
                   <PValueCell variant={variant} comparisons={k} correctionMethod={correctionMethod} />
                 </td>
@@ -424,6 +532,11 @@ export function MetricComparisonTable({
                     isSignificant={variant.is_significant}
                     pLabel={adjustedShown ? 'adjusted p' : 'p'}
                   />
+                  {view.note && (
+                    <p className="mt-1 text-xs text-slate-600" data-testid="reconciliation-note">
+                      {view.note}
+                    </p>
+                  )}
                 </td>
               </tr>
             );
@@ -433,6 +546,16 @@ export function MetricComparisonTable({
       {adjustedHeader && correctionMethod && (
         <p className="mt-3 text-xs text-slate-600" data-testid="adjusted-p-footnote">
           {adjustedFootnote(correctedKs, correctionMethod, confidenceLevel)}
+        </p>
+      )}
+      {intervalNoted && (
+        <p className="mt-3 text-xs text-slate-600" data-testid="interval-footnote">
+          {intervalFootnote(confidenceLevel)}
+        </p>
+      )}
+      {impactShown && (
+        <p className="mt-3 text-xs text-slate-600" data-testid="impact-footnote">
+          {IMPACT_FOOTNOTE}
         </p>
       )}
       {MEAN_FOOTNOTES.map(([type, Footnote]) =>

@@ -22,6 +22,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import ResultDetailPage from '@/pages/results/[id]';
 import { ApiError, apiFetch } from '@/services/api';
 import { makeRouter, routedApi } from './helpers/apiMock';
+import { visibleText } from '@/tests/helpers/visibleText';
 
 // The shared recharts mock draws no axis or tooltip, so this file's mock
 // renders what the chart's formatters make of one value.
@@ -302,7 +303,7 @@ describe.each(CASES)('a %s primary on the results page', (type, name, event, lab
     await renderLoaded();
     const table = screen.getByTestId('metric-comparison-table');
     expect(within(table).getByTestId(`${type}-per-user-footnote`)).toBeInTheDocument();
-    expect(table).toHaveTextContent('+0.50 per user (95% CI +0.14 to +0.86)');
+    expect(visibleText(table)).toContain('+0.50 per user (95% CI +0.14 to +0.86)');
   });
 });
 

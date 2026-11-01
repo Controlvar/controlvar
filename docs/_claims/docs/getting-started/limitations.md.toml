@@ -87,6 +87,15 @@ by = [
 ]
 
 [[unit]]
+text = "A relative-change interval bound above +1,000,000% | The dashboard shows a bound beyond 1,000,000% in either direction as 'above +1,000,000%' or 'below −1,000,000%'; the API returns the exact number."
+by = [
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::abbreviates only past the boundary: 1,000,000.0 is written out, 1,000,000.04 is not",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::writes an upper bound above +1,000,000% as \"above +1,000,000%\" (server: 500/1000 against 1/100000)",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::writes a lower bound below -1,000,000% as \"below −1,000,000%\" (server: a custom mean)",
+    "test:backend/tests/unit/scripts/test_results_interval_fixtures.py::test_the_quoted_numbers",
+]
+
+[[unit]]
 text = "The impact projected to all traffic, to a later period, or in a currency | incremental_impact is the difference from the control times the treatment's own assigned users so far, as a plain number: nothing projects it further, and no currency or unit is read or added."
 by = [
     "test:backend/tests/unit/services/test_difference_intervals.py::test_the_proportion_impact_is_the_difference_times_the_treatments_users",
