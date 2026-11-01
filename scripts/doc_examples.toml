@@ -100,6 +100,7 @@ universe = [
     "docs/guides/dashboard-and-api.md",
     "docs/guides/experiment-wizard.md",
     "docs/guides/guided-examples.md",
+    "docs/guides/how-events-count.md",
     "docs/guides/segments.md",
     "docs/guides/user-guide.md",
     "docs/hipaa/overview.md",

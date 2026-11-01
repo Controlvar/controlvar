@@ -353,6 +353,17 @@ text = "Any other non-2xx status raises immediately."
 by = ["test:sdk/python/tests/test_client.py::TestRateLimit::test_any_other_error_status_raises_at_once"]
 
 [[unit]]
+text = "track returns False on a timeout even when the server stored the event."
+by = [
+    "test:sdk/python/tests/test_client.py::TestTrackNeverRaises::test_a_timeout_returns_false_although_the_event_was_sent",
+    "test:sdk/python/tests/test_transport.py::test_network_failures_raise_transport_error",
+]
+
+[[unit]]
+text = "See How events count before you send it again."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "The cache is checked before any request, so a cached value is returned even if the backend is currently unreachable."
 by = ["test:sdk/python/tests/test_client.py::TestGetAssignment::test_sticky_cache_hit_makes_one_request"]
 
