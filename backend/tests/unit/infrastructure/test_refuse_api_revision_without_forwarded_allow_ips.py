@@ -27,6 +27,8 @@ The contract:
   with a `::notice::`, and no AWS call. Any other entrypoint, a missing one or
   one that cannot be read is checked;
 * the revision cannot be read, or the answer is about another revision: exit 2;
+  so does an exception main() does not handle, with one `::error::` naming
+  its type and no traceback;
 * it runs under `python3 -I -S`, the runner's own python3 with no
   site-packages;
 * it is never run by rollback.yml or db-migrate.yml.
@@ -336,9 +338,10 @@ def assert_refused(code: int, out: str, mode: str, why: str) -> str:
 def test_an_old_release_without_the_setting_passes_with_a_notice(
     capsys, mode, old_release
 ):
-    """A release that still passes uvicorn the fixed list does not read the
-    variable, so its deploy is not refused. Nothing is read from AWS, although
-    a revision without the setting is there to be read."""
+    """A release that still passes uvicorn a fixed list when the variable is
+    unset does not need the setting, so its deploy is not refused. Nothing is
+    read from AWS, although a revision without the setting is there to be
+    read."""
     calls: list[list[str]] = []
 
     def reads(argv: Sequence[str]) -> dict:
@@ -351,6 +354,10 @@ def test_an_old_release_without_the_setting_passes_with_a_notice(
     (notice,) = [ln for ln in out.splitlines() if ln.startswith("::")]
     assert notice.startswith(NOTICE), notice
     assert "backend/docker-entrypoint.sh passes uvicorn a fixed list" in notice
+    assert notice.endswith(
+        "a fixed list when FORWARDED_ALLOW_IPS is unset, so it does not need the "
+        "setting."
+    ), notice
     assert calls == []
 
 
@@ -610,19 +617,25 @@ sys.stdout.write(open(os.environ["FAKE_AWS_ANSWER"]).read())
 
 
 def run_isolated(
-    tmp_path: Path, td: dict, release: Path
+    tmp_path: Path, td: dict, release: Path, *, with_aws: bool = True
 ) -> subprocess.CompletedProcess:
-    """The script as deploy.yml runs it, `python3 -I -S`, with a fake `aws`."""
+    """The script as deploy.yml runs it, `python3 -I -S`, with a fake `aws`
+    first on PATH (or, *with_aws* false, a PATH with no `aws` at all)."""
     fakebin = tmp_path / "fakebin"
     fakebin.mkdir(exist_ok=True)
-    fake = fakebin / "aws"
-    fake.write_text(FAKE_AWS.replace("{python}", sys.executable))
-    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    if with_aws:
+        fake = fakebin / "aws"
+        fake.write_text(FAKE_AWS.replace("{python}", sys.executable))
+        fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
     answer = tmp_path / "answer.json"
     answer.write_text(json.dumps({"taskDefinition": td}))
     env = {k: v for k, v in os.environ.items() if not k.startswith("AWS_")}
     env.update(
-        PATH=f"{fakebin}{os.pathsep}{os.environ.get('PATH', '')}",
+        PATH=(
+            f"{fakebin}{os.pathsep}{os.environ.get('PATH', '')}"
+            if with_aws
+            else str(fakebin)
+        ),
         AWS_CONFIG_FILE="/nonexistent/aws-config",
         AWS_SHARED_CREDENTIALS_FILE="/nonexistent/aws-credentials",
         AWS_EC2_METADATA_DISABLED="true",
@@ -686,6 +699,37 @@ def test_it_runs_with_the_standard_library_only(tmp_path, new_release):
     assert [json.loads(c)[:2] for c in calls] == [
         ["ecs", "describe-task-definition"]
     ] * 2
+
+
+CRASHES = {
+    # An answer whose containerDefinitions is not a list: main() raises.
+    "malformed answer": (
+        {**task_definition(), "containerDefinitions": 7},
+        True,
+        "TypeError",
+    ),
+    # No `aws` on the runner's PATH: subprocess.run raises.
+    "no aws on PATH": (task_definition(), False, "FileNotFoundError"),
+}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("case", sorted(CRASHES))
+def test_an_unexpected_failure_is_could_not_tell(tmp_path, new_release, case):
+    """An exception main() does not handle stops the deploy with exit 2 (not
+    1, a refusal) and one `::error::` naming only its type: no traceback, whose
+    text could carry values from the answer."""
+    td, with_aws, kind = CRASHES[case]
+    crashed = run_isolated(tmp_path, td, new_release, with_aws=with_aws)
+    out = crashed.stdout + crashed.stderr
+    assert crashed.returncode == gate.UNKNOWN, out
+    (error,) = [ln for ln in crashed.stdout.splitlines() if ln.startswith("::")]
+    assert error == (
+        f"::error title=The FORWARDED_ALLOW_IPS check failed::{kind}. This deploy "
+        "stops here: a check that failed did not find FORWARDED_ALLOW_IPS set."
+    ), error
+    assert "Traceback" not in out, out
+    assert crashed.stderr == "", crashed.stderr
 
 
 # --- deploy.yml: placement -------------------------------------------------------
@@ -800,7 +844,8 @@ def test_the_family_step_refuses_a_stack_without_the_setting(runner):
 @pytest.mark.regression
 def test_the_family_step_checks_when_there_is_no_release_entrypoint(runner):
     code, out = _early(runner, task_definition(value=UNSET), None)
-    # A crash exits 1 too: the refusal is told apart by its message.
+    # A failed import exits 1 too (the catch-all wraps main() only): the
+    # refusal is told apart by its message.
     assert code == gate.REFUSED, out
     assert ERROR in out and FIX in out, out
     assert len(runner.calls()) == 1, runner.calls()

@@ -48,8 +48,9 @@ READ-ONLY: `OPERATIONS` is the whole allow-list, and its one call reads.
 
 Exit status: 0 go on (the setting is usable, or the release predates it); 1
 refused; 2 could not tell (bad arguments, the AWS call failed, its answer
-could not be read, or it describes another revision). 2 also stops the
-deploy: "I could not read it" is not "it is set".
+could not be read, it describes another revision, or main() raised: an
+`::error::` naming the exception's type only). 2 also stops the deploy: "I
+could not read it" is not "it is set".
 """
 
 from __future__ import annotations
@@ -234,8 +235,8 @@ def main(
     if predates_the_list(args.release):
         print(
             f"::notice title={VARIABLE} not checked::This release's {ENTRYPOINT} "
-            "passes uvicorn a fixed list of trusted proxies, so its API does not "
-            f"read {VARIABLE} from the task definition."
+            f"passes uvicorn a fixed list when {VARIABLE} is unset, so it does "
+            "not need the setting."
         )
         return OK
 
@@ -279,4 +280,15 @@ def main(
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        status = main()
+    except Exception as exc:
+        # Could not tell, not refused. Only the exception's type is printed:
+        # its message or a traceback could carry values from the answer.
+        print(
+            "::error title=The FORWARDED_ALLOW_IPS check failed::"
+            f"{type(exc).__name__}. This deploy stops here: a check that "
+            f"failed did not find {VARIABLE} set."
+        )
+        status = UNKNOWN
+    sys.exit(status)
