@@ -6,11 +6,20 @@
  * comparison was not computed (no variation in either variant) says so in its
  * Result cell.
  *
- * Nothing here is signalled by colour alone: significance, the SRM warning
- * and "Not computed" are all words.
+ * Each computed metric's heading says the direction the run analysed it in,
+ * "lower is better" or "higher is better", from the run's own result: its
+ * source's setting when the run started, not the source's setting now. A
+ * significant change of a treatment is called better or worse in that
+ * direction, by the core Results table's rule (`changeVerdict`). A result
+ * stored before the direction existed shows neither.
+ *
+ * Nothing here is signalled by colour alone: significance, the direction, the
+ * verdict, the SRM warning and "Not computed" are all words.
  */
 import React from 'react';
+import { changeVerdict } from '@/components/results/shared/resultFormat';
 import {
+  MetricResult,
   RESULTS_DIFFERENCE,
   RunMetric,
   RunResults as Results,
@@ -205,11 +214,45 @@ function intervalText(v: VariantResult): string {
   return `${meanText(ci[0])} to ${meanText(ci[1])}`;
 }
 
+/** The direction a result was analysed in, as its heading says it; null when it carries none. */
+export function directionText(result: MetricResult | null): string | null {
+  if (typeof result?.lower_is_better !== 'boolean') return null;
+  return result.lower_is_better ? 'lower is better' : 'higher is better';
+}
+
+/**
+ * Better or worse, by the core Results table's rule: only a treatment's
+ * significant, finite, non-zero change, and nothing for a result without a
+ * direction. The rule reads the metric's `lower_is_better` and the variant's
+ * `is_control`, `is_significant` and `relative_improvement_pct`, which a
+ * warehouse result carries with the same types and meaning; core's signature
+ * names only those fields, so a type that drifts on either side fails tsc.
+ */
+export function warehouseVerdict(result: MetricResult, variant: VariantResult): 'better' | 'worse' | null {
+  return changeVerdict(result, variant);
+}
+
+function changeClass(verdict: 'better' | 'worse' | null): string {
+  // As core: the colour repeats the word, never replaces it.
+  if (verdict === 'better') return ' text-green-700';
+  if (verdict === 'worse') return ' text-red-700';
+  return '';
+}
+
+function changeText(result: MetricResult, v: VariantResult): string {
+  if (v.is_control || v.relative_improvement_pct === null) return '—';
+  const pct = `${v.relative_improvement_pct > 0 ? '+' : ''}${v.relative_improvement_pct.toFixed(2)}%`;
+  const verdict = warehouseVerdict(result, v);
+  return verdict ? `${pct} · ${verdict}` : pct;
+}
+
 function MetricTable({ metric, experimentKey, run }: { metric: RunMetric; experimentKey: string; run: WarehouseRun }) {
+  const direction = metric.computed ? directionText(metric.result) : null;
   const heading = (
     <h4 className="text-sm font-semibold text-slate-800">
       {metric.name}
       {metric.is_primary && <span className="text-xs font-medium text-slate-600"> (primary)</span>}
+      {direction && <span className="text-xs font-medium text-slate-600"> · {direction}</span>}
     </h4>
   );
   if (!metric.computed || !metric.result) {
@@ -282,10 +325,8 @@ function MetricTable({ metric, experimentKey, run }: { metric: RunMetric; experi
                   <td className="px-3 py-2 text-right tabular-nums">{percent(v.mean)}</td>
                 </>
               )}
-              <td className="px-3 py-2 text-right tabular-nums">
-                {v.is_control || v.relative_improvement_pct === null
-                  ? '—'
-                  : `${v.relative_improvement_pct > 0 ? '+' : ''}${v.relative_improvement_pct.toFixed(2)}%`}
+              <td className={`px-3 py-2 text-right tabular-nums${changeClass(warehouseVerdict(result, v))}`}>
+                {changeText(result, v)}
               </td>
               <td className="px-3 py-2 text-right tabular-nums">
                 {v.is_control ? '—' : pValueText(v.adjusted_p_value ?? v.p_value)}

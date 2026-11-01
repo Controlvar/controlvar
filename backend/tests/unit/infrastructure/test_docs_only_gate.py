@@ -213,6 +213,11 @@ NOT_DOCS_TESTS = {
     "sdk/python/tests/test_readme.py": "reads sdk/python/README.md only",
     # Reads only docs/api/warehouse-analytics.md (same reason as above).
     "modules/backend/tests/unit/test_warehouse_docs_availability.py": "docs/api only",
+    # Reads only docs/api/openapi-v1.full.json, to hold the warehouse source
+    # components to the live document (same reason as above).
+    "modules/backend/tests/smoke/test_warehouse_source_direction_snapshot.py": (
+        "docs/api only"
+    ),
     # Runs the runbook SQL of docs/self-hosting/migrations.md against
     # PostgreSQL, which the docs-only lane does not have. It reads the page
     # through backend/tests/unit/docs/test_email_case_runbook.py, which is in
@@ -222,6 +227,15 @@ NOT_DOCS_TESTS = {
     ),
     # Hands the classifier path STRINGS such as "docs/a.py"; opens no file.
     "backend/tests/unit/scripts/test_classify_changes.py": "fixture strings only",
+    # Hands scripts/contributor_guard.py path STRINGS such as "docs/x.md";
+    # walks the tree, where docs/_claims/ and docs/security/ must each hold a
+    # file (it reads their names, opens none of them); and reads the headings
+    # of CONTRIBUTING.md, which is never docs-only (scripts/classify_changes.py),
+    # so a change to it runs this test. A docs-only change that emptied either
+    # directory would fail here on the next full run, not on its own.
+    "backend/tests/unit/scripts/test_contributor_guard.py": (
+        "names under docs/_claims/ and docs/security/; CONTRIBUTING.md headings"
+    ),
     # Gives storyboard narration claims a source STRING such as
     # "docs/getting-started/quick-start.md"; opens no file under docs/.
     "backend/tests/unit/showcase/test_showcase_narration.py": "fixture strings only",

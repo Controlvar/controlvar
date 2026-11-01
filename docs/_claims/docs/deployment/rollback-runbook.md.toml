@@ -1384,6 +1384,14 @@ by = [
 ]
 
 [[unit]]
+text = "Before running it, note which sources are marked: the dashboard's Warehouse › Metric sources list tags them \"lower is better\", and the compliance audit trail, which the downgrade leaves in place, keeps each source's definition as last saved, lower_is_better included."
+by = [
+    "test:modules/frontend/src/tests/warehouse/warehouse-index.test.tsx::tags a metric source marked lower is better in the list, outside its link",
+    "test:backend/tests/integration/database/test_modules_0003_transitions.py::test_downgrade_drops_the_column_keeps_the_rows_and_an_upgrade_restores_false",
+    "test:modules/backend/tests/integration/warehouse/test_sources_api.py::test_a_metric_source_stores_and_returns_its_direction",
+]
+
+[[unit]]
 text = "Once the downgrade has completed, roll the API back (Method 1)."
 by = ["exempt:instruction"]
 

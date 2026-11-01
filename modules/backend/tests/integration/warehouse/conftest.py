@@ -302,11 +302,11 @@ class Harness:
         assert response.status_code == 200, response.text
         return response.json()
 
-    def ready(self, client) -> Dict[str, str]:
+    def ready(self, client, **metric_overrides) -> Dict[str, str]:
         """A connection with a validated assignment and metric source."""
         connection = self.athena_connection(client)
         assignment = self.assignment_source(client, connection["id"])
-        metric = self.metric_source(client, connection["id"])
+        metric = self.metric_source(client, connection["id"], **metric_overrides)
         self.validate(client, assignment["id"])
         self.validate(client, metric["id"])
         return {

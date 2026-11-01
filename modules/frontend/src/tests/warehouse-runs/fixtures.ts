@@ -45,6 +45,7 @@ export function source(over: Partial<WarehouseSourceSummary> = {}): WarehouseSou
     name: 'Exposures',
     table: 'analytics.exposures',
     metric_type: null,
+    lower_is_better: over.kind === 'metric' ? false : null,
     validated_at: '2026-09-20T10:00:00Z',
     ...over,
   };
@@ -71,6 +72,7 @@ export function computedMetric(over: Partial<RunMetric> = {}): RunMetric {
       metric_name: 'Purchased',
       metric_type: 'conversion',
       is_primary: true,
+      lower_is_better: false,
       has_significant_result: true,
       winning_variant_id: TREATMENT_ID,
       variants: [
@@ -119,6 +121,7 @@ export function meanMetric(over: Partial<RunMetric> = {}): RunMetric {
       metric_name: 'Revenue per user',
       metric_type: 'mean',
       is_primary: false,
+      lower_is_better: false,
       has_significant_result: false,
       winning_variant_id: null,
       variants: [

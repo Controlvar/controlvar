@@ -75,13 +75,6 @@ reason = "A path id that is not a UUID reaches the database query."
 
 [[known]]
 pass = "superuser"
-operation = "GET /api/v1/feature-flags/"
-status = 500
-issue = 955
-reason = "A status filter value outside the enum reaches the database query."
-
-[[known]]
-pass = "superuser"
 operation = "GET /api/v1/metrics/errors"
 status = 500
 issue = 956
@@ -100,13 +93,6 @@ operation = "POST /api/v1/utils/utils/sample-size"
 status = 500
 issue = 958
 reason = "A zero or near-zero input reaches the sample-size arithmetic."
-
-[[known]]
-pass = "superuser"
-operation = "GET /api/v1/mutual-exclusion-groups"
-status = 500
-issue = 955
-reason = "A status filter value outside the enum reaches the database query."
 
 [[known]]
 pass = "superuser"
@@ -145,13 +131,6 @@ reason = "A zero or near-zero input reaches the sample-size arithmetic."
 
 [[known]]
 pass = "superuser"
-operation = "GET /api/v1/notifications/delivery-log"
-status = 500
-issue = 955
-reason = "A status filter value outside the enum reaches the database query."
-
-[[known]]
-pass = "superuser"
 operation = "GET /api/v1/compliance/export"
 status = 500
 issue = 956
@@ -163,13 +142,6 @@ operation = "POST /api/v1/results/{experiment_id}/post-stratification"
 status = 501
 issue = 963
 reason = "Published, and always answers 501: not implemented."
-
-[[known]]
-pass = "superuser"
-operation = "GET /api/v1/llm-experiments/"
-status = 500
-issue = 955
-reason = "A status filter value outside the enum reaches the database query."
 
 [[known]]
 pass = "superuser"
@@ -259,13 +231,6 @@ reason = "A path id that is not a UUID reaches the database query."
 
 [[known]]
 pass = "viewer"
-operation = "GET /api/v1/feature-flags/"
-status = 500
-issue = 955
-reason = "A status filter value outside the enum reaches the database query."
-
-[[known]]
-pass = "viewer"
 operation = "GET /api/v1/metrics/errors"
 status = 500
 issue = 956
@@ -326,13 +291,6 @@ operation = "POST /api/v1/results/{experiment_id}/post-stratification"
 status = 501
 issue = 963
 reason = "Published, and always answers 501: not implemented."
-
-[[known]]
-pass = "viewer"
-operation = "GET /api/v1/llm-experiments/"
-status = 500
-issue = 955
-reason = "A status filter value outside the enum reaches the database query."
 
 [[known]]
 pass = "viewer"

@@ -24,10 +24,14 @@ What is pinned:
 4. ``downgrade modules_0002_warehouse_analysis`` drops the column on both
    origins and keeps the tables and their rows; an upgrade afterwards brings
    the column back ``false`` on every row, not the value that was stored.
+   The compliance audit trail is core, so the downgrade leaves it alone: a
+   source's latest entry still says it was marked lower is better, which is
+   the record the operator page points to.
 """
 
 from __future__ import annotations
 
+import json
 import uuid
 
 import pytest
@@ -204,6 +208,40 @@ def _source_ids(engine, schema: str) -> set[uuid.UUID]:
         return set(conn.execute(text(f'SELECT id FROM "{schema}".{SOURCES}')).scalars())
 
 
+def _audit_source_update(engine, schema: str, source_id: uuid.UUID) -> None:
+    """The compliance audit entry the source API writes for an edit that
+    marks the source lower is better (the definition is
+    ``warehouse_source_service.stored_definition``'s, abridged)."""
+    definition = {"kind": "metric", "name": "metric source", COLUMN: True}
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                f'INSERT INTO "{schema}".audit_events_v2 '
+                "(id, action, resource_type, resource_id, new_value, outcome) "
+                "VALUES (:id, 'UPDATE', 'warehouse_source', :source_id, "
+                "CAST(:definition AS jsonb), 'SUCCESS')"
+            ),
+            {
+                "id": uuid.uuid4(),
+                "source_id": str(source_id),
+                "definition": json.dumps(definition),
+            },
+        )
+
+
+def _audited_direction(engine, schema: str, source_id: uuid.UUID):
+    """The direction in the source's latest audit entry."""
+    with engine.connect() as conn:
+        return conn.execute(
+            text(
+                f"SELECT new_value -> '{COLUMN}' FROM \"{schema}\".audit_events_v2 "
+                "WHERE resource_type = 'warehouse_source' AND resource_id = :id "
+                "ORDER BY timestamp DESC LIMIT 1"
+            ),
+            {"id": str(source_id)},
+        ).scalar_one()
+
+
 # ---------------------------------------------------------------------------
 # 1. The previous release's database, upgraded
 # ---------------------------------------------------------------------------
@@ -295,13 +333,16 @@ def test_downgrade_drops_the_column_keeps_the_rows_and_an_upgrade_restores_false
 ):
     """``downgrade modules_0002_warehouse_analysis`` deletes every source's
     setting, on a bootstrapped database too, and keeps the sources; an
-    upgrade afterwards puts the column back ``false``, not the stored value."""
+    upgrade afterwards puts the column back ``false``, not the stored value.
+    The audit trail still holds the setting the source had."""
     _at_head(origin, test_db, scratch_schema, core_tree, full_tree)
     connection_id = _insert_connection(test_db, scratch_schema)
-    for kind in ("assignment", "metric"):
-        _insert_source_as_the_previous_release(
-            test_db, scratch_schema, connection_id, kind
-        )
+    _insert_source_as_the_previous_release(
+        test_db, scratch_schema, connection_id, "assignment"
+    )
+    marked = _insert_source_as_the_previous_release(
+        test_db, scratch_schema, connection_id, "metric"
+    )
     with test_db.begin() as conn:
         conn.execute(
             text(
@@ -309,6 +350,7 @@ def test_downgrade_drops_the_column_keeps_the_rows_and_an_upgrade_restores_false
                 "WHERE kind = 'metric'"
             )
         )
+    _audit_source_update(test_db, scratch_schema, marked)
     assert _directions(test_db, scratch_schema) == [
         ("assignment", False),
         ("metric", True),
@@ -325,6 +367,7 @@ def test_downgrade_drops_the_column_keeps_the_rows_and_an_upgrade_restores_false
     assert COLUMN not in _columns(test_db, scratch_schema, SOURCES)
     assert WAREHOUSE_TABLES <= _tables(test_db, scratch_schema)
     assert _source_ids(test_db, scratch_schema) == ids
+    assert _audited_direction(test_db, scratch_schema, marked) is True
 
     _ok(tree_profiles.alembic(full_tree, scratch_schema, "upgrade", "heads"))
 
@@ -335,3 +378,5 @@ def test_downgrade_drops_the_column_keeps_the_rows_and_an_upgrade_restores_false
         ("metric", False),
     ]
     assert _catalogue(test_db, scratch_schema) == ("boolean", "NO", "false")
+    # The record of which sources were marked outlives the column.
+    assert _audited_direction(test_db, scratch_schema, marked) is True

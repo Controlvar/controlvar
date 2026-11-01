@@ -18,7 +18,10 @@ Now the scheduler runs that same check before a draft's scheduled first start:
       so one with no metrics (older data) still resumes;
 * D5  a skipped draft is not counted in the tick's ``items_failed``;
 * D6  a check that raises keeps today's handling: that row's savepoint is rolled
-      back, it is counted as failed and logged, and the tick goes on.
+      back, it is counted as failed and logged, and the tick goes on;
+* D7  a split URL draft with no ``split_url_config``, or one whose URL variants
+      do not match its variants, stays a draft, as start would refuse it
+      (#393); one whose configuration matches starts.
 
 The fixtures follow ``test_scheduler_pause_semantics.py``: real users and
 tokens, ``deps.get_db`` the only override, and the scheduler run against the
@@ -46,7 +49,12 @@ from backend.app.api.v1.endpoints.auth import create_local_access_token
 from backend.app.core.config import settings
 from backend.app.main import app
 from backend.app.models.audit_log import ActionType, AuditLog
-from backend.app.models.experiment import Experiment, ExperimentStatus, Metric
+from backend.app.models.experiment import (
+    Experiment,
+    ExperimentStatus,
+    ExperimentType,
+    Metric,
+)
 from backend.app.models.user import User, UserRole
 from backend.app.services.experiment_service import ExperimentService
 from backend.app.services.notification_service import NotificationService
@@ -58,7 +66,8 @@ SCHEDULER_LOGGER = "backend.app.core.scheduler"
 #: The scheduler's warning for a draft it does not start, with the id filled in.
 NOT_READY = (
     "Scheduled start skipped for experiment {id}: it is not ready to start (it "
-    "needs at least two variants, a control and a metric), so it stays a draft"
+    "needs at least two variants, a control and a metric, and a split URL "
+    "experiment needs a valid split_url_config), so it stays a draft"
 )
 
 
@@ -437,3 +446,61 @@ def test_d6_a_check_that_raises_keeps_todays_handling(
     ]
     assert errors == [f"Error activating experiment {raising}"]
     assert _not_ready_warnings(caplog, raising) == []
+
+
+# --- D7: a split URL draft whose configuration cannot split ----------------------
+
+
+def _split_url_config(host, second_name="Treatment"):
+    return {
+        "variants": [
+            {"name": "Control", "url": f"https://{host}/a", "traffic_allocation": 50},
+            {"name": second_name, "url": f"https://{host}/b", "traffic_allocation": 50},
+        ]
+    }
+
+
+def _make_split_url(db_session, experiment_id, config):
+    """Turn the draft into a split URL experiment with *config*, written to the
+    row directly: the API refuses such a configuration, and creating a split
+    URL experiment answers 501 in the core profile."""
+    session = _factory(db_session)()
+    try:
+        row = session.get(Experiment, uuid.UUID(experiment_id))
+        row.experiment_type = ExperimentType.SPLIT_URL
+        row.split_url_config = config
+        session.commit()
+    finally:
+        session.close()
+
+
+@pytest.mark.parametrize(
+    "has_config", [False, True], ids=["no-config", "url-variants-not-its-variants"]
+)
+def test_d7_a_split_url_draft_that_cannot_split_stays_a_draft(
+    client, db_session, developer, caplog, has_config
+):
+    caplog.set_level(logging.WARNING, logger=SCHEDULER_LOGGER)
+    host = f"d7{uuid.uuid4().hex[:10]}.example"
+    config = _split_url_config(host, second_name="B") if has_config else None
+    experiment_id = _create(client, developer)
+    start = _schedule_due(client, developer, experiment_id)
+    _make_split_url(db_session, experiment_id, config)
+
+    sent = _tick(db_session)
+
+    assert _row(db_session, experiment_id) == (ExperimentStatus.DRAFT, start)
+    assert experiment_id not in sent
+    assert _starts_audited(db_session, experiment_id) == 0
+    assert _not_ready_warnings(caplog, experiment_id) == [
+        NOT_READY.format(id=experiment_id)
+    ]
+
+    # Matched: the next tick starts it.
+    _make_split_url(db_session, experiment_id, _split_url_config(host))
+    caplog.clear()
+    sent = _tick(db_session)
+
+    assert _row(db_session, experiment_id) == (ExperimentStatus.ACTIVE, start)
+    assert experiment_id in sent
+    assert _not_ready_warnings(caplog, experiment_id) == []

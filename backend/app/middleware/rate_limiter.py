@@ -523,9 +523,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             pass  # Metrics are best-effort
 
         if not allowed:
-            logger.warning(
+            log.warning(
                 "Rate limit exceeded",
-                extra={"client_ip": client_ip, "path": path, "limit": limit},
+                client_ip=client_ip,
+                path=path,
+                limit=limit,
             )
             return JSONResponse(
                 status_code=429,

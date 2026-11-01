@@ -419,7 +419,7 @@ class TestLLMExperimentCRUD:
             exp
         ]
         db.query.return_value.filter.return_value = filter_chain
-        items, total = svc.list_experiments(db, status="ACTIVE")
+        items, total = svc.list_experiments(db, status=LLMExperimentStatus.ACTIVE)
         assert total == 1
 
 

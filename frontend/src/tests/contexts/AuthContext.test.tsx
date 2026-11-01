@@ -224,6 +224,101 @@ describe('AuthProvider', () => {
     expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull();
   });
 
+  describe('logout signs out before the server answers (#1040)', () => {
+    interface Deferred<T> {
+      promise: Promise<T>;
+      resolve: (value: T) => void;
+      reject: (reason: unknown) => void;
+    }
+
+    function deferred<T>(): Deferred<T> {
+      let resolve!: (value: T) => void;
+      let reject!: (reason: unknown) => void;
+      const promise = new Promise<T>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    }
+
+    async function renderSignedIn() {
+      localStorage.setItem(TOKEN_STORAGE_KEY, 'tok-1');
+      mockFetch.mockResolvedValueOnce(jsonResponse(200, mockUser));
+      render(
+        <AuthProvider>
+          <Consumer />
+        </AuthProvider>,
+      );
+      await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
+    }
+
+    it('is signed out at once while the server never answers (#1040)', async () => {
+      await renderSignedIn();
+      mockFetch.mockImplementationOnce(() => new Promise(() => {}));
+
+      await act(async () => {
+        fireEvent.click(screen.getByText('logout'));
+      });
+
+      expect(screen.getByTestId('status')).toHaveTextContent('anonymous');
+      expect(screen.getByTestId('email')).toHaveTextContent('none');
+      expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull();
+      // The server is still told, with the token being discarded.
+      const [url, init] = mockFetch.mock.calls[1];
+      expect(url).toBe('/api/v1/auth/logout');
+      expect(init.method).toBe('POST');
+      expect(init.headers.Authorization).toBe('Bearer tok-1');
+    });
+
+    it.each([
+      ['is unreachable', (server: Deferred<Response>) => server.reject(new TypeError('Failed to fetch'))],
+      ['answers 500', (server: Deferred<Response>) => server.resolve(jsonResponse(500, { detail: 'boom' }))],
+    ])('a server that %s changes nothing: signed out first, and still (#1040)', async (_label, fail) => {
+      await renderSignedIn();
+      const server = deferred<Response>();
+      mockFetch.mockImplementationOnce(() => server.promise);
+
+      await act(async () => {
+        fireEvent.click(screen.getByText('logout'));
+      });
+      // Signed out before the call settles...
+      expect(screen.getByTestId('status')).toHaveTextContent('anonymous');
+
+      await act(async () => {
+        fail(server);
+      });
+      // ...and its failure neither restores the session nor redirects.
+      expect(screen.getByTestId('status')).toHaveTextContent('anonymous');
+      expect(screen.getByTestId('error')).toHaveTextContent('');
+      expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull();
+      expect(assignSpy).not.toHaveBeenCalled();
+    });
+
+    it("a late 401 to the logout cannot end the next person's session (#1040)", async () => {
+      await renderSignedIn();
+      const server = deferred<Response>();
+      mockFetch.mockImplementationOnce(() => server.promise);
+      await act(async () => {
+        fireEvent.click(screen.getByText('logout'));
+      });
+
+      mockFetch.mockResolvedValueOnce(
+        jsonResponse(200, { access_token: 'jwt-next', token_type: 'bearer', expires_in: 43200, user: mockUser }),
+      );
+      await act(async () => {
+        fireEvent.click(screen.getByText('login'));
+      });
+      await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authenticated'));
+
+      await act(async () => {
+        server.resolve(jsonResponse(401, { detail: 'Could not validate credentials' }));
+      });
+      expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('jwt-next');
+      expect(screen.getByTestId('status')).toHaveTextContent('authenticated');
+      expect(assignSpy).not.toHaveBeenCalled();
+    });
+  });
+
   it('reacts to the token being removed in another tab', async () => {
     localStorage.setItem(TOKEN_STORAGE_KEY, 'tok-1');
     mockFetch.mockResolvedValueOnce(jsonResponse(200, mockUser));
