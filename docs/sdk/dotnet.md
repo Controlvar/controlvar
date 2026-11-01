@@ -1,7 +1,7 @@
 # .NET SDK
 
-`Controlvar.SDK` (v0.2) provides feature flag evaluation, experiment assignment and
-event tracking for .NET applications. It targets `netstandard2.1` and `net6.0`, uses
+`Controlvar.SDK` (v0.1.0) provides feature flag evaluation, experiment assignment and
+event tracking for .NET applications. It targets `net8.0` and `netstandard2.1`, uses
 `System.Text.Json` and `HttpClient`, and has no other dependencies.
 
 Flag evaluation and experiment assignment are decided **by the server**: every call goes to the
@@ -14,8 +14,13 @@ Source: `sdk/dotnet`.
 
 ## Requirements
 
-- The library targets `netstandard2.1` and `net6.0`; its xUnit tests target `net6.0`
-- .NET 6+ SDK to build, test or run the examples
+- The library targets `net8.0` and `netstandard2.1`. .NET 8 and later use the `net8.0` build,
+  and .NET Core 3.0 to .NET 7 use the `netstandard2.1` build. On .NET Core 3.0 to .NET 5,
+  System.Text.Json 8 warns at build time that it does not support that target framework and has
+  not been tested with it.
+- .NET Framework cannot use it: .NET Framework does not implement .NET Standard 2.1.
+- To build it from source and run its tests: the .NET 10 SDK and the .NET 8 runtime (see
+  Development)
 
 ---
 
@@ -371,8 +376,12 @@ dotnet test
 dotnet run --project examples/BasicUsage
 ```
 
-- `dotnet build`: netstandard2.1 + net6.0
-- `dotnet test`: xUnit (HTTP faked, no network)
+- `dotnet build`: netstandard2.1 + net8.0
+- `dotnet test`: xUnit (HTTP faked, no network), in three legs: `tests/Controlvar.Tests` on
+  `net8.0` and on `net10.0` against the `net8.0` build, and `tests/Controlvar.Tests.NetStandard`
+  on `net8.0` against the `netstandard2.1` build. The tests need the .NET 10 SDK and the .NET 8
+  runtime.
 
-CI runs `dotnet test sdk/dotnet/Controlvar.sln` on .NET 6 in the SDK Unit Tests workflow
+CI runs `dotnet test sdk/dotnet/Controlvar.sln` with the .NET 10 SDK and the .NET 8 runtime in
+the SDK Unit Tests workflow
 ([sdk-unit-tests.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/sdk-unit-tests.yml)), daily and on a pull request that changes `sdk/dotnet/`.

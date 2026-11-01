@@ -5,7 +5,8 @@
 #
 #   sdk/js/v1.2.3        @controlvar/js-sdk 1.2.3                  -> npm
 #   sdk/python/v1.2.3    controlvar 1.2.3                          -> PyPI
-#   sdk/go/v1.2.3        github.com/controlvar/controlvar/sdk/go   -> the Go module proxy
+#   sdk/dotnet/v1.2.3    Controlvar.SDK 1.2.3                      -> NuGet
+#   sdk/go/v1.2.3       github.com/controlvar/controlvar/sdk/go   -> the Go module proxy
 #                        (the module path is lower case; the repository it is
 #                        fetched from is github.com/Controlvar/controlvar)
 #
@@ -13,12 +14,17 @@
 # `<subdir>/vX.Y.Z` tag), reused for every SDK so there is one convention.
 #
 # Publishing is by trusted publishing -- OIDC, no long-lived token in any
-# secret. Both registries must be told, once, to trust this repository and this
+# secret. Each registry must be told, once, to trust this repository and this
 # workflow file:
 #
-#   PyPI  Manage project -> Publishing -> Add a GitHub publisher:
-#         owner + repository + workflow `sdk-release.yml` + environment `sdk-release`
-#   npm   Package settings -> Trusted publisher -> GitHub Actions, same three
+#   PyPI   Manage project -> Publishing -> Add a GitHub publisher:
+#          owner + repository + workflow `sdk-release.yml` + environment `sdk-release`
+#   npm    Package settings -> Trusted publisher -> GitHub Actions, same three
+#   NuGet  a trusted publishing policy for GitHub Actions on nuget.org, same
+#          three; the `sdk-release` environment's variable NUGET_USER names
+#          the nuget.org account (its profile name) that created the policy.
+#          The `nuget` job exchanges the OIDC token for a short-lived API key
+#          (nuget.org's documentation: one hour).
 #
 # Until that is done, a publish is meant to stop at the registry's
 # authentication check: nothing is published by a fallback nobody audited.
@@ -31,10 +37,11 @@
 # repository configuration, not something this file can assert, so it is on the
 # P3.8 checklist beside the registry configuration above.
 #
-# Each registry has two jobs. `pypi-build` and `npm-build` install, test and
-# build, and cannot request an OIDC token. `pypi` and `npm` hold the token and
-# the environment, install nothing, and check the package they upload against
-# the tag before uploading it. So the environment's approval is asked for
+# Each registry has two jobs. `pypi-build`, `npm-build` and `nuget-build`
+# install, test and build, and cannot request an OIDC token. `pypi`, `npm` and
+# `nuget` hold the token and the environment, install nothing from this
+# repository, and check the package they upload against the tag before
+# uploading it. So the environment's approval is asked for
 # after the tests and checks have passed. An npm prerelease (a version with a
 # `-`, such as 1.0.0-rc.1) publishes under the `next` dist-tag; a stable
 # version gets `latest`. backend/tests/smoke/test_sdk_release_wiring.py pins
@@ -149,9 +156,10 @@ jobs:
           ecosystem="$(python scripts/check_sdk_version.py "$sdk" --print-ecosystem)"
           # The registry name, from the manifest. It is not derivable from the
           # directory: sdk/openfeature is @controlvar/openfeature-provider
-          # while sdk/js is @controlvar/js-sdk.
+          # while sdk/js is @controlvar/js-sdk, and sdk/dotnet is
+          # Controlvar.SDK.
           name=""
-          if [ "$ecosystem" = "pypi" ] || [ "$ecosystem" = "npm" ]; then
+          if [ "$ecosystem" = "pypi" ] || [ "$ecosystem" = "npm" ] || [ "$ecosystem" = "nuget" ]; then
             name="$(python scripts/check_sdk_version.py "$sdk" --print-name)"
           fi
 
@@ -685,6 +693,483 @@ jobs:
               exit 1
               ;;
           esac
+
+  # ---------------------------------------------------------------------------
+  # NuGet: sdk/dotnet (Controlvar.SDK)
+  #
+  # Two jobs, the same shape as the others. `nuget-build` runs the SDK's tests
+  # on every leg, packs the one project the release publishes, checks the
+  # package's contents and its README, and checks that a consumer restores it
+  # from the package alone. Its permissions are `contents: read` and nothing
+  # else. `nuget` holds the token and the `sdk-release` environment and has no
+  # checkout. It checks the package it downloaded against that job's digest
+  # and against the tag, exchanges the OIDC token for a short-lived nuget.org
+  # API key, and pushes the package. There is no --skip-duplicate: a version
+  # nuget.org already has fails the push.
+  # ---------------------------------------------------------------------------
+  nuget-build:
+    name: test and build for NuGet
+    needs: resolve
+    if: needs.resolve.outputs.ecosystem == 'nuget'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      file: ${{ steps.record.outputs.file }}
+      digest: ${{ steps.record.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # The .NET 10 SDK builds; the tests run on the .NET 8 and .NET 10
+      # runtimes, as sdk-unit-tests.yml runs them.
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      # Three legs: the SDK's net8.0 build on .NET 8 and on .NET 10, and its
+      # netstandard2.1 build on .NET 8. The check refuses a leg that is
+      # missing, failed, ran no test or ran a different number from the others.
+      - name: Run the SDK's tests
+        run: |
+          set -euo pipefail
+          dotnet test sdk/dotnet/Controlvar.sln -c Release --nologo --logger trx --results-directory "$RUNNER_TEMP/trx"
+          python3 scripts/check_dotnet_test_legs.py "$RUNNER_TEMP/trx"
+
+      # The release packs this project and nothing else: the solution also
+      # holds the tests and the examples. scripts/check_sdk_version.py reads
+      # its version (NUGET_PROJECTS). One file must come out: the .nupkg, and
+      # no .snupkg (the PDB is embedded in the DLL).
+      - name: Pack
+        id: pack
+        env:
+          SDK: ${{ needs.resolve.outputs.sdk }}
+        run: |
+          set -euo pipefail
+          if [ "$SDK" != "dotnet" ]; then
+            printf '%s\n' "::error::this job packs sdk/dotnet only, not sdk/$SDK"
+            exit 1
+          fi
+          dest="$RUNNER_TEMP/nupkg"
+          mkdir -p "$dest"
+          dotnet pack sdk/dotnet/src/Controlvar/Controlvar.csproj -c Release --nologo -o "$dest" -p:ContinuousIntegrationBuild=true
+          shopt -s nullglob
+          packed=("$dest"/*)
+          if [ "${#packed[@]}" -ne 1 ] || [ "${packed[0]##*.}" != "nupkg" ]; then
+            printf '%s\n' "::error::expected one .nupkg in $dest, found: ${packed[*]}"
+            exit 1
+          fi
+          printf 'nupkg=%s\n' "${packed[0]}" >> "$GITHUB_OUTPUT"
+
+      # Standard library only. The package holds exactly what nuget.org
+      # should show for this tag: its id and version, the MIT licence
+      # expression, the README, the project and repository links with this
+      # run's commit, and a build for each target framework in FRAMEWORKS with
+      # exactly the dependencies listed there, and nothing else.
+      # test_sdk_release_nuget.py holds FRAMEWORKS and the two links to
+      # sdk/dotnet/src/Controlvar/Controlvar.csproj.
+      - name: Check the package
+        env:
+          NUPKG: ${{ steps.pack.outputs.nupkg }}
+          NAME: ${{ needs.resolve.outputs.name }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+          FRAMEWORKS: >-
+            net8.0
+            netstandard2.1:System.Text.Json@8.0.6
+          PROJECT_URL: https://github.com/Controlvar/controlvar/tree/main/sdk/dotnet#readme
+          REPOSITORY_URL: https://github.com/Controlvar/controlvar
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, pathlib, re, sys, zipfile
+          import xml.etree.ElementTree as ET
+
+          def local(tag):
+              return tag.rsplit("}", 1)[-1]
+
+          def framework(name):
+              # The nuspec writes netstandard2.1 as .NETStandard2.1.
+              return name.lower().lstrip(".")
+
+          path = pathlib.Path(os.environ["NUPKG"])
+          name = os.environ["NAME"]
+          version = os.environ["VERSION"]
+          commit = os.environ["GITHUB_SHA"]
+          expected_frameworks = {}
+          for entry in os.environ["FRAMEWORKS"].split():
+              target, _, deps = entry.partition(":")
+              expected_frameworks[target] = sorted(tuple(d.split("@")) for d in deps.split(",") if d)
+
+          problems = []
+          if not name or not re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z.+-]*", version):
+              problems.append(f"the tag resolved no usable name or version: {name!r} {version!r}")
+          if path.name != f"{name}.{version}.nupkg":
+              problems.append(f"the package is {path.name}, not {name}.{version}.nupkg")
+          if problems:
+              for problem in problems:
+                  print(f"::error::{problem}")
+              sys.exit(1)
+
+          with zipfile.ZipFile(path) as archive:
+              names = archive.namelist()
+              nuspec = archive.read(f"{name}.nuspec") if f"{name}.nuspec" in names else b""
+          if not nuspec:
+              print(f"::error::the package holds no {name}.nuspec")
+              sys.exit(1)
+          root = ET.fromstring(nuspec)
+          metadata = next((e for e in root if local(e.tag) == "metadata"), [])
+          fields = {local(e.tag): e for e in metadata}
+
+          def text(field):
+              element = fields.get(field)
+              return (element.text or "").strip() if element is not None else None
+
+          for field, want in (
+              ("id", name),
+              ("version", version),
+              ("readme", "README.md"),
+              ("projectUrl", os.environ["PROJECT_URL"]),
+          ):
+              if text(field) != want:
+                  problems.append(f"the nuspec's {field} is {text(field)!r}, not {want!r}")
+          licence = fields.get("license")
+          if licence is None or licence.get("type") != "expression" or (licence.text or "").strip() != "MIT":
+              problems.append("the nuspec's licence is not the expression MIT")
+          repository = fields.get("repository")
+          repo = dict(repository.attrib) if repository is not None else {}
+          if repo.get("type") != "git" or repo.get("url") != os.environ["REPOSITORY_URL"]:
+              problems.append(f"the nuspec's repository is {repo}, not git {os.environ['REPOSITORY_URL']}")
+          if repo.get("commit") != commit:
+              problems.append(f"the nuspec's repository commit is {repo.get('commit')!r}, not this run's {commit}")
+
+          groups = {}
+          dependencies = fields.get("dependencies")
+          for group in (dependencies if dependencies is not None else []):
+              target = framework(group.get("targetFramework", ""))
+              if target in groups:
+                  problems.append(f"the nuspec lists the dependencies of {target} twice")
+              groups[target] = sorted(
+                  (d.get("id"), d.get("version")) for d in group if local(d.tag) == "dependency"
+              )
+          if groups != expected_frameworks:
+              problems.append(f"the nuspec's dependencies are {groups}, not {expected_frameworks}")
+
+          expected = {"[Content_Types].xml", "_rels/.rels", f"{name}.nuspec", "README.md"}
+          for target in expected_frameworks:
+              expected |= {f"lib/{target}/Controlvar.dll", f"lib/{target}/Controlvar.xml"}
+          extra = sorted(
+              n for n in set(names) - expected
+              # NuGet's core-properties part: `nuget.psmdcp` from the .NET 10
+              # SDK, a random hex name from older ones.
+              if not re.fullmatch(r"package/services/metadata/core-properties/(?:nuget|[0-9a-f]{32})\.psmdcp", n)
+          )
+          missing = sorted(expected - set(names))
+          if len(names) != len(set(names)):
+              problems.append("the package holds an entry twice")
+          problems += [f"the package holds an unexpected entry: {n}" for n in extra]
+          problems += [f"the package is missing {n}" for n in missing]
+
+          for problem in problems:
+              print(f"::error::{problem}")
+          if problems:
+              sys.exit(1)
+          print(f"{path.name}: {name} {version}, commit {commit}")
+          for entry in sorted(names):
+              print(f"  {entry}")
+          PY
+
+      # The README nuget.org shows for this version, for good: no status, no
+      # install command, no own version, no relative link, and an Install
+      # section that links the SDK's page (DECISIONS T230).
+      - name: Check the packed README
+        env:
+          SDK: ${{ needs.resolve.outputs.sdk }}
+          NUPKG: ${{ steps.pack.outputs.nupkg }}
+        run: python3 scripts/check_packaged_readme.py --sdk "$SDK" "$NUPKG"
+
+      # A consumer that has only this package: an empty directory, an empty
+      # package cache, and a NuGet.Config whose source mapping takes the
+      # package from the directory it was packed into and nothing else from
+      # there; System.Text.Json comes from nuget.org. The consumer targets
+      # both of the package's frameworks, so both builds are restored and
+      # compiled against, and the package it restored must be this one, byte
+      # for byte.
+      - name: A consumer restores the package alone
+        env:
+          NUPKG: ${{ steps.pack.outputs.nupkg }}
+          NAME: ${{ needs.resolve.outputs.name }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          consumer="$RUNNER_TEMP/consumer"
+          export NUGET_PACKAGES="$RUNNER_TEMP/consumer-packages"
+          export NUGET_HTTP_CACHE_PATH="$RUNNER_TEMP/consumer-http-cache"
+          for path in "$consumer" "$NUGET_PACKAGES" "$NUGET_HTTP_CACHE_PATH"; do
+            if [ -e "$path" ]; then
+              printf '%s\n' "::error::$path exists; the consumer must start empty"
+              exit 1
+            fi
+          done
+          mkdir "$consumer"
+          cd "$consumer"
+          python3 - "$(dirname "$NUPKG")" "$NAME" <<'PY'
+          import pathlib, sys
+          from xml.sax.saxutils import quoteattr
+
+          source, name = sys.argv[1:3]
+          pathlib.Path("NuGet.Config").write_text("\n".join([
+              '<?xml version="1.0" encoding="utf-8"?>',
+              "<configuration>",
+              "  <packageSources>",
+              "    <clear />",
+              f"    <add key=\"packed\" value={quoteattr(source)} />",
+              '    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />',
+              "  </packageSources>",
+              "  <packageSourceMapping>",
+              f"    <packageSource key=\"packed\"><package pattern={quoteattr(name)} /></packageSource>",
+              '    <packageSource key="nuget.org"><package pattern="*" /></packageSource>',
+              "  </packageSourceMapping>",
+              "</configuration>",
+              "",
+          ]), encoding="utf-8")
+          pathlib.Path("Consumer.csproj").write_text("\n".join([
+              '<Project Sdk="Microsoft.NET.Sdk">',
+              "  <PropertyGroup>",
+              "    <TargetFrameworks>net8.0;netstandard2.1</TargetFrameworks>",
+              "  </PropertyGroup>",
+              "</Project>",
+              "",
+          ]), encoding="utf-8")
+          pathlib.Path("Consumer.cs").write_text("\n".join([
+              "public static class Consumer",
+              "{",
+              '    public static Controlvar.SdkConfig Config() => new Controlvar.SdkConfig("http://localhost", "key");',
+              "}",
+              "",
+          ]), encoding="utf-8")
+          PY
+          dotnet add package "$NAME" --version "$VERSION"
+          dotnet build -c Release --nologo
+          python3 - "$NUPKG" "$NAME" "$VERSION" <<'PY'
+          import hashlib, json, os, pathlib, sys
+
+          packed, name, version = sys.argv[1:4]
+          cache = pathlib.Path(os.environ["NUGET_PACKAGES"]) / name.lower() / version.lower()
+          restored = cache / f"{name.lower()}.{version.lower()}.nupkg"
+          problems = []
+          if not restored.is_file():
+              problems.append(f"the consumer restored no {restored}")
+          elif hashlib.sha256(restored.read_bytes()).digest() != hashlib.sha256(pathlib.Path(packed).read_bytes()).digest():
+              problems.append(f"the consumer restored a {name} {version} that is not the packed one")
+          assets = json.loads(pathlib.Path("obj/project.assets.json").read_text(encoding="utf-8"))
+          targets = assets.get("targets", {})
+          # The .NET 10 SDK keys the targets by framework alias; older ones by
+          # the framework's full name.
+          for target, full, lib, needs in (
+              ("net8.0", ".NETCoreApp,Version=v8.0", "lib/net8.0/Controlvar.dll", None),
+              ("netstandard2.1", ".NETStandard,Version=v2.1", "lib/netstandard2.1/Controlvar.dll", "System.Text.Json"),
+          ):
+              libraries = targets.get(target) or targets.get(full) or {}
+              compile_assets = libraries.get(f"{name}/{version}", {}).get("compile", {})
+              if lib not in compile_assets:
+                  problems.append(f"{target}: the consumer compiles against {sorted(compile_assets)}, not {lib}")
+              if needs and not any(key.startswith(f"{needs}/") for key in libraries):
+                  problems.append(f"{target}: the consumer restored no {needs}")
+          for problem in problems:
+              print(f"::error::{problem}")
+          if problems:
+              sys.exit(1)
+          print(f"the consumer restored {restored.name}, equal to the packed file, and built against both frameworks")
+          PY
+
+      # The file name and the sha256 of the package's bytes. The publish job
+      # recomputes the sha256 over what it downloaded and compares it with
+      # this job's output.
+      - name: Record the package
+        id: record
+        env:
+          NUPKG: ${{ steps.pack.outputs.nupkg }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, os, pathlib
+
+          nupkg = pathlib.Path(os.environ["NUPKG"])
+          digest = hashlib.sha256(nupkg.read_bytes()).hexdigest()
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"file={nupkg.name}\ndigest={digest}\n")
+          print(f"{digest}  {nupkg.name}")
+          PY
+
+      - name: Upload the checked package
+        uses: actions/upload-artifact@v7
+        with:
+          name: nuget-package
+          path: ${{ steps.pack.outputs.nupkg }}
+          if-no-files-found: error
+          overwrite: false
+
+  nuget:
+    name: publish to NuGet
+    needs: [resolve, nuget-build]
+    if: needs.resolve.outputs.ecosystem == 'nuget'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: sdk-release
+      url: https://www.nuget.org/packages/${{ needs.resolve.outputs.name }}
+    permissions:
+      contents: read
+      id-token: write   # trusted publishing: exchanged for a short-lived API key
+    env:
+      # The nuget.org account (its profile name, not an email) that created
+      # the trusted publishing policy: a variable of the sdk-release
+      # environment. Not a secret; it reaches the login step through `env`.
+      NUGET_USER: ${{ vars.NUGET_USER }}
+    steps:
+      # Every action in this job is pinned to a commit: the job holds the
+      # OIDC token, and CI never runs it, so a moved tag would first run here.
+      - name: Download the checked package
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: nuget-package
+          path: ${{ github.workspace }}/package
+
+      # Standard library only. Exactly one file was downloaded, it has the
+      # name the build job recorded, that name is a plain `.nupkg` file name,
+      # and its sha256 is the one the build job recorded.
+      - name: Check the package's name and digest
+        env:
+          FILE: ${{ needs.nuget-build.outputs.file }}
+          DIGEST: ${{ needs.nuget-build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, os, pathlib, re, sys
+
+          def fail(problem):
+              print(f"::error::{problem}")
+              sys.exit(1)
+
+          name = os.environ["FILE"]
+          expected = os.environ["DIGEST"]
+          folder = pathlib.Path(os.environ["GITHUB_WORKSPACE"]) / "package"
+
+          if not re.fullmatch(r"[A-Za-z0-9._-]+\.nupkg", name):
+              fail(f"the build job recorded no usable file name: {name!r}")
+          if not re.fullmatch(r"[0-9a-f]{64}", expected):
+              fail(f"the build job recorded no usable digest: {expected!r}")
+          found = sorted(p.name for p in folder.iterdir()) if folder.is_dir() else []
+          if found != [name]:
+              fail(f"expected exactly {name} in {folder}, found {found}")
+          path = folder / name
+          if path.is_symlink() or not path.is_file():
+              fail(f"{name} is not a regular file")
+          digest = hashlib.sha256(path.read_bytes()).hexdigest()
+          if digest != expected:
+              fail(f"{name} has digest {digest}; the build job recorded {expected}")
+          print(f"{digest}  {name}")
+          PY
+
+      # The nuspec inside the package has the tag's id and version. Compared
+      # with `resolve`, never with the build job.
+      - name: Check the packed nuspec against the tag
+        env:
+          NAME: ${{ needs.resolve.outputs.name }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+          FILE: ${{ needs.nuget-build.outputs.file }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, pathlib, sys, zipfile
+          import xml.etree.ElementTree as ET
+
+          name = os.environ["NAME"]
+          version = os.environ["VERSION"]
+          path = pathlib.Path(os.environ["GITHUB_WORKSPACE"]) / "package" / os.environ["FILE"]
+
+          problems = []
+          if not name or not version:
+              problems.append("the tag resolved no name or no version")
+          with zipfile.ZipFile(path) as archive:
+              nuspecs = [n for n in archive.namelist() if "/" not in n and n.endswith(".nuspec")]
+              if len(nuspecs) != 1:
+                  problems.append(f"expected one .nuspec at the package root, found {nuspecs}")
+                  fields = {}
+              else:
+                  fields = {
+                      e.tag.rsplit("}", 1)[-1]: (e.text or "").strip()
+                      for e in ET.fromstring(archive.read(nuspecs[0])).iter()
+                  }
+          if fields.get("id") != name:
+              problems.append(f"the package is {fields.get('id')!r}, not {name!r}")
+          if fields.get("version") != version:
+              problems.append(f"the package is version {fields.get('version')!r}, not {version!r}")
+
+          for problem in problems:
+              print(f"::error::{problem}")
+          if problems:
+              sys.exit(1)
+          print(f"{name} {version}")
+          PY
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.403'
+
+      # The runner image carries .NET SDKs of its own, and `dotnet` picks the
+      # newest unless a global.json pins one, so the push runs in a directory
+      # whose global.json pins the SDK set up above and refuses any other.
+      - name: The .NET SDK is the pinned version
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/push"
+          mkdir -p "$work"
+          printf '%s\n' '{"sdk": {"version": "10.0.403", "rollForward": "disable"}}' > "$work/global.json"
+          cd "$work"
+          version="$(dotnet --version)"
+          printf 'dotnet %s\n' "$version"
+          if [ "$version" != "10.0.403" ]; then
+            printf '%s\n' "::error::expected the .NET SDK 10.0.403, found $version"
+            exit 1
+          fi
+
+      - name: The NuGet user is set
+        run: |
+          set -euo pipefail
+          if [ -z "${NUGET_USER:-}" ]; then
+            printf '%s\n' "::error::NUGET_USER is empty in the sdk-release environment (a variable that does not exist reads as empty); set it to the nuget.org profile name that created the trusted publishing policy"
+            exit 1
+          fi
+          printf 'pushing as the nuget.org user %s\n' "$NUGET_USER"
+
+      # The OIDC token is exchanged for an API key that lasts an hour; the
+      # action masks it before it sets the output (core.setSecret, read in
+      # its src/index.ts at this commit).
+      - name: Exchange the OIDC token for a NuGet API key
+        id: login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: ${{ env.NUGET_USER }}
+
+      # The key reaches the script through `env:` and is masked again before
+      # its first use. No --skip-duplicate: a version nuget.org already has is
+      # a failure, not a green run that published nothing.
+      - name: Push
+        env:
+          NUPKG: ${{ github.workspace }}/package/${{ needs.nuget-build.outputs.file }}
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NUGET_API_KEY:-}" ]; then
+            printf '%s\n' "::error::the login step produced no API key"
+            exit 1
+          fi
+          printf '::add-mask::%s\n' "$NUGET_API_KEY"
+          cd "$RUNNER_TEMP/push"
+          dotnet nuget push "$NUPKG" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json
 
   # ---------------------------------------------------------------------------
   # Go: nothing to upload. `go get` resolves the tag from the repository, so

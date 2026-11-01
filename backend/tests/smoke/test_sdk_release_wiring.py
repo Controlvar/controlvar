@@ -112,11 +112,27 @@ def test_wired_sdks_report_a_version_and_unwired_ones_refuse(sdk: str) -> None:
         )
 
 
-@pytest.mark.parametrize(
-    "sdk", sorted(name for name, eco in ecosystems().items() if eco in {"pypi", "npm"})
+#: The SDKs whose tag the gate compares with a manifest: every ecosystem but
+#: `tag-only` (no manifest) and `unwired` (refused whatever the version), so a
+#: newly wired ecosystem is in the parametrisation below without anyone
+#: adding it.
+COMPARED_SDKS = sorted(
+    name for name, eco in ecosystems().items() if eco not in {"tag-only", "unwired"}
 )
+
+
+def test_the_compared_sdks_include_every_wired_registry() -> None:
+    """The parametrisation is read from ECOSYSTEMS, so this is what it holds."""
+    assert {"pypi", "npm", "nuget"} <= {ecosystems()[sdk] for sdk in COMPARED_SDKS}
+    assert "dotnet" in COMPARED_SDKS
+
+
+@pytest.mark.parametrize("sdk", COMPARED_SDKS)
 def test_a_mismatched_tag_is_refused(sdk: str) -> None:
-    """The gate's whole job: a tag that does not match the manifest."""
+    """The gate's whole job: a tag that does not match the manifest.
+
+    It once listed pypi and npm by name, so wiring dotnet to nuget would have
+    left the nuget reader's mismatch untested."""
     result = subprocess.run(
         [
             sys.executable,
@@ -402,15 +418,25 @@ def test_every_npm_sdk_names_its_repository(sdk: str) -> None:
 #   PUBLISH_JOBS        jobs that hold the token and publish only.
 
 UNSPLIT_TOKEN_JOBS: set[str] = set()
-PUBLISH_JOBS = {"pypi", "npm"}
+PUBLISH_JOBS = {"pypi", "npm", "nuget"}
 RELEASE_ENVIRONMENT = "sdk-release"
+
+#: The secrets each job reads, exactly: none. npm, PyPI and NuGet publish by
+#: OIDC, with no long-lived token.
+SECRETS_BY_JOB: dict[str, set[str]] = {}
+#: The configuration variables each job reads, exactly. NUGET_USER is the
+#: nuget.org account the trusted publishing policy belongs to.
+VARIABLES_BY_JOB = {"nuget": {"NUGET_USER"}}
 
 #: A step whose `run:` installs packages, runs a test suite or builds one.
 INSTALLS_OR_TESTS = re.compile(
     r"\bnpm\s+(ci|install|test|run)\b"
     r"|\bpip3?\s+install\b|-m\s+pip\s+install\b"
     r"|\bpytest\b|-m\s+build\b|\btwine\b"
+    r"|\bdotnet\s+(restore|build|test|pack|add|new|run)\b"
 )
+SECRET = re.compile(r"\$\{\{[^}]*?\bsecrets\.([A-Za-z_][A-Za-z0-9_]*)")
+VARIABLE = re.compile(r"\$\{\{[^}]*?\bvars\.([A-Za-z_][A-Za-z0-9_]*)")
 EXPRESSION = re.compile(r"\$\{\{\s*(.*?)\s*\}\}")
 PYPA_PIN = re.compile(r"pypa/gh-action-pypi-publish@([0-9a-f]{40})")
 
@@ -501,6 +527,62 @@ def test_no_publish_job_run_block_contains_an_expression() -> None:
         if "${{" in _run_of(step)
     ]
     assert not found, f"a publish-job run: block contains ${{{{ }}}}: {found}"
+
+
+def _references(pattern: re.Pattern, node) -> set[str]:
+    """Every name `pattern` captures anywhere in a parsed YAML node."""
+    if isinstance(node, dict):
+        return set().union(
+            *(
+                _references(pattern, key) | _references(pattern, value)
+                for key, value in node.items()
+            )
+        )
+    if isinstance(node, list):
+        return set().union(*(_references(pattern, item) for item in node))
+    return set(pattern.findall(str(node)))
+
+
+def _by_job(pattern: re.Pattern) -> dict[str, set[str]]:
+    jobs = _workflow()["jobs"]
+    found = {name: _references(pattern, job) for name, job in jobs.items()}
+    return {name: names for name, names in found.items() if names}
+
+
+def test_each_job_reads_exactly_its_own_secrets() -> None:
+    """No job reads a secret, and only `nuget` reads a variable, NUGET_USER;
+    nothing outside the jobs (a workflow-level `env:`) names either; every
+    expression that reads one names it (no `toJSON(secrets)`, no
+    `secrets['X']`); and a variable reaches its job through `env:` only (the
+    job's or a step's), never through `with:` or a `run:` line."""
+    workflow = _workflow()
+    assert _by_job(SECRET) == SECRETS_BY_JOB
+    assert _by_job(VARIABLE) == VARIABLES_BY_JOB
+    outside = {key: value for key, value in workflow.items() if key != "jobs"}
+    assert not _references(SECRET, outside), _references(SECRET, outside)
+    assert not _references(VARIABLE, outside), _references(VARIABLE, outside)
+
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert "secrets: inherit" not in text
+    for expression in EXPRESSION.findall(text):
+        for context in ("secrets", "vars"):
+            if re.search(rf"\b{context}\b", expression):
+                assert re.fullmatch(rf"{context}\.[A-Z][A-Z0-9_]*", expression), (
+                    f"${{{{ {expression} }}}} reads {context} other than by one name"
+                )
+
+    for name in set(SECRETS_BY_JOB) | set(VARIABLES_BY_JOB):
+        job = workflow["jobs"][name]
+        outside_env = {
+            key: value for key, value in job.items() if key not in ("env", "steps")
+        }
+        assert not _references(SECRET, outside_env), name
+        assert not _references(VARIABLE, outside_env), name
+        for step in job["steps"]:
+            label = step.get("name") or step.get("uses")
+            outside_env = {key: value for key, value in step.items() if key != "env"}
+            assert not _references(SECRET, outside_env), (name, label)
+            assert not _references(VARIABLE, outside_env), (name, label)
 
 
 def test_the_pypi_build_and_publish_jobs_are_a_pair() -> None:
@@ -616,8 +698,14 @@ def test_the_distributions_are_uploaded_once_and_never_overwritten() -> None:
 
 
 def _run_step(
-    step: dict, values: dict[str, str], tmp_path: Path, cwd: Path
+    step: dict,
+    values: dict[str, str],
+    tmp_path: Path,
+    cwd: Path,
+    runner_env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess:
+    """`runner_env` is what the runner itself sets beside the step's `env:`
+    (`GITHUB_SHA`, say)."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
     for name in ("python3", "python"):
@@ -639,6 +727,7 @@ def _run_step(
         "GITHUB_WORKSPACE": str(tmp_path / "workspace"),
         "RUNNER_TEMP": str(runner_temp),
         "HOME": str(tmp_path),
+        **(runner_env or {}),
     }
     for key, value in (step.get("env") or {}).items():
         env[key] = EXPRESSION.sub(resolve, str(value))
