@@ -194,7 +194,7 @@ When a limit is reached the API answers:
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `WAREHOUSE_CREDENTIALS_KEYS` | unset | Fernet keys, comma-separated, newest first, that encrypt stored warehouse credentials. While unset, storing or using a credential answers `503 credentials_unavailable`. In staging and production a malformed value is refused when the API starts, and the full profile's modules do not load until it is fixed. |
+| `WAREHOUSE_CREDENTIALS_KEYS` | unset | Fernet keys, comma-separated, newest first, that encrypt stored warehouse credentials. While unset or empty, storing or using a credential answers `503 credentials_unavailable`. In staging and production a malformed value is refused when the API starts, and the full profile's modules do not load until it is fixed. |
 | `WAREHOUSE_MAX_QUERY_TIMEOUT_SECONDS` | 1800 | The highest `query_timeout_seconds` a connection may set. |
 | `WAREHOUSE_MAX_BYTES_PER_QUERY` | 214748364800 (200 GiB) | The highest byte limit a connection may set. |
 | `WAREHOUSE_MAX_RUNS_PER_DAY` | 200 | The highest `max_runs_per_day` a connection may set. |
@@ -206,6 +206,12 @@ A stored credential that none of the configured keys can open answers
 `needs_new_credentials`; an admin replaces it. Deleting a connection deletes
 its row and its credentials; its sources go with it, and its past analyses
 keep their results and the connection's name.
+
+Both compose files pass `WAREHOUSE_CREDENTIALS_KEYS` to the API, empty by
+default, and an empty value is the same as one that is not set. Put it in the
+`.env` file next to the compose file: a value exported in another terminal does
+not reach the container, and one exported in the terminal that runs
+`docker compose up` does.
 
 ## API
 
