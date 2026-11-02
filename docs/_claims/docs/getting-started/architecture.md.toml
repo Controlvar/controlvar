@@ -388,11 +388,14 @@ by = [
 ]
 
 [[unit]]
-text = "Not limited by their scopes, with one exception: any active key authenticates every API-key route as the user who created it, except the server-side SDK routes (GET /api/v1/sdk/ruleset, POST /api/v1/tracking/evaluations, POST /api/v1/tracking/assign/batch), which require the sdk:ruleset scope (see API Key Management)"
+text = "Not limited by their scopes, with two exceptions: any active key authenticates every SDK route as the user who created it, except the server-side SDK routes (GET /api/v1/sdk/ruleset, POST /api/v1/tracking/evaluations, POST /api/v1/tracking/assign/batch), which require the sdk:ruleset scope; and four read operations (GET /api/v1/feature-flags/, GET /api/v1/experiments/, GET /api/v1/experiments/{experiment_id} and GET /api/v1/experiments/{experiment_id}/results) accept a key only if it carries the mcp:read scope (see API Key Management)"
 by = [
     "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these",
     "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_every_route_under_the_sdk_prefix_requires_the_scope",
     "journey:api-key-first-assignment#ruleset-scope",
+    "test:backend/tests/smoke/test_mcp_read_routes.py::test_the_mcp_read_routes_are_exactly_these",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_key_without_the_exact_scope_is_refused_on_each_operation",
+    "journey:api-key-first-assignment#management-route",
 ]
 
 [[unit]]

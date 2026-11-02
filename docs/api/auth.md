@@ -4,7 +4,7 @@ The platform uses two authentication methods, depending on who is calling:
 
 | Method | Used For |
 |--------|---------|
-| **API Key** (`X-API-Key` header) | SDK clients, server-to-server calls, event tracking |
+| **API Key** (`X-API-Key` header) | SDK clients, server-to-server calls, event tracking; with the `mcp:read` scope, reading flags, experiments and results |
 | **Bearer token** (`Authorization: Bearer` header) | People: the dashboard, and direct API calls made as a user |
 
 The commands on this page run as written against the stack from the
@@ -130,14 +130,15 @@ It prints `eptk_`, the start of every key. The key is shown only in this respons
 it securely. If you lose it, create a new key and delete the old one. See
 [API Key Management](../security/api-keys.md) for listing, deleting and rotating keys.
 
-The request also accepts an optional `"scopes"` list. The one scope that is enforced is
-`sdk:ruleset`, for server-side SDK use: `GET /api/v1/sdk/ruleset`,
+The request also accepts an optional `"scopes"` list. Two scopes are enforced.
+`sdk:ruleset` is for server-side SDK use: `GET /api/v1/sdk/ruleset`,
 `POST /api/v1/tracking/evaluations` and `POST /api/v1/tracking/assign/batch` (all beta)
 refuse a key without it, or whose owner can no longer change feature flags or experiments.
 Only users who can change feature flags (ADMIN, DEVELOPER, or a superuser) can create a key
-with it; anyone else gets `403` and no key is created. Every other endpoint that takes an
-API key accepts any active key, whatever its scopes; see
-[Scopes](../security/api-keys.md#scopes).
+with it; anyone else gets `403` and no key is created. `mcp:read` lets a key read flags,
+experiments and results on four read operations, listed below; any role can create a key
+with it. Every other endpoint that takes an API key accepts any active key, whatever its
+scopes; see [Scopes](../security/api-keys.md#scopes).
 
 ### Using an API Key
 
@@ -171,8 +172,12 @@ curl -s -G localhost:8000/api/v1/feature-flags/evaluate/beta_features \
 
 It prints `true`.
 
-An API key is accepted only by the endpoints an SDK calls: tracking, flag evaluation and
-the flag ruleset. Everything else takes a bearer token.
+An API key is accepted by the endpoints an SDK calls: tracking, flag evaluation and the
+flag ruleset. A key that carries the `mcp:read` scope is also accepted by four read
+operations: `GET /api/v1/feature-flags/`, `GET /api/v1/experiments/`,
+`GET /api/v1/experiments/{experiment_id}` and `GET /api/v1/experiments/{experiment_id}/results`.
+There it reads as the user who created the key, under that user's role, and a key without
+the scope is refused with `403`. Everything else takes a bearer token.
 
 ---
 

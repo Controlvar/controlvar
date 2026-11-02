@@ -33,7 +33,7 @@ by = ["docex:docs/api/endpoints.md#\"admin@demo.com\""]
 [[unit]]
 text = "OAuth2 Bearer tokens for user authentication"
 by = [
-    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_management_route_refuses_a_request_that_carries_only_an_api_key",
+    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_route_outside_the_sdk_and_mcp_read_sets_refuses_a_request_that_carries_only_an_api_key",
     "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_bearer_token_is_not_an_api_key",
 ]
 
@@ -100,6 +100,13 @@ text = "API keys are used by client applications for the tracking and feature fl
 by = [
     "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_tracking_assign_with_created_key",
     "test:backend/tests/smoke/test_openfeature_routes.py::test_the_valid_key_reaches_a_route_that_is_still_mounted",
+]
+
+[[unit]]
+text = "A key that carries the mcp:read scope can also list feature flags and experiments and read an experiment and its results (see Scopes)."
+by = [
+    "test:backend/tests/smoke/test_mcp_read_routes.py::test_the_mcp_read_routes_are_exactly_these",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_key_with_the_scope_is_served",
 ]
 
 [[unit]]
@@ -684,7 +691,8 @@ by = ["exempt:label"]
 [[unit]]
 text = "Headers: Authorization: Bearer {token}"
 by = [
-    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_management_route_refuses_a_request_that_carries_only_an_api_key",
+    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_route_outside_the_sdk_and_mcp_read_sets_refuses_a_request_that_carries_only_an_api_key",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_valid_bearer_does_not_read_the_key",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
 count = 16

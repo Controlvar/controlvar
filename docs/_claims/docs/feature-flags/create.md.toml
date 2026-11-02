@@ -49,7 +49,8 @@ by = [
 text = "An API key can't do them (the API answers 401)."
 by = [
     "test:backend/tests/integration/api/test_flag_guide_behaviour.py::test_an_api_key_does_not_create_change_or_turn_on_a_flag",
-    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_management_route_refuses_a_request_that_carries_only_an_api_key",
+    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_route_outside_the_sdk_and_mcp_read_sets_refuses_a_request_that_carries_only_an_api_key",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_scoped_key_is_refused_by_the_routes_that_change_things",
 ]
 
 [[unit]]

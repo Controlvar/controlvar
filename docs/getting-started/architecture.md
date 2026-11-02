@@ -186,7 +186,7 @@ SDK clients and server-to-server integrations use **API keys** instead of JWT to
 
 - Created by any signed-in user, for themselves, via `POST /api/v1/api-keys`; whatever its creator's role, a key writes tracking data (assignments and events)
 - Passed in the `X-API-Key: <key>` header
-- Not limited by their `scopes`, with one exception: any active key authenticates every API-key route as the user who created it, except the server-side SDK routes (`GET /api/v1/sdk/ruleset`, `POST /api/v1/tracking/evaluations`, `POST /api/v1/tracking/assign/batch`), which require the `sdk:ruleset` scope (see [API Key Management](../security/api-keys.md#scopes))
+- Not limited by their `scopes`, with two exceptions: any active key authenticates every SDK route as the user who created it, except the server-side SDK routes (`GET /api/v1/sdk/ruleset`, `POST /api/v1/tracking/evaluations`, `POST /api/v1/tracking/assign/batch`), which require the `sdk:ruleset` scope; and four read operations (`GET /api/v1/feature-flags/`, `GET /api/v1/experiments/`, `GET /api/v1/experiments/{experiment_id}` and `GET /api/v1/experiments/{experiment_id}/results`) accept a key only if it carries the `mcp:read` scope (see [API Key Management](../security/api-keys.md#scopes))
 - Revocable without affecting user accounts
 
 ### Role-Based Access Control
