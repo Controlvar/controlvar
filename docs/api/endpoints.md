@@ -200,6 +200,15 @@ jq '{key, status, experiment_type}' <<<"$EXP"
 <!-- expect: "status": "draft" -->
 <!-- expect: "experiment_type": "a_b" -->
 
+Each metric's `name` may appear once in an experiment, compared exactly: case and spaces
+count, so `Revenue` and `revenue` are two metrics. A list that repeats a name answers 422 at
+`["body", "metrics"]`, and nothing is written. The `msg` gives the 0-based positions of the
+first repeated pair and never the name, for example `duplicate metric name; each name may
+appear once per experiment (first seen at metrics[0], repeated at metrics[2])`.
+`PUT /api/v1/experiments/{experiment_id}` gives the same answer, and refuses an empty
+`metrics` list with 422 as a create does; leaving `metrics` out, or sending `null`, leaves the
+metrics as they are.
+
 A new experiment is a `draft`. Its dates are not part of the create request: schedule it
 with `PUT /api/v1/experiments/{experiment_id}/schedule`, or start it now:
 
@@ -374,6 +383,8 @@ It prints the new account. Its `role` is `VIEWER`; change it with
 Limits are counted per client address and per path: most routes allow 300 requests a
 minute to each path from one address, and a path with an id in it, such as
 `/api/v1/experiments/{experiment_id}`, counts separately for each id.
+Behind a proxy, the client address is the one the proxy reports, when the API is set to
+believe it ([Users' addresses behind a proxy](../self-hosting/proxies.md)).
 AI design (`POST /api/v1/ai/design`) allows 10 a minute, and AI results
 interpretation (`POST /api/v1/ai/interpret/{experiment_id}`) 10 a minute for every
 experiment id together. For the other routes with a limit of their own, see

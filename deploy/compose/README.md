@@ -77,6 +77,7 @@ Compose refuses to start while a required one is unset or empty, and names it.
 | `EXPERIMENTLY_PROFILE` | `core` (the default) or `full` |
 | `AUDIT_HMAC_KEY` | needed by the `full` profile |
 | `HTTP_BIND`, `HTTP_PORT` | where the dashboard listens: `127.0.0.1` and `8080` by default |
+| `FORWARDED_ALLOW_IPS` | a TLS proxy on another machine whose `X-Forwarded-For` the API should believe; empty for a proxy on this host that connects to `127.0.0.1` (see [Users' addresses](#users-addresses)) |
 | `POSTGRES_SERVER` | an external PostgreSQL instead of the bundled one; then start only `docker compose up -d api web` |
 | `WAREHOUSE_CREDENTIALS_KEYS` | turns on warehouse analysis in the `full` profile: Fernet keys, comma-separated, newest first, that encrypt the warehouse credentials the API stores; while it is empty, storing or using a credential answers `503 credentials_unavailable` |
 | `ANTHROPIC_API_KEY` | turns on Anthropic variants in LLM experiments and also Claude calls in `POST /api/v1/ai/design` and `POST /api/v1/ai/interpret/{experiment_id}` (limited to 10 requests a minute); without it those two routes answer from built-in templates |
@@ -96,6 +97,41 @@ The image lines name the images of this file's own release,
 `ghcr.io/controlvar/controlvar-web:<profile>-X.Y.Z`.
 [Releases, images and verification](https://docs.controlvar.com/self-hosting/releases/)
 shows how to check what you pulled.
+
+## Users' addresses
+
+The API counts its rate limits per user address and writes that address on
+its access lines. Behind your TLS reverse proxy it reads the address from the
+`X-Forwarded-For` header, so set your proxy to send it; in nginx that is
+`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`.
+
+The API believes that header from the dashboard container and from a TLS
+proxy on this host that connects to `127.0.0.1`, as above, and from the
+proxies in `FORWARDED_ALLOW_IPS`: IP addresses and networks, separated by
+commas. Leave it empty for a proxy on this host that connects to `127.0.0.1`.
+For a proxy on another machine, put its address in `.env`, such as
+`FORWARDED_ALLOW_IPS=192.0.2.10` for a proxy at `192.0.2.10`, and run
+`docker compose up -d`. A proxy in a container on a Docker network of its own
+connects from that network: give the network's subnet, which
+`docker network inspect` shows. Behind a TLS proxy, keep `HTTP_BIND` at
+`127.0.0.1`, so that the proxy is the only way in.
+
+Check it once people have used the dashboard:
+
+```bash
+docker compose logs api 2>&1 | grep '"uvicorn.access"' | grep ' /api/' \
+  | sed -E 's/.*"event": "([^ ]*):[0-9]+ - .*/\1/' | sort | uniq -c | sort -rn | head
+```
+
+Each line is an address and the number of API requests from it. Your users'
+addresses mean it works. If every request comes from one private address,
+such as `172.18.0.1`, the API sees a proxy instead of your users: either your
+TLS proxy sends no `X-Forwarded-For`, or it is on another machine (or connects
+to this host's network address rather than `127.0.0.1`) and
+`FORWARDED_ALLOW_IPS` does not list it. `docker compose logs web` ends each
+line with the `X-Forwarded-For` the dashboard received, `"-"` when there was
+none, and `docker compose logs api 2>&1 | grep 'trusted proxies'` shows what
+the API believes.
 
 ## Back up and restore
 

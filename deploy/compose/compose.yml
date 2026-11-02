@@ -70,6 +70,10 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # Proxies whose X-Forwarded-For the API believes besides the dashboard
+      # container and the gateway of this project's network, which it always
+      # believes: a TLS proxy on another machine. Empty by default.
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-}
       POSTGRES_SERVER: ${POSTGRES_SERVER:-postgres}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_USER: ${POSTGRES_USER:-experimently}

@@ -1418,6 +1418,13 @@ jobs:
           grep -qF "cannot start: 1 setting needs attention." url.log
           refuse_text "user:pw@" url.log
 
+          # A FORWARDED_ALLOW_IPS entry that matches no proxy (an address
+          # written with a mask): one line, naming the entry and both fixes.
+          expect_refusal experimently-api:full fwd.log "${good[@]}" \
+            -e FORWARDED_ALLOW_IPS=172.18.0.3/16
+          grep -qxF "  - FORWARDED_ALLOW_IPS entry 1 ('172.18.0.3/16') is an address with a mask, which matches no proxy. Write the network, 172.18.0.0/16, or the address alone, 172.18.0.3." fwd.log
+          grep -qF "cannot start: 1 setting needs attention." fwd.log
+
           # No environment named at all: one line.
           expect_refusal experimently-api:full noenv.log
           grep -qxF "[preflight] ENVIRONMENT is not set. This image requires it: set ENVIRONMENT=production (or staging; development only for a local trial)." noenv.log
@@ -1440,7 +1447,7 @@ jobs:
           # definitions set instead of ENVIRONMENT.
           docker run --rm -e APP_ENV=dev -e WAIT_FOR_DB=false -e RUN_MIGRATIONS=false \
             experimently-api:core true
-          rm -f full.log core.log url.log noenv.log testenv.log testing.log
+          rm -f full.log core.log url.log fwd.log noenv.log testenv.log testing.log
           echo "start-up check: every refusal fired, and a good set starts"
 
       # The entrypoint's OpenSSL fallback (#1265) reaches a process started
@@ -1507,6 +1514,24 @@ jobs:
           docker compose -f docker-compose.yml logs --no-color api >api-first.log
           grep -qF "created the first administrator admin@demo.com (role ADMIN)" api-first.log \
             || { cat api-first.log; echo "::error::no first-administrator line"; exit 1; }
+
+      # The API's start line says which proxies it believes: loopback and the
+      # network this container is attached to, read from /proc
+      # (backend/app/core/proxy_trust.py). The whole line, so the WARNING form
+      # (/proc could not be read) or an empty network list fails here.
+      - name: The API names the proxies it believes
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.yml logs --no-color --no-log-prefix api >api-start.log
+          if ! grep -qE "^\[entrypoint\] trusted proxies: 127\.0\.0\.1 ::1; this container's networks: [0-9a-f.:/]+( [0-9a-f.:/]+)*; FORWARDED_ALLOW_IPS: \(none\)$" api-start.log; then
+            grep -F 'trusted proxies' api-start.log || true
+            echo "::error::the API's start line does not name the network its container is attached to"
+            exit 1
+          fi
+          if grep -qF "[entrypoint] WARNING" api-start.log; then
+            echo "::error::the API could not read its networks from /proc"
+            exit 1
+          fi
 
       - name: API readiness and auth gate
         run: |

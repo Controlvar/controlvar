@@ -16,7 +16,11 @@ What it refuses:
   environment name the settings do not know, or ``test``, which is the test
   runner's environment and not one the image runs in.  The image requires
   ENVIRONMENT to be set.  Also an ``ALLOWED_HOSTS`` entry that can never match
-  (``*example.com``), which the settings refuse in every environment.
+  (``*example.com``), which the settings refuse in every environment, and a
+  ``FORWARDED_ALLOW_IPS`` entry that is not an IP address or a network written
+  with its host bits zero, or is ``*`` (``proxy_trust.entry_problems``, one
+  line per entry; read from the process environment only, as the entrypoint
+  reads it).
 * in staging and production -- ``TESTING`` set (the test runner's flag; one
   line, and nothing else is listed, as the settings refuse it outright);
   ``SECRET_KEY``, ``FIRST_SUPERUSER_PASSWORD``
@@ -24,7 +28,8 @@ What it refuses:
   placeholder; (full profile) ``WAREHOUSE_CREDENTIALS_KEYS`` set but not a
   list of Fernet keys, or holding a placeholder (it may be absent);
   ``PUBLIC_BASE_URL`` missing (unless ``ALLOWED_HOSTS`` names the hosts) or
-  malformed; ``ALLOWED_HOSTS=*``; ``POSTGRES_SERVER`` (or
+  malformed; ``ALLOWED_HOSTS=*``; a ``FORWARDED_ALLOW_IPS`` entry that covers
+  every address (``0.0.0.0/0``, ``::/0``); ``POSTGRES_SERVER`` (or
   ``POSTGRES_HOST``) not set; ``DATABASE_URL`` or ``DATABASE_URI`` set.
 
 The secret rules are ``settings_rules``', the ones ``config.py`` and the
@@ -45,6 +50,7 @@ import sys
 from pathlib import Path
 from typing import Callable, Dict, List, Mapping, Optional
 
+from backend.app.core import proxy_trust
 from backend.app.core.settings_rules import (
     CANONICAL_ENVIRONMENTS,
     CREDENTIAL_KEYS_SETTING,
@@ -196,8 +202,17 @@ def check(
         if error:
             problems.append(error)
 
+    # FORWARDED_ALLOW_IPS, in every environment: an entry uvicorn would keep
+    # as a literal that no peer address equals, and `*`. The process
+    # environment only: the entrypoint reads it there, never from .env.prod.
+    forwarded_allow_ips = environ.get(proxy_trust.SETTING)
+    problems.extend(proxy_trust.entry_problems(forwarded_allow_ips))
+
     if environment not in HARDENED_ENVIRONMENTS:
         return problems
+
+    # ...and in staging and production an entry that covers every address.
+    problems.extend(proxy_trust.every_address_problems(forwarded_allow_ips))
 
     if full_profile is None:
         full_profile = _modules_present()

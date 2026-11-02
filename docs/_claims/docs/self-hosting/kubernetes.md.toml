@@ -100,3 +100,87 @@ by = ["workflow:chart-kind.yml"]
 [[unit]]
 text = "The values given at install are kept."
 by = ["workflow:chart-kind.yml"]
+
+[[unit]]
+text = "Users' addresses"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The API counts its rate limits per user address and writes that address on its access lines."
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestGetClientIp::test_it_uses_the_resolved_client_and_not_the_header",
+    "test:backend/tests/unit/core/test_aws_settings_and_clients.py::test_each_request_reaches_the_access_log_with_its_path_and_status",
+]
+
+[[unit]]
+text = "Through the chart's Ingress it reads the address from the X-Forwarded-For header your ingress controller adds, and believes that header only from the API pod's own network and the addresses and networks in api.forwardedAllowIps."
+by = [
+    "test:backend/tests/unit/infrastructure/test_proxy_headers_trust.py::test_the_list_each_topology_starts_with_believes_its_proxies_only",
+    "test:backend/tests/unit/chart/test_chart_render.py::test_the_proxies_the_api_believes_default_to_the_private_ranges",
+]
+
+[[unit]]
+text = "The chart's default is the private ranges, 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16, which covers an ingress controller on a private pod network."
+by = [
+    "test:backend/tests/unit/chart/test_chart_render.py::test_the_proxies_the_api_believes_default_to_the_private_ranges",
+    "test:backend/tests/unit/infrastructure/test_proxy_headers_trust.py::test_the_list_each_topology_starts_with_believes_its_proxies_only",
+]
+
+[[unit]]
+text = "You can narrow it to the network your ingress controller's pods get their addresses from, your cluster's pod network: 10.244.0.0/16 on kind."
+by = ["test:backend/tests/unit/chart/test_chart_render.py::test_a_set_value_is_rendered_exactly"]
+
+[[unit]]
+text = "A single pod's address is not enough, because a replaced pod gets another."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "kubectl get pods -n ingress-nginx -o wide -l app.kubernetes.io/component=controller lists ingress-nginx's controller pods with their addresses."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Add --set api.forwardedAllowIps=<that network> to the install or upgrade command."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "For more than one network use a values file, or quote the whole argument and escape each comma: --set 'api.forwardedAllowIps=10.0.0.0/8\\,192.168.0.0/16'."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "A controller that runs with hostNetwork: true connects from its node's address; give your nodes' network then."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "To check it once people have used the dashboard, count the addresses on the API's access lines, as Users' addresses behind a proxy shows."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Your users' addresses mean it works."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "One pod address on every line is your ingress controller's: api.forwardedAllowIps does not cover it."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Node or load balancer addresses on every line mean the controller itself does not receive your users' addresses; its documentation says how to pass them on."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Upgrade the chart together with the image."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Earlier charts left api.forwardedAllowIps empty, and under one of them a newer image believes X-Forwarded-For only from the API pod's own network."
+by = ["test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_unset_empty_or_blank_adds_nothing"]
+
+[[unit]]
+text = "The chart now refuses an empty api.forwardedAllowIps: --reset-then-reuse-values, below, takes the new default, while --reuse-values can keep an earlier chart's empty value, and that upgrade fails naming api.forwardedAllowIps."
+by = [
+    "test:backend/tests/unit/chart/test_chart_render.py::test_schema_refuses",
+    "workflow:chart-kind.yml",
+]
+
+[[unit]]
+text = "If your own values set it to \"\", give it a network on this upgrade, such as --set api.forwardedAllowIps=10.244.0.0/16 on kind."
+by = ["exempt:instruction"]

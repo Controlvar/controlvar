@@ -128,7 +128,7 @@ function SearchPage() {
 | `reason` | `string \| undefined` | Why the server decided: `targeting_rule`, `rollout`, `inactive` or `error`; `undefined` while loading, on error, or from servers that do not send it |
 
 A flag change reaches an open page when a hook re-mounts after `cacheTtlMs`, or on reload; the SDK
-neither polls nor streams.
+neither polls nor streams. See [Turning a Flag Off](../feature-flags/kill-switch.md).
 
 ### `useVariant(flagKey): string | null`
 

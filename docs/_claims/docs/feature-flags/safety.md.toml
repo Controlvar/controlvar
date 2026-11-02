@@ -37,6 +37,13 @@ by = [
 ]
 
 [[unit]]
+text = "A rollback reaches clients as any change to the flag does: see Turning a Flag Off."
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p8_p9_the_monitor_turns_the_flag_off_once",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_every_sdk_but_the_edge_sdk_keeps_an_answer_five_minutes_and_the_edge_sdk_one",
+]
+
+[[unit]]
 text = "For every ACTIVE flag, whatever its rollout_percentage (a flag at 0% still serves the users its targeting rules match), it:"
 by = [
     "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p3_a_rule_only_flag_can_be_rolled_back",

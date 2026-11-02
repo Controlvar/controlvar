@@ -576,6 +576,19 @@ describe('evaluateFlag — offline fallback (AsyncStorage)', () => {
     expect(fetchMock()).toHaveBeenCalledTimes(1);
   });
 
+  // #1519: the kill-switch page says a device that cannot reach the API serves the last answer it
+  // stored with no time limit, also after a restart (a new client over the same storage).
+  test('on API failure returns the last-known evaluation however long ago it expired', async () => {
+    const storage = new OfflineStorage();
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+    await storage.setFlag('user-1', 'dark-mode', { key: 'dark-mode', enabled: true, config: null }, -thirtyDaysMs);
+    mockFetchError('Connection refused');
+
+    const client = makeClient({ offlineFallback: true }, storage);
+    expect(await client.evaluateFlag('dark-mode', 'user-1')).toEqual({ key: 'dark-mode', enabled: true, config: null });
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
+  });
+
   test('on API failure with nothing persisted returns disabled (and persists nothing)', async () => {
     mockFetchError('Connection refused');
     const storage = new OfflineStorage();

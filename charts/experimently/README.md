@@ -29,12 +29,28 @@ Sign in at `publicBaseUrl` as `firstSuperuser`, with the
 `FIRST_SUPERUSER_PASSWORD` of your Secret. That password is read only while the
 database has no users: changing it later does nothing.
 
+## Users' addresses
+
+The Ingress sends API requests to the API's Service, so the API reads each
+user's address from the `X-Forwarded-For` header your ingress controller adds.
+It believes that header from the API pod's own network and from the addresses
+and networks in `api.forwardedAllowIps`, which defaults to the private ranges,
+`10.0.0.0/8,172.16.0.0/12,192.168.0.0/16`. That covers an ingress controller on
+a private pod network. To believe only your ingress controller, set it to the
+network its pods get their addresses from, as
+[Kubernetes (Helm)](https://docs.controlvar.com/self-hosting/kubernetes/#users-addresses)
+shows. It cannot be empty. An entry that is not an address or a network stops
+the `migrate` init container, and its log names the entry.
+
 ## Without the Ingress
 
 With `ingress.enabled=false`, route `/api`, `/ws` and `/health` to the API's
 Service (`experimently-api` for the guide's release) and everything else to the
 dashboard's (`experimently-web`), as the chart's Ingress does. Pass the Host header
 unchanged: the API answers only for the host name of `publicBaseUrl`.
+Whatever reaches the API's Service must connect from an address in
+`api.forwardedAllowIps` for the API to read users' addresses from its
+`X-Forwarded-For`.
 
 ## The bundled PostgreSQL and Redis
 
