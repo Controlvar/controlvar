@@ -42,7 +42,7 @@ STATES: Tuple[str, ...] = (
 ACTIVE_STATES = frozenset({"role-active", "grant-active"})
 
 
-def _role(db: Session, tag: str, pairs: Iterable[Tuple[str, str]]) -> uuid.UUID:
+def make_role(db: Session, tag: str, pairs: Iterable[Tuple[str, str]]) -> uuid.UUID:
     """A custom role holding *pairs*, grouped by resource, in request shape."""
     grouped: dict = {}
     for resource, action in pairs:
@@ -113,7 +113,7 @@ def plant(db: Session, user_id, pair: Tuple[str, str], state: str, tag: str) -> 
     if state == "none":
         pass
     elif state in ("role-active", "role-not-activated"):
-        role_id = _role(db, tag, [pair])
+        role_id = make_role(db, tag, [pair])
         assign(db, user_id, role_id, activated=state == "role-active")
     elif state == "grant-active":
         grant(db, user_id, resource, [action])
@@ -125,7 +125,7 @@ def plant(db: Session, user_id, pair: Tuple[str, str], state: str, tag: str) -> 
         grant(db, user_id, resource, [action], expires_sql="now() - interval '1 hour'")
     elif state == "every-other-pair":
         others = sorted(ELEVEN - {pair})
-        role_id = _role(db, tag, others)
+        role_id = make_role(db, tag, others)
         assign(db, user_id, role_id, activated=True)
     else:  # pragma: no cover - a typo in a test
         raise ValueError(state)
