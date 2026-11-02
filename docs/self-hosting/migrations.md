@@ -117,7 +117,7 @@ Output, for a full install (a core install prints the first line only):
 
 ```text
 607c51a59bf5 (head)
-modules_0003_lower_is_better (head)
+modules_0004_rbac_activation (head)
 ```
 
 One line per head: the revision ID of the last migration applied on each
@@ -155,8 +155,9 @@ Roll back the most recent migration **of one branch**. With two heads a bare
 `-1` is ambiguous — alembic warns and picks one, which may not be the branch you
 meant — so name the branch:
 
-The modules branch has three revisions: `modules_0001_rbac`, then
-`modules_0002_warehouse_analysis`, then `modules_0003_lower_is_better`. Name
+The modules branch has four revisions: `modules_0001_rbac`, then
+`modules_0002_warehouse_analysis`, then `modules_0003_lower_is_better`, then
+`modules_0004_rbac_activation`. Name
 the modules revision to end at rather than counting back: a relative step such
 as `modules@-2` counts from the newest revision the image has, so it unapplies
 a different revision once a release adds one.
@@ -164,16 +165,20 @@ a different revision once a release adds one.
 The modules branch, back to a named revision:
 
 ```{.bash skip reason="destructive: unapplies modules revisions; see what each drops"}
+docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade modules_0003_lower_is_better
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade modules_0002_warehouse_analysis
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade modules_0001_rbac
 ```
 
-`downgrade modules_0002_warehouse_analysis` unapplies
-`modules_0003_lower_is_better` only, which drops the column
+`downgrade modules_0003_lower_is_better` unapplies
+`modules_0004_rbac_activation` only, which drops the column `activated_at` from
+`user_custom_roles` and `direct_permission_grants`, with any activation time
+stored in it. `downgrade modules_0002_warehouse_analysis` also unapplies
+`modules_0003_lower_is_better`, which drops the column
 `warehouse_sources.lower_is_better`, every metric source's lower-is-better
 setting. `downgrade modules_0001_rbac` also unapplies
 `modules_0002_warehouse_analysis`, which drops the three warehouse tables it
-created, with their rows. `modules@-3` unapplies all three, newest first.
+created, with their rows. `modules@-4` unapplies all four, newest first.
 
 One step back on the core chain:
 
@@ -192,6 +197,8 @@ COMMENT as it goes). On a database whose tables came from the bootstrap rather
 than from those migrations, their downgrade is a no-op — it will not drop
 populated tables it never made. `modules_0003_lower_is_better` drops its column
 on every database, however the column was made.
+`modules_0004_rbac_activation` drops its two columns on every database in the
+same way.
 
 ### `modules_0002_warehouse_analysis` removes saved warehouse connections
 
@@ -201,9 +208,12 @@ earlier `warehouse_connections` is deleted** — connections saved through the
 earlier warehouse endpoints — and nothing is copied into the new table.
 
 Downgrading it cannot bring those rows back: `downgrade modules_0001_rbac`
-first unapplies `modules_0003_lower_is_better`, which drops each metric
-source's lower-is-better setting, then drops the three tables this revision
-created and puts back an **empty** table of the earlier shape.
+first unapplies `modules_0004_rbac_activation`, which drops the
+activation-time column of custom role assignments and direct grants, with any
+activation time stored in it, and `modules_0003_lower_is_better`, which drops
+each metric source's
+lower-is-better setting, then drops the three tables this revision created and
+puts back an **empty** table of the earlier shape.
 If you need the rows, take a snapshot of the database before upgrading to the
 release that carries this revision, and restore that snapshot to go back. The
 migration logs how many rows it removed:
@@ -231,6 +241,26 @@ The [compliance audit trail](../api/compliance.md#list-audit-events) keeps a
 record too, and a downgrade leaves it in place: each source's latest entry
 (`resource_type=warehouse_source`) carries its definition as last saved,
 `lower_is_better` included.
+
+### `modules_0004_rbac_activation` adds an activation time to custom role assignments and direct grants
+
+This revision adds a nullable `activated_at` column to `user_custom_roles` and
+`direct_permission_grants`. It sets no default and fills in nothing, so every
+assignment and grant already stored has none. It logs them, so you have a
+record of what existed when it ran: one WARNING that counts them, then one line
+per row (at most 200, then `… and N more`), or one INFO line when there are
+none.
+
+```text
+modules_0004_rbac_activation: 2 custom role assignments and 1 direct permission grant have no activation time (activated_at is empty; expired grants and grants with is_active false are not counted or listed). See docs/self-hosting/migrations.md, "modules_0004_rbac_activation":
+assignment user_id=<uuid> role_name=data-scientist
+grant user_id=<uuid> resource=experiment actions=["update"] expires_at=<iso or none>
+```
+
+Read the log where the `1ab99332f0ba` section below says (Docker Compose,
+Helm, AWS). Downgrading this revision (to `modules_0003_lower_is_better`)
+drops both columns, and any activation time stored in them; upgrading
+afterwards adds them empty.
 
 ### `1ab99332f0ba` rewrites stored event times to UTC
 
@@ -785,6 +815,10 @@ What this means for you:
   is backward-compatible for a rollback, and undoing it drops every warehouse
   metric source's lower-is-better setting; an upgrade afterwards sets each back
   to `false`, not to the choice.
+  [`modules_0004_rbac_activation`](#modules_0004_rbac_activation-adds-an-activation-time-to-custom-role-assignments-and-direct-grants)
+  is backward-compatible for a rollback too, and undoing it drops the
+  activation-time column of custom role assignments and direct grants, with
+  any activation time stored in it; an upgrade afterwards adds the column empty.
 - Compose runs one API container, which is the only writer and keeps `RUN_MIGRATIONS=true`.
   The chart already keeps the bootstrap out of the serving container: it runs
   it in an init container.

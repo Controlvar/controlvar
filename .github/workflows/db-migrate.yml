@@ -27,7 +27,7 @@ on:
         default: upgrade
         options: [upgrade, downgrade]
       target:
-        description: 'Alembic target. upgrade: heads. downgrade: the revision id to end at, e.g. 4c2c09a2b3e8 (the down_revision of the migration you are undoing; that example undoes 607c51a59bf5, which drops each flag''s value type and values and refuses while any flag is a string, number or json flag; one further, 37dcb2969766, also undoes 4c2c09a2b3e8, whose downgrade changes no table; modules_0001_rbac exists only in a full-profile image). Relative steps (-1, modules@-1), head and base are refused: a full image has two heads. A core id at or below a7b8c9d0e1f2 also unapplies the modules branch.'
+        description: 'Alembic target. upgrade: heads. downgrade: the revision id to end at, e.g. 4c2c09a2b3e8 (the down_revision of the migration you are undoing; that example undoes 607c51a59bf5, which drops each flag''s value type and values and refuses while any flag is a string, number or json flag; one further, 37dcb2969766, also undoes 4c2c09a2b3e8, whose downgrade changes no table; modules_0001_rbac exists only in a full-profile image, and a downgrade to it also undoes every later modules revision, dropping the warehouse analysis tables with their rows). Relative steps (-1, modules@-1), head and base are refused: a full image has two heads. A core id at or below a7b8c9d0e1f2 also unapplies the modules branch.'
         required: true
         type: string
         default: 'heads'

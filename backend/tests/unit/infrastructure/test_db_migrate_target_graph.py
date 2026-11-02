@@ -62,9 +62,16 @@ NAMED_DOWNGRADES = {
         "806901fb7735",
     ],
     # docs/deployment/rollback-runbook.md, Step 2, and the operator page's
-    # Rolling Back: the modules branch, back to a named revision (#1386).
-    "modules_0002_warehouse_analysis": ["modules_0003_lower_is_better"],
+    # Rolling Back: the modules branch, back to a named revision (#1386, #891).
+    # The help text's modules_0001_rbac "also undoes every later modules
+    # revision": the last entry.
+    "modules_0003_lower_is_better": ["modules_0004_rbac_activation"],
+    "modules_0002_warehouse_analysis": [
+        "modules_0004_rbac_activation",
+        "modules_0003_lower_is_better",
+    ],
     "modules_0001_rbac": [
+        "modules_0004_rbac_activation",
         "modules_0003_lower_is_better",
         "modules_0002_warehouse_analysis",
     ],
@@ -160,9 +167,10 @@ def test_the_branch_point_also_unapplies_the_modules_branch():
     the modules branch"."""
     plan = _downgrade_plan(_script(), BRANCH_POINT)
     # The eleven core revisions above it (through 607c51a59bf5, #1497) and the
-    # modules branch's three (through modules_0003_lower_is_better, #1386).
-    assert len(plan) == 14, plan
+    # modules branch's four (through modules_0004_rbac_activation, #891).
+    assert len(plan) == 15, plan
     assert [r for r in plan if r.startswith(MODULES_PREFIX)] == [
+        "modules_0004_rbac_activation",
         "modules_0003_lower_is_better",
         "modules_0002_warehouse_analysis",
         "modules_0001_rbac",

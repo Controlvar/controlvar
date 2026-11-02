@@ -472,6 +472,10 @@ jobs:
                 --summary "$work/summary.md" --values "$work/values.json" || verdict=$?
               if [ -f "$work/summary.md" ]; then
                 cat "$work/summary.md" >> "$GITHUB_STEP_SUMMARY"
+                # Also in the job log: the step summary is not in `gh run view --log`.
+                echo "::group::Fuzz summary"
+                cat "$work/summary.md"
+                echo "::endgroup::"
               fi
               if [ -f "$work/values.json" ]; then
                 printf 'fuzz_values=%s\n' "$(cat "$work/values.json")" >> "$GITHUB_OUTPUT"

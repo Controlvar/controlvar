@@ -430,7 +430,8 @@ as an `ADMIN` superuser.
 
 Run `cdk deploy` for the Fargate stack (`experimentation-fargate-<env>`) from a
 release's checkout before you deploy that release's image: the stack is what
-sets `FORWARDED_ALLOW_IPS` on the API task.
+sets `FORWARDED_ALLOW_IPS` on the API task. The Deploy workflow refuses an API
+task definition that does not set it, and says which stack to deploy.
 
 The API task sets `FORWARDED_ALLOW_IPS` to the VPC's range, `10.0.0.0/16`, so
 the API believes the `X-Forwarded-For` header the load balancer adds, counts

@@ -228,7 +228,7 @@ text = "Show migration history, newest first, down to the first revision (<base>
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "The modules branch has three revisions, modules_0001_rbac, modules_0002_warehouse_analysis and then modules_0003_lower_is_better: downgrade modules@-1 unapplies modules_0003_lower_is_better only, and downgrade modules@-3 the whole branch."
+text = "The modules branch has four revisions, modules_0001_rbac, modules_0002_warehouse_analysis, modules_0003_lower_is_better and then modules_0004_rbac_activation: downgrade modules@-1 unapplies modules_0004_rbac_activation only, and downgrade modules@-4 the whole branch."
 by = ["mechanism:alembic-plan-unapply"]
 
 [[unit]]
