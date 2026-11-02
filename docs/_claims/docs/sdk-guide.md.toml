@@ -264,6 +264,10 @@ by = [
 ]
 
 [[unit]]
+text = "How long a cached answer keeps a flag change from your users, SDK by SDK: Turning a Flag Off."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "\"Verified live\" means the SDK's contract_smoke entry point passed tests/sdk-contract/live/run_live_contract.py against a running backend (see tests/sdk-contract/README.md); the SDK Live Contract CI job repeats this on every pull request, with --strict, for python, openfeature-python, js, openfeature, edge, react, react-native, go, java, android, ruby, php and dotnet (the sdks: list of the job in pr-qa-gate.yml)."
 by = [
     "mechanism:sdk-guide-status",

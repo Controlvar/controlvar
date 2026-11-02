@@ -488,6 +488,25 @@ def test_5xx_after_a_load_keeps_serving_and_reports_each_failure(no_thread):
     assert client.get_feature_flag("us-only", "user-1", US).source == "local"
 
 
+def test_without_max_stale_seconds_a_ruleset_whose_refreshes_failed_for_a_day_is_still_used(no_thread):
+    """#1519: the kill-switch page says the last ruleset is served with no time limit unless
+    max_stale_seconds is set, so a flag turned off during an outage stays on until the API answers."""
+    from controlvar import TransportError
+
+    now = [1000.0]
+    server = FakeServer(ok(), make_response(503), TransportError("connection refused"))
+    client, errors = local_client(server)
+    client._local._clock = lambda: now[0]
+    client._local.refresh_once()
+    while now[0] < 1000.0 + 86_400:
+        now[0] += client._local.refresh_once()
+    assert len(errors) > 100
+    status = client.status()
+    assert (status.ready, status.ruleset_version) == (True, "v1")
+    assert client.get_feature_flag("all-on", "user-1").source == "local"
+    assert server.calls("/api/v1/feature-flags/evaluate/") == []
+
+
 def test_a_network_failure_before_the_first_load(no_thread):
     from controlvar import TransportError
 
