@@ -9256,13 +9256,15 @@
           "min_stage_duration": {
             "anyOf": [
               {
+                "maximum": 8760,
+                "minimum": 0,
                 "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Minimum time (hours) between stages",
+            "description": "Minimum time (hours) between stages: a whole number from 0 to 8760, or null for no minimum",
             "title": "Min Stage Duration"
           },
           "name": {
@@ -9574,13 +9576,15 @@
           "min_stage_duration": {
             "anyOf": [
               {
+                "maximum": 8760,
+                "minimum": 0,
                 "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Minimum time (hours) between stages",
+            "description": "Minimum time (hours) between stages: a whole number from 0 to 8760, or null for no minimum; null clears a stored minimum",
             "title": "Min Stage Duration"
           },
           "name": {
@@ -9609,7 +9613,8 @@
                 "type": "null"
               }
             ],
-            "description": "Updated rollout stages",
+            "deprecated": true,
+            "description": "Not accepted. A request that contains `stages`, with any value including null, is refused with 422. Add a stage with `POST /api/v1/rollout-schedules/{schedule_id}/stages` and change one with `PUT /api/v1/rollout-schedules/stages/{stage_id}`.",
             "title": "Stages"
           },
           "start_date": {
@@ -24660,7 +24665,7 @@
         ]
       },
       "put": {
-        "description": "Update an existing rollout schedule.\n\nThis endpoint allows updating the properties of a rollout schedule,\nincluding its stages and status transitions.",
+        "description": "Update an existing rollout schedule.\n\nThis endpoint updates the properties of a rollout schedule. It does not\ntake `stages`: a request that contains it answers 422. Add a stage with\n`POST /api/v1/rollout-schedules/{schedule_id}/stages` and change one with\n`PUT /api/v1/rollout-schedules/stages/{stage_id}`.",
         "operationId": "update_rollout_schedule_api_v1_rollout_schedules__schedule_id__put",
         "parameters": [
           {

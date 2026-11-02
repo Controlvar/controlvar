@@ -728,3 +728,13 @@ by = [
     "test:backend/tests/unit/schemas/test_experiment_metric_names.py::test_the_update_schema_has_a_minimum_of_one_metric",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
 ]
+
+[[unit]]
+text = "POST /api/v1/rollout-schedules/, PUT /api/v1/rollout-schedules/{schedule_id} | #962, #1086, #1529, #1534 | min_stage_duration accepts a whole number of hours from 0 to 8760, or null for no minimum (null on a PUT still clears it); anything else answers 422, where a negative value or one above 8760 was stored, and 2147483648 or more answered 500. A PUT that makes the end date not after the start date, or sends one date that falls on the wrong side of the stored one, answers 422 with End date must be after start date, where it answered 500. A date with no zone is read as UTC, so a start and an end that mix zoned and unzoned values no longer answer 500. A PUT that contains stages, with any value including null and [], answers 422 naming the stage routes, where it answered 200 without applying the stages; this is deliberately wider than \"a non-empty list\" so a client cannot believe a list was applied. Schedules already stored with a value outside 0 to 8760 are read back unchanged, and the scheduler treats a negative one as no minimum; a PUT that sends such a value back answers 422 until it is corrected. The OpenAPI document changes: min_stage_duration has a minimum and a maximum on both requests, and stages is marked deprecated on the update. See Rollout schedules."
+by = [
+    "test:backend/tests/integration/api/test_rollout_schedule_input_api.py",
+    "test:backend/tests/unit/schemas/test_rollout_schedule_input.py",
+    "test:backend/tests/unit/core/test_rollout_min_stage_duration.py::test_a_stored_negative_min_stage_duration_is_no_minimum",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
