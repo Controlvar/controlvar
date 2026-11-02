@@ -777,7 +777,7 @@ def test_every_deferred_page_with_an_install_section_is_read():
     request that packs a README moves the second and third."""
     with_section = [page for page in DEFERRED if INSTALL_HEADING.search(text(page))]
     under_the_rule = [page for page in with_section if page not in PACKAGED]
-    assert (len(with_section), len(under_the_rule), len(PACKAGED)) == (24, 21, 4), (
+    assert (len(with_section), len(under_the_rule), len(PACKAGED)) == (24, 21, 5), (
         with_section,
         sorted(PACKAGED),
     )
@@ -794,6 +794,7 @@ def test_every_deferred_page_with_an_install_section_is_read():
 #: READMEs the packages actually ship.
 PACKAGED: Dict[str, str] = {
     "sdk/dotnet/README.md": "dotnet",
+    "sdk/mcp/README.md": "mcp",
     "sdk/openfeature-python/README.md": "openfeature-python",
     "sdk/openfeature/README.md": "openfeature",
     "sdk/react/README.md": "react",
@@ -807,6 +808,11 @@ PLANTS: Dict[str, Tuple[str, str, Tuple[str, str]]] = {
         "## Quick Start\n",
         "`dotnet add package Controlvar.SDK`",
         ("nuget", "Controlvar.SDK"),
+    ),
+    "sdk/mcp/README.md": (
+        "## Configuration\n",
+        "`npm install @controlvar/mcp-server`",
+        ("npm", "@controlvar/mcp-server"),
     ),
     "sdk/openfeature-python/README.md": (
         "## Quick start\n",
