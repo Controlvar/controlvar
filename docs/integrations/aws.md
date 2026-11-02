@@ -143,6 +143,8 @@ response, and the distribution caches nothing.
 Before you deploy it:
 
 - the account is bootstrapped for CDK in us-east-1;
+- the CDK app's Python requirements are installed, as in
+  [AWS CDK Deployment](../self-hosting/cdk.md#deploy-all-stacks);
 - the API runs the full profile and is reachable from the internet over https, with a valid
   certificate;
 - you have an API key for it: use an API key made for the router; changing it means
@@ -167,7 +169,11 @@ A setting that is missing or wrong stops the synth, with a message that names it
 function runs Python 3.12 on x86_64.
 
 The router fails open: when the API does not answer in time or answers an error, the visitor
-gets the page they asked for, with `X-Split-URL: failed`. Each failure is one JSON line in
+gets the page they asked for, with `X-Split-URL: failed`. The router gives the API 1 second to
+send the routes table and 1.5 seconds to answer for a visitor, from the start of the call to
+the last byte of the answer. Looking up the API's host name counts towards that time, but a
+slow lookup is not cut short. If the router cannot get the routes table when the page comes
+back, that visit gets no cookie. Each failure is one JSON line in
 the router's log, with the HTTP status or a fixed word, such as
 `{"event": "split_url_failed", "phase": "viewer-request", "status": "429"}`. The log is in
 CloudWatch in the Region where the function ran, under the log group

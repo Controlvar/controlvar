@@ -66,8 +66,10 @@ Both split URL routes have the limit `POST /api/v1/tracking/assign` has: 6,000 r
 minute per client address, per route. `SDK_RATE_LIMIT_PER_MINUTE` raises it, for every SDK
 route and every address. Over the limit the API answers `429`, and the reference integration
 serves the page with `X-Split-URL: failed` and logs `split_url_failed status=429`. The
-CloudFront edge router does the same: it serves the page with `X-Split-URL: failed`, and its
-log line carries `"status": "429"`. Above the
+CloudFront edge router does the same: it serves the page with `X-Split-URL: failed` (a header
+that rests on an AWS behaviour not yet verified, see
+[AWS integration](../integrations/aws.md#the-split-url-edge-router)), and its log line carries
+`"status": "429"`. Above the
 limit, a returning visitor whose assignment is a treatment is served the control page while
 their conversions still count for the treatment; a site with more than about 100 entry-page
 views a second is in that range.

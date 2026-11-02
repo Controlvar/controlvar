@@ -277,8 +277,11 @@ text = "Over the limit the API answers 429, and the reference integration serves
 by = ["test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_a_failure_serves_the_page_and_logs_its_status"]
 
 [[unit]]
-text = "The CloudFront edge router does the same: it serves the page with X-Split-URL: failed, and its log line carries \"status\": \"429\"."
-by = ["test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_failure_serves_the_page_and_logs_its_status"]
+text = "The CloudFront edge router does the same: it serves the page with X-Split-URL: failed (a header that rests on an AWS behaviour not yet verified, see AWS integration), and its log line carries \"status\": \"429\"."
+by = [
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_failure_serves_the_page_and_logs_its_status",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_the_cookie_does_not_rest_on_the_internal_header",
+]
 
 [[unit]]
 text = "Above the limit, a returning visitor whose assignment is a treatment is served the control page while their conversions still count for the treatment; a site with more than about 100 entry-page views a second is in that range."

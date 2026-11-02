@@ -331,6 +331,10 @@ text = "the account is bootstrapped for CDK in us-east-1;"
 by = ["exempt:instruction"]
 
 [[unit]]
+text = "the CDK app's Python requirements are installed, as in AWS CDK Deployment;"
+by = ["exempt:instruction"]
+
+[[unit]]
 text = "the API runs the full profile and is reachable from the internet over https, with a valid certificate;"
 by = [
     "test:backend/tests/unit/core/test_optional_modules.py::TestSplitUrlRoutingIsTheModulesOnly::test_the_core_routers_answer_404",
@@ -426,6 +430,22 @@ by = [
     "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_failure_serves_the_page_and_logs_its_status",
     "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_an_unexpected_error_serves_the_page",
 ]
+
+[[unit]]
+text = "The router gives the API 1 second to send the routes table and 1.5 seconds to answer for a visitor, from the start of the call to the last byte of the answer."
+by = [
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_the_timeouts_are_one_and_a_half_seconds",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_slow_answer_ends_the_call_at_its_deadline",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_slow_api_is_a_timeout_and_the_page_is_served",
+]
+
+[[unit]]
+text = "Looking up the API's host name counts towards that time, but a slow lookup is not cut short."
+by = ["test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_the_host_name_lookup_counts_towards_the_deadline"]
+
+[[unit]]
+text = "If the router cannot get the routes table when the page comes back, that visit gets no cookie."
+by = ["test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_viewer_response_without_a_routes_table_sets_no_cookie"]
 
 [[unit]]
 text = "Each failure is one JSON line in the router's log, with the HTTP status or a fixed word, such as {\"event\": \"split_url_failed\", \"phase\": \"viewer-request\", \"status\": \"429\"}."

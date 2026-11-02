@@ -699,7 +699,9 @@ Controlvar for them. Check, in order:
    did not match an entry; `failed` means the API did not answer, and the integration's log
    says why, with the HTTP status (`401` for a revoked key, `429` for the rate limit). The
    CloudFront edge router's log is in CloudWatch (see
-   [AWS integration](../integrations/aws.md#the-split-url-edge-router)).
+   [AWS integration](../integrations/aws.md#the-split-url-edge-router)). On a page the router
+   serves, its `X-Split-URL` rests on an AWS behaviour not yet verified, which that section
+   describes.
 3. Conversions are sent with the visitor-id cookie's value as `user_id`, and name the
    experiment, as in [Count conversions](#count-conversions).
 
@@ -852,10 +854,14 @@ its settings, what it costs and where its logs are: see
 - Over the limit the API answers `429`, and the reference integration serves the page with
   `X-Split-URL: failed` and logs `split_url_failed status=429`.
 - The CloudFront edge router does the same over the limit: it serves the page with
-  `X-Split-URL: failed`, and its log line carries `"status": "429"`.
-- The CloudFront edge router sends no targeting attributes (`context`), so a new visitor of
-  an experiment with targeting rules is not enrolled: they are served the page they asked
-  for, with `X-Split-URL: not-enrolled`.
+  `X-Split-URL: failed` (a header that rests on an AWS behaviour not yet verified, see
+  [AWS integration](../integrations/aws.md#the-split-url-edge-router)), and its log line
+  carries `"status": "429"`.
+- The CloudFront edge router sends no targeting attributes (`context`), so an experiment's
+  targeting rules see only the visitor id: a new visitor is enrolled only if the rules match
+  without any other attribute, and otherwise is served the page they asked for, with
+  `X-Split-URL: not-enrolled` (a header that rests on an AWS behaviour not yet verified, see
+  [AWS integration](../integrations/aws.md#the-split-url-edge-router)).
 - Above the limit, a returning visitor whose assignment is a treatment is served the control
   page while their conversions still count for the treatment; a site with more than about 100
   entry-page views a second is in that range.
