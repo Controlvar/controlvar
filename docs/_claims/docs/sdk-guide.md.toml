@@ -363,6 +363,10 @@ text = "Elixir | sdk/elixir | ExUnit | not yet (unit tests run in the nightly ti
 by = ["mechanism:sdk-guide-status"]
 
 [[unit]]
+text = "MCP server (not an SDK; not yet published) | sdk/mcp | jest | no: it is not an SDK, and has no contract smoke | sdk/mcp/README.md"
+by = ["mechanism:sdk-guide-status", "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_sdk_mcp_is_the_mcp_server_and_not_an_sdk"]
+
+[[unit]]
 text = "Rows marked \"not yet\" have a contract_smoke entry point that no CI job runs against a live backend; their unit tests run in the nightly tier and on pull requests that touch them."
 by = ["mechanism:sdk-guide-status"]
 

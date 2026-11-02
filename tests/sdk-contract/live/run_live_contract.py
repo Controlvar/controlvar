@@ -160,6 +160,7 @@ EXPOSURE_SDKS: frozenset[str] = frozenset(
         "js",
         "python",
         "go",
+        "java",
     ]
 )
 

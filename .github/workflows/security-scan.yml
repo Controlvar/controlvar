@@ -109,7 +109,7 @@ jobs:
       - name: Install the published SDK closures
         run: |
           set -euo pipefail
-          for dir in sdk/js sdk/react sdk/react-native sdk/openfeature sdk/edge; do
+          for dir in sdk/js sdk/react sdk/react-native sdk/openfeature sdk/edge sdk/mcp; do
             echo "::group::npm ci $dir"
             (cd "$dir" && npm ci)
             echo "::endgroup::"
@@ -151,7 +151,8 @@ jobs:
       # SSPL would have been reported and merged. The Python equivalent is
       # scripts/core_build.sh's `licences` step.
       # No argument: the script defaults to every closure that is published or
-      # shipped -- the dashboard and the five npm SDKs. Passing `frontend`
+      # shipped -- the dashboard, the five npm SDKs and the MCP server (every
+      # sdk/ directory with a package-lock.json). Passing `frontend`
       # alone, which is what this did, left the packages that are actually
       # redistributed to users ungated.
       - name: Check production licences

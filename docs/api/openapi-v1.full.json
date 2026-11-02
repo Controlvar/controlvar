@@ -277,9 +277,6 @@
       },
       "AggregatedMetricResponse": {
         "description": "Schema for aggregated metric response.",
-        "metadata": {
-          "alias": "meta_data"
-        },
         "properties": {
           "count": {
             "description": "Number of occurrences",
@@ -4662,9 +4659,6 @@
       },
       "ErrorLogResponse": {
         "description": "Schema for error log response.",
-        "metadata": {
-          "alias": "meta_data"
-        },
         "properties": {
           "created_at": {
             "format": "date-time",
