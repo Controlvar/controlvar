@@ -1,0 +1,81 @@
+{
+  "mode": "publication",
+  "scenarios": [
+    "evaluate_get",
+    "assign",
+    "assign_returning",
+    "track",
+    "batch",
+    "ruleset"
+  ],
+  "step_multiplier_milli": 1260,
+  "step_cap_milli_rps": 2000000,
+  "start_milli_rps": {
+    "evaluate_get": 5000,
+    "assign": 5000,
+    "assign_returning": 5000,
+    "track": 5000,
+    "batch": 1000,
+    "ruleset": 2000
+  },
+  "settle_s": 10,
+  "measure_s": 60,
+  "gap_s": 10,
+  "warmup_s": 30,
+  "stop_after_failing_steps": 2,
+  "timeout_ms": 5000,
+  "max_vus_per_rps": 2,
+  "min_vus": 20,
+  "keeps_up": {
+    "max_errors_per_mille": 1,
+    "max_p99_ms": 1000,
+    "max_dropped": 0
+  },
+  "validity": {
+    "max_generator_cpu_permille": 900,
+    "max_start_lag_p99_us": 5000,
+    "max_foreign_cpu_permille": 100,
+    "min_sample_permille": 900,
+    "sent_identity_tolerance": 1
+  },
+  "bottleneck": {
+    "cpu_permille": 900,
+    "io_wait_permille": 500,
+    "pool_permille": 900,
+    "serialised": {
+      "max_cpu_permille": 900,
+      "max_active_backends": 1,
+      "min_share_permille": 800
+    }
+  },
+  "repetitions": 3,
+  "max_knee_spread_steps": 2,
+  "sdk_rate_limit_per_minute": 10000000,
+  "expected_web_concurrency": 1,
+  "preload": {
+    "users": 100000,
+    "events": 1000000,
+    "raw_metrics": 1000000
+  },
+  "evaluate_expected_reason": {
+    "rule_flag": "targeting_rule",
+    "plain_flag": "rollout"
+  },
+  "smoke": {
+    "settle_s": 5,
+    "measure_s": 20,
+    "gap_s": 5,
+    "warmup_s": 10,
+    "rates_milli_rps": [
+      5000,
+      10000
+    ],
+    "mix": {
+      "evaluate_get": 60,
+      "track": 25,
+      "assign": 10,
+      "batch": 4,
+      "ruleset": 1
+    }
+  }
+}
