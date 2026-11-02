@@ -7,8 +7,9 @@
  * copy of the package directory without node_modules (the working tree's
  * lock is never renamed), with the same strip script. Then the release's
  * consumer check installs the tarball through a stub registry whose metadata
- * says `_hasShrinkwrap: true`, as npm's does for a package that ships a
- * shrinkwrap, so the shipped file is what decides the tree: exactly the
+ * says `_hasShrinkwrap: true`, as we expect npm's registry to mark a version
+ * that ships a shrinkwrap (checked with `npm view` after the first publish),
+ * so the shipped file is what decides the tree: exactly the
  * lock's production entries, nested under the package, no development
  * package, `npm ls --all` clean, and the installed bin answering one
  * `initialize` line. A local tarball install would not read the shrinkwrap
