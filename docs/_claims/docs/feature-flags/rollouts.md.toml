@@ -501,6 +501,28 @@ by = [
 ]
 
 [[unit]]
+text = "trigger_configuration.duration is a number of hours from 0 to 8760; if it is missing the default is 24."
+by = [
+    "test:backend/tests/unit/schemas/test_rollout_stage_duration.py::test_a_duration_from_0_to_8760_is_accepted",
+    "test:backend/tests/integration/api/test_rollout_stage_duration_api.py::test_a_duration_from_0_to_8760_is_accepted_on_all_three_write_paths",
+    "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_is_not_completed_before_24_hours",
+]
+
+[[unit]]
+text = "Any other value, a string, null or a boolean included, is refused with 422, on create, on adding a stage and on changing one."
+by = [
+    "test:backend/tests/integration/api/test_rollout_stage_duration_api.py::test_bad_duration_is_422_on_all_three_write_paths",
+    "test:backend/tests/unit/schemas/test_rollout_stage_duration.py::test_a_duration_that_is_not_hours_from_0_to_8760_is_refused",
+]
+
+[[unit]]
+text = "The rest of trigger_configuration is not checked."
+by = [
+    "test:backend/tests/unit/schemas/test_rollout_stage_duration.py::test_a_configuration_without_duration_is_not_checked",
+    "test:backend/tests/integration/api/test_rollout_stage_duration_api.py::test_a_stage_without_duration_keeps_the_default",
+]
+
+[[unit]]
 text = "The scheduler never completes a manual stage, so a time-based stage after a manual stage never starts by itself."
 by = [
     "test:backend/tests/unit/core/test_rollout_scheduler.py::TestRolloutScheduler::test_is_stage_eligible_for_completion",

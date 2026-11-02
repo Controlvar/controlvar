@@ -12688,7 +12688,7 @@
                 "type": "null"
               }
             ],
-            "description": "Configuration for the trigger",
+            "description": "Configuration for the trigger. When it has `duration`, that is the number of hours from 0 to 8760 a time-based stage runs before the scheduler completes it; without `duration` the default is 24. The rest of the object is not checked.",
             "title": "Trigger Configuration"
           },
           "trigger_type": {
@@ -12923,7 +12923,7 @@
                 "type": "null"
               }
             ],
-            "description": "Configuration for the trigger",
+            "description": "Configuration for the trigger. When it has `duration`, that is the number of hours from 0 to 8760 a time-based stage runs before the scheduler completes it; without `duration` the default is 24. The rest of the object is not checked.",
             "title": "Trigger Configuration"
           },
           "trigger_type": {

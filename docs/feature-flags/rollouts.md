@@ -229,6 +229,11 @@ lowering `max_percentage` answers `409`, and nothing is changed.
 | `manual` | The stage starts only when you advance it. |
 | `metric_based` | Accepted, but not implemented in this release: such a stage never starts by itself. |
 
+`trigger_configuration.duration` is a number of hours from 0 to 8760; if it is missing the
+default is 24. Any other value, a string, `null` or a boolean included, is refused with
+`422`, on create, on adding a stage and on changing one. The rest of `trigger_configuration`
+is not checked.
+
 The scheduler never completes a manual stage, so **a time-based stage after a manual stage
 never starts by itself**. Advance the manual stage a second time to move on (see
 [Manual Advancement](#manual-advancement)).

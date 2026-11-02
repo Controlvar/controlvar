@@ -5,6 +5,7 @@ This module defines Pydantic models for rollout schedule-related data structures
 These models are used for request/response validation and documentation.
 """
 
+import math
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -45,6 +46,47 @@ _MIN_STAGE_DURATION_DESCRIPTION = (
     "Minimum time (hours) between stages: a whole number from 0 to 8760, "
     "or null for no minimum"
 )
+
+#: The largest ``trigger_configuration.duration`` a request may set, in hours
+#: (#1535): one year, as for ``min_stage_duration``.
+MAX_STAGE_DURATION_HOURS = 8760
+
+#: The one message for a ``trigger_configuration.duration`` that is not a
+#: number of hours from 0 to 8760 (#1535). Nothing in it comes from the value.
+DURATION_REFUSED = (
+    "trigger_configuration.duration must be a number of hours from 0 to 8760"
+)
+
+_TRIGGER_CONFIGURATION_DESCRIPTION = (
+    "Configuration for the trigger. When it has `duration`, that is the number "
+    "of hours from 0 to 8760 a time-based stage runs before the scheduler "
+    "completes it; without `duration` the default is 24. The rest of the "
+    "object is not checked."
+)
+
+
+def _check_duration(
+    configuration: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """Refuse a ``duration`` that is not a number of hours from 0 to 8760.
+
+    The scheduler reads ``duration`` as hours (default 24). A string, null or
+    a number it cannot use left the stage in progress for ever, a negative
+    one completed it at once, and ``true`` read as one hour (#1535). A
+    boolean is refused although ``bool`` is an ``int``; an ``int`` is compared
+    as it is (``math.isfinite`` raises ``OverflowError`` on a very large one).
+    The rest of ``trigger_configuration`` is free-form and not checked.
+    """
+    if not configuration or "duration" not in configuration:
+        return configuration
+    value = configuration["duration"]
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise PydanticCustomError("value_error", DURATION_REFUSED)
+    if isinstance(value, float) and not math.isfinite(value):
+        raise PydanticCustomError("value_error", DURATION_REFUSED)
+    if not 0 <= value <= MAX_STAGE_DURATION_HOURS:
+        raise PydanticCustomError("value_error", DURATION_REFUSED)
+    return configuration
 
 
 def _as_utc(value: Optional[datetime]) -> Optional[datetime]:
@@ -164,6 +206,21 @@ class RolloutStageBase(BaseModel):
 class RolloutStageCreate(RolloutStageBase):
     """Model for creating a new rollout stage."""
 
+    # The duration check is here and on RolloutStageUpdate, never on the
+    # base: RolloutStageResponse inherits the base, and a stage stored with a
+    # bad duration before the check (#1535) must still read back.
+    trigger_configuration: Optional[Dict[str, Any]] = Field(
+        None, description=_TRIGGER_CONFIGURATION_DESCRIPTION
+    )
+
+    @field_validator("trigger_configuration")
+    @classmethod
+    def validate_duration(
+        cls, value: Optional[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        """``duration``, when present, is a number of hours from 0 to 8760."""
+        return _check_duration(value)
+
 
 class RolloutStageUpdate(BaseModel):
     """Model for updating a rollout stage."""
@@ -185,9 +242,17 @@ class RolloutStageUpdate(BaseModel):
         None, description="Type of trigger for this stage"
     )
     trigger_configuration: Optional[Dict[str, Any]] = Field(
-        None, description="Configuration for the trigger"
+        None, description=_TRIGGER_CONFIGURATION_DESCRIPTION
     )
     start_date: Optional[datetime] = Field(None, description="For time-based triggers")
+
+    @field_validator("trigger_configuration")
+    @classmethod
+    def validate_duration(
+        cls, value: Optional[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        """``duration``, when present, is a number of hours from 0 to 8760."""
+        return _check_duration(value)
 
 
 class RolloutStageResponse(RolloutStageBase):
