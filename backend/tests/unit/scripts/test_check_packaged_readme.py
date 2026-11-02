@@ -342,18 +342,16 @@ def test_the_gate_refuses_a_package_with_no_readme(
 #: Each SDK the release builds for npm, PyPI or NuGet, and the rules its
 #: packed README is held to: "i-readme" (I_README), "strict" (STRICT), or
 #: "none", which the gate refuses, so its release stops at the README step.
-#: edge's README is not held to either set yet, and react-native has no
-#: README until its own pull request (P1-RN) writes one and moves it to
-#: I_README.
+#: edge's README is not held to either set yet.
 CLASSIFIED: Dict[str, str] = {
     "dotnet": "i-readme",
     "openfeature": "i-readme",
     "openfeature-python": "i-readme",
     "react": "i-readme",
+    "react-native": "i-readme",
     "js": "strict",
     "python": "strict",
     "edge": "none",
-    "react-native": "none",
 }
 
 

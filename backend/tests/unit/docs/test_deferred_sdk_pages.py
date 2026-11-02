@@ -585,7 +585,7 @@ def test_every_deferred_page_with_an_install_section_is_read():
     request that packs a README moves the second and third."""
     with_section = [page for page in DEFERRED if INSTALL_HEADING.search(text(page))]
     under_the_rule = [page for page in with_section if page not in PACKAGED]
-    assert (len(with_section), len(under_the_rule), len(PACKAGED)) == (24, 21, 4), (
+    assert (len(with_section), len(under_the_rule), len(PACKAGED)) == (24, 21, 5), (
         with_section,
         sorted(PACKAGED),
     )
@@ -597,13 +597,14 @@ def test_every_deferred_page_with_an_install_section_is_read():
 
 #: Each README a registry shows, with its SDK: an explicit list, not
 #: ``DEFERRED`` (a packaged README need not be a deferred page: the Python
-#: provider's has a claims registry of its own). It is held exactly to the
-#: SDKs scripts/check_packaged_readme.py holds to I-README, and to the
-#: READMEs the packages actually ship.
+#: provider's and React Native's have claims registries of their own). It is
+#: held exactly to the SDKs scripts/check_packaged_readme.py holds to
+#: I-README, and to the READMEs the packages actually ship.
 PACKAGED: Dict[str, str] = {
     "sdk/dotnet/README.md": "dotnet",
     "sdk/openfeature-python/README.md": "openfeature-python",
     "sdk/openfeature/README.md": "openfeature",
+    "sdk/react-native/README.md": "react-native",
     "sdk/react/README.md": "react",
 }
 
@@ -625,6 +626,11 @@ PLANTS: Dict[str, Tuple[str, str, Tuple[str, str]]] = {
         "## Quick start\n",
         "`npm install @controlvar/openfeature-provider`",
         ("npm", "@controlvar/openfeature-provider"),
+    ),
+    "sdk/react-native/README.md": (
+        "## Quick start\n",
+        "`npm install @controlvar/react-native-sdk`",
+        ("npm", "@controlvar/react-native-sdk"),
     ),
     "sdk/react/README.md": (
         "## Provider setup\n",
@@ -926,6 +932,17 @@ def test_the_claim_patterns_find_the_true_sentence_on_the_react_native_page():
     assert "sent as context on flag evaluation" in attribute_claims(
         text("docs/sdk/react-native.md")
     )
+
+
+def test_the_react_native_readme_says_the_attributes_are_sent_and_cites_no_438():
+    # The README npm shows for React Native's first release is frozen with it:
+    # it must say what the client does since #1520 (the attributes go as
+    # `context` on flag evaluation), and carry none of the #438 limit that
+    # iOS, Android and Flutter keep.
+    readme = text("sdk/react-native/README.md")
+    assert "sent as context on flag evaluation" in attribute_claims(readme)
+    assert "438" not in readme
+    assert "sends only the user id" not in fold(readme).lower()
 
 
 @pytest.mark.parametrize("page", DEFERRED)
