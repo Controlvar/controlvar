@@ -29,10 +29,13 @@ function mockOk(data: unknown) {
 }
 
 const role: CustomRole = {
+  id: 'role-1',
   name: 'release-manager',
   description: 'Ships flags',
-  permissions: ['feature_flags:update'],
+  is_system_role: false,
+  permissions: [{ resource: 'feature_flag', actions: ['update'] }],
   created_at: '2026-09-01T00:00:00Z',
+  user_count: 0,
 };
 
 describe('RbacService', () => {
@@ -71,10 +74,16 @@ describe('RbacService', () => {
   });
 
   it('reads effective permissions for a user', async () => {
-    mockOk({ permissions: ['experiments:read'] });
-    await expect(RbacService.getUserPermissions('u-1')).resolves.toEqual({
-      permissions: ['experiments:read'],
-    });
+    const answer = {
+      user_id: 'u-1',
+      username: 'ada',
+      base_role: 'developer',
+      custom_roles: [],
+      permissions: { experiment: ['read'] },
+      is_superuser: false,
+    };
+    mockOk(answer);
+    await expect(RbacService.getUserPermissions('u-1')).resolves.toEqual(answer);
     expect(mockFetch).toHaveBeenCalledWith(
       `${BASE}/api/v1/rbac/users/u-1/permissions`,
       expect.any(Object),

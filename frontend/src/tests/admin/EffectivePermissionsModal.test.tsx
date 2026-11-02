@@ -1,7 +1,8 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { EffectivePermissionsModal } from '@/components/admin/users/EffectivePermissionsModal';
 import { RbacService } from '@modules/rbac';
+import { shapeErrors } from '@/tests/helpers/openapiShape';
 
 jest.mock('@modules/rbac');
 
@@ -13,6 +14,24 @@ const ACCESS_NOTE =
   "This list adds the user's custom roles and direct grants to their built-in role. " +
   'Custom roles and direct permission grants are recorded, but they do not change what ' +
   "anyone can do yet: each user's built-in role decides.";
+
+/**
+ * What `GET /api/v1/rbac/users/{id}/permissions` answers: an object map from a
+ * resource to its actions. Checked against the snapshot's
+ * `EffectivePermissionsResponse` so the mock cannot drift from the API.
+ */
+function answer(permissions: Record<string, string[]>) {
+  const body = {
+    user_id: 'user-123',
+    username: 'ada',
+    base_role: 'developer',
+    custom_roles: ['data-scientist'],
+    permissions,
+    is_superuser: false,
+  };
+  expect(shapeErrors('EffectivePermissionsResponse', body)).toEqual([]);
+  return body;
+}
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -27,7 +46,7 @@ describe('EffectivePermissionsModal', () => {
   };
 
   it('renders modal when isOpen=true', async () => {
-    mockGetUserPermissions.mockResolvedValue({ permissions: [] });
+    mockGetUserPermissions.mockResolvedValue(answer({}));
     render(<EffectivePermissionsModal {...defaultProps} />);
     expect(screen.getByTestId('effective-permissions-modal')).toBeInTheDocument();
     await waitFor(() => {
@@ -35,24 +54,28 @@ describe('EffectivePermissionsModal', () => {
     });
   });
 
-  it('fetches permissions for userId on open', async () => {
-    mockGetUserPermissions.mockResolvedValue({ permissions: ['read:experiments'] });
+  it('renders the API\'s object map, one line per resource (#891)', async () => {
+    mockGetUserPermissions.mockResolvedValue(
+      answer({
+        experiment: ['create', 'read', 'update'],
+        feature_flag: ['read'],
+        audit_log: ['read'],
+      }),
+    );
     render(<EffectivePermissionsModal {...defaultProps} />);
-    await waitFor(() => {
-      expect(mockGetUserPermissions).toHaveBeenCalledWith('user-123');
-    });
+    const list = await screen.findByTestId('permissions-list');
+    const lines = Array.from(list.querySelectorAll('li')).map((li) => li.textContent);
+    expect(lines).toEqual([
+      'Experiments: create, read, update',
+      'Feature flags: read',
+      'Audit log: read',
+    ]);
   });
 
-  it('shows list of permissions', async () => {
-    mockGetUserPermissions.mockResolvedValue({
-      permissions: ['read:experiments', 'write:feature_flags', 'admin:users'],
-    });
+  it('says so when there are no permissions', async () => {
+    mockGetUserPermissions.mockResolvedValue(answer({}));
     render(<EffectivePermissionsModal {...defaultProps} />);
-    await waitFor(() => {
-      expect(screen.getByText('read:experiments')).toBeInTheDocument();
-      expect(screen.getByText('write:feature_flags')).toBeInTheDocument();
-      expect(screen.getByText('admin:users')).toBeInTheDocument();
-    });
+    expect(await screen.findByText('No permissions assigned.')).toBeInTheDocument();
   });
 
   it('shows loading while fetching', () => {
@@ -70,7 +93,7 @@ describe('EffectivePermissionsModal', () => {
   });
 
   it('says, above the list, that custom roles and direct grants do not change access yet (#891)', async () => {
-    mockGetUserPermissions.mockResolvedValue({ permissions: ['experiments:read', 'experiments:create'] });
+    mockGetUserPermissions.mockResolvedValue(answer({ experiment: ['read', 'create'] }));
     render(<EffectivePermissionsModal {...defaultProps} />);
     const dialog = screen.getByRole('dialog', { name: 'Recorded Permissions' });
     expect(dialog).toHaveAccessibleDescription(ACCESS_NOTE);
@@ -82,8 +105,20 @@ describe('EffectivePermissionsModal', () => {
     expect(screen.queryByText('Effective Permissions')).not.toBeInTheDocument();
   });
 
+  it('closes on Escape, and the close button has a name and a readable colour', async () => {
+    mockGetUserPermissions.mockResolvedValue(answer({}));
+    const onClose = jest.fn();
+    render(<EffectivePermissionsModal {...defaultProps} onClose={onClose} />);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    const x = screen.getByTestId('permissions-close-button');
+    expect(x).toHaveAccessibleName('Close');
+    expect(x.className).not.toMatch(/slate-400/);
+    await screen.findByText('No permissions assigned.');
+  });
+
   it('renders with data-testid="effective-permissions-modal"', async () => {
-    mockGetUserPermissions.mockResolvedValue({ permissions: [] });
+    mockGetUserPermissions.mockResolvedValue(answer({}));
     render(<EffectivePermissionsModal {...defaultProps} />);
     expect(screen.getByTestId('effective-permissions-modal')).toBeInTheDocument();
     await waitFor(() => {
