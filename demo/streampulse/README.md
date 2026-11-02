@@ -12,9 +12,9 @@ rollout schedules, safety monitoring + auto-rollback, kill switches, mutual excl
 global holdout and Bayesian A/B analysis. No audio, no images, no external fonts or CDNs.
 
 The phone is drawn in the browser and uses the React SDK, which sends the device's attributes with
-every flag evaluation. The native iOS, Android, React Native and Flutter SDKs do not send attributes
+every flag evaluation. The native iOS, Android and Flutter SDKs do not send attributes
 on flag evaluation yet ([#438](https://github.com/Controlvar/controlvar/issues/438)), so a rule like
-the Search tab's would not match from them.
+the Search tab's would not match from them. The React Native SDK sends them, as the React SDK does.
 
 [Guided examples](https://docs.controlvar.com/guides/guided-examples/#device) walks the Search
 tab's rule one step at a time, with what you will see at each step.
