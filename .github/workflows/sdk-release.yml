@@ -641,10 +641,10 @@ jobs:
       # The README npm will show for this version, for good, read from the
       # packed bytes and held to the SDK's rule set: STRICT for js (present,
       # absolute links, not "not yet published"), I-README for react,
-      # openfeature and mcp (no status, no install command, no own version,
-      # and an Install section that links its page; DECISIONS T230). An npm
-      # SDK in neither set is refused here, so it cannot be released until it
-      # is classified (scripts/check_packaged_readme.py).
+      # react-native, openfeature and mcp (no status, no install command, no own
+      # version, and an Install section that links its page; DECISIONS T230).
+      # An npm SDK in neither set is refused here, so it cannot be released
+      # until it is classified (scripts/check_packaged_readme.py).
       - name: Check the packed README
         env:
           SDK: ${{ needs.resolve.outputs.sdk }}
@@ -670,6 +670,19 @@ jobs:
           # shellcheck disable=SC2086  # one peer pin per word
           npm install --ignore-scripts --no-audit --no-fund "$TGZ" $peers
           npm ls --all
+
+      # React Native's `types` is its TypeScript source, so an app's tsc
+      # checks the SDK's code: a type package it needs that the tarball does
+      # not bring, or a call one AsyncStorage major lacks, fails there and
+      # nowhere above. Once per AsyncStorage major its peer range allows: an
+      # app with the React Native template's strict tsconfig, already on that
+      # major, installs this tarball alone, keeps its one AsyncStorage at its
+      # own version, and type-checks (scripts/check_react_native_app.py).
+      - name: A TypeScript app type-checks the packed SDK
+        if: needs.resolve.outputs.sdk == 'react-native'
+        env:
+          TGZ: ${{ steps.pack.outputs.tgz }}
+        run: python3 scripts/check_react_native_app.py "$TGZ"
 
       # The MCP server is a program, so its consumer runs it. The tarball is
       # installed through a stub registry on 127.0.0.1 whose metadata says

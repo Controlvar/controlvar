@@ -167,6 +167,7 @@ universe = [
     "sdk/openfeature/README.md",
     "sdk/php/README.md",
     "sdk/python/README.md",
+    "sdk/react-native/README.md",
     "sdk/react/README.md",
     "sdk/ruby/README.md",
     "tests/sdk-contract/README.md",

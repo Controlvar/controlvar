@@ -1758,11 +1758,14 @@ def test_the_mcp_steps_run_in_order_and_only_for_mcp() -> None:
         assert step.get("if") == MCP_ONLY, name
         assert "continue-on-error" not in step, name
         assert "|| true" not in _run_of(step), name
-    # No other npm-build step is conditioned on one SDK.
+    # No other npm-build step is conditioned on one SDK, except the React
+    # Native app type-check (its own test pins that step).
     others = [
         name
         for step, name in zip(_npm_build_steps(), names)
-        if "outputs.sdk" in str(step.get("if", "")) and name not in MCP_STEPS
+        if "outputs.sdk" in str(step.get("if", ""))
+        and name not in MCP_STEPS
+        and name != "A TypeScript app type-checks the packed SDK"
     ]
     assert others == []
 

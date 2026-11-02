@@ -78,6 +78,7 @@ I_README: dict[str, str] = {
     "openfeature": "docs/sdk/openfeature.md",
     "openfeature-python": "docs/sdk/openfeature.md",
     "react": "docs/sdk/react.md",
+    "react-native": "docs/sdk/react-native.md",
 }
 #: The published SDKs whose README quotes its version and its registry
 #: install line: present, absolute links, and not "not yet published".
