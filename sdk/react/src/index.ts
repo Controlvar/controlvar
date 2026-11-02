@@ -21,4 +21,5 @@ export type {
   TrackEventOptions,
   FeatureFlagEvaluateResponse,
   ExperimentAssignResponse,
+  Exposure,
 } from './client/types';

@@ -16,4 +16,10 @@
  * }
  */
 export { ServerClient } from '../client/ServerClient';
-export type { SdkConfig, UserContext, FeatureFlagEvaluation, ExperimentAssignment } from '../client/types';
+export type {
+  SdkConfig,
+  UserContext,
+  FeatureFlagEvaluation,
+  ExperimentAssignment,
+  Exposure,
+} from '../client/types';

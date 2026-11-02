@@ -1151,3 +1151,292 @@ def test_the_react_page_names_the_ssr_entry_the_package_ships():
     manifest = json.loads((REPO_ROOT / "sdk/react/package.json").read_text("utf-8"))
     assert "ssr" in manifest["files"]
     assert (REPO_ROOT / "sdk/react/ssr/package.json").is_file()
+
+
+# ---------------------------------------------------------------------------
+# 4. The React SDK's exposure hook (#1499)
+# ---------------------------------------------------------------------------
+
+#: Where the React SDK's jest tests live; every test named below is in one of them.
+REACT_TESTS = REPO_ROOT / "sdk" / "react" / "src" / "__tests__"
+REACT_PAGE = "docs/sdk/react.md"
+REACT_README = "sdk/react/README.md"
+
+#: Each sentence the React pages state about ``onExposure`` (as written, folded
+#: to one line), the pages that state it, and the jest tests that fail when it
+#: stops being true. Both pages are in ``CLAIMS_DEFERRED``, so no claims
+#: registry binds them; this does. An ``it.each`` test is named by its template.
+REACT_EXPOSURE_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...] = (
+    (
+        "The client calls it once each time the server enrols the user in an experiment and"
+        " the answer did not come from the client's cache: the moment the server records the"
+        " exposure.",
+        (REACT_PAGE,),
+        (
+            "is called once for an assigned: true answer, with exactly the four values",
+            "is not called for a cached answer, however often it is asked for",
+            "calls onExposure once when useExperiment mounts, with the four values",
+        ),
+    ),
+    (
+        "is a function the client calls once each time the server enrols the user in an"
+        " experiment and the answer did not come from the client's cache: the moment the"
+        " server records the exposure.",
+        (REACT_README,),
+        (
+            "is called once for an assigned: true answer, with exactly the four values",
+            "is not called for a cached answer, however often it is asked for",
+            "calls its own onExposure once for two assignments of one user",
+        ),
+    ),
+    (
+        "Called once each time the server enrols the user in an experiment and the answer is"
+        " not cached",
+        (REACT_PAGE,),
+        (
+            "is called once for an assigned: true answer, with exactly the four values",
+            "is not called for a cached answer, however often it is asked for",
+        ),
+    ),
+    (
+        "It receives an `Exposure`, a new object each time: `experimentKey`, `userId`,"
+        " `variantId` (`null` when the server sends none) and `variantName`. Nothing else:"
+        " not the user's attributes and not the variant's configuration.",
+        (REACT_PAGE,),
+        (
+            "is called once for an assigned: true answer, with exactly the four values",
+            "passes a null variantId when the server sends none",
+            "receives a new object that does not alias the cached answer",
+            "has four readonly fields",
+        ),
+    ),
+    (
+        "It receives an `Exposure`: `experimentKey`, `userId`, `variantId` (`null` when the"
+        " server sends none) and `variantName`.",
+        (REACT_README,),
+        (
+            "is called once for an assigned: true answer, with exactly the four values",
+            "passes a null variantId when the server sends none",
+        ),
+    ),
+    (
+        "It is not called for:",
+        (REACT_PAGE,),
+        ("is not called for a cached answer, however often it is asked for",),
+    ),
+    (
+        "- an answer from the client's cache; - a user the experiment did not enrol"
+        " (`assigned: false`, with `reason` `'holdout'`, `'mutual_exclusion'` or"
+        " `'targeting'`), or an experiment that is not running (`'draft'`, `'paused'`,"
+        " `'completed'` or `'archived'`): the server records no exposure for them; - a call"
+        " that fails; - a feature flag.",
+        (REACT_PAGE,),
+        (
+            "is not called for a cached answer, however often it is asked for",
+            "is not called for an assigned: false answer (%s), and the answer is unchanged",
+            "is not called when the call fails (%s)",
+            "is not called when the call times out",
+            "is never called for a flag",
+        ),
+    ),
+    (
+        "It is not called for an answer from the client's cache, a user the experiment did"
+        " not enrol (`assigned: false`), a call that fails or a feature flag.",
+        (REACT_README,),
+        (
+            "is not called for a cached answer, however often it is asked for",
+            "is not called for an assigned: false answer (%s), and the answer is unchanged",
+            "is not called when the call fails (%s)",
+            "is never called for a flag",
+        ),
+    ),
+    (
+        "Calls for the same user and experiment that are made while the first is still"
+        " waiting share its request, so together they call it once.",
+        (REACT_PAGE,),
+        ("is called once for concurrent first calls that share one request",),
+    ),
+    (
+        "`useExperiment` asks for the assignment in the browser, after the first render, so a"
+        " server render makes no request and calls nothing. A server render followed by"
+        " hydration calls it once, in the browser, and so does React's StrictMode, which runs"
+        " effects twice in development.",
+        (REACT_PAGE,),
+        (
+            "is not called, and the render makes no request",
+            "is not called under StrictMode either",
+            "calls it once after hydrating server markup",
+            "calls it once under StrictMode, which runs the effect twice",
+        ),
+    ),
+    (
+        "A Provider rendered on the server calls nothing: `useExperiment` asks for the"
+        " assignment in the browser, after the first render.",
+        (REACT_README,),
+        ("is not called, and the render makes no request",),
+    ),
+    (
+        "Changing `onExposure` between renders does not create a new client, so nothing is"
+        " asked again; the client calls the function from the latest render.",
+        (REACT_PAGE,),
+        ("keeps the client when onExposure changes, and calls the latest function",),
+    ),
+    (
+        "(a new client starts with empty caches), not when `onExposure` does;",
+        (REACT_PAGE,),
+        ("keeps the client when onExposure changes, and calls the latest function",),
+    ),
+    (
+        "It is called again, and the server records another exposure, after the cache"
+        " lifetime (`cacheTtlMs`, 5 minutes by default), after `clearCache()`, and in every"
+        " new client: each page load, and each change of `apiKey`, `baseUrl`, `timeoutMs` or"
+        " `cacheTtlMs`.",
+        (REACT_PAGE,),
+        (
+            "after the cache lifetime (one millisecond past it, never at the boundary)",
+            "after clearCache()",
+            "in a new client",
+            "creates a new client when apiKey changes",
+        ),
+    ),
+    (
+        "It never receives one the server did not record.",
+        (REACT_PAGE,),
+        (
+            "is not called for an assigned: false answer (%s), and the answer is unchanged",
+            "is not called when assigned is %s, and the answer is still returned",
+        ),
+    ),
+    (
+        "It runs before the assignment resolves, and before every call waiting on the same"
+        " request,",
+        (REACT_PAGE,),
+        (
+            "runs before assignExperiment resolves",
+            "is called once for concurrent first calls that share one request",
+        ),
+    ),
+    (
+        "The client does not wait for a Promise it returns.",
+        (REACT_PAGE,),
+        ("reports a rejection, once, as the hook error, without awaiting it",),
+    ),
+    (
+        "If it throws, or returns a Promise that rejects, the answer is unchanged, and nothing"
+        " reports the error: this SDK has no `onError`.",
+        (REACT_PAGE, REACT_README),
+        (
+            "that throws leaves the answer unchanged and cached",
+            "that returns a rejected Promise leaves the answer unchanged",
+            "leaves useExperiment with the answer and no error",
+            "leaves ServerClient answering, with no error",
+            "passes on what onExposure returns, so a Promise it returns has its rejection handled",
+            "is given the dropping report by the clients: this SDK reports the failure nowhere",
+        ),
+    ),
+    (
+        "A failing `onExposure` changes no answer and is reported nowhere",
+        (REACT_PAGE,),
+        (
+            "that throws leaves the answer unchanged and cached",
+            "is given the dropping report by the clients: this SDK reports the failure nowhere",
+        ),
+    ),
+    (
+        "`ServerClient` takes `onExposure` in its config too, and calls it for the"
+        " assignments it makes, in the same way. It is a separate client with its own cache:",
+        (REACT_PAGE,),
+        (
+            "calls its own onExposure once for two assignments of one user",
+            "never calls the onExposure of a Provider",
+        ),
+    ),
+    (
+        "the server records two exposures, and each client that has `onExposure` calls its"
+        " own.",
+        (REACT_PAGE,),
+        (
+            "calls its own onExposure once for two assignments of one user",
+            "never calls the onExposure of a Provider",
+        ),
+    ),
+    (
+        "A `ServerClient` created in each request, as in the `getServerSideProps` example"
+        " above, starts with an empty cache, so it calls `onExposure` on every request that"
+        " assigns, and the server records an exposure on each.",
+        (REACT_PAGE,),
+        (
+            "in a new client",
+            "calls its own onExposure once for two assignments of one user",
+        ),
+    ),
+    (
+        "interface Exposure {          // what onExposure receives; also exported from"
+        " '@controlvar/react-sdk/ssr'",
+        (REACT_PAGE,),
+        ("is exported as a type from the package and from ssr",),
+    ),
+    (
+        "The Provider and `ServerClient` throw `onExposure must be a function` for any other"
+        " value; `null` and `undefined` set none.",
+        (REACT_PAGE,),
+        (
+            "is refused by the client and ServerClient: %p",
+            "is refused by the Provider when it renders: %p",
+            "null and undefined set none",
+        ),
+    ),
+    (
+        'In a test, a mocked `/assign` answer must include `"assigned": true`, or the hook is'
+        " not called. This SDK treats an answer without `assigned` as enrolled for"
+        " `ExperimentAssignment.assigned`, but does not call the hook for it.",
+        (REACT_PAGE,),
+        ("is not called when assigned is %s, and the answer is still returned",),
+    ),
+)
+
+
+def _react_test_titles() -> str:
+    return "\n".join(
+        path.read_text("utf-8") for path in sorted(REACT_TESTS.glob("*.test.ts*"))
+    )
+
+
+def _h2s(page: str) -> List[str]:
+    """The level-2 headings of a page, outside fenced blocks."""
+    without_fences = re.sub(r"^```.*?^```[ \t]*$", "", text(page), flags=re.S | re.M)
+    return re.findall(r"^##[ \t]+(.+?)[ \t]*$", without_fences, re.M)
+
+
+def test_the_react_pages_give_the_exposure_hook_a_section_of_its_own():
+    """H-M9: an H2 "Exposure hook" (``#exposure-hook``), never in a Quick
+    Start; the README's links to the page's section, absolutely."""
+    for page in (REACT_PAGE, REACT_README):
+        h2s = _h2s(page)
+        assert h2s.count("Exposure hook") == 1, (page, h2s)
+        assert not any("quick start" in h.lower() for h in h2s), (page, h2s)
+    assert (
+        "https://github.com/Controlvar/controlvar/blob/main/docs/sdk/react.md#exposure-hook"
+        in text(REACT_README)
+    )
+
+
+@pytest.mark.parametrize(
+    "sentence, pages, tests",
+    REACT_EXPOSURE_SENTENCES,
+    ids=[s[:60] for s, _, _ in REACT_EXPOSURE_SENTENCES],
+)
+def test_each_react_exposure_sentence_is_on_its_page_and_held_by_a_test(
+    sentence, pages, tests
+):
+    titles = _react_test_titles()
+    unsaid = [page for page in pages if sentence not in fold(text(page))]
+    assert unsaid == [], f"no longer said there: {sentence}"
+    missing = [title for title in tests if f"'{title}'" not in titles]
+    assert missing == [], "no jest test in sdk/react/src/__tests__ has these names"
+
+
+def test_the_react_refusal_the_pages_quote_is_the_one_the_source_throws():
+    source = (REPO_ROOT / "sdk/react/src/client/exposure.ts").read_text("utf-8")
+    assert "throw new Error('onExposure must be a function')" in source
+    assert "`onExposure must be a function`" in text(REACT_PAGE)
