@@ -367,6 +367,27 @@ describe("Q19: misconfiguration and failures are loud, with exactly one request 
     expect(held).toBe(1);
     expect(lines).toHaveLength(1);
   });
+
+  test("the timeout is 60 seconds, and a request given no timeout of its own uses it", async () => {
+    // The test above runs at 300 ms and reads the constant back, so it would
+    // pass with any value; this pins the value and the default.
+    expect(TIMEOUT_SECONDS).toBe(60);
+    const timeout = jest.spyOn(AbortSignal, "timeout");
+    try {
+      const api = new Api({
+        origin: "http://127.0.0.1:9",
+        apiKey: newKey(),
+        version: "0.0.0",
+        fetch: async () => new Response("{}", { status: 200, headers: { "content-type": "application/json" } }),
+        log: () => undefined,
+      });
+      await api.request({ tool: "t", operation: "listing feature flags", method: "GET", template: "/x", path: "/x" });
+      expect(timeout).toHaveBeenCalledTimes(1);
+      expect(timeout).toHaveBeenCalledWith(60_000);
+    } finally {
+      timeout.mockRestore();
+    }
+  });
 });
 
 describe("C5: redirects are never followed", () => {

@@ -425,8 +425,9 @@ jobs:
   # ---------------------------------------------------------------------------
   # npm: sdk/js, sdk/edge, sdk/openfeature, sdk/react, sdk/react-native, and
   # sdk/mcp (the MCP server, with four steps of its own, each `if: sdk ==
-  # 'mcp'`: the audit, the shrinkwrap, the packed shrinkwrap, and the
-  # installed server answering `initialize`)
+  # 'mcp'`: the audit, the shrinkwrap with its development entries removed,
+  # the packed shrinkwrap, and the server installed through a stub registry
+  # answering `initialize`)
   #
   # Two jobs, the same shape as PyPI. `npm-build` installs, tests, pins,
   # packs and checks the tarball, and cannot request an OIDC token: its
@@ -470,18 +471,26 @@ jobs:
       # release and nothing else. It is not in security-scan.yml's audit loop,
       # which feeds a check every pull request needs: an advisory in this
       # fast-moving closure would turn every pull request red. Blocking, never
-      # `continue-on-error`; `--omit=dev` is what a consumer installs.
+      # `continue-on-error`; `--omit=dev` is the set the shipped shrinkwrap
+      # holds (the next step strips the rest).
       # backend/tests/smoke/test_sdk_release_wiring.py pins this step.
       - name: The MCP server's production dependencies have no high advisory
         if: needs.resolve.outputs.sdk == 'mcp'
         working-directory: sdk/mcp
         run: npm audit --omit=dev --audit-level=high
 
-      # The MCP server ships npm-shrinkwrap.json, so a consumer installs the
-      # closure these tests ran with rather than resolving its ranges again.
-      # `npm shrinkwrap` renames package-lock.json; a copy of the lock is kept
-      # for the check after Pack. `npm pack` drops a shrinkwrap silently when
-      # it is absent, so that check reads the packed listing.
+      # The MCP server ships npm-shrinkwrap.json holding only the lock's
+      # production entries, at the lock's versions. `npm shrinkwrap` keeps the
+      # development entries too, and an install from a registry whose
+      # metadata marks the version `_hasShrinkwrap` installs every entry of
+      # the file; an install of a local tarball ignores the file. So the strip
+      # removes the `dev: true` entries and refuses unless what is left is
+      # exactly the lock's production closure. We expect npm's registry to
+      # mark a version that ships a shrinkwrap; that is to be checked with
+      # `npm view` after the first publish. `npm shrinkwrap` renames
+      # package-lock.json; a copy of the lock is kept for the strip and the
+      # checks after Pack. `npm pack` drops a shrinkwrap silently when it is
+      # absent, so the check after Pack reads the packed listing.
       - name: Shrinkwrap the MCP server
         if: needs.resolve.outputs.sdk == 'mcp'
         working-directory: sdk/mcp
@@ -489,6 +498,7 @@ jobs:
           set -euo pipefail
           cp package-lock.json "$RUNNER_TEMP/mcp-package-lock.json"
           npm shrinkwrap
+          node scripts/strip-shrinkwrap-dev.js npm-shrinkwrap.json "$RUNNER_TEMP/mcp-package-lock.json"
           test -f npm-shrinkwrap.json
           test ! -e package-lock.json
 
@@ -561,9 +571,11 @@ jobs:
           tar -xzf "$TGZ" -C "$out" package/package.json
           python3 scripts/pin_npm_local_deps.py --check-only "$out/package/package.json"
 
-      # The MCP server's tarball holds npm-shrinkwrap.json, and the versions
-      # it pins for the server's own dependencies are the lock's: the closure
-      # the tests above ran with. Read from the packed bytes.
+      # The MCP server's tarball holds npm-shrinkwrap.json, and it is exactly
+      # the lock's production closure, the one the tests above ran with: no
+      # development entry, no entry missing or added, each at the lock's
+      # version and integrity, and the server's own dependencies at the
+      # lock's versions. Read from the packed bytes.
       - name: The packed MCP server carries its shrinkwrap
         if: needs.resolve.outputs.sdk == 'mcp'
         env:
@@ -602,10 +614,28 @@ jobs:
                   )
               else:
                   print(f"{name} {packed}")
+          # The whole closure: the lock's production entries and nothing else.
+          wanted = {k: e for k, e in lock.items() if k and not e.get("dev")}
+          shipped = {k: e for k, e in packages.items() if k}
+          for key in sorted(shipped):
+              if "dev" in shipped[key]:
+                  problems.append(f"npm-shrinkwrap.json carries a dev entry: {key}")
+              elif key not in wanted:
+                  problems.append(f"npm-shrinkwrap.json has an unexpected entry: {key}")
+          for key in sorted(set(wanted) - set(shipped)):
+              problems.append(f"npm-shrinkwrap.json is missing {key}")
+          for key in sorted(set(wanted) & set(shipped)):
+              for field in ("version", "integrity"):
+                  if shipped[key].get(field) != wanted[key].get(field):
+                      problems.append(
+                          f"{key}: npm-shrinkwrap.json has {field} {shipped[key].get(field)!r}, "
+                          f"package-lock.json {wanted[key].get(field)!r}"
+                      )
           for problem in problems:
               print(f"::error::{problem}")
           if problems:
               sys.exit(1)
+          print(f"npm-shrinkwrap.json is the lock's {len(wanted)} production entries")
           PY
 
       # The README npm will show for this version, for good, read from the
@@ -641,61 +671,19 @@ jobs:
           npm install --ignore-scripts --no-audit --no-fund "$TGZ" $peers
           npm ls --all
 
-      # The MCP server is a program, so its consumer runs it: installed alone
-      # with no lifecycle script, its tree holds none of its development
-      # dependencies (it installs from its shrinkwrap), and its bin answers one
-      # `initialize` line. The environment is explicit, so nothing of the
-      # runner's reaches the server; it makes no request to answer initialize.
+      # The MCP server is a program, so its consumer runs it. The tarball is
+      # installed through a stub registry on 127.0.0.1 whose metadata says
+      # `_hasShrinkwrap: true`, with no lifecycle script and an empty npm
+      # cache, so the shipped shrinkwrap decides the tree: exactly its
+      # entries, nested under the package, no package the lock has only as a
+      # development dependency, `npm ls --all` clean, and the bin answering
+      # one `initialize` line with an explicit environment. The same script
+      # runs in the pull request's own test (sdk/mcp/__tests__/packed.test.ts).
       - name: The installed MCP server answers initialize, with no dev dependency
         if: needs.resolve.outputs.sdk == 'mcp'
         env:
           TGZ: ${{ steps.pack.outputs.tgz }}
-        run: |
-          set -euo pipefail
-          consumer="$RUNNER_TEMP/mcp-consumer"
-          rm -rf "$consumer"
-          mkdir -p "$consumer"
-          cd "$consumer"
-          npm init -y > /dev/null
-          npm install --ignore-scripts --no-audit --no-fund "$TGZ"
-          request='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"sdk-release","version":"0"}}}'
-          printf '%s\n' "$request" \
-            | env -i PATH="$PATH" CONTROLVAR_API_URL=http://localhost:8000 CONTROLVAR_API_KEY=release-check-placeholder \
-                ./node_modules/.bin/controlvar-mcp > answer.jsonl
-          python3 - "$GITHUB_WORKSPACE/sdk/mcp/package.json" <<'PY'
-          import json, pathlib, sys
-
-          def fail(problem):
-              print(f"::error::{problem}")
-              sys.exit(1)
-
-          manifest = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
-          installed = set()
-          pending = [pathlib.Path("node_modules")]
-          while pending:
-              folder = pending.pop()
-              for entry in folder.iterdir() if folder.is_dir() else []:
-                  if entry.name.startswith("."):
-                      continue
-                  scoped = entry.name.startswith("@")
-                  for package in (sorted(entry.iterdir()) if scoped else [entry]):
-                      meta = package / "package.json"
-                      if meta.is_file():
-                          installed.add(json.loads(meta.read_text(encoding="utf-8")).get("name"))
-                      pending.append(package / "node_modules")
-          if manifest["name"] not in installed:
-              fail(f"{manifest['name']} is not in the consumer's tree")
-          for name in sorted(manifest.get("devDependencies") or {}):
-              if name in installed:
-                  fail(f"{name} is installed in a consumer's tree")
-          lines = pathlib.Path("answer.jsonl").read_text(encoding="utf-8").splitlines()
-          if not lines:
-              fail("initialize failed: the installed server answered nothing")
-          info = (json.loads(lines[0]).get("result") or {}).get("serverInfo") or {}
-          if info != {"name": "controlvar", "version": manifest["version"]}:
-              fail(f"initialize answered serverInfo {info!r}")
-          print(f"{manifest['name']} {manifest['version']} answered initialize")
-          PY
+        run: node sdk/mcp/scripts/registry-consumer-check.js "$TGZ" "$RUNNER_TEMP/mcp-consumer" "$RUNNER_TEMP/mcp-package-lock.json"
 
       # The file name and the sha256 of the tarball's bytes. The publish job
       # recomputes the sha256 over what it downloaded and compares it with

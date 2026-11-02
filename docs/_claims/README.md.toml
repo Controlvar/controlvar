@@ -470,7 +470,7 @@ text = "The SDK guide says how, and what CI runs for each one."
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "sdk/mcp holds the Controlvar MCP server, which is not an SDK: an AI assistant such as Claude Code starts it on your computer, and it reads your instance's feature flags, experiments and results with your API key."
+text = "sdk/mcp holds the Controlvar MCP server, which is not an SDK and is not yet published; it is meant for an AI assistant such as Claude Code to start on your computer, to read your instance's feature flags, experiments and results with your API key."
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_sdk_mcp_is_the_mcp_server_and_not_an_sdk"]
 
 [[unit]]

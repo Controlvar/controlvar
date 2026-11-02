@@ -7,7 +7,7 @@
  * echoed that might be a secret; an acceptance answers `initialize`.
  */
 
-import { ARGUMENTS_REFUSED } from "../src/config";
+import { ARGUMENTS_REFUSED, readConfig } from "../src/config";
 import { call, initialize, json, newKey, refused, start, startStub } from "./helpers";
 
 const KEY = newKey();
@@ -170,6 +170,34 @@ describe("V-OPT: plain HTTP without the opt-in", () => {
     const line = await expectRefused(env("http://localhost:8000", { NODE_USE_ENV_PROXY: "1" }), "CONTROLVAR_API_URL");
     expect(line).toContain("NODE_USE_ENV_PROXY");
   });
+});
+
+describe("V-OPT: the --use-env-proxy flag, read in-process", () => {
+  // No Node this package runs on accepts the flag (each says "bad option",
+  // and "not allowed in NODE_OPTIONS"), so a spawned server cannot show it:
+  // readConfig is given the flag directly, in execArgv and in NODE_OPTIONS.
+  const local = { CONTROLVAR_API_URL: "http://localhost:8000", CONTROLVAR_API_KEY: KEY };
+  const throughProxy = "NODE_USE_ENV_PROXY (or --use-env-proxy) makes Node send requests through a proxy";
+
+  test("with neither, http://localhost:8000 is accepted", () => {
+    expect(readConfig([], local, []).ok).toBe(true);
+    expect(readConfig([], { ...local, NODE_OPTIONS: "--max-old-space-size=100" }, ["--max-old-space-size=100"]).ok).toBe(true);
+  });
+
+  test.each([["--use-env-proxy"], ["--use-env-proxy=1"]])("execArgv %s gives E2d", (flag) => {
+    const result = readConfig([], local, [flag]);
+    if (result.ok) throw new Error(`execArgv ${flag} was accepted for http://localhost:8000`);
+    expect(result.message).toContain(throughProxy);
+  });
+
+  test.each([["--use-env-proxy"], ["--max-old-space-size=100 --use-env-proxy"], ["--use-env-proxy=1"]])(
+    "NODE_OPTIONS=%j gives E2d",
+    (options) => {
+      const result = readConfig([], { ...local, NODE_OPTIONS: options }, []);
+      if (result.ok) throw new Error(`NODE_OPTIONS=${options} was accepted for http://localhost:8000`);
+      expect(result.message).toContain(throughProxy);
+    },
+  );
 });
 
 describe("V-OPT: CONTROLVAR_ALLOW_INSECURE_HTTP with any value but 1", () => {

@@ -261,10 +261,15 @@ def test_thirteen_of_the_sixteen_sdks_run_the_live_contract():
 
 
 def test_sdk_mcp_is_the_mcp_server_and_not_an_sdk():
+    from backend.tests.unit.docs.test_sdk_doc_versions import PUBLISHED
+
     package = json.loads(_text("sdk/mcp/package.json"))
     assert package["name"] == "@controlvar/mcp-server"
     assert package["license"] == "MIT"
     assert "mcp" not in _live_contract_sdks()
+    # The README and the SDK guide say it is not yet published. Publishing it
+    # puts it in PUBLISHED, and this fails until both sentences say so.
+    assert "mcp" not in PUBLISHED
     tools = json.loads(_text("sdk/mcp/tools.json"))
     # It reads flags, experiments and results; the one tool that is not
     # read-only records an evaluation, as an SDK's does, and destroys nothing.

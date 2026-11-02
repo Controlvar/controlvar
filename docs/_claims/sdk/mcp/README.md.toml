@@ -18,7 +18,7 @@ by = [
 text = "An AI assistant such as Claude Code, Claude Desktop or Cursor starts it on your computer and talks to it over stdio."
 by = [
     "test:sdk/mcp/__tests__/surface.test.ts::initialize at %s",
-    "test:sdk/mcp/__tests__/packed.test.ts::shrinkwrap, pack, install with --ignore-scripts, and answer initialize",
+    "test:sdk/mcp/__tests__/packed.test.ts::shrinkwrap, strip, pack, install through a registry, and answer initialize",
 ]
 
 [[unit]]
@@ -167,7 +167,7 @@ by = ["exempt:instruction"]
 text = "The tests build dist/ and run the built server as a child process against a stub API on 127.0.0.1; one of them packs the package and installs it into an empty directory, so it needs the npm registry."
 by = [
     "test:sdk/mcp/__tests__/tools.test.ts::list_feature_flags: the query, the projection, and only the configured key",
-    "test:sdk/mcp/__tests__/packed.test.ts::shrinkwrap, pack, install with --ignore-scripts, and answer initialize",
+    "test:sdk/mcp/__tests__/packed.test.ts::shrinkwrap, strip, pack, install through a registry, and answer initialize",
 ]
 
 [[unit]]

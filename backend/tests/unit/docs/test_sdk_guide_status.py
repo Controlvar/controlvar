@@ -260,14 +260,14 @@ def test_the_status_table_agrees_with_ci():
         ),
         ("ruby, php and dotnet", "ruby and php", "the sentence lists"),
         (
-            "| MCP server (not an SDK) | `sdk/mcp` | jest | no: it is not an SDK, and has no contract smoke |",
-            "| MCP server (not an SDK) | `sdk/mcp` | jest | yes |",
-            "row 'MCP server (not an SDK)': says verified live; 'mcp' is not in the job's sdks: list",
+            "| MCP server (not an SDK; not yet published) | `sdk/mcp` | jest | no: it is not an SDK, and has no contract smoke |",
+            "| MCP server (not an SDK; not yet published) | `sdk/mcp` | jest | yes |",
+            "row 'MCP server (not an SDK; not yet published)': says verified live; 'mcp' is not in the job's sdks: list",
         ),
         (
-            "| MCP server (not an SDK) | `sdk/mcp` | jest | no: it is not an SDK, and has no contract smoke |",
-            "| MCP server (not an SDK) | `sdk/go` | `go test` | no: it is not an SDK, and has no contract smoke |",
-            "row 'MCP server (not an SDK)': says no; 'go' is in the job's sdks: list",
+            "| MCP server (not an SDK; not yet published) | `sdk/mcp` | jest | no: it is not an SDK, and has no contract smoke |",
+            "| MCP server (not an SDK; not yet published) | `sdk/go` | `go test` | no: it is not an SDK, and has no contract smoke |",
+            "row 'MCP server (not an SDK; not yet published)': says no; 'go' is in the job's sdks: list",
         ),
     ],
 )
