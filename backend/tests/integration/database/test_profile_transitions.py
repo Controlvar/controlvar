@@ -63,8 +63,10 @@ CORE_HEAD = "607c51a59bf5"
 #: full database at head records" -- none means the branch's first revision,
 #: ``modules_0001_rbac``, which stopped being the head in #312, nor its
 #: second, ``modules_0002_warehouse_analysis``, which stopped being the head
-#: when ``modules_0003_lower_is_better`` was added (#1386).
-MODULES_HEAD = "modules_0003_lower_is_better"
+#: when ``modules_0003_lower_is_better`` was added (#1386), nor that third
+#: one, which stopped being the head when ``modules_0004_rbac_activation`` was
+#: added (#891).
+MODULES_HEAD = "modules_0004_rbac_activation"
 CORE_HEADS = {CORE_HEAD}
 FULL_HEADS = {CORE_HEAD, MODULES_HEAD}
 

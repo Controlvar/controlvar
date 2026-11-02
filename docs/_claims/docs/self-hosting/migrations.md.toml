@@ -235,7 +235,14 @@ text = "The modules branch, back to a named revision:"
 by = ["exempt:label"]
 
 [[unit]]
-text = "downgrade modules_0002_warehouse_analysis unapplies modules_0003_lower_is_better only, which drops the column warehouse_sources.lower_is_better, every metric source's lower-is-better setting."
+text = "downgrade modules_0003_lower_is_better unapplies modules_0004_rbac_activation only, which drops the column activated_at from user_custom_roles and direct_permission_grants, with any activation time stored in it."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_an_activation_time_is_gone_after_a_downgrade_and_an_upgrade",
+]
+
+[[unit]]
+text = "downgrade modules_0002_warehouse_analysis also unapplies modules_0003_lower_is_better, which drops the column warehouse_sources.lower_is_better, every metric source's lower-is-better setting."
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_modules_0003_transitions.py::test_downgrade_drops_the_column_keeps_the_rows_and_an_upgrade_restores_false",
@@ -271,6 +278,13 @@ by = [
 ]
 
 [[unit]]
+text = "modules_0004_rbac_activation drops its two columns on every database in the same way."
+by = [
+    "test:backend/tests/integration/database/test_profile_migrations.py::test_downgrade_keeps_the_tables_the_bootstrap_created",
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_downgrade_drops_both_columns_and_keeps_every_row",
+]
+
+[[unit]]
 text = "modules_0002_warehouse_analysis removes saved warehouse connections"
 by = ["exempt:baseline"]
 
@@ -282,7 +296,7 @@ by = [
 ]
 
 [[unit]]
-text = "Downgrading it cannot bring those rows back: downgrade modules_0001_rbac first unapplies modules_0003_lower_is_better, which drops each metric source's lower-is-better setting, then drops the three tables this revision created and puts back an empty table of the earlier shape."
+text = "Downgrading it cannot bring those rows back: downgrade modules_0001_rbac first unapplies modules_0004_rbac_activation, which drops the activation time of every custom role assignment and direct grant, and modules_0003_lower_is_better, which drops each metric source's lower-is-better setting, then drops the three tables this revision created and puts back an empty table of the earlier shape."
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_modules_0002_transitions.py::test_modules_0002_downgrade_restores_the_earlier_shape",
@@ -335,6 +349,42 @@ text = "Its downgrade drops the column on every database, however the column was
 by = [
     "test:backend/tests/integration/database/test_modules_0003_transitions.py::test_downgrade_drops_the_column_keeps_the_rows_and_an_upgrade_restores_false",
     "test:backend/tests/integration/database/test_profile_migrations.py::test_downgrade_keeps_the_tables_the_bootstrap_created",
+]
+
+[[unit]]
+text = "modules_0004_rbac_activation adds an activation time to custom role assignments and direct grants"
+by = ["test:backend/tests/integration/database/test_modules_0004_transitions.py::test_a_database_at_the_previous_release_upgrades_and_no_row_has_an_activation_time"]
+
+[[unit]]
+text = "This revision adds a nullable activated_at column to user_custom_roles and direct_permission_grants."
+by = [
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_a_database_at_the_previous_release_upgrades_and_no_row_has_an_activation_time",
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_both_tables_have_the_models_shape_defaults_included",
+]
+
+[[unit]]
+text = "It sets no default and fills in nothing, so every assignment and grant already stored has none."
+by = [
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_a_database_at_the_previous_release_upgrades_and_no_row_has_an_activation_time",
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_the_previous_release_still_writes_and_its_rows_have_no_activation_time",
+]
+
+[[unit]]
+text = "It logs them, so you have a record of what existed when it ran: one WARNING that counts them, then one line per row (at most 200, then … and N more), or one INFO line when there are none."
+by = [
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_a_database_at_the_previous_release_upgrades_and_no_row_has_an_activation_time",
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_the_upgrade_log_counts_and_lists_the_rows_without_an_activation_time",
+]
+
+[[unit]]
+text = "Read the log where the 1ab99332f0ba section below says (Docker Compose, Helm, AWS)."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Downgrading this revision (to modules_0003_lower_is_better) drops both columns, and any activation time stored in them; upgrading afterwards adds them empty."
+by = [
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_downgrade_drops_both_columns_and_keeps_every_row",
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_an_activation_time_is_gone_after_a_downgrade_and_an_upgrade",
 ]
 
 [[unit]]
@@ -1322,6 +1372,13 @@ by = [
 ]
 
 [[unit]]
+text = "modules_0004_rbac_activation is backward-compatible for a rollback too, and undoing it drops the activation-time column of custom role assignments and direct grants, with any activation time stored in it; an upgrade afterwards adds the column empty."
+by = [
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_the_previous_release_still_writes_and_its_rows_have_no_activation_time",
+    "test:backend/tests/integration/database/test_modules_0004_transitions.py::test_an_activation_time_is_gone_after_a_downgrade_and_an_upgrade",
+]
+
+[[unit]]
 text = "Compose runs one API container, which is the only writer and keeps RUN_MIGRATIONS=true."
 by = ["test:backend/tests/unit/infrastructure/test_compose_database_settings.py::test_compose_runs_one_api_container_and_keeps_run_migrations_true"]
 
@@ -1541,7 +1598,7 @@ text = "CI runs this page's exec blocks as written against the Quick Start stack
 by = ["mechanism:migration-pages-environments"]
 
 [[unit]]
-text = "The modules branch has three revisions: modules_0001_rbac, then modules_0002_warehouse_analysis, then modules_0003_lower_is_better."
+text = "The modules branch has four revisions: modules_0001_rbac, then modules_0002_warehouse_analysis, then modules_0003_lower_is_better, then modules_0004_rbac_activation."
 by = [
     "mechanism:alembic-plan-branch",
     "mechanism:alembic-plan-unapply",
@@ -1552,7 +1609,7 @@ text = "Name the modules revision to end at rather than counting back: a relativ
 by = ["mechanism:alembic-plan-relative-downgrade"]
 
 [[unit]]
-text = "modules@-3 unapplies all three, newest first."
+text = "modules@-4 unapplies all four, newest first."
 by = ["mechanism:alembic-plan-unapply"]
 
 [[unit]]

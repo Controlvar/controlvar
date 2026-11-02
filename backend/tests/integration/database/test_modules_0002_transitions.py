@@ -59,8 +59,9 @@ MODULES_FIRST = "modules_0001_rbac"
 #: This revision: the branch's second.
 MODULES_0002 = "modules_0002_warehouse_analysis"
 #: The modules branch's head, which ``upgrade heads`` runs on to past this
-#: revision: ``modules_0003_lower_is_better`` (#1386).
-MODULES_HEAD = "modules_0003_lower_is_better"
+#: revision: ``modules_0004_rbac_activation`` (#891), after
+#: ``modules_0003_lower_is_better`` (#1386).
+MODULES_HEAD = "modules_0004_rbac_activation"
 PREVIOUS_FULL_HEADS = {CORE_HEAD, MODULES_FIRST}
 FULL_HEADS = {CORE_HEAD, MODULES_HEAD}
 
@@ -445,8 +446,9 @@ def test_reupgrade_keeps_new_shape_rows(test_db, scratch_schema, full_tree):
 
     A fresh full bootstrap builds the new tables from the models, so this
     revision's downgrade (``downgrade modules_0001_rbac``, which first runs
-    ``modules_0003_lower_is_better``'s and drops its column) has nothing of its
-    own to drop and leaves them -- with their connections -- in place.  The
+    ``modules_0004_rbac_activation``'s and ``modules_0003_lower_is_better``'s,
+    each dropping its own columns) has nothing of its own to drop and leaves
+    them -- with their connections -- in place.  The
     next ``upgrade heads`` runs this revision again, meets a
     ``warehouse_connections`` that already has the new shape, and must leave
     it, and its rows, alone.
@@ -489,11 +491,12 @@ def test_modules_0002_downgrade_restores_the_earlier_shape(
     """``downgrade modules_0001_rbac`` drops what the revision made and puts the
     earlier table back.
 
-    It first unapplies ``modules_0003_lower_is_better``, whose column goes with
-    ``warehouse_sources``.  The table comes back empty -- the rows the upgrade
-    removed are not recoverable, which is why the supported way back is the
-    snapshot taken before upgrading -- but in exactly the shape the previous
-    release's model builds, so that release maps it.
+    It first unapplies ``modules_0004_rbac_activation``, which drops its two
+    columns from the RBAC tables, and ``modules_0003_lower_is_better``, whose
+    column goes with ``warehouse_sources``.  The table comes back empty -- the
+    rows the upgrade removed are not recoverable, which is why the supported
+    way back is the snapshot taken before upgrading -- but in exactly the shape
+    the previous release's model builds, so that release maps it.
     """
     assert tree_profiles.bootstrap_schema(core_tree, scratch_schema).returncode == 0
     upgrade = tree_profiles.alembic(full_tree, scratch_schema, "upgrade", "heads")
