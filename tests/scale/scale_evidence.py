@@ -126,6 +126,10 @@ SYSTEM_UNDER_TEST: Tuple[str, ...] = ("api", "postgres", "web", "redis")
 #: The hardware threads the samplers read from /proc/stat, as the VM numbers
 #: them. A hardware thread is what the VM calls a CPU; it is not a core.
 THREADS: Tuple[str, ...] = ("cpu0", "cpu1", "cpu2", "cpu3")
+#: What the samplers read for each hardware thread from /proc/stat, each in
+#: per-mille of the window's ticks: busy (user, nice, system, irq and
+#: softirq), steal, and irq and softirq on their own.
+THREAD_FIELDS: Tuple[str, ...] = ("busy", "steal", "irq", "softirq")
 #: How the page names each container.
 NAMES: Dict[str, str] = {
     "api": "the API",
@@ -539,12 +543,14 @@ STEP_SPEC = obj(
     samples=Int(0),
     # Each container's cgroup CPU, in per-mille of one hardware thread.
     **{f"{name}_cpu_permille": Int(0) for name in CONTAINERS},
-    # Each hardware thread's /proc/stat busy and steal, and the foreign CPU
-    # computed from them: busy minus the containers pinned to the thread.
+    # Each hardware thread's /proc/stat busy and steal, its irq and softirq
+    # (part of busy, recorded apart so the foreign-CPU limit can be calibrated
+    # against them: PE SMT condition 8), and the foreign CPU computed from
+    # them: busy minus the containers pinned to the thread.
     **{
         f"{thread}_{what}_permille": PERMILLE
         for thread in THREADS
-        for what in ("busy", "steal", "foreign")
+        for what in THREAD_FIELDS + ("foreign",)
     },
     active_backend_samples_by_count=ListOf(Int(0), 0, 1000),
     active_backend_share_permille=PERMILLE,
@@ -1387,7 +1393,7 @@ def summarise_step(
         f"{name}_cpu_permille": cpu[name] if sampled else 0 for name in CONTAINERS
     }
     for thread in THREADS:
-        for what in ("busy", "steal"):
+        for what in THREAD_FIELDS:
             key = f"{what}_permille"
             cpu_fields[f"{thread}_{key}"] = threads[thread][key] if sampled else 0
         cpu_fields[f"{thread}_foreign_permille"] = 0
@@ -1457,10 +1463,10 @@ OBSERVATION_SPEC = obj(
     samples=Int(0),
     # Each container's cgroup CPU over the window.
     cpu_permille=obj(**{name: Int(0) for name in CONTAINERS}),
-    # Every hardware thread's /proc/stat busy and steal over the window.
+    # Every hardware thread's /proc/stat THREAD_FIELDS over the window.
     threads=obj(
         **{
-            thread: obj(busy_permille=PERMILLE, steal_permille=PERMILLE)
+            thread: obj(**{f"{what}_permille": PERMILLE for what in THREAD_FIELDS})
             for thread in THREADS
         }
     ),
@@ -2129,7 +2135,9 @@ def _topology(host: Mapping[str, Any]) -> Tuple[int, Tuple[Tuple[int, ...], ...]
 def _topology_text(
     nproc: int, cores: Sequence[Sequence[int]], split: Mapping[str, str]
 ) -> str:
-    """The topology as the VM reported it, naming what ran on each core."""
+    """The topology as the VM reported it, naming what the harness pinned to
+    each core. "Pinned", not "ran": the Docker daemon, the runner's agent and
+    the harness's own process run there too, unrecorded (#1616 review N1)."""
     sizes = {len(core) for core in cores}
     if sizes == {1}:
         shape = f"{len(cores)} cores of one hardware thread each"
@@ -2139,10 +2147,12 @@ def _topology_text(
         shape = f"{len(cores)} cores"
     parts = []
     for core in cores:
-        ran = _on_threads(split, core)
+        pinned = _on_threads(split, core)
         where = f"the core of {_threads_text(set(core))}"
         parts.append(
-            f"{where} ran {_and(ran)}" if ran else f"{where} ran nothing pinned"
+            f"{where} had pinned to it {_and(pinned)}"
+            if pinned
+            else f"{where} had nothing pinned to it"
         )
     return f"{nproc} vCPUs, which the VM reports as {shape}: " + "; ".join(parts)
 
