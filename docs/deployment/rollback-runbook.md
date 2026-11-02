@@ -203,13 +203,17 @@ Deploy refuses to create a deployment for one that does not
 Rollback does not check its target: that is this command.
 
 Where the API migrates on start (Docker Compose, and the Helm chart's init
-container), start the older image only after `alembic downgrade 85dd4796bb8b`
-has run with the release that contains `7b6b4b4fe246`, whose downgrade drops
-`rollout_stages.started_at`
-([Step 2](#step-2-run-migration-downgrade-via-github-actions) says what that
-loses): without it the older image
-refuses to start with `this database was migrated by a newer Controlvar release
-than this image`.
+container), start the older image only after the database has been downgraded
+to the heads of the release you go back to, with the newer release still
+running: its core head, and on a full install its modules head too, one
+`alembic downgrade <id>` for each. `alembic heads`, run with the older image,
+prints them. Without that the older image refuses to start with `this database
+was migrated by a newer Controlvar release than this image`. Each migration in
+between runs its downgrade on the way; from a release that carries
+`7b6b4b4fe246` (its own `down_revision` is `85dd4796bb8b`), that includes
+`7b6b4b4fe246`'s, which drops `rollout_stages.started_at`
+([Step 2](#step-2-run-migration-downgrade-via-github-actions) says what each
+downgrade loses).
 
 ### Rolling back past segment targeting
 

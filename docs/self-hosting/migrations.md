@@ -595,9 +595,12 @@ exact values. An upgrade afterwards sets each stage in progress from its
 `updated_at`, which an edit may have moved, so a stage edited in the meantime
 restarts its clock from the edit. Where the API migrates on start (Docker
 Compose, and the Helm chart's init container), the previous release refuses to
-start against this revision; run the downgrade first, with this release still
-running, and with the Engineering Lead's approval at the moment it runs when
-any stage is `IN_PROGRESS`:
+start against this revision. To go back to it, first downgrade to the previous
+release's heads, with this release still running
+([An Older Image Against a Newer Database](#an-older-image-against-a-newer-database)),
+and with the Engineering Lead's approval at the moment it runs when any stage
+is `IN_PROGRESS`. This revision's own `down_revision` is `85dd4796bb8b`; this
+undoes this revision alone:
 
 ```{.bash skip reason="destructive: drops rollout_stages.started_at"}
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade 85dd4796bb8b
@@ -821,10 +824,15 @@ names:
   against the restored database.
 
 A third way, when the newer release's migrations can be undone: with the newer
-release still running, downgrade to the older release's core head, then start
-the older image. For example, to go back from the release that added
-`7b6b4b4fe246` to the one before it, downgrade to `85dd4796bb8b` first, which
-drops the recorded start of every rollout stage (see
+release still running, downgrade to the heads of the older release, then start
+the older image. Those are its core head and, on a full install, its modules
+head too, one `alembic downgrade <id>` for each; `alembic heads`, run with the
+older image, prints them. The core head alone is not enough when the newer
+release also moved the modules branch: the older image still refuses, naming
+the modules revision. Each migration in between runs its downgrade on the way:
+from a release that carries `7b6b4b4fe246`, whose own `down_revision` is
+`85dd4796bb8b`, that includes its downgrade, which drops the recorded start of
+every rollout stage (see
 [`7b6b4b4fe246`](#7b6b4b4fe246-records-when-each-rollout-stage-started)).
 
 Do not edit `alembic_version` to make the older image start.

@@ -596,8 +596,10 @@ def test_the_previous_release_starts_only_after_the_downgrade(
 ):
     """Docker Compose and the Helm chart's init container run the bootstrap
     on every start. Against this revision the previous release's bootstrap
-    refuses; after ``downgrade 85dd4796bb8b``, run with this release, it
-    starts."""
+    refuses; after a downgrade to the previous release's heads, as ``alembic
+    heads`` run with that release prints them (``85dd4796bb8b``, this
+    revision's own ``down_revision``, and on a full install the modules head),
+    run with this release, it starts."""
     tree = _bootstrapped_at_previous_release(test_db, profile, scratch_schema, tmp_path)
     _upgrade(tree, scratch_schema)
     release_n_minus_1 = _previous_release(profile, tmp_path)
@@ -609,8 +611,15 @@ def test_the_previous_release_starts_only_after_the_downgrade(
     assert REVISION in refused.stderr
     assert _rows(test_db, scratch_schema) == ROWS[profile]
 
-    down = tree_profiles.alembic(tree, scratch_schema, "downgrade", PREVIOUS_CORE_HEAD)
-    assert down.returncode == 0, down.stderr[-3000:]
+    heads = tree_profiles.alembic(release_n_minus_1, "public", "heads")
+    assert heads.returncode == 0, heads.stderr[-3000:]
+    previous_heads = {
+        line.split()[0] for line in heads.stdout.splitlines() if line.strip()
+    }
+    assert previous_heads == PREVIOUS_ROWS[profile]
+    for head in sorted(previous_heads):
+        down = tree_profiles.alembic(tree, scratch_schema, "downgrade", head)
+        assert down.returncode == 0, down.stderr[-3000:]
     started = tree_profiles.bootstrap_schema(release_n_minus_1, scratch_schema)
     print(f"[{profile}] after the downgrade: exit {started.returncode}")
     assert started.returncode == 0, started.stderr[-3000:]
