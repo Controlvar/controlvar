@@ -157,15 +157,16 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
             "Set optimization_type to one of thompson_sampling, ucb1 or epsilon_greedy when you create the experiment"
         ),
     ),
-    "Full profile: store split URL experiments and preview the URL a user id hashes to. The edge router does not split traffic yet.": (
+    "Full profile: give each variant its own URL. Your server or edge, or on AWS an optional CloudFront router, asks Controlvar where to send each visitor, and conversions count for the variant they saw.": (
         lede("present in the full profile"),
-        lede("The edge router does not split traffic in this release"),
+        lede("A split URL experiment gives each variant its own page"),
+        lede("your server or edge asks Controlvar which variant the visitor is in"),
+        lede("On AWS, an optional CloudFront router can do the asking for your site"),
         lede(
-            "What works today is storing a split URL experiment and its configuration, and the preview endpoint"
+            "conversions tracked with their id and the experiment count for the variant they saw"
         ),
-        lede("it hashes the user_id you pass with the experiment's id"),
         says(
-            "Returns the URL variant the preview's own hash gives a user_id, without redirecting"
+            "A conversion counts for a variant only when it is tracked with the same visitor id"
         ),
     ),
     "Keep users out of conflicting experiments, and a share of new users out of every experiment": (
@@ -259,7 +260,7 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
     "useFlag and useExperiment hooks, Provider, AsyncStorage offline support.": (
         lede("a context provider, three hooks"),
         lede("AsyncStorage-backed offline fallback"),
-        says("### useFlag(flagKey): FlagState"),
+        says("### useFlag(flagKey, attributes?): FlagState"),
         says("### useExperiment(experimentKey): ExperimentState"),
     ),
     "Describes the API's tools for AI assistants.": (

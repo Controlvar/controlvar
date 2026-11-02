@@ -13,14 +13,17 @@ until then three things are held here for every one of them, read from files:
 2. **Install commands.** No install command or dependency line names one of
    this repository's packages from its registry (npm, PyPI, RubyGems, Hex,
    pub.dev, Packagist, NuGet, Maven Central, CocoaPods, a SwiftPM URL) unless
-   that package is published (``PUBLISHED`` in ``test_sdk_doc_versions.py``).
+   that package is on its registry (``ON_REGISTRY`` in
+   ``test_sdk_doc_versions.py``; ``published_identities()`` reads each one's
+   name from its npm, PyPI, Maven or NuGet manifest).
    A source install is not a registry one: a path, a tarball, ``pip install
    -e``, a ``git:``/``path:`` dependency, a Composer path repository in the
    same block, a Maven coordinate on a page that installs it into ``~/.m2``
    (and, for Gradle, reads it there with ``mavenLocal()``). A page with an
-   install section says "not yet published" exactly when its SDK is not
-   published, except a README a registry shows (``PACKAGED``): that one
-   states no status at all, and keeps the packaged-README contract of
+   install section says "not yet published" exactly when its SDK is not on
+   its registry, except a README a registry shows (``PACKAGED``): that one
+   states no status at all, installs nothing from a registry whether or not
+   its package is on one, and keeps the packaged-README contract of
    ``scripts/check_packaged_readme.py`` instead (DECISIONS T230).
 3. **Attribute targeting on flags.** Which SDKs send a ``context`` on flag
    evaluation is read from each SDK's source: the line that builds the
@@ -44,12 +47,14 @@ import ast
 import json
 import re
 import tomllib
+import xml.etree.ElementTree as ET
+from functools import lru_cache
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Set, Tuple
+from typing import AbstractSet, Dict, Iterator, List, Optional, Set, Tuple
 
 import pytest
 
-from backend.tests.unit.docs.test_sdk_doc_versions import PUBLISHED, says_unpublished
+from backend.tests.unit.docs.test_sdk_doc_versions import ON_REGISTRY, says_unpublished
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
@@ -93,6 +98,16 @@ def sdks_of(page: str) -> Tuple[str, ...]:
 
 def text(page: str) -> str:
     return (REPO_ROOT / page).read_text(encoding="utf-8")
+
+
+def _script(name: str):
+    from importlib.util import module_from_spec, spec_from_file_location
+
+    spec = spec_from_file_location(name, REPO_ROOT / "scripts" / f"{name}.py")
+    assert spec is not None and spec.loader is not None
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def fold(value: str) -> str:
@@ -368,16 +383,85 @@ def _manifest(sdk: str, name: str) -> str:
     return (SDK_DIR / sdk / name).read_text(encoding="utf-8")
 
 
-def published_identities() -> Set[Tuple[str, str]]:
-    """(ecosystem, name) of every published package, from its manifest."""
-    found = set()
-    for directory in PUBLISHED:
-        if (SDK_DIR / directory / "package.json").is_file():
-            found.add(("npm", json.loads(_manifest(directory, "package.json"))["name"]))
-        else:
-            data = tomllib.loads(_manifest(directory, "pyproject.toml"))
-            found.add(("pypi", data["project"]["name"].lower()))
+@lru_cache(maxsize=None)
+def _check_sdk_version():
+    """scripts/check_sdk_version.py, loaded once: its ``ECOSYSTEMS`` says how
+    the release publishes each SDK, and its NuGet reader which project it packs."""
+    return _script("check_sdk_version")
+
+
+POM_NAMESPACE = {"m": "http://maven.apache.org/POM/4.0.0"}
+#: A Maven ``groupId:artifactId``.
+COORDINATE = re.compile(r"[\w.-]{1,100}:[\w.-]{1,100}")
+
+
+def _pom(path: Path, field: str) -> str:
+    return (ET.parse(path).getroot().findtext(f"m:{field}", "", POM_NAMESPACE)).strip()
+
+
+def maven_coordinates(sdk: str) -> Set[str]:
+    """``groupId:artifactId`` of the SDK's parent POM and of each module it
+    lists: Central serves every one, the parent too. A module that names no
+    groupId of its own has its parent's."""
+    parent = SDK_DIR / sdk / "pom.xml"
+    group = _pom(parent, "groupId")
+    found = {f"{group}:{_pom(parent, 'artifactId')}"}
+    modules = ET.parse(parent).getroot().findall("m:modules/m:module", POM_NAMESPACE)
+    for module in modules:
+        child = SDK_DIR / sdk / (module.text or "").strip() / "pom.xml"
+        found.add(f"{_pom(child, 'groupId') or group}:{_pom(child, 'artifactId')}")
+    assert modules and all(COORDINATE.fullmatch(c) for c in found), (sdk, found)
     return found
+
+
+def package_identities(sdk: str) -> Set[Tuple[str, str]]:
+    """How the registry names the SDK's package, read from the manifest its
+    release reads (``ECOSYSTEMS`` in scripts/check_sdk_version.py), each as
+    ``registry_key`` writes it:
+
+    * npm: ``package.json``'s name;
+    * PyPI: ``pyproject.toml``'s name;
+    * Maven Central: the ``groupId:artifactId`` of the parent POM and of each
+      module, as a ``<dependency>`` (``maven``) and as a Gradle coordinate
+      (``gradle``) names it;
+    * NuGet: the ``<PackageId>`` of the project the release packs.
+
+    An SDK released another way (Go, whose tag is the release) or not wired
+    to a registry has no such name, and asking for one is an error: such an
+    SDK cannot be in ``ON_REGISTRY``.
+    """
+    ecosystem = _check_sdk_version().ECOSYSTEMS.get(sdk)
+    if ecosystem == "npm":
+        found = {("npm", json.loads(_manifest(sdk, "package.json"))["name"])}
+    elif ecosystem == "pypi":
+        found = {
+            ("pypi", tomllib.loads(_manifest(sdk, "pyproject.toml"))["project"]["name"])
+        }
+    elif ecosystem == "maven":
+        found = {
+            (kind, c) for c in maven_coordinates(sdk) for kind in ("maven", "gradle")
+        }
+    elif ecosystem == "nuget":
+        found = {
+            ("nuget", _check_sdk_version().read_nuget_version(sdk, SDK_DIR / sdk)[1])
+        }
+    else:
+        raise AssertionError(
+            f"sdk/{sdk} is {ecosystem!r} in scripts/check_sdk_version.py's ECOSYSTEMS,"
+            " so it has no npm, PyPI, Maven Central or NuGet name to read:"
+            " ON_REGISTRY cannot hold it"
+        )
+    return {registry_key(*identity) for identity in found}
+
+
+def registry_key(ecosystem: str, name: str) -> Tuple[str, str]:
+    """An identity as its registry compares names: PyPI and NuGet ignore case."""
+    return (ecosystem, name.lower() if ecosystem in ("pypi", "nuget") else name)
+
+
+def published_identities() -> Set[Tuple[str, str]]:
+    """(ecosystem, name) of every package on its registry (``ON_REGISTRY``)."""
+    return {identity for sdk in ON_REGISTRY for identity in package_identities(sdk)}
 
 
 def ours(ecosystem: str, name: str, group: Optional[str] = None) -> bool:
@@ -438,8 +522,14 @@ def _arguments(ecosystem: str, args: str) -> Iterator[str]:
             yield name
 
 
-def registry_installs(page_text: str) -> List[Tuple[str, str]]:
-    """Every (ecosystem, package) of ours that the page installs from a registry."""
+def registry_installs(
+    page_text: str, published: Optional[AbstractSet[Tuple[str, str]]] = None
+) -> List[Tuple[str, str]]:
+    """Every (ecosystem, package) of ours that the page installs from a
+    registry and that is not in *published* (``published_identities()``
+    unless given). A Maven or Gradle package is its ``groupId:artifactId``."""
+    if published is None:
+        published = published_identities()
     found: List[Tuple[str, str]] = []
     maven_local = bool(MAVEN_LOCAL_INSTALL.search(page_text))
     gradle_local = maven_local and "mavenLocal()" in page_text
@@ -471,7 +561,9 @@ def registry_installs(page_text: str) -> List[Tuple[str, str]]:
                 if ecosystem == "gradle" and gradle_local:
                     continue
                 identity = (ecosystem, name.lower() if ecosystem == "pypi" else name)
-                if identity not in published_identities():
+                if ecosystem in ("maven", "gradle"):
+                    identity = (ecosystem, f"{groups['group']}:{name}")
+                if registry_key(*identity) not in published:
                     found.append(identity)
     return found
 
@@ -513,11 +605,11 @@ INSTALL_SAMPLES = (
     ),
     (
         "<groupId>com.controlvar</groupId>\n    <artifactId>controlvar-sdk</artifactId>",
-        [("maven", "controlvar-sdk")],
+        [("maven", "com.controlvar:controlvar-sdk")],
     ),
     (
         'implementation("com.controlvar:controlvar-android:1.0.0")',
-        [("gradle", "controlvar-android")],
+        [("gradle", "com.controlvar:controlvar-android")],
     ),
     ("pod 'Controlvar'", [("cocoapods", "Controlvar")]),
     (
@@ -555,12 +647,112 @@ def test_each_install_pattern_reads_what_it_exists_for(sample, expected):
     assert registry_installs(sample) == expected
 
 
+# The registry names a package has, read before it joins ON_REGISTRY. The Java
+# and .NET names are public for good from their first publish (#1498).
+JAVA_COORDINATES = {
+    "com.controlvar:controlvar-sdk-parent",
+    "com.controlvar:controlvar-sdk",
+    "com.controlvar:controlvar-spring-boot-starter",
+}
+
+
+def test_the_maven_reader_reads_the_parent_and_each_module():
+    assert package_identities("java") == {
+        (kind, coordinate)
+        for coordinate in JAVA_COORDINATES
+        for kind in ("maven", "gradle")
+    }
+    # The version check of test_sdk_doc_versions.py reads the same POMs.
+    from backend.tests.unit.docs.test_sdk_doc_versions import maven_versions
+
+    assert set(maven_versions()) == JAVA_COORDINATES
+
+
+def test_the_nuget_reader_reads_the_packed_projects_id():
+    assert package_identities("dotnet") == {("nuget", "controlvar.sdk")}
+
+
+@pytest.mark.parametrize(
+    "sdk",
+    sorted(
+        sdk
+        for sdk, ecosystem in _check_sdk_version().ECOSYSTEMS.items()
+        if ecosystem in ("npm", "pypi", "maven", "nuget")
+    ),
+)
+def test_each_registry_sdk_has_the_name_its_release_checks(sdk):
+    """The name scripts/check_sdk_version.py reads for the tag (a Maven
+    parent's coordinate, a NuGet id) is one the reader here gives."""
+    ecosystem = _check_sdk_version().ECOSYSTEMS[sdk]
+    name = _check_sdk_version().read_manifest_version(sdk)[1]
+    assert registry_key(ecosystem, name) in package_identities(sdk)
+
+
+@pytest.mark.parametrize(
+    "sdk", ["go", "ruby", "php", "elixir", "flutter", "android", "ios"]
+)
+def test_an_sdk_with_no_registry_name_cannot_be_on_the_registry(sdk, monkeypatch):
+    with pytest.raises(AssertionError, match="ON_REGISTRY cannot hold it"):
+        package_identities(sdk)
+    monkeypatch.setitem(globals(), "ON_REGISTRY", (*ON_REGISTRY, sdk))
+    with pytest.raises(AssertionError, match=f"sdk/{sdk} is"):
+        published_identities()
+
+
+#: Install lines for the Java and .NET packages: refused today, allowed once
+#: java and dotnet are in ON_REGISTRY.
+JAVA_AND_DOTNET_INSTALLS = (
+    "<groupId>com.controlvar</groupId>\n    <artifactId>controlvar-sdk</artifactId>",
+    "<groupId>com.controlvar</groupId>\n"
+    "    <artifactId>controlvar-spring-boot-starter</artifactId>",
+    'implementation("com.controlvar:controlvar-sdk:0.1.0")',
+    "implementation 'com.controlvar:controlvar-spring-boot-starter:0.1.0'",
+    "dotnet add package Controlvar.SDK --version 0.1.0",
+    "dotnet add package controlvar.sdk",
+    '<PackageReference Include="Controlvar.SDK" Version="0.1.0" />',
+)
+
+
+@pytest.mark.parametrize("line", JAVA_AND_DOTNET_INSTALLS)
+def test_a_java_or_dotnet_install_is_allowed_once_its_sdk_is_on_the_registry(
+    line, monkeypatch
+):
+    assert registry_installs(line) != []
+    monkeypatch.setitem(globals(), "ON_REGISTRY", (*ON_REGISTRY, "java", "dotnet"))
+    assert registry_installs(line) == []
+
+
+@pytest.mark.parametrize(
+    "line, expected",
+    [
+        (
+            'implementation("com.controlvar:controlvar-android:1.0.0")',
+            [("gradle", "com.controlvar:controlvar-android")],
+        ),
+        (
+            "<groupId>com.controlvar.other</groupId>\n<artifactId>controlvar-sdk</artifactId>",
+            [("maven", "com.controlvar.other:controlvar-sdk")],
+        ),
+        (
+            "dotnet add package Controlvar.SDK.Extras",
+            [("nuget", "Controlvar.SDK.Extras")],
+        ),
+        ("npm install @controlvar/react-sdk", [("npm", "@controlvar/react-sdk")]),
+    ],
+)
+def test_java_and_dotnet_on_the_registry_allow_only_their_own_names(
+    line, expected, monkeypatch
+):
+    monkeypatch.setitem(globals(), "ON_REGISTRY", (*ON_REGISTRY, "java", "dotnet"))
+    assert registry_installs(line) == expected
+
+
 @pytest.mark.parametrize("page", DEFERRED)
 def test_a_deferred_page_installs_no_unpublished_package_from_a_registry(page):
     found = registry_installs(text(page))
     assert not found, (
         f"{page} installs {found} from a registry, where it is not published"
-        " (test_sdk_doc_versions.PUBLISHED); show the build from source instead"
+        " (test_sdk_doc_versions.ON_REGISTRY); show the build from source instead"
     )
 
 
@@ -571,10 +763,10 @@ def test_a_deferred_install_section_says_whether_it_is_published(page):
         # A README a registry shows says nothing about its status: the
         # packaged-README contract below holds it instead (T230).
         return
-    unpublished = [sdk for sdk in sdks_of(page) if sdk not in PUBLISHED]
+    unpublished = [sdk for sdk in sdks_of(page) if sdk not in ON_REGISTRY]
     assert says_unpublished(page_text) == bool(unpublished), (
         f"{page}: its SDK is {'not ' if unpublished else ''}published"
-        " (test_sdk_doc_versions.PUBLISHED); the page says otherwise"
+        " (test_sdk_doc_versions.ON_REGISTRY); the page says otherwise"
     )
 
 
@@ -585,7 +777,7 @@ def test_every_deferred_page_with_an_install_section_is_read():
     request that packs a README moves the second and third."""
     with_section = [page for page in DEFERRED if INSTALL_HEADING.search(text(page))]
     under_the_rule = [page for page in with_section if page not in PACKAGED]
-    assert (len(with_section), len(under_the_rule), len(PACKAGED)) == (24, 23, 1), (
+    assert (len(with_section), len(under_the_rule), len(PACKAGED)) == (24, 21, 5), (
         with_section,
         sorted(PACKAGED),
     )
@@ -596,22 +788,48 @@ def test_every_deferred_page_with_an_install_section_is_read():
 # ---------------------------------------------------------------------------
 
 #: Each README a registry shows, with its SDK: an explicit list, not
-#: ``DEFERRED`` (a packaged README need not be a deferred page). It is held
-#: exactly to the SDKs scripts/check_packaged_readme.py has rules for, and to
-#: the READMEs the packages actually ship.
+#: ``DEFERRED`` (a packaged README need not be a deferred page: the Python
+#: provider's has a claims registry of its own). It is held exactly to the
+#: SDKs scripts/check_packaged_readme.py holds to I-README, and to the
+#: READMEs the packages actually ship.
 PACKAGED: Dict[str, str] = {
     "sdk/dotnet/README.md": "dotnet",
+    "sdk/mcp/README.md": "mcp",
+    "sdk/openfeature-python/README.md": "openfeature-python",
+    "sdk/openfeature/README.md": "openfeature",
+    "sdk/react/README.md": "react",
 }
 
-
-def _script(name: str):
-    from importlib.util import module_from_spec, spec_from_file_location
-
-    spec = spec_from_file_location(name, REPO_ROOT / "scripts" / f"{name}.py")
-    assert spec is not None and spec.loader is not None
-    module = module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+#: For each packaged README: the heading a planted registry install goes
+#: under (outside the Install section), the line planted, and what the
+#: registry sweep must then find. The plant must change the page.
+PLANTS: Dict[str, Tuple[str, str, Tuple[str, str]]] = {
+    "sdk/dotnet/README.md": (
+        "## Quick Start\n",
+        "`dotnet add package Controlvar.SDK`",
+        ("nuget", "Controlvar.SDK"),
+    ),
+    "sdk/mcp/README.md": (
+        "## Configuration\n",
+        "`npm install @controlvar/mcp-server`",
+        ("npm", "@controlvar/mcp-server"),
+    ),
+    "sdk/openfeature-python/README.md": (
+        "## Quick start\n",
+        "`pip install controlvar-openfeature`",
+        ("pypi", "controlvar-openfeature"),
+    ),
+    "sdk/openfeature/README.md": (
+        "## Quick start\n",
+        "`npm install @controlvar/openfeature-provider`",
+        ("npm", "@controlvar/openfeature-provider"),
+    ),
+    "sdk/react/README.md": (
+        "## Provider setup\n",
+        "`npm install @controlvar/react-sdk`",
+        ("npm", "@controlvar/react-sdk"),
+    ),
+}
 
 
 def test_the_packaged_readmes_are_the_ones_the_gate_and_the_packages_name():
@@ -637,7 +855,9 @@ def test_a_packaged_readme_keeps_the_contract(page):
 
 @pytest.mark.parametrize("page", sorted(PACKAGED))
 def test_a_packaged_readme_installs_nothing_from_a_registry(page):
-    assert registry_installs(text(page)) == []
+    # Nothing, whether or not its package is on its registry yet: the README
+    # is frozen at the tag (T230), so the sweep is given no published names.
+    assert registry_installs(text(page), published=frozenset()) == []
 
 
 @pytest.mark.parametrize("page", sorted(PACKAGED))
@@ -646,20 +866,23 @@ def test_a_packaged_readme_claims_no_attribute_targeting_its_client_does_not_sen
         assert attribute_claims(text(page)) == []
 
 
+def test_every_packaged_readme_has_a_plant():
+    assert set(PLANTS) == set(PACKAGED)
+
+
 @pytest.mark.parametrize("page", sorted(PACKAGED))
 def test_a_registry_install_anywhere_in_a_packaged_readme_is_refused(page):
-    """PP-3's plant, in memory: an install line in the Quick Start, outside
-    the Install section, fails both the contract and the registry sweep."""
+    """PP-3's plant, in memory: an install line in a section other than
+    Install fails both the contract and the registry sweep."""
+    heading, line, expected = PLANTS[page]
     original = text(page)
-    planted = original.replace(
-        "## Quick Start\n", "## Quick Start\n\n`dotnet add package Controlvar.SDK`\n", 1
-    )
+    planted = original.replace(heading, f"{heading}\n{line}\n", 1)
     assert planted != original
     assert any(
         "installs this repository's package from a registry" in p
         for p in _contract_problems(page, planted)
     )
-    assert registry_installs(planted) == [("nuget", "Controlvar.SDK")]
+    assert registry_installs(planted, published=frozenset()) == [expected]
 
 
 #: A link to a page of this repository on GitHub, with a fragment.
@@ -761,7 +984,6 @@ SENDS_NO_CONTEXT = {
     "ios",
     "java",
     "php",
-    "react-native",
     "ruby",
 }
 
@@ -884,6 +1106,18 @@ def test_the_claim_patterns_find_the_true_sentence_on_the_react_page():
     )
 
 
+def test_the_claim_patterns_find_the_true_sentence_on_the_react_native_page():
+    # React Native sends the context since #1520, and its page says so: the
+    # patterns must see it, so that react-native put back in SENDS_NO_CONTEXT
+    # fails test_a_page_claims_no_attribute_targeting_its_client_does_not_send
+    # on docs/sdk/react-native.md as well as here.
+    assert "react-native" not in SENDS_NO_CONTEXT
+    assert sends_context("react-native")
+    assert "sent as context on flag evaluation" in attribute_claims(
+        text("docs/sdk/react-native.md")
+    )
+
+
 @pytest.mark.parametrize("page", DEFERRED)
 def test_a_page_claims_no_attribute_targeting_its_client_does_not_send(page):
     silent = [sdk for sdk in sdks_of(page) if sdk in SENDS_NO_CONTEXT]
@@ -894,3 +1128,26 @@ def test_a_page_claims_no_attribute_targeting_its_client_does_not_send(page):
         f"{page}: {', '.join(silent)} sends the user id alone on flag evaluation,"
         f" but the page says attributes reach it ({claims}); say what it sends"
     )
+
+
+def test_the_react_page_names_the_ssr_entry_the_package_ships():
+    """docs/sdk/react.md names `@controlvar/react-sdk/ssr`, and the package has it.
+
+    The page is in ``CLAIMS_DEFERRED``, so no claims entry binds its App Router
+    sentence. It once told readers to call ``ServerClient`` from a server
+    component without naming an import path that exists (#1518); this holds the
+    fixed sentence, and the files that make the path real, in place, and keeps
+    the page from naming a path inside the package's ``dist``.
+    """
+    page = fold(text("docs/sdk/react.md"))
+    assert "@controlvar/react-sdk/ssr" in page
+    assert (
+        "In the App Router call the same methods from an async server component."
+        not in page
+    )
+    # The package's `exports` map refuses deep imports, so a page that sends
+    # readers into `dist` gives an instruction Node rejects.
+    assert "@controlvar/react-sdk/dist" not in page
+    manifest = json.loads((REPO_ROOT / "sdk/react/package.json").read_text("utf-8"))
+    assert "ssr" in manifest["files"]
+    assert (REPO_ROOT / "sdk/react/ssr/package.json").is_file()

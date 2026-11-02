@@ -1,6 +1,6 @@
 # React SDK
 
-`@controlvar/react-sdk` (v1.1) provides a context provider, hooks, a higher-order
+`@controlvar/react-sdk` (v0.1.0) provides a context provider, hooks, a higher-order
 component and an SSR client for using experiments and feature flags from React and Next.js.
 
 Flag evaluation and experiment assignment are decided **by the server**: every call goes to the
@@ -23,7 +23,7 @@ clone of this repository and install the packed tarball (the blocks below).
 Its peer dependencies are `react` >= 17 and `react-dom` >= 17.
 
 To install from source, clone the repository and build a package; `npm pack` writes
-`controlvar-react-sdk-1.1.0.tgz`:
+`controlvar-react-sdk-0.1.0.tgz`:
 
 ```bash
 git clone https://github.com/Controlvar/controlvar.git
@@ -34,7 +34,7 @@ npm ci && npm run build && npm pack
 Then install that file in your app:
 
 ```bash
-npm install /path/to/controlvar/sdk/react/controlvar-react-sdk-1.1.0.tgz
+npm install /path/to/controlvar/sdk/react/controlvar-react-sdk-0.1.0.tgz
 ```
 
 To consume the SDK from source inside this monorepo (what `demo/shoplab` does), alias
@@ -261,7 +261,11 @@ export const getServerSideProps: GetServerSideProps = async ({ req }) => {
 };
 ```
 
-In the App Router call the same methods from an async server component.
+In the App Router, import `ServerClient` from `@controlvar/react-sdk/ssr` in an async server
+component and call the same methods there. Use the `/ssr` subpath rather than the package root: the
+root also loads the provider, which a React Server Component cannot import. The `/ssr` subpath
+resolves for a CommonJS `require`, for a Node ES module `import`, and for TypeScript under
+`node10`, `node16`, `nodenext` and `bundler` module resolution.
 
 ### `ServerClient` API
 

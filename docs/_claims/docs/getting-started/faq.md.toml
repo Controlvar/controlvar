@@ -149,11 +149,12 @@ by = [
 ]
 
 [[unit]]
-text = "CloudFront | Not created by the CDK. Only the split-URL module's Lambda@Edge construct would use it, and its router has no configuration source yet (#393)"
+text = "CloudFront | Not created by the CDK app. The split URL edge router, a CDK app of its own, creates a distribution and a Lambda@Edge function only when you deploy it; AWS bills both (AWS Integration)"
 by = [
     "test:infrastructure/tests/test_front_door_cdk.py::test_no_stack_creates_a_waf_cloudfront_or_api_gateway",
-    "test:modules/backend/tests/unit/infrastructure/test_split_url_distribution.py::test_cloudfront_distribution_created",
-    "test:modules/backend/tests/unit/test_front_door_module_facts.py::test_the_split_url_construct_sets_no_router_configuration",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_edge_app_runs_the_router_at_both_viewer_events",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_constructs_only_referrer_is_the_edge_app",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_nothing_deploys_the_edge_app",
 ]
 
 [[unit]]
@@ -536,47 +537,32 @@ text = "How does Split URL testing work?"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Split URL testing would send different users to different URLs — for example, /checkout vs /checkout-v2 — with a Lambda@Edge router at the CDN."
-by = ["test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_returns_302_redirect"]
+text = "Split URL testing sends different visitors to different URLs — for example, /checkout vs /checkout-v2."
+by = ["test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_a_split_url_experiment_splits_its_visitors"]
 
 [[unit]]
-text = "It does not split traffic yet: the router has no configuration source in this release (#393)."
+text = "Your server or edge asks the API where to send each visitor who opens the control's URL, and redirects them; the API assigns the visitor as POST /api/v1/tracking/assign does."
 by = [
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerPassThrough::test_no_config_header_passes_through",
-    "test:modules/backend/tests/unit/test_front_door_module_facts.py::test_the_split_url_construct_sets_no_router_configuration",
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_variant_seen_is_the_variant_counted",
+    "test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_the_location_is_the_api_s",
 ]
 
 [[unit]]
-text = "The split-URL module ships a CloudFront construct with a Lambda@Edge router, which no stack uses: you add it to a stack yourself."
+text = "Conversions count for the variant the visitor saw when they are tracked with the same visitor id and name the experiment."
 by = [
-    "test:infrastructure/tests/test_front_door_cdk.py::test_no_stack_creates_a_waf_cloudfront_or_api_gateway",
-    "test:modules/backend/tests/unit/infrastructure/test_split_url_distribution.py::test_lambda_edge_attached_to_viewer_request",
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_variant_seen_is_the_variant_counted",
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_conversions_through_the_per_site_pattern_count_for_the_variant_seen",
 ]
 
 [[unit]]
-text = "The router reads a cookie to check whether the visitor has already been assigned."
+text = "On AWS, an optional CloudFront edge router (beta) can do the asking and the redirect."
 by = [
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerExistingCookie::test_existing_valid_cookie_passes_through",
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_returns_302_redirect",
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_the_fingerprint_is_ip_and_user_agent_not_a_user_id",
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_cookie_ttl_defaults_to_30_days",
+    "test:modules/backend/tests/integration/split_url/test_split_url_router_e2e.py::test_a_split_url_experiment_splits_its_visitors_through_the_router",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_nothing_deploys_the_edge_app",
 ]
 
 [[unit]]
-text = "If not, it hashes the client fingerprint (IP address and User-Agent) to pick a variant, returns a 302 redirect to the variant URL, and sets a cookie that lasts cookie_ttl_days (30 days by default)."
-by = [
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerExistingCookie::test_existing_valid_cookie_passes_through",
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_returns_302_redirect",
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_the_fingerprint_is_ip_and_user_agent_not_a_user_id",
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_cookie_ttl_defaults_to_30_days",
-]
-
-[[unit]]
-text = "A request that carries a cookie naming a known variant URL passes through without being bucketed again."
-by = ["test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerExistingCookie::test_existing_valid_cookie_passes_through"]
-
-[[unit]]
-text = "See Split URL Testing API for setup and the CDK construct reference."
+text = "See Split URL testing to set it up, with a reference integration in the Python standard library."
 by = ["exempt:navigation"]
 
 [[unit]]

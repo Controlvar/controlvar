@@ -108,8 +108,8 @@ of devices through the same API, and a scripted "rollout story" walks the platfo
 - Server-side targeting with 20+ operators, including semantic versions
 - Rollout schedules and safety monitoring work together: expand automatically, retreat automatically
 - Kill switches take effect without a release, which is the whole point in a native app
-- Native apps: kill switches and percentage rollouts work; attribute rules do not until
-  [#438](https://github.com/Controlvar/controlvar/issues/438).
+- Native apps: kill switches and percentage rollouts work; attribute rules do not on iOS, Android and Flutter until
+  [#438](https://github.com/Controlvar/controlvar/issues/438). React Native sends the attributes.
 
 Run pieces by hand: `python backend/scripts/seed_streampulse.py`, `cd demo/streampulse && npm run dev`,
 `python demo/streampulse/simulator/traffic.py --rate 3`, `python demo/streampulse/simulator/rollout_story.py --auto`.

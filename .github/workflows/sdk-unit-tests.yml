@@ -6,8 +6,9 @@ name: SDK Unit Tests
 # toolchain, in two tiers:
 #
 #   Linux tier (required on PRs) — js, react, react-native, edge, openfeature,
-#     python, openfeature-python, go, java, ruby, php, dotnet. All install and
-#     run in well under a minute on ubuntu-latest. A pull request runs the SDKs
+#     python, openfeature-python, go, java, ruby, php, dotnet, and mcp (the
+#     MCP server: not an SDK, but its suite runs here like one). All install
+#     and run in well under a minute on ubuntu-latest. A pull request runs the SDKs
 #     it touches plus the always-on core three (js, python, react: the dashboard,
 #     the demos and the backend's own examples depend on them), so an unrelated
 #     backend change does not pay for twelve toolchains.
@@ -111,6 +112,9 @@ jobs:
             dotnet:
               - *all
               - 'sdk/dotnet/**'
+            mcp:
+              - *all
+              - 'sdk/mcp/**'
             elixir:
               - *all
               - 'sdk/elixir/**'
@@ -148,6 +152,7 @@ jobs:
               "ruby": "ruby",
               "php": "php",
               "dotnet": "dotnet",
+              "mcp": "node",
           }
           HEAVY = ["elixir", "flutter", "android", "ios"]
 
@@ -267,6 +272,14 @@ jobs:
               fi
               npm test -- --ci
               ;;
+            mcp)
+              # The MCP server. Its `test` script builds dist/ first: the suite
+              # runs the built server as a child process against a stub API
+              # on 127.0.0.1, and packs and installs the package from npm.
+              cd sdk/mcp
+              npm ci --no-audit --no-fund
+              npm test -- --ci
+              ;;
             python)
               pip install pytest
               # tests/conftest.py puts the source tree on sys.path; no install needed.
@@ -307,6 +320,35 @@ jobs:
             *)
               echo "::error::no test command for sdk '$SDK'"; exit 1 ;;
           esac
+
+      # The README npm or PyPI would show for this SDK's next release, read
+      # from the package built the way sdk-release.yml builds it (`npm pack`;
+      # a wheel and an sdist) and held to the same rule set by the same gate,
+      # so a README the release would refuse fails the pull request that
+      # wrote it rather than a release tag. An SDK the gate has no rules for
+      # is refused by the release itself; here it is named and not packed.
+      - name: Check the packed README
+        if: matrix.lang == 'node' || matrix.lang == 'python'
+        env:
+          SDK: ${{ matrix.sdk }}
+          TOOLCHAIN: ${{ matrix.lang }}
+        run: |
+          set -euo pipefail
+          rules="$(python3 scripts/check_packaged_readme.py --sdk "$SDK" --print-rule-set)"
+          if [ "$rules" = "none" ]; then
+            printf '%s\n' "::notice::sdk/$SDK: the README gate has no rules for this SDK, so sdk-release.yml refuses to release it until it has (scripts/check_packaged_readme.py)"
+            exit 0
+          fi
+          out="$RUNNER_TEMP/packed"
+          rm -rf "$out"
+          mkdir -p "$out"
+          if [ "$TOOLCHAIN" = "node" ]; then
+            (cd "sdk/$SDK" && npm pack --pack-destination "$out")
+          else
+            python -m pip install build
+            python -m build --outdir "$out" "sdk/$SDK"
+          fi
+          python3 scripts/check_packaged_readme.py --sdk "$SDK" "$out"/*
 
   # ───────────────────────────────────────────────────────────────────────────
   # Heavy tier — nightly, or when the SDK's own path is touched.

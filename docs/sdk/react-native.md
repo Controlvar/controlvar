@@ -8,11 +8,10 @@ Flag evaluation and experiment assignment are decided **by the server**: every c
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
 the SDK caches the answer per user + key. Nothing is bucketed locally.
 
-> **Flag evaluation sends only the user id.** `GET /api/v1/feature-flags/evaluate/{key}?user_id=…`
-> carries none of the user's attributes, so the server evaluates a flag's targeting rules against
-> an empty context. Experiment assignment sends them: `getAssignment` (and `useExperiment`, with the provider's `attributes`) sends the attributes as
-> `context`. To evaluate a flag with attributes, call the evaluate endpoint with a `context`
-> query parameter (a URL-encoded JSON object of the attributes).
+Flag evaluation and experiment assignment both send the user's attributes, so targeting rules match as in the JavaScript SDK: flag
+evaluation sends them as the `context` query parameter (a URL-encoded JSON object; nothing is
+sent for missing or empty attributes), and experiment assignment sends them as `context` in the
+request body.
 
 Source: `sdk/react-native`. Example app: `sdk/react-native/example/App.tsx`.
 
@@ -108,11 +107,22 @@ function Home() {
 |------|------|----------|-------------|
 | `client` | `ExperimentationClient` | Yes | The client instance (create it once) |
 | `userId` | `string` | Yes | Stable identifier used by the server for bucketing |
-| `attributes` | `Record<string, unknown>` | No | Sent as `context` on experiment assignment (targeting rules); not sent on flag evaluation |
+| `attributes` | `Record<string, unknown>` | No | Sent as `context` on flag evaluation and on experiment assignment (targeting rules) |
 
 The context value is memoised on `client`, `userId` and `attributes`. Hooks re-run when `client`,
-`userId` or the key they were given changes; `useExperiment` deliberately ignores `attributes`
-changes because assignment is sticky per user.
+`userId` or the key they were given changes; neither `useExperiment` nor `useFlag` re-runs when
+`attributes` changes (assignment is sticky per user, and an inline object is new on every render).
+
+**After the user's attributes change,** the SDK keys its memory cache, its AsyncStorage entries
+and its in-flight requests by user + key, as the JavaScript SDK does, so an answer already stored
+for that user and flag is served until it expires, with the attributes it was asked with. To ask
+again with the new attributes, call `client.clearCache()` and `await client.clearStorage()`, then
+mount the components that read flags again (a new `key` on the provider does it). `clearStorage()`
+also removes the stored assignments, so the next `useExperiment` asks again; the variant is the
+same because assignment is sticky, and the server records another exposure. With a client
+constructed with `offlineFallback: false`, which keeps nothing in AsyncStorage, `clearCache()` plus
+a remount is enough; either one alone is not, because a mounted hook does not ask again and a
+remount is answered from the memory cache.
 
 ### Client configuration (`SdkConfig`)
 
@@ -129,11 +139,11 @@ changes because assignment is sticky per user.
 
 ## Hooks
 
-### `useFlag(flagKey): FlagState`
+### `useFlag(flagKey, attributes?): FlagState`
 
 Evaluates one flag for the provider's user via
-`GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…`. A second `attributes` argument is
-accepted for signature compatibility but not sent.
+`GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…&context=…`. It sends its `attributes`
+argument as `context`; when it has none, the provider's `attributes`. The two are not merged.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -196,9 +206,9 @@ const result = await client.trackBatch([
 
 | Method | Signature | Returns | On failure |
 |--------|-----------|---------|------------|
-| `evaluateFlag` | `(flagKey, userId) => Promise<FlagEvaluation>` | `{ key, enabled, config }` | `{ key, enabled: false, config: null }` (or the last-known AsyncStorage value) |
-| `isFeatureEnabled` | `(flagKey, userId) => Promise<boolean>` | `enabled` | `false` |
-| `getAllFlags` | `(userId) => Promise<Record<string, boolean>>` | `{ flagKey: enabled }`; not cached, not part of the fan-out | `{}` |
+| `evaluateFlag` | `(flagKey, userId, attributes?) => Promise<FlagEvaluation>` | `{ key, enabled, config }` | `{ key, enabled: false, config: null }` (or the last-known AsyncStorage value). Attributes that cannot be sent (`JSON.stringify` throws, or the server answers 422 for a context over 8,192 bytes or nested more than 10 levels) are reported to `onError` and answered the same way |
+| `isFeatureEnabled` | `(flagKey, userId, attributes?) => Promise<boolean>` | `enabled` | `false` |
+| `getAllFlags` | `(userId, attributes?) => Promise<Record<string, boolean>>` | `{ flagKey: enabled }`; not cached, not part of the fan-out | `{}` |
 | `getAssignment` | `(experimentKey, userId, attributes?) => Promise<Assignment \| null>` | `{ experimentKey, userId, variantId, variantName, isControl, configuration }` | `null` (or the last-known AsyncStorage value) |
 | `getVariant` | `(experimentKey, userId, attributes?) => Promise<string \| null>` | `variantName` | `null` |
 | `track` | `(eventName, userId, properties?, options?) => Promise<void>` | — | Never rejects; reported to `onError` |
@@ -263,13 +273,13 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | SDK call | Method and path | Body / query | 200 response |
 |---|---|---|---|
 | `getAssignment`, `getVariant`, `useExperiment` | `POST /api/v1/tracking/assign` | `{"experiment_key","user_id","context"?: object}` | `{"experiment_key","user_id","variant_id","variant_name","is_control","configuration"}` |
-| `evaluateFlag`, `isFeatureEnabled`, `useFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<id>` | — | `{"key","enabled","config"}` |
-| `getAllFlags` | `GET /api/v1/feature-flags/user/{user_id}` | — | `{"<flag_key>": bool, ...}` |
+| `evaluateFlag`, `isFeatureEnabled`, `useFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<id>&context=<url-encoded JSON>` (no `context` for missing or empty attributes) | — | `{"key","enabled","config"}` |
+| `getAllFlags` | `GET /api/v1/feature-flags/user/{user_id}?context=<url-encoded JSON>` (no `context` for missing or empty attributes) | — | `{"<flag_key>": bool, ...}` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{"event_type","event_name","user_id","experiment_key"?,"feature_flag_key"?,"value"?,"metadata"?,"timestamp"?}` | stored event (ignored) |
 | `track` without a key, `trackBatch` | `POST /api/v1/tracking/batch` | `{"events":[<track body>...]}` (max 100) | `{"success_count","failure_count","errors"}` |
 
-Errors: 401 bad key; 404 an unknown experiment or flag key, or a draft experiment with no control variant; 422 invalid
-event; 429 rate limited (`Retry-After` header).
+Errors: 401 bad key; 404 an unknown experiment or flag key, or a draft experiment with no control variant; 422 an invalid
+event, or a targeting context over 8,192 bytes or 10 levels deep; 429 rate limited (`Retry-After` header).
 
 ---
 
@@ -360,6 +370,9 @@ npm run typecheck:tests
 
 The contract smoke, `examples/contract_smoke.test.ts`, runs under Jest in Node, with no device
 runtime; the live runner runs it with `python tests/sdk-contract/live/run_live_contract.py --sdk react-native --strict`.
+Besides assigning, evaluating and tracking, it evaluates the seed's `sdk_contract_targeted` flag
+(0% rollout, one rule: `plan` equals `pro`) with the attributes `{ plan: 'pro' }` and then
+`{ plan: 'free' }`, and the runner requires the first on, by that rule, and the second off.
 
 ---
 
@@ -373,5 +386,13 @@ at the `ApiError.status`: 401 means a bad `apiKey`, 404 means an unknown key or 
 control variant (a flag that is not ACTIVE comes back disabled, and an experiment that is not ACTIVE answers its
 control variant: neither is an error), a plain `Error` means the network/timeout. Check that `baseUrl` is the origin
 only (no `/api/v1`). With `offlineFallback: true` the last-known value is served during outages.
+An `ApiError` message gives the request path without its query.
+
+**A flag with an attribute rule is off for a user who matches it** — check that the provider (or
+`useFlag`'s second argument) carries the attribute, and that the answer was not cached before the
+attributes changed (see "After the user's attributes change" under Provider): the answer stored
+for that user and flag is served until it expires, whatever attributes the new call sends. Call
+`clearCache()` and `await clearStorage()`, then remount; with a client constructed with
+`offlineFallback: false`, `clearCache()` plus a remount is enough.
 
 **Type errors with `md5`** — `npm install --save-dev @types/md5`.

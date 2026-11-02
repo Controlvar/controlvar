@@ -159,7 +159,16 @@ WRITTEN_ACTION_TYPES: frozenset = frozenset(
 #: may carry these and nothing else beyond ``WRITTEN_ACTION_TYPES``. The
 #: modules' inventories (``modules/backend/tests/smoke/test_audit_inventory_modules.py``)
 #: pin it to what the modules write that core does not.
-MODULES_ONLY_ACTION_TYPES: frozenset = frozenset({ActionType.ROLE_UNASSIGN})
+MODULES_ONLY_ACTION_TYPES: frozenset = frozenset(
+    {
+        ActionType.ROLE_UNASSIGN,
+        ActionType.ROLE_CREATE,
+        ActionType.ROLE_UPDATE,
+        ActionType.ROLE_DELETE,
+        ActionType.PERMISSION_GRANT,
+        ActionType.PERMISSION_REVOKE,
+    }
+)
 
 
 @dataclass(frozen=True)

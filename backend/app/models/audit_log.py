@@ -80,6 +80,10 @@ class ActionType(str, Enum):
     PERMISSION_REVOKE = "permission_revoke"
     ROLE_ASSIGN = "role_assign"
     ROLE_UNASSIGN = "role_unassign"
+    # Custom role definitions (the rbac module).
+    ROLE_CREATE = "role_create"
+    ROLE_UPDATE = "role_update"
+    ROLE_DELETE = "role_delete"
 
     # Safety Actions
     SAFETY_ROLLBACK = "safety_rollback"
@@ -225,6 +229,9 @@ class AuditLog(Base, BaseModel):
             ActionType.PERMISSION_REVOKE: "revoked permission",
             ActionType.ROLE_ASSIGN: "assigned role",
             ActionType.ROLE_UNASSIGN: "unassigned role",
+            ActionType.ROLE_CREATE: "created role",
+            ActionType.ROLE_UPDATE: "updated role",
+            ActionType.ROLE_DELETE: "deleted role",
             ActionType.SAFETY_ROLLBACK: "rolled back",
             ActionType.SAFETY_CONFIG_UPDATE: "updated safety config",
             ActionType.API_KEY_CREATE: "created",

@@ -570,10 +570,6 @@ steps:
           name: 7.34%
         - role: cell
           name: 8.44%
-        - role: cell
-          name: +15.0% · better
-          quote: false
-          reason: the change cell follows the +15.0% lift the guide quotes with its direction word
       cells:
         - row: new_copy
           column: p-value
@@ -582,9 +578,16 @@ steps:
           oracle:
             name: fisher_exact_p
             args: {control_users: 25000, control_converted: 1836, treatment_users: 25000, treatment_converted: 2111}
+      # The treatment's row reads the +15.0% lift the guide quotes with its direction word. Matched as part of the
+      # row, not as the whole cell's name: since #1538 the change cell also carries its interval lines.
       aria: |
         - main:
           - heading "Homepage Hero Copy Test" [level=2]
+          - tabpanel:
+            - region "Metric comparison":
+              - table:
+                - rowgroup:
+                  - row /8\.44% \+15\.0% · better/
     fail: the results page does not show the seed's rates and lift that Scene 3 quotes, or a p-value below 0.001
   - id: sequential-tab
     doc: scene-3-statistical-results-5-min

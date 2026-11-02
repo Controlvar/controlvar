@@ -2357,7 +2357,9 @@ async def trigger_schedule_processing(
 @router.get(
     "/{experiment_id}/split-url/preview",
     summary="Preview split URL assignment for a user",
-    response_description="Returns the predicted URL variant for the given user",
+    response_description=(
+        "The URL that visitor id gets now, without recording anything"
+    ),
     responses={
         status.HTTP_501_NOT_IMPLEMENTED: {
             "description": "The split_url module is not installed in this deployment",
@@ -2366,18 +2368,23 @@ async def trigger_schedule_processing(
 )
 async def preview_split_url_assignment(
     experiment_id: UUID = Path(..., description="The ID of the split URL experiment"),
-    user_id: str = Query(..., description="User ID to simulate assignment for"),
+    user_id: str = Query(..., description="The visitor id to preview"),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user),
 ) -> Dict[str, Any]:
     """
-    Preview the split URL variant assignment for a given user.
+    Returns the URL that visitor id gets now, without recording anything:
+    their stored variant if they have one, else the variant a new visitor with
+    that id would get (the bandit weights for a bandit experiment, else the
+    traffic allocation). It checks no eligibility rule: a visitor the global
+    holdout, mutual exclusion or targeting would keep out is served the
+    control page by POST /api/v1/tracking/split-url/assign instead.
 
-    The route is declared here so the URL exists in every profile; the body
-    lives in the split_url module (``experiments_split_url``) and is reached
-    through the ``core.optional_modules`` seam. Builds without split-URL
-    routing answer HTTP 501 rather than a meaningless assignment.
+    For ADMIN and DEVELOPER users (and superusers). A deployment without split
+    URL testing (the core profile) answers 501.
     """
+    # Declared here so the URL exists in every profile; the body is the
+    # split_url module's, reached through backend.app.core.optional_modules.
     # The route's own access policy comes before the seam is consulted, so a
     # VIEWER is told no in every profile rather than learning from a 501
     # which bodies this build has (the same order the compliance routes use).

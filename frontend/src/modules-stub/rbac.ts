@@ -8,17 +8,30 @@
  * second is true is lying. Gate the call site with `useModule(MODULES.RBAC)`
  * instead — the throw is the backstop for a caller that forgot.
  */
-import { CustomRole } from '@/types/admin';
+import { CustomRole, PermissionGrant } from '@/types/admin';
 import { MODULES } from '@/services/modules';
 
+/** `CustomRoleCreate`: permissions are `{resource, actions}` objects, never strings. */
 export interface CreateRoleRequest {
   name: string;
-  description: string;
-  permissions: string[];
+  description?: string | null;
+  permissions: PermissionGrant[];
 }
 
+/** `CustomRoleUpdate`: the role is named in the path, so the body has no name. */
+export interface UpdateRoleRequest {
+  description?: string | null;
+  permissions?: PermissionGrant[] | null;
+}
+
+/** `EffectivePermissionsResponse`: `permissions` maps a resource to its actions. */
 export interface UserPermissionsResponse {
-  permissions: string[];
+  user_id: string;
+  username: string;
+  base_role: string;
+  custom_roles: string[];
+  permissions: Record<string, string[]>;
+  is_superuser: boolean;
 }
 
 /** Thrown by every stubbed module call. */
@@ -46,7 +59,7 @@ export const RbacService = {
     return notInstalled();
   },
 
-  async updateRole(name: string, data: Partial<CustomRole>): Promise<CustomRole> {
+  async updateRole(name: string, data: UpdateRoleRequest): Promise<CustomRole> {
     return notInstalled();
   },
 
