@@ -101,7 +101,7 @@ def test_a_stored_negative_min_stage_duration_is_no_minimum(stored):
         1,
         TriggerType.TIME_BASED,
         RolloutStageStatus.IN_PROGRESS,
-        updated_at=NOW - timedelta(hours=25),
+        started_at=NOW - timedelta(hours=25),
     )
     second = _stage(
         2, TriggerType.TIME_BASED, RolloutStageStatus.PENDING, start_date=PAST
