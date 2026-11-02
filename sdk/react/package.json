@@ -4,7 +4,7 @@
   "description": "React hooks, a context provider and an SSR client for Controlvar feature flags and experiments",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist", "README.md"],
+  "files": ["dist", "ssr", "README.md"],
   "scripts": {
     "build": "tsc",
     "test": "jest",

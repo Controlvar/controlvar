@@ -261,7 +261,9 @@ export const getServerSideProps: GetServerSideProps = async ({ req }) => {
 };
 ```
 
-In the App Router call the same methods from an async server component.
+In the App Router, import `ServerClient` from `@controlvar/react-sdk/ssr` in an async server
+component and call the same methods there. Use the `/ssr` subpath rather than the package root: the
+root also loads the provider, which a React Server Component cannot import.
 
 ### `ServerClient` API
 
