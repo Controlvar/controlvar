@@ -99,7 +99,7 @@ public final class ContractSmoke {
             for (int i = 0; i < 2; i++) {
                 client.trackEventSync(TrackEvent.builder(userId, dedupName)
                         .experimentKey(experimentKey)
-                        .eventId(dedupId)
+                        .eventId("contract-" + UUID.randomUUID())
                         .build());
             }
 
