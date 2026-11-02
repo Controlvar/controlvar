@@ -72,6 +72,16 @@ describe('EffectivePermissionsModal', () => {
     ]);
   });
 
+  it('hides a resource whose action list is empty (#891)', async () => {
+    mockGetUserPermissions.mockResolvedValue(
+      answer({ experiment: [], feature_flag: ['read'] }),
+    );
+    render(<EffectivePermissionsModal {...defaultProps} />);
+    const list = await screen.findByTestId('permissions-list');
+    const lines = Array.from(list.querySelectorAll('li')).map((li) => li.textContent);
+    expect(lines).toEqual(['Feature flags: read']);
+  });
+
   it('says so when there are no permissions', async () => {
     mockGetUserPermissions.mockResolvedValue(answer({}));
     render(<EffectivePermissionsModal {...defaultProps} />);
