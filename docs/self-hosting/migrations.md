@@ -208,9 +208,10 @@ earlier `warehouse_connections` is deleted** — connections saved through the
 earlier warehouse endpoints — and nothing is copied into the new table.
 
 Downgrading it cannot bring those rows back: `downgrade modules_0001_rbac`
-first unapplies `modules_0004_rbac_activation`, which drops the activation
-time of every custom role assignment and direct grant, and
-`modules_0003_lower_is_better`, which drops each metric source's
+first unapplies `modules_0004_rbac_activation`, which drops the
+activation-time column of custom role assignments and direct grants, with any
+activation time stored in it, and `modules_0003_lower_is_better`, which drops
+each metric source's
 lower-is-better setting, then drops the three tables this revision created and
 puts back an **empty** table of the earlier shape.
 If you need the rows, take a snapshot of the database before upgrading to the

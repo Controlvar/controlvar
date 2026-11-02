@@ -296,10 +296,11 @@ by = [
 ]
 
 [[unit]]
-text = "Downgrading it cannot bring those rows back: downgrade modules_0001_rbac first unapplies modules_0004_rbac_activation, which drops the activation time of every custom role assignment and direct grant, and modules_0003_lower_is_better, which drops each metric source's lower-is-better setting, then drops the three tables this revision created and puts back an empty table of the earlier shape."
+text = "Downgrading it cannot bring those rows back: downgrade modules_0001_rbac first unapplies modules_0004_rbac_activation, which drops the activation-time column of custom role assignments and direct grants, with any activation time stored in it, and modules_0003_lower_is_better, which drops each metric source's lower-is-better setting, then drops the three tables this revision created and puts back an empty table of the earlier shape."
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_modules_0002_transitions.py::test_modules_0002_downgrade_restores_the_earlier_shape",
+    "test:backend/tests/integration/database/test_profile_migrations.py::test_downgrade_keeps_the_tables_the_bootstrap_created",
 ]
 
 [[unit]]
