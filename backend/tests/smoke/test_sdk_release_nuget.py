@@ -906,24 +906,35 @@ def test_both_workflows_check_the_legs_after_the_tests() -> None:
 
 def test_every_sdk_whose_build_runs_the_readme_gate_has_rules() -> None:
     """The gate refuses an SDK it has no rules for, so a build job that runs
-    it for an unclassified SDK would fail at the release. Each ecosystem whose
-    build job runs the gate has every one of its SDKs in the gate's rules."""
+    it for an unclassified SDK would fail at the release. A step that runs the
+    gate runs it for one SDK when the step itself is conditioned on that SDK
+    (``if: needs.resolve.outputs.sdk == '<sdk>'``), and otherwise for every SDK
+    of its job's ecosystem; each of those SDKs is in the gate's rules."""
     gate = _load("check_packaged_readme")
     jobs = _workflow()["jobs"]
-    gated = set()
+    gated: set[str] = set()
+    ecosystems_gated = set()
     for job in jobs.values():
-        if any(
-            "scripts/check_packaged_readme.py" in _run_of(s)
-            for s in job.get("steps", [])
-        ):
+        for step in job.get("steps", []):
+            if "scripts/check_packaged_readme.py" not in _run_of(step):
+                continue
             match = re.fullmatch(
                 r"needs\.resolve\.outputs\.ecosystem == '(\w+)'", job.get("if", "")
             )
             assert match, job.get("if")
-            gated.add(match.group(1))
-    assert "nuget" in gated
-    sdks = {sdk for sdk, eco in ecosystems().items() if eco in gated}
-    assert sdks <= set(gate.I_README), sorted(sdks - set(gate.I_README))
+            one = re.fullmatch(
+                r"needs\.resolve\.outputs\.sdk == '([\w-]+)'", str(step.get("if", ""))
+            )
+            if one:
+                assert ecosystems()[one.group(1)] == match.group(1), step.get("if")
+                gated.add(one.group(1))
+            else:
+                assert "if" not in step, step.get("if")
+                ecosystems_gated.add(match.group(1))
+                gated |= {s for s, eco in ecosystems().items() if eco == match.group(1)}
+    assert "nuget" in ecosystems_gated
+    assert "mcp" in gated
+    assert gated <= set(gate.I_README), sorted(gated - set(gate.I_README))
 
 
 def test_the_readme_gate_runs_on_the_packed_file_before_it_is_recorded() -> None:

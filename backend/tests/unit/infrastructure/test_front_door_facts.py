@@ -247,11 +247,44 @@ def _live_contract_sdks() -> list:
     return found[0]
 
 
+#: Directories under sdk/ that are not SDKs, so not counted as one.
+NOT_SDKS = {"mcp"}
+
+
 def test_thirteen_of_the_sixteen_sdks_run_the_live_contract():
-    sdks = sorted(p.name for p in (ROOT / "sdk").iterdir() if p.is_dir())
+    directories = {p.name for p in (ROOT / "sdk").iterdir() if p.is_dir()}
+    assert NOT_SDKS <= directories
+    sdks = sorted(directories - NOT_SDKS)
     live = _live_contract_sdks()
     assert len(sdks) == 16 and len(live) == 13
     assert sorted(set(sdks) - set(live)) == ["elixir", "flutter", "ios"]
+
+
+def test_sdk_mcp_is_the_mcp_server_and_not_an_sdk():
+    package = json.loads(_text("sdk/mcp/package.json"))
+    assert package["name"] == "@controlvar/mcp-server"
+    assert package["license"] == "MIT"
+    assert "mcp" not in _live_contract_sdks()
+    tools = json.loads(_text("sdk/mcp/tools.json"))
+    # It reads flags, experiments and results; the one tool that is not
+    # read-only records an evaluation, as an SDK's does, and destroys nothing.
+    assert {tool["name"] for tool in tools["tools"]} == {
+        "list_feature_flags",
+        "get_feature_flag",
+        "evaluate_feature_flag",
+        "list_experiments",
+        "get_experiment",
+        "get_experiment_results",
+    }
+    not_read_only = {
+        tool["name"]: tool["annotations"]
+        for tool in tools["tools"]
+        if tool["annotations"].get("readOnlyHint") is not True
+    }
+    assert list(not_read_only) == ["evaluate_feature_flag"]
+    assert not_read_only["evaluate_feature_flag"]["destructiveHint"] is False
+    # With the user's own API key.
+    assert "CONTROLVAR_API_KEY" in tools["env"]
 
 
 def test_the_sdk_package_names():

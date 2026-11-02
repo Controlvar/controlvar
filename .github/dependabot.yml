@@ -344,6 +344,32 @@ updates:
       patch-and-minor:
         update-types: ["patch", "minor"]
 
+  # The MCP server (sdk/mcp), in an entry of its own for `cooldown`. Its two
+  # runtime dependencies are exact pins, each at least 14 days old when it was
+  # pinned: this package's own rule, not the repository's. `cooldown` makes
+  # Dependabot wait 14 days after a release before proposing it as a version
+  # update, upstream of dependabot-automerge.yml. It does not delay a security
+  # update: a version that fixes an advisory is pinned at any age.
+  # backend/tests/smoke/test_sdk_mcp_package.py pins this entry.
+  - package-ecosystem: "npm"
+    directory: "/sdk/mcp"
+    commit-message:
+      prefix: "chore(deps)"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+    open-pull-requests-limit: 3
+    cooldown:
+      default-days: 14
+    ignore:
+      # Majors are migrations, not bumps -- see the header.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    labels: ["dependencies", "sdk"]
+    groups:
+      patch-and-minor:
+        update-types: ["patch", "minor"]
+
   - package-ecosystem: "pip"
     directories: ["/sdk/python", "/sdk/openfeature-python"]
     commit-message:

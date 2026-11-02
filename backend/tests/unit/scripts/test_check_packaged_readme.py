@@ -311,6 +311,71 @@ def test_the_gate_refuses_a_package_with_no_readme(
     assert refusal in result.stderr, (case, result.stderr)
 
 
+def _tgz(tmp_path: Path, members: dict[str, bytes]) -> Path:
+    """An npm tarball: every file under `package/`."""
+    import io
+    import tarfile
+
+    path = tmp_path / f"controlvar-mcp-server-{VERSION}.tgz"
+    with tarfile.open(path, "w:gz") as archive:
+        for name, data in members.items():
+            info = tarfile.TarInfo(f"package/{name}")
+            info.size = len(data)
+            archive.addfile(info, io.BytesIO(data))
+    return path
+
+
+MANIFEST = f'{{"name": "@controlvar/mcp-server", "version": "{VERSION}"}}'.encode()
+
+
+def test_an_npm_tarball_is_read_like_a_nupkg(tmp_path: Path) -> None:
+    """The README at the tarball's root, and package.json's version."""
+    passing = _tgz(tmp_path, {"package.json": MANIFEST, "README.md": GOOD.encode()})
+    result = _run("--sdk", "dotnet", str(passing))
+    assert result.returncode == 0, result.stderr
+    (tmp_path / "refused").mkdir()
+    refused = _tgz(
+        tmp_path / "refused",
+        {"package.json": MANIFEST, "README.md": (GOOD + f"\nv{VERSION}\n").encode()},
+    )
+    result = _run("--sdk", "dotnet", str(refused))
+    assert result.returncode == 1
+    assert f"the README quotes its own version {VERSION}" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("case", "members", "refusal"),
+    [
+        ("no README", {"package.json": MANIFEST}, "expected one README"),
+        (
+            "two READMEs",
+            {"package.json": MANIFEST, "README.md": b"a", "readme": b"b"},
+            "expected one README",
+        ),
+        ("no package.json", {"README.md": GOOD.encode()}, "no package/package.json"),
+        (
+            "no version",
+            {"package.json": b'{"name": "x"}', "README.md": GOOD.encode()},
+            "the package has no version",
+        ),
+    ],
+)
+def test_the_gate_refuses_a_tarball_it_cannot_read(
+    case: str, members: dict, refusal: str, tmp_path: Path
+) -> None:
+    result = _run("--sdk", "dotnet", str(_tgz(tmp_path, members)))
+    assert result.returncode == 1, (case, result.stdout)
+    assert refusal in result.stderr, (case, result.stderr)
+
+
+def test_the_gate_refuses_a_file_it_does_not_read(tmp_path: Path) -> None:
+    other = tmp_path / "package.zip"
+    other.write_bytes(b"")
+    result = _run("--sdk", "dotnet", str(other))
+    assert result.returncode == 1
+    assert "this gate reads a .nupkg or a .tgz" in result.stderr
+
+
 def test_a_heading_inside_a_fence_does_not_end_the_install_section() -> None:
     gate = _gate()
     text = "## Install\n\nOne.\n\n```md\n## Not a heading\n```\n\nTwo.\n\n## Next\n\nThree.\n"

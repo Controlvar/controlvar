@@ -1694,3 +1694,279 @@ def test_the_npm_publish_job_checks_node_and_npm(
         _step("npm", "Node and npm are the pinned versions"), {}, tmp_path, tmp_path
     )
     assert (result.returncode == 0) is ok, result.stdout + result.stderr
+
+
+# --------------------------------------------------------------------------
+# sdk/mcp, the MCP server: four npm-build steps of its own. A blocking audit
+# of its production closure (here, not on pull requests), its shrinkwrap, the
+# shrinkwrap in the packed bytes, and the installed server answering.
+# --------------------------------------------------------------------------
+
+MCP_ONLY = "needs.resolve.outputs.sdk == 'mcp'"
+MCP_AUDIT = "The MCP server's production dependencies have no high advisory"
+MCP_SHRINKWRAP = "Shrinkwrap the MCP server"
+MCP_PACKED = "The packed MCP server carries its shrinkwrap"
+MCP_README = "Check the packed README"
+MCP_CONSUMER = "The installed MCP server answers initialize, with no dev dependency"
+MCP_STEPS = (MCP_AUDIT, MCP_SHRINKWRAP, MCP_PACKED, MCP_README, MCP_CONSUMER)
+
+
+def _npm_build_names() -> list[str]:
+    return [str(step.get("name") or step.get("uses")) for step in _npm_build_steps()]
+
+
+def test_the_mcp_release_audit_is_blocking() -> None:
+    """The MCP server's production closure is audited at release, and the
+    audit can fail the release: present, scoped to sdk/mcp, not
+    `continue-on-error`, and nothing in its command that swallows a failure."""
+    found = [
+        step
+        for step in _npm_build_steps()
+        if "npm audit --omit=dev --audit-level=high" in _run_of(step)
+    ]
+    assert len(found) == 1, "the sdk/mcp release audit step is missing or may fail open"
+    step = found[0]
+    assert step.get("name") == MCP_AUDIT
+    assert step.get("if") == MCP_ONLY
+    assert step.get("working-directory") == "sdk/mcp"
+    assert "continue-on-error" not in step, (
+        "the sdk/mcp release audit step is missing or may fail open"
+    )
+    assert _run_of(step).strip() == "npm audit --omit=dev --audit-level=high", (
+        "the sdk/mcp release audit step is missing or may fail open"
+    )
+
+
+def test_the_mcp_steps_run_in_order_and_only_for_mcp() -> None:
+    names = _npm_build_names()
+    order = [
+        names.index("Install, test and build"),
+        names.index(MCP_AUDIT),
+        names.index(MCP_SHRINKWRAP),
+        names.index("Pack"),
+        names.index(MCP_PACKED),
+        names.index(MCP_README),
+        names.index("A consumer can install the tarball"),
+        names.index(MCP_CONSUMER),
+        names.index("Record the tarball"),
+    ]
+    assert order == sorted(order), order
+    for name in MCP_STEPS:
+        step = _step("npm-build", name)
+        assert step.get("if") == MCP_ONLY, name
+        assert "continue-on-error" not in step, name
+        assert "|| true" not in _run_of(step), name
+    # No other npm-build step is conditioned on one SDK.
+    others = [
+        name
+        for step, name in zip(_npm_build_steps(), names)
+        if "outputs.sdk" in str(step.get("if", "")) and name not in MCP_STEPS
+    ]
+    assert others == []
+
+
+def test_the_packed_mcp_readme_is_checked_from_the_tarball() -> None:
+    step = _step("npm-build", MCP_README)
+    assert step.get("env") == {
+        "SDK": "${{ needs.resolve.outputs.sdk }}",
+        "TGZ": "${{ steps.pack.outputs.tgz }}",
+    }
+    assert (
+        _run_of(step).strip()
+        == 'python3 scripts/check_packaged_readme.py --sdk "$SDK" "$TGZ"'
+    )
+
+
+def _readme_tarball(path: Path, readme: str, version: str = "0.1.0") -> None:
+    import io
+    import json
+    import tarfile
+
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
+        for name, data in (
+            ("package/package.json", json.dumps({"version": version}).encode()),
+            ("package/README.md", readme.encode()),
+        ):
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            archive.addfile(info, io.BytesIO(data))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(buffer.getvalue())
+
+
+@pytest.mark.parametrize(
+    "plant, refusal",
+    [
+        (None, None),
+        (
+            "Run `npm install @controlvar/mcp-server`.",
+            "installs this repository's package from a registry",
+        ),
+        ("This is version 0.1.0.", "quotes its own version 0.1.0"),
+    ],
+    ids=["the-tree-readme", "a-registry-install", "its-own-version"],
+)
+def test_the_packed_readme_step_on_the_mcp_readme(
+    plant: str | None, refusal: str | None, tmp_path: Path
+) -> None:
+    """The step, run as written, on a tarball holding the tree's README, and
+    on the same README with one planted line."""
+    readme = (SDK_DIR / "mcp" / "README.md").read_text(encoding="utf-8")
+    if plant is not None:
+        planted = readme.replace(
+            "## Configuration\n", f"## Configuration\n\n{plant}\n", 1
+        )
+        assert planted != readme
+        readme = planted
+    tgz = tmp_path / "pack" / "controlvar-mcp-server-0.1.0.tgz"
+    _readme_tarball(tgz, readme)
+    result = _run_step(
+        _step("npm-build", MCP_README),
+        {"needs.resolve.outputs.sdk": "mcp", "steps.pack.outputs.tgz": str(tgz)},
+        tmp_path,
+        ROOT,
+    )
+    if refusal is None:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "README checked" in result.stdout
+    else:
+        assert result.returncode == 1, result.stdout
+        assert refusal in result.stderr, result.stderr
+
+
+def test_the_mcp_shrinkwrap_step_keeps_the_lock_and_renames_it() -> None:
+    step = _step("npm-build", MCP_SHRINKWRAP)
+    assert step.get("working-directory") == "sdk/mcp"
+    commands = [line.strip() for line in _run_of(step).splitlines() if line.strip()]
+    assert commands == [
+        "set -euo pipefail",
+        'cp package-lock.json "$RUNNER_TEMP/mcp-package-lock.json"',
+        "npm shrinkwrap",
+        "test -f npm-shrinkwrap.json",
+        "test ! -e package-lock.json",
+    ]
+
+
+def test_the_mcp_package_ships_its_shrinkwrap() -> None:
+    import json
+
+    manifest = json.loads((SDK_DIR / "mcp" / "package.json").read_text("utf-8"))
+    assert "npm-shrinkwrap.json" in manifest["files"], (
+        "sdk/mcp/package.json's files list does not name npm-shrinkwrap.json, so "
+        "npm pack drops it silently"
+    )
+
+
+def _mcp_tarball(path: Path, members: dict[str, dict]) -> None:
+    import io
+    import json
+    import tarfile
+
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
+        for name, content in members.items():
+            data = json.dumps(content).encode()
+            info = tarfile.TarInfo(f"package/{name}")
+            info.size = len(data)
+            archive.addfile(info, io.BytesIO(data))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(buffer.getvalue())
+
+
+def _lock(sdk_version: str, zod_version: str) -> dict:
+    return {
+        "packages": {
+            "": {"name": "@controlvar/mcp-server"},
+            "node_modules/@modelcontextprotocol/sdk": {"version": sdk_version},
+            "node_modules/zod": {"version": zod_version},
+        }
+    }
+
+
+MCP_MANIFEST = {
+    "name": "@controlvar/mcp-server",
+    "version": "0.1.0",
+    "dependencies": {"@modelcontextprotocol/sdk": "1.32.1", "zod": "4.6.7"},
+}
+
+
+@pytest.mark.parametrize(
+    "members, expected",
+    [
+        (
+            {
+                "package.json": MCP_MANIFEST,
+                "npm-shrinkwrap.json": _lock("1.32.1", "4.6.7"),
+            },
+            None,
+        ),
+        (
+            {"package.json": MCP_MANIFEST},
+            "the packed listing has no npm-shrinkwrap.json",
+        ),
+        (
+            {
+                "package.json": MCP_MANIFEST,
+                "npm-shrinkwrap.json": _lock("1.32.2", "4.6.7"),
+            },
+            "@modelcontextprotocol/sdk: npm-shrinkwrap.json has '1.32.2', package-lock.json '1.32.1'",
+        ),
+    ],
+    ids=["matches", "no-shrinkwrap", "other-version"],
+)
+def test_the_packed_shrinkwrap_check(
+    members: dict, expected: str | None, tmp_path: Path
+) -> None:
+    import json
+
+    tgz = tmp_path / "pack" / "controlvar-mcp-server-0.1.0.tgz"
+    _mcp_tarball(tgz, members)
+    (tmp_path / "runner_temp").mkdir()
+    (tmp_path / "runner_temp" / "mcp-package-lock.json").write_text(
+        json.dumps(_lock("1.32.1", "4.6.7"))
+    )
+    result = _run_step(
+        _step("npm-build", MCP_PACKED),
+        {"steps.pack.outputs.tgz": str(tgz)},
+        tmp_path,
+        tmp_path,
+    )
+    if expected is None:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "@modelcontextprotocol/sdk 1.32.1" in result.stdout
+    else:
+        assert result.returncode != 0, result.stdout
+        assert f"::error::{expected}" in result.stdout, result.stdout
+
+
+def test_the_packed_shrinkwrap_check_refuses_a_missing_lock_copy(
+    tmp_path: Path,
+) -> None:
+    tgz = tmp_path / "pack" / "controlvar-mcp-server-0.1.0.tgz"
+    _mcp_tarball(
+        tgz,
+        {"package.json": MCP_MANIFEST, "npm-shrinkwrap.json": _lock("1.32.1", "4.6.7")},
+    )
+    result = _run_step(
+        _step("npm-build", MCP_PACKED),
+        {"steps.pack.outputs.tgz": str(tgz)},
+        tmp_path,
+        tmp_path,
+    )
+    assert result.returncode != 0
+    assert "did the shrinkwrap step run?" in result.stdout
+
+
+def test_the_installed_mcp_server_is_run_with_an_explicit_environment() -> None:
+    """Q25's release leg: the tarball installed alone, with no lifecycle
+    script; no devDependency in the tree; the bin answers `initialize`."""
+    run = _run_of(_step("npm-build", MCP_CONSUMER))
+    assert 'npm install --ignore-scripts --no-audit --no-fund "$TGZ"' in run
+    assert (
+        'env -i PATH="$PATH" CONTROLVAR_API_URL=http://localhost:8000'
+        " CONTROLVAR_API_KEY=release-check-placeholder" in run
+    )
+    assert "./node_modules/.bin/controlvar-mcp > answer.jsonl" in run
+    assert 'manifest.get("devDependencies")' in run
+    assert "is installed in a consumer's tree" in run

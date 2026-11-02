@@ -3,7 +3,8 @@
 
 A registry shows the README packed into a version as that version's page for
 as long as the version exists, and nothing on main can change it afterwards.
-So a README that a registry shows (here: NuGet's ``PackageReadmeFile``) is
+So a README that a registry shows (here: NuGet's ``PackageReadmeFile``, and
+the ``README.md`` at the root of an npm tarball) is
 written to be true before the publish and after it, for good (DECISIONS
 T230, the note on T228's bullet 3). It has:
 
@@ -28,6 +29,7 @@ An SDK the gate has no rules for is refused rather than passed.
 Usage::
 
     python scripts/check_packaged_readme.py --sdk dotnet Controlvar.SDK.0.1.0.nupkg
+    python scripts/check_packaged_readme.py --sdk mcp controlvar-mcp-server-0.1.0.tgz
 
 Exit 0 prints ``<artefact>: README checked``; exit 1 prints each problem.
 Standard library only, so the runner's python3 is enough.
@@ -36,8 +38,10 @@ Standard library only, so the runner's python3 is enough.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
+import tarfile
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path, PurePosixPath
@@ -47,6 +51,9 @@ from pathlib import Path, PurePosixPath
 #: that every SDK whose build job runs this gate is named here.
 I_README: dict[str, str] = {
     "dotnet": "docs/sdk/dotnet.md",
+    # The MCP server, @controlvar/mcp-server: npm-build runs this gate on its
+    # packed tarball (that step only, `if: sdk == 'mcp'`).
+    "mcp": "docs/mcp-server.md",
 }
 PAGE_URL = "https://github.com/Controlvar/controlvar/blob/main/"
 
@@ -299,12 +306,46 @@ def read_nupkg(path: Path) -> tuple[str, str]:
         return archive.read(entry).decode("utf-8"), metadata.get("version", "")
 
 
+#: The README npm takes from a tarball: a file at the package root named
+#: README, with any extension, in any case. npm packs one of them.
+TGZ_README = re.compile(r"package/readme(?:\.[a-z]{1,10})?", re.IGNORECASE)
+
+
+def read_tgz(path: Path) -> tuple[str, str]:
+    """Return ``(README text, version)`` from an npm tarball: the README at
+    the package root, and ``package/package.json``'s ``version``."""
+    with tarfile.open(path, "r:gz") as archive:
+        members = {member.name: member for member in archive.getmembers()}
+        manifest = members.get("package/package.json")
+        if manifest is None or not manifest.isfile():
+            raise ValueError("the tarball holds no package/package.json")
+        readmes = sorted(
+            name
+            for name, member in members.items()
+            if TGZ_README.fullmatch(name) and member.isfile()
+        )
+        if len(readmes) != 1:
+            raise ValueError(
+                f"expected one README at the package root, found {readmes}, so npm "
+                "would show no README or an unchecked one"
+            )
+        data = json.load(archive.extractfile(manifest))
+        text = archive.extractfile(members[readmes[0]]).read().decode("utf-8")
+    version = data.get("version", "") if isinstance(data, dict) else ""
+    return text, version if isinstance(version, str) else ""
+
+
+READERS = {".nupkg": read_nupkg, ".tgz": read_tgz}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument(
         "--sdk", required=True, help="Directory name under sdk/, e.g. dotnet."
     )
-    parser.add_argument("artefact", type=Path, help="The built package (.nupkg).")
+    parser.add_argument(
+        "artefact", type=Path, help="The built package (.nupkg, or an npm .tgz)."
+    )
     args = parser.parse_args(argv)
 
     if args.sdk not in I_README:
@@ -312,22 +353,27 @@ def main(argv: list[str] | None = None) -> int:
             f"error: {args.artefact}: {problems(args.sdk, '', '')[0]}", file=sys.stderr
         )
         return 1
-    if args.artefact.suffix != ".nupkg":
-        print(f"error: {args.artefact}: this gate reads a .nupkg", file=sys.stderr)
+    reader = READERS.get(args.artefact.suffix)
+    if reader is None:
+        print(
+            f"error: {args.artefact}: this gate reads a .nupkg or a .tgz",
+            file=sys.stderr,
+        )
         return 1
     try:
-        text, version = read_nupkg(args.artefact)
+        text, version = reader(args.artefact)
     except (
         OSError,
         ValueError,
         zipfile.BadZipFile,
+        tarfile.TarError,
         ET.ParseError,
         UnicodeDecodeError,
     ) as error:
         print(f"error: {args.artefact}: {error}", file=sys.stderr)
         return 1
     if not version:
-        print(f"error: {args.artefact}: the nuspec has no <version>", file=sys.stderr)
+        print(f"error: {args.artefact}: the package has no version", file=sys.stderr)
         return 1
     found = problems(args.sdk, text, version)
     for problem in found:
