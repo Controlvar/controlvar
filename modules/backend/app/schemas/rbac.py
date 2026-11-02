@@ -9,15 +9,14 @@ from typing import Dict, Iterable, List, Optional, Tuple
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
-#: Every (resource, action) pair a custom role or a direct grant may hold
-#: (#891). A request that would store any other pair is refused with a 422 of
-#: type ``not_grantable`` (:func:`not_grantable_message`), and nothing is
-#: written. Roles and grants stored before the check read back unchanged.
-GRANTABLE: frozenset = frozenset(
-    {("experiment", a) for a in ("create", "read", "update", "delete", "list")}
-    | {("feature_flag", a) for a in ("create", "read", "update", "delete", "list")}
-    | {("audit_log", "read")}
-)
+from backend.app.core.permissions import GRANTABLE
+
+# ``GRANTABLE`` is every (resource, action) pair a custom role or a direct
+# grant may hold (#891). It is the core's own object, the one the permission
+# checks filter by, so the 422 and the checks cannot disagree. A request that
+# would store any other pair is refused with a 422 of type ``not_grantable``
+# (:func:`not_grantable_message`), and nothing is written. Roles and grants
+# stored before the check read back unchanged.
 
 #: The end of the ``not_grantable`` message: what may be held, in words.
 NOT_GRANTABLE_TAIL = (

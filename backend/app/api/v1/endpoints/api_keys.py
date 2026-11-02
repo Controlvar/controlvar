@@ -9,8 +9,9 @@ create endpoint; only its SHA-256 hash is persisted (``APIKey.key``).
 * ``GET /``            — the caller's keys; ADMIN may pass ``?all=true``.
 * ``POST /``           — create; 201 with the plaintext ``key``. A key with the
   ``sdk:ruleset`` scope is for server-side evaluation, and only a user who can
-  change feature flags (ADMIN, DEVELOPER or a superuser) may create one;
-  anyone else gets 403 and no key is written.
+  change feature flags (ADMIN, DEVELOPER, a superuser, or in the full profile
+  anyone whose custom role or direct grant gives ``feature_flag (update)``)
+  may create one; anyone else gets 403 and no key is written.
 * ``DELETE /{key_id}`` — owner or ADMIN; 204.
 
 These are the only API keys: workspaces (the workspaces module) issue none.
@@ -23,6 +24,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.sdk_scope import may_use_server_key
 from backend.app.core.api_key_scopes import (
     SDK_RULESET_SCOPE,
     format_scopes,
@@ -53,9 +55,9 @@ from backend.app.services.audit_service import (
 router = APIRouter()
 
 SDK_RULESET_CREATE_FORBIDDEN = (
-    "Only users who can change feature flags (the ADMIN and DEVELOPER roles, "
-    f"or a superuser) can create an API key with the {SDK_RULESET_SCOPE} scope. "
-    "Create the key without that scope, or ask someone with one of those roles."
+    "Only users who can change feature flags can create an API key with the "
+    f"{SDK_RULESET_SCOPE} scope; the ADMIN and DEVELOPER roles and superusers "
+    "can. Create the key without that scope, or ask someone who can."
 )
 
 
@@ -127,11 +129,9 @@ def create_api_key(
     the key can be recognised later.
     """
     scopes = format_scopes(body.scopes)
-    # Server-side evaluation keys are for roles that can change flags. The
-    # check runs before anything is written.
-    if has_scope(scopes, SDK_RULESET_SCOPE) and not check_permission(
-        current_user, ResourceType.FEATURE_FLAG, Action.UPDATE
-    ):
+    # Server-side evaluation keys are for users who can change feature flags.
+    # The check runs before anything is written.
+    if has_scope(scopes, SDK_RULESET_SCOPE) and not may_use_server_key(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=SDK_RULESET_CREATE_FORBIDDEN,

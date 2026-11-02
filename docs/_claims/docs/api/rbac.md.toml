@@ -144,7 +144,7 @@ by = ["test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEff
 
 [[unit]]
 text = "There is no deny mechanism; a higher layer cannot revoke a permission given by a lower layer."
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_layers_only_add_and_actions_are_sorted"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_layers_only_add_and_actions_are_sorted"]
 
 [[unit]]
 text = "Expired or deactivated direct grants are excluded from the union."
@@ -224,7 +224,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "include_system | boolean | true | When false, leaves out roles marked is_system_role. Nothing in this release creates one, so both forms list the custom roles you created."
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_include_system_and_nothing_creates_a_system_role"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_include_system_and_nothing_creates_a_system_role"]
 
 [[unit]]
 text = "Response 200"
@@ -310,7 +310,7 @@ by = [
 
 [[unit]]
 text = "Examples of valid names: data-scientist, read_only_experiments, analyst2"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_role_names_are_lower_case_slugs"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_role_names_are_lower_case_slugs"]
 
 [[unit]]
 text = "What a role or a grant can hold: experiment and feature_flag, each with create, read, update, delete and list, and audit_log with read."
@@ -433,7 +433,7 @@ count = 2
 
 [[unit]]
 text = "role_name | string | The role's name."
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_routes_name_roles_and_users_in_their_paths"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_routes_name_roles_and_users_in_their_paths"]
 
 [[unit]]
 text = "404 Not Found — Role does not exist"
@@ -604,7 +604,7 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Note: actions within each resource are returned sorted alphabetically."
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_layers_only_add_and_actions_are_sorted"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_layers_only_add_and_actions_are_sorted"]
 
 [[unit]]
 text = "403 Forbidden — Non-admin user trying to view another user's permissions"
@@ -734,11 +734,11 @@ by = [
 
 [[unit]]
 text = "user_id | UUID | Target user's ID"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_routes_name_roles_and_users_in_their_paths"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_routes_name_roles_and_users_in_their_paths"]
 
 [[unit]]
 text = "resource | string | Resource name (e.g. experiment)"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_routes_name_roles_and_users_in_their_paths"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_routes_name_roles_and_users_in_their_paths"]
 count = 2
 
 [[unit]]
@@ -893,7 +893,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "CustomRole"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_three_data_models"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models"]
 
 [[unit]]
 text = "Column | Type | Description"
@@ -902,88 +902,88 @@ count = 3
 
 [[unit]]
 text = "id | UUID | Primary key"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_three_data_models"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models"]
 count = 3
 
 [[unit]]
 text = "name | string(64) | Unique role name (lowercase, slugified)"
 by = [
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_three_data_models",
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_role_names_are_lower_case_slugs",
+    "test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models",
+    "test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_role_names_are_lower_case_slugs",
 ]
 
 [[unit]]
 text = "description | text | Optional human-readable description"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_three_data_models"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models"]
 
 [[unit]]
 text = "is_system_role | boolean | true for built-in roles (protected from edits)"
 by = [
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_three_data_models",
+    "test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models",
     "test:modules/backend/tests/unit/services/test_rbac_service.py::TestUpdateCustomRole::test_raises_on_system_role",
 ]
 
 [[unit]]
 text = "permissions | JSONB | List of {resource, actions[]} objects"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_three_data_models"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models"]
 
 [[unit]]
 text = "created_by_id | UUID FK | User who created the role"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_three_data_models"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models"]
 
 [[unit]]
 text = "created_at | datetime | Creation timestamp"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_three_data_models"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models"]
 
 [[unit]]
 text = "updated_at | datetime | Last update timestamp"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_three_data_models"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models"]
 
 [[unit]]
 text = "UserCustomRole"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_three_data_models"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models"]
 
 [[unit]]
 text = "user_id | UUID FK | Reference to user"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_three_data_models"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models"]
 
 [[unit]]
 text = "role_id | UUID FK | Reference to custom role"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_three_data_models"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models"]
 
 [[unit]]
 text = "assigned_by_id | UUID FK | Admin who made the assignment"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_three_data_models"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models"]
 
 [[unit]]
 text = "reason | text | Optional audit reason"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_three_data_models"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models"]
 count = 2
 
 [[unit]]
 text = "assigned_at | datetime | When the assignment was made"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_three_data_models"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models"]
 
 [[unit]]
 text = "DirectPermissionGrant"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_three_data_models"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models"]
 
 [[unit]]
 text = "user_id | UUID FK | Target user"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_three_data_models"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models"]
 
 [[unit]]
 text = "actions | JSONB | List of action strings (e.g. [\"read\"])"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_three_data_models"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models"]
 
 [[unit]]
 text = "granted_by_id | UUID FK | Admin who granted the permission"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_three_data_models"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models"]
 
 [[unit]]
 text = "expires_at | datetime | Optional expiry; null means never expires"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_three_data_models"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models"]
 
 [[unit]]
 text = "is_active | boolean | Can be deactivated without deleting"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_the_three_data_models"]
+by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models"]

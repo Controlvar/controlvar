@@ -100,9 +100,20 @@ def test_the_missing_scope_text():
 
 def test_the_owner_role_text():
     assert sdk_scope.OWNER_ROLE_DETAIL == (
-        "This key's owner can no longer change feature flags or experiments, so "
-        "the key is refused for server-side SDK use."
+        "This key's owner can no longer change feature flags, so the key is "
+        "refused for server-side SDK use."
     )
+
+
+def test_the_owner_experiment_text():
+    """Batch assignment's own 403 (#891, option B): the owner can change feature
+    flags but not experiments, and nobody is assigned."""
+    assert sdk_scope.OWNER_EXPERIMENT_DETAIL == (
+        "This key's owner cannot change experiments, so the key cannot assign "
+        "users in a batch, and nobody was assigned. Use a server-side key whose "
+        "owner can change experiments."
+    )
+    assert sdk_scope.OWNER_EXPERIMENT_DETAIL != sdk_scope.OWNER_ROLE_DETAIL
 
 
 def test_bulk_assign_users_is_gone():
