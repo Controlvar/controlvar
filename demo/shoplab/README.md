@@ -181,4 +181,4 @@ source venv/bin/activate && python -m pytest demo/shoplab/simulator/test_traffic
 | "Invalid hook call" in the browser | Two React copies. `next.config.js` aliases `react`/`react-dom` to this app's `node_modules`; make sure you ran `npm install` inside `demo/shoplab`. |
 | Running with `docker compose --profile demo`: **401** everywhere, and the simulator log says `no /data/demo/shoplab/.api_key` | The shoplab seed did not run. Run `SEED=demo,shoplab,streampulse docker compose --profile demo up -d --wait`: it applies the missing seeds to the existing database (no `down -v`). |
 | Simulator exits with code 2 / 3 / 4 | 2 = API key rejected or missing, 3 = experiments not seeded (404), 4 = backend unreachable. |
-| `npm run typecheck` fails inside `sdk/react/src` | The app is written against React SDK v1.1.0's surface (`useExperiment`, `useTrackEvent`, `ExperimentAssignment.configuration`, ...). Make sure `sdk/react` is on that version. |
+| `npm run typecheck` fails inside `sdk/react/src` | The app is written against React SDK 0.1.0's surface (`useExperiment`, `useTrackEvent`, `ExperimentAssignment.configuration`, ...). Make sure `sdk/react` is on that version. |

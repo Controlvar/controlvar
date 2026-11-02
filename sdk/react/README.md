@@ -1,33 +1,18 @@
 # @controlvar/react-sdk
 
+**Beta.** This is a 0.x release: pin the exact version you test against.
+
 React hooks and clients for the Controlvar public API. Feature flags and
 experiment assignments are decided **by the server** (sticky per user); the SDK caches the
 answers per user + key and never buckets locally.
 
+Full documentation: [the React SDK page](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/react.md).
+
 ## Install
 
-**Not yet published.** `@controlvar/react-sdk` is not on npm, so build it from source in a
-clone of this repository and install the packed tarball (the blocks below).
+To install it, follow [the React SDK page](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/react.md#installation).
 
-Its peer dependencies are `react` >= 17 and `react-dom` >= 17.
-
-To install from source, clone the repository and build a package; `npm pack` writes
-`controlvar-react-sdk-1.1.0.tgz`:
-
-```bash
-git clone https://github.com/Controlvar/controlvar.git
-cd controlvar/sdk/react
-npm ci && npm run build && npm pack
-```
-
-Then install that file in your app:
-
-```bash
-npm install /path/to/controlvar/sdk/react/controlvar-react-sdk-1.1.0.tgz
-```
-
-Consuming from source (as the ShopLab demo does): alias `@controlvar/react-sdk`
-to `sdk/react/src` in your bundler and tsconfig.
+Its peer dependencies are `react` >= 17 and `react-dom` >= 17; your app provides them.
 
 ## Provider setup
 
@@ -168,7 +153,26 @@ Every request carries `X-API-Key: <key>` and `Content-Type: application/json`.
 | `trackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `trackEvent` without keys | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (≤ 100 per request) | ignored |
 
-## Contract smoke
+## Development
+
+In a clone of this repository:
+
+```bash
+cd sdk/react && npm ci
+npm test
+npm run build
+```
+
+- `npm test`: unit tests (fetch is mocked)
+- `npm run build`: tsc, strict
+
+The unit tests run in `.github/workflows/sdk-unit-tests.yml` on every pull request (react is one of
+the always-on core SDKs).
+
+Consuming from source (as the ShopLab demo does): alias `@controlvar/react-sdk`
+to `sdk/react/src` in your bundler and tsconfig.
+
+### Contract smoke
 
 ```bash
 cd sdk/react && npm run build --silent && node examples/contract_smoke.mjs
@@ -189,17 +193,3 @@ node — no DOM, no React render. Env: `CONTROLVAR_API_URL` (default `http://loc
 
 `trackEvent` never throws, so the smoke wraps `fetch` and fails when a tracking call did not come
 back 2xx — which is what catches a path the backend does not serve.
-
-## Development
-
-```bash
-cd sdk/react && npm ci
-npm test
-npm run build
-```
-
-- `npm test`: unit tests (fetch is mocked)
-- `npm run build`: tsc, strict
-
-The unit tests run in `.github/workflows/sdk-unit-tests.yml` on every pull request (react is one of
-the always-on core SDKs).

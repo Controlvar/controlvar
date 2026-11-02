@@ -141,8 +141,8 @@ Other scripts: `npm test` (jest + Testing Library, SDK mocked), `npm run lint`,
 The React SDK is consumed straight from `../../sdk/react/src` (tsconfig `paths` + webpack alias +
 `experimental.externalDir`), so SDK changes show up without a build step. `react` and `react-dom`
 are aliased to this app's copies to avoid the duplicate-React "Invalid hook call" trap. StreamPulse
-uses `useFeatureFlag(...).reason` and `useExperiment(...).assigned` / `.reason` (React SDK ≥ 1.1.0
-with the `assigned`/`reason` fields).
+uses `useFeatureFlag(...).reason` and `useExperiment(...).assigned` / `.reason` (React SDK 0.1.0
+or later, with the `assigned`/`reason` fields).
 
 ## Demo script — what to show
 
