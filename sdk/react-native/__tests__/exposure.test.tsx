@@ -719,6 +719,13 @@ function throwingHook(): never {
 // ─── Through useExperiment ───────────────────────────────────────────────────
 
 describe('onExposure through useExperiment', () => {
+  // The first render in a jest worker loads React Native's renderer, transformed afresh when the
+  // transform cache is empty, as on a CI runner. On one CI run that alone exceeded jest's default
+  // 5 s (measured on a laptop: about 1.5 s with an empty cache, 0.2 s with a warm one, and the
+  // second render about 50 ms), so these tests get a bound that is not about them. Nothing here
+  // asserts a duration.
+  const RENDER_TIMEOUT_MS = 30_000;
+
   function Probe({ experimentKey }: { experimentKey: string }) {
     const { variant } = useExperiment(experimentKey);
     return <Text testID={`variant-${experimentKey}`}>{variant ?? 'none'}</Text>;
@@ -737,7 +744,7 @@ describe('onExposure through useExperiment', () => {
     expect(requests).toHaveLength(1);
     expect(hook).toHaveBeenCalledTimes(1);
     expect(hook.mock.calls[0][0]).toStrictEqual(EXPOSURE);
-  });
+  }, RENDER_TIMEOUT_MS);
 
   test('two components using one experiment share one request and one call', async () => {
     const { requests } = fakeFetch();
@@ -754,5 +761,5 @@ describe('onExposure through useExperiment', () => {
     await flush();
     expect(requests).toHaveLength(1);
     expect(hook).toHaveBeenCalledTimes(1);
-  });
+  }, RENDER_TIMEOUT_MS);
 });
