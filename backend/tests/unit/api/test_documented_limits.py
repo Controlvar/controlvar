@@ -428,7 +428,9 @@ NATIVE_SDKS = {
 
 #: A block comment, or a line comment (not the `//` of a URL's scheme).
 _COMMENT = re.compile(r"/\*.*?\*/|(?<![:\w])//[^\n]*", re.S)
-_CONTEXT = re.compile(r"\bcontext\b", re.I)
+#: Any word that starts with "context": `context`, and a helper such as
+#: `contextQuery(` that builds it (#1520), which `\bcontext\b` did not see.
+_CONTEXT = re.compile(r"\bcontext", re.I)
 
 
 def _native_code(rel: str, bounds) -> str:
@@ -446,11 +448,12 @@ def _native_code(rel: str, bounds) -> str:
 
 @pytest.mark.parametrize("sdk", sorted(NATIVE_SDKS))
 def test_the_native_sdks_send_no_context_on_flag_evaluation(sdk):
-    """iOS, Android and Flutter evaluate a flag with the user id
-    alone (#438; React Native sends the attributes since #1520), so a flag rule on attributes cannot match from them; each
-    sends the attributes as the context of an experiment assignment. When this
-    fails, the SDK has started to send a context on flag evaluation: say so on
-    the pages whose registries name this test."""
+    """iOS, Android and Flutter evaluate a flag with the user id alone (#438;
+    React Native sends the attributes since #1520), so a flag rule on
+    attributes cannot match from them; each sends the attributes as the context
+    of an experiment assignment. When this fails, the SDK has started to send a
+    context on flag evaluation: say so on the pages whose registries name this
+    test."""
     rel, evaluate, assign = NATIVE_SDKS[sdk]
     evaluation = _native_code(rel, evaluate)
     assert "feature-flags/evaluate" in evaluation, f"{sdk}: no evaluate request read"

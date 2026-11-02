@@ -1073,6 +1073,7 @@ describe('OfflineStorage', () => {
 
 describe('regression #1520 — flag evaluation sends the user attributes', () => {
   // The same shape as sdk/js contextQuery: `&context=` + encodeURIComponent(JSON.stringify(attributes)).
+  // sdk/js/__tests__/client.test.ts (describe 'regression #1520') pins the same seven literal rows.
   const FIXTURE: Array<[string, Record<string, unknown>, string]> = [
     ['a space', { plan: 'a b' }, '%7B%22plan%22%3A%22a%20b%22%7D'],
     ['non-ASCII', { city: 'été' }, '%7B%22city%22%3A%22%C3%A9t%C3%A9%22%7D'],
@@ -1146,6 +1147,20 @@ describe('regression #1520 — flag evaluation sends the user attributes', () =>
       third.evaluateFlag('other', 'user-1', { plan: 'b' }),
     ]);
     expect(fetchMock()).toHaveBeenCalledTimes(1);
+  });
+
+  test('without offlineFallback the memory key is user + flag too: other attributes, no clearCache(), one fetch', async () => {
+    // AsyncStorage is off, so nothing but the in-memory cache can answer the second call.
+    mockFetchAlways(flagBody());
+    const client = makeClient({ offlineFallback: false });
+    await client.evaluateFlag('dark-mode', 'user-1', { plan: 'pro' });
+    expect(await client.evaluateFlag('dark-mode', 'user-1', { plan: 'free' })).toEqual({
+      key: 'dark-mode',
+      enabled: true,
+      config: { theme: 'dark' },
+    });
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
+    expect(callAt(0).url).toContain('%22plan%22%3A%22pro%22');
   });
 
   test('without offlineFallback, a changed attribute set is asked again after clearCache()', async () => {

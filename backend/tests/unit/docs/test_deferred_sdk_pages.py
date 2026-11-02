@@ -883,6 +883,18 @@ def test_the_claim_patterns_find_the_true_sentence_on_the_react_page():
     )
 
 
+def test_the_claim_patterns_find_the_true_sentence_on_the_react_native_page():
+    # React Native sends the context since #1520, and its page says so: the
+    # patterns must see it, so that react-native put back in SENDS_NO_CONTEXT
+    # fails test_a_page_claims_no_attribute_targeting_its_client_does_not_send
+    # on docs/sdk/react-native.md as well as here.
+    assert "react-native" not in SENDS_NO_CONTEXT
+    assert sends_context("react-native")
+    assert "sent as context on flag evaluation" in attribute_claims(
+        text("docs/sdk/react-native.md")
+    )
+
+
 @pytest.mark.parametrize("page", DEFERRED)
 def test_a_page_claims_no_attribute_targeting_its_client_does_not_send(page):
     silent = [sdk for sdk in sdks_of(page) if sdk in SENDS_NO_CONTEXT]

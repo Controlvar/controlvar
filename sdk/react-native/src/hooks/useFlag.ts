@@ -22,7 +22,7 @@ function initialState(flagKey: string, loading: boolean): FlagState {
 /**
  * Evaluates feature flag `flagKey` for the `userId` supplied to the enclosing
  * {@link ExperimentationProvider} via
- * `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…`.
+ * `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…&context=…`.
  *
  * @param flagKey  The feature flag key to evaluate.
  * @param attributes  Sent as `context`, so targeting rules match. When omitted, the

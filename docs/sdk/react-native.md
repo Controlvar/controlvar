@@ -107,7 +107,7 @@ function Home() {
 |------|------|----------|-------------|
 | `client` | `ExperimentationClient` | Yes | The client instance (create it once) |
 | `userId` | `string` | Yes | Stable identifier used by the server for bucketing |
-| `attributes` | `Record<string, unknown>` | No | Sent as `context` on experiment assignment and, unless the hook is given its own, on `useFlag` (targeting rules) |
+| `attributes` | `Record<string, unknown>` | No | Sent as `context` on flag evaluation and on experiment assignment (targeting rules) |
 
 The context value is memoised on `client`, `userId` and `attributes`. Hooks re-run when `client`,
 `userId` or the key they were given changes; neither `useExperiment` nor `useFlag` re-runs when
@@ -116,11 +116,13 @@ The context value is memoised on `client`, `userId` and `attributes`. Hooks re-r
 **After the user's attributes change,** the SDK keys its memory cache, its AsyncStorage entries
 and its in-flight requests by user + key, as the JavaScript SDK does, so an answer already stored
 for that user and flag is served until it expires, with the attributes it was asked with. To ask
-again with the new attributes, call `client.clearCache()`, `await client.clearStorage()` and
-remount the component (`clearStorage()` also removes the stored assignments, so the next
-`useExperiment` asks again; the variant is the same because assignment is sticky, and the server
-records another exposure). Or construct the client with `offlineFallback: false`, which keeps
-nothing in AsyncStorage, and call `clearCache()`.
+again with the new attributes, call `client.clearCache()` and `await client.clearStorage()`, then
+mount the components that read flags again (a new `key` on the provider does it). `clearStorage()`
+also removes the stored assignments, so the next `useExperiment` asks again; the variant is the
+same because assignment is sticky, and the server records another exposure. With a client
+constructed with `offlineFallback: false`, which keeps nothing in AsyncStorage, `clearCache()` plus
+a remount is enough; either one alone is not, because a mounted hook does not ask again and a
+remount is answered from the memory cache.
 
 ### Client configuration (`SdkConfig`)
 
@@ -204,7 +206,7 @@ const result = await client.trackBatch([
 
 | Method | Signature | Returns | On failure |
 |--------|-----------|---------|------------|
-| `evaluateFlag` | `(flagKey, userId, attributes?) => Promise<FlagEvaluation>` | `{ key, enabled, config }` | `{ key, enabled: false, config: null }` (or the last-known AsyncStorage value) |
+| `evaluateFlag` | `(flagKey, userId, attributes?) => Promise<FlagEvaluation>` | `{ key, enabled, config }` | `{ key, enabled: false, config: null }` (or the last-known AsyncStorage value). Attributes that cannot be sent (`JSON.stringify` throws, or the server answers 422 for a context over 8,192 bytes or nested more than 10 levels) are reported to `onError` and answered the same way |
 | `isFeatureEnabled` | `(flagKey, userId, attributes?) => Promise<boolean>` | `enabled` | `false` |
 | `getAllFlags` | `(userId, attributes?) => Promise<Record<string, boolean>>` | `{ flagKey: enabled }`; not cached, not part of the fan-out | `{}` |
 | `getAssignment` | `(experimentKey, userId, attributes?) => Promise<Assignment \| null>` | `{ experimentKey, userId, variantId, variantName, isControl, configuration }` | `null` (or the last-known AsyncStorage value) |
@@ -368,6 +370,9 @@ npm run typecheck:tests
 
 The contract smoke, `examples/contract_smoke.test.ts`, runs under Jest in Node, with no device
 runtime; the live runner runs it with `python tests/sdk-contract/live/run_live_contract.py --sdk react-native --strict`.
+Besides assigning, evaluating and tracking, it evaluates the seed's `sdk_contract_targeted` flag
+(0% rollout, one rule: `plan` equals `pro`) with the attributes `{ plan: 'pro' }` and then
+`{ plan: 'free' }`, and the runner requires the first on, by that rule, and the second off.
 
 ---
 
@@ -381,11 +386,13 @@ at the `ApiError.status`: 401 means a bad `apiKey`, 404 means an unknown key or 
 control variant (a flag that is not ACTIVE comes back disabled, and an experiment that is not ACTIVE answers its
 control variant: neither is an error), a plain `Error` means the network/timeout. Check that `baseUrl` is the origin
 only (no `/api/v1`). With `offlineFallback: true` the last-known value is served during outages.
-An `ApiError` message gives the request path without its query, so it never carries the user id or the attributes.
+An `ApiError` message gives the request path without its query.
 
-**A flag's targeting rule does not match after the user's attributes changed** — the answer
-stored for that user and flag is served until it expires, whatever attributes the new call sends.
-See "After the user's attributes change" under the provider props: `clearCache()`,
-`await clearStorage()` and remount, or construct the client with `offlineFallback: false`.
+**A flag with an attribute rule is off for a user who matches it** — check that the provider (or
+`useFlag`'s second argument) carries the attribute, and that the answer was not cached before the
+attributes changed (see "After the user's attributes change" under Provider): the answer stored
+for that user and flag is served until it expires, whatever attributes the new call sends. Call
+`clearCache()` and `await clearStorage()`, then remount; with a client constructed with
+`offlineFallback: false`, `clearCache()` plus a remount is enough.
 
 **Type errors with `md5`** — `npm install --save-dev @types/md5`.

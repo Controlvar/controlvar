@@ -71,7 +71,7 @@ function encode(value: string): string {
  * attributes are missing or an empty object (nothing is sent then). The same
  * rule as the JavaScript SDK's `contextQuery`.
  */
-export function contextQuery(attributes: Record<string, unknown> | undefined): string {
+function contextQuery(attributes: Record<string, unknown> | undefined): string {
   if (!attributes || typeof attributes !== 'object' || Object.keys(attributes).length === 0) return '';
   return `&context=${encode(JSON.stringify(attributes))}`;
 }
@@ -128,12 +128,14 @@ export class ExperimentationClient {
   // ---------------------------------------------------------------------------
 
   /**
-   * Evaluates `flagKey` for `userId` via `GET /api/v1/feature-flags/evaluate/{key}?user_id=…`.
+   * Evaluates `flagKey` for `userId` via `GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=…`.
    * `attributes` is sent as `context` (URL-encoded JSON, nothing for `{}`), so targeting
    * rules match. Cache, AsyncStorage and in-flight keys stay user + flag, as in the
-   * JavaScript SDK: after the attributes change, `clearCache()` and `await clearStorage()`
-   * (or construct the client with `offlineFallback: false`). A context the server refuses
-   * (422) or that cannot be serialised goes to `onError`, and nothing is cached.
+   * JavaScript SDK, so after the attributes change call `clearCache()` and
+   * `await clearStorage()`, then remount the components that read the flag; with a client
+   * constructed with `offlineFallback: false`, `clearCache()` plus a remount is enough.
+   * A context the server refuses (422) or that cannot be serialised goes to `onError`,
+   * and nothing is cached.
    *
    * Evaluation order:
    *   1. In-memory cache (fast path).

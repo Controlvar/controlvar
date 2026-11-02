@@ -151,6 +151,17 @@ describe('useFlag', () => {
     expect(evaluateFlag.mock.calls[0]).toEqual(['f', 'u1', { plan: 'pro' }]);
   });
 
+  test('regression #1520: its own argument replaces the provider attributes; keys of the provider are not merged in', async () => {
+    const evaluateFlag = jest.fn().mockResolvedValue(enabledFlag);
+    renderHookInProvider(() => useFlag('f', { country: 'US' }), {
+      client: makeClient({ evaluateFlag }),
+      userId: 'u1',
+      attributes: { plan: 'pro' },
+    });
+    await waitFor(() => expect(evaluateFlag).toHaveBeenCalledTimes(1));
+    expect(evaluateFlag.mock.calls[0]).toEqual(['f', 'u1', { country: 'US' }]);
+  });
+
   test('regression #1520: an equal inline object re-rendered 3 times asks once', async () => {
     const evaluateFlag = jest.fn().mockResolvedValue(enabledFlag);
     const client = makeClient({ evaluateFlag });
@@ -563,6 +574,46 @@ describe('hooks with a real ExperimentationClient', () => {
     expect((global.fetch as jest.Mock).mock.calls[0][0]).toBe(
       `${BASE_URL}/api/v1/feature-flags/evaluate/f?user_id=u1&context=%7B%22plan%22%3A%22pro%22%7D`
     );
+  });
+
+  // docs/sdk/react-native.md: with offlineFallback: false, clearCache() plus a remount asks again
+  // with the new attributes; either one alone does not.
+  test('regression #1520: offlineFallback false, new attributes are asked after clearCache() plus a remount only', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(jsonResponse({ key: 'f', enabled: false, config: null }));
+    const client = realClient();
+    const states: FlagState[] = [];
+    function Probe() {
+      const state = useFlag('f');
+      states.push(state);
+      return <Text>{String(state.enabled)}</Text>;
+    }
+    // A new `key` on the provider remounts everything under it.
+    const ui = (attributes: Record<string, unknown>, key: string) => (
+      <ExperimentationProvider key={key} client={client} userId="u1" attributes={attributes}>
+        <Probe />
+      </ExperimentationProvider>
+    );
+    const urls = () => (global.fetch as jest.Mock).mock.calls.map(([url]) => url as string);
+
+    const { rerender } = render(ui({ plan: 'free' }, 'first'));
+    await waitFor(() => expect(settled(states[states.length - 1])).toBe(true));
+    expect(urls()).toEqual([`${BASE_URL}/api/v1/feature-flags/evaluate/f?user_id=u1&context=%7B%22plan%22%3A%22free%22%7D`]);
+
+    // New attributes and a remount, no clearCache(): the memory cache answers.
+    rerender(ui({ plan: 'pro' }, 'second'));
+    await waitFor(() => expect(settled(states[states.length - 1])).toBe(true));
+    expect(urls()).toHaveLength(1);
+
+    // clearCache(), no remount: the mounted hook does not ask again.
+    client.clearCache();
+    rerender(ui({ plan: 'pro' }, 'second'));
+    await act(async () => {});
+    expect(urls()).toHaveLength(1);
+
+    // clearCache() and a remount: one request, with the new attributes.
+    rerender(ui({ plan: 'pro' }, 'third'));
+    await waitFor(() => expect(urls()).toHaveLength(2));
+    expect(urls()[1]).toBe(`${BASE_URL}/api/v1/feature-flags/evaluate/f?user_id=u1&context=%7B%22plan%22%3A%22pro%22%7D`);
   });
 
   // #1519: the kill-switch page says a component already on screen keeps its answer until it
