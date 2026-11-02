@@ -42,6 +42,10 @@
 # entries were removed because the run stopped sending those requests, not
 # because the bugs were fixed: both still answer 500 to the requests sent
 # before, and both issues stay open.
+#
+# GET /api/v1/metrics/errors (#956) is fixed, as GET /api/v1/metrics/summary
+# was (#1572): a start_date or end_date with a UTC offset of 16 hours or more
+# answers 422, so both its entries (superuser and viewer) were removed.
 
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
@@ -72,13 +76,6 @@ operation = "PUT /api/v1/users/{user_id}"
 status = 500
 issue = 959
 reason = "A path id that is not a UUID reaches the database query."
-
-[[known]]
-pass = "superuser"
-operation = "GET /api/v1/metrics/errors"
-status = 500
-issue = 956
-reason = "A date-time with a UTC offset beyond 15:59 reaches the database."
 
 [[known]]
 pass = "superuser"
@@ -228,13 +225,6 @@ operation = "DELETE /api/v1/users/{user_id}"
 status = 500
 issue = 959
 reason = "A path id that is not a UUID reaches the database query."
-
-[[known]]
-pass = "viewer"
-operation = "GET /api/v1/metrics/errors"
-status = 500
-issue = 956
-reason = "A date-time with a UTC offset beyond 15:59 reaches the database."
 
 [[known]]
 pass = "viewer"
