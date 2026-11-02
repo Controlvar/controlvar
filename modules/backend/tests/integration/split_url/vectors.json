@@ -1,0 +1,143 @@
+{
+  "$comment": "Split URL routing vectors (#393), read by the API test (test_split_url_assign_contract.py) and the reference integration's test (test_split_url_reference_integration.py). 'location' cases: an experiment whose control URL is 'control' and whose one other variant is 'variant', every visitor sent to the variant (bandit weights 0/100); a request for host + path + query answers 'expect': the exact Location, or 'not_entry'. 'set_cookie' cases: the exact Set-Cookie for a minted id, '<id>' standing for it.",
+  "location": [
+    {
+      "id": "query-added",
+      "control": "https://e.com/checkout",
+      "variant": "https://e.com/checkout-v2",
+      "host": "e.com",
+      "path": "/checkout",
+      "query": "utm_source=x",
+      "expect": "https://e.com/checkout-v2?utm_source=x"
+    },
+    {
+      "id": "variant-parameters-first",
+      "control": "https://e.com/checkout",
+      "variant": "https://e.com/checkout-v2?a=1",
+      "host": "e.com",
+      "path": "/checkout",
+      "query": "utm_source=x",
+      "expect": "https://e.com/checkout-v2?a=1&utm_source=x"
+    },
+    {
+      "id": "no-query",
+      "control": "https://e.com/checkout",
+      "variant": "https://e.com/checkout-v2",
+      "host": "e.com",
+      "path": "/checkout",
+      "query": "",
+      "expect": "https://e.com/checkout-v2"
+    },
+    {
+      "id": "query-kept-as-sent",
+      "control": "https://e.com/checkout",
+      "variant": "https://e.com/checkout-v2",
+      "host": "e.com",
+      "path": "/checkout",
+      "query": "q=caf%C3%A9&b=%20&c",
+      "expect": "https://e.com/checkout-v2?q=caf%C3%A9&b=%20&c"
+    },
+    {
+      "id": "host-case-and-port",
+      "control": "https://e.com/checkout",
+      "variant": "https://e.com/checkout-v2",
+      "host": "E.com:443",
+      "path": "/checkout",
+      "query": "utm_source=x",
+      "expect": "https://e.com/checkout-v2?utm_source=x"
+    },
+    {
+      "id": "one-trailing-slash",
+      "control": "https://e.com/checkout",
+      "variant": "https://e.com/checkout-v2",
+      "host": "e.com",
+      "path": "/checkout/",
+      "query": "utm_source=x",
+      "expect": "https://e.com/checkout-v2?utm_source=x"
+    },
+    {
+      "id": "root-control",
+      "control": "https://e.com/",
+      "variant": "https://e.com/home-v2",
+      "host": "e.com",
+      "path": "/",
+      "query": "",
+      "expect": "https://e.com/home-v2"
+    },
+    {
+      "id": "percent-encoded-path-as-sent",
+      "control": "https://e.com/caf%C3%A9",
+      "variant": "https://e.com/caf%C3%A9-v2",
+      "host": "e.com",
+      "path": "/caf%C3%A9",
+      "query": "",
+      "expect": "https://e.com/caf%C3%A9-v2"
+    },
+    {
+      "id": "path-case-is-kept",
+      "control": "https://e.com/checkout",
+      "variant": "https://e.com/checkout-v2",
+      "host": "e.com",
+      "path": "/Checkout",
+      "query": "utm_source=x",
+      "expect": "not_entry"
+    },
+    {
+      "id": "another-path",
+      "control": "https://e.com/checkout",
+      "variant": "https://e.com/checkout-v2",
+      "host": "e.com",
+      "path": "/checkout-v2",
+      "query": "utm_source=x",
+      "expect": "not_entry"
+    },
+    {
+      "id": "the-control-path-on-another-host",
+      "control": "https://e.com/checkout",
+      "variant": "https://e.com/checkout-v2",
+      "host": "other.example",
+      "path": "/checkout",
+      "query": "utm_source=x",
+      "expect": "not_entry"
+    },
+    {
+      "id": "V9-h-variant-on-another-host",
+      "control": "https://e.com/checkout",
+      "variant": "https://other.example/landing",
+      "host": "e.com",
+      "path": "/checkout",
+      "query": "utm_source=x",
+      "expect": "https://other.example/landing"
+    },
+    {
+      "id": "V9-h-variant-on-another-host-with-its-own-query",
+      "control": "https://e.com/checkout",
+      "variant": "https://other.example/landing?a=1",
+      "host": "e.com",
+      "path": "/checkout",
+      "query": "utm_source=x",
+      "expect": "https://other.example/landing?a=1"
+    },
+    {
+      "id": "V9-p-same-host-another-port",
+      "control": "https://e.com/checkout",
+      "variant": "https://e.com:8443/checkout-v2",
+      "host": "e.com",
+      "path": "/checkout",
+      "query": "utm_source=x",
+      "expect": "https://e.com:8443/checkout-v2?utm_source=x"
+    }
+  ],
+  "set_cookie": [
+    {
+      "id": "default",
+      "cookie_domain": null,
+      "expect": "controlvar_uid=<id>; Max-Age=2592000; Path=/; SameSite=Lax; Secure"
+    },
+    {
+      "id": "with-a-domain",
+      "cookie_domain": "example.com",
+      "expect": "controlvar_uid=<id>; Max-Age=2592000; Path=/; SameSite=Lax; Secure; Domain=example.com"
+    }
+  ]
+}

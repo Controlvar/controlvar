@@ -31,7 +31,7 @@ A full production deployment uses the following AWS services:
 | ElastiCache Redis | Rate-limit counters and the API's caches |
 | DynamoDB | Full profile: the `counters` module's counters, which only its own routes write |
 | Lambda | No request or event processing: placeholder functions that do nothing, and a daily Glue ETL trigger in the full profile. Assignment and flag evaluation are API calls ([AWS Integration](../integrations/aws.md#lambda-functions)) |
-| CloudFront | Not created by the CDK. Only the split-URL module's Lambda@Edge construct would use it, and its router has no configuration source yet ([#393](https://github.com/Controlvar/controlvar/issues/393)) |
+| CloudFront | Not created by the CDK app. The split URL edge router, a CDK app of its own, creates a distribution and a Lambda@Edge function only when you deploy it; AWS bills both ([AWS Integration](../integrations/aws.md#the-split-url-edge-router)) |
 | Kinesis | Full profile only: a stream feeding Firehose and the S3 data lake. The API does not write to it today |
 | OpenSearch | Full profile only: a domain is created; nothing writes to it today |
 | Cognito | A user pool the CDK creates; sign-in uses local accounts by default ([Cognito Integration](../cognito_integration.md)) |
@@ -152,11 +152,9 @@ See [Bayesian Experimentation API](../api/bayesian.md) to enable Bayesian analys
 
 ### How does Split URL testing work?
 
-Split URL testing would send different users to different URLs — for example, `/checkout` vs `/checkout-v2` — with a Lambda@Edge router at the CDN. It does not split traffic yet: the router has no configuration source in this release ([#393](https://github.com/Controlvar/controlvar/issues/393)).
+Split URL testing sends different visitors to different URLs — for example, `/checkout` vs `/checkout-v2`. Your server or edge asks the API where to send each visitor who opens the control's URL, and redirects them; the API assigns the visitor as `POST /api/v1/tracking/assign` does. Conversions count for the variant the visitor saw when they are tracked with the same visitor id and name the experiment. On AWS, an optional CloudFront edge router (beta) can do the asking and the redirect.
 
-The split-URL module ships a CloudFront construct with a Lambda@Edge router, which no stack uses: you add it to a stack yourself. The router reads a cookie to check whether the visitor has already been assigned. If not, it hashes the client fingerprint (IP address and User-Agent) to pick a variant, returns a 302 redirect to the variant URL, and sets a cookie that lasts `cookie_ttl_days` (30 days by default). A request that carries a cookie naming a known variant URL passes through without being bucketed again.
-
-See [Split URL Testing API](../api/split-url.md) for setup and the CDK construct reference.
+See [Split URL testing](../api/split-url.md) to set it up, with a reference integration in the Python standard library.
 
 ---
 

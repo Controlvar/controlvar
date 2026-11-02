@@ -288,54 +288,196 @@ text = "The dashboard is an ECS service behind the same Application Load Balance
 by = ["test:infrastructure/tests/test_dashboard_service.py"]
 
 [[unit]]
-text = "Lambda@Edge for Split URL Testing"
-by = ["exempt:baseline"]
+text = "The split URL edge router"
+by = ["exempt:label"]
 
 [[unit]]
-text = "The split-URL module ships a CDK construct, modules/infrastructure/constructs/split_url_distribution.py, that creates a CloudFront distribution with a Lambda@Edge viewer-request router in front of your application."
+text = "The split URL module's CloudFront edge router (beta) sends each visitor who opens a split URL experiment's control page to their variant, as Split URL testing describes: a CloudFront distribution in front of your site, with a Lambda@Edge function that asks the API at viewer request and sets the visitor-id cookie at viewer response."
 by = [
-    "test:modules/backend/tests/unit/infrastructure/test_split_url_distribution.py::test_cloudfront_distribution_created",
-    "test:modules/backend/tests/unit/infrastructure/test_split_url_distribution.py::test_lambda_edge_attached_to_viewer_request",
+    "test:modules/backend/tests/integration/split_url/test_split_url_router_e2e.py::test_a_split_url_experiment_splits_its_visitors_through_the_router",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_edge_app_runs_the_router_at_both_viewer_events",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_served_page_keeps_its_own_headers_and_gets_the_routers",
 ]
 
 [[unit]]
-text = "infrastructure/cdk/app.py does not use it, so a deployment gets it only if you add it to a stack yourself."
-by = ["exempt:baseline"]
+text = "It is a CDK app of its own, modules/infrastructure/split_url_edge/, with one stack, controlvar-split-url-edge, in us-east-1, where AWS runs Lambda@Edge functions from."
+by = ["test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_edge_app_is_one_stack_in_us_east_1"]
 
 [[unit]]
-text = "The router (modules/lambda/split_url_router/handler.py):"
-by = ["exempt:baseline"]
-
-[[unit]]
-text = "Reads the assignment cookie"
-by = ["test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerExistingCookie::test_existing_valid_cookie_passes_through"]
-
-[[unit]]
-text = "If absent, hashes the client fingerprint (IP + User-Agent) to assign a variant"
-by = ["test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_the_fingerprint_is_ip_and_user_agent_not_a_user_id"]
-
-[[unit]]
-text = "Returns a 302 Found redirect to the variant URL"
-by = ["test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_returns_302_redirect"]
-
-[[unit]]
-text = "Sets a Set-Cookie header recording the assignment (30 days by default; cookie_ttl_days in the experiment config)"
+text = "Nothing is created unless you deploy it: cdk deploy --all of the platform's app does not, and no workflow or installer step does."
 by = [
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_cookie_ttl_defaults_to_30_days",
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerNewAssignment::test_cookie_ttl_from_config",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_nothing_deploys_the_edge_app",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_constructs_only_referrer_is_the_edge_app",
+    "test:infrastructure/tests/test_stack_graph.py::test_the_split_url_construct_ships_and_nothing_builds_it",
 ]
 
 [[unit]]
-text = "AWS requires a Lambda@Edge function to be created in us-east-1."
+text = "Deploying it creates a CloudFront distribution and a Lambda@Edge function in us-east-1, which AWS bills."
+by = [
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_edge_app_runs_the_router_at_both_viewer_events",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_edge_app_is_one_stack_in_us_east_1",
+]
+
+[[unit]]
+text = "Every request for every path through the distribution runs two Lambda@Edge invocations, one at viewer request and one at viewer response, and the distribution caches nothing."
+by = ["test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_edge_app_runs_the_router_at_both_viewer_events"]
+
+[[unit]]
+text = "Before you deploy it:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "the account is bootstrapped for CDK in us-east-1;"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "the CDK app's Python requirements are installed, as in AWS CDK Deployment;"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "the API runs the full profile and is reachable from the internet over https, with a valid certificate;"
+by = [
+    "test:backend/tests/unit/core/test_optional_modules.py::TestSplitUrlRoutingIsTheModulesOnly::test_the_core_routers_answer_404",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_synth_is_refused_for_each_wrong_setting",
+]
+
+[[unit]]
+text = "you have an API key for it: use an API key made for the router; changing it means redeploying the router;"
+by = ["test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_router_is_bundled_with_its_settings"]
+
+[[unit]]
+text = "you manage the DNS of any alternate domain name you give the distribution."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Its settings are environment variables, read when you run cdk deploy from modules/infrastructure/split_url_edge/:"
+by = [
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_router_is_bundled_with_its_settings",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_synth_is_refused_for_each_wrong_setting",
+]
+
+[[unit]]
+text = "Setting | What it is"
+by = ["exempt:label"]
+
+[[unit]]
+text = "SPLIT_URL_API_URL | Required: the API's https URL, with no path"
+by = [
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_synth_is_refused_for_each_wrong_setting",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_required_settings_are_the_three_documented",
+]
+
+[[unit]]
+text = "SPLIT_URL_API_KEY | Required: the router's API key"
+by = [
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_synth_is_refused_for_each_wrong_setting",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_required_settings_are_the_three_documented",
+]
+
+[[unit]]
+text = "SPLIT_URL_ORIGIN | Required: the host name of your site's origin"
+by = [
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_synth_is_refused_for_each_wrong_setting",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_edge_app_runs_the_router_at_both_viewer_events",
+]
+
+[[unit]]
+text = "SPLIT_URL_COOKIE_NAME | The visitor-id cookie's name (default controlvar_uid)"
+by = [
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_router_is_bundled_with_its_settings",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_the_cookie_is_exact",
+]
+
+[[unit]]
+text = "SPLIT_URL_COOKIE_MAX_AGE_DAYS | Its lifetime, from 1 to 400 days (default 30)"
+by = [
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_router_is_bundled_with_its_settings",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_synth_is_refused_for_each_wrong_setting",
+]
+
+[[unit]]
+text = "SPLIT_URL_COOKIE_DOMAIN | Its Domain attribute (none by default)"
+by = [
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_router_is_bundled_with_its_settings",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_the_cookie_is_exact",
+]
+
+[[unit]]
+text = "SPLIT_URL_DOMAIN_NAMES | Alternate domain names for the distribution, separated by commas; with the next"
+by = [
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_edge_app_runs_the_router_at_both_viewer_events",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_synth_is_refused_for_each_wrong_setting",
+]
+
+[[unit]]
+text = "SPLIT_URL_CERTIFICATE_ARN | Their ACM certificate, in us-east-1; with the previous"
+by = [
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_edge_app_runs_the_router_at_both_viewer_events",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_synth_is_refused_for_each_wrong_setting",
+]
+
+[[unit]]
+text = "A setting that is missing or wrong stops the synth, with a message that names it."
+by = ["test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_synth_is_refused_for_each_wrong_setting"]
+
+[[unit]]
+text = "The function runs Python 3.12 on x86_64."
+by = ["test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_edge_app_runs_the_router_at_both_viewer_events"]
+
+[[unit]]
+text = "The router fails open: when the API does not answer in time or answers an error, the visitor gets the page they asked for, with X-Split-URL: failed."
+by = [
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_failure_serves_the_page_and_logs_its_status",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_an_unexpected_error_serves_the_page",
+]
+
+[[unit]]
+text = "The router gives the API 1 second to send the routes table and 1.5 seconds to answer for a visitor, from the start of the call to the last byte of the answer."
+by = [
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_the_timeouts_are_one_and_a_half_seconds",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_slow_answer_ends_the_call_at_its_deadline",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_the_deadline_covers_the_body_and_the_https_branch",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_slow_api_is_a_timeout_and_the_page_is_served",
+]
+
+[[unit]]
+text = "Looking up the API's host name counts towards that time, but a slow lookup is not cut short."
+by = ["test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_the_host_name_lookup_counts_towards_the_deadline"]
+
+[[unit]]
+text = "If the router cannot get the routes table when the page comes back, that visit gets no cookie."
+by = ["test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_viewer_response_without_a_routes_table_sets_no_cookie"]
+
+[[unit]]
+text = "Each failure is one JSON line in the router's log, with the HTTP status or a fixed word, such as {\"event\": \"split_url_failed\", \"phase\": \"viewer-request\", \"status\": \"429\"}."
+by = ["test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_failure_serves_the_page_and_logs_its_status"]
+
+[[unit]]
+text = "The log is in CloudWatch in the Region where the function ran, under the log group /aws/lambda/us-east-1.<function name>."
 by = ["exempt:third-party"]
 
 [[unit]]
-text = "The construct is Python, like the rest of the CDK app."
-by = ["exempt:baseline"]
+text = "X-Split-URL on a served page rests on a behaviour AWS does not document (that a header added at viewer request is visible at viewer response)."
+by = ["test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_the_cookie_does_not_rest_on_the_internal_header"]
 
 [[unit]]
-text = "Its usage, and how the router receives its configuration, are in Split URL testing."
-by = ["exempt:baseline"]
+text = "It is unverified until the router has run on AWS: on 2026-11-02 it had not."
+by = ["exempt:intent"]
+
+[[unit]]
+text = "The CloudFront router sets the visitor-id cookie on entry pages without asking."
+by = [
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_served_page_keeps_its_own_headers_and_gets_the_routers",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_redirect_is_exact",
+]
+
+[[unit]]
+text = "A site that must have consent before it sets an identifying cookie uses a server-side integration instead, which makes no call and sets no cookie until the visitor consents."
+by = ["test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_only_a_get_with_consent_is_split"]
+
+[[unit]]
+text = "On 2026-11-02 the router had been tested against simulated CloudFront events, and had not yet run on AWS."
+by = ["exempt:intent"]
 
 [[unit]]
 text = "Kinesis and OpenSearch"

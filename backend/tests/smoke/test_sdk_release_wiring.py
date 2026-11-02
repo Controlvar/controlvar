@@ -1706,9 +1706,11 @@ MCP_ONLY = "needs.resolve.outputs.sdk == 'mcp'"
 MCP_AUDIT = "The MCP server's production dependencies have no high advisory"
 MCP_SHRINKWRAP = "Shrinkwrap the MCP server"
 MCP_PACKED = "The packed MCP server carries its shrinkwrap"
-MCP_README = "Check the packed README"
 MCP_CONSUMER = "The installed MCP server answers initialize, with no dev dependency"
-MCP_STEPS = (MCP_AUDIT, MCP_SHRINKWRAP, MCP_PACKED, MCP_README, MCP_CONSUMER)
+MCP_STEPS = (MCP_AUDIT, MCP_SHRINKWRAP, MCP_PACKED, MCP_CONSUMER)
+#: Not one of the four: every npm SDK's packed README is checked by this
+#: step, unconditioned, under its rule set; sdk/mcp's is I-README.
+MCP_README = "Check the packed README"
 
 
 def _npm_build_names() -> list[str]:

@@ -585,7 +585,7 @@ def test_every_deferred_page_with_an_install_section_is_read():
     request that packs a README moves the second and third."""
     with_section = [page for page in DEFERRED if INSTALL_HEADING.search(text(page))]
     under_the_rule = [page for page in with_section if page not in PACKAGED]
-    assert (len(with_section), len(under_the_rule), len(PACKAGED)) == (24, 23, 2), (
+    assert (len(with_section), len(under_the_rule), len(PACKAGED)) == (24, 21, 5), (
         with_section,
         sorted(PACKAGED),
     )
@@ -596,12 +596,16 @@ def test_every_deferred_page_with_an_install_section_is_read():
 # ---------------------------------------------------------------------------
 
 #: Each README a registry shows, with its SDK: an explicit list, not
-#: ``DEFERRED`` (a packaged README need not be a deferred page). It is held
-#: exactly to the SDKs scripts/check_packaged_readme.py has rules for, and to
-#: the READMEs the packages actually ship.
+#: ``DEFERRED`` (a packaged README need not be a deferred page: the Python
+#: provider's has a claims registry of its own). It is held exactly to the
+#: SDKs scripts/check_packaged_readme.py holds to I-README, and to the
+#: READMEs the packages actually ship.
 PACKAGED: Dict[str, str] = {
     "sdk/dotnet/README.md": "dotnet",
     "sdk/mcp/README.md": "mcp",
+    "sdk/openfeature-python/README.md": "openfeature-python",
+    "sdk/openfeature/README.md": "openfeature",
+    "sdk/react/README.md": "react",
 }
 
 #: For each packaged README: the heading a planted registry install goes
@@ -617,6 +621,21 @@ PLANTS: Dict[str, Tuple[str, str, Tuple[str, str]]] = {
         "## Configuration\n",
         "`npm install @controlvar/mcp-server`",
         ("npm", "@controlvar/mcp-server"),
+    ),
+    "sdk/openfeature-python/README.md": (
+        "## Quick start\n",
+        "`pip install controlvar-openfeature`",
+        ("pypi", "controlvar-openfeature"),
+    ),
+    "sdk/openfeature/README.md": (
+        "## Quick start\n",
+        "`npm install @controlvar/openfeature-provider`",
+        ("npm", "@controlvar/openfeature-provider"),
+    ),
+    "sdk/react/README.md": (
+        "## Provider setup\n",
+        "`npm install @controlvar/react-sdk`",
+        ("npm", "@controlvar/react-sdk"),
     ),
 }
 
@@ -781,7 +800,6 @@ SENDS_NO_CONTEXT = {
     "ios",
     "java",
     "php",
-    "react-native",
     "ruby",
 }
 
@@ -901,6 +919,18 @@ def test_the_claim_patterns_find_the_true_sentence_on_the_react_page():
     # React sends the context, and its page says so: the patterns must see it.
     assert "sent as context on flag evaluation" in attribute_claims(
         text("docs/sdk/react.md")
+    )
+
+
+def test_the_claim_patterns_find_the_true_sentence_on_the_react_native_page():
+    # React Native sends the context since #1520, and its page says so: the
+    # patterns must see it, so that react-native put back in SENDS_NO_CONTEXT
+    # fails test_a_page_claims_no_attribute_targeting_its_client_does_not_send
+    # on docs/sdk/react-native.md as well as here.
+    assert "react-native" not in SENDS_NO_CONTEXT
+    assert sends_context("react-native")
+    assert "sent as context on flag evaluation" in attribute_claims(
+        text("docs/sdk/react-native.md")
     )
 
 

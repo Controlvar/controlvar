@@ -299,7 +299,7 @@ by = [
 ]
 
 [[unit]]
-text = "Split URL Testing (Lambda@Edge)"
+text = "Split URL Testing"
 by = ["exempt:label"]
 
 [[unit]]
@@ -307,27 +307,27 @@ text = "A split URL experiment gives each variant its own URL."
 by = ["test:modules/backend/tests/integration/api/test_split_url_api.py::TestCreateSplitUrlExperiment::test_admin_can_create_split_url_experiment"]
 
 [[unit]]
-text = "The split-URL module ships a CloudFront construct (modules/infrastructure/constructs/split_url_distribution.py) with a Lambda@Edge viewer-request router."
+text = "The API decides where each visitor goes, in the code that answers POST /api/v1/tracking/assign; whatever performs the redirect asks it and does what it is told:"
 by = [
-    "test:modules/backend/tests/unit/infrastructure/test_split_url_distribution.py::test_cloudfront_distribution_created",
-    "test:modules/backend/tests/unit/infrastructure/test_split_url_distribution.py::test_lambda_edge_attached_to_viewer_request",
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_variant_seen_is_the_variant_counted",
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_contract.py::test_the_route_resolves_every_dependency_tracking_assign_declares",
 ]
 
 [[unit]]
-text = "No stack uses it: infrastructure/cdk/app.py creates no CloudFront distribution, so a deployment has it only if you add it to a stack yourself."
-by = ["test:infrastructure/tests/test_front_door_cdk.py::test_no_stack_creates_a_waf_cloudfront_or_api_gateway"]
+text = "On AWS, the split-URL module's CloudFront edge router (beta) can do the asking: a CloudFront distribution in front of the site, with a Lambda@Edge function at viewer request and viewer response that follows the same rules as any server or edge."
+by = [
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_edge_app_runs_the_router_at_both_viewer_events",
+    "test:modules/backend/tests/integration/split_url/test_split_url_router_e2e.py::test_a_split_url_experiment_splits_its_visitors_through_the_router",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_the_routers_rules_are_the_ones_the_api_and_the_reference_use",
+]
 
 [[unit]]
-text = "The router (modules/lambda/split_url_router/handler.py):"
-by = ["exempt:navigation"]
-
-[[unit]]
-text = "The construct does not set X-Split-URL-Config, so how the configuration reaches the router is left to you."
-by = ["test:modules/backend/tests/unit/test_front_door_module_facts.py::test_the_split_url_construct_sets_no_router_configuration"]
-
-[[unit]]
-text = "Lambda@Edge functions must be deployed in us-east-1."
-by = ["exempt:third-party"]
+text = "It is a CDK app of its own (modules/infrastructure/split_url_edge/), in us-east-1, which nothing deploys but you: infrastructure/cdk/app.py creates no CloudFront distribution."
+by = [
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_edge_app_is_one_stack_in_us_east_1",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_nothing_deploys_the_edge_app",
+    "test:infrastructure/tests/test_front_door_cdk.py::test_no_stack_creates_a_waf_cloudfront_or_api_gateway",
+]
 
 [[unit]]
 text = "See Split URL testing."
@@ -476,10 +476,10 @@ text = "No stack creates CloudFront."
 by = ["test:infrastructure/tests/test_front_door_cdk.py::test_no_stack_creates_a_waf_cloudfront_or_api_gateway"]
 
 [[unit]]
-text = "The split-URL module's CloudFront construct exists but app.py does not use it."
+text = "The split URL edge router is a CDK app of its own, which app.py does not include."
 by = [
     "test:infrastructure/tests/test_front_door_cdk.py::test_no_stack_creates_a_waf_cloudfront_or_api_gateway",
-    "test:modules/backend/tests/unit/infrastructure/test_split_url_distribution.py::test_cloudfront_distribution_created",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_constructs_only_referrer_is_the_edge_app",
 ]
 
 [[unit]]

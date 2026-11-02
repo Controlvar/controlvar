@@ -104,7 +104,8 @@ def test_a_manual_advance_does_not_wait_for_min_stage_duration(trigger):
     flag = SimpleNamespace(rollout_percentage=canary.target_percentage, updated_at=None)
     session = _Session(
         {
-            RolloutStage: [[canary], [nxt]],
+            # The stage by id, then every stage of the schedule.
+            RolloutStage: [[canary], [canary, nxt]],
             RolloutSchedule: [[schedule], [schedule]],
             FeatureFlag: [[flag]],
         }

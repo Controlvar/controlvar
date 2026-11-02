@@ -185,6 +185,8 @@ routes = [
   "/api/v1/tracking/errors/batch",
   "/api/v1/tracking/evaluations",
   "/api/v1/tracking/events",
+  "/api/v1/tracking/split-url/assign",
+  "/api/v1/tracking/split-url/routes",
   "/api/v1/tracking/track",
   "/api/v1/users/",
   "/api/v1/users/me",

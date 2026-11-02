@@ -11,16 +11,29 @@
  * these — the stub throws rather than pretending to have answered.
  */
 import { apiFetch } from '@/services/api';
-import { CustomRole } from '@/types/admin';
+import { CustomRole, PermissionGrant } from '@/types/admin';
 
+/** `CustomRoleCreate`: permissions are `{resource, actions}` objects, never strings. */
 export interface CreateRoleRequest {
   name: string;
-  description: string;
-  permissions: string[];
+  description?: string | null;
+  permissions: PermissionGrant[];
 }
 
+/** `CustomRoleUpdate`: the role is named in the path, so the body has no name. */
+export interface UpdateRoleRequest {
+  description?: string | null;
+  permissions?: PermissionGrant[] | null;
+}
+
+/** `EffectivePermissionsResponse`: `permissions` maps a resource to its actions. */
 export interface UserPermissionsResponse {
-  permissions: string[];
+  user_id: string;
+  username: string;
+  base_role: string;
+  custom_roles: string[];
+  permissions: Record<string, string[]>;
+  is_superuser: boolean;
 }
 
 export const RbacService = {
@@ -32,7 +45,7 @@ export const RbacService = {
     return apiFetch<CustomRole>('/api/v1/rbac/roles', { method: 'POST', json: data });
   },
 
-  async updateRole(name: string, data: Partial<CustomRole>): Promise<CustomRole> {
+  async updateRole(name: string, data: UpdateRoleRequest): Promise<CustomRole> {
     return apiFetch<CustomRole>(`/api/v1/rbac/roles/${name}`, { method: 'PUT', json: data });
   },
 

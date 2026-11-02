@@ -239,10 +239,56 @@ text = "Split URL testing"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Traffic split between URLs at the edge | The split_url module's edge router has no configuration source in this release, so it splits no traffic (#393)."
+text = "Traffic split between URLs with nothing to install | Your server or edge must ask the API where to send each visitor and redirect them; a site with no server or edge of its own in front of its pages cannot split, because nothing redirects in the browser. On AWS, the CloudFront edge router (beta) is one you deploy yourself."
 by = [
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerPassThrough::test_no_config_header_passes_through",
-    "test:modules/backend/tests/unit/test_front_door_module_facts.py::test_the_split_url_construct_sets_no_router_configuration",
+    "test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_the_middleware_redirects_without_calling_the_page",
+    "test:modules/backend/tests/integration/split_url/test_split_url_router_e2e.py::test_a_split_url_experiment_splits_its_visitors_through_the_router",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_nothing_deploys_the_edge_app",
+]
+
+[[unit]]
+text = "Split URL experiments on the AWS installer | It installs the core profile, which does not run them."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_full_profile_stops_before_the_deploy",
+    "test:backend/tests/unit/core/test_optional_modules.py::TestSplitUrlRefusedWithoutRouting::test_create_split_url_experiment_returns_501",
+]
+
+[[unit]]
+text = "Each visitor counted once, whatever their browser does | A browser that blocks cookies is a new visitor on each visit, with a new assignment."
+by = ["test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_the_cookie_is_exact"]
+
+[[unit]]
+text = "No limit on how many visitors a site splits | A per-address rate limit, below."
+by = ["test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitConfig::test_the_split_url_routes_have_tracking_assigns_limit"]
+
+[[unit]]
+text = "Both split URL routes have the limit POST /api/v1/tracking/assign has: 6,000 requests a minute per client address, per route."
+by = ["test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitConfig::test_the_split_url_routes_have_tracking_assigns_limit"]
+
+[[unit]]
+text = "SDK_RATE_LIMIT_PER_MINUTE raises it, for every SDK route and every address."
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitConfig::test_the_split_url_routes_have_tracking_assigns_limit",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitConfig::test_sdk_limit_is_configurable",
+]
+
+[[unit]]
+text = "Over the limit the API answers 429, and the reference integration serves the page with X-Split-URL: failed and logs split_url_failed status=429."
+by = ["test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_a_failure_serves_the_page_and_logs_its_status"]
+
+[[unit]]
+text = "The CloudFront edge router does the same: it serves the page with X-Split-URL: failed (a header that rests on an AWS behaviour not yet verified, see AWS integration), and its log line carries \"status\": \"429\"."
+by = [
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_failure_serves_the_page_and_logs_its_status",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_the_cookie_does_not_rest_on_the_internal_header",
+]
+
+[[unit]]
+text = "Above the limit, a returning visitor whose assignment is a treatment is served the control page while their conversions still count for the treatment; a site with more than about 100 entry-page views a second is in that range."
+by = [
+    "test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_a_failure_serves_the_page_and_logs_its_status",
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_variant_seen_is_the_variant_counted",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitConfig::test_the_split_url_routes_have_tracking_assigns_limit",
 ]
 
 [[unit]]
@@ -250,13 +296,15 @@ text = "SDKs"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Flag targeting from a native mobile SDK | iOS, Android, React Native and Flutter send only the user id on flag evaluation, so rules on attributes do not match (#438). Experiment assignment sends them."
+text = "Flag targeting from a native mobile SDK | iOS, Android and Flutter send only the user id on flag evaluation, so rules on attributes do not match (#438). Experiment assignment sends them. React Native sends them on flag evaluation too."
 by = [
     "test:backend/tests/unit/api/test_documented_limits.py::test_the_native_sdks_send_no_context_on_flag_evaluation",
     "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_no_context_keeps_existing_behaviour",
     "test:sdk/ios/Tests/ControlvarTests/ExperimentationClientTests.swift::testGetAssignment_postsExperimentKeyUserIdAndContext",
     "test:sdk/android/sdk/src/test/kotlin/ExperimentationClientTest.kt::getAssignment sends POST tracking assign with experiment_key, user_id and context",
     "test:sdk/react-native/__tests__/client.test.ts::sends the user attributes as `context`",
+    "test:sdk/react-native/__tests__/hooks.test.tsx::regression #1520: useFlag puts the attributes on the wire",
+    "test:sdk/react-native/__tests__/client.test.ts::getAllFlags sends ?context= and nothing for {} or undefined",
     "test:sdk/flutter/test/client_test.dart::POSTs experiment_key, user_id and context to /api/v1/tracking/assign",
 ]
 

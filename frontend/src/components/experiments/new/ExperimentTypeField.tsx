@@ -46,7 +46,7 @@ export function ExperimentTypeField({ value, dispatch }: ExperimentTypeFieldProp
           bandit
         </a>{' '}
         experiments need an optimization algorithm — neither can be set up from this form
-        yet, so create them through the API or an SDK.
+        yet, so create them through the API.
       </p>
     </div>
   );

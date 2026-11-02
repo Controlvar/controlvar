@@ -29,8 +29,6 @@ WHERE BUCKETING HAPPENS, and with what:
           MD5("{user}"), full digest, % 100
       services/llm_experiment_service
           MD5("{experiment_id}:{user}"), full digest, % 10000
-      modules: split_url_service
-          MD5("{user}:{experiment_key}"), first 8 hex digits / 0xFFFFFFFF
       backend/lambda/shared/consistent_hash.py
           its own salted hasher ("{key}_traffic", "{key}_variant")
 

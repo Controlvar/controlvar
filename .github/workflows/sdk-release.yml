@@ -61,7 +61,9 @@
 # asked for after the tests and checks have passed. An npm prerelease (a
 # version with a `-`, such as 1.0.0-rc.1) publishes under the `next` dist-tag;
 # a stable version gets `latest`. backend/tests/smoke/test_sdk_release_wiring.py,
-# test_sdk_release_maven.py and test_sdk_release_nuget.py pin this shape.
+# test_sdk_release_maven.py and test_sdk_release_nuget.py pin this shape, and
+# test_sdk_release_readme_gate.py the README check in npm-build, pypi-build
+# and nuget-build.
 name: SDK Release
 
 on:
@@ -286,6 +288,16 @@ jobs:
           print(f"{len(wheels)} wheel(s) at {expected}")
           PY
 
+      # The README PyPI will show for this version, for good: the long
+      # description in each file's metadata, held to the SDK's rule set,
+      # STRICT for python and I-README for openfeature-python, as npm-build
+      # does (scripts/check_packaged_readme.py). `dist/*` with nothing in it
+      # names no file, which the gate refuses.
+      - name: Check the packed README
+        env:
+          SDK: ${{ needs.resolve.outputs.sdk }}
+        run: python3 scripts/check_packaged_readme.py --sdk "$SDK" "sdk/$SDK/dist/"*
+
       # One line per file, `<sha256>  <name>`, sorted by name; the digest is
       # the sha256 of that listing. The publish job recomputes it over what it
       # downloaded and compares it with this job's output.
@@ -412,9 +424,9 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # npm: sdk/js, sdk/edge, sdk/openfeature, sdk/react, sdk/react-native, and
-  # sdk/mcp (the MCP server, with five steps of its own, each `if: sdk ==
-  # 'mcp'`: the audit, the shrinkwrap, the packed shrinkwrap, the packed
-  # README, and the installed server answering `initialize`)
+  # sdk/mcp (the MCP server, with four steps of its own, each `if: sdk ==
+  # 'mcp'`: the audit, the shrinkwrap, the packed shrinkwrap, and the
+  # installed server answering `initialize`)
   #
   # Two jobs, the same shape as PyPI. `npm-build` installs, tests, pins,
   # packs and checks the tarball, and cannot request an OIDC token: its
@@ -596,12 +608,14 @@ jobs:
               sys.exit(1)
           PY
 
-      # The README npm will show for this version of the MCP server, for good:
-      # no status, no install command, no own version, no relative link, and
-      # an Install section that links its page (DECISIONS T230). Read from the
-      # packed bytes. Only sdk/mcp: the gate refuses an SDK it has no rules for.
+      # The README npm will show for this version, for good, read from the
+      # packed bytes and held to the SDK's rule set: STRICT for js (present,
+      # absolute links, not "not yet published"), I-README for react,
+      # openfeature and mcp (no status, no install command, no own version,
+      # and an Install section that links its page; DECISIONS T230). An npm
+      # SDK in neither set is refused here, so it cannot be released until it
+      # is classified (scripts/check_packaged_readme.py).
       - name: Check the packed README
-        if: needs.resolve.outputs.sdk == 'mcp'
         env:
           SDK: ${{ needs.resolve.outputs.sdk }}
           TGZ: ${{ steps.pack.outputs.tgz }}

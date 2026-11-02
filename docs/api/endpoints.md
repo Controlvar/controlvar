@@ -2257,7 +2257,7 @@ variant, and the decision.
 
 See [Split URL API Reference](split-url.md) for full documentation.
 
-Split URL experiments use `experiment_type: split_url` and carry a `split_url_config` in the request body. How visitors are meant to be redirected, and what does not work in this release, is on the [Split URL API Reference](split-url.md).
+Split URL experiments use `experiment_type: split_url` and carry a `split_url_config` in the request body. Your server or edge asks the API where to send each visitor, and redirects them: how to set it up is on the [Split URL API Reference](split-url.md).
 
 **Experiment management** uses the existing experiment CRUD endpoints with `experiment_type=split_url`:
 
@@ -2267,14 +2267,17 @@ PUT  /api/v1/experiments/{id}          — Update split URL config
 GET  /api/v1/experiments/{id}          — Returns split_url_config in response
 ```
 
-**Split URL-specific endpoint**:
+**Split URL-specific endpoints**:
 
 ```text
-GET /api/v1/experiments/{experiment_id}/split-url/preview  — Preview variant assignment for a user (dev/QA)
+GET  /api/v1/tracking/split-url/routes                     — Every active split URL experiment's control host and path (API key, beta)
+POST /api/v1/tracking/split-url/assign                     — Where to send one visitor: redirect, with the variant's URL, or serve (API key, beta)
+GET  /api/v1/experiments/{experiment_id}/split-url/preview — The URL a visitor id gets now, recording nothing (dev/QA)
 ```
 
-Query parameters for preview: `user_id` (required). The preview hashes `{user_id}:{experiment_id}`;
-it does not predict the edge router.
+Query parameters for preview: `user_id` (required). The preview answers the visitor's stored
+variant, or the variant a new visitor with that id would get, as the assign route does,
+without recording anything.
 
 **`SplitUrlConfig` schema** (`split_url_config` field):
 
@@ -2291,4 +2294,4 @@ At least two URL variants, with `traffic_allocation` values (0-100) that sum to 
 In a `split_url` experiment the URL variants name the experiment's variants one to one,
 with the same allocations, and each `url` is an absolute `http://` or `https://` URL; see
 [Validation Rules](split-url.md#validation-rules).
-`cookie_name` and `cookie_ttl_days` (default 30) are optional.
+`cookie_name` and `cookie_ttl_days` (default 30) are optional, stored, and read by nothing.

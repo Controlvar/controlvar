@@ -1046,15 +1046,13 @@ by = [
 ]
 
 [[unit]]
-text = "No stack creates a distribution."
+text = "No stack creates a distribution unless you deploy the split URL edge router, which is a CDK app of its own (modules/infrastructure/split_url_edge/) that app.py does not include; see AWS integration."
 by = [
     "test:infrastructure/tests/test_api_task_and_data_resources.py::test_no_cloudfront_distribution_and_no_bucket_for_the_dashboard",
     "test:infrastructure/tests/test_stack_graph.py::test_the_split_url_construct_ships_and_nothing_builds_it",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_constructs_only_referrer_is_the_edge_app",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_nothing_deploys_the_edge_app",
 ]
-
-[[unit]]
-text = "The split-URL module ships a construct for one (modules/infrastructure/constructs/split_url_distribution.py), but app.py does not use it; see Split URL testing."
-by = ["test:infrastructure/tests/test_stack_graph.py::test_the_split_url_construct_ships_and_nothing_builds_it"]
 
 [[unit]]
 text = "Blue/Green Deployment for Zero-Downtime Updates"
