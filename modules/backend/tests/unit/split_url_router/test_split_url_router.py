@@ -34,6 +34,7 @@ import json
 import logging
 import random
 import socket
+import ssl
 import threading
 import time
 import uuid
@@ -939,15 +940,20 @@ class _SlowApi:
     """An API on 127.0.0.1 that sends its slow answer in ``pieces`` parts,
     ``gap`` seconds apart: each part comes well within the time any one
     socket operation may wait, so only a deadline for the whole call stops
-    the caller before the answer is complete. A GET gets ``fast`` when it is
-    given: its head, then its body 0.05 s later, so the body is read after
-    http.client has seen the head. ``sent`` counts the parts of the slow
-    answer that had gone out; ``connections`` the connections accepted."""
+    the caller before the answer is complete. The first ``lead`` bytes of the
+    slow answer go at once (its head, to drip only the body); the rest is
+    the parts. A GET gets ``fast`` when it is given: its head, then its body
+    0.05 s later, so the body is read after http.client has seen the head.
+    ``sent`` counts the parts of the slow answer that had gone out;
+    ``connections`` the connections accepted."""
 
-    def __init__(self, slow: bytes, fast: Optional[bytes] = None, gap: float = 0.1):
-        self.slow, self.fast, self.gap = slow, fast, gap
-        self.size = -(-len(slow) // 40)
-        self.pieces = len(range(0, len(slow), self.size))
+    def __init__(
+        self, slow: bytes, fast: Optional[bytes] = None, gap: float = 0.1, lead: int = 0
+    ):
+        self.fast, self.gap = fast, gap
+        self.lead, self.slow = slow[:lead], slow[lead:]
+        self.size = -(-len(self.slow) // 40)
+        self.pieces = len(range(0, len(self.slow), self.size))
         self.sent = self.connections = 0
         self.stopped = False
         self.listener = _listener()
@@ -978,6 +984,8 @@ class _SlowApi:
                         time.sleep(0.05)
                         conn.sendall(body)
                         continue
+                    if self.lead:
+                        conn.sendall(self.lead)
                     for start in range(0, len(self.slow), self.size):
                         time.sleep(self.gap)
                         conn.sendall(self.slow[start : start + self.size])
@@ -1004,6 +1012,49 @@ def test_a_slow_answer_ends_the_call_at_its_deadline():
             router_module.http_call(
                 "POST",
                 f"http://127.0.0.1:{api.port}/api/v1/tracking/split-url/assign",
+                {"X-API-Key": "key-1", "Content-Type": "application/json"},
+                b"{}",
+                0.3,
+            )
+        sent = api.sent
+    finally:
+        api.close()
+    assert sent < api.pieces
+
+
+class _UnwrappedTls:
+    """Stands in for the TLS context: hands the socket back as it is, so the
+    https branch of http_call (the only scheme the construct accepts) runs
+    against the plain local API with everything after the handshake as in
+    production. HTTPSConnection reads ``verify_mode`` and ``check_hostname``
+    from the context it is given; the values are a verifying context's."""
+
+    verify_mode = ssl.CERT_REQUIRED
+    check_hostname = True
+
+    def wrap_socket(self, sock, server_hostname=None):
+        return sock
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("scheme", ["http", "https"])
+@pytest.mark.parametrize("dripped", ["the-whole-answer", "the-body"])
+def test_the_deadline_covers_the_body_and_the_https_branch(
+    scheme, dripped, monkeypatch
+):
+    """The deadline holds for every receive, the body's included, and on the
+    https branch too: an API that sends its head at once and then drips the
+    body is cut off with TimeoutError and part of the body unsent, over http
+    and https alike."""
+    monkeypatch.setattr(router_module, "_tls_context", lambda: _UnwrappedTls())
+    answer = _http_answer(SERVE)
+    lead = answer.index(b"\r\n\r\n") + 4 if dripped == "the-body" else 0
+    api = _SlowApi(answer, lead=lead)
+    try:
+        with pytest.raises(TimeoutError):
+            router_module.http_call(
+                "POST",
+                f"{scheme}://127.0.0.1:{api.port}/api/v1/tracking/split-url/assign",
                 {"X-API-Key": "key-1", "Content-Type": "application/json"},
                 b"{}",
                 0.3,

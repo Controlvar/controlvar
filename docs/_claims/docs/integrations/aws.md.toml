@@ -436,6 +436,7 @@ text = "The router gives the API 1 second to send the routes table and 1.5 secon
 by = [
     "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_the_timeouts_are_one_and_a_half_seconds",
     "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_slow_answer_ends_the_call_at_its_deadline",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_the_deadline_covers_the_body_and_the_https_branch",
     "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_slow_api_is_a_timeout_and_the_page_is_served",
 ]
 
