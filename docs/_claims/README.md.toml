@@ -638,11 +638,11 @@ by = [
 ]
 
 [[unit]]
-text = "split_url | Server-side URL splitting at the edge. The edge router has no configuration source in this release, so it does not split traffic yet; experiments, their URL configuration and the preview work (#393)"
+text = "split_url | Split URL experiments: each variant is its own URL. Your server or edge asks the API where to send each visitor; the CloudFront edge router does not split traffic yet (#393). The AWS installer installs the core profile, so it does not include them"
 by = [
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerPassThrough::test_no_config_header_passes_through",
-    "test:modules/backend/tests/unit/test_front_door_module_facts.py::test_the_split_url_construct_sets_no_router_configuration",
-    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlPreview::test_admin_can_preview_split_url_assignment",
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_a_split_url_experiment_splits_its_visitors",
+    "test:modules/backend/tests/unit/test_split_url_edge_wiring.py::test_the_router_redirects_only_on_the_header",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_full_profile_stops_before_the_deploy",
 ]
 
 [[unit]]

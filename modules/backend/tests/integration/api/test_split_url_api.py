@@ -11,24 +11,15 @@ Schema validation tests:
   - Fewer than 2 URL variants is rejected (422/400)
   - Traffic allocations not summing to 100 is rejected (422/400)
 
-NOTE: The `_experiment_to_dict()` method in ExperimentService does not include
-`split_url_config` in the dict it returns.  This means:
-1. GET /experiments/{id} response always has split_url_config=null.
-2. The preview endpoint calls `get_experiment_by_id()` which calls
-   `_experiment_to_dict()`, so it always sees split_url_config=None and
-   raises 400 "split_url_config is not set".
-
-To work around (2), the preview tests mock `ExperimentService.get_experiment_by_id`
-to return a dict that already includes a populated `split_url_config`.  This
-lets us test the RBAC enforcement and the hash-assignment logic without
-depending on the service bug being fixed.
+The preview reads the experiment row itself; its answers against the
+assignment route, on 1000 visitor ids, are in
+``modules/backend/tests/integration/split_url/``.
 
 All tests use the conftest.py role-specific client fixtures.
 """
 
 import uuid
 from typing import Any, Dict, List
-from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -384,75 +375,44 @@ _PREVIEW_CONTROL_URL = "https://preview.example.com/control"
 _PREVIEW_VARIANT_URL = "https://preview.example.com/variant-b"
 
 
-def _make_mock_experiment_dict(exp_id: str, split_url_config: Dict) -> Dict:
-    """Return a fake ExperimentService.get_experiment_by_id() dict with split_url_config."""
-    return {
-        "id": exp_id,
-        "name": "Mock Split URL Experiment",
-        "description": "Mock",
-        "hypothesis": "Mock",
-        "status": "draft",
-        "experiment_type": "split_url",
-        "targeting_rules": None,
-        "owner_id": "00000000-0000-0000-0000-000000000001",
-        "created_at": "2026-01-01T00:00:00+00:00",
-        "updated_at": "2026-01-01T00:00:00+00:00",
-        "start_date": None,
-        "end_date": None,
-        "tags": [],
-        "variants": [],
-        "metrics": [],
-        "split_url_config": split_url_config,
-    }
-
-
-def _default_split_url_config(
+def _preview_url_variants(
     control_url: str = _PREVIEW_CONTROL_URL,
     variant_url: str = _PREVIEW_VARIANT_URL,
-) -> Dict:
-    """Return a valid split_url_config dict for use in mocked experiments."""
-    return {
-        "variants": [
-            {"name": "Control", "url": control_url, "traffic_allocation": 50.0},
-            {"name": "Variant B", "url": variant_url, "traffic_allocation": 50.0},
-        ],
-        "cookie_name": "split_test_cookie",
-        "cookie_ttl_days": 30,
-    }
+) -> List[Dict]:
+    """The URL variants of a previewed experiment."""
+    return [
+        {"name": "Control", "url": control_url, "traffic_allocation": 50.0},
+        {"name": "Variant B", "url": variant_url, "traffic_allocation": 50.0},
+    ]
+
+
+def _previewable(client: TestClient, **kwargs) -> str:
+    """Create a split URL experiment through the API; its id."""
+    return _create_split_url_experiment(
+        client,
+        f"Preview {uuid.uuid4().hex[:6]}",
+        url_variants=_preview_url_variants(**kwargs),
+    )["id"]
 
 
 # ---------------------------------------------------------------------------
 # GET /api/v1/experiments/{id}/split-url/preview
 # ---------------------------------------------------------------------------
 
-MOCK_EXP_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
-
-_MOCK_PATCH_PATH = (
-    "backend.app.services.experiment_service.ExperimentService.get_experiment_by_id"
-)
-
 
 @pytest.mark.integration
 @pytest.mark.requires_db
 class TestSplitUrlPreview:
-    """Tests for GET /api/v1/experiments/{id}/split-url/preview.
-
-    The preview endpoint reads the experiment via ExperimentService.get_experiment_by_id(),
-    which calls _experiment_to_dict() — a method that does NOT include split_url_config
-    in its output.  To isolate and test the preview endpoint's logic (RBAC enforcement,
-    hash assignment, response structure) we patch get_experiment_by_id to return a dict
-    that already has split_url_config populated.
-    """
+    """Tests for GET /api/v1/experiments/{id}/split-url/preview, on
+    experiments created through the API."""
 
     def test_admin_can_preview_split_url_assignment(self, admin_client):
         """Admin can call the preview endpoint and get a URL assignment."""
-        mock_exp = _make_mock_experiment_dict(MOCK_EXP_ID, _default_split_url_config())
-
-        with patch(_MOCK_PATCH_PATH, return_value=mock_exp):
-            response = admin_client.get(
-                f"/api/v1/experiments/{MOCK_EXP_ID}/split-url/preview",
-                params={"user_id": "alice"},
-            )
+        exp_id = _previewable(admin_client)
+        response = admin_client.get(
+            f"/api/v1/experiments/{exp_id}/split-url/preview",
+            params={"user_id": "alice"},
+        )
 
         assert response.status_code == 200, response.text
         data = response.json()
@@ -464,35 +424,19 @@ class TestSplitUrlPreview:
 
     def test_developer_can_preview_split_url_assignment(self, developer_client):
         """Developer role can access the split URL preview endpoint."""
-        mock_exp = _make_mock_experiment_dict(MOCK_EXP_ID, _default_split_url_config())
-
-        with patch(_MOCK_PATCH_PATH, return_value=mock_exp):
-            response = developer_client.get(
-                f"/api/v1/experiments/{MOCK_EXP_ID}/split-url/preview",
-                params={"user_id": "bob"},
-            )
+        exp_id = _previewable(developer_client)
+        response = developer_client.get(
+            f"/api/v1/experiments/{exp_id}/split-url/preview",
+            params={"user_id": "bob"},
+        )
 
         assert response.status_code == 200, response.text
         assert response.json()["user_id"] == "bob"
 
-    def test_preview_assignment_is_deterministic(self, admin_client):
-        """Same user_id always gets the same URL variant (deterministic MD5 hash)."""
-        mock_exp = _make_mock_experiment_dict(MOCK_EXP_ID, _default_split_url_config())
-
-        with patch(_MOCK_PATCH_PATH, return_value=mock_exp):
-            r1 = admin_client.get(
-                f"/api/v1/experiments/{MOCK_EXP_ID}/split-url/preview",
-                params={"user_id": "deterministic_user"},
-            )
-            r2 = admin_client.get(
-                f"/api/v1/experiments/{MOCK_EXP_ID}/split-url/preview",
-                params={"user_id": "deterministic_user"},
-            )
-
-        assert r1.status_code == 200, r1.text
-        assert r2.status_code == 200, r2.text
-        assert r1.json()["variant_name"] == r2.json()["variant_name"]
-        assert r1.json()["url"] == r2.json()["url"]
+    # test_preview_assignment_is_deterministic (an MD5 hash of the user id
+    # and the experiment id, which nothing else used) is replaced by
+    # split_url/test_split_url_assign_e2e.py::
+    # test_the_preview_agrees_with_the_route_and_records_nothing (#393).
 
     def test_preview_for_regular_experiment_returns_400(self, admin_client):
         """Preview endpoint returns 400 for a non-split_url experiment."""
@@ -527,31 +471,26 @@ class TestSplitUrlPreview:
 
     def test_preview_returns_traffic_allocation(self, admin_client):
         """Preview response includes traffic_allocation for the assigned variant."""
-        mock_exp = _make_mock_experiment_dict(MOCK_EXP_ID, _default_split_url_config())
-
-        with patch(_MOCK_PATCH_PATH, return_value=mock_exp):
-            response = admin_client.get(
-                f"/api/v1/experiments/{MOCK_EXP_ID}/split-url/preview",
-                params={"user_id": "charlie"},
-            )
+        exp_id = _previewable(admin_client)
+        response = admin_client.get(
+            f"/api/v1/experiments/{exp_id}/split-url/preview",
+            params={"user_id": "charlie"},
+        )
 
         assert response.status_code == 200, response.text
         data = response.json()
-        assert "traffic_allocation" in data
-        assert isinstance(data["traffic_allocation"], (int, float))
+        assert data["traffic_allocation"] == 50.0
 
     def test_preview_nonexistent_experiment_returns_404(self, admin_client):
         """Preview for a non-existent experiment returns 404."""
-        fake_id = "00000000-0000-0000-0000-000000000099"
-
-        # When get_experiment_by_id returns None, the endpoint raises 404.
-        with patch(_MOCK_PATCH_PATH, return_value=None):
-            response = admin_client.get(
-                f"/api/v1/experiments/{fake_id}/split-url/preview",
-                params={"user_id": "alice"},
-            )
+        fake_id = str(uuid.uuid4())
+        response = admin_client.get(
+            f"/api/v1/experiments/{fake_id}/split-url/preview",
+            params={"user_id": "alice"},
+        )
 
         assert response.status_code == 404, response.text
+        assert response.json()["detail"] == "Experiment not found"
 
     def test_analyst_cannot_access_preview(self, analyst_client):
         """Analyst role is forbidden from the split URL preview endpoint.
@@ -580,16 +519,13 @@ class TestSplitUrlPreview:
         """URL in preview response matches one of the configured variant URLs."""
         control_url = "https://match.example.com/control"
         variant_url = "https://match.example.com/variant-b"
-        mock_exp = _make_mock_experiment_dict(
-            MOCK_EXP_ID,
-            _default_split_url_config(control_url=control_url, variant_url=variant_url),
+        exp_id = _previewable(
+            admin_client, control_url=control_url, variant_url=variant_url
         )
-
-        with patch(_MOCK_PATCH_PATH, return_value=mock_exp):
-            response = admin_client.get(
-                f"/api/v1/experiments/{MOCK_EXP_ID}/split-url/preview",
-                params={"user_id": "url_check_user"},
-            )
+        response = admin_client.get(
+            f"/api/v1/experiments/{exp_id}/split-url/preview",
+            params={"user_id": "url_check_user"},
+        )
 
         assert response.status_code == 200, response.text
         data = response.json()

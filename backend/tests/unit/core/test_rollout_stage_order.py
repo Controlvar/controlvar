@@ -210,7 +210,9 @@ def test_advancing_a_manual_stage_in_progress_starts_the_next_stage_at_once(
     flag = SimpleNamespace(rollout_percentage=canary.target_percentage, updated_at=None)
     session = _Session(
         {
-            RolloutStage: [[canary], [nxt]],
+            # The stage by id, then every stage of the schedule (read under
+            # the locks; a stage missing from it was deleted meanwhile).
+            RolloutStage: [[canary], [canary, nxt]],
             RolloutSchedule: [[schedule], [schedule]],
             FeatureFlag: [[flag]],
         }

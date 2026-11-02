@@ -865,6 +865,21 @@ class TestRateLimitConfig:
     def test_sdk_limit_is_configurable(self):
         assert resolve_rate_limit("/api/v1/tracking/batch", 42) == (42, 60)
 
+    def test_the_split_url_routes_have_tracking_assigns_limit(self):
+        """#393: a server or edge asking where to send each visitor gets the
+        SDK limit /tracking/assign has, per address and per path, and
+        SDK_RATE_LIMIT_PER_MINUTE raises it."""
+        for path in (
+            "/api/v1/tracking/split-url/routes",
+            "/api/v1/tracking/split-url/assign",
+        ):
+            assert resolve_rate_limit(path) == resolve_rate_limit(
+                "/api/v1/tracking/assign"
+            )
+            assert resolve_rate_limit(path) == (DEFAULT_SDK_RATE_LIMIT_PER_MINUTE, 60)
+            assert resolve_rate_limit(path, 42) == (42, 60)
+            assert rate_limit_key("10.0.0.1", path) == f"10.0.0.1:{path}"
+
     def test_the_sdk_paths_default_to_6000_a_minute(self):
         from backend.app.core.config import Settings
 

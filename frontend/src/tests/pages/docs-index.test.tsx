@@ -46,7 +46,7 @@ const retired: Array<[string[], string]> = [
   [['PSR-', '4'], 'the PHP page says nothing of PSR-4'],
   [['LRU', '\\s+cache'], 'the .NET page describes no LRU cache'],
   [['DynamoDB', '\\s+and\\s+Lambda'], 'no Lambda function serves requests or processes events'],
-  [['send each variant', '\\s+to a different URL'], 'the edge router does not split traffic yet'],
+  [['send each variant', '\\s+to a different URL'], 'Controlvar sends no visitor anywhere: your server or edge redirects them'],
   [['record of', '\\s+feature-flag status'], 'the audit log records more than flag status changes'],
   [['JWT', '\\s+tokens'], 'the authentication page names bearer tokens'],
   [['Complete', '\\s+endpoint'], 'the endpoint page does not list every endpoint'],

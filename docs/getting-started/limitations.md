@@ -57,7 +57,18 @@ the row links it.
 
 | What you might expect | What happens instead |
 |---|---|
-| Traffic split between URLs at the edge | The `split_url` module's edge router has no configuration source in this release, so it splits no traffic ([#393](https://github.com/Controlvar/controlvar/issues/393)). |
+| Traffic split between URLs with nothing to install | Your server or edge must ask the API where to send each visitor and redirect them; a site with no server or edge of its own in front of its pages cannot split, because nothing redirects in the browser. The CloudFront edge router does not split traffic yet ([#393](https://github.com/Controlvar/controlvar/issues/393)). |
+| Split URL experiments on the AWS installer | It installs the core profile, which does not run them. |
+| Each visitor counted once, whatever their browser does | A browser that blocks cookies is a new visitor on each visit, with a new assignment. |
+| No limit on how many visitors a site splits | A per-address rate limit, below. |
+
+Both split URL routes have the limit `POST /api/v1/tracking/assign` has: 6,000 requests a
+minute per client address, per route. `SDK_RATE_LIMIT_PER_MINUTE` raises it, for every SDK
+route and every address. Over the limit the API answers `429`, and the reference integration
+serves the page with `X-Split-URL: failed` and logs `split_url_failed status=429`. Above the
+limit, a returning visitor whose assignment is a treatment is served the control page while
+their conversions still count for the treatment; a site with more than about 100 entry-page
+views a second is in that range.
 
 ## SDKs
 

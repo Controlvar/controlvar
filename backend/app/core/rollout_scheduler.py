@@ -265,8 +265,15 @@ class RolloutScheduler:
         """
         notifications: List[Dict[str, Any]] = []
 
+        # Lock the flag, then the schedule, before reading the stages, and
+        # read them from the database (``populate_existing``): a stage added,
+        # moved or advanced while this tick waited for the lock is seen, so
+        # the tick never starts a stage from a stale list (#1536). The API's
+        # changes take the same locks in the same order.
+        self._lock_active_schedule(db, schedule)
         current_active_stage = (
             db.query(RolloutStage)
+            .populate_existing()
             .filter(
                 and_(
                     RolloutStage.rollout_schedule_id == schedule.id,
@@ -278,6 +285,7 @@ class RolloutScheduler:
 
         next_pending_stages = (
             db.query(RolloutStage)
+            .populate_existing()
             .filter(
                 and_(
                     RolloutStage.rollout_schedule_id == schedule.id,
