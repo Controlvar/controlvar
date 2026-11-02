@@ -118,10 +118,22 @@ class FakeStoryClient:
         return next(s for s in self.schedule["stages"] if s["id"] == stage_id)
 
     def update_stage(self, stage_id, body):
+        """Mirrors RolloutService.update_rollout_stage's stage rules (#1460): a completed or
+        failed stage takes no change, and one in progress keeps its target and order but
+        still takes a new trigger (the story's ensure_manual)."""
         self.calls.append(("update_stage", stage_id))
         self.stage_updates.append((stage_id, dict(body)))
-        self._stage(stage_id).update(body)
-        return copy.deepcopy(self._stage(stage_id))
+        stage = self._stage(stage_id)
+        if body and stage["status"] in ("completed", "failed"):
+            raise story.ApiError(409, f"A stage that is {stage['status']} cannot be changed.")
+        if stage["status"] == "in_progress" and {"target_percentage", "stage_order"} & set(body):
+            raise story.ApiError(
+                409,
+                "target_percentage and stage_order cannot be changed on a stage that is in_progress; "
+                "its name, description, trigger_type, trigger_configuration and start_date still can.",
+            )
+        stage.update(body)
+        return copy.deepcopy(stage)
 
     def activate_schedule(self, schedule_id):
         """Mirrors RolloutService.activate_rollout_schedule: DRAFT or PAUSED -> ACTIVE."""
@@ -140,6 +152,22 @@ class FakeStoryClient:
         if self.schedule["status"] != "active":
             raise story.ApiError(400, f"Cannot advance stage for schedule in {self.schedule['status']} status")
         if stage["status"] == "pending":
+            # Stages start in stage_order, one at a time (#1460).
+            blocking = next((s for s in self.schedule["stages"] if s is not stage and s["status"] == "in_progress"), None)
+            blocking = blocking or next(
+                (
+                    s
+                    for s in sorted(self.schedule["stages"], key=lambda s: s["stage_order"])
+                    if s["stage_order"] < stage["stage_order"] and s["status"] != "completed"
+                ),
+                None,
+            )
+            if blocking is not None:
+                raise story.ApiError(
+                    409,
+                    f"Stages start in stage_order, one at a time: stage_order {blocking['stage_order']} "
+                    f"is {blocking['status']}, so this stage cannot start yet.",
+                )
             stage["status"] = "in_progress"
             self.flag["rollout_percentage"] = stage["target_percentage"]
         elif stage["status"] == "in_progress":

@@ -225,10 +225,16 @@ class RolloutScheduleCreate(RolloutScheduleBase):
         if not self.stages:
             raise ValueError("At least one stage is required")
 
-        # Check that stages have increasing percentages
-        stage_percentages = [stage.target_percentage for stage in self.stages]
+        # Check that the targets do not decrease in stage_order, whatever
+        # order the list is in: the scheduler starts stages by stage_order
+        # (#1460). A stable sort, so stages that share an order (refused
+        # below) are compared in list order.
+        stage_percentages = [
+            stage.target_percentage
+            for stage in sorted(self.stages, key=lambda stage: stage.stage_order)
+        ]
         if not all(a <= b for a, b in zip(stage_percentages, stage_percentages[1:])):
-            raise ValueError("Stage percentages must be non-decreasing")
+            raise ValueError("Stage percentages must be non-decreasing in stage_order")
 
         # Check that max stage percentage doesn't exceed the schedule max
         if max(stage_percentages) > self.max_percentage:
