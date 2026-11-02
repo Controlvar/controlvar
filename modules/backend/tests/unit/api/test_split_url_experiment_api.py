@@ -11,7 +11,9 @@ Covers:
 """
 
 import uuid
+import zlib
 from datetime import datetime
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -302,21 +304,57 @@ def mock_cache_control():
     return CacheControl(enabled=False, skip=False, redis=None)
 
 
+def _stored_row(experiment: Dict[str, Any]) -> SimpleNamespace:
+    """The experiment row the preview reads, built from a response-shaped
+    dict: one experiment variant per URL variant, the first the control."""
+    config = experiment.get("split_url_config") or {}
+    variants = [
+        SimpleNamespace(
+            id=uuid.uuid4(),
+            name=url_variant["name"],
+            is_control=index == 0,
+            traffic_allocation=url_variant["traffic_allocation"],
+        )
+        for index, url_variant in enumerate(config.get("variants", []))
+    ]
+    return SimpleNamespace(
+        id=uuid.UUID(str(experiment["id"])),
+        key=None,
+        experiment_type=experiment["experiment_type"],
+        split_url_config=experiment.get("split_url_config"),
+        variants=variants,
+        optimization_type="fixed",
+    )
+
+
+def _chosen_variant(db, experiment, user_id):
+    """A deterministic stand-in for the variant a visitor gets."""
+    return experiment.variants[zlib.crc32(user_id.encode()) % len(experiment.variants)]
+
+
 @pytest.fixture
-def mock_experiment_service():
-    # The preview route body lives in the module's ``experiments_split_url``
-    # module (reached through the ``core.optional_modules`` seam), while
-    # create/get/update stay in ``experiments`` — patch both so one fixture
-    # serves every test in this file.
+def mock_experiment_service(mock_db):
+    # create/get/update read through ``experiments.ExperimentService``; the
+    # preview body (the module's ``experiments_split_url``) reads the row from
+    # the session and asks ``split_url_service`` for the variant. One fixture
+    # serves both: what a test sets as ``get_experiment_by_id``'s answer is the
+    # row the preview reads.
     instance = MagicMock()
+
+    def stored(*_args, **_kwargs):
+        found = instance.get_experiment_by_id.return_value
+        return None if found is None else _stored_row(found)
+
+    query = mock_db.query.return_value.options.return_value.filter.return_value
+    query.first.side_effect = stored
     with (
         patch("backend.app.api.v1.endpoints.experiments.ExperimentService") as mock_cls,
         patch(
-            "modules.backend.app.api.v1.endpoints.experiments_split_url.ExperimentService"
-        ) as mock_split_url_cls,
+            "modules.backend.app.services.split_url_service.stored_or_new_variant",
+            side_effect=_chosen_variant,
+        ),
     ):
         mock_cls.return_value = instance
-        mock_split_url_cls.return_value = instance
         yield instance
 
 

@@ -421,7 +421,7 @@ export default function FeatureFlagDetailPage() {
       <div className="flex-1 bg-slate-50 flex items-center justify-center">
         <PageTitle title={notFound ? 'Flag not found' : 'Feature Flag'} />
         <div className="text-center max-w-md px-4" data-testid={notFound ? 'flag-not-found' : 'flag-error'}>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 mb-2">
             {notFound ? '404' : 'Error'}
           </p>
           <p className="text-slate-800 text-lg mb-2">
@@ -623,7 +623,7 @@ export default function FeatureFlagDetailPage() {
             </div>
 
             {!safety && safetyLoading && (
-              <p className="text-sm text-slate-400" data-testid="safety-loading">Checking…</p>
+              <p className="text-sm text-slate-500" data-testid="safety-loading">Checking…</p>
             )}
             {safetyError && (
               <p className="text-sm text-red-600" data-testid="safety-error">{safetyError}</p>
@@ -659,7 +659,7 @@ export default function FeatureFlagDetailPage() {
                           <span className="tabular-nums text-slate-700">
                             {m.current_value}
                             {m.unit ? ` ${m.unit}` : ''}{' '}
-                            <span className="text-slate-400">/ {m.threshold}{m.unit ? ` ${m.unit}` : ''}</span>
+                            <span className="text-slate-500">/ {m.threshold}{m.unit ? ` ${m.unit}` : ''}</span>
                           </span>
                           {unmeasured && RATE_METRICS.has(m.name) ? (
                             <span className="text-xs text-slate-700" data-testid="safety-metric-not-computed">
@@ -667,6 +667,7 @@ export default function FeatureFlagDetailPage() {
                             </span>
                           ) : (
                             <span
+                              role="img"
                               className={`inline-block h-2 w-2 rounded-full ${m.is_healthy ? 'bg-green-500' : 'bg-red-500'}`}
                               aria-label={m.is_healthy ? 'healthy' : 'unhealthy'}
                             />
@@ -676,7 +677,7 @@ export default function FeatureFlagDetailPage() {
                     ))}
                   </ul>
                 )}
-                <p className="text-xs text-slate-400 mt-3" data-testid="safety-last-checked">
+                <p className="text-xs text-slate-500 mt-3" data-testid="safety-last-checked">
                   Last checked {formatDateTime(safety.last_checked)}
                 </p>
               </div>
@@ -847,7 +848,7 @@ export default function FeatureFlagDetailPage() {
                 className="w-full accent-blue-600"
                 data-testid="rollout-percentage"
               />
-              <div className="flex justify-between text-xs text-slate-400 mt-1">
+              <div className="flex justify-between text-xs text-slate-500 mt-1">
                 <span>0%</span>
                 <span>100%</span>
               </div>

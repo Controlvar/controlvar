@@ -65,6 +65,10 @@ ETL = NotAudited("starts an ETL job over derived data; not on the audited event 
 HIPAA = NotAudited(
     "HIPAA records are kept in the modules' own PHI audit log, not this one"
 )
+SPLIT_URL_ROUTING = NotAudited(
+    "a server or edge asking where to send a visitor, with an API key, as "
+    "/tracking/assign does: SDK traffic, not a change made by a person"
+)
 
 INVENTORY = {
     # --- SSO ----------------------------------------------------------------
@@ -124,6 +128,8 @@ INVENTORY = {
     ("POST", f"{V1}/etl/crawler/run"): ETL,
     ("POST", f"{V1}/etl/jobs/run"): ETL,
     ("POST", f"{V1}/etl/partitions/add"): ETL,
+    # --- split URL routing (#393) -------------------------------------------
+    ("POST", f"{V1}/tracking/split-url/assign"): SPLIT_URL_ROUTING,
     # --- HIPAA --------------------------------------------------------------
     ("POST", f"{V1}/hipaa/baa"): HIPAA,
     ("DELETE", f"{V1}/hipaa/baa/{{baa_id}}"): HIPAA,
@@ -156,7 +162,7 @@ def test_the_inventory_is_exact():
         f"unclassified: {sorted(found - set(INVENTORY))}; "
         f"gone: {sorted(set(INVENTORY) - found)}"
     )
-    assert len(INVENTORY) == 49
+    assert len(INVENTORY) == 50
     audited = [k for k, e in INVENTORY.items() if isinstance(e, Audited)]
     assert len(audited) == 5
 

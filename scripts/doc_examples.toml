@@ -12,8 +12,8 @@
 # scripts/doc_examples.py), and each page's residual counts can only fall.
 
 [meta]
-documents = 56
-exec = 309
+documents = 57
+exec = 320
 universe = [
     ".github/pull_request_template.md",
     ".github/qa-templates/README.md",
@@ -471,7 +471,6 @@ reason = "starts the production stack on a Docker host: the compose-production w
 [pending]
 "backend/lambda/README.md" = { comments = 0, unlabelled = 1, syntax = 0 }
 "backend/lambda/event_processor/README.md" = { comments = 0, unlabelled = 1, syntax = 0 }
-"docs/api/split-url.md" = { comments = 0, unlabelled = 2, syntax = 0 }
 "docs/deployment/README.md" = { comments = 0, unlabelled = 0, syntax = 0 }
 "docs/deployment/deployment-guide.md" = { comments = 0, unlabelled = 1, syntax = 2 }
 "docs/deployment/disaster-recovery.md" = { comments = 0, unlabelled = 0, syntax = 0 }
@@ -564,6 +563,16 @@ environment = "stack"
 exec = 4
 skip = 0
 expects = 4
+
+# #393: a split URL experiment created, started and routed through the API,
+# the reference integration written to a file and run from the command line,
+# and one conversion sent with the per-site pattern counted in the results.
+[[document]]
+path = "docs/api/split-url.md"
+environment = "stack-full"
+exec = 11
+skip = 0
+expects = 12
 
 [[document]]
 path = "docs/api/compliance.md"
