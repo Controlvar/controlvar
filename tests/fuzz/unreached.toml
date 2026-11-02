@@ -35,6 +35,11 @@
 # the seed generates, and with them the ids Schemathesis reuses: the superuser
 # pass now sends a GET /api/v1/results/{experiment_id}/sequential that names a
 # stored experiment (200), so it reaches it, and its list is 100.
+#
+# Then #393 added the two split URL routes, which take an API key: the
+# superuser and viewer passes send a bearer token (401) and reach neither, and
+# the sdk pass generates no seeded experiment's key for the assign route (404).
+# Listed from that reasoning before the pull request's own fuzz run.
 
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
@@ -131,6 +136,16 @@ reason = "An SDK route: it takes an API key, and this pass sends a bearer token 
 [[unreached]]
 pass = "superuser"
 operation = "POST /api/v1/tracking/evaluations"
+reason = "An SDK route: it takes an API key, and this pass sends a bearer token (401). The sdk pass fuzzes it."
+
+[[unreached]]
+pass = "superuser"
+operation = "GET /api/v1/tracking/split-url/routes"
+reason = "An SDK route: it takes an API key, and this pass sends a bearer token (401). The sdk pass fuzzes it."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/tracking/split-url/assign"
 reason = "An SDK route: it takes an API key, and this pass sends a bearer token (401). The sdk pass fuzzes it."
 
 [[unreached]]
@@ -683,6 +698,16 @@ reason = "An SDK route: it takes an API key, and this pass sends a bearer token 
 [[unreached]]
 pass = "viewer"
 operation = "POST /api/v1/tracking/evaluations"
+reason = "An SDK route: it takes an API key, and this pass sends a bearer token (401). The sdk pass fuzzes it."
+
+[[unreached]]
+pass = "viewer"
+operation = "GET /api/v1/tracking/split-url/routes"
+reason = "An SDK route: it takes an API key, and this pass sends a bearer token (401). The sdk pass fuzzes it."
+
+[[unreached]]
+pass = "viewer"
+operation = "POST /api/v1/tracking/split-url/assign"
 reason = "An SDK route: it takes an API key, and this pass sends a bearer token (401). The sdk pass fuzzes it."
 
 [[unreached]]
@@ -1431,3 +1456,8 @@ reason = "Generated flag and experiment keys never name a seeded one (404); the 
 pass = "sdk"
 operation = "POST /api/v1/tracking/events"
 reason = "Takes stored experiment, flag and variant ids. Generated ids are not UUIDs and answer 422; a UUID that names no stored row answers 404 (test_an_id_that_names_nothing_answers_404_naming_the_field in backend/tests/integration/api/test_tracking_events_unknown_ids.py)."
+
+[[unreached]]
+pass = "sdk"
+operation = "POST /api/v1/tracking/split-url/assign"
+reason = "Generated experiment keys never name a seeded experiment (404); the other requests fail validation (422)."

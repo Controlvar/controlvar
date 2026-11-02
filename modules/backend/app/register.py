@@ -3,7 +3,7 @@ The modules' registration entry point: ``modules.register(hooks)``.
 
 One ``register(hooks)`` that installs the optional modules into the core
 application through the seam in :mod:`backend.app.core.hooks`: the modules'
-settings, the nine model modules, the audit signer, the eight routers, the
+settings, the nine model modules, the audit signer, the nine endpoint modules' routers, the
 OpenAPI tags, the five capabilities and the ten module names.
 ``backend/app/modules_loader.py`` calls it once per process, from whichever of
 ``modules.register`` and ``modules.backend.app.register`` it finds first
@@ -147,7 +147,8 @@ def mount_routers(router: Any) -> None:
     The three modules that also serve public routes -- inbound webhooks, the
     SSO login flow, the invite preview -- expose them on a separate
     ``public_router`` that is mounted behind nothing, as their routes are
-    public by design.
+    public by design. Split URL routing has only a ``public_router``: its
+    routes are called by a server or edge, and each takes an API key.
     """
     modules = _endpoint_modules()
     etl = modules["etl"]
@@ -155,6 +156,7 @@ def mount_routers(router: Any) -> None:
     integrations = modules["integrations"]
     rbac = modules["rbac"]
     realtime_counters = modules["realtime_counters"]
+    split_url_routing = modules["split_url_routing"]
     sso = modules["sso"]
     warehouse_analysis = modules["warehouse_analysis"]
     workspaces = modules["workspaces"]
@@ -235,6 +237,13 @@ def mount_routers(router: Any) -> None:
         tags=["HIPAA"],
         dependencies=_authenticated(),
     )
+    # Split URL routing (#393), beta: a server or edge asks where to send each
+    # visitor. No user: each route takes an API key, as the tracking routes do.
+    router.include_router(
+        split_url_routing.public_router,
+        prefix="/tracking/split-url",
+        tags=["Tracking"],
+    )
 
 
 #: The endpoint modules, by name under ``modules.backend.app.api.v1.endpoints``.
@@ -244,6 +253,7 @@ ENDPOINT_MODULES: tuple[str, ...] = (
     "integrations",
     "rbac",
     "realtime_counters",
+    "split_url_routing",
     "sso",
     "warehouse_analysis",
     "workspaces",
@@ -270,7 +280,7 @@ def _import_endpoint_modules() -> None:
     loader clears the registries and the process starts cleanly on the core
     profile.  A failure at mount time leaves a registration that succeeded
     standing and costs the deployment its module routes.  Importing the
-    eight modules up front puts the likeliest failure -- an endpoint module
+    nine modules up front puts the likeliest failure -- an endpoint module
     that does not import -- on the side that rolls back.
     """
     _endpoint_modules()
@@ -344,7 +354,7 @@ def register(hooks: Any, with_routers: bool = True) -> None:
     from modules.backend.app.api.v1.endpoints.experiments_split_url import (
         preview_split_url_assignment,
     )
-    from modules.backend.app.services.split_url_service import get_url_variant
+    from modules.backend.app.services.split_url_service import stored_or_new_variant
 
     hooks.register_router(mount_routers)
     hooks.register_tags(MODULE_TAGS)
@@ -352,7 +362,7 @@ def register(hooks: Any, with_routers: bool = True) -> None:
     # Capabilities: the keys are the contract with core/optional_modules.py.
     # Route bodies and the routing function are registered as they are; the
     # core caller only ever asks "is this here?" and has its own 501.
-    hooks.register_capability("split_url.routing", get_url_variant)
+    hooks.register_capability("split_url.routing", stored_or_new_variant)
     hooks.register_capability("split_url.preview", preview_split_url_assignment)
     hooks.register_capability("compliance.report", generate_compliance_report)
     hooks.register_capability("compliance.export", export_audit_events)

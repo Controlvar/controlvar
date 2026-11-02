@@ -373,8 +373,7 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
                 >
                   bandit
                 </a>{' '}
-                experiments need settings this flow does not ask for. Create them through the API or an
-                SDK.
+                experiments need settings this flow does not ask for. Create them through the API.
               </p>
             </fieldset>
           )}
