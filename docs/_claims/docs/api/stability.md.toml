@@ -749,3 +749,12 @@ by = [
     "test:modules/backend/tests/integration/split_url/test_split_url_assign_contract.py::test_a_stored_configuration_that_breaks_the_rules_answers_409",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
 ]
+
+[[unit]]
+text = "GET /api/v1/metrics/errors, GET /api/v1/metrics/aggregated | #1625 | A stored row is returned with its metadata (the stored meta_data), where any answer holding a row answered 500. An empty answer is unchanged. The OpenAPI document changes: the two response schemas lose a metadata keyword that described an alias the code never had; no field, type or requirement changes."
+by = [
+    "test:backend/tests/integration/api/test_metric_responses_metadata.py::test_the_error_log_returns_a_stored_row_with_its_metadata",
+    "test:backend/tests/integration/api/test_metric_responses_metadata.py::test_the_error_log_returns_a_row_with_no_metadata",
+    "test:backend/tests/integration/api/test_metric_responses_metadata.py::test_aggregated_metrics_return_a_stored_row_with_its_metadata",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
