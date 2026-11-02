@@ -88,15 +88,19 @@ text = "All flags for a user | GET /api/v1/feature-flags/user/{user_id} | — | 
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
-text = "Track one event | POST /api/v1/tracking/track | {event_type, event_name?, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?} | stored event"
+text = "Track one event | POST /api/v1/tracking/track | {event_type, event_name?, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id?} | stored event, with duplicate and event_id"
 by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
     "test:backend/tests/integration/api/test_tracking_api.py::TestTrack::test_tracks_event_with_assigned_variant",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
 ]
 
 [[unit]]
-text = "Track up to 100 events | POST /api/v1/tracking/batch | {events: [...]} | {success_count, failure_count, errors}"
-by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+text = "Track up to 100 events | POST /api/v1/tracking/batch | {events: [...]} | {success_count, failure_count, duplicate_count, errors}"
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r2_the_same_item_twice_in_one_batch_is_stored_once",
+]
 
 [[unit]]
 text = "A user's assignments | GET /api/v1/tracking/assignments/{user_id} | — | list"
@@ -152,6 +156,13 @@ by = [
 [[unit]]
 text = "Conversions are matched to experiment metrics by event_name (exposures excluded), whatever event_type an SDK sends."
 by = ["test:backend/tests/integration/services/test_conversion_event_matching.py::TestConversionEventFilter::test_matches_both_producer_shapes_and_excludes_exposures"]
+
+[[unit]]
+text = "An event sent again is stored again unless it carries an event_id; see How events count."
+by = [
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r8_without_an_event_id_two_identical_purchases_are_both_stored",
+]
 
 [[unit]]
 text = "Full request/response examples: Tracking Endpoints."

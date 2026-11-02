@@ -3137,6 +3137,7 @@
       "EventBatchResponse": {
         "description": "Model for batch event tracking response.",
         "example": {
+          "duplicate_count": 0,
           "errors": [
             {
               "error": "Invalid experiment key",
@@ -3149,6 +3150,11 @@
           "success_count": 1
         },
         "properties": {
+          "duplicate_count": {
+            "description": "Number of events already stored: an earlier one had the same event_id, user, experiment, flag and event name. Each is counted in success_count too, and nothing was written for it.",
+            "title": "Duplicate Count",
+            "type": "integer"
+          },
           "errors": {
             "anyOf": [
               {
@@ -3171,14 +3177,15 @@
             "type": "integer"
           },
           "success_count": {
-            "description": "Number of events successfully tracked",
+            "description": "Number of events stored, or already stored (see duplicate_count)",
             "title": "Success Count",
             "type": "integer"
           }
         },
         "required": [
           "success_count",
-          "failure_count"
+          "failure_count",
+          "duplicate_count"
         ],
         "title": "EventBatchResponse",
         "type": "object"
@@ -3186,6 +3193,19 @@
       "EventCreate": {
         "description": "Model for creating a new event.",
         "properties": {
+          "event_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Names one occurrence of the event. An event sent again with the same event_id, user, experiment, flag and event name is stored once: the later one is answered as a duplicate and writes nothing. At most 255 characters, compared exactly; an empty string or null means none.",
+            "title": "Event Id"
+          },
           "event_name": {
             "maxLength": 100,
             "minLength": 1,
@@ -3327,6 +3347,19 @@
           "value": 49.99
         },
         "properties": {
+          "event_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Names one occurrence of the event. An event sent again with the same event_id, user, experiment, flag and event name is stored once: the later one is answered as a duplicate and writes nothing. At most 255 characters, compared exactly; an empty string or null means none.",
+            "title": "Event Id"
+          },
           "event_name": {
             "anyOf": [
               {
@@ -3419,12 +3452,30 @@
         "type": "object"
       },
       "EventResponse": {
-        "description": "Model for event responses.",
+        "description": "An event as stored.\n\nFor an event already stored with the same event_id, user, experiment, flag\nand event name, duplicate is true, id is the stored event's, and every other\nfield is this request's or this request's time.",
         "properties": {
           "created_at": {
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "duplicate": {
+            "default": false,
+            "description": "True when an event with the same event_id, user, experiment, flag and event name was already stored: nothing was written, and id is the stored event's.",
+            "title": "Duplicate",
+            "type": "boolean"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The event_id this request sent, or null.",
+            "title": "Event Id"
           },
           "event_name": {
             "maxLength": 100,
