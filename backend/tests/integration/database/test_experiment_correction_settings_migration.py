@@ -55,7 +55,7 @@ CORE_HEAD = "607c51a59bf5"
 LATER_DOWNGRADE_TABLES = {"holdout_population", "segment_members"}
 #: The modules branch's head in this tree, recorded on both sides of every
 #: step here: this file is about the core chain.
-MODULES_HEAD = "modules_0003_lower_is_better"
+MODULES_HEAD = "modules_0004_rbac_activation"
 
 PREVIOUS_ROWS = {
     CORE: {PREVIOUS_CORE_HEAD},
