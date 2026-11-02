@@ -53,6 +53,40 @@ func TestCallExposureHook_APanicIsAHookError(t *testing.T) {
 	}
 }
 
+// A value whose Error or String method panics on every call, so that fmt's own
+// recovery of the first panic panics again.
+type panicsWhenFormatted struct{}
+
+func (panicsWhenFormatted) Error() string { panic(panicsWhenFormatted{}) }
+
+type panicsWhenStringified struct{}
+
+func (panicsWhenStringified) String() string { panic(panicsWhenStringified{}) }
+
+// A panic value that cannot be formatted is still recovered: the guard returns
+// a hook error with a fixed text and nothing panics out of it.
+func TestCallExposureHook_AValueThatCannotBeFormattedIsStillContained(t *testing.T) {
+	for name, value := range map[string]interface{}{"an error": panicsWhenFormatted{}, "a Stringer": panicsWhenStringified{}} {
+		t.Run(name, func(t *testing.T) {
+			var err error
+			func() {
+				defer func() {
+					if escaped := recover(); escaped != nil {
+						t.Fatalf("a panic of type %T escaped the guard", escaped)
+					}
+				}()
+				err = callExposureHook(context.Background(), func(context.Context, Exposure) { panic(value) }, Exposure{})
+			}()
+			if !errors.Is(err, errExposureHook) {
+				t.Fatalf("got %v, want a hook error", err)
+			}
+			if want := "onExposure failed: the panic value cannot be turned into a string"; err.Error() != want {
+				t.Errorf("text %q, want %q", err.Error(), want)
+			}
+		})
+	}
+}
+
 // panic(nil) is recovered too (a *runtime.PanicNilError since Go 1.21).
 func TestCallExposureHook_PanicNilIsAHookError(t *testing.T) {
 	err := callExposureHook(context.Background(), func(context.Context, Exposure) { panic(nil) }, Exposure{})

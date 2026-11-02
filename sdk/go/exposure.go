@@ -30,8 +30,17 @@ func callExposureHook(ctx context.Context, fn func(context.Context, Exposure), e
 
 // exposureError is the error for what the exposure function panicked with:
 // its text is "onExposure failed: " and the panic's, and it wraps the panic
-// value with %w when that is an error.
-func exposureError(recovered any) error {
+// value with %w when that is an error. Formatting the value calls its Error or
+// String method, which may panic again, and fmt re-panics on a nested panic; a
+// panic while formatting is recovered here and gives the fixed text
+// "onExposure failed: the panic value cannot be turned into a string", so it
+// never reaches the caller of GetAssignment.
+func exposureError(recovered any) (err error) {
+	defer func() {
+		if recover() != nil {
+			err = fmt.Errorf("%w: the panic value cannot be turned into a string", errExposureHook)
+		}
+	}()
 	if cause, ok := recovered.(error); ok {
 		return fmt.Errorf("%w: %w", errExposureHook, cause)
 	}

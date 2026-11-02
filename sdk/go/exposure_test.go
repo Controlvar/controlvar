@@ -347,10 +347,19 @@ func TestOnExposure_ATimedOutCallCallsNothing(t *testing.T) {
 	wantExposures(t, log.all())
 }
 
+// unformattableError's Error method panics on every call, so fmt's recovery of
+// the first panic panics again.
+type unformattableError struct{}
+
+func (unformattableError) Error() string { panic(unformattableError{}) }
+
 // A panic in the function never reaches the caller or changes the answer, and
 // the answer stays cached.
 func TestOnExposure_APanicChangesNothing(t *testing.T) {
-	for name, value := range map[string]interface{}{"an error": errors.New("hook boom"), "a string": "hook boom", "nil": nil} {
+	for name, value := range map[string]interface{}{
+		"an error": errors.New("hook boom"), "a string": "hook boom", "nil": nil,
+		"an error that cannot be formatted": unformattableError{},
+	} {
 		t.Run(name, func(t *testing.T) {
 			s := newExposureServer(t, enrolled)
 			calls := 0
@@ -405,6 +414,30 @@ func TestOnExposure_RunsOnTheCallersGoroutineBeforeGetAssignmentReturns(t *testi
 	}
 }
 
+// newClientClosedIfPassed is mustNewClient for a test that detects a deadlock:
+// it closes the client only when the test passed, because Close waits for the
+// cache's lock, and after a detected deadlock that wait would hang the package
+// until its -timeout and hide the failure.
+func newClientClosedIfPassed(t *testing.T, serverURL string, opts ...exp.Option) exp.Client {
+	t.Helper()
+	base := []exp.Option{
+		exp.WithBaseURL(serverURL),
+		exp.WithAPIKey("test-key"),
+		exp.WithCacheSize(100),
+		exp.WithCacheTTL(5 * time.Minute),
+	}
+	c, err := exp.New(append(base, opts...)...)
+	if err != nil {
+		t.Fatalf("New() error: %v", err)
+	}
+	t.Cleanup(func() {
+		if !t.Failed() {
+			_ = c.Close()
+		}
+	})
+	return c
+}
+
 // The function may call the client: asked for the same assignment, the client
 // answers from the cache (the answer is stored before the hook), sends nothing
 // and holds no lock the call needs.
@@ -414,7 +447,7 @@ func TestOnExposure_MayCallGetAssignmentForTheSameKey(t *testing.T) {
 	var inner *exp.Assignment
 	var innerErr error
 	reentered := 0
-	c = mustNewClient(t, s.URL, exp.WithOnExposure(func(ctx context.Context, e exp.Exposure) {
+	c = newClientClosedIfPassed(t, s.URL, exp.WithOnExposure(func(ctx context.Context, e exp.Exposure) {
 		if reentered++; reentered > 1 {
 			return
 		}
@@ -450,7 +483,7 @@ func TestOnExposure_ABlockedFunctionHoldsUpOnlyItsOwnCall(t *testing.T) {
 	s := newExposureServer(t, enrolled)
 	entered := make(chan struct{})
 	release := make(chan struct{})
-	c := mustNewClient(t, s.URL, exp.WithOnExposure(func(_ context.Context, e exp.Exposure) {
+	c := newClientClosedIfPassed(t, s.URL, exp.WithOnExposure(func(_ context.Context, e exp.Exposure) {
 		if e == exposureOf("exp-1", "u-1") {
 			close(entered)
 			<-release
