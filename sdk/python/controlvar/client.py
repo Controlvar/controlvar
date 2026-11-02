@@ -23,6 +23,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import time
@@ -33,6 +34,7 @@ from urllib.parse import quote, urlencode
 from .attribution import AttributedKeys
 from .cache import UserKeyCache
 from .evaluator import DEFER, copy_value, is_value_of_type
+from .exposure import call_exposure_hook, exposure_error
 from .local import (
     DEFAULT_REFRESH_INTERVAL_SECONDS,
     MIN_REFRESH_INTERVAL_SECONDS,
@@ -41,7 +43,13 @@ from .local import (
     ReadyResult,
 )
 from .transport import Response, Transport, UrllibTransport, failure_message
-from .types import Assignment, BatchResult, ExperimentationError, FlagEvaluation
+from .types import (
+    Assignment,
+    BatchResult,
+    ExperimentationError,
+    Exposure,
+    FlagEvaluation,
+)
 from .version import __version__
 
 __all__ = ["BATCH_LIMIT", "ExperimentationClient"]
@@ -168,10 +176,23 @@ class ExperimentationClient:
         max_stale_seconds: Local mode: stop answering locally once the ruleset
             has not been refreshed for this long (default: no limit).
         on_error: Called as ``on_error(error, operation)`` whenever a typed
-            getter returns the caller's default (``"value"``), and when a
-            local-mode ruleset refresh (``"refresh"``), evaluation-count report
+            getter returns the caller's default (``"value"``), whenever
+            ``on_exposure`` raises (``"exposure"``), and when a local-mode
+            ruleset refresh (``"refresh"``), evaluation-count report
             (``"flush"``) or local evaluation (``"evaluate"``; that call then
             goes to the server) fails. Those never raise.
+        on_exposure: Called as ``on_exposure(exposure)`` with an
+            :class:`~controlvar.Exposure` once each time the server enrols the
+            user in an experiment and the answer did not come from this
+            client's cache: when ``POST /api/v1/tracking/assign`` answers
+            ``assigned`` True and the slot for that user and experiment held no
+            unexpired answer. Not called for a cached answer, ``assigned``
+            False or missing, a failed call, or a flag. It runs in the calling
+            thread, after the answer is cached and before ``get_assignment``
+            returns. If it raises, the answer is unchanged: the client logs
+            the error at ERROR and passes it to ``on_error`` with
+            ``"exposure"``. ``None`` (default) sets none; a value that is not
+            callable, or an ``async`` function, raises ``TypeError``.
     """
 
     def __init__(
@@ -186,11 +207,21 @@ class ExperimentationClient:
         refresh_interval_seconds: float = DEFAULT_REFRESH_INTERVAL_SECONDS,
         max_stale_seconds: Optional[float] = None,
         on_error: Optional[Callable[[ExperimentationError, str], None]] = None,
+        on_exposure: Optional[Callable[[Exposure], None]] = None,
     ) -> None:
         if not api_url:
             raise ValueError("api_url is required")
         if not api_key:
             raise ValueError("api_key is required")
+        if on_exposure is not None:
+            if not callable(on_exposure):
+                raise TypeError("on_exposure must be callable or None")
+            # An async def (or a partial of one) returns a coroutine the client never awaits.
+            if inspect.iscoroutinefunction(on_exposure):
+                raise TypeError(
+                    "on_exposure must not be async: the client never awaits it, "
+                    "so the body of an async def would never run"
+                )
         self.api_url = api_url.rstrip("/")
         self.timeout_seconds = float(timeout_seconds)
         self.cache_ttl_seconds = cache_ttl_seconds
@@ -212,6 +243,7 @@ class ExperimentationClient:
             raise ValueError("evaluation must be 'server' or 'local'")
         self.evaluation = evaluation
         self._on_error = on_error
+        self._on_exposure = on_exposure
         self._local: Optional[LocalEvaluation] = None
         if evaluation == "local":
             interval = refresh_interval_seconds
@@ -249,6 +281,26 @@ class ExperimentationClient:
             self._on_error(error, operation)
         except Exception:  # noqa: BLE001 - a failing handler must not stop the poller or a getter
             logger.exception("on_error handler raised")
+
+    def _exposed(self, user_id: str, assignment: Assignment) -> None:
+        """Give ``on_exposure`` a new :class:`Exposure` (the user id asked for, and the answer's
+        experiment key, variant id and variant name); what it raises is logged and goes to
+        ``on_error`` with ``"exposure"``."""
+        hook = self._on_exposure
+        if hook is None:
+            return
+        exposure = Exposure(
+            experiment_key=assignment.experiment_key,
+            user_id=user_id,
+            variant_id=assignment.variant_id,
+            variant_name=assignment.variant_name,
+        )
+        call_exposure_hook(hook, exposure, self._exposure_failed)
+
+    def _exposure_failed(self, thrown: Exception) -> None:
+        error = exposure_error(thrown)
+        logger.error("%s", error.message, exc_info=(type(thrown), thrown, thrown.__traceback__))
+        self._call_on_error(error, "exposure")
 
     def ready(self, timeout_seconds: Optional[float] = None) -> ReadyResult:
         """Wait until flags can be answered locally, the first ruleset fetch has finished, or
@@ -368,7 +420,9 @@ class ExperimentationClient:
         :class:`ExperimentationError` (``status == 404`` when no experiment has
         the key, or for a draft with no control variant). An experiment that is
         not ACTIVE returns its control variant with ``assigned`` False and
-        ``reason`` its status.
+        ``reason`` its status. When the server answers ``assigned`` True,
+        ``on_exposure`` is called before this returns; a cached answer calls
+        nothing.
         """
         cached = self._assignments.get(user_id, experiment_key)
         if cached is not None:
@@ -404,8 +458,14 @@ class ExperimentationClient:
             assigned=data["assigned"] if isinstance(data.get("assigned"), bool) else None,
             reason=data["reason"] if isinstance(data.get("reason"), str) else None,
         )
-        self._assignments.set(user_id, experiment_key, assignment)
+        new = self._assignments.set_new(user_id, experiment_key, assignment)
         self._attributed.record_experiment(user_id, assignment.experiment_key, assignment.reason)
+        # Last, once the answer is stored and recorded, with no lock held. The server recorded an
+        # exposure for this request only if it said ``assigned`` True (a missing field is not
+        # taken as True). Threads that asked for the same new user and experiment at once each
+        # sent a request; only the one whose answer filled the empty slot calls the hook.
+        if new and assignment.assigned is True:
+            self._exposed(user_id, assignment)
         return assignment
 
     def get_variant(
