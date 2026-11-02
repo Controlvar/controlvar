@@ -540,6 +540,21 @@ describe('refresh failures', () => {
     await expect(client.evaluateFlag('us-only', us)).resolves.toMatchObject({ source: 'local', enabled: true });
   });
 
+  // #1519: the kill-switch page says the last ruleset is served with no time limit unless
+  // maxStaleMs is set, so a flag turned off during an outage stays on until the API answers.
+  test('without maxStaleMs, a ruleset whose refreshes have failed for a day is still used', async () => {
+    const server = new FakeServer(ok(), { status: 503 }, new TypeError('fetch failed'));
+    const { client } = localClient(server);
+    track(client);
+    await client.ready();
+    const loadedAt = client.status().lastRefreshAt;
+    await jest.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
+    expect(server.requests(RULESET_PATH).length).toBeGreaterThan(100);
+    expect(client.status()).toMatchObject({ ready: true, rulesetVersion: 'v1', lastRefreshAt: loadedAt });
+    await expect(client.evaluateFlag('all-on', us)).resolves.toMatchObject({ source: 'local', enabled: true });
+    expect(server.requests('/feature-flags/evaluate/')).toHaveLength(0);
+  });
+
   test('a network failure before the first load: ready() resolves ok: false, evaluations go to the server', async () => {
     const server = new FakeServer(new TypeError('fetch failed'));
     const { client, errors } = localClient(server);

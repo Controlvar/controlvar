@@ -11,6 +11,7 @@ the row links it.
 | A flag's value in every SDK | An SDK reads a flag's value only where its page documents a value method; every other SDK reads a value flag as on or off (`enabled` is `true` when the user gets the on value). `GET /api/v1/feature-flags/evaluate/{key}` returns the value in `value`. |
 | A flag targeted on a value inside a JSON attribute | Flag targeting refuses the `json_path` operator with `422`, because flag evaluation does not implement it. Experiment targeting accepts it. |
 | A flag targeted on a percentage bucket of an attribute | Flag targeting refuses the `percentage_bucket` operator with `422`, because flag evaluation does not implement it. Experiment targeting accepts it. |
+| A flag turned off for every user at once | Each client keeps the answer it has until its cache expires; a React or React Native component already on screen keeps its answer until it mounts again; and an iOS, Android, Flutter or React Native app that cannot reach the API keeps serving the last answer it stored. See [Turning a Flag Off](../feature-flags/kill-switch.md). |
 
 ## Experiments and results
 
