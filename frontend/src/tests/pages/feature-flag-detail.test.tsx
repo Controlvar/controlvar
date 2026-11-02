@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import axe from 'axe-core';
 import FeatureFlagDetailPage, { pickSchedule, stageSummary } from '@/pages/feature-flags/[id]';
 import { apiFetch } from '@/services/api';
 import { FeatureFlag, RolloutSchedule, RolloutStageStatus } from '@/services/featureFlags';
@@ -551,5 +552,13 @@ describe('who may change a flag (#917)', () => {
     render(<FeatureFlagDetailPage />);
     await screen.findByTestId('flag-detail');
     expect(screen.getByTestId('targeting-replace')).toBeInTheDocument();
+  });
+
+  it('has no axe violations across the whole feature flag detail page (#1466)', async () => {
+    install(happyRoutes());
+    const { container } = render(<FeatureFlagDetailPage />);
+    await screen.findByTestId('safety-status');
+    const result = await axe.run(container, { rules: { 'color-contrast': { enabled: false } } });
+    expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`)).toEqual([]);
   });
 });
