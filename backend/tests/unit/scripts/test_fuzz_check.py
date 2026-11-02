@@ -1161,6 +1161,38 @@ def test_the_red_summary_is_the_red_template(tmp_path):
 
 
 @pytest.mark.usefixtures("qa_render")
+def test_the_summary_names_a_known_entry_that_went_quiet(tmp_path):
+    summary = tmp_path / "summary.md"
+    values = tmp_path / "values.json"
+    link = "https://github.com/Controlvar/controlvar/actions/runs/123"
+    assert (
+        _run_main(
+            tmp_path,
+            dict(REACHED_ALL),
+            "--summary",
+            str(summary),
+            "--values",
+            str(values),
+            "--run-link",
+            link,
+            known=KNOWN_ITEMS_500,
+        )
+        == 1
+    )
+    text = summary.read_text()
+    assert "- GET /api/v1/items (superuser)" in text
+    # Only the step summary and the log carry the name, never the issue's values.
+    assert "/api/v1/items" not in values.read_text()
+
+
+@pytest.mark.usefixtures("qa_render")
+def test_a_green_summary_lists_no_quiet_entries(tmp_path):
+    summary = tmp_path / "summary.md"
+    assert _run_main(tmp_path, dict(REACHED_ALL), "--summary", str(summary)) == 0
+    assert "Known entries with no 5xx" not in summary.read_text()
+
+
+@pytest.mark.usefixtures("qa_render")
 def test_a_red_summary_without_a_run_link_is_refused(tmp_path):
     interactions = dict(REACHED_ALL)
     interactions["GET /api/v1/items"] = [("GET", 500)]
