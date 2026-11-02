@@ -99,3 +99,45 @@ def test_the_js_sdk_runs_jest():
         r"js\|react\|react-native\|edge\|openfeature\)\s*\n\s*cd \"sdk/\$SDK\"", run
     )
     assert "npm test -- --ci" in run
+
+
+def sdk_directories() -> set:
+    """Every SDK in the tree: a directory under ``sdk/``, as
+    ``backend/tests/smoke/test_sdk_release_wiring.py`` counts them (a name
+    starting with a dot or an underscore is tooling, ``sdk/LICENSE`` a file)."""
+    return {
+        entry.name
+        for entry in (REPO_ROOT / "sdk").iterdir()
+        if entry.is_dir() and not entry.name.startswith((".", "_"))
+    }
+
+
+def path_filters() -> Dict[str, list]:
+    """key -> flat list of patterns, from the 'Filter changed paths' step.
+
+    The filters are a YAML string whose anchor (``*all``) nests a list, so the
+    parse is flattened."""
+    steps = {s.get("name"): s for s in workflow()["jobs"]["changes"]["steps"]}
+    filters = yaml.safe_load(steps["Filter changed paths"]["with"]["filters"])
+
+    def flat(value):
+        if isinstance(value, list):
+            return [leaf for item in value for leaf in flat(item)]
+        return [value]
+
+    return {key: flat(patterns) for key, patterns in filters.items()}
+
+
+def test_every_sdk_directory_runs_somewhere():
+    constants = matrix_constants()
+    runs = set(constants["LINUX"]) | set(constants["HEAVY"])
+    directories = sdk_directories()
+    for name in sorted(directories - runs):
+        pytest.fail(f"sdk/{name} exists but sdk-unit-tests.yml runs no suite for it")
+    for name in sorted(runs - directories):
+        pytest.fail(f"sdk-unit-tests.yml runs {name}, which is not a directory in sdk/")
+    filters = path_filters()
+    for name in sorted(runs):
+        assert f"sdk/{name}/**" in filters.get(name, []), (
+            f"sdk-unit-tests.yml has no paths-filter key for sdk/{name}/**"
+        )

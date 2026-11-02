@@ -10,6 +10,11 @@ from prometheus_client import Counter, Gauge, Histogram
 
 # ---------------------------------------------------------------------------
 # HTTP metrics
+#
+# ``endpoint`` is the template of the route the request matched
+# (``/api/v1/feature-flags/user/{user_id}``), or ``unmatched`` when it matched
+# none; ``backend.app.middleware.prometheus_metrics_middleware`` chooses it.
+# ``method`` is one of ``HTTP_METHOD_LABELS`` or ``other`` (``record_request``).
 # ---------------------------------------------------------------------------
 
 http_requests_total: Counter = Counter(
@@ -61,17 +66,22 @@ cache_misses_total: Counter = Counter(
 
 # ---------------------------------------------------------------------------
 # Rate limiting metrics
+#
+# ``endpoint`` is the limit the request was counted against, as
+# ``backend.app.middleware.rate_limiter.resolve_rate_limit_bucket`` names it:
+# the path, for a route with a limit of its own (``/api/v1/auth/login``), or
+# ``export``, ``ai_interpret``, ``sdk`` or ``default``.
 # ---------------------------------------------------------------------------
 
 rate_limit_hits_total: Counter = Counter(
     "rate_limit_hits_total",
-    "Total requests checked by the rate limiter",
+    "Total requests checked by the rate limiter, by the limit they were counted against",
     ["endpoint"],
 )
 
 rate_limit_rejections_total: Counter = Counter(
     "rate_limit_rejections_total",
-    "Total requests rejected by the rate limiter (HTTP 429)",
+    "Total requests rejected by the rate limiter (HTTP 429), by the limit they exceeded",
     ["endpoint"],
 )
 
@@ -129,20 +139,42 @@ scheduler_ticks_total: Counter = Counter(
 # ---------------------------------------------------------------------------
 
 
+#: The request methods the ``method`` label carries as themselves. Any other
+#: method token a request arrives with is counted as ``other``.
+HTTP_METHOD_LABELS: frozenset = frozenset(
+    {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
+)
+OTHER_METHOD_LABEL = "other"
+
+
+def http_method_label(method: str) -> str:
+    """Map a request method to a label value from a fixed set.
+
+    Exact match: ``get`` is not ``GET`` to the router either, so it is
+    ``other`` here.
+    """
+    return method if method in HTTP_METHOD_LABELS else OTHER_METHOD_LABEL
+
+
 def record_request(
     method: str,
     endpoint: str,
     status_code: int,
     duration: float,
 ) -> None:
-    """Record HTTP request counter and duration histogram."""
+    """Record HTTP request counter and duration histogram.
+
+    ``endpoint`` must already be a route template or ``unmatched`` (the
+    middleware's ``route_template``); ``method`` is mapped here.
+    """
+    method_label = http_method_label(method)
     http_requests_total.labels(
-        method=method,
+        method=method_label,
         endpoint=endpoint,
         status_code=status_code,
     ).inc()
     http_request_duration_seconds.labels(
-        method=method,
+        method=method_label,
         endpoint=endpoint,
         status_code=status_code,
     ).observe(duration)
@@ -196,14 +228,14 @@ def update_active_experiments(count: int) -> None:
     active_experiments_gauge.set(count)
 
 
-def record_rate_limit_hit(endpoint: str) -> None:
-    """Increment the rate-limit hits counter."""
-    rate_limit_hits_total.labels(endpoint=endpoint).inc()
+def record_rate_limit_hit(bucket: str) -> None:
+    """Increment the rate-limit hits counter for one limit bucket."""
+    rate_limit_hits_total.labels(endpoint=bucket).inc()
 
 
-def record_rate_limit_rejection(endpoint: str) -> None:
-    """Increment the rate-limit rejections counter."""
-    rate_limit_rejections_total.labels(endpoint=endpoint).inc()
+def record_rate_limit_rejection(bucket: str) -> None:
+    """Increment the rate-limit rejections counter for one limit bucket."""
+    rate_limit_rejections_total.labels(endpoint=bucket).inc()
 
 
 def record_rate_limit_redis_fallback() -> None:
