@@ -1,10 +1,11 @@
 """What the front door says about the modules, read from the module tree.
 
 ``docs/getting-started/modules.md``, the architecture overview and the FAQ
-state these: which dashboard pages the modules add, which dependencies only
-the modules install, and that the split-URL construct sets no configuration
-for its router. The pages' sentences are tied to these tests by their
-registries under ``docs/_claims/``.
+state these: which dashboard pages the modules add, and which dependencies
+only the modules install. The pages' sentences are tied to these tests by
+their registries under ``docs/_claims/``. (What the split URL edge app
+bundles for its router is held by
+``split_url_router/test_split_url_edge_app.py``.)
 """
 
 from __future__ import annotations
@@ -41,12 +42,3 @@ def test_the_modules_bring_saml_oidc_and_the_sql_parser_and_the_backend_none_of_
     assert {"python3-saml", "authlib", "sqlglot"} <= modules
     backend = _pins("backend/requirements.txt")
     assert not ({"python3-saml", "authlib", "sqlglot"} & backend)
-
-
-def test_the_split_url_construct_sets_no_router_configuration():
-    construct = (
-        ROOT / "modules" / "infrastructure" / "constructs" / "split_url_distribution.py"
-    )
-    text = construct.read_text(encoding="utf-8")
-    assert "lambda" in text.lower(), "the scan read the wrong file"
-    assert "x-split-url-config" not in text.lower()
