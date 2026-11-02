@@ -13,14 +13,17 @@ until then three things are held here for every one of them, read from files:
 2. **Install commands.** No install command or dependency line names one of
    this repository's packages from its registry (npm, PyPI, RubyGems, Hex,
    pub.dev, Packagist, NuGet, Maven Central, CocoaPods, a SwiftPM URL) unless
-   that package is published (``PUBLISHED`` in ``test_sdk_doc_versions.py``).
+   that package is on its registry (``ON_REGISTRY`` in
+   ``test_sdk_doc_versions.py``; ``published_identities()`` reads each one's
+   name from its npm, PyPI, Maven or NuGet manifest).
    A source install is not a registry one: a path, a tarball, ``pip install
    -e``, a ``git:``/``path:`` dependency, a Composer path repository in the
    same block, a Maven coordinate on a page that installs it into ``~/.m2``
    (and, for Gradle, reads it there with ``mavenLocal()``). A page with an
-   install section says "not yet published" exactly when its SDK is not
-   published, except a README a registry shows (``PACKAGED``): that one
-   states no status at all, and keeps the packaged-README contract of
+   install section says "not yet published" exactly when its SDK is not on
+   its registry, except a README a registry shows (``PACKAGED``): that one
+   states no status at all, installs nothing from a registry whether or not
+   its package is on one, and keeps the packaged-README contract of
    ``scripts/check_packaged_readme.py`` instead (DECISIONS T230).
 3. **Attribute targeting on flags.** Which SDKs send a ``context`` on flag
    evaluation is read from each SDK's source: the line that builds the
@@ -44,12 +47,14 @@ import ast
 import json
 import re
 import tomllib
+import xml.etree.ElementTree as ET
+from functools import lru_cache
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Set, Tuple
+from typing import AbstractSet, Dict, Iterator, List, Optional, Set, Tuple
 
 import pytest
 
-from backend.tests.unit.docs.test_sdk_doc_versions import PUBLISHED, says_unpublished
+from backend.tests.unit.docs.test_sdk_doc_versions import ON_REGISTRY, says_unpublished
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
@@ -93,6 +98,16 @@ def sdks_of(page: str) -> Tuple[str, ...]:
 
 def text(page: str) -> str:
     return (REPO_ROOT / page).read_text(encoding="utf-8")
+
+
+def _script(name: str):
+    from importlib.util import module_from_spec, spec_from_file_location
+
+    spec = spec_from_file_location(name, REPO_ROOT / "scripts" / f"{name}.py")
+    assert spec is not None and spec.loader is not None
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def fold(value: str) -> str:
@@ -368,16 +383,85 @@ def _manifest(sdk: str, name: str) -> str:
     return (SDK_DIR / sdk / name).read_text(encoding="utf-8")
 
 
-def published_identities() -> Set[Tuple[str, str]]:
-    """(ecosystem, name) of every published package, from its manifest."""
-    found = set()
-    for directory in PUBLISHED:
-        if (SDK_DIR / directory / "package.json").is_file():
-            found.add(("npm", json.loads(_manifest(directory, "package.json"))["name"]))
-        else:
-            data = tomllib.loads(_manifest(directory, "pyproject.toml"))
-            found.add(("pypi", data["project"]["name"].lower()))
+@lru_cache(maxsize=None)
+def _check_sdk_version():
+    """scripts/check_sdk_version.py, loaded once: its ``ECOSYSTEMS`` says how
+    the release publishes each SDK, and its NuGet reader which project it packs."""
+    return _script("check_sdk_version")
+
+
+POM_NAMESPACE = {"m": "http://maven.apache.org/POM/4.0.0"}
+#: A Maven ``groupId:artifactId``.
+COORDINATE = re.compile(r"[\w.-]{1,100}:[\w.-]{1,100}")
+
+
+def _pom(path: Path, field: str) -> str:
+    return (ET.parse(path).getroot().findtext(f"m:{field}", "", POM_NAMESPACE)).strip()
+
+
+def maven_coordinates(sdk: str) -> Set[str]:
+    """``groupId:artifactId`` of the SDK's parent POM and of each module it
+    lists: Central serves every one, the parent too. A module that names no
+    groupId of its own has its parent's."""
+    parent = SDK_DIR / sdk / "pom.xml"
+    group = _pom(parent, "groupId")
+    found = {f"{group}:{_pom(parent, 'artifactId')}"}
+    modules = ET.parse(parent).getroot().findall("m:modules/m:module", POM_NAMESPACE)
+    for module in modules:
+        child = SDK_DIR / sdk / (module.text or "").strip() / "pom.xml"
+        found.add(f"{_pom(child, 'groupId') or group}:{_pom(child, 'artifactId')}")
+    assert modules and all(COORDINATE.fullmatch(c) for c in found), (sdk, found)
     return found
+
+
+def package_identities(sdk: str) -> Set[Tuple[str, str]]:
+    """How the registry names the SDK's package, read from the manifest its
+    release reads (``ECOSYSTEMS`` in scripts/check_sdk_version.py), each as
+    ``registry_key`` writes it:
+
+    * npm: ``package.json``'s name;
+    * PyPI: ``pyproject.toml``'s name;
+    * Maven Central: the ``groupId:artifactId`` of the parent POM and of each
+      module, as a ``<dependency>`` (``maven``) and as a Gradle coordinate
+      (``gradle``) names it;
+    * NuGet: the ``<PackageId>`` of the project the release packs.
+
+    An SDK released another way (Go, whose tag is the release) or not wired
+    to a registry has no such name, and asking for one is an error: such an
+    SDK cannot be in ``ON_REGISTRY``.
+    """
+    ecosystem = _check_sdk_version().ECOSYSTEMS.get(sdk)
+    if ecosystem == "npm":
+        found = {("npm", json.loads(_manifest(sdk, "package.json"))["name"])}
+    elif ecosystem == "pypi":
+        found = {
+            ("pypi", tomllib.loads(_manifest(sdk, "pyproject.toml"))["project"]["name"])
+        }
+    elif ecosystem == "maven":
+        found = {
+            (kind, c) for c in maven_coordinates(sdk) for kind in ("maven", "gradle")
+        }
+    elif ecosystem == "nuget":
+        found = {
+            ("nuget", _check_sdk_version().read_nuget_version(sdk, SDK_DIR / sdk)[1])
+        }
+    else:
+        raise AssertionError(
+            f"sdk/{sdk} is {ecosystem!r} in scripts/check_sdk_version.py's ECOSYSTEMS,"
+            " so it has no npm, PyPI, Maven Central or NuGet name to read:"
+            " ON_REGISTRY cannot hold it"
+        )
+    return {registry_key(*identity) for identity in found}
+
+
+def registry_key(ecosystem: str, name: str) -> Tuple[str, str]:
+    """An identity as its registry compares names: PyPI and NuGet ignore case."""
+    return (ecosystem, name.lower() if ecosystem in ("pypi", "nuget") else name)
+
+
+def published_identities() -> Set[Tuple[str, str]]:
+    """(ecosystem, name) of every package on its registry (``ON_REGISTRY``)."""
+    return {identity for sdk in ON_REGISTRY for identity in package_identities(sdk)}
 
 
 def ours(ecosystem: str, name: str, group: Optional[str] = None) -> bool:
@@ -438,8 +522,14 @@ def _arguments(ecosystem: str, args: str) -> Iterator[str]:
             yield name
 
 
-def registry_installs(page_text: str) -> List[Tuple[str, str]]:
-    """Every (ecosystem, package) of ours that the page installs from a registry."""
+def registry_installs(
+    page_text: str, published: Optional[AbstractSet[Tuple[str, str]]] = None
+) -> List[Tuple[str, str]]:
+    """Every (ecosystem, package) of ours that the page installs from a
+    registry and that is not in *published* (``published_identities()``
+    unless given). A Maven or Gradle package is its ``groupId:artifactId``."""
+    if published is None:
+        published = published_identities()
     found: List[Tuple[str, str]] = []
     maven_local = bool(MAVEN_LOCAL_INSTALL.search(page_text))
     gradle_local = maven_local and "mavenLocal()" in page_text
@@ -471,7 +561,9 @@ def registry_installs(page_text: str) -> List[Tuple[str, str]]:
                 if ecosystem == "gradle" and gradle_local:
                     continue
                 identity = (ecosystem, name.lower() if ecosystem == "pypi" else name)
-                if identity not in published_identities():
+                if ecosystem in ("maven", "gradle"):
+                    identity = (ecosystem, f"{groups['group']}:{name}")
+                if registry_key(*identity) not in published:
                     found.append(identity)
     return found
 
@@ -513,11 +605,11 @@ INSTALL_SAMPLES = (
     ),
     (
         "<groupId>com.controlvar</groupId>\n    <artifactId>controlvar-sdk</artifactId>",
-        [("maven", "controlvar-sdk")],
+        [("maven", "com.controlvar:controlvar-sdk")],
     ),
     (
         'implementation("com.controlvar:controlvar-android:1.0.0")',
-        [("gradle", "controlvar-android")],
+        [("gradle", "com.controlvar:controlvar-android")],
     ),
     ("pod 'Controlvar'", [("cocoapods", "Controlvar")]),
     (
@@ -555,12 +647,112 @@ def test_each_install_pattern_reads_what_it_exists_for(sample, expected):
     assert registry_installs(sample) == expected
 
 
+# The registry names a package has, read before it joins ON_REGISTRY. The Java
+# and .NET names are public for good from their first publish (#1498).
+JAVA_COORDINATES = {
+    "com.controlvar:controlvar-sdk-parent",
+    "com.controlvar:controlvar-sdk",
+    "com.controlvar:controlvar-spring-boot-starter",
+}
+
+
+def test_the_maven_reader_reads_the_parent_and_each_module():
+    assert package_identities("java") == {
+        (kind, coordinate)
+        for coordinate in JAVA_COORDINATES
+        for kind in ("maven", "gradle")
+    }
+    # The version check of test_sdk_doc_versions.py reads the same POMs.
+    from backend.tests.unit.docs.test_sdk_doc_versions import maven_versions
+
+    assert set(maven_versions()) == JAVA_COORDINATES
+
+
+def test_the_nuget_reader_reads_the_packed_projects_id():
+    assert package_identities("dotnet") == {("nuget", "controlvar.sdk")}
+
+
+@pytest.mark.parametrize(
+    "sdk",
+    sorted(
+        sdk
+        for sdk, ecosystem in _check_sdk_version().ECOSYSTEMS.items()
+        if ecosystem in ("npm", "pypi", "maven", "nuget")
+    ),
+)
+def test_each_registry_sdk_has_the_name_its_release_checks(sdk):
+    """The name scripts/check_sdk_version.py reads for the tag (a Maven
+    parent's coordinate, a NuGet id) is one the reader here gives."""
+    ecosystem = _check_sdk_version().ECOSYSTEMS[sdk]
+    name = _check_sdk_version().read_manifest_version(sdk)[1]
+    assert registry_key(ecosystem, name) in package_identities(sdk)
+
+
+@pytest.mark.parametrize(
+    "sdk", ["go", "ruby", "php", "elixir", "flutter", "android", "ios"]
+)
+def test_an_sdk_with_no_registry_name_cannot_be_on_the_registry(sdk, monkeypatch):
+    with pytest.raises(AssertionError, match="ON_REGISTRY cannot hold it"):
+        package_identities(sdk)
+    monkeypatch.setitem(globals(), "ON_REGISTRY", (*ON_REGISTRY, sdk))
+    with pytest.raises(AssertionError, match=f"sdk/{sdk} is"):
+        published_identities()
+
+
+#: Install lines for the Java and .NET packages: refused today, allowed once
+#: java and dotnet are in ON_REGISTRY.
+JAVA_AND_DOTNET_INSTALLS = (
+    "<groupId>com.controlvar</groupId>\n    <artifactId>controlvar-sdk</artifactId>",
+    "<groupId>com.controlvar</groupId>\n"
+    "    <artifactId>controlvar-spring-boot-starter</artifactId>",
+    'implementation("com.controlvar:controlvar-sdk:0.1.0")',
+    "implementation 'com.controlvar:controlvar-spring-boot-starter:0.1.0'",
+    "dotnet add package Controlvar.SDK --version 0.1.0",
+    "dotnet add package controlvar.sdk",
+    '<PackageReference Include="Controlvar.SDK" Version="0.1.0" />',
+)
+
+
+@pytest.mark.parametrize("line", JAVA_AND_DOTNET_INSTALLS)
+def test_a_java_or_dotnet_install_is_allowed_once_its_sdk_is_on_the_registry(
+    line, monkeypatch
+):
+    assert registry_installs(line) != []
+    monkeypatch.setitem(globals(), "ON_REGISTRY", (*ON_REGISTRY, "java", "dotnet"))
+    assert registry_installs(line) == []
+
+
+@pytest.mark.parametrize(
+    "line, expected",
+    [
+        (
+            'implementation("com.controlvar:controlvar-android:1.0.0")',
+            [("gradle", "com.controlvar:controlvar-android")],
+        ),
+        (
+            "<groupId>com.controlvar.other</groupId>\n<artifactId>controlvar-sdk</artifactId>",
+            [("maven", "com.controlvar.other:controlvar-sdk")],
+        ),
+        (
+            "dotnet add package Controlvar.SDK.Extras",
+            [("nuget", "Controlvar.SDK.Extras")],
+        ),
+        ("npm install @controlvar/react-sdk", [("npm", "@controlvar/react-sdk")]),
+    ],
+)
+def test_java_and_dotnet_on_the_registry_allow_only_their_own_names(
+    line, expected, monkeypatch
+):
+    monkeypatch.setitem(globals(), "ON_REGISTRY", (*ON_REGISTRY, "java", "dotnet"))
+    assert registry_installs(line) == expected
+
+
 @pytest.mark.parametrize("page", DEFERRED)
 def test_a_deferred_page_installs_no_unpublished_package_from_a_registry(page):
     found = registry_installs(text(page))
     assert not found, (
         f"{page} installs {found} from a registry, where it is not published"
-        " (test_sdk_doc_versions.PUBLISHED); show the build from source instead"
+        " (test_sdk_doc_versions.ON_REGISTRY); show the build from source instead"
     )
 
 
@@ -571,10 +763,10 @@ def test_a_deferred_install_section_says_whether_it_is_published(page):
         # A README a registry shows says nothing about its status: the
         # packaged-README contract below holds it instead (T230).
         return
-    unpublished = [sdk for sdk in sdks_of(page) if sdk not in PUBLISHED]
+    unpublished = [sdk for sdk in sdks_of(page) if sdk not in ON_REGISTRY]
     assert says_unpublished(page_text) == bool(unpublished), (
         f"{page}: its SDK is {'not ' if unpublished else ''}published"
-        " (test_sdk_doc_versions.PUBLISHED); the page says otherwise"
+        " (test_sdk_doc_versions.ON_REGISTRY); the page says otherwise"
     )
 
 
@@ -585,7 +777,7 @@ def test_every_deferred_page_with_an_install_section_is_read():
     request that packs a README moves the second and third."""
     with_section = [page for page in DEFERRED if INSTALL_HEADING.search(text(page))]
     under_the_rule = [page for page in with_section if page not in PACKAGED]
-    assert (len(with_section), len(under_the_rule), len(PACKAGED)) == (24, 21, 4), (
+    assert (len(with_section), len(under_the_rule), len(PACKAGED)) == (24, 21, 6), (
         with_section,
         sorted(PACKAGED),
     )
@@ -597,13 +789,15 @@ def test_every_deferred_page_with_an_install_section_is_read():
 
 #: Each README a registry shows, with its SDK: an explicit list, not
 #: ``DEFERRED`` (a packaged README need not be a deferred page: the Python
-#: provider's has a claims registry of its own). It is held exactly to the
-#: SDKs scripts/check_packaged_readme.py holds to I-README, and to the
-#: READMEs the packages actually ship.
+#: provider's and React Native's have claims registries of their own). It is
+#: held exactly to the SDKs scripts/check_packaged_readme.py holds to
+#: I-README, and to the READMEs the packages actually ship.
 PACKAGED: Dict[str, str] = {
     "sdk/dotnet/README.md": "dotnet",
+    "sdk/mcp/README.md": "mcp",
     "sdk/openfeature-python/README.md": "openfeature-python",
     "sdk/openfeature/README.md": "openfeature",
+    "sdk/react-native/README.md": "react-native",
     "sdk/react/README.md": "react",
 }
 
@@ -616,6 +810,11 @@ PLANTS: Dict[str, Tuple[str, str, Tuple[str, str]]] = {
         "`dotnet add package Controlvar.SDK`",
         ("nuget", "Controlvar.SDK"),
     ),
+    "sdk/mcp/README.md": (
+        "## Configuration\n",
+        "`npm install @controlvar/mcp-server`",
+        ("npm", "@controlvar/mcp-server"),
+    ),
     "sdk/openfeature-python/README.md": (
         "## Quick start\n",
         "`pip install controlvar-openfeature`",
@@ -626,22 +825,17 @@ PLANTS: Dict[str, Tuple[str, str, Tuple[str, str]]] = {
         "`npm install @controlvar/openfeature-provider`",
         ("npm", "@controlvar/openfeature-provider"),
     ),
+    "sdk/react-native/README.md": (
+        "## Quick start\n",
+        "`npm install @controlvar/react-native-sdk`",
+        ("npm", "@controlvar/react-native-sdk"),
+    ),
     "sdk/react/README.md": (
         "## Provider setup\n",
         "`npm install @controlvar/react-sdk`",
         ("npm", "@controlvar/react-sdk"),
     ),
 }
-
-
-def _script(name: str):
-    from importlib.util import module_from_spec, spec_from_file_location
-
-    spec = spec_from_file_location(name, REPO_ROOT / "scripts" / f"{name}.py")
-    assert spec is not None and spec.loader is not None
-    module = module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 def test_the_packaged_readmes_are_the_ones_the_gate_and_the_packages_name():
@@ -667,7 +861,9 @@ def test_a_packaged_readme_keeps_the_contract(page):
 
 @pytest.mark.parametrize("page", sorted(PACKAGED))
 def test_a_packaged_readme_installs_nothing_from_a_registry(page):
-    assert registry_installs(text(page)) == []
+    # Nothing, whether or not its package is on its registry yet: the README
+    # is frozen at the tag (T230), so the sweep is given no published names.
+    assert registry_installs(text(page), published=frozenset()) == []
 
 
 @pytest.mark.parametrize("page", sorted(PACKAGED))
@@ -692,7 +888,7 @@ def test_a_registry_install_anywhere_in_a_packaged_readme_is_refused(page):
         "installs this repository's package from a registry" in p
         for p in _contract_problems(page, planted)
     )
-    assert registry_installs(planted) == [expected]
+    assert registry_installs(planted, published=frozenset()) == [expected]
 
 
 #: A link to a page of this repository on GitHub, with a fragment.
@@ -928,6 +1124,17 @@ def test_the_claim_patterns_find_the_true_sentence_on_the_react_native_page():
     )
 
 
+def test_the_react_native_readme_says_the_attributes_are_sent_and_cites_no_438():
+    # The README npm shows for React Native's first release is frozen with it:
+    # it must say what the client does since #1520 (the attributes go as
+    # `context` on flag evaluation), and carry none of the #438 limit that
+    # iOS, Android and Flutter keep.
+    readme = text("sdk/react-native/README.md")
+    assert "sent as context on flag evaluation" in attribute_claims(readme)
+    assert "438" not in readme
+    assert "sends only the user id" not in fold(readme).lower()
+
+
 @pytest.mark.parametrize("page", DEFERRED)
 def test_a_page_claims_no_attribute_targeting_its_client_does_not_send(page):
     silent = [sdk for sdk in sdks_of(page) if sdk in SENDS_NO_CONTEXT]
@@ -938,3 +1145,315 @@ def test_a_page_claims_no_attribute_targeting_its_client_does_not_send(page):
         f"{page}: {', '.join(silent)} sends the user id alone on flag evaluation,"
         f" but the page says attributes reach it ({claims}); say what it sends"
     )
+
+
+def test_the_react_page_names_the_ssr_entry_the_package_ships():
+    """docs/sdk/react.md names `@controlvar/react-sdk/ssr`, and the package has it.
+
+    The page is in ``CLAIMS_DEFERRED``, so no claims entry binds its App Router
+    sentence. It once told readers to call ``ServerClient`` from a server
+    component without naming an import path that exists (#1518); this holds the
+    fixed sentence, and the files that make the path real, in place, and keeps
+    the page from naming a path inside the package's ``dist``.
+    """
+    page = fold(text("docs/sdk/react.md"))
+    assert "@controlvar/react-sdk/ssr" in page
+    assert (
+        "In the App Router call the same methods from an async server component."
+        not in page
+    )
+    # The package's `exports` map refuses deep imports, so a page that sends
+    # readers into `dist` gives an instruction Node rejects.
+    assert "@controlvar/react-sdk/dist" not in page
+    manifest = json.loads((REPO_ROOT / "sdk/react/package.json").read_text("utf-8"))
+    assert "ssr" in manifest["files"]
+    assert (REPO_ROOT / "sdk/react/ssr/package.json").is_file()
+
+
+# ---------------------------------------------------------------------------
+# 4. The React SDK's exposure hook (#1499)
+# ---------------------------------------------------------------------------
+
+#: Where the React SDK's jest tests live; every test named below is in one of them.
+REACT_TESTS = REPO_ROOT / "sdk" / "react" / "src" / "__tests__"
+REACT_PAGE = "docs/sdk/react.md"
+REACT_README = "sdk/react/README.md"
+
+#: Each sentence the React pages state about ``onExposure`` (as written, folded
+#: to one line), the pages that state it, and the jest tests that fail when it
+#: stops being true. Both pages are in ``CLAIMS_DEFERRED``, so no claims
+#: registry binds them; this does. An ``it.each`` test is named by its template.
+REACT_EXPOSURE_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...] = (
+    (
+        "The client calls it once each time the server enrols the user in an experiment and"
+        " the answer did not come from the client's cache: the moment the server records the"
+        " exposure.",
+        (REACT_PAGE,),
+        (
+            "is called once for an assigned: true answer, with exactly the four values",
+            "is not called for a cached answer, however often it is asked for",
+            "calls onExposure once when useExperiment mounts, with the four values",
+        ),
+    ),
+    (
+        "is a function the client calls once each time the server enrols the user in an"
+        " experiment and the answer did not come from the client's cache: the moment the"
+        " server records the exposure.",
+        (REACT_README,),
+        (
+            "is called once for an assigned: true answer, with exactly the four values",
+            "is not called for a cached answer, however often it is asked for",
+            "calls its own onExposure once for two assignments of one user",
+        ),
+    ),
+    (
+        "Called once each time the server enrols the user in an experiment and the answer is"
+        " not cached",
+        (REACT_PAGE,),
+        (
+            "is called once for an assigned: true answer, with exactly the four values",
+            "is not called for a cached answer, however often it is asked for",
+        ),
+    ),
+    (
+        "It receives an `Exposure`, a new object each time: `experimentKey`, `userId`,"
+        " `variantId` (`null` when the server sends none) and `variantName`. Nothing else:"
+        " not the user's attributes and not the variant's configuration.",
+        (REACT_PAGE,),
+        (
+            "is called once for an assigned: true answer, with exactly the four values",
+            "passes a null variantId when the server sends none",
+            "receives a new object that does not alias the cached answer",
+            "has four readonly fields",
+        ),
+    ),
+    (
+        "It receives an `Exposure`: `experimentKey`, `userId`, `variantId` (`null` when the"
+        " server sends none) and `variantName`.",
+        (REACT_README,),
+        (
+            "is called once for an assigned: true answer, with exactly the four values",
+            "passes a null variantId when the server sends none",
+        ),
+    ),
+    (
+        "It is not called for:",
+        (REACT_PAGE,),
+        ("is not called for a cached answer, however often it is asked for",),
+    ),
+    (
+        "- an answer from the client's cache; - a user the experiment did not enrol"
+        " (`assigned: false`, with `reason` `'holdout'`, `'mutual_exclusion'` or"
+        " `'targeting'`), or an experiment that is not running (`'draft'`, `'paused'`,"
+        " `'completed'` or `'archived'`): the server records no exposure for them; - a call"
+        " that fails; - a feature flag.",
+        (REACT_PAGE,),
+        (
+            "is not called for a cached answer, however often it is asked for",
+            "is not called for an assigned: false answer (%s), and the answer is unchanged",
+            "is not called when the call fails (%s)",
+            "is not called when the call times out",
+            "is never called for a flag",
+        ),
+    ),
+    (
+        "It is not called for an answer from the client's cache, a user the experiment did"
+        " not enrol (`assigned: false`), a call that fails or a feature flag.",
+        (REACT_README,),
+        (
+            "is not called for a cached answer, however often it is asked for",
+            "is not called for an assigned: false answer (%s), and the answer is unchanged",
+            "is not called when the call fails (%s)",
+            "is never called for a flag",
+        ),
+    ),
+    (
+        "Calls for the same user and experiment that are made while the first is still"
+        " waiting share its request, so together they call it once.",
+        (REACT_PAGE,),
+        ("is called once for concurrent first calls that share one request",),
+    ),
+    (
+        "`useExperiment` asks for the assignment in the browser, after the first render, so a"
+        " server render makes no request and calls nothing. A server render followed by"
+        " hydration calls it once, in the browser, and so does React's StrictMode, which runs"
+        " effects twice in development.",
+        (REACT_PAGE,),
+        (
+            "is not called, and the render makes no request",
+            "is not called under StrictMode either",
+            "calls it once after hydrating server markup",
+            "calls it once under StrictMode, which runs the effect twice",
+        ),
+    ),
+    (
+        "A Provider rendered on the server calls nothing: `useExperiment` asks for the"
+        " assignment in the browser, after the first render.",
+        (REACT_README,),
+        ("is not called, and the render makes no request",),
+    ),
+    (
+        "Changing `onExposure` between renders does not create a new client, so nothing is"
+        " asked again; the client calls the function from the latest render.",
+        (REACT_PAGE,),
+        ("keeps the client when onExposure changes, and calls the latest function",),
+    ),
+    (
+        "(a new client starts with empty caches), not when `onExposure` does;",
+        (REACT_PAGE,),
+        ("keeps the client when onExposure changes, and calls the latest function",),
+    ),
+    (
+        "It is called again, and the server records another exposure, after the cache"
+        " lifetime (`cacheTtlMs`, 5 minutes by default), after `clearCache()`, and in every"
+        " new client: each page load, and each change of `apiKey`, `baseUrl`, `timeoutMs` or"
+        " `cacheTtlMs`.",
+        (REACT_PAGE,),
+        (
+            "after the cache lifetime (one millisecond past it, never at the boundary)",
+            "after clearCache()",
+            "in a new client",
+            "creates a new client when apiKey changes",
+        ),
+    ),
+    (
+        "It never receives one the server did not record.",
+        (REACT_PAGE,),
+        (
+            "is not called for an assigned: false answer (%s), and the answer is unchanged",
+            "is not called when assigned is %s, and the answer is still returned",
+        ),
+    ),
+    (
+        "It runs before the assignment resolves, and before every call waiting on the same"
+        " request,",
+        (REACT_PAGE,),
+        (
+            "runs before assignExperiment resolves",
+            "is called once for concurrent first calls that share one request",
+        ),
+    ),
+    (
+        "The client does not wait for a Promise it returns.",
+        (REACT_PAGE,),
+        ("reports a rejection, once, as the hook error, without awaiting it",),
+    ),
+    (
+        "If it throws, or returns a Promise that rejects, the answer is unchanged, and nothing"
+        " reports the error: this SDK has no `onError`.",
+        (REACT_PAGE, REACT_README),
+        (
+            "that throws leaves the answer unchanged and cached",
+            "that returns a rejected Promise leaves the answer unchanged",
+            "leaves useExperiment with the answer and no error",
+            "leaves ServerClient answering, with no error",
+            "passes on what onExposure returns, so a Promise it returns has its rejection handled",
+            "is given the dropping report by the clients: this SDK reports the failure nowhere",
+        ),
+    ),
+    (
+        "A failing `onExposure` changes no answer and is reported nowhere",
+        (REACT_PAGE,),
+        (
+            "that throws leaves the answer unchanged and cached",
+            "is given the dropping report by the clients: this SDK reports the failure nowhere",
+        ),
+    ),
+    (
+        "`ServerClient` takes `onExposure` in its config too, and calls it for the"
+        " assignments it makes, in the same way. It is a separate client with its own cache:",
+        (REACT_PAGE,),
+        (
+            "calls its own onExposure once for two assignments of one user",
+            "never calls the onExposure of a Provider",
+        ),
+    ),
+    (
+        "the server records two exposures, and each client that has `onExposure` calls its"
+        " own.",
+        (REACT_PAGE,),
+        (
+            "calls its own onExposure once for two assignments of one user",
+            "never calls the onExposure of a Provider",
+        ),
+    ),
+    (
+        "A `ServerClient` created in each request, as in the `getServerSideProps` example"
+        " above, starts with an empty cache, so it calls `onExposure` on every request that"
+        " assigns, and the server records an exposure on each.",
+        (REACT_PAGE,),
+        (
+            "in a new client",
+            "calls its own onExposure once for two assignments of one user",
+        ),
+    ),
+    (
+        "interface Exposure {          // what onExposure receives; also exported from"
+        " '@controlvar/react-sdk/ssr'",
+        (REACT_PAGE,),
+        ("is exported as a type from the package and from ssr",),
+    ),
+    (
+        "The Provider and `ServerClient` throw `onExposure must be a function` for any other"
+        " value; `null` and `undefined` set none.",
+        (REACT_PAGE,),
+        (
+            "is refused by the client and ServerClient: %p",
+            "is refused by the Provider when it renders: %p",
+            "null and undefined set none",
+        ),
+    ),
+    (
+        'In a test, a mocked `/assign` answer must include `"assigned": true`, or the hook is'
+        " not called. This SDK treats an answer without `assigned` as enrolled for"
+        " `ExperimentAssignment.assigned`, but does not call the hook for it.",
+        (REACT_PAGE,),
+        ("is not called when assigned is %s, and the answer is still returned",),
+    ),
+)
+
+
+def _react_test_titles() -> str:
+    return "\n".join(
+        path.read_text("utf-8") for path in sorted(REACT_TESTS.glob("*.test.ts*"))
+    )
+
+
+def _h2s(page: str) -> List[str]:
+    """The level-2 headings of a page, outside fenced blocks."""
+    without_fences = re.sub(r"^```.*?^```[ \t]*$", "", text(page), flags=re.S | re.M)
+    return re.findall(r"^##[ \t]+(.+?)[ \t]*$", without_fences, re.M)
+
+
+def test_the_react_pages_give_the_exposure_hook_a_section_of_its_own():
+    """H-M9: an H2 "Exposure hook" (``#exposure-hook``), never in a Quick
+    Start; the README's links to the page's section, absolutely."""
+    for page in (REACT_PAGE, REACT_README):
+        h2s = _h2s(page)
+        assert h2s.count("Exposure hook") == 1, (page, h2s)
+        assert not any("quick start" in h.lower() for h in h2s), (page, h2s)
+    assert (
+        "https://github.com/Controlvar/controlvar/blob/main/docs/sdk/react.md#exposure-hook"
+        in text(REACT_README)
+    )
+
+
+@pytest.mark.parametrize(
+    "sentence, pages, tests",
+    REACT_EXPOSURE_SENTENCES,
+    ids=[s[:60] for s, _, _ in REACT_EXPOSURE_SENTENCES],
+)
+def test_each_react_exposure_sentence_is_on_its_page_and_held_by_a_test(
+    sentence, pages, tests
+):
+    titles = _react_test_titles()
+    unsaid = [page for page in pages if sentence not in fold(text(page))]
+    assert unsaid == [], f"no longer said there: {sentence}"
+    missing = [title for title in tests if f"'{title}'" not in titles]
+    assert missing == [], "no jest test in sdk/react/src/__tests__ has these names"
+
+
+def test_the_react_refusal_the_pages_quote_is_the_one_the_source_throws():
+    source = (REPO_ROOT / "sdk/react/src/client/exposure.ts").read_text("utf-8")
+    assert "throw new Error('onExposure must be a function')" in source
+    assert "`onExposure must be a function`" in text(REACT_PAGE)

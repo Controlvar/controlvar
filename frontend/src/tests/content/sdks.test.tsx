@@ -36,6 +36,15 @@ jest.mock('next/router', () => ({ useRouter: () => ({ pathname:'/', asPath:'/', 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const SDK_DIR = path.join(REPO_ROOT, 'sdk');
 
+/**
+ * Directories under `sdk/` that are not SDKs, so `SDKS` does not name them
+ * and the pages do not count them: `mcp` is the MCP server, a program an AI
+ * assistant starts, not a client library. The backend's front-door facts
+ * test holds the same list (`NOT_SDKS` in test_front_door_facts.py). Each
+ * must exist, so a stale entry fails rather than hiding a directory.
+ */
+const NOT_SDKS: readonly string[] = ['mcp'];
+
 function sdkDirectories(): string[] {
   if (!fs.existsSync(SDK_DIR)) {
     throw new Error(`${SDK_DIR} does not exist; the SDK list cannot be checked`);
@@ -48,7 +57,12 @@ function sdkDirectories(): string[] {
   if (dirs.length === 0) {
     throw new Error(`${SDK_DIR} has no directories; the SDK list cannot be checked`);
   }
-  return dirs;
+  for (const name of NOT_SDKS) {
+    if (!dirs.includes(name)) {
+      throw new Error(`NOT_SDKS names sdk/${name}, which does not exist; remove it from the list`);
+    }
+  }
+  return dirs.filter((name) => !NOT_SDKS.includes(name));
 }
 
 /**

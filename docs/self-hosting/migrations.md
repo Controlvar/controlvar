@@ -91,8 +91,8 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini history
 Output, for example:
 
 ```text
-4c2c09a2b3e8 -> 607c51a59bf5 (head), Feature flags: a value type and two values, held by one check
-37dcb2969766 -> 4c2c09a2b3e8, Safety rollback records: safety_config_id nullable, its foreign key ON DELETE SET NULL
+607c51a59bf5 -> 85dd4796bb8b (head), Events: an event_id is stored once per user, experiment, flag and event name
+4c2c09a2b3e8 -> 607c51a59bf5, Feature flags: a value type and two values, held by one check
 ...
 <base> -> 84a772608a6e, Initial schema
 ```
@@ -116,7 +116,7 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini current
 Output, for a full install (a core install prints the first line only):
 
 ```text
-607c51a59bf5 (head)
+85dd4796bb8b (head)
 modules_0004_rbac_activation (head)
 ```
 
@@ -401,6 +401,10 @@ any flag is a string, number or json flag**: that downgrade refuses, names those
 flags, and changes nothing (see
 [`607c51a59bf5`](#607c51a59bf5-gives-each-flag-a-value-type-and-two-values)).
 
+Past `85dd4796bb8b` it also drops the table `event_dedup_keys`, and with it every
+stored `event_id` (see
+[`85dd4796bb8b`](#85dd4796bb8b-stores-an-event-sent-again-with-its-event_id-once)).
+
 ### `d29a479daafe` records who each global holdout covers
 
 This revision adds `activated_at`, `deactivated_at` and `hash_salt` to
@@ -471,6 +475,8 @@ From a release that carries `607c51a59bf5`, the same downgrade first runs that
 revision's downgrade, which drops each flag's value type and values and refuses
 while any flag is a string, number or json flag (see
 [`607c51a59bf5`](#607c51a59bf5-gives-each-flag-a-value-type-and-two-values)).
+From a release that carries `85dd4796bb8b`, it also drops the table
+`event_dedup_keys` before that.
 
 ### `4c2c09a2b3e8` keeps rollback records without a safety configuration
 
@@ -527,6 +533,26 @@ To go on, delete those flags or convert each to a boolean flag, or restore the
 backup taken before the upgrade. With only boolean flags stored, the downgrade
 drops the check and the three columns, and nothing else. Neither the upgrade
 nor the downgrade can be emitted as SQL (`--sql`).
+
+### `85dd4796bb8b` stores an event sent again with its event_id once
+
+This revision adds the table `event_dedup_keys`: one row per event stored with
+an `event_id`, holding the user id and a key made from the event's experiment,
+flag, event name and `event_id`
+([How events count](../guides/how-events-count.md#sending-an-event-again)). It
+changes nothing in `events`, and it has no foreign key to `events`, so it takes
+no lock on `events` and completes while the previous release keeps writing
+events.
+
+The previous release runs against this schema unchanged: it never reads or
+writes the table, so an event it stores during the deploy is stored as every
+event was before, even when it carries an `event_id`.
+
+**The downgrade drops the table and every key in it.** No event is changed or
+removed. Until the API is rolled back too, this release answers `500` to an
+event that carries an `event_id`, because the table is gone, and stores every
+other event as before; so roll the API back straight after the downgrade, as the
+rollback runbook does.
 
 Roll back to a specific revision:
 
@@ -811,6 +837,9 @@ What this means for you:
   is backward-compatible for a rollback too, and undoing it drops each flag's
   value type and values; it refuses while any flag is a string, number or json
   flag.
+  [`85dd4796bb8b`](#85dd4796bb8b-stores-an-event-sent-again-with-its-event_id-once)
+  is backward-compatible for a rollback too, and undoing it drops
+  `event_dedup_keys`, every stored `event_id`, and no event.
   [`modules_0003_lower_is_better`](#modules_0003_lower_is_better-gives-each-warehouse-metric-source-a-direction)
   is backward-compatible for a rollback, and undoing it drops every warehouse
   metric source's lower-is-better setting; an upgrade afterwards sets each back

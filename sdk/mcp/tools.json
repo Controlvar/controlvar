@@ -1,0 +1,230 @@
+{
+  "server": {
+    "name": "controlvar"
+  },
+  "instructions": "These tools read one Controlvar instance (feature flags and A/B experiments) as the user whose API key this server holds. They change no flag, experiment or setting; evaluate_feature_flag records one evaluation, as an SDK call does. Flags are named by their key; experiments by the id that list_experiments gives.",
+  "env": [
+    "CONTROLVAR_API_URL",
+    "CONTROLVAR_API_KEY",
+    "CONTROLVAR_ALLOW_INSECURE_HTTP"
+  ],
+  "tools": [
+    {
+      "name": "list_feature_flags",
+      "title": "List feature flags",
+      "description": "Lists the feature flags on the Controlvar instance. Each item has its `key`, `name`, `status` (ACTIVE, INACTIVE or ARCHIVED), `value_type`, `rollout_percentage`, `tags` and `updated_at`. `search` matches part of a flag's name or key; `status` keeps one status. Returns at most `limit` flags (default 50, at most 100) and `total`, the number that match. When `total` is larger, call again with `skip`. The list has no defined order, so a later page can repeat a flag or miss one; to read one flag by its key, use get_feature_flag.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "search": {
+            "description": "Part of a flag's name or key, 1 to 100 characters.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "status": {
+            "description": "Only flags with this status.",
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE",
+              "ARCHIVED"
+            ]
+          },
+          "limit": {
+            "default": 50,
+            "description": "How many to return, from 1 to 100. Default 50.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "skip": {
+            "default": 0,
+            "description": "How many to skip, to read the next page. Default 0.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_feature_flag",
+      "title": "Read a feature flag",
+      "description": "Reads one feature flag by its key: status, rollout percentage, targeting rules, the values it serves when on and off, tags and timestamps. A flag that is not ACTIVE serves its off value to every user.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "flag_key": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$",
+            "description": "The flag's key, as list_feature_flags shows it."
+          }
+        },
+        "required": [
+          "flag_key"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "evaluate_feature_flag",
+      "title": "Evaluate a flag for a user",
+      "description": "Asks the instance what a flag serves one user, the same answer an SDK gets: `enabled`, the `value` served, and `reason`. The reasons are: targeting_rule (a targeting rule matched); rollout (the rollout percentage decided); inactive (the flag is not ACTIVE); error (the rules could not be evaluated, so the flag is off). Put the user's attributes in `context`, for example {\"country\": \"DE\", \"plan\": \"pro\"}, so targeting rules can match them. Each call is recorded as one evaluation of the flag, with this user_id and context, as an SDK's is.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "flag_key": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$",
+            "description": "The flag's key, as list_feature_flags shows it."
+          },
+          "user_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "description": "The user to evaluate the flag for, as your app identifies them."
+          },
+          "context": {
+            "description": "The user's attributes, as a JSON object, for the flag's targeting rules.",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "flag_key",
+          "user_id"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "list_experiments",
+      "title": "List experiments",
+      "description": "Lists experiments. Each item has its `id` (which get_experiment and get_experiment_results take), `key`, `name`, `status` (draft, active, paused, completed or archived), `experiment_type`, `start_date`, `end_date` and `updated_at`. `search` matches part of a name or description, or a whole tag, but not the key; `status` keeps one status. Paging is the same as list_feature_flags: at most `limit` items, `total`, and `skip` for the next page.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "search": {
+            "description": "Part of an experiment's name or description, or a whole tag, 1 to 100 characters.",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "status": {
+            "description": "Only experiments with this status.",
+            "type": "string",
+            "enum": [
+              "draft",
+              "active",
+              "paused",
+              "completed",
+              "archived"
+            ]
+          },
+          "limit": {
+            "default": 50,
+            "description": "How many to return, from 1 to 100. Default 50.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "skip": {
+            "default": 0,
+            "description": "How many to skip, to read the next page. Default 0.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_experiment",
+      "title": "Read an experiment",
+      "description": "Reads one experiment by its id (from list_experiments): hypothesis, status, variants and their traffic allocation, metrics (one is primary), targeting rules and dates.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "experiment_id": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "description": "The experiment's id, from list_experiments."
+          }
+        },
+        "required": [
+          "experiment_id"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_experiment_results",
+      "title": "Read experiment results",
+      "description": "Reads the statistical results of an experiment that has started (a draft has none). For each metric and variant: the sample size, the conversion rate or mean, the difference from the control with its confidence interval, the p-value and whether it is significant, plus a summary and recommendation. Before stating a conclusion, check `srm` (a sample-ratio mismatch: users were not split as configured, so the comparison cannot be trusted) and `sample_size_adequate` (false: too few users yet).",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "experiment_id": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "description": "The experiment's id, from list_experiments."
+          }
+        },
+        "required": [
+          "experiment_id"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    }
+  ]
+}

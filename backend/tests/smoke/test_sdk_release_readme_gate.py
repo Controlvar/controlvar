@@ -200,33 +200,38 @@ def _planted(readme: str, heading: str, line: str) -> str:
     return planted
 
 
-def test_npm_build_passes_the_react_readme_and_refuses_a_planted_install(
-    tmp_path: Path,
+#: Per I-README npm SDK: the heading a planted registry install goes under
+#: (outside its Install section), and the line planted.
+NPM_PLANTS: Dict[str, Tuple[str, str]] = {
+    "react": ("## Provider setup\n", "`npm install @controlvar/react-sdk`"),
+    "react-native": ("## Quick start\n", "`npm install @controlvar/react-native-sdk`"),
+}
+
+
+@pytest.mark.parametrize("sdk", sorted(NPM_PLANTS))
+def test_npm_build_passes_the_readme_and_refuses_a_planted_install(
+    sdk: str, tmp_path: Path
 ) -> None:
     """The step as the runner runs it, on a tarball of the README in the
     tree: it passes, and the same README with a registry install line
     outside its Install section is refused."""
     workspace = _workspace(tmp_path)
     step = _step("npm-build", STEP)
-    readme, version = _readme("react"), _npm_version("react")
+    readme, version = _readme(sdk), _npm_version(sdk)
     good = _tgz(tmp_path / "good.tgz", readme, version)
     result = _run_step(
         step,
-        {"needs.resolve.outputs.sdk": "react", "steps.pack.outputs.tgz": str(good)},
+        {"needs.resolve.outputs.sdk": sdk, "steps.pack.outputs.tgz": str(good)},
         tmp_path,
         workspace,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert f"{good}: README checked" in result.stdout
 
-    bad = _tgz(
-        tmp_path / "bad.tgz",
-        _planted(readme, "## Provider setup\n", "`npm install @controlvar/react-sdk`"),
-        version,
-    )
+    bad = _tgz(tmp_path / "bad.tgz", _planted(readme, *NPM_PLANTS[sdk]), version)
     result = _run_step(
         step,
-        {"needs.resolve.outputs.sdk": "react", "steps.pack.outputs.tgz": str(bad)},
+        {"needs.resolve.outputs.sdk": sdk, "steps.pack.outputs.tgz": str(bad)},
         tmp_path,
         workspace,
     )
@@ -402,6 +407,7 @@ def _run_unit_step(
     [
         ("js", "node"),
         ("react", "node"),
+        ("react-native", "node"),
         ("openfeature", "node"),
         ("openfeature-python", "python"),
     ],
@@ -434,7 +440,7 @@ def test_js_held_to_the_i_readme_rules_turns_the_js_leg_red(tmp_path: Path) -> N
     assert "the Install section names an install command" in result.stderr
 
 
-@pytest.mark.parametrize("sdk", ["edge", "react-native"])
+@pytest.mark.parametrize("sdk", ["edge"])
 def test_a_leg_with_no_rules_is_named_and_not_packed(sdk: str, tmp_path: Path) -> None:
     result, npm_calls = _run_unit_step(tmp_path, sdk, "node")
     assert result.returncode == 0, result.stdout + result.stderr

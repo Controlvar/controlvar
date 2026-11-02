@@ -6,8 +6,9 @@ name: SDK Unit Tests
 # toolchain, in two tiers:
 #
 #   Linux tier (required on PRs) — js, react, react-native, edge, openfeature,
-#     python, openfeature-python, go, java, ruby, php, dotnet. All install and
-#     run in well under a minute on ubuntu-latest. A pull request runs the SDKs
+#     python, openfeature-python, go, java, ruby, php, dotnet, and mcp (the
+#     MCP server: not an SDK, but its suite runs here like one). All install
+#     and run in well under a minute on ubuntu-latest. A pull request runs the SDKs
 #     it touches plus the always-on core three (js, python, react: the dashboard,
 #     the demos and the backend's own examples depend on them), so an unrelated
 #     backend change does not pay for twelve toolchains.
@@ -80,6 +81,8 @@ jobs:
             react-native:
               - *all
               - 'sdk/react-native/**'
+              # the real-npm app check the react-native leg runs on the packed tarball
+              - 'scripts/check_react_native_app.py'
             edge:
               - *all
               - 'sdk/edge/**'
@@ -111,6 +114,9 @@ jobs:
             dotnet:
               - *all
               - 'sdk/dotnet/**'
+            mcp:
+              - *all
+              - 'sdk/mcp/**'
             elixir:
               - *all
               - 'sdk/elixir/**'
@@ -148,6 +154,7 @@ jobs:
               "ruby": "ruby",
               "php": "php",
               "dotnet": "dotnet",
+              "mcp": "node",
           }
           HEAVY = ["elixir", "flutter", "android", "ios"]
 
@@ -266,6 +273,20 @@ jobs:
                 (cd ../js && npm ci --no-audit --no-fund)
               fi
               npm test -- --ci
+              # React Native ships its TypeScript source and has no build, so
+              # its own type checks (the source; the tests and mocks) run here.
+              if [ "$SDK" = "react-native" ]; then
+                npm run typecheck
+                npm run typecheck:tests
+              fi
+              ;;
+            mcp)
+              # The MCP server. Its `test` script builds dist/ first: the suite
+              # runs the built server as a child process against a stub API
+              # on 127.0.0.1, and packs and installs the package from npm.
+              cd sdk/mcp
+              npm ci --no-audit --no-fund
+              npm test -- --ci
               ;;
             python)
               pip install pytest
@@ -336,6 +357,24 @@ jobs:
             python -m build --outdir "$out" "sdk/$SDK"
           fi
           python3 scripts/check_packaged_readme.py --sdk "$SDK" "$out"/*
+
+      # React Native's `types` is its TypeScript source, so an app's own tsc
+      # checks the SDK's code against the app's AsyncStorage, which the SDK
+      # takes as a peer at >=1.21.0 <4. This packs the SDK the way
+      # sdk-release.yml does and, once per AsyncStorage major, installs the
+      # tarball alone into a React Native app already on that major (the
+      # template's strict tsconfig): the app keeps its one AsyncStorage at its
+      # own version and type-checks the SDK (scripts/check_react_native_app.py;
+      # npm-build runs it on the tarball it publishes).
+      - name: A TypeScript app type-checks the packed SDK
+        if: matrix.sdk == 'react-native'
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/rn-app-pack"
+          rm -rf "$out"
+          mkdir -p "$out"
+          (cd sdk/react-native && npm pack --pack-destination "$out")
+          python3 scripts/check_react_native_app.py "$out"/*.tgz
 
   # ───────────────────────────────────────────────────────────────────────────
   # Heavy tier — nightly, or when the SDK's own path is touched.

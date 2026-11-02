@@ -37,6 +37,11 @@ changes:
   `*APIError` (422, or the 400, 414 or 431 of a server or proxy that refuses the URL), for any
   flag. Before, they were not sent, and the flag answered without them.
 
+`WithOnExposure` is new: an option that gives the client a function it calls once each time the
+server enrols a user in an experiment and the answer did not come from its cache. Its argument is
+the new `Exposure` type. Run `go get github.com/controlvar/controlvar/sdk/go` again to have it. See
+Exposure hook below.
+
 ## Quick Start
 
 ```go
@@ -84,6 +89,7 @@ _ = client.Track(ctx, &exp.TrackEvent{UserID: user.ID, EventName: "page_view"})
 | `WithTimeout` | `time.Duration` | `10s` | Per-request HTTP timeout (also honours `ctx`) |
 | `WithCacheTTL` | `time.Duration` | `5m` | How long a successful evaluation/assignment is reused; `<= 0` never expires |
 | `WithCacheSize` | `int` | `1000` | Max cached evaluations + assignments (LRU eviction) |
+| `WithOnExposure` | `func(context.Context, Exposure)` | none | Called once each time the server enrols the user and the answer is not cached; `nil` sets none (Exposure hook, below) |
 | `WithLocalEval` | `bool` | — | Deprecated no-op kept for source compatibility |
 
 ## API
@@ -107,6 +113,7 @@ Types (`types.go`):
 | `User` | `ID string`, `Attributes map[string]interface{}` (sent as `context` on assignment and on flag evaluation; Targeting attributes, below) |
 | `EvalResult` | `Key string`, `Enabled bool`, `Config map[string]any` (always `nil`: the evaluate endpoint returns `config: null` for every flag), `Value json.RawMessage` (what the flag serves this user; `nil` when the server sent none), `ValueType string` (`"boolean"`, `"string"`, `"number"` or `"json"`; `""` when the server sent none) |
 | `Assignment` | `ExperimentKey`, `UserID`, `VariantID`, `VariantName string`, `IsControl bool`, `Configuration map[string]any` |
+| `Exposure` | `ExperimentKey`, `UserID`, `VariantID` (`""` when the server sent none), `VariantName string`: what the `WithOnExposure` function receives (Exposure hook, below) |
 | `TrackEvent` | `UserID`, `EventName` (required), `EventType` (defaults to `EventName`), `ExperimentKey`, `FeatureFlagKey`, `Value *float64` (`exp.Float64(v)`), `Properties` (sent as `metadata`), `Timestamp time.Time` (ISO-8601 when non-zero) |
 | `APIError` | `StatusCode int`, `Message string`, `RetryAfter string` (429); use `errors.As` |
 
@@ -178,11 +185,42 @@ user (`feature_flag_key`), taken from the cache. Nothing cached → nothing is s
 makes a single `Track("purchase")` count as a conversion for every experiment the user is in.
 Conversions are matched to metrics by **event name**.
 
-This SDK reads only the variant from an answer: an `assigned: false` answer (a user the
+This SDK returns only the variant from an answer: an `assigned: false` answer (a user the
 experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as the
 control variant, and an event tracked without a key after the user's cache entries have expired
 (`CacheTTL`, 5 minutes by default) is not sent, so pass `ExperimentKey` on a conversion that can
 come later.
+
+## Exposure hook
+
+`WithOnExposure` gives the client a function of yours when you create it. The client calls it once
+each time the server enrols the user in an experiment and the answer did not come from the
+client's cache: the moment the server records the exposure. Use it to send the exposure to your
+analytics tool or warehouse.
+
+```go
+exposures := make(chan exp.Exposure, 10000) // a goroutine of yours reads it and calls your analytics tool
+
+client, err := exp.New(
+    exp.WithBaseURL(os.Getenv("CONTROLVAR_API_URL")),
+    exp.WithAPIKey(os.Getenv("CONTROLVAR_API_KEY")),
+    exp.WithOnExposure(func(ctx context.Context, e exp.Exposure) {
+        select {
+        case exposures <- e:
+        default: // the channel is full: drop it rather than make GetAssignment wait
+        }
+    }),
+)
+```
+
+It receives an `Exposure`: `ExperimentKey`, `UserID`, `VariantID` (`""` when the server sends
+none) and `VariantName`. It is not called for a cached answer, a user the experiment did not enrol
+or an experiment that is not running (`assigned: false`), a call that fails, or a feature flag. It
+runs on the goroutine that called `GetAssignment`, before that call returns, so its running time
+is added to the call: hand the exposure on, as above. If it panics, the client recovers:
+`GetAssignment` returns the answer and a nil error, and nothing records the panic.
+
+Full details: [Exposure hook](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/go.md#exposure-hook).
 
 ## Consistent hash (compatibility utility)
 
@@ -201,7 +239,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
 | `EvaluateFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the user's attributes as URL-encoded JSON, only when there are any | `{key, enabled, value, value_type, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
-| `GetAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
+| `GetAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `Track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `Track` without keys, `TrackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |
 
@@ -214,7 +252,7 @@ cd sdk/go && go run ./examples/contract_smoke
 It prints:
 
 ```text
-{"sdk":"go","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
+{"sdk":"go","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true},"exposure":{"calls":1,"payload":{"experiment_key":"sdk_contract_ab","variant_name":"control","variant_id":"<variant id>","user_id":"smoke-<uuid>"}}}
 ```
 
 Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),

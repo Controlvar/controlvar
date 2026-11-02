@@ -24,7 +24,8 @@ SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlv
 
 **Not yet published.** `@controlvar/react-native-sdk` is not on npm, so build it from
 source: pack it from a clone of this repository (it ships TypeScript source, so there is no build
-step) and install the tarball. No CI job packs the tarball or installs it into a React Native app.
+step) and install the tarball. The SDK Unit Tests workflow packs it and type-checks it in a
+TypeScript React Native app on every pull request that changes it; no CI job runs it on a device.
 `npm pack` writes `controlvar-react-native-sdk-0.1.0.tgz`:
 
 ```bash
@@ -33,18 +34,30 @@ cd controlvar/sdk/react-native
 npm pack
 ```
 
-Then, in your app, install the tarball. `@react-native-async-storage/async-storage` and `md5` are
-dependencies of the package (its peer dependencies are `react` and `react-native`); the command
-names them too, so they are direct dependencies of your app:
+Then, in your app, install the tarball:
 
 ```bash
-npm install /path/to/controlvar/sdk/react-native/controlvar-react-native-sdk-0.1.0.tgz @react-native-async-storage/async-storage md5
+npm install /path/to/controlvar/sdk/react-native/controlvar-react-native-sdk-0.1.0.tgz
 ```
+
+Its peer dependencies are `react` (>= 16.8), `react-native` (>= 0.65) and
+`@react-native-async-storage/async-storage` (`>=1.21.0 <4`: majors 1, 2 and 3 are supported).
+React Native links a native module only from your app's own dependencies, so AsyncStorage must be
+one of them. If your app does not have it yet, add it:
+
+```bash
+npm install @react-native-async-storage/async-storage
+```
+
+An app that already has AsyncStorage keeps its version. Do not put a version or range of
+AsyncStorage on that line (such as `@latest`): npm saves it, which moves an app on 1.x or 2.x to
+3.x. Your app's own AsyncStorage already satisfies the peer.
 
 - **iOS**: `cd ios && pod install` (required by `@react-native-async-storage/async-storage`).
 - **Android**: no additional setup (minSdk 21).
-- `md5` is imported when the package loads (its entry point re-exports `hashUser`), so it must
-  resolve even if you never call `hashUser`.
+- `md5` is a dependency of the package, imported when the package loads (its entry point
+  re-exports `hashUser`), so it must resolve even if you never call `hashUser`. Its type
+  declarations, `@types/md5`, are a dependency too, so an app's `tsc` finds them.
 
 ---
 
@@ -304,6 +317,18 @@ hashUser('user-123', 'my-flag'); // ≈ 0.6927449859
 
 ### Jest setup
 
+React Native's Jest preset does not transform code under `node_modules`, and the package is
+TypeScript source, so add it to the preset's `transformIgnorePatterns` in your Jest config:
+
+```json
+{
+  "preset": "react-native",
+  "transformIgnorePatterns": [
+    "node_modules/(?!((jest-)?react-native|@react-native(-community)?|@controlvar/react-native-sdk)/)"
+  ]
+}
+```
+
 This repository has an in-memory Jest mock for AsyncStorage,
 `sdk/react-native/__mocks__/@react-native-async-storage/async-storage.ts`. The package does not
 ship it (its `files` list is `src` only), so copy it into your project and map it in your Jest
@@ -358,8 +383,9 @@ test('useFlag reflects the server decision', async () => {
 
 ### Running the SDK's own tests
 
-`npx jest` runs the client, hook and hash tests, with `fetch` mocked. `npx tsc --noEmit`
-type-checks `src/`, and `npm run typecheck:tests` type-checks the tests too:
+`npx jest` runs the client, hook, hash and storage tests, with `fetch` mocked (the storage tests
+run against the AsyncStorage 1.x and 3.x shapes). `npx tsc --noEmit` type-checks `src/`, and
+`npm run typecheck:tests` type-checks the tests too. The SDK Unit Tests workflow runs all three:
 
 ```bash
 cd sdk/react-native && npm install
@@ -395,4 +421,7 @@ for that user and flag is served until it expires, whatever attributes the new c
 `clearCache()` and `await clearStorage()`, then remount; with a client constructed with
 `offlineFallback: false`, `clearCache()` plus a remount is enough.
 
-**Type errors with `md5`** — `npm install --save-dev @types/md5`.
+**Type errors in `node_modules/@controlvar/react-native-sdk/src`** — the package is TypeScript
+source, so your app's `tsc` checks it with your app's AsyncStorage. Check that AsyncStorage is a
+major the peer range allows (1, 2 or 3), and that `@types/md5`, which comes with the package, is
+installed.

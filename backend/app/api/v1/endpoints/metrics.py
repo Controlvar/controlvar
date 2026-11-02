@@ -194,8 +194,16 @@ def get_error_logs(
     feature_flag_id: Optional[UUID] = Query(
         None, description="Filter by feature flag ID"
     ),
-    start_date: Optional[datetime] = Query(None, description="Start date for errors"),
-    end_date: Optional[datetime] = Query(None, description="End date for errors"),
+    start_date: Annotated[
+        Optional[datetime],
+        Query(description="Start date for errors"),
+        AfterValidator(_storable_offset),
+    ] = None,
+    end_date: Annotated[
+        Optional[datetime],
+        Query(description="End date for errors"),
+        AfterValidator(_storable_offset),
+    ] = None,
     error_type: Optional[str] = Query(None, description="Filter by error type"),
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(
@@ -209,6 +217,9 @@ def get_error_logs(
 
     This endpoint provides access to error logs that occurred during
     feature flag evaluation and other system operations.
+
+    A ``start_date`` or ``end_date`` whose UTC offset is 16 hours or more
+    answers 422 (#956); it used to answer 500.
     """
     return MetricsService.get_error_logs(
         db=db,
