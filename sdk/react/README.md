@@ -46,7 +46,8 @@ return isEnabled ? <NewSearch /> : <LegacySearch />;
 ```
 
 `variant` is `null` when off and `'on'` otherwise, and `config` is always `null`: the evaluate
-endpoint returns `config: null` for every flag. On error the flag is reported off with `error` set. `reason`
+endpoint returns `config: null` for every flag. On error `error` is set and the flag is reported off,
+or, if it started from the Provider's `bootstrap`, keeps that answer. `reason`
 (`'targeting_rule' | 'rollout' | 'inactive' | 'error'`) says why the server decided; it is
 `undefined` while loading, on error, or when the server does not send one.
 
@@ -68,6 +69,8 @@ const headline = (configuration?.headline as string) ?? 'Gear up for the season'
 
 While loading or on error you get the control defaults:
 `variantKey: 'control', variantName: 'Control', variantId: null, isControl: true, configuration: null`.
+With a `bootstrap` that has the experiment, it starts from that assignment instead, and keeps it,
+with `error` set, if its request fails.
 
 A resolved assignment also carries `assigned` and `reason`. `assigned: false` means the server
 did not enrol the user — `reason` is `'holdout'`, `'mutual_exclusion'` or `'targeting'` — and
@@ -142,6 +145,41 @@ export async function getServerSideProps({ req }) {
   return { props: { flags, hero } };
 }
 ```
+
+`ServerClient.bootstrap(keys, user)` returns the answers in the form the Provider's `bootstrap`
+takes (see Bootstrap below).
+
+## Bootstrap
+
+Pass the Provider a `bootstrap`, the answers the server already has for the page's user, and the
+page's first render shows them with no request instead of every flag off and the control variant:
+
+```tsx
+// pages/checkout.tsx
+export const getServerSideProps = async ({ req }) => {
+  const client = new ServerClient({ apiKey: process.env.CONTROLVAR_API_KEY!, baseUrl: process.env.CONTROLVAR_API_URL! });
+  const visitorId = req.cookies.visitor_id;
+  const bootstrap = await client.bootstrap({ flags: ['new_search'], experiments: ['checkout_flow'] }, { userId: visitorId });
+  return { props: { visitorId, bootstrap } };  // a prop, never a <script> tag of your own
+};
+
+export default function CheckoutPage({ visitorId, bootstrap }) {
+  return (
+    <ExperimentationProvider config={{ apiKey, baseUrl }} user={{ userId: visitorId }} bootstrap={bootstrap}>
+      <Checkout />
+    </ExperimentationProvider>
+  );
+}
+```
+
+Each hook whose key the bootstrap has starts from its answer (`loading: false`), then asks the API
+as it always does and shows a changed answer. If that request fails, it keeps the bootstrapped
+answer, with `error` set. `bootstrap()` never throws and leaves out a key it could not get; each
+experiment it names records an exposure on the server, and the hook's request after hydration
+records another, so name only the experiments the page renders. A bootstrap for another user, or
+one that is not what `bootstrap()` returns, is ignored, with one warning in the browser console.
+
+Full details, with the App Router: [Start from the server's answers](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/react.md#start-from-the-servers-answers-bootstrap).
 
 ## Exposure hook
 

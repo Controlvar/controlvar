@@ -229,6 +229,14 @@ describe('bootstrap: the first render', () => {
     });
   });
 
+  it('uses a bootstrap however long ago it was built: it has no expiry', async () => {
+    const yearLater = Date.now() + 365 * 24 * 60 * 60 * 1000;
+    jest.spyOn(Date, 'now').mockReturnValue(yearLater);
+    render(tree(<Banner />, JSON.parse(JSON.stringify(bootstrap))));
+    expect(frames[0]).toBe('FLAG-ON|treatment');
+    await act(flush);
+  });
+
   it('starts useMultipleFlags from the entries it has, and null for the others', () => {
     global.fetch = jest.fn().mockReturnValue(new Promise(() => {})); // never answers
     const { result } = renderHook(() => useMultipleFlags(['flag-1', 'flag-2']), {

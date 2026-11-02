@@ -831,9 +831,8 @@ def test_the_pages_example_must_have_the_live_fields(runner):
     assert len(problems) == 1
     assert problems[0].startswith("the page's example flags entries have the fields")
     assert "regenerate the example" in problems[0]
-    assert _problems(runner, (1, 2), documented=None) == [
-        "docs/sdk/react.md has no JSON example of a bootstrap"
-    ]
+    (missing,) = _problems(runner, (1, 2), documented=None)
+    assert missing.endswith("/react.md has no JSON example of a bootstrap")
 
 
 def test_the_pages_example_is_the_json_fence_holding_a_bootstrap(runner):

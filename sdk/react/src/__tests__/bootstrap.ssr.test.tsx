@@ -135,7 +135,7 @@ describe('a server render with a bootstrap', () => {
     expect(fetchMock).toHaveBeenCalledTimes(0);
   });
 
-  it("calls no Provider's onExposure: the server render records nothing", async () => {
+  it('calls no Provider onExposure: the server render records nothing', async () => {
     const hook = jest.fn();
     renderToString(
       <ExperimentationProvider
