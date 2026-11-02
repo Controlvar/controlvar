@@ -54,6 +54,10 @@ from backend.app.models.rollout_schedule import (
 )
 from backend.app.models.user import User, UserRole
 from backend.tests.conftest import DEFAULT_TEST_DB_URL
+from backend.tests.integration.api.rollout_rules import rollout_invariants
+
+# Gate 3e (#1460): after every test, no schedule it wrote breaks a rule.
+pytestmark = pytest.mark.usefixtures("rollout_invariants")
 
 # ---------------------------------------------------------------------------
 # Constants
