@@ -36,7 +36,7 @@ const sections = [
       { label: 'Statistical Methods', href: docsUrl('api/sequential-testing'), desc: 'Sequential testing with mSPRT' },
       { label: 'CUPED', href: docsUrl('api/cuped'), desc: "Variance reduction from each user's own pre-experiment events (API only)" },
       { label: 'Multi-Armed Bandits', href: docsUrl('api/multi-armed-bandit'), desc: 'Thompson Sampling, UCB1, Epsilon-Greedy (create a bandit through the API)' },
-      { label: 'Split URL Testing', href: docsUrl('api/split-url'), desc: 'Full profile: store split URL experiments and preview the URL a user id hashes to. The edge router does not split traffic yet.' },
+      { label: 'Split URL Testing', href: docsUrl('api/split-url'), desc: 'Full profile: give each variant its own URL. Your server or edge asks Controlvar where to send each visitor, and conversions count for the variant they saw.' },
       { label: 'Mutual Exclusion Groups', href: docsUrl('api/mutual-exclusion-groups'), desc: 'Keep users out of conflicting experiments, and a share of new users out of every experiment' },
       { label: 'Live Results Streaming', href: docsUrl('websocket-streaming'), desc: 'Live experiment results over WebSocket: a snapshot on connect, then a fresh one every 30 seconds (by default), whatever the client sends.' },
     ],

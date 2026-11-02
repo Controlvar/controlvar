@@ -98,6 +98,9 @@ azure-credentials
 # generated SQL text the tests compare byte for byte, not data.
 !modules/backend/tests/unit/warehouse/golden/*.sql
 !modules/backend/tests/unit/warehouse/parity/*.sql
+# ...nor the scale harness's preload, which defines a function and holds no
+# data (#1608).
+!tests/scale/preload.sql
 *.dump
 *.backup
 db-backup/

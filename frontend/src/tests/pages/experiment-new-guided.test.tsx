@@ -305,6 +305,14 @@ describe('guided setup sends exactly the request the single-page form sends', ()
     );
     expect(mvCard?.textContent?.toLowerCase()).not.toContain('combination');
   });
+
+  it('says split URL and bandit experiments are created through the API', () => {
+    render(<NewExperimentPage />);
+    const note = screen.getByTestId('wizard-type-note');
+    // No SDK creates an experiment (#393).
+    expect(note).toHaveTextContent(/Create them through the API\.$/);
+    expect(note.textContent).not.toMatch(/sdk/i);
+  });
 });
 
 describe('views and the URL', () => {

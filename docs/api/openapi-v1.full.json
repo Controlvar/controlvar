@@ -15851,6 +15851,171 @@
         "title": "SourceOut",
         "type": "object"
       },
+      "SplitUrlAssignRequest": {
+        "description": "``POST /api/v1/tracking/assign``'s request, plus the request the\nvisitor made: its host, path, query and User-Agent.",
+        "example": {
+          "experiment_key": "checkout-pages",
+          "host": "shop.example.com",
+          "path": "/checkout",
+          "query": "utm_source=mail",
+          "user_agent": "Mozilla/5.0",
+          "user_id": "6f1c2a9e-3b7d-4e1a-9c55-0d2b8e4f7a10"
+        },
+        "properties": {
+          "context": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "User context for targeting",
+            "title": "Context"
+          },
+          "experiment_key": {
+            "description": "Experiment identifier",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Experiment Key",
+            "type": "string"
+          },
+          "host": {
+            "description": "The host the visitor asked for (their Host header), with or without a :port; compared without case or port. No whitespace or control characters.",
+            "maxLength": 261,
+            "minLength": 1,
+            "title": "Host",
+            "type": "string"
+          },
+          "path": {
+            "description": "The path the visitor asked for, as they sent it (not percent-decoded), starting with /. One trailing / is ignored.",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "maxLength": 8192,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The visitor's query string, without the ?, as they sent it. It is added to the URL of a variant on the control URL's host. No #, whitespace or control characters.",
+            "title": "Query"
+          },
+          "user_agent": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The visitor's User-Agent. A crawler is answered as a new visitor would be, and nothing is recorded for it.",
+            "title": "User Agent"
+          },
+          "user_id": {
+            "description": "User identifier",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "experiment_key",
+          "user_id",
+          "host",
+          "path"
+        ],
+        "title": "SplitUrlAssignRequest",
+        "type": "object"
+      },
+      "SplitUrlAssignResponse": {
+        "description": "Where to send the visitor, and why.",
+        "properties": {
+          "action": {
+            "description": "redirect: answer 302 with Location set to location. serve: serve the page the visitor asked for.",
+            "enum": [
+              "redirect",
+              "serve"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "assigned": {
+            "description": "True when the visitor holds an assignment in the experiment; false when nothing was recorded for them.",
+            "title": "Assigned",
+            "type": "boolean"
+          },
+          "experiment_key": {
+            "title": "Experiment Key",
+            "type": "string"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "On redirect, the variant's URL, with the visitor's query string added when the variant is on the control URL's host; otherwise null.",
+            "title": "Location"
+          },
+          "reason": {
+            "description": "assigned | holdout | mutual_exclusion | targeting, the status of an experiment that is not ACTIVE (draft | paused | completed | archived), not_entry (the host and path are not the experiment's control URL's; nothing recorded) or bot (a crawler; nothing recorded)",
+            "title": "Reason",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          },
+          "variant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The visitor's variant; null when reason is not_entry.",
+            "title": "Variant Id"
+          },
+          "variant_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The visitor's variant; null when reason is not_entry.",
+            "title": "Variant Name"
+          }
+        },
+        "required": [
+          "experiment_key",
+          "user_id",
+          "action",
+          "assigned",
+          "reason"
+        ],
+        "title": "SplitUrlAssignResponse",
+        "type": "object"
+      },
       "SplitUrlConfig": {
         "description": "Configuration for a split URL experiment.\n\nRequires at least 2 URL variants with unique names, whose\ntraffic_allocation values are each from 0 to 100 and sum to 100, and whose\nURLs are absolute http or https URLs (see each field).",
         "properties": {
@@ -15897,6 +16062,60 @@
           "variants"
         ],
         "title": "SplitUrlConfig",
+        "type": "object"
+      },
+      "SplitUrlRoute": {
+        "description": "One ACTIVE split URL experiment's entry.",
+        "properties": {
+          "experiment_id": {
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "experiment_key": {
+            "title": "Experiment Key",
+            "type": "string"
+          },
+          "host": {
+            "description": "The control URL's host name, in lower case",
+            "title": "Host",
+            "type": "string"
+          },
+          "path": {
+            "description": "The control URL's path, without one trailing / (except /)",
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "experiment_key",
+          "experiment_id",
+          "host",
+          "path"
+        ],
+        "title": "SplitUrlRoute",
+        "type": "object"
+      },
+      "SplitUrlRoutesResponse": {
+        "description": "The entries to match requests against, and how long to keep them.",
+        "properties": {
+          "max_age": {
+            "description": "Seconds to keep this table before fetching it again",
+            "title": "Max Age",
+            "type": "integer"
+          },
+          "routes": {
+            "items": {
+              "$ref": "#/components/schemas/SplitUrlRoute"
+            },
+            "title": "Routes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "routes",
+          "max_age"
+        ],
+        "title": "SplitUrlRoutesResponse",
         "type": "object"
       },
       "SplitUrlVariant": {
@@ -24188,7 +24407,7 @@
     },
     "/api/v1/experiments/{experiment_id}/split-url/preview": {
       "get": {
-        "description": "Preview the split URL variant assignment for a given user.\n\nThe route is declared here so the URL exists in every profile; the body\nlives in the split_url module (``experiments_split_url``) and is reached\nthrough the ``core.optional_modules`` seam. Builds without split-URL\nrouting answer HTTP 501 rather than a meaningless assignment.",
+        "description": "Returns the URL that visitor id gets now, without recording anything:\ntheir stored variant if they have one, else the variant a new visitor with\nthat id would get (the bandit weights for a bandit experiment, else the\ntraffic allocation). It checks no eligibility rule: a visitor the global\nholdout, mutual exclusion or targeting would keep out is served the\ncontrol page by POST /api/v1/tracking/split-url/assign instead.\n\nFor ADMIN and DEVELOPER users (and superusers). A deployment without split\nURL testing (the core profile) answers 501.",
         "operationId": "preview_split_url_assignment_api_v1_experiments__experiment_id__split_url_preview_get",
         "parameters": [
           {
@@ -24204,12 +24423,12 @@
             }
           },
           {
-            "description": "User ID to simulate assignment for",
+            "description": "The visitor id to preview",
             "in": "query",
             "name": "user_id",
             "required": true,
             "schema": {
-              "description": "User ID to simulate assignment for",
+              "description": "The visitor id to preview",
               "title": "User Id",
               "type": "string"
             }
@@ -24226,7 +24445,7 @@
                 }
               }
             },
-            "description": "Returns the predicted URL variant for the given user"
+            "description": "The URL that visitor id gets now, without recording anything"
           },
           "401": {
             "content": {
@@ -33499,6 +33718,104 @@
         "tags": [
           "Tracking"
         ]
+      }
+    },
+    "/api/v1/tracking/split-url/assign": {
+      "post": {
+        "description": "Where to send the visitor who asked for ``host`` + ``path``.\n\nIn order:\n\n1. 404 when no experiment has the key; 400 when it is not a split URL\n   experiment, or has no ``split_url_config``; 409 when the stored\n   configuration breaks the rules.\n2. ``serve``, reason ``not_entry``, nothing recorded, when the host\n   (without case or port) and the path (without one trailing ``/``) are\n   not the control URL's.\n3. For an ACTIVE experiment and a crawler's User-Agent: the variant a new\n   visitor with that id would get, reason ``bot``, nothing recorded.\n4. Otherwise ``POST /api/v1/tracking/assign``'s answer: ``redirect`` to the\n   variant's URL for a visitor assigned to a variant that is not the\n   control, else ``serve`` with that route's reason (``assigned``,\n   ``holdout``, ``mutual_exclusion``, ``targeting``, or the status of an\n   experiment that is not ACTIVE).\n\n``location`` is the variant's stored URL, with ``query`` added when the\nvariant is on the control URL's host.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.",
+        "operationId": "assign_split_url_visitor_api_v1_tracking_split_url_assign_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SplitUrlAssignRequest",
+                "description": "The visitor's request"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SplitUrlAssignResponse"
+                }
+              }
+            },
+            "description": "redirect, with the variant's URL, or serve"
+          },
+          "400": {
+            "description": "The experiment is not a split URL experiment, or has no split_url_config"
+          },
+          "401": {
+            "description": "No API key, or an unknown, expired or revoked one"
+          },
+          "404": {
+            "description": "No experiment has the key"
+          },
+          "409": {
+            "description": "The stored split_url_config breaks the rules"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "description": "Over the SDK rate limit for this address and path"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Where to send a split URL experiment's visitor (beta)",
+        "tags": [
+          "Tracking"
+        ],
+        "x-stability": "beta"
+      }
+    },
+    "/api/v1/tracking/split-url/routes": {
+      "get": {
+        "description": "Every ACTIVE split URL experiment's entry: the control URL's host (lower\ncase) and path, ordered by host, then path, with the experiment's key and\nid. Keep the table for ``max_age`` seconds, and for a GET whose host and\npath are an entry, ask ``POST /api/v1/tracking/split-url/assign``.\n\nAn experiment whose stored configuration breaks the rules is left out,\nand so is one whose control page an experiment started before it already\nhas, or that would chain with one.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.",
+        "operationId": "get_split_url_routes_api_v1_tracking_split_url_routes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SplitUrlRoutesResponse"
+                }
+              }
+            },
+            "description": "Every ACTIVE split URL experiment's control host and path"
+          },
+          "401": {
+            "description": "No API key, or an unknown, expired or revoked one"
+          },
+          "429": {
+            "description": "Over the SDK rate limit for this address and path"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "List the split URL entries to match requests against (beta)",
+        "tags": [
+          "Tracking"
+        ],
+        "x-stability": "beta"
       }
     },
     "/api/v1/tracking/track": {

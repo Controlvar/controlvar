@@ -1253,6 +1253,18 @@
         "summary": "Track event by ids"
       }
     },
+    "/api/v1/tracking/split-url/assign": {
+      "post": {
+        "operationId": "assign_split_url_visitor_api_v1_tracking_split_url_assign_post",
+        "summary": "Where to send a split URL experiment's visitor (beta)"
+      }
+    },
+    "/api/v1/tracking/split-url/routes": {
+      "get": {
+        "operationId": "get_split_url_routes_api_v1_tracking_split_url_routes_get",
+        "summary": "List the split URL entries to match requests against (beta)"
+      }
+    },
     "/api/v1/tracking/track": {
       "post": {
         "operationId": "track_event_api_v1_tracking_track_post",

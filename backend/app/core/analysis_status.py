@@ -82,7 +82,7 @@ ANALYSIS_STATUS: Dict[str, AnalysisLabel] = {
         BETA,
         "Beta: this measures the combined effect of running experiments' "
         "treatment arms on users first seen while the holdout was active. "
-        "Feature flags and split-URL experiments ignore the holdout: once a "
+        "Feature flags ignore the holdout: once a "
         "winner ships behind a flag, users in the holdout get it too, so "
         "shipped features are not part of this comparison. "
         "always_valid_ci_lower and always_valid_ci_upper stay valid however "
