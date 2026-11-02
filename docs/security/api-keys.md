@@ -151,8 +151,9 @@ mobile apps and code repositories. A key without the scope is refused on these f
 
 `This API key does not have the 'mcp:read' scope. Create a key with the 'mcp:read' scope to read flags, experiments and results with it.`
 
-The scope opens nothing else. Every route that creates, changes or deletes something still
-takes a user login, and a request that carries a bearer token is judged on the token alone.
+The scope opens nothing else. The routes that create, change or delete flags or experiments,
+and the routes that manage users, still take a user login, and a request that carries a bearer
+token is judged on the token alone.
 
 Every role can create a key with `mcp:read`: through the API, send `"scopes": ["mcp:read"]`.
 Keys already labelled `mcp:read` gain that access when the instance is upgraded to a

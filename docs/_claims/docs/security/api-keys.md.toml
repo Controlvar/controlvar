@@ -396,7 +396,7 @@ by = [
 ]
 
 [[unit]]
-text = "Every route that creates, changes or deletes something still takes a user login, and a request that carries a bearer token is judged on the token alone."
+text = "The routes that create, change or delete flags or experiments, and the routes that manage users, still take a user login, and a request that carries a bearer token is judged on the token alone."
 by = [
     "test:backend/tests/smoke/test_mcp_read_routes.py::test_every_mcp_read_route_is_a_get",
     "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_scoped_key_is_refused_by_the_routes_that_change_things",

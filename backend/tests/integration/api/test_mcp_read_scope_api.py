@@ -221,10 +221,13 @@ def test_a_read_records_the_keys_use(client, db_session, developer, seeded):
     + [["sdk:ruleset"], ["mcp:*"], ["mcp"], ["read", "write"]],
     ids=repr,
 )
+@pytest.mark.parametrize("is_superuser", [False, True], ids=["developer", "superuser"])
 def test_a_key_without_the_exact_scope_is_refused_on_each_operation(
-    client, developer, seeded, scopes
+    client, db_session, seeded, scopes, is_superuser
 ):
-    key = _key(client, developer, scopes)["key"]
+    """A superuser's key without the scope is refused too."""
+    owner = _make_user(db_session, is_superuser=is_superuser)
+    key = _key(client, owner, scopes)["key"]
     for name, path in _paths(seeded).items():
         response = client.get(path, headers=_with_key(key))
         assert response.status_code == 403, (
