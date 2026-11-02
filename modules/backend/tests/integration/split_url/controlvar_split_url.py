@@ -10,6 +10,7 @@ import asyncio
 import http.client
 import json
 import logging
+import string
 import time
 import urllib.error
 import urllib.parse
@@ -256,7 +257,7 @@ class SplitUrl:
                 "redirected",
                 status=302,
                 headers=[
-                    ("Location", location),
+                    ("Location", urllib.parse.quote(location, safe=string.punctuation)),
                     ("Cache-Control", "no-store"),
                     *cookie,
                     ("X-Split-URL", "redirected"),

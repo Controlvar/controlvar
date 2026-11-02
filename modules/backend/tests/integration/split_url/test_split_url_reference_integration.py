@@ -294,6 +294,22 @@ def test_a_location_whose_scheme_is_in_upper_case_is_followed():
     assert dict(answer.headers)["Location"] == "HTTPS://e.com/b"
 
 
+@pytest.mark.regression
+def test_a_location_with_a_non_ascii_character_is_percent_encoded():
+    """The API returns a variant URL's query string as stored, so it can hold
+    a character a header cannot carry; the integration sends it as a browser
+    would, percent-encoded as UTF-8, instead of failing the visitor."""
+    api = FakeApi(assign={**REDIRECT, "location": "https://e.com/b?ref=€"})
+    sent, pages = run_middleware({}, api)
+    assert pages == []
+    assert (b"location", b"https://e.com/b?ref=%E2%82%AC") in [
+        (n.lower(), v) for n, v in sent[0]["headers"]
+    ]
+    answer = visit(split_url(api))
+    assert answer.status == 302
+    assert dict(answer.headers)["Location"] == "https://e.com/b?ref=%E2%82%AC"
+
+
 def test_the_routes_table_is_kept_for_its_max_age():
     """V17 for the reference integration: one fetch within max_age, a second
     once the clock passes it."""
