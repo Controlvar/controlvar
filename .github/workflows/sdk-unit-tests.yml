@@ -308,6 +308,35 @@ jobs:
               echo "::error::no test command for sdk '$SDK'"; exit 1 ;;
           esac
 
+      # The README npm or PyPI would show for this SDK's next release, read
+      # from the package built the way sdk-release.yml builds it (`npm pack`;
+      # a wheel and an sdist) and held to the same rule set by the same gate,
+      # so a README the release would refuse fails the pull request that
+      # wrote it rather than a release tag. An SDK the gate has no rules for
+      # is refused by the release itself; here it is named and not packed.
+      - name: Check the packed README
+        if: matrix.lang == 'node' || matrix.lang == 'python'
+        env:
+          SDK: ${{ matrix.sdk }}
+          TOOLCHAIN: ${{ matrix.lang }}
+        run: |
+          set -euo pipefail
+          rules="$(python3 scripts/check_packaged_readme.py --sdk "$SDK" --print-rule-set)"
+          if [ "$rules" = "none" ]; then
+            printf '%s\n' "::notice::sdk/$SDK: the README gate has no rules for this SDK, so sdk-release.yml refuses to release it until it has (scripts/check_packaged_readme.py)"
+            exit 0
+          fi
+          out="$RUNNER_TEMP/packed"
+          rm -rf "$out"
+          mkdir -p "$out"
+          if [ "$TOOLCHAIN" = "node" ]; then
+            (cd "sdk/$SDK" && npm pack --pack-destination "$out")
+          else
+            python -m pip install build
+            python -m build --outdir "$out" "sdk/$SDK"
+          fi
+          python3 scripts/check_packaged_readme.py --sdk "$SDK" "$out"/*
+
   # ───────────────────────────────────────────────────────────────────────────
   # Heavy tier — nightly, or when the SDK's own path is touched.
   # ───────────────────────────────────────────────────────────────────────────

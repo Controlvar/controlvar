@@ -31,6 +31,10 @@
     "url": "git+https://github.com/Controlvar/controlvar.git",
     "directory": "sdk/openfeature"
   },
+  "homepage": "https://github.com/Controlvar/controlvar/tree/main/sdk/openfeature#readme",
+  "bugs": {
+    "url": "https://github.com/Controlvar/controlvar/issues"
+  },
   "dependencies": {
     "@controlvar/js-sdk": "file:../js"
   },
