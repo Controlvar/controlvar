@@ -613,11 +613,13 @@ text = "Responses give stage dates in UTC with no zone (2027-01-08T00:00:00)."
 by = ["test:backend/tests/integration/api/test_rollout_stage_dates_utc.py::test_a_stage_start_date_is_stored_and_served_in_utc"]
 
 [[unit]]
-text = "A stage's response carries started_at: the time the stage actually started, in UTC, or null until it starts (and for a stage that finished before the field existed)."
+text = "A stage's response carries started_at: the time the stage actually started, in UTC, or null until it starts (and for a stage that finished before the field existed, or that the previous release started during the upgrade to the release that added it, which keeps null while it runs and after)."
 by = [
     "test:backend/tests/integration/api/test_rollout_stage_started_at.py::test_a_schedule_read_shows_each_stage_s_start",
     "test:backend/tests/integration/api/test_rollout_stage_started_at.py::test_every_start_transition_records_the_start",
+    "test:backend/tests/integration/api/test_rollout_stage_started_at.py::test_a_stage_an_older_release_started_completes_from_its_updated_at",
     "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_a_database_at_the_previous_release_gains_the_column_and_each_start",
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_previous_release_starts_stages_and_this_release_completes_them",
 ]
 
 [[unit]]

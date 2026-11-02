@@ -275,8 +275,11 @@ class RolloutStageResponse(RolloutStageBase):
         description=(
             "When the stage started, in UTC: the time a time-based stage's "
             "duration and the schedule's min_stage_duration are measured from. "
-            "Null until the stage starts, and for a stage that completed or "
-            "failed before it was recorded. Editing the stage does not change it."
+            "Null until the stage starts, for a stage that completed or failed "
+            "before it was recorded, and for a stage a release that did not "
+            "record it started during an upgrade, while that stage runs and "
+            "after; the scheduler measures such a stage from updated_at. "
+            "Editing the stage does not change it."
         ),
     )
     created_at: datetime

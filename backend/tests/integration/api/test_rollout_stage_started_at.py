@@ -414,6 +414,11 @@ def test_a_stage_an_older_release_started_completes_from_its_updated_at(
     _set(fresh, timed, started_at=None, updated_at=_naive(T0))
 
     _completes_at_exactly(session_factory, fresh, created["id"], timed, T0 + ONE_HOUR)
+    # Such a stage never gets a start: null in the response after it completes
+    # too, not only while it runs (#1632 review F5).
+    assert _started(fresh, timed) is None
+    read = ok(send(client, "GET", f"{SCHEDULES}/{created['id']}", developer))
+    assert {s["name"]: s["started_at"] for s in read["stages"]}["timed"] is None
 
 
 @pytest.mark.regression

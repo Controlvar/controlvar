@@ -277,8 +277,9 @@ and `2027-01-08T00:00:00` are the same moment. Responses give stage dates in UTC
 (`2027-01-08T00:00:00`).
 
 A stage's response carries `started_at`: the time the stage actually started, in UTC, or
-`null` until it starts (and for a stage that finished before the field existed). It is
-read-only; a request that sends it is ignored. A time-based stage completes once
+`null` until it starts (and for a stage that finished before the field existed, or that the
+previous release started during the upgrade to the release that added it, which keeps `null`
+while it runs and after). It is read-only; a request that sends it is ignored. A time-based stage completes once
 `trigger_configuration.duration` hours (24 if absent) have passed since `started_at`, and the
 schedule's `min_stage_duration` is measured from it too. `start_date` is different: it is the
 earliest a time-based stage may start. Editing a stage in progress does not change
