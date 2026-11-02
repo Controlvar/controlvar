@@ -52,6 +52,9 @@ def fake_api(experiment_key: str, flag_key: str) -> FakeTransport:
             "variant_name": "control",
             "is_control": True,
             "configuration": None,
+            # The server answers an enrolled user with assigned: true, which on_exposure needs.
+            "assigned": True,
+            "reason": "assigned",
         },
     )
     transport.route(
@@ -95,6 +98,15 @@ def test_it_runs_from_the_source_tree_with_its_defaults(environment, capsys):
         "flag": {"enabled": True},
         "track": {"ok": True},
         "fanout": {"ok": True},
+        "exposure": {
+            "calls": 1,
+            "payload": {
+                "experiment_key": "sdk_contract_ab",
+                "variant_name": "control",
+                "variant_id": "var-1",
+                "user_id": assign["user_id"],
+            },
+        },
     }
 
 
@@ -115,6 +127,8 @@ def test_it_runs_the_four_contract_steps(environment, capsys):
         "POST /api/v1/tracking/track",  # purchase, with the experiment's key
         "POST /api/v1/tracking/batch",  # page_view without a key: fanned out
         "POST /api/v1/tracking/batch",  # the 2-event batch
+        "POST /api/v1/tracking/assign",  # the exposure hook's new client: two assigns, the second cached
+        "POST /api/v1/tracking/assign",  # the client whose hook raises
     ]
     assert all(r.url.startswith("http://api.test/") for r in transport.requests)
     track = transport.requests[3].json()
@@ -125,7 +139,53 @@ def test_it_runs_the_four_contract_steps(environment, capsys):
         ("page_view", None, "flag_a"),
     }
     assert len(transport.requests[5].json()["events"]) == 2
+    assert [(r.json()["experiment_key"], r.json()["user_id"]) for r in transport.requests[6:]] == [
+        ("exp_a", "user-a"),
+        ("exp_a", "user-a"),
+    ]
     assert len(capsys.readouterr().out.strip().splitlines()) == 1
+
+
+def test_it_fails_when_the_raising_hook_is_not_logged(environment, capsys):
+    transport = fake_api("sdk_contract_ab", "sdk_contract_flag")
+    environment.setattr(client_module, "UrllibTransport", lambda: transport)
+    environment.setattr(client_module.logger, "error", lambda *args, **kwargs: None)
+    with pytest.raises(SystemExit) as stopped:
+        load_smoke(environment).main()
+    assert stopped.value.code == 1
+    assert capsys.readouterr().err == "the raising hook was logged as []\n"
+
+
+def test_without_assigned_in_the_answer_no_hook_is_called_and_it_fails_on_the_raising_hook(environment, capsys):
+    environment.setenv("CONTRACT_EXPERIMENT_KEY", "exp_a")
+    environment.setenv("CONTRACT_USER_ID", "user-a")
+    transport = fake_api("exp_a", "sdk_contract_flag")
+    older = {"experiment_key": "exp_a", "user_id": "user-a", "variant_id": "var-1", "variant_name": "control"}
+    transport.route("POST", "/api/v1/tracking/assign", json={**older, "is_control": True, "configuration": None})
+    environment.setattr(client_module, "UrllibTransport", lambda: transport)
+    with pytest.raises(SystemExit) as stopped:
+        load_smoke(environment).main()
+    assert stopped.value.code == 1
+    out, err = capsys.readouterr()
+    assert out == ""
+    assert err == "the raising hook was reported as [], expected ['exposure/HOOK_ERROR']\n"
+    assert [r.path for r in transport.requests].count("/api/v1/tracking/assign") == 4
+
+
+def test_it_fails_when_the_hook_is_given_another_user(environment, capsys):
+    environment.setenv("CONTRACT_USER_ID", "user-a")
+    transport = fake_api("sdk_contract_ab", "sdk_contract_flag")
+    environment.setattr(client_module, "UrllibTransport", lambda: transport)
+    real = client_module.ExperimentationClient._exposed
+    environment.setattr(
+        client_module.ExperimentationClient,
+        "_exposed",
+        lambda self, user_id, assignment: real(self, "someone-else", assignment),
+    )
+    with pytest.raises(SystemExit) as stopped:
+        load_smoke(environment).main()
+    assert stopped.value.code == 1
+    assert capsys.readouterr().err == "on_exposure received user 'someone-else', expected 'user-a'\n"
 
 
 @pytest.mark.parametrize(

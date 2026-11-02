@@ -215,7 +215,7 @@ the core through the registration hooks in `backend/app/core/`:
 | `integrations` | Jira, Salesforce and GitHub |
 | `counters` | Routes to increment and read assignment and conversion counters in DynamoDB; assignment and tracking do not write them |
 | `etl` | Glue crawlers, Athena partitions and scheduled jobs |
-| `split_url` | Split URL experiments: each variant is its own URL. Your server or edge asks the API where to send each visitor; the CloudFront edge router does not split traffic yet ([#393](https://github.com/Controlvar/controlvar/issues/393)). The AWS installer installs the core profile, so it does not include them |
+| `split_url` | Split URL experiments: each variant is its own URL. Your server or edge asks the API where to send each visitor (on AWS an optional CloudFront router can). The AWS installer installs the core profile, so it does not include them |
 
 `GET /api/v1/modules` reports the running profile and the installed modules — ask it first, rather
 than inferring the profile from a status code. A core deployment is the repository with `modules/`

@@ -623,9 +623,10 @@ unless you deploy with `-c bastion_ssh_cidr=<cidr>`.
 
 ### What is not deployed
 
-- **CloudFront.** No stack creates a distribution. The split-URL module ships a
-  construct for one (`modules/infrastructure/constructs/split_url_distribution.py`),
-  but `app.py` does not use it; see [Split URL testing](../api/split-url.md).
+- **CloudFront.** No stack creates a distribution unless you deploy the split URL
+  edge router, which is a CDK app of its own (`modules/infrastructure/split_url_edge/`)
+  that `app.py` does not include; see
+  [AWS integration](../integrations/aws.md#the-split-url-edge-router).
 
 ---
 

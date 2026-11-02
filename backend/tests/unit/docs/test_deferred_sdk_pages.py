@@ -585,7 +585,7 @@ def test_every_deferred_page_with_an_install_section_is_read():
     request that packs a README moves the second and third."""
     with_section = [page for page in DEFERRED if INSTALL_HEADING.search(text(page))]
     under_the_rule = [page for page in with_section if page not in PACKAGED]
-    assert (len(with_section), len(under_the_rule), len(PACKAGED)) == (24, 23, 1), (
+    assert (len(with_section), len(under_the_rule), len(PACKAGED)) == (24, 21, 4), (
         with_section,
         sorted(PACKAGED),
     )
@@ -596,11 +596,41 @@ def test_every_deferred_page_with_an_install_section_is_read():
 # ---------------------------------------------------------------------------
 
 #: Each README a registry shows, with its SDK: an explicit list, not
-#: ``DEFERRED`` (a packaged README need not be a deferred page). It is held
-#: exactly to the SDKs scripts/check_packaged_readme.py has rules for, and to
-#: the READMEs the packages actually ship.
+#: ``DEFERRED`` (a packaged README need not be a deferred page: the Python
+#: provider's has a claims registry of its own). It is held exactly to the
+#: SDKs scripts/check_packaged_readme.py holds to I-README, and to the
+#: READMEs the packages actually ship.
 PACKAGED: Dict[str, str] = {
     "sdk/dotnet/README.md": "dotnet",
+    "sdk/openfeature-python/README.md": "openfeature-python",
+    "sdk/openfeature/README.md": "openfeature",
+    "sdk/react/README.md": "react",
+}
+
+#: For each packaged README: the heading a planted registry install goes
+#: under (outside the Install section), the line planted, and what the
+#: registry sweep must then find. The plant must change the page.
+PLANTS: Dict[str, Tuple[str, str, Tuple[str, str]]] = {
+    "sdk/dotnet/README.md": (
+        "## Quick Start\n",
+        "`dotnet add package Controlvar.SDK`",
+        ("nuget", "Controlvar.SDK"),
+    ),
+    "sdk/openfeature-python/README.md": (
+        "## Quick start\n",
+        "`pip install controlvar-openfeature`",
+        ("pypi", "controlvar-openfeature"),
+    ),
+    "sdk/openfeature/README.md": (
+        "## Quick start\n",
+        "`npm install @controlvar/openfeature-provider`",
+        ("npm", "@controlvar/openfeature-provider"),
+    ),
+    "sdk/react/README.md": (
+        "## Provider setup\n",
+        "`npm install @controlvar/react-sdk`",
+        ("npm", "@controlvar/react-sdk"),
+    ),
 }
 
 
@@ -646,20 +676,23 @@ def test_a_packaged_readme_claims_no_attribute_targeting_its_client_does_not_sen
         assert attribute_claims(text(page)) == []
 
 
+def test_every_packaged_readme_has_a_plant():
+    assert set(PLANTS) == set(PACKAGED)
+
+
 @pytest.mark.parametrize("page", sorted(PACKAGED))
 def test_a_registry_install_anywhere_in_a_packaged_readme_is_refused(page):
-    """PP-3's plant, in memory: an install line in the Quick Start, outside
-    the Install section, fails both the contract and the registry sweep."""
+    """PP-3's plant, in memory: an install line in a section other than
+    Install fails both the contract and the registry sweep."""
+    heading, line, expected = PLANTS[page]
     original = text(page)
-    planted = original.replace(
-        "## Quick Start\n", "## Quick Start\n\n`dotnet add package Controlvar.SDK`\n", 1
-    )
+    planted = original.replace(heading, f"{heading}\n{line}\n", 1)
     assert planted != original
     assert any(
         "installs this repository's package from a registry" in p
         for p in _contract_problems(page, planted)
     )
-    assert registry_installs(planted) == [("nuget", "Controlvar.SDK")]
+    assert registry_installs(planted) == [expected]
 
 
 #: A link to a page of this repository on GitHub, with a fragment.
@@ -761,7 +794,6 @@ SENDS_NO_CONTEXT = {
     "ios",
     "java",
     "php",
-    "react-native",
     "ruby",
 }
 
@@ -884,6 +916,18 @@ def test_the_claim_patterns_find_the_true_sentence_on_the_react_page():
     )
 
 
+def test_the_claim_patterns_find_the_true_sentence_on_the_react_native_page():
+    # React Native sends the context since #1520, and its page says so: the
+    # patterns must see it, so that react-native put back in SENDS_NO_CONTEXT
+    # fails test_a_page_claims_no_attribute_targeting_its_client_does_not_send
+    # on docs/sdk/react-native.md as well as here.
+    assert "react-native" not in SENDS_NO_CONTEXT
+    assert sends_context("react-native")
+    assert "sent as context on flag evaluation" in attribute_claims(
+        text("docs/sdk/react-native.md")
+    )
+
+
 @pytest.mark.parametrize("page", DEFERRED)
 def test_a_page_claims_no_attribute_targeting_its_client_does_not_send(page):
     silent = [sdk for sdk in sdks_of(page) if sdk in SENDS_NO_CONTEXT]
@@ -894,3 +938,26 @@ def test_a_page_claims_no_attribute_targeting_its_client_does_not_send(page):
         f"{page}: {', '.join(silent)} sends the user id alone on flag evaluation,"
         f" but the page says attributes reach it ({claims}); say what it sends"
     )
+
+
+def test_the_react_page_names_the_ssr_entry_the_package_ships():
+    """docs/sdk/react.md names `@controlvar/react-sdk/ssr`, and the package has it.
+
+    The page is in ``CLAIMS_DEFERRED``, so no claims entry binds its App Router
+    sentence. It once told readers to call ``ServerClient`` from a server
+    component without naming an import path that exists (#1518); this holds the
+    fixed sentence, and the files that make the path real, in place, and keeps
+    the page from naming a path inside the package's ``dist``.
+    """
+    page = fold(text("docs/sdk/react.md"))
+    assert "@controlvar/react-sdk/ssr" in page
+    assert (
+        "In the App Router call the same methods from an async server component."
+        not in page
+    )
+    # The package's `exports` map refuses deep imports, so a page that sends
+    # readers into `dist` gives an instruction Node rejects.
+    assert "@controlvar/react-sdk/dist" not in page
+    manifest = json.loads((REPO_ROOT / "sdk/react/package.json").read_text("utf-8"))
+    assert "ssr" in manifest["files"]
+    assert (REPO_ROOT / "sdk/react/ssr/package.json").is_file()

@@ -56,15 +56,23 @@ EXPOSURE = {
         "user_id": "smoke-user",
     },
 }
+#: What the smoke of an SDK in ATTRIBUTE_SDKS adds (#1520): the seed's targeted
+#: flag on for plan=pro through its rule, off for plan=free.
+TARGETED = {"pro": True, "free": False, "reason": "targeting_rule"}
+PR_QA_GATE = REPO_ROOT / ".github" / "workflows" / "pr-qa-gate.yml"
+PLATFORM = REPO_ROOT / ".github" / "workflows" / "_platform.yml"
 
 
 def good(runner, sdk: str, experiment_key: str = "sdk_contract_ab") -> dict:
     """A passing report from *sdk*'s smoke: GOOD, with EXPOSURE only if the
-    runner lists *sdk* in EXPOSURE_SDKS (an unlisted SDK may not report one)."""
+    runner lists *sdk* in EXPOSURE_SDKS and TARGETED only if it lists *sdk* in
+    ATTRIBUTE_SDKS (an unlisted SDK may report neither)."""
     report = {"sdk": sdk, **GOOD}
     if sdk in runner.EXPOSURE_SDKS:
         hook = {**EXPOSURE["payload"], "experiment_key": experiment_key}
         report["exposure"] = {**EXPOSURE, "payload": hook}
+    if sdk in runner.ATTRIBUTE_SDKS:
+        report["targeted"] = dict(TARGETED)
     return report
 
 
@@ -237,10 +245,180 @@ def test_each_wrong_exposure_report_gives_exactly_its_problem(
 ):
     """The gate's own planted reports, with "js" listed and "python" not."""
     monkeypatch.setattr(runner, "EXPOSURE_SDKS", frozenset({"js"}))
+    monkeypatch.setattr(runner, "ATTRIBUTE_SDKS", frozenset())  # exposure alone here
     report = {"sdk": sdk, **GOOD}
     if exposure is not None:
         report["exposure"] = exposure
     assert runner.validate(sdk, report) == [problem]
+
+
+def test_js_and_react_native_must_show_their_attributes_reach_flag_evaluation(runner):
+    """#1520 (plan D211 gate 4f): the two SDKs whose smokes report the targeted
+    flag, and each passes with exactly TARGETED."""
+    assert runner.ATTRIBUTE_SDKS == frozenset({"js", "react-native"})
+    assert runner.TARGETED_FLAG_KEY == "sdk_contract_targeted"
+    for sdk in sorted(runner.ATTRIBUTE_SDKS):
+        report = good(runner, sdk)
+        assert report["targeted"] == TARGETED
+        assert runner.validate(sdk, report) == [], sdk
+
+
+@pytest.mark.parametrize(
+    ("sdk", "targeted", "problems"),
+    [
+        pytest.param(
+            "react-native",
+            {**TARGETED, "pro": False, "reason": "rollout"},
+            [
+                "targeted.pro=False (seeded rule plan=pro)",
+                "targeted.reason='rollout' (expected 'targeting_rule' for plan=pro)",
+            ],
+            id="context-dropped",
+        ),
+        pytest.param(
+            "js",
+            {**TARGETED, "free": True},
+            ["targeted.free=True (seeded rollout 0)"],
+            id="free-on",
+        ),
+        pytest.param(
+            "react-native",
+            {**TARGETED, "reason": None},
+            ["targeted.reason=None (expected 'targeting_rule' for plan=pro)"],
+            id="no-reason",
+        ),
+        pytest.param(
+            "react-native",
+            {**TARGETED, "pro": 1},
+            ["targeted.pro=1 (seeded rule plan=pro)"],
+            id="pro-not-a-bool",
+        ),
+        pytest.param(
+            "react-native",
+            None,
+            ["targeted missing (react-native is in ATTRIBUTE_SDKS)"],
+            id="missing",
+        ),
+        pytest.param(
+            "python",
+            TARGETED,
+            ["targeted reported but python is not in ATTRIBUTE_SDKS"],
+            id="unlisted",
+        ),
+    ],
+)
+def test_each_wrong_targeted_report_gives_exactly_its_problems(
+    runner, sdk, targeted, problems
+):
+    """The gate's own planted reports. ``context-dropped`` is what an SDK that
+    sends no attributes reports: the server answers the rollout, 0%."""
+    report = good(runner, sdk)
+    report.pop("targeted", None)
+    if targeted is not None:
+        report["targeted"] = targeted
+    assert runner.validate(sdk, report) == problems
+
+
+def test_a_smoke_that_drops_the_attributes_fails_its_row(monkeypatch, runner, capsys):
+    """main() on react-native whose smoke reports what a dropped context gets."""
+    dropped = {
+        **good(runner, "react-native"),
+        "targeted": {"pro": False, "free": False, "reason": "rollout"},
+    }
+    monkeypatch.setattr(
+        runner, "_run_command", lambda command, env, timeout: ("PASS", "0.1s", dropped)
+    )
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: f"/usr/bin/{tool}")
+    monkeypatch.setattr(sys, "argv", ["run_live_contract.py", "--sdk", "react-native"])
+    assert runner.main() == 1
+    out = " ".join(capsys.readouterr().out.split())
+    assert "FAIL react-native targeted.pro=False (seeded rule plan=pro)" in out
+
+
+def test_every_attribute_sdk_runs_in_ci_where_a_skip_is_a_failure(
+    monkeypatch, runner, capsys
+):
+    """The SDK Live Contract job names every SDK in ATTRIBUTE_SDKS and runs the
+    runner with --strict, under which a missing toolchain fails the row: an
+    SDK that cannot run cannot pass as SKIP."""
+    import yaml
+
+    job = yaml.safe_load(PR_QA_GATE.read_text(encoding="utf-8"))["jobs"][
+        "sdk-live-contract"
+    ]
+    assert set(runner.ATTRIBUTE_SDKS) <= set(job["with"]["sdks"].split())
+    platform = PLATFORM.read_text(encoding="utf-8")
+    assert (
+        "python tests/sdk-contract/live/run_live_contract.py --strict $args" in platform
+    )
+
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: None)
+    monkeypatch.setattr(runner, "check_ruleset", lambda *args: ("PASS", "ok"))
+    monkeypatch.setenv("CONTROLVAR_LOCAL_API_KEY", "scoped")
+    status, ran = run_main(monkeypatch, runner, "--sdk", "react-native", "--strict")
+    assert (status, ran) == (1, [])
+    out = " ".join(capsys.readouterr().out.split())
+    assert "FAIL react-native missing toolchain: node, npx" in out
+
+
+def test_the_seeds_targeted_flag_is_on_only_through_its_plan_rule(runner):
+    """The flag the targeted reports are judged against: ACTIVE at 0%, one rule
+    plan equals pro at 100%; put back to exactly that when it already exists."""
+    from types import SimpleNamespace
+
+    from backend.app.core.targeting_adapter import (
+        expand_context,
+        match_targeting_rule,
+        normalise_targeting_rules,
+    )
+    from backend.app.models import register_core_models
+    from backend.app.models.feature_flag import FeatureFlagStatus
+    from backend.scripts import seed_sdk_contract as seed
+
+    register_core_models()
+    assert seed.TARGETED_FLAG_KEY == runner.TARGETED_FLAG_KEY
+    rules = normalise_targeting_rules(seed.TARGETED_FLAG_RULES)
+    matched = match_targeting_rule(rules, expand_context({"plan": "pro"}))
+    assert matched is not None and matched.rollout_percentage == 100
+    assert match_targeting_rule(rules, expand_context({"plan": "free"})) is None
+    assert match_targeting_rule(rules, expand_context({})) is None
+
+    class Db:
+        def __init__(self, existing):
+            self.existing, self.added = existing, []
+
+        def query(self, model):
+            return self
+
+        def filter(self, *criteria):
+            return self
+
+        def first(self):
+            return self.existing
+
+        def add(self, obj):
+            self.added.append(obj)
+
+        def commit(self):
+            pass
+
+        def refresh(self, obj):
+            pass
+
+    admin = SimpleNamespace(id="00000000-0000-0000-0000-000000000001")
+    created = seed.seed_targeted_flag(Db(None), admin)
+    edited = SimpleNamespace(
+        id="f",
+        status=FeatureFlagStatus.INACTIVE,
+        rollout_percentage=50,
+        targeting_rules={},
+    )
+    restored = seed.seed_targeted_flag(Db(edited), admin)
+    for flag in (created, restored):
+        assert flag.status == FeatureFlagStatus.ACTIVE
+        assert flag.rollout_percentage == 0
+        assert flag.targeting_rules == seed.TARGETED_FLAG_RULES
+    assert created.key == "sdk_contract_targeted"
 
 
 def test_a_run_checks_the_exposure_against_the_experiment_it_gave_the_smoke(
@@ -263,18 +441,24 @@ def test_the_seed_creates_the_fixtures_the_runner_defaults_to(monkeypatch, runne
         for node in ast.parse(SEED.read_text(encoding="utf-8")).body
         if isinstance(node, ast.Assign)
         and isinstance(node.targets[0], ast.Name)
-        and node.targets[0].id in ("EXPERIMENT_KEY", "FLAG_KEY")
+        and node.targets[0].id in ("EXPERIMENT_KEY", "FLAG_KEY", "TARGETED_FLAG_KEY")
     }
     assert constants == {
         "EXPERIMENT_KEY": "sdk_contract_ab",
         "FLAG_KEY": "sdk_contract_flag",
+        "TARGETED_FLAG_KEY": "sdk_contract_targeted",
     }
     monkeypatch.setattr(runner.shutil, "which", lambda tool: f"/usr/bin/{tool}")
     _, ran = run_main(monkeypatch, runner, "--sdk", "go")
     env = ran[0][1]
-    assert (env["CONTRACT_EXPERIMENT_KEY"], env["CONTRACT_FLAG_KEY"]) == (
+    assert (
+        env["CONTRACT_EXPERIMENT_KEY"],
+        env["CONTRACT_FLAG_KEY"],
+        env["CONTRACT_TARGETED_FLAG_KEY"],
+    ) == (
         constants["EXPERIMENT_KEY"],
         constants["FLAG_KEY"],
+        constants["TARGETED_FLAG_KEY"],
     )
 
 

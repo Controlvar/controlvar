@@ -64,6 +64,24 @@ public class AssignmentCache<V> {
     }
 
     /**
+     * Stores a value exactly as {@link #put(String, Object)} does, and reports, in the same locked
+     * step, whether the key held no live entry before: true when it was absent or expired,
+     * false when an unexpired entry was replaced. Expiry is judged as {@link #get(String)}
+     * judges it. Two threads that store the same key one after the other therefore get true
+     * and then false, which is how the client calls its exposure listener once per stored
+     * answer.
+     *
+     * @param key   cache key
+     * @param value the value to cache (non-null)
+     * @return true when the key held no unexpired entry
+     */
+    synchronized boolean fill(String key, V value) {
+        long now = System.currentTimeMillis();
+        CacheEntry<V> previous = cache.put(key, new CacheEntry<>(value, now + ttlMs));
+        return previous == null || now > previous.expiresAt;
+    }
+
+    /**
      * Retrieves a cached value for the given key.
      *
      * <p>Returns {@code null} if the key is not present or the entry has expired.

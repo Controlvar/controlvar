@@ -1,42 +1,12 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { CreateRoleModal } from '@modules/components/admin/roles/CreateRoleModal';
 import { RbacService } from '@modules/rbac';
-import { CustomRole } from '@/types/admin';
+import { makeRole } from './rbacFixtures';
+import { shapeErrors } from '@/tests/helpers/openapiShape';
+import { ApiError } from '@/services/api';
 
 jest.mock('@modules/rbac');
-jest.mock('@modules/components/admin/roles/PermissionCheckboxGrid', () => ({
-  PermissionCheckboxGrid: ({
-    selectedPermissions,
-    onChange,
-    readOnly,
-  }: {
-    selectedPermissions: string[];
-    onChange: (p: string[]) => void;
-    readOnly?: boolean;
-  }) => (
-    <div data-testid="permission-checkbox-grid">
-      {['experiments:read', 'users:read'].map((perm) => (
-        <input
-          key={perm}
-          type="checkbox"
-          data-testid={`permission-checkbox-${perm}`}
-          checked={selectedPermissions.includes(perm)}
-          disabled={readOnly}
-          onChange={() => {
-            if (selectedPermissions.includes(perm)) {
-              onChange(selectedPermissions.filter((p) => p !== perm));
-            } else {
-              onChange([...selectedPermissions, perm]);
-            }
-          }}
-          aria-label={perm}
-        />
-      ))}
-    </div>
-  ),
-}));
-
 const mockCreateRole = RbacService.createRole as jest.Mock;
 const mockUpdateRole = RbacService.updateRole as jest.Mock;
 
@@ -44,12 +14,11 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
-const mockRole: CustomRole = {
+const mockRole = makeRole({
   name: 'existing-role',
   description: 'An existing role',
-  permissions: ['experiments:read'],
-  created_at: '2024-01-01T00:00:00Z',
-};
+  permissions: [{ resource: 'experiment', actions: ['read'] }],
+});
 
 describe('CreateRoleModal', () => {
   it('renders modal when isOpen=true', () => {
@@ -110,12 +79,7 @@ describe('CreateRoleModal', () => {
   });
 
   it('calls RbacService.createRole with correct data on submit in create mode', async () => {
-    mockCreateRole.mockResolvedValue({
-      name: 'new-role',
-      description: 'A new role',
-      permissions: ['experiments:read'],
-      created_at: '2024-01-01T00:00:00Z',
-    });
+    mockCreateRole.mockResolvedValue(makeRole({ name: 'new-role' }));
 
     const onSuccess = jest.fn();
     render(
@@ -134,8 +98,9 @@ describe('CreateRoleModal', () => {
     });
 
     // Check a permission
-    const permCheckbox = screen.getByTestId('permission-checkbox-experiments:read');
+    const permCheckbox = screen.getByTestId('permission-checkbox-experiment:read');
     fireEvent.click(permCheckbox);
+    fireEvent.click(screen.getByTestId('permission-checkbox-audit_log:read'));
 
     fireEvent.click(screen.getByTestId('modal-submit-button'));
 
@@ -143,9 +108,14 @@ describe('CreateRoleModal', () => {
       expect(mockCreateRole).toHaveBeenCalledWith({
         name: 'new-role',
         description: 'A new role',
-        permissions: ['experiments:read'],
+        permissions: [
+          { resource: 'experiment', actions: ['read'] },
+          { resource: 'audit_log', actions: ['read'] },
+        ],
       });
     });
+    // What goes on the wire is what the API's CustomRoleCreate accepts.
+    expect(shapeErrors('CustomRoleCreate', mockCreateRole.mock.calls[0][0])).toEqual([]);
 
     await waitFor(() => {
       expect(onSuccess).toHaveBeenCalled();
@@ -190,10 +160,9 @@ describe('CreateRoleModal', () => {
     await waitFor(() => {
       expect(mockUpdateRole).toHaveBeenCalledWith(
         'existing-role',
-        expect.objectContaining({
-          description: 'Updated description',
-        })
+        { description: 'Updated description', permissions: [{ resource: 'experiment', actions: ['read'] }] }
       );
+      expect(shapeErrors('CustomRoleUpdate', mockUpdateRole.mock.calls[0][1])).toEqual([]);
     });
 
     await waitFor(() => {
@@ -201,26 +170,58 @@ describe('CreateRoleModal', () => {
     });
   });
 
-  it('shows error message on failure', async () => {
-    mockCreateRole.mockRejectedValue(new Error('Failed to create role'));
-
-    render(
-      <CreateRoleModal
-        isOpen={true}
-        onClose={jest.fn()}
-        onSuccess={jest.fn()}
-      />
+  it('shows the API\'s refusal in an alert, and stays open (#891)', async () => {
+    const refusal =
+      'export (read) cannot be granted. A custom role or a direct grant can hold only ' +
+      'experiment (create, read, update, delete, list), feature_flag (create, read, update, delete, list) ' +
+      'and audit_log (read)';
+    mockCreateRole.mockRejectedValue(
+      new ApiError({
+        status: 422,
+        detail: [{ type: 'not_grantable', loc: ['body', 'permissions'], msg: refusal }],
+      }),
     );
-
-    fireEvent.change(screen.getByTestId('role-name-input'), {
-      target: { value: 'bad-role' },
-    });
-
+    const onSuccess = jest.fn();
+    render(<CreateRoleModal isOpen={true} onClose={jest.fn()} onSuccess={onSuccess} />);
+    fireEvent.change(screen.getByTestId('role-name-input'), { target: { value: 'bad-role' } });
     fireEvent.click(screen.getByTestId('modal-submit-button'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('modal-error')).toBeInTheDocument();
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(`permissions: ${refusal}`);
+    expect(onSuccess).not.toHaveBeenCalled();
+  });
+
+  it('shows a stored pair that can no longer be granted, and leaves it out of the PUT body (#891)', async () => {
+    const stored = makeRole({
+      name: 'old-role',
+      permissions: [
+        { resource: 'experiment', actions: ['read'] },
+        { resource: 'export', actions: ['read'] },
+        { resource: 'report', actions: ['read', 'list'] },
+      ],
     });
+    mockUpdateRole.mockResolvedValue(stored);
+    render(<CreateRoleModal isOpen={true} role={stored} onClose={jest.fn()} onSuccess={jest.fn()} />);
+    expect(screen.getByTestId('legacy-permissions-note')).toHaveTextContent(
+      'Not grantable, removed when you save: export (read), report (read, list). No permission check reads them.',
+    );
+    expect(screen.getByTestId('permission-checkbox-experiment:read')).toBeChecked();
+    fireEvent.click(screen.getByTestId('modal-submit-button'));
+    await waitFor(() => expect(mockUpdateRole).toHaveBeenCalled());
+    expect(mockUpdateRole.mock.calls[0][1].permissions).toEqual([{ resource: 'experiment', actions: ['read'] }]);
+  });
+
+  it('names the audit log checkbox "Read the audit log", inside its group', () => {
+    render(<CreateRoleModal isOpen={true} onClose={jest.fn()} onSuccess={jest.fn()} />);
+    const group = screen.getByRole('group', { name: 'Audit log' });
+    expect(within(group).getByRole('checkbox', { name: 'Read the audit log' })).toBeInTheDocument();
+  });
+
+  it('is a labelled dialog whose close button has a name and a readable colour', () => {
+    render(<CreateRoleModal isOpen={true} onClose={jest.fn()} onSuccess={jest.fn()} />);
+    expect(screen.getByRole('dialog', { name: 'Create Role' })).toBeInTheDocument();
+    const close = screen.getByRole('button', { name: 'Close' });
+    expect(close.className).not.toMatch(/slate-400/);
   });
 
   it('calls onClose when cancel clicked', () => {
