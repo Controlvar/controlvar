@@ -287,6 +287,35 @@ text = "key is what the tracking API and the SDKs call it by:"
 by = ["docex:docs/api/endpoints.md#\"assigned\": true"]
 
 [[unit]]
+text = "Each metric's name may appear once in an experiment, compared exactly: case and spaces count, so Revenue and revenue are two metrics."
+by = [
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_create_and_update_answer_the_same_list_alike",
+    "test:backend/tests/unit/schemas/test_experiment_metric_names.py::test_names_are_compared_exactly",
+]
+
+[[unit]]
+text = "A list that repeats a name answers 422 at [\"body\", \"metrics\"], and nothing is written."
+by = [
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_create_and_update_answer_the_same_list_alike",
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_an_update_repeating_a_name_is_422_and_keeps_the_stored_metrics",
+]
+
+[[unit]]
+text = "The msg gives the 0-based positions of the first repeated pair and never the name, for example duplicate metric name; each name may appear once per experiment (first seen at metrics[0], repeated at metrics[2])."
+by = [
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_an_update_repeating_a_name_is_422_and_keeps_the_stored_metrics",
+    "test:backend/tests/unit/schemas/test_experiment_metric_names.py::test_a_repeat_is_refused_naming_the_first_repeated_pair",
+]
+
+[[unit]]
+text = "PUT /api/v1/experiments/{experiment_id} gives the same answer, and refuses an empty metrics list with 422 as a create does; leaving metrics out, or sending null, leaves the metrics as they are."
+by = [
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_an_update_with_an_empty_list_is_422_too_short_as_on_create",
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_create_and_update_answer_the_same_list_alike",
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_an_update_without_metrics_leaves_them_unchanged",
+]
+
+[[unit]]
 text = "A new experiment is a draft."
 by = ["docex:docs/api/endpoints.md#\"key\": \"button_color_test\""]
 

@@ -29,6 +29,12 @@
 # the PUT /api/v1/rollout-schedules/{schedule_id} that answered 200 or the
 # DELETE /api/v1/rollout-schedules/{schedule_id} that answered 204, so it
 # reaches neither, and its list is 101.
+#
+# Then #1461 refused an empty `metrics` list and a repeated metric name on
+# the experiment requests (minItems on the update). That changed the requests
+# the seed generates, and with them the ids Schemathesis reuses: the superuser
+# pass now sends a GET /api/v1/results/{experiment_id}/sequential that names a
+# stored experiment (200), so it reaches it, and its list is 100.
 
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
@@ -176,11 +182,6 @@ reason = "Generated ids never name a stored row (404); the other requests fail v
 pass = "superuser"
 operation = "DELETE /api/v1/admin/users/{user_id}"
 reason = "The handler refuses the generated values (400); ids that name no stored row answer 404 and invalid requests answer 422."
-
-[[unreached]]
-pass = "superuser"
-operation = "GET /api/v1/results/{experiment_id}/sequential"
-reason = "Generated ids never name a stored row (404); the other requests fail validation (422)."
 
 [[unreached]]
 pass = "superuser"

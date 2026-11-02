@@ -302,12 +302,17 @@ def test_d2_a_draft_whose_metrics_were_removed_after_scheduling_stays_a_draft(
     caplog.set_level(logging.WARNING, logger=SCHEDULER_LOGGER)
     experiment_id = _create(client, developer)
     start = _schedule_due(client, developer, experiment_id)
-    # The update route accepts an empty list (it is not the start check).
-    body = _ok(
-        client.put(
-            f"{BASE}/{experiment_id}", json={"metrics": []}, headers=_auth(developer)
+    # The update route refuses `metrics: []` since #1461, but drafts it
+    # emptied before then are still stored, so the rows are removed directly.
+    session = _factory(db_session)()
+    try:
+        session.execute(
+            delete(Metric).where(Metric.experiment_id == uuid.UUID(experiment_id))
         )
-    )
+        session.commit()
+    finally:
+        session.close()
+    body = _ok(client.get(f"{BASE}/{experiment_id}", headers=_auth(developer)))
     assert body["metrics"] == []
 
     sent = _tick(db_session)
