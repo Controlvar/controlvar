@@ -51,10 +51,11 @@ PREVIOUS_CORE_HEAD = "d12cbd384bbe"
 #: ``806901fb7735`` (the experiments' correction settings) adds only what a
 #: database built by ``create_all`` already has, and ``d29a479daafe`` (holdout
 #: population), ``37dcb2969766`` (segment kind and members), ``4c2c09a2b3e8``
-#: (rollback records keep without a safety configuration) and ``607c51a59bf5``
-#: (a flag's value type and two values) find their objects already built by
-#: ``create_all`` and add none.
-CORE_HEAD = "607c51a59bf5"
+#: (rollback records keep without a safety configuration), ``607c51a59bf5``
+#: (a flag's value type and two values) and ``7b6b4b4fe246`` (when each
+#: rollout stage started) find their objects already built by ``create_all``
+#: and add none.
+CORE_HEAD = "7b6b4b4fe246"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``d29a479daafe``
 #: (#445) drops ``holdout_population``; ``37dcb2969766`` (#440) drops

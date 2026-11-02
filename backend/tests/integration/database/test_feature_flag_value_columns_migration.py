@@ -60,8 +60,9 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends.
 REVISION = "607c51a59bf5"
 PREVIOUS_CORE_HEAD = "4c2c09a2b3e8"
-#: The core head of this tree.
-CORE_HEAD = "607c51a59bf5"
+#: The core head of this tree: ``7b6b4b4fe246`` (#1528), the revision after this
+#: one, whose downgrade drops ``rollout_stages.started_at`` and refuses nothing.
+CORE_HEAD = "7b6b4b4fe246"
 #: The modules branch's head in this tree, recorded on both sides of every
 #: step here: this file is about the core chain.
 MODULES_HEAD = "modules_0004_rbac_activation"

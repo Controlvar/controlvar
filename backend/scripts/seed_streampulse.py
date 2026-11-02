@@ -830,11 +830,13 @@ def _seed_player_schedule(db, flag: FeatureFlag, admin_user) -> None:
             status=status,
         )
         if status == RolloutStageStatus.IN_PROGRESS:
-            # The stage went live two days ago (the scheduler reads updated_at
-            # as the activation time).
+            # The stage went live two days ago: the scheduler measures its
+            # duration from started_at (#1528), and an older release from
+            # updated_at, so both say so.
             naive_start = start.replace(tzinfo=None)
             stage.created_at = naive_start
             stage.updated_at = naive_start
+            stage.started_at = naive_start
         db.add(stage)
 
 

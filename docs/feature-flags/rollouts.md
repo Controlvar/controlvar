@@ -230,8 +230,8 @@ the stage's target. When the scheduler starts the next stage, the previous one b
 
 A stage that has completed or failed cannot be changed. A stage in progress keeps its target
 and its place in the order: a `PUT` that changes `target_percentage` or `stage_order` answers
-`409`. Its trigger, start date, name and description can still be changed; editing it, a
-rename included, restarts the clock the scheduler measures its duration from. A new stage, or
+`409`. Its trigger, start date, name and description can still be changed, and editing it
+does not restart its clock (see [Time-Based Triggers](#time-based-triggers)). A new stage, or
 a pending stage you move, goes after every stage that has started; placing it at or before
 one answers `409`.
 
@@ -256,8 +256,16 @@ UTC; one with no zone is taken as UTC. So `2027-01-08T00:00:00Z`, `2027-01-07T16
 and `2027-01-08T00:00:00` are the same moment. Responses give stage dates in UTC with no zone
 (`2027-01-08T00:00:00`).
 
-Editing an in-progress stage, a rename included, restarts its clock: the scheduler measures
-time-based completion and `min_stage_duration` from the stage's last update.
+A stage's response carries `started_at`: the time the stage actually started, in UTC, or
+`null` until it starts (and for a stage that finished before the field existed). It is
+read-only; a request that sends it is ignored. A time-based stage completes once
+`trigger_configuration.duration` hours (24 if absent) have passed since `started_at`, and the
+schedule's `min_stage_duration` is measured from it too. `start_date` is different: it is the
+earliest a time-based stage may start. Editing a stage in progress does not change
+`started_at`; changing its `duration` moves its completion time.
+
+Pausing a schedule does not stop a stage's clock: a time-based stage whose duration passed
+while the schedule was paused completes on the scheduler's first pass after you resume it.
 
 ---
 

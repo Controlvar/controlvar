@@ -27,8 +27,8 @@ ALEMBIC_INI = REPO_ROOT / "backend" / "app" / "db" / "alembic.ini"
 CORE_VERSIONS = REPO_ROOT / "backend" / "app" / "db" / "migrations" / "versions"
 ENV_PY = REPO_ROOT / "backend" / "app" / "db" / "migrations" / "env.py"
 
-#: The core chain's head (#1497).
-CORE_HEAD = "607c51a59bf5"
+#: The core chain's head (#1528).
+CORE_HEAD = "7b6b4b4fe246"
 #: The modules branch's head (#891).
 MODULES_HEAD = "modules_0004_rbac_activation"
 #: The revision 1ab99332f0ba's re-run recipe downgrades to, and what lies past it.
@@ -182,8 +182,10 @@ def test_past_1ab99332f0ba_its_rerun_downgrade_also_undoes_the_later_revisions()
     ]
     assert from_head[-1] == EVENTS_UTC and len(from_head) > 1, from_head
     assert "806901fb7735" in from_head
-    # And the value columns' (#1497), which drops three feature_flags columns.
+    # And the value columns' (#1497), which drops three feature_flags columns,
+    # and the stage start's (#1528), which drops rollout_stages.started_at.
     assert "607c51a59bf5" in from_head
+    assert "7b6b4b4fe246" in from_head
 
 
 def _bootstrap_url(env: dict[str, str]) -> str:

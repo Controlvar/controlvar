@@ -49,9 +49,9 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends.
 REVISION = "4c2c09a2b3e8"
 PREVIOUS_CORE_HEAD = "37dcb2969766"
-#: The core head of this tree: ``607c51a59bf5`` (#1497), the revision after
-#: this one.
-CORE_HEAD = "607c51a59bf5"
+#: The core head of this tree: ``7b6b4b4fe246`` (#1528), after ``607c51a59bf5``
+#: (#1497), the revision after this one.
+CORE_HEAD = "7b6b4b4fe246"
 MODULES_HEAD = "modules_0004_rbac_activation"
 #: The rows of a database at this revision, before the next one is applied.
 AT_REVISION_ROWS = {

@@ -216,6 +216,47 @@ def test_an_older_release_refuses_a_database_a_newer_release_migrated(
     assert _tables(test_db, scratch_schema) == tables_after_upgrade
 
 
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "profile",
+    [
+        pytest.param(CORE, id="core"),
+        pytest.param(FULL, marks=pytest.mark.modules, id="full"),
+    ],
+)
+def test_after_the_newer_release_downgrades_the_database_the_older_one_starts(
+    test_db, scratch_schema, tmp_path, profile
+):
+    """The recovery the rollback docs give where the API migrates on start
+    (Docker Compose, the Helm chart's init container): with N+1 still
+    running, ``alembic downgrade <N's core head>`` from N+1's tree, then start
+    N. Without the downgrade N refuses (the test above); after it, N's
+    bootstrap finds nothing it does not know and starts. Generic: every later
+    core migration's downgrade is held to it."""
+    release_n = _this_release(profile, tmp_path)
+    release_n_plus_1 = _next_release(profile, tmp_path)
+
+    built = tree_profiles.bootstrap_schema(release_n, scratch_schema)
+    assert built.returncode == 0, built.stderr[-3000:]
+    rows_at_n = _rows(test_db, scratch_schema)
+    tables_at_n = _tables(test_db, scratch_schema)
+    upgraded = tree_profiles.bootstrap_schema(release_n_plus_1, scratch_schema)
+    assert upgraded.returncode == 0, upgraded.stderr[-3000:]
+    assert NEXT_REVISION in _rows(test_db, scratch_schema)
+
+    down = tree_profiles.alembic(
+        release_n_plus_1, scratch_schema, "downgrade", CORE_HEAD
+    )
+    assert down.returncode == 0, down.stderr[-3000:]
+    assert _rows(test_db, scratch_schema) == rows_at_n
+    assert _tables(test_db, scratch_schema) == tables_at_n
+
+    started = tree_profiles.bootstrap_schema(release_n, scratch_schema)
+    assert started.returncode == 0, started.stderr[-3000:]
+    assert "migrated by a newer Controlvar release" not in started.stderr
+    assert _rows(test_db, scratch_schema) == rows_at_n
+
+
 # ---------------------------------------------------------------------------
 # Release N's API, started without migrations, on N+1's database (#298)
 # ---------------------------------------------------------------------------

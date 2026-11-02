@@ -955,8 +955,9 @@ class RolloutService:
             # Stages start in stage_order, one at a time (#1460).
             _check_starts_in_order(stages, stage)
 
-            # Activate the stage
+            # Activate the stage, and record when it started (#1528).
             stage.status = RolloutStageStatus.IN_PROGRESS
+            stage.started_at = current_time
             stage.updated_at = current_time
 
             # Update feature flag percentage
@@ -985,8 +986,9 @@ class RolloutService:
             )
 
             if next_stage:
-                # Activate next stage
+                # Activate next stage, and record when it started (#1528).
                 next_stage.status = RolloutStageStatus.IN_PROGRESS
+                next_stage.started_at = current_time
                 next_stage.updated_at = current_time
                 db.add(next_stage)
 
