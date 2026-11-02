@@ -18,6 +18,7 @@ import { ApiError, ApiFetchOptions, apiFetch } from '@/services/api';
 import { Experiment } from '@/types/experiments';
 import { isEditableTargeting, isNoRules, targetingPayload } from '@/utils/experimentTargeting';
 import { jsonToRules } from '@/utils/targeting';
+import vocabularyRefusal from '@/tests/fixtures/targeting-vocabulary-refusal.json';
 import { apiError, makeRouter, routedApi } from './helpers/apiMock';
 
 jest.mock('@/services/api', () => ({
@@ -687,6 +688,23 @@ describe('Who can join — saving', () => {
     await waitFor(() => expect(alert).toHaveFocus());
     expect(within(s).getByTestId('targeting-editor')).toBeInTheDocument();
     expect(within(s).getByRole('status')).toHaveTextContent('');
+  });
+
+  it('shows an unknown distance unit (#1204) in the section as one line in the builder’s words', async () => {
+    install({}, () => {
+      throw new ApiError({
+        status: 422,
+        detail: [{ loc: ['body', 'targeting_rules'], msg: vocabularyRefusal.msg, type: 'value_error' }],
+      });
+    });
+    render(<ExperimentDetailPage />);
+    const s = await section();
+    fireEvent.click(editButton()!);
+    fireEvent.click(within(s).getByRole('button', { name: 'Save rules' }));
+
+    const alert = await within(s).findByRole('alert');
+    expect(alert).toHaveTextContent('The rules were not accepted:');
+    expect(within(alert).getAllByRole('listitem').map((li) => li.textContent)).toEqual([vocabularyRefusal.shown]);
   });
 
   it.each([
