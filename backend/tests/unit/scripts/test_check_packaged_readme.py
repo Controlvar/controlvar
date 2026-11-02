@@ -621,6 +621,16 @@ def test_a_wheel_and_an_sdist_are_read_from_their_metadata(tmp_path: Path) -> No
         in result.stderr
     )
 
+    # A refusal counts wherever it comes: the refused file first and a good one
+    # after it still exits 1.
+    result = _run("--sdk", "dotnet", str(planted), str(wheel))
+    assert result.returncode == 1
+    assert f"{wheel}: README checked" in result.stdout
+    assert (
+        f"{planted}: the README installs this repository's package from a registry"
+        in result.stderr
+    )
+
 
 @pytest.mark.parametrize(
     ("case", "build", "refusal"),

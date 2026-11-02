@@ -317,7 +317,14 @@ def test_the_unit_tests_check_the_readme_of_every_npm_and_pypi_sdk() -> None:
     assert legs == registry, sorted(legs ^ registry)
     run = _run_of(step)
     assert "--print-rule-set" in run
-    assert 'python3 scripts/check_packaged_readme.py --sdk "$SDK" "$out"/*' in run
+    gate = 'python3 scripts/check_packaged_readme.py --sdk "$SDK" "$out"/*'
+    lines = [line.strip() for line in run.splitlines() if line.strip()]
+    # The gate's exit status is the step's: `set -e` is on, the gate is the
+    # last line, and nothing follows it on its own line (an `|| ...` there
+    # would let a refused README through).
+    assert lines[0] == "set -euo pipefail", lines[0]
+    assert lines[-1] == gate, lines[-1]
+    assert lines.count(gate) == 1, lines
 
 
 #: A fake `npm`: `npm pack --pack-destination DIR` writes a tarball of the
