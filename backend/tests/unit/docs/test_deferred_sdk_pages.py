@@ -1473,11 +1473,15 @@ _KEEP = "keeps the bootstrapped answer, with error set, when its refresh fails"
 _OFF = "reports a flag without a bootstrap entry off, with error set, when its request fails"
 _BOTH = "keeps or turns off by whether the hook had an entry, in one tree whose requests all fail"
 _KEEP_EXP = "keeps the bootstrapped assignment, with error set, when its refresh fails"
-_MAPPED = "starts each hook from its entry with loading: false, mapped as a fetched answer is"
+_MAPPED = (
+    "starts each hook from its entry with loading: false, mapped as a fetched answer is"
+)
 _EXPOSURES = "records one exposure on the server and one after hydration, and no more"
 _LEFT_OUT = "leaves out a key whose request fails (%s), and keeps the others"
 _NEVER_THROWS = "never throws, even when fetch itself throws"
-_OTHER_USER = "ignores a bootstrap for another user: the hooks load and ask, as without one"
+_OTHER_USER = (
+    "ignores a bootstrap for another user: the hooks load and ask, as without one"
+)
 _WRONG_SHAPE = "ignores a bootstrap of the wrong shape (%s), without throwing"
 
 #: Each sentence the React pages state about the bootstrap (as written, folded
@@ -1493,7 +1497,10 @@ REACT_BOOTSTRAP_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], .
     (
         "It asks the API for each key, in parallel, and returns plain JSON, safe to pass as a prop.",
         (REACT_PAGE,),
-        ("starts every request before any answers: in parallel", "returns plain JSON, safe to pass as a prop"),
+        (
+            "starts every request before any answers: in parallel",
+            "returns plain JSON, safe to pass as a prop",
+        ),
     ),
     (
         "A hook whose key is in the bootstrap starts with that answer (`loading: false`), on the"
@@ -1501,7 +1508,12 @@ REACT_BOOTSTRAP_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], .
         " the answer has changed since the page was rendered (the flag was turned off, say), it"
         " shows the new one.",
         (REACT_PAGE,),
-        (_SSR, _FIRST, _REFRESH, "hydrates server markup made with it with no mismatch, and commits the bootstrapped answers first"),
+        (
+            _SSR,
+            _FIRST,
+            _REFRESH,
+            "hydrates server markup made with it with no mismatch, and commits the bootstrapped answers first",
+        ),
     ),
     (
         "when the bootstrap has this flag, its answer from the first render, kept if the request fails",
@@ -1532,7 +1544,10 @@ REACT_BOOTSTRAP_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], .
     (
         "the control defaults are returned, or the bootstrapped assignment is kept;",
         (REACT_PAGE,),
-        (_KEEP_EXP, "returns the control defaults with error set for an experiment without an entry whose request fails"),
+        (
+            _KEEP_EXP,
+            "returns the control defaults with error set for an experiment without an entry whose request fails",
+        ),
     ),
     (
         "One request per key, in parallel; a failed key is left out. Never throws; reads and fills"
@@ -1562,7 +1577,10 @@ REACT_BOOTSTRAP_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], .
         "After hydration the hook asks again, and the server records a second exposure for the same"
         " user and variant (assignment is sticky).",
         (REACT_PAGE,),
-        (_EXPOSURES, "calls the Provider onExposure once after hydration under StrictMode too"),
+        (
+            _EXPOSURES,
+            "calls the Provider onExposure once after hydration under StrictMode too",
+        ),
     ),
     (
         "The provider's `onExposure` is called once, after hydration; `ServerClient`'s, if you set"
@@ -1612,7 +1630,9 @@ REACT_BOOTSTRAP_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], .
     (
         "Hooks already on the page keep their answers; hooks that mount later read the new one.",
         (REACT_PAGE,),
-        ("a hook already mounted ignores a new bootstrap prop, and a hook that mounts later reads it",),
+        (
+            "a hook already mounted ignores a new bootstrap prop, and a hook that mounts later reads it",
+        ),
     ),
     (
         "No bootstrap: every hook starts loading, and there is no warning.",
@@ -1677,7 +1697,9 @@ REACT_BOOTSTRAP_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], .
         "`ServerClient.bootstrap(keys, user)` returns the answers in the form the Provider's"
         " `bootstrap` takes",
         (REACT_README,),
-        ("builds the bootstrap a server render then shows, and calls its own onExposure once per assigned experiment",),
+        (
+            "builds the bootstrap a server render then shows, and calls its own onExposure once per assigned experiment",
+        ),
     ),
     (
         "Each hook whose key the bootstrap has starts from its answer (`loading: false`), then asks"
@@ -1714,7 +1736,9 @@ def test_each_react_bootstrap_sentence_is_on_its_page_and_held_by_a_test(
     unsaid = [page for page in pages if sentence not in fold(text(page))]
     assert unsaid == [], f"no longer said there: {sentence}"
     missing = [title for title in tests if f"'{title}'" not in titles]
-    assert missing == [], f"no jest test in sdk/react/src/__tests__ has these names: {missing}"
+    assert missing == [], (
+        f"no jest test in sdk/react/src/__tests__ has these names: {missing}"
+    )
 
 
 def test_the_react_pages_give_the_bootstrap_a_section_of_their_own():
@@ -1723,7 +1747,8 @@ def test_the_react_pages_give_the_bootstrap_a_section_of_their_own():
     assert github_slug(BOOTSTRAP_H2) == BOOTSTRAP_ANCHOR
     assert _h2s(REACT_README).count("Bootstrap") == 1
     assert (
-        "https://github.com/Controlvar/controlvar/blob/main/docs/sdk/react.md#" + BOOTSTRAP_ANCHOR
+        "https://github.com/Controlvar/controlvar/blob/main/docs/sdk/react.md#"
+        + BOOTSTRAP_ANCHOR
         in text(REACT_README)
     )
 

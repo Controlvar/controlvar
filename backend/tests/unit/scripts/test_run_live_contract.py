@@ -766,7 +766,12 @@ LIVE_BOOTSTRAP = {
 #: The page's example: other keys and values, the live fields.
 DOCUMENTED = {
     "userId": "9f1c",
-    "flags": {"new_search": {**LIVE_BOOTSTRAP["flags"]["sdk_contract_flag"], "key": "new_search"}},
+    "flags": {
+        "new_search": {
+            **LIVE_BOOTSTRAP["flags"]["sdk_contract_flag"],
+            "key": "new_search",
+        }
+    },
     "experiments": {
         "checkout_flow": {
             **LIVE_BOOTSTRAP["experiments"]["sdk_contract_ab"],
@@ -777,7 +782,9 @@ DOCUMENTED = {
 
 
 def _server_report(user_id: str = "bootstrap-user") -> dict:
-    bootstrap = json.loads(json.dumps(LIVE_BOOTSTRAP).replace("bootstrap-user", user_id))
+    bootstrap = json.loads(
+        json.dumps(LIVE_BOOTSTRAP).replace("bootstrap-user", user_id)
+    )
     return {
         "sdk": "react",
         "step": "server",
@@ -837,7 +844,7 @@ def test_the_pages_example_must_have_the_live_fields(runner):
 
 def test_the_pages_example_is_the_json_fence_holding_a_bootstrap(runner):
     page = (
-        "text\n```json\n{\"not\": \"it\"}\n```\nmore\n```json\n"
+        'text\n```json\n{"not": "it"}\n```\nmore\n```json\n'
         + json.dumps(DOCUMENTED, indent=2)
         + "\n```\n"
     )
@@ -863,13 +870,19 @@ def test_react_runs_its_bootstrap_after_its_row_for_one_new_user(
             step = env["CONTRACT_BOOTSTRAP_STEP"]
             if step == "server":
                 return "PASS", "0.1s", _server_report(env["CONTRACT_USER_ID"])
-            return "PASS", "0.1s", {"sdk": "react", "step": "client", "variant_name": "control"}
+            return (
+                "PASS",
+                "0.1s",
+                {"sdk": "react", "step": "client", "variant_name": "control"},
+            )
         return "PASS", "0.1s", good(runner, "react")
 
     read: List[Tuple[str, str]] = []
     monkeypatch.setattr(runner, "_run_command", fake_run)
     monkeypatch.setattr(
-        runner, "_exposure_rows", lambda user, key: read.append((user, key)) or next(rows)
+        runner,
+        "_exposure_rows",
+        lambda user, key: read.append((user, key)) or next(rows),
     )
     monkeypatch.setattr(runner.shutil, "which", lambda tool: f"/usr/bin/{tool}")
     monkeypatch.setattr(sys, "argv", ["run_live_contract.py", "--sdk", "react"])
@@ -879,11 +892,16 @@ def test_react_runs_its_bootstrap_after_its_row_for_one_new_user(
         runner.BOOTSTRAP_SMOKE,
         runner.BOOTSTRAP_SMOKE,
     ]
-    steps = [(env["CONTRACT_BOOTSTRAP_STEP"], env["CONTRACT_USER_ID"]) for _, env in ran[1:]]
+    steps = [
+        (env["CONTRACT_BOOTSTRAP_STEP"], env["CONTRACT_USER_ID"]) for _, env in ran[1:]
+    ]
     assert [step for step, _ in steps] == ["server", "client"]
     user = steps[0][1]
     assert user.startswith("bootstrap-") and steps[1][1] == user
     assert read == [(user, "sdk_contract_ab"), (user, "sdk_contract_ab")]
     out = " ".join(capsys.readouterr().out.split())
-    assert "PASS react (bootstrap) exposure rows 1 after the server render, +1 after hydration" in out
+    assert (
+        "PASS react (bootstrap) exposure rows 1 after the server render, +1 after hydration"
+        in out
+    )
     assert '"value_type": "boolean"' in out
