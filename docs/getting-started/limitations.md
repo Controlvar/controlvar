@@ -18,7 +18,7 @@ the row links it.
 | What you might expect | What happens instead |
 |---|---|
 | Every event value counted in a revenue, duration or custom metric | A value that is not a number, is infinite, or is larger than 10^12 in size, in the unit it was sent in, adds nothing to its user's total; the event still counts its user in `conversions`. A count metric counts events and does not read their value. |
-| An event sent twice counted once | It is stored and counted twice: a count metric counts it again, and a revenue, duration or custom metric adds its value again. A request that timed out may have been stored, so sending it again can double it ([#1543](https://github.com/Controlvar/controlvar/issues/1543)). A conversion rate counts each user once and is not affected. See [How events count](../guides/how-events-count.md). |
+| An event sent twice counted once | Only an event with an `event_id` is recognised when it is sent again. Without one it is stored and counted twice: a count metric counts it again, and a revenue, duration or custom metric adds its value again. A request that timed out may have been stored, so sending it again without an `event_id` can double it. A conversion rate counts each user once and is not affected. See [How events count](../guides/how-events-count.md#sending-an-event-again). |
 | A revenue, count, duration or custom metric's sequential analysis, Bayesian analysis, sample-size plan, daily series and Live tab by its values | Each is of the share of users who sent the metric's event, as for a conversion. CUPED does not analyse these metrics. |
 | A breakdown by segment of a revenue, count, duration or custom metric by its values | The Breakdowns view of such a metric shows, in its column headed Mean, the share of users who sent the metric's event in each segment. The metric's headline row is its mean per user. |
 | The average time one event takes, such as page load time | A duration metric is each user's total of its events' values, 0 for a user with none, averaged over every assigned user: a variant whose users send the event less often reads as less time. No metric averages over events rather than users. |
@@ -57,7 +57,7 @@ the row links it.
 
 | What you might expect | What happens instead |
 |---|---|
-| Traffic split between URLs with nothing to install | Your server or edge must ask the API where to send each visitor and redirect them; a site with no server or edge of its own in front of its pages cannot split, because nothing redirects in the browser. The CloudFront edge router does not split traffic yet ([#393](https://github.com/Controlvar/controlvar/issues/393)). |
+| Traffic split between URLs with nothing to install | Your server or edge must ask the API where to send each visitor and redirect them; a site with no server or edge of its own in front of its pages cannot split, because nothing redirects in the browser. On AWS, the CloudFront edge router (beta) is one you deploy yourself. |
 | Split URL experiments on the AWS installer | It installs the core profile, which does not run them. |
 | Each visitor counted once, whatever their browser does | A browser that blocks cookies is a new visitor on each visit, with a new assignment. |
 | No limit on how many visitors a site splits | A per-address rate limit, below. |
@@ -65,7 +65,11 @@ the row links it.
 Both split URL routes have the limit `POST /api/v1/tracking/assign` has: 6,000 requests a
 minute per client address, per route. `SDK_RATE_LIMIT_PER_MINUTE` raises it, for every SDK
 route and every address. Over the limit the API answers `429`, and the reference integration
-serves the page with `X-Split-URL: failed` and logs `split_url_failed status=429`. Above the
+serves the page with `X-Split-URL: failed` and logs `split_url_failed status=429`. The
+CloudFront edge router does the same: it serves the page with `X-Split-URL: failed` (a header
+that rests on an AWS behaviour not yet verified, see
+[AWS integration](../integrations/aws.md#the-split-url-edge-router)), and its log line carries
+`"status": "429"`. Above the
 limit, a returning visitor whose assignment is a treatment is served the control page while
 their conversions still count for the treatment; a site with more than about 100 entry-page
 views a second is in that range.
@@ -74,6 +78,7 @@ views a second is in that range.
 
 | What you might expect | What happens instead |
 |---|---|
-| Flag targeting from a native mobile SDK | iOS, Android, React Native and Flutter send only the user id on flag evaluation, so rules on attributes do not match ([#438](https://github.com/Controlvar/controlvar/issues/438)). Experiment assignment sends them. |
+| Flag targeting from a native mobile SDK | iOS, Android and Flutter send only the user id on flag evaluation, so rules on attributes do not match ([#438](https://github.com/Controlvar/controlvar/issues/438)). Experiment assignment sends them. React Native sends them on flag evaluation too. |
 | Every SDK on a package registry | The JavaScript SDK is on npm and the Python SDK is on PyPI. The Go SDK installs by module path, and every other SDK installs from a clone of this repository. |
+| An `event_id` sent by the SDK, so that an event sent again is stored once | No SDK has an `event_id` option yet: not the JavaScript, React, React Native, edge, Python, Go, Java, Android, iOS, Flutter, .NET, PHP, Ruby or Elixir SDK, nor the OpenFeature providers. Send an event that may be sent again to `POST /api/v1/tracking/track` or `POST /api/v1/tracking/batch` with its `event_id` ([#1543](https://github.com/Controlvar/controlvar/issues/1543)). |
 | An event tracked without an experiment key counted, however late it comes | In the Go, Java, .NET, Ruby, PHP, Elixir, iOS, Android, Flutter, React Native and edge SDKs, an event tracked without a key reaches only the experiments and flags still in that client's cache (5 minutes by default, 60 seconds in the edge SDK), and is not sent at all once they have expired. Pass the experiment key on a conversion that can come later. |

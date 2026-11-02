@@ -1793,12 +1793,34 @@ by = [
 ]
 
 [[unit]]
-text = "Body: {\"event_type\": string, \"event_name\": string?, \"user_id\": string, \"experiment_key\": string?, \"feature_flag_key\": string?, \"value\": number?, \"metadata\": object?, \"timestamp\": datetime?}"
+text = "event_id names one occurrence of the event: text of up to 255 characters, compared exactly; missing, null and \"\" mean none."
+by = [
+    "test:backend/tests/unit/schemas/test_tracking_event_id.py::test_255_characters_of_any_width_are_accepted",
+    "test:backend/tests/unit/schemas/test_tracking_event_id.py::test_empty_and_null_mean_no_event_id",
+    "test:backend/tests/unit/services/test_event_dedup.py::test_the_event_id_is_compared_exactly",
+]
+
+[[unit]]
+text = "An event sent again with the same event_id, user, experiment, flag and event name is not stored again; see How events count."
+by = [
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r5_the_same_event_id_from_two_users_is_two_events",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r6_one_event_id_fanned_out_to_three_experiments_and_a_flag",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r14_two_event_names_with_one_event_id_are_two_events",
+]
+
+[[unit]]
+text = "Body: {\"event_type\": string, \"event_name\": string?, \"user_id\": string, \"experiment_key\": string?, \"feature_flag_key\": string?, \"value\": number?, \"metadata\": object?, \"timestamp\": datetime?, \"event_id\": string?}"
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
-text = "Response: 200 OK (the stored event); 404 a key that was given was not found; 422 invalid body"
-by = ["test:backend/tests/integration/api/test_tracking_untagged_events.py::TestGivenKeysThatAreNotFound::test_track_answers_404"]
+text = "Response: 200 OK (the stored event, with \"duplicate\": false and the event_id sent, or null); 200 OK with \"duplicate\": true for an event already stored with that event_id: id is the stored event's, every other field is this request's, and nothing is written; 404 a key that was given was not found; 422 invalid body, an event_id that is not text or is over 255 characters among them"
+by = [
+    "test:backend/tests/integration/api/test_tracking_untagged_events.py::TestGivenKeysThatAreNotFound::test_track_answers_404",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r7_the_first_write_wins_and_the_answer_echoes_this_request",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r8_without_an_event_id_two_identical_purchases_are_both_stored",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r12_an_invalid_event_id_is_refused_and_a_batch_with_one_stores_nothing",
+]
 
 [[unit]]
 text = "Batch Track Events"
@@ -1827,10 +1849,18 @@ by = [
 ]
 
 [[unit]]
-text = "Response: 200 OK {\"success_count\": int, \"failure_count\": int, \"errors\": [...]|null}; 422 above 100 events, and none is stored"
+text = "An entry already stored with its event_id (an earlier request's, or an earlier entry of this one) counts in success_count and in duplicate_count, and nothing is written for it."
+by = [
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r2_the_same_item_twice_in_one_batch_is_stored_once",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r3_a_full_batch_sent_twice_is_stored_once",
+]
+
+[[unit]]
+text = "Response: 200 OK {\"success_count\": int, \"failure_count\": int, \"duplicate_count\": int, \"errors\": [...]|null}; 422 above 100 events, or one entry invalid (its event_id among them), and none is stored"
 by = [
     "test:backend/tests/integration/api/test_tracking_api.py::TestBatch::test_reports_success_and_failure_per_event",
     "test:backend/tests/integration/api/test_tracking_api.py::TestBatch::test_more_than_100_events_is_422_and_stores_nothing",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r12_an_invalid_event_id_is_refused_and_a_batch_with_one_stores_nothing",
 ]
 
 [[unit]]
@@ -1850,8 +1880,15 @@ text = "It stores the variant_id it is given, whatever the experiment's status."
 by = ["test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_events_by_ids_keep_the_variant_they_name_for_a_paused_experiment"]
 
 [[unit]]
-text = "Response: 200 OK (the stored event); 404 an id names no stored row, and nothing is stored: the detail names each such field, for example No experiment has that experiment_id.; 422 invalid body, or an id that is not a UUID"
-by = ["test:backend/tests/integration/api/test_tracking_events_unknown_ids.py"]
+text = "It takes event_id as /track does, and the same event sent through either route is stored once."
+by = ["test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r4_one_event_through_track_batch_and_events_is_one_row"]
+
+[[unit]]
+text = "Response: 200 OK (the stored event, or \"duplicate\": true as from /track); 404 an id names no stored row, and nothing is stored: the detail names each such field, for example No experiment has that experiment_id.; 422 invalid body, or an id that is not a UUID"
+by = [
+    "test:backend/tests/integration/api/test_tracking_events_unknown_ids.py",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r4_one_event_through_track_batch_and_events_is_one_row",
+]
 
 [[unit]]
 text = "Get User Assignments"

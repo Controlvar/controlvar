@@ -14,20 +14,10 @@ Full documentation: [`docs/sdk/openfeature.md`](https://github.com/Controlvar/co
 
 ## Install
 
-**Not yet published.** `@controlvar/openfeature-provider` is not on npm, so build it from
-source in a clone of this repository (the provider's build also builds `sdk/js`):
+To install it, follow [the OpenFeature provider page](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/openfeature.md#typescript--nodejs-provider).
 
-```bash
-git clone https://github.com/Controlvar/controlvar.git
-npm --prefix controlvar/sdk/js ci
-npm --prefix controlvar/sdk/openfeature ci
-npm --prefix controlvar/sdk/openfeature run build
-```
-
-Then, in your app, install both directories:
-`npm install @openfeature/server-sdk /path/to/controlvar/sdk/js /path/to/controlvar/sdk/openfeature`.
-From source the provider's manifest names `@controlvar/js-sdk` as `file:../js`, so install
-that directory too; `@openfeature/server-sdk` is a peer dependency your app provides.
+`@openfeature/server-sdk` is a peer dependency your app provides; `@controlvar/js-sdk` comes with
+the provider.
 
 ## Quick start
 
@@ -122,7 +112,26 @@ Every request carries `X-API-Key`, `Content-Type: application/json`, `Accept: ap
 Errors: 401 bad key, 404 an unknown experiment or flag key, or a draft experiment with no control variant (never cached), 422 an invalid event or a `context` the server refuses, 429 rate limited.
 An experiment that is not ACTIVE is not an error: `getAssignment` resolves to its control variant with `assigned: false`.
 
-## Contract smoke
+## Development
+
+In `sdk/openfeature` of a clone of this repository (the provider's build also builds `sdk/js`, so
+run `npm ci` in `sdk/js` too):
+
+```bash
+npm ci
+npm test
+npm run build
+```
+
+- `npm test`: Jest, fetch mocked; builds ../js first
+- `npm run build`: tsc → dist/ (CommonJS + .d.ts)
+
+To use a build from a clone in your app, install both directories:
+`npm install @openfeature/server-sdk /path/to/controlvar/sdk/js /path/to/controlvar/sdk/openfeature`.
+From source the provider's manifest names `@controlvar/js-sdk` as `file:../js`, so install
+that directory too.
+
+### Contract smoke
 
 ```bash
 cd sdk/openfeature && npm run build --silent && node examples/contract_smoke.mjs
@@ -133,14 +142,3 @@ Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY
 
 CI runs this SDK's contract smoke against a real API: `openfeature` is in the `sdks:` list of the
 SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml).
-
-## Development
-
-```bash
-npm install
-npm test
-npm run build
-```
-
-- `npm test`: Jest, fetch mocked; builds ../js first
-- `npm run build`: tsc → dist/ (CommonJS + .d.ts)

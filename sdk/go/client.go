@@ -1,6 +1,7 @@
 package experimentation
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -31,7 +32,10 @@ type Client interface {
 	// GetAssignment assigns the user to an experiment variant via
 	// POST /api/v1/tracking/assign (sticky server-side; records the exposure).
 	// Successful assignments are cached per user + key for the cache TTL.
-	// On failure it returns (nil, err).
+	// On failure it returns (nil, err). When the server answers
+	// "assigned": true and no unexpired answer was cached, the function set
+	// with WithOnExposure is called before it returns; a cached answer calls
+	// nothing.
 	GetAssignment(ctx context.Context, experimentKey string, user *User) (*Assignment, error)
 
 	// Track records an analytics event. With ExperimentKey or FeatureFlagKey set
@@ -194,6 +198,21 @@ type assignRequest struct {
 	Context       map[string]interface{} `json:"context,omitempty"`
 }
 
+// assignAnswer is the wire form of POST /api/v1/tracking/assign's answer: the
+// Assignment, and "assigned", which only the exposure hook reads. "assigned"
+// is kept raw, so an answer without it, or with any value but true, decodes as
+// it did before and calls nothing.
+type assignAnswer struct {
+	Assignment
+	Assigned json.RawMessage `json:"assigned"`
+}
+
+// enrolled reports whether the server said "assigned": true, the one answer
+// for which it records an exposure.
+func (a *assignAnswer) enrolled() bool {
+	return bytes.Equal(bytes.TrimSpace(a.Assigned), []byte("true"))
+}
+
 // GetAssignment implements Client.
 func (c *client) GetAssignment(ctx context.Context, experimentKey string, user *User) (*Assignment, error) {
 	if experimentKey == "" {
@@ -216,10 +235,11 @@ func (c *client) GetAssignment(ctx context.Context, experimentKey string, user *
 		Context:       user.Attributes,
 	}
 
-	var assignment Assignment
-	if err := c.http.Post(ctx, "/api/v1/tracking/assign", payload, &assignment); err != nil {
+	var answer assignAnswer
+	if err := c.http.Post(ctx, "/api/v1/tracking/assign", payload, &answer); err != nil {
 		return nil, fmt.Errorf("assign experiment %q: %w", experimentKey, err)
 	}
+	assignment := answer.Assignment
 	if assignment.ExperimentKey == "" {
 		assignment.ExperimentKey = experimentKey
 	}
@@ -227,8 +247,32 @@ func (c *client) GetAssignment(ctx context.Context, experimentKey string, user *
 		assignment.UserID = user.ID
 	}
 
-	c.cache.Set(key, &cachedAssignment{userID: user.ID, assignment: &assignment})
+	// Concurrent first calls each send a request and store their answer; only
+	// the one whose store finds no unexpired answer calls the hook.
+	filled := c.cache.fill(key, &cachedAssignment{userID: user.ID, assignment: &assignment})
+	// Last, once the answer is stored, with no lock held. The server recorded an
+	// exposure for this request only if it said "assigned": true.
+	if filled && answer.enrolled() {
+		c.exposed(ctx, &assignment)
+	}
 	return &assignment, nil
+}
+
+// exposed gives the function set with WithOnExposure a new Exposure holding
+// the assignment's four values, through the guard. The guard's error goes
+// nowhere: this SDK has no channel for the errors it swallows (no logger, no
+// error hook), so a function that panics looks like one that sends nothing.
+func (c *client) exposed(ctx context.Context, a *Assignment) {
+	hook := c.config.onExposure
+	if hook == nil {
+		return
+	}
+	_ = callExposureHook(ctx, hook.fn, Exposure{
+		ExperimentKey: a.ExperimentKey,
+		UserID:        a.UserID,
+		VariantID:     a.VariantID,
+		VariantName:   a.VariantName,
+	})
 }
 
 // Track implements Client.

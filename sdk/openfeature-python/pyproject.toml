@@ -23,6 +23,11 @@ dependencies = [
     "controlvar>=0.2.0,<0.3",
 ]
 
+[project.urls]
+Homepage = "https://github.com/Controlvar/controlvar/tree/main/sdk/openfeature-python#readme"
+Repository = "https://github.com/Controlvar/controlvar"
+Issues = "https://github.com/Controlvar/controlvar/issues"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7.4.4",

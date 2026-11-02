@@ -270,7 +270,9 @@ modules/backend/tests/unit/services/test_etl_service.py
 # cannot store an experiment nothing routes. frontend/src/types/experiments.ts
 # keeps the enum label.
 # infrastructure/constructs/split_url_distribution.py has no referrer in
-# infrastructure/cdk/app.py today.
+# infrastructure/cdk/app.py: its only user is the edge app,
+# infrastructure/split_url_edge, a CDK app of its own that nothing in the
+# repository deploys (#393).
 # The routes a server or edge calls (#393), GET /tracking/split-url/routes and
 # POST /tracking/split-url/assign, are declared only in
 # endpoints/split_url_routing.py: a core deployment answers 404 for both.
@@ -280,11 +282,12 @@ modules/backend/app/api/v1/endpoints/experiments_split_url.py
 modules/backend/app/api/v1/endpoints/split_url_routing.py
 modules/lambda/split_url_router
 modules/infrastructure/constructs/split_url_distribution.py
+modules/infrastructure/split_url_edge
 modules/backend/tests/unit/api/test_split_url_experiment_api.py
 modules/backend/tests/integration/api/test_split_url_api.py
-modules/backend/tests/unit/lambda/test_split_url_handler.py
+modules/backend/tests/unit/split_url_router/test_split_url_router.py
 modules/backend/tests/unit/services/test_split_url_service.py
-modules/backend/tests/unit/infrastructure/test_split_url_distribution.py
+modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 11. Dashboard implementations of the modules (cross-group)

@@ -43,13 +43,13 @@ pytestmark = [pytest.mark.integration]
 REVISION = "271f03a31742"
 PREVIOUS_CORE_HEAD = "8fd44fb483a2"
 #: The core head of this tree, which ``upgrade heads`` runs on to.
-CORE_HEAD = "607c51a59bf5"
+CORE_HEAD = "85dd4796bb8b"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``37dcb2969766``
 #: (#440) drops ``segment_members``; ``d29a479daafe`` (#445) drops
 #: ``holdout_population``; ``806901fb7735`` (#580) drops columns and checks, no
-#: table.
-LATER_DOWNGRADE_TABLES = {"holdout_population", "segment_members"}
+#: table; ``85dd4796bb8b`` (#1543) drops ``event_dedup_keys``.
+LATER_DOWNGRADE_TABLES = {"holdout_population", "segment_members", "event_dedup_keys"}
 #: The modules branch's head in this tree, recorded on both sides of every
 #: step here: this file is about the core chain.
 MODULES_HEAD = "modules_0004_rbac_activation"

@@ -5,7 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-__all__ = ["Assignment", "BatchResult", "ExperimentationError", "FlagEvaluation"]
+__all__ = [
+    "Assignment",
+    "BatchResult",
+    "ExperimentationError",
+    "Exposure",
+    "FlagEvaluation",
+]
 
 
 class ExperimentationError(Exception):
@@ -21,7 +27,10 @@ class ExperimentationError(Exception):
             ``get_number_value``, ``get_json_value``) makes itself:
             ``"TYPE_MISMATCH"`` when the flag serves another type, and
             ``"INVALID_RESPONSE"`` when its answer carries no value of the type
-            it names. ``None`` on every other error; ``status`` describes those.
+            it names. ``"HOOK_ERROR"`` only on the error passed to ``on_error``
+            with the operation ``"exposure"``: ``on_exposure`` raised, or
+            returned a coroutine; its ``__cause__`` is what it raised. Other
+            errors carry no code in this version; ``status`` describes them.
     """
 
     def __init__(
@@ -64,6 +73,22 @@ class Assignment:
     configuration: Optional[Dict[str, Any]]
     assigned: Optional[bool] = None
     reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class Exposure:
+    """What ``on_exposure`` receives: one experiment exposure the server recorded.
+
+    The experiment's key, the user id the assignment was asked for, and the
+    variant's id (``None`` when the server sent none) and name, in the order an
+    :class:`Assignment` has them, and nothing else: not the user's attributes
+    and not the variant's configuration. A new object for every call.
+    """
+
+    experiment_key: str
+    user_id: str
+    variant_id: Optional[str]
+    variant_name: str
 
 
 @dataclass(frozen=True)

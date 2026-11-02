@@ -1307,7 +1307,6 @@ exempt:baseline	docs/integrations/aws.md	17cddb53255c
 exempt:baseline	docs/integrations/aws.md	184e7db75e1a
 exempt:baseline	docs/integrations/aws.md	19e3abe3d61e
 exempt:baseline	docs/integrations/aws.md	226a1b3fcaa1
-exempt:baseline	docs/integrations/aws.md	2c926c7ea18a
 exempt:baseline	docs/integrations/aws.md	428ce38fc0d5
 exempt:baseline	docs/integrations/aws.md	50382b39c674
 exempt:baseline	docs/integrations/aws.md	51900dd81f93
@@ -1315,7 +1314,6 @@ exempt:baseline	docs/integrations/aws.md	56e37dba385c
 exempt:baseline	docs/integrations/aws.md	66fb0e2958fc
 exempt:baseline	docs/integrations/aws.md	685e13651c98
 exempt:baseline	docs/integrations/aws.md	71bdb73cfb9b
-exempt:baseline	docs/integrations/aws.md	73c87745fc6a
 exempt:baseline	docs/integrations/aws.md	742bcf7d90b6
 exempt:baseline	docs/integrations/aws.md	7563edc22f75
 exempt:baseline	docs/integrations/aws.md	854aac563210
@@ -1333,14 +1331,11 @@ exempt:baseline	docs/integrations/aws.md	c307c090af5e
 exempt:baseline	docs/integrations/aws.md	c58e371231b7
 exempt:baseline	docs/integrations/aws.md	cb08e7b8de29
 exempt:baseline	docs/integrations/aws.md	d4b1e60f6d0d
-exempt:baseline	docs/integrations/aws.md	d945a479b5e2
 exempt:baseline	docs/integrations/aws.md	d9bf2baa2bad
-exempt:baseline	docs/integrations/aws.md	dcf9129226ff
 exempt:baseline	docs/integrations/aws.md	e5cb112baa77
 exempt:baseline	docs/integrations/aws.md	edc0fdef1fb4
 exempt:baseline	docs/integrations/aws.md	f02f2928e50e
 exempt:baseline	docs/integrations/aws.md	f1e8d2ea6ca1
-exempt:baseline	docs/integrations/aws.md	f67af64f5310
 exempt:baseline	docs/integrations/aws.md	faa1aeb81289
 exempt:baseline	docs/integrations/github.md	053492d2eeda
 exempt:baseline	docs/integrations/github.md	054e4e191ea7

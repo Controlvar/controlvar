@@ -1086,23 +1086,31 @@ A 422 names positions and fields, never the ids that were sent.
   events by `event_name`: a metric with `event_name: "purchase"` counts every `purchase` event.
   Which metrics read `value`: a revenue, duration or custom metric adds it up per user; a count
   metric counts the event and does not read it; a conversion metric does not read it.
+  `event_id` names one occurrence of the event: text of up to 255 characters, compared exactly;
+  missing, `null` and `""` mean none. An event sent again with the same `event_id`, user,
+  experiment, flag and event name is not stored again; see
+  [How events count](../guides/how-events-count.md#sending-an-event-again).
 - **Headers**: X-API-Key: {api_key}
-- **Body**: `{"event_type": string, "event_name": string?, "user_id": string, "experiment_key": string?, "feature_flag_key": string?, "value": number?, "metadata": object?, "timestamp": datetime?}`
-- **Response**: 200 OK (the stored event); 404 a key that was given was not found; 422 invalid body
+- **Body**: `{"event_type": string, "event_name": string?, "user_id": string, "experiment_key": string?, "feature_flag_key": string?, "value": number?, "metadata": object?, "timestamp": datetime?, "event_id": string?}`
+- **Response**: 200 OK (the stored event, with `"duplicate": false` and the `event_id` sent, or null); 200 OK with `"duplicate": true` for an event already stored with that `event_id`: `id` is the stored event's, every other field is this request's, and nothing is written; 404 a key that was given was not found; 422 invalid body, an `event_id` that is not text or is over 255 characters among them
 
 ### Batch Track Events
 - **Endpoint**: `POST /api/v1/tracking/batch`
 - **Description**: Record up to 100 events (same shape as `/track`) in one request. An entry with no
   key is stored as history, not refused; an entry whose key is not found is reported in `errors`.
   Each entry is tagged with a variant as `/track` tags it: only while its experiment is running.
-- **Response**: 200 OK `{"success_count": int, "failure_count": int, "errors": [...]|null}`; 422 above 100 events, and none is stored
+  An entry already stored with its `event_id` (an earlier request's, or an earlier entry of this
+  one) counts in `success_count` and in `duplicate_count`, and nothing is written for it.
+- **Response**: 200 OK `{"success_count": int, "failure_count": int, "duplicate_count": int, "errors": [...]|null}`; 422 above 100 events, or one entry invalid (its `event_id` among them), and none is stored
 
 ### Track Event by Ids
 - **Endpoint**: `POST /api/v1/tracking/events`
 - **Description**: Same as `/track` but keyed by internal ids (`experiment_id`, `variant_id`, `feature_flag_id`);
   `event_name` is required. It stores the `variant_id` it is given, whatever the experiment's status.
+  It takes `event_id` as `/track` does, and the same event sent through either route is stored
+  once.
 - **Headers**: X-API-Key: {api_key}
-- **Response**: 200 OK (the stored event); 404 an id names no stored row, and nothing is stored: the detail names
+- **Response**: 200 OK (the stored event, or `"duplicate": true` as from `/track`); 404 an id names no stored row, and nothing is stored: the detail names
   each such field, for example `No experiment has that experiment_id.`; 422 invalid body, or an id that is not a UUID
 
 ### Get User Assignments

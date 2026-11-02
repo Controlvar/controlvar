@@ -701,7 +701,7 @@ note = "sign-in per role and a password change, a first API key used for an assi
 # above says what each field means.
 # ---------------------------------------------------------------------------
 [meta]
-walked = 154
+walked = 155
 
 # The front door, and the policy beside it.
 
@@ -810,7 +810,7 @@ reason = "the Go module's README; not walked: the sdk-go journey walks docs/sdk/
 [documents."sdk/openfeature-python/README.md"]
 scope = "in"
 class = "reference"
-reason = "not walked: the README installs the Python OpenFeature provider from a clone of this repository"
+reason = "not walked: the provider is not on PyPI yet (docs/sdk/openfeature.md says so; the README is the one PyPI will show, so it names no status)"
 
 [documents."sdk/java/README.md"]
 scope = "in"
@@ -820,17 +820,22 @@ reason = "not walked: the README says the package is not on Maven Central yet; #
 [documents."sdk/react/README.md"]
 scope = "in"
 class = "reference"
-reason = "not walked: the README says the package is not on npm yet; #1107 tests its flows"
+reason = "not walked: the package is not on npm yet (docs/sdk/react.md says so; the README is the one npm will show, so it names no status); #1107 tests its flows"
 
 [documents."sdk/openfeature/README.md"]
 scope = "in"
 class = "reference"
-reason = "not walked: the README says the provider is not on npm yet; #1107 tests its flows"
+reason = "not walked: the provider is not on npm yet (docs/sdk/openfeature.md says so; the README is the one npm will show, so it names no status); #1107 tests its flows"
 
 [documents."sdk/edge/README.md"]
 scope = "in"
 class = "reference"
 reason = "not walked: the package is not on npm yet (docs/sdk/edge.md says so); #1107 tests its flows"
+
+[documents."sdk/mcp/README.md"]
+scope = "in"
+class = "reference"
+reason = "not walked: the MCP server is not on npm yet (the README is the one npm will show, so it names no status); its own suite runs each tool against a stub API"
 
 [documents."sdk/ruby/README.md"]
 scope = "in"
