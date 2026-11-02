@@ -683,3 +683,17 @@ by = [
     "test:backend/tests/unit/api/test_enum_filters.py::test_the_enum_filters_are_plain_strings_that_list_their_values",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
 ]
+
+[[unit]]
+text = "POST /api/v1/experiments/, PUT /api/v1/experiments/{experiment_id} | #1461 | Two metrics with the same name answer 422 at [\"body\", \"metrics\"] on create and on update, naming the two positions; create used to answer 400 Something went wrong while creating the experiment, and update answered 500. Names are compared exactly, so Revenue and revenue are different metrics, as before. metrics: [] on update answers 422 as create does, where it removed every metric; metrics absent or null still leaves the metrics unchanged. An experiment already left with no metrics stays so, and cannot be started. The OpenAPI document changes: metrics has a minimum of one item on update, and the descriptions of metrics on both requests and of the update operation say what is refused."
+by = [
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_create_and_update_answer_the_same_list_alike",
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_an_update_repeating_a_name_is_422_and_keeps_the_stored_metrics",
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_an_update_with_an_empty_list_is_422_too_short_as_on_create",
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_an_update_without_metrics_leaves_them_unchanged",
+    "test:backend/tests/integration/api/test_experiment_create_errors.py::test_two_metrics_with_one_name_answer_422_naming_their_positions",
+    "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestStartPausePermissions::test_start_experiment_without_metrics_returns_400",
+    "test:backend/tests/integration/services/test_scheduler_draft_validation.py::test_d2_a_draft_whose_metrics_were_removed_after_scheduling_stays_a_draft",
+    "test:backend/tests/unit/schemas/test_experiment_metric_names.py::test_the_update_schema_has_a_minimum_of_one_metric",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]

@@ -200,6 +200,15 @@ jq '{key, status, experiment_type}' <<<"$EXP"
 <!-- expect: "status": "draft" -->
 <!-- expect: "experiment_type": "a_b" -->
 
+Each metric's `name` may appear once in an experiment, compared exactly: case and spaces
+count, so `Revenue` and `revenue` are two metrics. A list that repeats a name answers 422 at
+`["body", "metrics"]`, and nothing is written. The `msg` gives the 0-based positions of the
+first repeated pair and never the name, for example `duplicate metric name; each name may
+appear once per experiment (first seen at metrics[0], repeated at metrics[2])`.
+`PUT /api/v1/experiments/{experiment_id}` gives the same answer, and refuses an empty
+`metrics` list with 422 as a create does; leaving `metrics` out, or sending `null`, leaves the
+metrics as they are.
+
 A new experiment is a `draft`. Its dates are not part of the create request: schedule it
 with `PUT /api/v1/experiments/{experiment_id}/schedule`, or start it now:
 
