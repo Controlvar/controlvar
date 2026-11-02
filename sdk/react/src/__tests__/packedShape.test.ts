@@ -4,9 +4,14 @@
  * The shape of the packed package: `@controlvar/react-sdk/ssr` resolves from
  * the tarball `npm pack` makes, and what it loads is server-safe.
  *
- * `ssr` is a physical directory with its own package.json (no `exports` map,
- * so a consumer on any module resolution, including the classic "node" one,
- * finds it). The test builds the package the way the release does, packs it,
+ * `ssr` is a physical directory with its own package.json (no `exports` map).
+ * What this verifies: CommonJS `require` resolves it (the probe below),
+ * bundlers do (Next App Router, per the plan's P18), and TypeScript finds its
+ * types under node10, bundler, node16 and nodenext resolution. What it does
+ * NOT cover: an unbundled Node ES module (`import` in .mjs, or a dynamic
+ * `import()`) cannot import `@controlvar/react-sdk/ssr` today
+ * (ERR_UNSUPPORTED_DIR_IMPORT); `@controlvar/react-sdk/dist/ssr/index.js`
+ * works there. The test builds the package the way the release does, packs it,
  * unpacks the tarball into a scratch node_modules and resolves the subpath
  * from there, so a `files` list that drops `ssr`, a `main` that points at a
  * missing file or an `exports` map added later fails here.
@@ -43,12 +48,26 @@ describe('packed package shape', () => {
 
     const out = path.join(scratch, 'out');
     fs.mkdirSync(out);
-    const packed = JSON.parse(run('npm', ['pack', '--json', '--pack-destination', out], build));
+    const packed = JSON.parse(
+      execFileSync('npm', ['pack', '--json', '--pack-destination', out], {
+        cwd: build,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, npm_config_update_notifier: 'false' },
+      }),
+    );
     const tgz = path.join(out, packed[0].filename);
     tarballFiles = packed[0].files.map((f: { path: string }) => f.path);
 
     installed = path.join(scratch, 'consumer', 'node_modules', '@controlvar', 'react-sdk');
     fs.mkdirSync(installed, { recursive: true });
+    // The consumer needs react to resolve, so that a provider re-exported from
+    // the ssr entry reaches the module-graph assertion below rather than
+    // crashing the probe on a missing module.
+    fs.symlinkSync(
+      path.join(PKG_DIR, 'node_modules', 'react'),
+      path.join(scratch, 'consumer', 'node_modules', 'react'),
+    );
     run('tar', ['-xzf', tgz, '-C', installed, '--strip-components=1'], scratch);
   }, 180000);
 
