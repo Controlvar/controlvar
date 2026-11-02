@@ -939,9 +939,10 @@ class _SlowApi:
     """An API on 127.0.0.1 that sends its slow answer in ``pieces`` parts,
     ``gap`` seconds apart: each part comes well within the time any one
     socket operation may wait, so only a deadline for the whole call stops
-    the caller before the answer is complete. A GET gets ``fast``, at once,
-    when it is given. ``sent`` counts the parts of the slow answer that had
-    gone out; ``connections`` the connections accepted."""
+    the caller before the answer is complete. A GET gets ``fast`` when it is
+    given: its head, then its body 0.05 s later, so the body is read after
+    http.client has seen the head. ``sent`` counts the parts of the slow
+    answer that had gone out; ``connections`` the connections accepted."""
 
     def __init__(self, slow: bytes, fast: Optional[bytes] = None, gap: float = 0.1):
         self.slow, self.fast, self.gap = slow, fast, gap
@@ -972,7 +973,10 @@ class _SlowApi:
                             break
                         request += data
                     if self.fast is not None and request.startswith(b"GET"):
-                        conn.sendall(self.fast)
+                        head, _, body = self.fast.partition(b"\r\n\r\n")
+                        conn.sendall(head + b"\r\n\r\n")
+                        time.sleep(0.05)
+                        conn.sendall(body)
                         continue
                     for start in range(0, len(self.slow), self.size):
                         time.sleep(self.gap)
@@ -1013,9 +1017,10 @@ def test_a_slow_answer_ends_the_call_at_its_deadline():
 @pytest.mark.regression
 def test_a_slow_api_is_a_timeout_and_the_page_is_served(monkeypatch, caplog):
     """The same through the router, over the real transport: the routes
-    table comes at once and is read whole, the slow assign call is the
-    failure ``timeout``, the visitor is served the page with the cookie, and
-    the API is not asked again for 30 seconds."""
+    table comes quickly and is read whole (its body after its head, which
+    says the connection ends), the slow assign call is the failure
+    ``timeout``, the visitor is served the page with the cookie, and the API
+    is not asked again for 30 seconds."""
     api = _SlowApi(
         _http_answer(SERVE), fast=_http_answer({"routes": [ROUTE], "max_age": 60})
     )
