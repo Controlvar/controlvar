@@ -17,6 +17,7 @@ and exits 1.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 import uuid
@@ -28,13 +29,32 @@ from urllib.parse import urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import controlvar.client as client_module  # noqa: E402
-from controlvar import ExperimentationClient, ExperimentationError  # noqa: E402
+from controlvar import (  # noqa: E402
+    ExperimentationClient,
+    ExperimentationError,
+    Exposure,
+)
 from controlvar.transport import Response  # noqa: E402
 
 
 def fail(message: str) -> None:
     print(message, file=sys.stderr)
     sys.exit(1)
+
+
+def _raise_hook_boom(exposure: Exposure) -> None:
+    raise RuntimeError("hook boom")
+
+
+class _Records(logging.Handler):
+    """Keeps the log records it is given (and so keeps the raising hook's traceback off stderr)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.records: List[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
 
 
 class Recording:
@@ -121,6 +141,48 @@ def main() -> None:
     if not batch.ok:
         fail(f"track_batch failed: {batch.errors}")
 
+    # 5. The exposure hook (#1499): a NEW client with on_exposure assigns the same user twice,
+    #    with no clear_cache() in between. The server records an exposure for the first request
+    #    (assigned: true) and the second answer comes from the cache, so the hook is called once.
+    #    The runner checks the count, the experiment key and the variant; the user id is checked
+    #    here, the one place that knows it.
+    exposures: List[Exposure] = []
+    try:
+        hooked = ExperimentationClient(api_url, api_key, on_exposure=exposures.append)
+        hooked.get_assignment(experiment_key, user_id, attributes)
+        hooked.get_assignment(experiment_key, user_id, attributes)
+    except ExperimentationError as exc:
+        fail(f"assign with on_exposure failed: {exc} (status={exc.status}, body={exc.body!r})")
+    wrong_user = next((e for e in exposures if e.user_id != user_id), None)
+    if wrong_user is not None:
+        fail(f"on_exposure received user {wrong_user.user_id!r}, expected {user_id!r}")
+
+    # 5b. A hook that raises: the answer is unchanged, the error is logged at ERROR and passed
+    #     to on_error as "exposure" with code HOOK_ERROR.
+    hook_errors: List[str] = []
+    logged = _Records()
+    hook_logger = logging.getLogger("controlvar.client")
+    hook_logger.addHandler(logged)
+    try:
+        raising = ExperimentationClient(
+            api_url,
+            api_key,
+            on_exposure=_raise_hook_boom,
+            on_error=lambda error, operation: hook_errors.append(f"{operation}/{error.code}"),
+        )
+        from_raising = raising.get_assignment(experiment_key, user_id, attributes)
+    except ExperimentationError as exc:
+        fail(f"assign with a raising on_exposure failed: {exc} (status={exc.status}, body={exc.body!r})")
+    finally:
+        hook_logger.removeHandler(logged)
+    if from_raising.variant_name != second.variant_name:
+        fail(f"the client with a raising hook answered {from_raising.variant_name}, not {second.variant_name}")
+    if hook_errors != ["exposure/HOOK_ERROR"]:
+        fail(f"the raising hook was reported as {hook_errors}, expected ['exposure/HOOK_ERROR']")
+    if [(r.levelname, r.getMessage().startswith("on_exposure failed: ")) for r in logged.records] != [("ERROR", True)]:
+        fail(f"the raising hook was logged as {[(r.levelname, r.getMessage()) for r in logged.records]}")
+
+    exposure = exposures[0] if exposures else None
     print(
         json.dumps(
             {
@@ -133,6 +195,17 @@ def main() -> None:
                 "flag": {"enabled": flag.enabled},
                 "track": {"ok": True},
                 "fanout": {"ok": True},
+                "exposure": {
+                    "calls": len(exposures),
+                    "payload": None
+                    if exposure is None
+                    else {
+                        "experiment_key": exposure.experiment_key,
+                        "variant_name": exposure.variant_name,
+                        "variant_id": exposure.variant_id,
+                        "user_id": exposure.user_id,
+                    },
+                },
             },
             separators=(",", ":"),
         )

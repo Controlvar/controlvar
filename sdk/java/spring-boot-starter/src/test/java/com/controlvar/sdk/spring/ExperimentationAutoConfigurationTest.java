@@ -343,7 +343,7 @@ class ExperimentationAutoConfigurationTest {
         // One of the two beans is named "exposureListener", exactly the name of the
         // ObjectProvider<ExposureListener> parameter of
         // ExperimentationAutoConfiguration#experimentationClient. Compiled without -parameters
-        // (as now), Spring cannot see that name and getIfAvailable() refuses two beans. Compiled
+        // and without a LocalVariableTable (as now), Spring cannot see that name and getIfAvailable() refuses two beans. Compiled
         // with -parameters, Spring would pick the bean named like the parameter and silently
         // ignore the other, the context would start, and this test would fail.
         contextRunner
@@ -379,6 +379,22 @@ class ExperimentationAutoConfigurationTest {
                             + " choose an ExposureListener bean named like it and ignore a second one", parameter)
                     .isFalse();
         }
+    }
+
+    @Test
+    @DisplayName("the auto-configuration class carries no LocalVariableTable, which Spring Framework 6.0 reads parameter names from")
+    void compiledWithoutLocalVariableTable() throws IOException {
+        byte[] bytes;
+        try (java.io.InputStream in = ExperimentationAutoConfiguration.class
+                .getResourceAsStream("ExperimentationAutoConfiguration.class")) {
+            assertThat(in).as("the class file of the auto-configuration").isNotNull();
+            bytes = in.readAllBytes();
+        }
+        assertThat(new String(bytes, StandardCharsets.ISO_8859_1))
+                .as("ExperimentationAutoConfiguration.class holds a LocalVariableTable (javac -g), so on"
+                        + " Spring Boot 3.0 and 3.1 Spring would choose an ExposureListener bean named like"
+                        + " the parameter and ignore a second one; the POM needs <debuglevel>lines,source")
+                .doesNotContain("LocalVariableTable");
     }
 
     @Test

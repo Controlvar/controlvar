@@ -581,6 +581,33 @@ class ExposureListenerTest {
         }
 
         @Test
+        @DisplayName("a listener that throws a value whose getMessage() throws changes nothing too")
+        void aThrownValueWhoseGetMessageThrowsIsContained() {
+            RuntimeException hostile = new RuntimeException("hidden") {
+                private static final long serialVersionUID = 1L;
+
+                @Override
+                public String getMessage() {
+                    throw new IllegalStateException("getMessage planted");
+                }
+            };
+            server.enqueue(json(200, ASSIGNED));
+            AtomicInteger listened = new AtomicInteger();
+            try (ExperimentationClient client = client(e -> {
+                listened.incrementAndGet();
+                throw hostile;
+            })) {
+                ExperimentAssignment answer = client.getExperimentAssignment(user("u-1"), "exp-1");
+                ExperimentAssignment again = client.getExperimentAssignment(user("u-1"), "exp-1");
+
+                assertEquals("treatment", answer.getVariantName());
+                assertSame(answer, again, "the answer is cached");
+                assertEquals(1, server.getRequestCount());
+                assertEquals(1, listened.get());
+            }
+        }
+
+        @Test
         @DisplayName("an OutOfMemoryError or a StackOverflowError is not caught (VirtualMachineError)")
         void aVirtualMachineErrorIsNotCaught() {
             for (VirtualMachineError fatal : Arrays.<VirtualMachineError>asList(

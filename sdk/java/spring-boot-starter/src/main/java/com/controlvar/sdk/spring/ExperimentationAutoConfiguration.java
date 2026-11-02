@@ -95,8 +95,11 @@ public class ExperimentationAutoConfiguration {
                 .cacheTtlMs((long) properties.getCacheTtlSeconds() * 1000L)
                 // getIfAvailable() throws NoUniqueBeanDefinitionException for two beans, which
                 // stops startup; getIfUnique() would silently give none. That holds while this
-                // module is compiled without -parameters: with them, Spring would pick the bean
-                // named like this parameter ("exposureListener") and ignore the other.
+                // module's class files carry no parameter names, neither the MethodParameters
+                // attribute (-parameters) nor, for Spring Framework 6.0 (Boot 3.0 and 3.1), the
+                // LocalVariableTable (javac -g; the POM sets debuglevel lines,source): with
+                // either, Spring would pick the bean named like this parameter
+                // ("exposureListener") and ignore the other.
                 // ExperimentationAutoConfigurationTest pins it.
                 .exposureListener(exposureListener.getIfAvailable())
                 .build();
