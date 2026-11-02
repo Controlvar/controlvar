@@ -162,6 +162,7 @@ universe = [
     "sdk/ios/README.md",
     "sdk/java/README.md",
     "sdk/js/README.md",
+    "sdk/mcp/README.md",
     "sdk/openfeature-python/README.md",
     "sdk/openfeature/README.md",
     "sdk/php/README.md",

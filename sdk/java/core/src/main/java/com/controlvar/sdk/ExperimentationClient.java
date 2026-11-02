@@ -3,9 +3,11 @@ package com.controlvar.sdk;
 import com.controlvar.sdk.config.SdkConfig;
 import com.controlvar.sdk.exception.ExperimentationException;
 import com.controlvar.sdk.model.ExperimentAssignment;
+import com.controlvar.sdk.model.Exposure;
 import com.controlvar.sdk.model.FlagEvaluation;
 import com.controlvar.sdk.model.TrackEvent;
 import com.controlvar.sdk.model.User;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.Call;
 import okhttp3.Callback;
@@ -182,6 +184,11 @@ public class ExperimentationClient implements AutoCloseable {
      * rules. Successful assignments are cached per user + experiment for the configured
      * TTL; failures are never cached.
      *
+     * <p>When the server answers {@code "assigned": true} and no unexpired answer for this user
+     * and experiment was cached, the configured {@link ExposureListener} is called on this
+     * thread before this method returns. A cached answer calls nothing, and nothing the
+     * listener throws reaches the caller, except a {@link VirtualMachineError}.
+     *
      * @param user          the user to assign
      * @param experimentKey the experiment key (e.g., "checkout-button-color")
      * @return the assignment (never null)
@@ -209,6 +216,9 @@ public class ExperimentationClient implements AutoCloseable {
             payload.put("context", user.getAttributes());
         }
 
+        ExposureListener listener = config.getExposureListener();
+        ExperimentAssignment assignment;
+        Exposure exposure = null;
         try {
             Request request = requestBuilder(config.getBaseUrl() + "/api/v1/tracking/assign")
                     .post(RequestBody.create(objectMapper.writeValueAsString(payload), JSON))
@@ -225,20 +235,36 @@ public class ExperimentationClient implements AutoCloseable {
                 if (body == null) {
                     throw new ExperimentationException("Empty response body for experiment: " + experimentKey);
                 }
-                ExperimentAssignment assignment = objectMapper.readValue(body.string(), ExperimentAssignment.class);
+                String json = body.string();
+                assignment = objectMapper.readValue(json, ExperimentAssignment.class);
                 if (assignment.getExperimentKey() == null || assignment.getExperimentKey().isEmpty()) {
                     assignment.setExperimentKey(experimentKey);
                 }
                 if (assignment.getUserId() == null || assignment.getUserId().isEmpty()) {
                     assignment.setUserId(user.getUserId());
                 }
-                assignmentCache.put(cacheKey, assignment);
-                return assignment;
+                // The server recorded an exposure for this request only if it said
+                // "assigned": true; a missing field is not taken as true.
+                boolean recorded = listener != null && saysAssigned(json);
+                // fill() is put() that also says whether the slot held no live answer. Two
+                // threads that asked for the same new user and experiment at once each store an
+                // answer here; only the first is told the slot was empty.
+                if (assignmentCache.fill(cacheKey, assignment) && recorded) {
+                    exposure = new Exposure(assignment.getExperimentKey(), assignment.getUserId(),
+                            assignment.getVariantId(), assignment.getVariantName());
+                }
             }
         } catch (IOException e) {
             throw new ExperimentationException(
                     "Network error assigning experiment '" + experimentKey + "': " + e.getMessage(), e);
         }
+        if (exposure != null) {
+            // Last, outside the request's try blocks, with no cache lock held. The listener's
+            // failure becomes a hook error (ExposureHook.HookError), which this SDK, having no
+            // error channel, drops: the answer below is returned whatever the listener did.
+            ExposureHook.call(listener, exposure);
+        }
+        return assignment;
     }
 
     // =========================================================================
@@ -438,6 +464,22 @@ public class ExperimentationClient implements AutoCloseable {
     // =========================================================================
     // Internals
     // =========================================================================
+
+    /**
+     * True only when the {@code /assign} answer's {@code assigned} is the JSON literal
+     * {@code true}. A missing field, {@code null}, {@code "true"} or {@code 1} is not, and an
+     * answer that cannot be read as a tree is not either: it never fails the call.
+     */
+    private boolean saysAssigned(String json) {
+        try {
+            JsonNode tree = objectMapper.readTree(json);
+            if (tree == null) return false;
+            JsonNode assigned = tree.path("assigned");
+            return assigned.isBoolean() && assigned.booleanValue();
+        } catch (IOException unreadable) {
+            return false;
+        }
+    }
 
     private static String userPrefix(String userId) {
         return userId + KEY_SEPARATOR;

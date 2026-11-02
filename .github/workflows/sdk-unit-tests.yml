@@ -6,8 +6,9 @@ name: SDK Unit Tests
 # toolchain, in two tiers:
 #
 #   Linux tier (required on PRs) — js, react, react-native, edge, openfeature,
-#     python, openfeature-python, go, java, ruby, php, dotnet. All install and
-#     run in well under a minute on ubuntu-latest. A pull request runs the SDKs
+#     python, openfeature-python, go, java, ruby, php, dotnet, and mcp (the
+#     MCP server: not an SDK, but its suite runs here like one). All install
+#     and run in well under a minute on ubuntu-latest. A pull request runs the SDKs
 #     it touches plus the always-on core three (js, python, react: the dashboard,
 #     the demos and the backend's own examples depend on them), so an unrelated
 #     backend change does not pay for twelve toolchains.
@@ -111,6 +112,9 @@ jobs:
             dotnet:
               - *all
               - 'sdk/dotnet/**'
+            mcp:
+              - *all
+              - 'sdk/mcp/**'
             elixir:
               - *all
               - 'sdk/elixir/**'
@@ -148,6 +152,7 @@ jobs:
               "ruby": "ruby",
               "php": "php",
               "dotnet": "dotnet",
+              "mcp": "node",
           }
           HEAVY = ["elixir", "flutter", "android", "ios"]
 
@@ -272,6 +277,14 @@ jobs:
                 npm run typecheck
                 npm run typecheck:tests
               fi
+              ;;
+            mcp)
+              # The MCP server. Its `test` script builds dist/ first: the suite
+              # runs the built server as a child process against a stub API
+              # on 127.0.0.1, and packs and installs the package from npm.
+              cd sdk/mcp
+              npm ci --no-audit --no-fund
+              npm test -- --ci
               ;;
             python)
               pip install pytest

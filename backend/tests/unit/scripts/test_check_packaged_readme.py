@@ -345,6 +345,7 @@ def test_the_gate_refuses_a_package_with_no_readme(
 #: edge's README is not held to either set yet.
 CLASSIFIED: Dict[str, str] = {
     "dotnet": "i-readme",
+    "mcp": "i-readme",
     "openfeature": "i-readme",
     "openfeature-python": "i-readme",
     "react": "i-readme",

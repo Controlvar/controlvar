@@ -78,6 +78,11 @@
                 <configuration>
                     <source>11</source>
                     <target>11</target>
+                    <!-- Keep the LocalVariableTable out of the class files: Spring Framework 6.0
+                         (Spring Boot 3.0 and 3.1) reads parameter names from it and would then
+                         pick the ExposureListener bean named like a parameter, ignoring a second
+                         one. ExperimentationAutoConfigurationTest pins it. -->
+                    <debuglevel>lines,source</debuglevel>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.springframework.boot</groupId>

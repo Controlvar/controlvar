@@ -74,6 +74,7 @@ from typing import Callable
 #: the tree to the same contract.
 I_README: dict[str, str] = {
     "dotnet": "docs/sdk/dotnet.md",
+    "mcp": "docs/mcp-server.md",
     "openfeature": "docs/sdk/openfeature.md",
     "openfeature-python": "docs/sdk/openfeature.md",
     "react": "docs/sdk/react.md",

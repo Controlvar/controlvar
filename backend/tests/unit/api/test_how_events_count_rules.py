@@ -116,6 +116,11 @@ def _source(rel: str) -> str:
     return "\n".join(texts)
 
 
+#: Directories under sdk/ that are not SDKs and send no event, with where their
+#: source is: the MCP server reads flags, experiments and results only.
+NOT_AN_SDK = {"mcp": "sdk/mcp/src"}
+
+
 def test_every_sdk_directory_is_listed():
     """A new SDK fails here until it is listed, so the next test reads it."""
     found = sorted(
@@ -123,7 +128,13 @@ def test_every_sdk_directory_is_listed():
         for p in SDK.iterdir()
         if p.is_dir() and not p.name.startswith((".", "__"))
     )
-    assert found == sorted(SDK_SOURCES)
+    assert found == sorted([*SDK_SOURCES, *NOT_AN_SDK])
+
+
+@pytest.mark.parametrize("name", sorted(NOT_AN_SDK))
+def test_a_directory_that_is_not_an_sdk_sends_no_event(name):
+    """The MCP server names no tracking route: it sends no event."""
+    assert "/tracking/" not in _source(NOT_AN_SDK[name])
 
 
 @pytest.mark.parametrize("sdk", sorted(SDK_SOURCES))
