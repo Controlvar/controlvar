@@ -18,7 +18,8 @@ What is pinned, in the order of the contract:
 * the scope is matched exactly, on the presented key only;
 * the owner of a scoped key reads what a sign-in of the same user reads, and
   the route's own role check still runs;
-* a scoped key opens nothing else: a write route still wants a sign-in.
+* a scoped key opens nothing else: the routes that create, change or delete
+  flags or experiments, and those that manage users, still want a sign-in.
 """
 
 from __future__ import annotations

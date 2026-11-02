@@ -10,7 +10,8 @@ registrations (``backend/tests/smoke/test_mcp_read_routes.py`` pins the set):
 * ``GET /api/v1/experiments/{experiment_id}``;
 * ``GET /api/v1/experiments/{experiment_id}/results``.
 
-Every other route is unchanged: a write route still takes a sign-in only.
+Every other route is unchanged; the routes that create, change or delete flags or
+experiments, and those that manage users, still take a sign-in only.
 
 The contract, in this order:
 
