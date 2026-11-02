@@ -567,7 +567,9 @@ def refuse_max_percentage():
         event.remove(RolloutSchedule, "before_insert", force)
 
 
-@pytest.mark.parametrize("violation", ["not-null", "check_max_percentage"])
+@pytest.mark.parametrize(
+    "violation", ["not-null", "check_max_percentage", "name-in-the-message"]
+)
 def test_another_constraint_on_update_keeps_todays_500_and_log_line(
     client, developer, new_flag, fresh, routes_log, refuse_max_percentage, violation
 ):
@@ -575,6 +577,12 @@ def test_another_constraint_on_update_keeps_todays_500_and_log_line(
     before = _row(fresh, created["id"])
     if violation == "not-null":
         body = {"name": None}
+        cause = "NotNullViolation"
+    elif violation == "name-in-the-message":
+        # The date constraint's name appears in the error text (the failing row
+        # holds it) but a NOT NULL is what was violated: only the constraint
+        # that was violated may be mapped, never a match on the message.
+        body = {"name": None, "description": "check_rollout_schedule_dates"}
         cause = "NotNullViolation"
     else:
         refuse_max_percentage.add(uuid.UUID(created["id"]))

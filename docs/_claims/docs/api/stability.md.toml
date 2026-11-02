@@ -751,7 +751,7 @@ by = [
 ]
 
 [[unit]]
-text = "POST /api/v1/rollout-schedules/, POST /api/v1/rollout-schedules/{schedule_id}/stages, PUT /api/v1/rollout-schedules/stages/{stage_id} | #1535 | When a stage's trigger_configuration has a duration, it must be a number of hours from 0 to 8760, not a string, null, a boolean, NaN or a larger number; anything else answers 422 at trigger_configuration, where it was accepted and the stage then never completed (or, for a negative number, completed at once, and true read as one hour). A stage without duration keeps the 24-hour default, and the rest of trigger_configuration is not checked. Stages already stored with a bad duration are read back unchanged. See Trigger types."
+text = "POST /api/v1/rollout-schedules/, POST /api/v1/rollout-schedules/{schedule_id}/stages, PUT /api/v1/rollout-schedules/stages/{stage_id} | #1535 | When a stage's trigger_configuration has a duration, it must be a number of hours from 0 to 8760, not a string, null, a boolean, NaN or a larger number; anything else answers 422 at trigger_configuration, where a string, null or a number above 8760 was accepted and the stage then never completed, a negative number or false was accepted and the stage completed at once, true was read as one hour, and NaN answered 500. A stage without duration keeps the 24-hour default, and the rest of trigger_configuration is not checked. Stages already stored with a bad duration are read back unchanged. See Trigger types."
 by = [
     "test:backend/tests/integration/api/test_rollout_stage_duration_api.py",
     "test:backend/tests/unit/schemas/test_rollout_stage_duration.py",
