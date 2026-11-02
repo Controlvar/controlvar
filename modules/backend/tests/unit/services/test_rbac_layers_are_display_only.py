@@ -237,7 +237,10 @@ def test_the_routes_name_roles_and_users_in_their_paths():
     assert "UUID" in str(revoke["user_id"].annotation)
 
 
-def test_granting_and_revoking_a_direct_permission_write_no_audit_entry():
+def test_every_rbac_write_route_writes_its_audit_entry():
+    """Each RBAC route that changes something hands its own action to a writer
+    (#891). Was ``..._write_no_audit_entry`` for the grant routes, before they
+    were recorded; ``test_audit_module_events.py`` pins each entry itself."""
     source = (
         REPO / "modules" / "backend" / "app" / "api" / "v1" / "endpoints" / "rbac.py"
     )
@@ -246,17 +249,38 @@ def test_granting_and_revoking_a_direct_permission_write_no_audit_entry():
         for node in ast.walk(ast.parse(source.read_text()))
         if isinstance(node, ast.FunctionDef)
     }
-    for name in ("grant_permission", "revoke_permission"):
-        called = {
-            n.id if isinstance(n, ast.Name) else n.attr
-            for n in ast.walk(functions[name])
-            if isinstance(n, (ast.Name, ast.Attribute))
-        }
-        assert not called & {"AuditService", "ActionType", "_record_custom_role"}, name
-    # The custom-role routes next to them do record.
-    assert "_record_custom_role" in {
-        n.id for n in ast.walk(functions["assign_role"]) if isinstance(n, ast.Name)
+    expected = {
+        "create_role": ("_record_role_definition", "ROLE_CREATE"),
+        "update_role": ("_record_role_definition", "ROLE_UPDATE"),
+        "delete_role": ("_record_role_definition", "ROLE_DELETE"),
+        "assign_role": ("_record_custom_role", "ROLE_ASSIGN"),
+        "revoke_role": ("_record_custom_role", "ROLE_UNASSIGN"),
+        "grant_permission": ("_record_direct_grant", "PERMISSION_GRANT"),
+        "revoke_permission": ("_record_direct_grant", "PERMISSION_REVOKE"),
     }
+    for name, (writer, action) in expected.items():
+        calls = [
+            n
+            for n in ast.walk(functions[name])
+            if isinstance(n, ast.Call) and getattr(n.func, "id", None) == writer
+        ]
+        assert len(calls) == 1, f"{name} calls {writer} {len(calls)} times"
+        named = {
+            n.attr
+            for n in ast.walk(calls[0])
+            if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name)
+            if n.value.id == "ActionType"
+        }
+        assert named == {action}, f"{name} records {named}"
+    # Each helper reaches the writer that commits after the change.
+    for helper in (
+        "_record_role_definition",
+        "_record_custom_role",
+        "_record_direct_grant",
+    ):
+        assert "record_after_commit" in {
+            n.attr for n in ast.walk(functions[helper]) if isinstance(n, ast.Attribute)
+        }, helper
 
 
 def test_the_roles_page_needs_a_superuser():

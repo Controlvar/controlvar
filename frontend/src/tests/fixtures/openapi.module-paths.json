@@ -38,6 +38,8 @@
     "/api/v1/rbac/users/{user_id}/grant",
     "/api/v1/rbac/users/{user_id}/grant/{resource}",
     "/api/v1/rbac/users/{user_id}/permissions",
+    "/api/v1/tracking/split-url/assign",
+    "/api/v1/tracking/split-url/routes",
     "/api/v1/warehouse/analysis/connections",
     "/api/v1/warehouse/analysis/connections/test",
     "/api/v1/warehouse/analysis/connections/{connection_id}",

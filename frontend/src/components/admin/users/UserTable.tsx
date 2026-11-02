@@ -24,6 +24,12 @@ export interface UserTableProps {
   /** Opens the Edit dialog for a row. Without it the row has no Edit button. */
   onEdit?: (user: AdminUser) => void;
   /**
+   * Opens the user's recorded permissions. Without it the row has no
+   * Permissions button (the core profile, which has no rbac routes). The
+   * button is passed so focus can go back to it when the dialog closes.
+   */
+  onPermissions?: (user: AdminUser, trigger: HTMLButtonElement) => void;
+  /**
    * Bump to reload the list. The current page and search term are kept, so an
    * edit does not send the administrator back to the first page.
    */
@@ -38,6 +44,7 @@ export interface UserTableProps {
 
 export function UserTable({
   onEdit,
+  onPermissions,
   reloadToken: externalReloadToken = 0,
   focusUserId = null,
   onFocusHandled,
@@ -280,6 +287,17 @@ export function UserTable({
                           className="text-blue-700 hover:text-blue-900 text-sm font-medium"
                         >
                           Edit
+                        </button>
+                      )}
+                      {onPermissions && (
+                        <button
+                          type="button"
+                          data-testid={`permissions-user-${user.id}`}
+                          aria-label={`Permissions for ${user.username}`}
+                          onClick={(e) => onPermissions(user, e.currentTarget)}
+                          className="text-blue-700 hover:text-blue-900 text-sm font-medium"
+                        >
+                          Permissions
                         </button>
                       )}
                       <button

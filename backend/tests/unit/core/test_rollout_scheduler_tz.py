@@ -136,10 +136,17 @@ class TestNextStageRespectsItsOwnStartDate:
         schedules_query.filter.return_value = schedules_query
         schedules_query.order_by.return_value = schedules_query
         schedules_query.all.return_value = [schedule]
+        # The tick locks the flag and re-reads the schedule before it reads
+        # the stages (#1536).
+        schedules_query.populate_existing.return_value = schedules_query
+        schedules_query.with_for_update.return_value = schedules_query
+        schedules_query.one_or_none.return_value = schedule
         active_query = MagicMock()
+        active_query.populate_existing.return_value = active_query
         active_query.filter.return_value = active_query
         active_query.first.return_value = active_stage
         pending_query = MagicMock()
+        pending_query.populate_existing.return_value = pending_query
         pending_query.filter.return_value = pending_query
         pending_query.order_by.return_value = pending_query
         pending_query.all.return_value = [future_stage]

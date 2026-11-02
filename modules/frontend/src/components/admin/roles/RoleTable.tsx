@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { CustomRole } from '@/types/admin';
 import { RbacService } from '@modules/rbac';
+import { describeGrants } from './grantable';
 
 interface RoleTableProps {
   onEditRole: (role: CustomRole) => void;
@@ -73,7 +74,7 @@ export function RoleTable({ onEditRole }: RoleTableProps) {
           className="p-12 text-center"
         >
           <p className="text-slate-500 font-medium">No custom roles found</p>
-          <p className="text-slate-400 text-sm mt-1">
+          <p className="text-slate-600 text-sm mt-1">
             Create your first custom role to get started.
           </p>
         </div>
@@ -91,6 +92,9 @@ export function RoleTable({ onEditRole }: RoleTableProps) {
               </th>
               <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                 Permissions
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Users
               </th>
               <th className="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">
                 Actions
@@ -111,13 +115,15 @@ export function RoleTable({ onEditRole }: RoleTableProps) {
                   </span>
                 </td>
                 <td className="px-6 py-4">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                    {role.permissions.length} permissions
+                  <span className="text-sm text-slate-700">
+                    {describeGrants(role.permissions) || 'None'}
                   </span>
                 </td>
+                <td className="px-6 py-4 text-sm text-slate-700">{role.user_count}</td>
                 <td className="px-6 py-4 text-right space-x-2">
                   <button
                     data-testid="edit-role-button"
+                    aria-label={`Edit ${role.name}`}
                     onClick={() => onEditRole(role)}
                     className="text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
                   >
@@ -125,6 +131,7 @@ export function RoleTable({ onEditRole }: RoleTableProps) {
                   </button>
                   <button
                     data-testid="delete-role-button"
+                    aria-label={`Delete ${role.name}`}
                     onClick={() => handleDelete(role)}
                     className="text-sm text-red-600 hover:text-red-800 font-medium transition-colors"
                   >

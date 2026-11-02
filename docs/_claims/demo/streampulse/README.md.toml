@@ -59,10 +59,17 @@ by = [
 ]
 
 [[unit]]
-text = "The native iOS, Android, React Native and Flutter SDKs do not send attributes on flag evaluation yet (#438), so a rule like the Search tab's would not match from them."
+text = "The native iOS, Android and Flutter SDKs do not send attributes on flag evaluation yet (#438), so a rule like the Search tab's would not match from them."
 by = [
     "test:backend/tests/unit/api/test_documented_limits.py::test_the_native_sdks_send_no_context_on_flag_evaluation",
     "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_no_context_keeps_existing_behaviour",
+]
+
+[[unit]]
+text = "The React Native SDK sends them, as the React SDK does."
+by = [
+    "test:sdk/react-native/__tests__/hooks.test.tsx::regression #1520: useFlag puts the attributes on the wire",
+    "test:sdk/react-native/__tests__/client.test.ts::isFeatureEnabled passes the attributes on",
 ]
 
 [[unit]]
@@ -409,9 +416,9 @@ text = "react and react-dom are aliased to this app's copies to avoid the duplic
 by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_builds_against_the_react_sdk_source_with_its_own_react"]
 
 [[unit]]
-text = "StreamPulse uses useFeatureFlag(...).reason and useExperiment(...).assigned / .reason (React SDK ≥ 1.1.0 with the assigned/reason fields)."
+text = "StreamPulse uses useFeatureFlag(...).reason and useExperiment(...).assigned / .reason (React SDK 0.1.0 or later, with the assigned/reason fields)."
 by = [
-    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_react_sdk_is_1_1_0_with_the_hooks_the_apps_use",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_react_sdk_is_0_1_0_with_the_hooks_the_apps_use",
     "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::exposes the server reason when the response carries one",
     "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::maps an ineligible user (assigned: false + reason) onto the control variant the server returned",
 ]
@@ -696,7 +703,7 @@ by = [
 [[unit]]
 text = "npm run typecheck fails inside sdk/react/src | The app needs ExperimentAssignment.assigned / .reason and FeatureFlagEvaluation.reason from the React SDK; make sure sdk/react is at the version in this repo."
 by = [
-    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_react_sdk_is_1_1_0_with_the_hooks_the_apps_use",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_react_sdk_is_0_1_0_with_the_hooks_the_apps_use",
     "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::exposes the server reason when the response carries one",
 ]
 

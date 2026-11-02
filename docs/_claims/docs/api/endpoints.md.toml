@@ -3413,15 +3413,15 @@ text = "Split URL experiments use experiment_type: split_url and carry a split_u
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
-text = "How visitors are meant to be redirected, and what does not work in this release, is on the Split URL API Reference."
-by = ["exempt:navigation"]
+text = "Your server or edge asks the API where to send each visitor, and redirects them: how to set it up is on the Split URL API Reference."
+by = ["test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_a_split_url_experiment_splits_its_visitors"]
 
 [[unit]]
 text = "Experiment management uses the existing experiment CRUD endpoints with experiment_type=split_url:"
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
-text = "Split URL-specific endpoint:"
+text = "Split URL-specific endpoints:"
 by = ["exempt:label"]
 
 [[unit]]
@@ -3429,8 +3429,11 @@ text = "Query parameters for preview: user_id (required)."
 by = ["test:modules/backend/tests/integration/api/test_split_url_api.py"]
 
 [[unit]]
-text = "The preview hashes {user_id}:{experiment_id}; it does not predict the edge router."
-by = ["test:modules/backend/tests/integration/api/test_split_url_api.py"]
+text = "The preview answers the visitor's stored variant, or the variant a new visitor with that id would get, as the assign route does, without recording anything."
+by = [
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_preview_agrees_with_the_route_and_records_nothing",
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_preview_answers_a_stored_assignment",
+]
 
 [[unit]]
 text = "SplitUrlConfig schema (split_url_config field):"
@@ -3448,10 +3451,11 @@ by = [
 ]
 
 [[unit]]
-text = "cookie_name and cookie_ttl_days (default 30) are optional."
+text = "cookie_name and cookie_ttl_days (default 30) are optional, stored, and read by nothing."
 by = [
     "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigOptionalFields::test_cookie_ttl_days_default_30",
     "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigOptionalFields::test_cookie_name_defaults_to_none",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
 ]
 
 [[unit]]

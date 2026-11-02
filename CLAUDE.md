@@ -594,6 +594,10 @@ schedule_data = {
 3. Stage orders must be sequential without gaps.
 4. For time-based triggers, ensure the dates are in UTC timezone.
 5. Manual stages must be explicitly advanced using the API.
+6. A flag has at most one ACTIVE schedule: activating or resuming a second answers 409.
+7. Targets are checked on every write: 422 on create, 409 on add, update and `max_percentage` changes.
+8. Only the next stage can be advanced; a completed or failed stage cannot be changed, and one in progress keeps its target and order.
+9. A stage is added, or a pending one moved, only after every stage that has started (409 otherwise, #1536).
 
 ## Enhanced Rules Engine (EP-001)
 

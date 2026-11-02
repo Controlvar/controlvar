@@ -19,6 +19,7 @@ const FILES = [
   'pages/login.tsx',
   'pages/experiments/index.tsx',
   'pages/feature-flags/index.tsx',
+  'pages/feature-flags/[id].tsx',
   'components/admin/AdminSidebar.tsx',
   'components/admin/AdminLayout.tsx',
   // #1455: the nightly audit does not visit these, so this is their only pin.
