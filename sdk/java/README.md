@@ -134,7 +134,8 @@ scalar / null), `getConfigMap()`. `ExperimentAssignment` → `getExperimentKey()
 `getVariantId()`, `getVariantName()`, `isControl()`, `getConfiguration()` (`Map<String,Object>`).
 `TrackEvent.builder(userId, eventName)` → `.eventType()` (defaults to the name), `.experimentKey()`,
 `.featureFlagKey()`, `.value(Double)`, `.property(k, v)` / `.properties(Map)` (sent as `metadata`),
-`.timestamp(Instant)`. `User.builder(userId).attribute(k, v)` — attributes are the assignment `context`.
+`.timestamp(Instant)`, `.eventId(String)` (sent as `event_id`, see [Event ids](#event-ids)).
+`User.builder(userId).attribute(k, v)` — attributes are the assignment `context`.
 `Exposure` → `getExperimentKey()`, `getUserId()`, `getVariantId()` (`null` when the server sends none),
 `getVariantName()`: what an `ExposureListener` receives.
 
@@ -161,6 +162,24 @@ experiment did not enrol, or an experiment that is not ACTIVE) is cached and ret
 control variant, and an event tracked without a key after the user's cache entries have expired
 (`cacheTtlMs`, 5 minutes by default) is not sent, so pass `experimentKey` on a conversion that can
 come later.
+
+## Event ids
+
+Every event this SDK sends carries an `event_id`, and the server stores an event sent again with
+the same `event_id`, user, experiment, flag and event name only once.
+
+- `.eventId("order-42")` on the `TrackEvent` builder sets the id. Without one, the SDK makes a
+  lowercase random UUID (version 4) each time you track the event, so tracking the same
+  `TrackEvent` twice sends two events.
+- A fanned-out event carries the same id in every entry. In `trackBatch`, each event has its own id.
+- At most 255 characters, with no NUL and no lone surrogate; the builder throws
+  `IllegalArgumentException` for any other id. `null` and `""` set none.
+- OkHttp sends a request again by itself when the connection drops after the request was written.
+  The request it sends again carries the same `event_id`, so the server stores the event once.
+- A request that times out is not sent again. To send it again yourself and have it stored once,
+  give the event an `eventId` and send that same id again.
+
+Full details: [Event ids](../../docs/sdk/java.md#event-ids).
 
 ## Exposure hook
 
@@ -201,7 +220,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 |---|---|---|---|
 | `evaluateFeatureFlag`, `isFeatureEnabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
 | `getExperimentAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
-| `trackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
+| `trackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id}` | ignored |
 | `trackEvent` without keys, `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |
 
 ## Contract smoke

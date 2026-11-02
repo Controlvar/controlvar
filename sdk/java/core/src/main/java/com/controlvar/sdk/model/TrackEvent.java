@@ -23,8 +23,16 @@ import java.util.Objects;
  * <p>When neither {@code experimentKey} nor {@code featureFlagKey} is set, the
  * client fans the event out to every experiment the user was assigned to and
  * every flag evaluated for the user (from its cache).
+ *
+ * <p>Every event the client sends carries an {@code event_id}, so that the server
+ * stores an event sent again only once: the one set with
+ * {@link Builder#eventId(String)}, or else a random UUID the client makes each time
+ * the event is tracked.
  */
 public class TrackEvent {
+
+    /** The longest {@code event_id} the server accepts, in characters (code points). */
+    private static final int MAX_EVENT_ID_LENGTH = 255;
 
     private final String userId;
     private final String eventName;
@@ -34,6 +42,7 @@ public class TrackEvent {
     private final Double value;
     private final Map<String, Object> properties;
     private final Instant timestamp;
+    private final String eventId;
 
     private TrackEvent(Builder builder) {
         this.userId = builder.userId;
@@ -44,6 +53,7 @@ public class TrackEvent {
         this.value = builder.value;
         this.properties = Collections.unmodifiableMap(new HashMap<>(builder.properties));
         this.timestamp = builder.timestamp;
+        this.eventId = builder.eventId;
     }
 
     public String getUserId() { return userId; }
@@ -67,6 +77,12 @@ public class TrackEvent {
     /** Returns the explicit timestamp, or {@code null} to let the server stamp the event. */
     public Instant getTimestamp() { return timestamp; }
 
+    /**
+     * Returns the event id set with {@link Builder#eventId(String)}, or {@code null} when none
+     * was set: the client then makes a new one each time the event is tracked.
+     */
+    public String getEventId() { return eventId; }
+
     /** Returns true when the event is attributed to an experiment or a feature flag. */
     public boolean hasKey() {
         return (experimentKey != null && !experimentKey.isEmpty())
@@ -75,7 +91,9 @@ public class TrackEvent {
 
     /**
      * Returns the wire form of this event: the body of {@code POST /api/v1/tracking/track}
-     * and of each {@code POST /api/v1/tracking/batch} entry.
+     * and of each {@code POST /api/v1/tracking/batch} entry. It holds {@code event_id} only
+     * when one was set with {@link Builder#eventId(String)}; when none was, the client adds
+     * the id it makes as it sends the event.
      */
     public Map<String, Object> toBody() {
         Map<String, Object> body = new LinkedHashMap<>();
@@ -96,6 +114,9 @@ public class TrackEvent {
         }
         if (timestamp != null) {
             body.put("timestamp", DateTimeFormatter.ISO_INSTANT.format(timestamp));
+        }
+        if (eventId != null) {
+            body.put("event_id", eventId);
         }
         return body;
     }
@@ -124,19 +145,46 @@ public class TrackEvent {
                Objects.equals(featureFlagKey, that.featureFlagKey) &&
                Objects.equals(value, that.value) &&
                Objects.equals(properties, that.properties) &&
-               Objects.equals(timestamp, that.timestamp);
+               Objects.equals(timestamp, that.timestamp) &&
+               Objects.equals(eventId, that.eventId);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(userId, eventName, eventType, experimentKey, featureFlagKey, value, properties, timestamp);
+        return Objects.hash(userId, eventName, eventType, experimentKey, featureFlagKey, value, properties, timestamp,
+                eventId);
     }
 
     @Override
     public String toString() {
         return "TrackEvent{userId='" + userId + "', eventName='" + eventName + "', eventType='" + eventType +
                "', experimentKey='" + experimentKey + "', featureFlagKey='" + featureFlagKey +
-               "', value=" + value + ", properties=" + properties + ", timestamp=" + timestamp + "}";
+               "', value=" + value + ", properties=" + properties + ", timestamp=" + timestamp +
+               ", eventId=" + (eventId == null ? null : "'" + eventId + "'") + "}";
+    }
+
+    /**
+     * Why the server would refuse {@code eventId}, or {@code null} when it accepts it: more than
+     * 255 characters (counted in code points, as the server counts them), a NUL, or a surrogate
+     * that is not half of a pair.
+     */
+    private static String eventIdProblem(String eventId) {
+        if (eventId.codePointCount(0, eventId.length()) > MAX_EVENT_ID_LENGTH) {
+            return "eventId must be at most " + MAX_EVENT_ID_LENGTH + " characters";
+        }
+        for (int i = 0; i < eventId.length(); i++) {
+            char c = eventId.charAt(i);
+            if (c == '\0') {
+                return "eventId must not contain NUL";
+            }
+            if (Character.isHighSurrogate(c)
+                    && i + 1 < eventId.length() && Character.isLowSurrogate(eventId.charAt(i + 1))) {
+                i++; // a pair: one character
+            } else if (Character.isSurrogate(c)) {
+                return "eventId must not contain a lone surrogate";
+            }
+        }
+        return null;
     }
 
     /** Builder for {@link TrackEvent}. */
@@ -149,6 +197,7 @@ public class TrackEvent {
         private Double value;
         private final Map<String, Object> properties = new HashMap<>();
         private Instant timestamp;
+        private String eventId;
 
         public Builder(String userId, String eventName) {
             if (userId == null || userId.isEmpty()) {
@@ -205,6 +254,30 @@ public class TrackEvent {
         /** Sets an explicit timestamp, sent as ISO-8601. */
         public Builder timestamp(Instant timestamp) {
             this.timestamp = timestamp;
+            return this;
+        }
+
+        /**
+         * Sets the event's id, sent as {@code event_id}: the server stores an event sent again
+         * with the same id, user, experiment, flag and event name only once. Without one the
+         * client makes a random UUID each time the event is tracked, so set your own id, made
+         * once when the event happens, to send an event again yourself and have it stored once.
+         * {@code null} and {@code ""} set none.
+         *
+         * @param eventId at most 255 characters, with no NUL and no lone surrogate
+         * @return this builder
+         * @throws IllegalArgumentException if the server would refuse the id
+         */
+        public Builder eventId(String eventId) {
+            if (eventId == null || eventId.isEmpty()) {
+                this.eventId = null;
+                return this;
+            }
+            String problem = eventIdProblem(eventId);
+            if (problem != null) {
+                throw new IllegalArgumentException(problem);
+            }
+            this.eventId = eventId;
             return this;
         }
 
