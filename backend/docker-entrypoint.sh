@@ -17,9 +17,11 @@
 #      of the container does not re-seed. SEED_FORCE=true re-runs them.
 #      Every seed is development-only: SEED=<any of them> is refused,
 #      before step 1, unless ENVIRONMENT is development or test.
-#   4. exec "$@" — by default uvicorn; `--workers ${WEB_CONCURRENCY:-1}` and the
-#      proxy flags are appended when the command is uvicorn and the caller did
-#      not pass them explicitly.
+#   4. exec "$@" — by default uvicorn. When the command is uvicorn,
+#      `--workers ${WEB_CONCURRENCY:-1}` is appended unless the caller passed
+#      --workers, and the proxy flags (--proxy-headers, and
+#      --forwarded-allow-ips with the list backend/app/core/proxy_trust.py
+#      builds) are always appended, after any the caller passed, so they win.
 #
 # Steps 1-3 can be skipped (step 0 cannot): RUN_MIGRATIONS=false, SEED= (empty),
 # WAIT_FOR_DB=false. The script runs with `set -euo pipefail`: a failed
@@ -263,19 +265,27 @@ if [ "$1" = "uvicorn" ]; then
     # address -- so prepending a fresh random IP per request bought an
     # unlimited budget, including on the strict login limit (#237).
     #
-    # The default is the PRIVATE ranges rather than a specific VPC CIDR, on
-    # purpose. A load balancer is always inside the VPC and therefore always
-    # RFC1918; a real client arriving from the internet never is. So uvicorn
-    # trusts the hop in front, skips any private hops in the list, and returns
-    # the first public address -- without this container having to be told its
-    # own VPC's CIDR. Getting that value wrong is the failure mode this avoids:
-    # a list that does not contain the load balancer makes uvicorn ignore the
-    # proxy headers entirely, every client appears to BE the load balancer, and
-    # the rate limiter silently collapses to a single shared bucket.
+    # The default believes loopback and the networks this container is
+    # directly attached to: in Compose, the dashboard container and the
+    # gateway a TLS proxy on the same host arrives from. Any other proxy -- an
+    # ingress controller, a load balancer, a TLS proxy on another machine --
+    # is named in FORWARDED_ALLOW_IPS, which adds to that list;
+    # backend/app/core/proxy_trust.py builds it, and the chart and the CDK
+    # stack set the variable. A list that misses the proxy in front makes
+    # uvicorn ignore its X-Forwarded-For, so every request resolves to that
+    # proxy and shares one rate-limit count; the "trusted proxies" line says
+    # what is in use. An empty list would believe nobody, so the entrypoint
+    # refuses to start with one.
     #
-    # FORWARDED_ALLOW_IPS overrides it for a topology this does not fit.
+    # A plain assignment, not `local` or `export`: those would hide the
+    # helper's exit status (78 for a refused entry) from `set -e`.
+    trusted="$(python -m backend.app.core.proxy_trust)"
+    if [ -z "$trusted" ]; then
+        log "the trusted-proxy list came back empty; refusing to start"
+        exit 78
+    fi
     set -- "$@" --proxy-headers \
-        --forwarded-allow-ips="${FORWARDED_ALLOW_IPS:-127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}" \
+        --forwarded-allow-ips="$trusted" \
         --no-server-header
 fi
 

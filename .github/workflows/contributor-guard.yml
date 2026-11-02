@@ -1,0 +1,57 @@
+name: Contributor Guard
+
+# A pull request from a fork may change files only in the areas open to
+# outside contributors; anything else (workflows, repository scripts, the tests
+# that pin the CI checks, dependency and build files, infrastructure) is
+# changed by a maintainer. scripts/contributor_guard.py says which, and why;
+# its docstring is the contract. A pull request from this repository passes
+# at once.
+#
+# The trigger is pull_request_target so that the check reports on a fork's
+# pull request before anyone approves its runs, and so that what runs is
+# main's copy of the script, not the pull request's. Nothing of the pull
+# request is checked out or run: the checkout has no `ref:` (it is main), and
+# the script reads the file list and the head commit's tree through the API
+# with this read-only token.
+#
+# Its exact shape is pinned by backend/tests/unit/scripts/test_privileged_triggers.py:
+# - no `if:` on the job or the step: a skipped job reports success to branch
+#   protection, so the job always runs and the script decides;
+# - no `continue-on-error`, no `|| true`;
+# - no `concurrency:` (see test_ci_concurrency.py: a cancelled run left beside
+#   a green one blocks the merge);
+# - no `paths:` filter, no setup action, no cache, nothing installed;
+# - the event's values reach the script only through `env:`.
+# `edited` is among the types so that a pull request with no run yet gets one
+# from an edit of its title or description.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  contributor-guard:
+    name: contributor-guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check which files the pull request changes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_REPO_ID: ${{ github.event.pull_request.head.repo.id }}
+          BASE_REPO_ID: ${{ github.event.pull_request.base.repo.id }}
+          CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+        run: python3 scripts/contributor_guard.py

@@ -20,7 +20,7 @@ from fastapi import HTTPException, status
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from backend.app.models.user import User
+from backend.app.models.user import User, UserRole
 from backend.app.schemas.split_url_config import SplitUrlConfig
 from backend.app.services.experiment_service import ExperimentService
 from modules.backend.app.services import split_url_service
@@ -59,16 +59,12 @@ async def preview_split_url_assignment(
         HTTPException 409: If the stored config is not valid (one saved before
             each allocation was held to 0-100, say); it is answered, not served
     """
-    # Only ADMIN and DEVELOPER roles may use the preview endpoint
-    is_admin_or_developer = (
-        current_user.is_superuser
-        or getattr(current_user, "role", None) in ("admin", "developer")
-        or (
-            hasattr(current_user, "username")
-            and "developer" in (current_user.username or "").lower()
-        )
-    )
-    if not is_admin_or_developer:
+    # A superuser, or the ADMIN or DEVELOPER role: the same rule as the core
+    # route that calls this handler (experiments.preview_split_url_assignment).
+    if not (
+        getattr(current_user, "is_superuser", False)
+        or getattr(current_user, "role", None) in (UserRole.ADMIN, UserRole.DEVELOPER)
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only DEVELOPER or ADMIN users can access the split URL preview endpoint",

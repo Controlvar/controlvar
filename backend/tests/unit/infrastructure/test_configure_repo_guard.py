@@ -1,12 +1,14 @@
-"""configure-repo.sh changes check names only, and check_required_checks.sh shows drift.
+"""configure-repo.sh writes the protection main has, and check_required_checks.sh shows drift.
 
 ``scripts/configure-repo.sh`` PUTs the whole branch protection body. Live
 protection on main is ``strict: false``, no review rule, and 20 checks each
-pinned to GitHub Actions (app 15368); the script's body says ``strict: true``,
-a code-owner review and bare ``contexts``. Its own header said "run it after
-changing a required check", so following that instruction would have switched
-on strict and a required review -- blocking every non-admin merge, with
-nothing saying so.
+pinned to GitHub Actions (app 15368); the script's body says the same
+(``strict: false``, ``required_pull_request_reviews: null``) and sends bare
+``contexts``. It used to say ``strict: true`` and a code-owner review, so
+following its own header ("run it after changing a required check") would
+have switched both on -- blocking every non-admin merge, with nothing saying
+so. Turning either on is now a deliberate edit to ``protection_payload()``
+AND to live, together; the guard below refuses any run in which they differ.
 
 App ids: the script sends the checks with no app id, and GitHub documents that
 such a check is assigned to the app that most recently posted it (only
@@ -112,7 +114,7 @@ def _matching_configure_repo() -> dict:
 
     Shaped as GitHub documents it would answer a GET after a PUT with bare
     ``contexts``: each check keeps the app that last posted it (GitHub
-    Actions, 15368, as recorded), and the review rule is present.
+    Actions, 15368, as recorded), and there is no review rule.
     """
     want = _payload()
     live = _recorded()
@@ -121,14 +123,7 @@ def _matching_configure_repo() -> dict:
     rsc["strict"] = want["required_status_checks"]["strict"]
     rsc["contexts"] = list(names)
     rsc["checks"] = [{"context": n, "app_id": 15368} for n in names]
-    live["required_pull_request_reviews"] = {
-        "url": live["url"] + "/required_pull_request_reviews",
-        **want["required_pull_request_reviews"],
-        "require_last_push_approval": False,
-        "required_approving_review_count": want["required_pull_request_reviews"][
-            "required_approving_review_count"
-        ],
-    }
+    live.pop("required_pull_request_reviews", None)
     return live
 
 
@@ -174,20 +169,29 @@ def _protection_put(writes: list[str]) -> list[str]:
 
 def _strict_mismatch() -> dict:
     live = _matching_configure_repo()
-    live["required_status_checks"]["strict"] = False
+    live["required_status_checks"]["strict"] = True
+    return live
+
+
+def _review_rule(**extra: object) -> dict:
+    live = _matching_configure_repo()
+    live["required_pull_request_reviews"] = {
+        "url": live["url"] + "/required_pull_request_reviews",
+        "required_approving_review_count": 1,
+        "require_code_owner_reviews": True,
+        "dismiss_stale_reviews": True,
+        "require_last_push_approval": False,
+        **extra,
+    }
     return live
 
 
 def _review_mismatch() -> dict:
-    live = _matching_configure_repo()
-    del live["required_pull_request_reviews"]
-    return live
+    return _review_rule()
 
 
 def _review_setting_mismatch() -> dict:
-    live = _matching_configure_repo()
-    live["required_pull_request_reviews"]["require_code_owner_reviews"] = False
-    return live
+    return _review_rule(require_last_push_approval=True)
 
 
 def _flag_mismatch() -> dict:
@@ -198,10 +202,9 @@ def _flag_mismatch() -> dict:
 
 REFUSED = {
     "strict": _strict_mismatch,
-    "no-review-rule-live": _review_mismatch,
+    "review-rule-live": _review_mismatch,
     "review-setting": _review_setting_mismatch,
     "flag": _flag_mismatch,
-    "recorded-live-2026-10-01": _recorded,
 }
 
 
@@ -214,9 +217,7 @@ def test_guard_refuses_and_writes_nothing(tmp_path: Path, case: str) -> None:
     assert writes == [], f"the refused run still wrote: {writes}"
 
 
-@pytest.mark.parametrize(
-    "case", ["strict", "review-setting", "recorded-live-2026-10-01"]
-)
+@pytest.mark.parametrize("case", ["strict", "review-setting", "review-rule-live"])
 def test_guard_refuses_in_dry_run_too(tmp_path: Path, case: str) -> None:
     result, writes = _run_configure(tmp_path, REFUSED[case](), "--dry-run")
     assert result.returncode != 0
@@ -331,9 +332,9 @@ def test_check_reports_no_drift_on_an_exact_match(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("case", "kind", "needle"),
     [
-        ("strict", "strict", "live false, configure-repo.sh writes true"),
-        ("no-review-rule-live", "reviews", "live no review rule"),
-        ("review-setting", "reviews", '"require_code_owner_reviews": false'),
+        ("strict", "strict", "live true, configure-repo.sh writes false"),
+        ("review-rule-live", "reviews", "configure-repo.sh writes no review rule"),
+        ("review-setting", "reviews", '"require_last_push_approval": true'),
         ("flag", "flags", "required_linear_history: live false"),
     ],
 )
@@ -414,22 +415,29 @@ def test_check_reports_name_drift_and_names_only_ok_accepts_it(tmp_path: Path) -
 
 
 def test_check_on_the_recorded_live_response(tmp_path: Path) -> None:
-    """Today's live protection: strict and the review rule differ; the pins are a note."""
+    """The recorded live response: no drift in strict, reviews or flags; the pins are a note."""
     recorded = _recorded()
+    assert recorded["required_status_checks"]["strict"] is False
+    assert "required_pull_request_reviews" not in recorded
     result = _check(tmp_path, recorded, "--names-only-ok")
-    assert result.returncode == 1
-    lines = _drift_lines(result.stdout)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _drift_lines(result.stdout) == []
     pinned = [
         c["context"]
         for c in recorded["required_status_checks"]["checks"]
         if c["app_id"] == 15368
     ]
     assert len(pinned) == 20
-    assert sum(line.startswith("drift  strict") for line in lines) == 1
-    assert sum(line.startswith("drift  reviews") for line in lines) == 1
-    assert len(lines) == 2, lines
     assert "note   app id   20 check(s) sent with no app id" in result.stdout
     assert "Live today: app 15368." in result.stdout
+
+
+def test_the_payload_is_what_main_has() -> None:
+    """strict off and no review rule; the key is present (the PUT requires it) and null."""
+    payload = _payload()
+    assert payload["required_status_checks"]["strict"] is False
+    assert "required_pull_request_reviews" in payload
+    assert payload["required_pull_request_reviews"] is None
 
 
 def test_check_refuses_input_that_is_not_a_protection_response(tmp_path: Path) -> None:

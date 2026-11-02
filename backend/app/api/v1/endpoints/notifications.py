@@ -16,10 +16,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.enum_filters import enum_filter
 from backend.app.core.logger import unexpected_failure
 from backend.app.models.notification import (
     NotificationDeliveryLog,
     NotificationPreference,
+    NotificationStatus,
 )
 from backend.app.models.user import User, UserRole
 from backend.app.schemas.notification import (
@@ -33,6 +35,14 @@ from backend.app.services.notification_service import NotificationService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+#: The delivery log's ``status`` filter values, as its entries spell them (#955).
+DELIVERY_STATUS_SPELLINGS = ("sent", "failed", "skipped")
+
+DELIVERY_STATUS_DESCRIPTION = (
+    "Only entries with this delivery status: `sent`, `failed` or `skipped`, in "
+    "any case. Any other value answers 422; an empty value means no filter."
+)
 
 
 @router.get("/preferences", response_model=NotificationPreferenceResponse)
@@ -85,7 +95,7 @@ def get_delivery_log(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     event_type: Optional[str] = None,
-    status: Optional[str] = None,
+    status: Optional[str] = Query(None, description=DELIVERY_STATUS_DESCRIPTION),
     current_user: User = Depends(deps.get_current_active_user),
     db: Session = Depends(deps.get_db),
 ):
@@ -93,11 +103,16 @@ def get_delivery_log(
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
 
+    # After the permission check (#955); the member goes to the query.
+    status_member = enum_filter(
+        status, NotificationStatus, "status", DELIVERY_STATUS_SPELLINGS
+    )
+
     query = db.query(NotificationDeliveryLog)
     if event_type:
         query = query.filter(NotificationDeliveryLog.event_type == event_type)
-    if status:
-        query = query.filter(NotificationDeliveryLog.status == status)
+    if status_member is not None:
+        query = query.filter(NotificationDeliveryLog.status == status_member)
 
     total = query.count()
     offset = (page - 1) * limit

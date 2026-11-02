@@ -3,7 +3,11 @@ interface CacheEntry<T> {
   expiresAt: number;
 }
 
-/** Per-user, per-key TTL cache. Only successful results are ever stored. */
+/**
+ * Per-user, per-key TTL cache. Only successful results are ever stored. An entry is live for
+ * `ttlMs` after it is set and expired from then on (`>=`), so a TTL of 0 caches nothing, even
+ * within the same millisecond.
+ */
 export class UserKeyCache<T> {
   private readonly users = new Map<string, Map<string, CacheEntry<T>>>();
 
@@ -12,7 +16,7 @@ export class UserKeyCache<T> {
   get(userId: string, key: string): T | null {
     const entry = this.users.get(userId)?.get(key);
     if (!entry) return null;
-    if (Date.now() > entry.expiresAt) {
+    if (Date.now() >= entry.expiresAt) {
       this.users.get(userId)?.delete(key);
       return null;
     }
@@ -35,7 +39,7 @@ export class UserKeyCache<T> {
     const now = Date.now();
     const live: Array<[string, T]> = [];
     for (const [key, entry] of byKey) {
-      if (now > entry.expiresAt) byKey.delete(key);
+      if (now >= entry.expiresAt) byKey.delete(key);
       else live.push([key, entry.value]);
     }
     return live;

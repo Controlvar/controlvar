@@ -31,6 +31,11 @@ from backend.app.schemas.metrics import (
 
 logger = get_logger(__name__)
 
+#: The summary's period when no ``start_date`` is given: this long before
+#: ``end_date``. ``GET /api/v1/metrics/summary`` computes the same default
+#: itself, to refuse an ``end_date`` whose default start falls before year 1.
+SUMMARY_DEFAULT_PERIOD = timedelta(days=30)
+
 
 class MetricsService:
     """
@@ -337,7 +342,7 @@ class MetricsService:
         """
         # Set default dates if not provided
         end_date = end_date or datetime.utcnow()
-        start_date = start_date or (end_date - timedelta(days=30))
+        start_date = start_date or (end_date - SUMMARY_DEFAULT_PERIOD)
 
         # Base query for aggregated metrics
         query = db.query(AggregatedMetric).filter(

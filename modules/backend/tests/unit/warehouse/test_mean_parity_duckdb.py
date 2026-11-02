@@ -141,6 +141,7 @@ def run_mean_metric(warehouse: DuckDBWarehouse, monkeypatch) -> Dict[str, Any]:
                 name="Revenue",
                 metric_type="mean",
                 is_primary=True,
+                lower_is_better=False,
                 query=build_metric_query(DUCKDB_SQL, ASSIGNMENT, METRIC, KEY, WINDOW),
             ),
         ),

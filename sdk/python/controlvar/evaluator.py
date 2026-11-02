@@ -22,14 +22,25 @@ Every condition and group of a rule that is tried is evaluated: a DEFER anywhere
 the whole evaluation, even when a sibling has already decided the result, because the server
 evaluates them all and can fail on the one this module would have skipped.
 
+A flag's value is answered with its ``enabled``: ``on_value`` when enabled, ``off_value``
+otherwise, and ``enabled`` itself for a boolean flag (an entry with no ``value_type``). An entry
+this SDK cannot read DEFERs that one flag and leaves the rest of the document in use: an
+``evaluation`` other than ``local`` or ``remote``, a ``value_type`` other than ``string``,
+``number`` or ``json``, or value fields missing or of the wrong type. A newer server can
+therefore add a flag shape without stopping local evaluation for every other flag. A known
+shape that is malformed (an active ``local`` entry without integer percentages, say) still
+rejects the whole document.
+
 ``tests/sdk-contract/ruleset-vectors.json`` is generated from the server and pins every
 answer; ``tests/test_evaluator.py`` runs this module against it.
 
-Standard library only; Python 3.9+.
+Standard library only, and no import from the rest of the package (a backend test loads this
+file on its own); Python 3.9+.
 """
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
@@ -40,8 +51,11 @@ __all__ = [
     "LOCAL_OPERATORS",
     "MAX_SAFE_INTEGER",
     "RULESET_SCHEMA",
+    "VALUE_TYPES",
     "WHITESPACE_CODE_POINTS",
     "IndexedRuleset",
+    "copy_value",
+    "entry_value_type",
     "evaluate_condition",
     "evaluate_group",
     "evaluate_locally",
@@ -51,7 +65,9 @@ __all__ = [
     "index_ruleset",
     "is_portable_number",
     "is_supported_format",
+    "is_value_of_type",
     "is_well_formed",
+    "reads_locally",
     "to_wire_context",
 ]
 
@@ -63,6 +79,10 @@ BUCKETING = "md5-mod100-v1"
 
 #: The largest integer both Python and JavaScript represent exactly.
 MAX_SAFE_INTEGER = 2**53 - 1
+
+#: The value types a ruleset entry may name in ``value_type``. A boolean flag's entry names none;
+#: any other ``value_type`` defers that flag.
+VALUE_TYPES: Tuple[str, ...] = ("string", "number", "json")
 
 #: Operators this SDK evaluates itself (the server's names). A copy of ``local_operators`` in
 #: ``tests/sdk-contract/ruleset-vectors.json``; a test fails when they differ.
@@ -124,7 +144,10 @@ class _Defer:
 #: "Ask the server": the answer cannot be given locally.
 DEFER = _Defer()
 
-#: ``{"enabled": bool, "reason": "targeting_rule" | "rollout" | "inactive"}``
+#: ``{"enabled": bool, "reason": "targeting_rule" | "rollout" | "inactive", "value": Any,
+#: "value_type": "boolean" | "string" | "number" | "json"}``. ``value`` is the server's: the
+#: flag's ``on_value`` when enabled, its ``off_value`` otherwise, ``enabled`` for a boolean flag.
+#: A JSON value is the ruleset's own object: copy it (:func:`copy_value`) before handing it out.
 LocalAnswer = Dict[str, Any]
 Outcome = Union[bool, _Defer]
 
@@ -168,14 +191,15 @@ def _valid_group(group: Any, depth: int) -> bool:
 
 
 def _valid_flag(flag: Any) -> bool:
+    """Whether an entry may be indexed. Only a ``local`` entry's shape is checked: an inactive
+    entry, a ``remote`` one and one with an ``evaluation`` this SDK does not know are indexed
+    and never evaluated from their rules (see :func:`evaluate_locally`)."""
     if not isinstance(flag, dict) or not isinstance(flag.get("key"), str):
         return False
     if not isinstance(flag.get("active"), bool):
         return False
-    if not flag["active"] or flag.get("evaluation") == "remote":
+    if not flag["active"] or flag.get("evaluation") != "local":
         return True
-    if flag.get("evaluation") != "local":
-        return False
     if not _is_percentage(flag.get("rollout_percentage")) or not isinstance(flag.get("rules"), list):
         return False
     for rule in flag["rules"]:
@@ -445,6 +469,56 @@ def in_rollout(percentage: int, user_id: str, flag_key: str) -> bool:
     return flag_bucket(user_id, flag_key) < percentage
 
 
+# --------------------------------------------------------------------------- flag values
+
+
+def is_value_of_type(value: Any, value_type: Any) -> bool:
+    """Whether ``value`` is a value of ``value_type`` as the server serves one: a ``str``; a
+    number that is not a ``bool``, finite and within +/-(2**53 - 1) (:func:`is_portable_number`;
+    ``10.0`` is a number); a ``dict`` or a ``list``. Any other ``value_type`` is ``False``."""
+    if value_type == "string":
+        return isinstance(value, str)
+    if value_type == "number":
+        return is_portable_number(value)
+    if value_type == "json":
+        return isinstance(value, (dict, list))
+    return False
+
+
+def copy_value(value: Any) -> Any:
+    """A copy of a JSON value that shares nothing with it: a ``dict`` or ``list`` is copied
+    deeply; a string, number, boolean or ``None`` is returned as it is."""
+    if isinstance(value, (dict, list)):
+        return copy.deepcopy(value)
+    return value
+
+
+def entry_value_type(flag: Mapping[str, Any]) -> Optional[str]:
+    """The type of value a ruleset entry serves, or ``None`` when this SDK cannot read it.
+
+    An entry with no ``value_type`` key is a boolean flag (``"boolean"``). ``None`` for a
+    ``value_type`` outside :data:`VALUE_TYPES` (a newer server's, ``null`` or not a string),
+    or when the value the entry needs (``off_value``, and ``on_value`` on an active entry) is
+    missing or of another type.
+    """
+    if "value_type" not in flag:
+        return "boolean"
+    value_type = flag["value_type"]
+    if not isinstance(value_type, str) or value_type not in VALUE_TYPES:
+        return None
+    if not is_value_of_type(flag.get("off_value"), value_type):
+        return None
+    if flag["active"] and not is_value_of_type(flag.get("on_value"), value_type):
+        return None
+    return value_type
+
+
+def reads_locally(flag: Mapping[str, Any]) -> bool:
+    """Whether an active flag can be answered from the ruleset at all: a ``local`` entry this
+    SDK can read. Every other active flag is evaluated by the server, for every user."""
+    return flag.get("evaluation") == "local" and entry_value_type(flag) is not None
+
+
 # --------------------------------------------------------------------------- flags
 
 
@@ -457,7 +531,9 @@ def evaluate_locally(
     """Evaluate one flag locally, or :data:`DEFER`.
 
     ``context`` must already be what the server would receive (see :func:`to_wire_context`),
-    or ``None`` for none.
+    or ``None`` for none. The answer carries the flag's ``value`` and ``value_type`` (see
+    :data:`LocalAnswer`); an entry this SDK cannot read (:func:`entry_value_type`, or an
+    ``evaluation`` other than ``local`` on an active entry) defers.
     """
     if ruleset.schema != RULESET_SCHEMA or ruleset.bucketing != BUCKETING:
         return DEFER
@@ -468,8 +544,19 @@ def evaluate_locally(
     flag = ruleset.flags.get(flag_key)
     if flag is None:
         return DEFER
+    value_type = entry_value_type(flag)
+    if value_type is None:
+        return DEFER
+
+    def answer(enabled: bool, reason: str) -> LocalAnswer:
+        if value_type == "boolean":
+            value = enabled
+        else:
+            value = flag["on_value"] if enabled else flag["off_value"]
+        return {"enabled": enabled, "reason": reason, "value": value, "value_type": value_type}
+
     if not flag["active"]:
-        return {"enabled": False, "reason": "inactive"}
+        return answer(False, "inactive")
     if flag.get("evaluation") != "local":
         return DEFER
 
@@ -479,17 +566,8 @@ def evaluate_locally(
         if matched is DEFER:
             return DEFER
         if matched:
-            return {
-                "enabled": in_rollout(rule["rollout_percentage"], user_id, flag_key),
-                "reason": "targeting_rule",
-            }
+            return answer(in_rollout(rule["rollout_percentage"], user_id, flag_key), "targeting_rule")
     default_rule = flag.get("default_rule")
     if default_rule is not None:
-        return {
-            "enabled": in_rollout(default_rule["rollout_percentage"], user_id, flag_key),
-            "reason": "targeting_rule",
-        }
-    return {
-        "enabled": in_rollout(flag.get("rollout_percentage") or 0, user_id, flag_key),
-        "reason": "rollout",
-    }
+        return answer(in_rollout(default_rule["rollout_percentage"], user_id, flag_key), "targeting_rule")
+    return answer(in_rollout(flag.get("rollout_percentage") or 0, user_id, flag_key), "rollout")

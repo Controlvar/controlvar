@@ -198,8 +198,64 @@ text = "POSTGRES_SERVER | an external PostgreSQL instead of the bundled one; the
 by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_api_does_not_wait_on_the_bundled_database"]
 
 [[unit]]
+text = "WAREHOUSE_CREDENTIALS_KEYS | turns on warehouse analysis in the full profile: Fernet keys, comma-separated, newest first, that encrypt the warehouse credentials the API stores; while it is empty, storing or using a credential answers 503 credentials_unavailable"
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestFeatureKeys::test_the_api_is_passed_the_key_empty_by_default",
+    "test:modules/backend/tests/unit/core/test_credential_crypto.py::TestTheSetting::test_an_empty_value_from_the_environment_reads_as_not_set",
+    "test:modules/backend/tests/integration/warehouse/test_connections_api.py",
+]
+
+[[unit]]
+text = "ANTHROPIC_API_KEY | turns on Anthropic variants in LLM experiments and also Claude calls in POST /api/v1/ai/design and POST /api/v1/ai/interpret/{experiment_id} (limited to 10 requests a minute); without it those two routes answer from built-in templates"
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestFeatureKeys::test_the_api_is_passed_the_key_empty_by_default",
+    "test:backend/tests/unit/services/test_llm_provider_wiring.py::test_anthropic_variants_go_to_the_gateway_anthropic_base_url_names",
+    "test:backend/tests/unit/services/test_ai_design_service.py",
+    "test:backend/tests/unit/middleware/test_ai_rate_limits.py::test_design_has_its_own_limit_of_ten_a_minute",
+    "test:backend/tests/unit/middleware/test_ai_rate_limits.py::test_interpretations_share_ten_a_minute_whatever_the_id",
+]
+
+[[unit]]
+text = "OPENAI_API_KEY | turns on OpenAI variants in LLM experiments"
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestFeatureKeys::test_the_api_is_passed_the_key_empty_by_default",
+    "test:backend/tests/unit/services/test_llm_provider_wiring.py::test_openai_variants_use_the_key_and_gateway_the_openai_sdk_reads",
+]
+
+[[unit]]
+text = "GEMINI_API_KEY | turns on Gemini (google) variants in LLM experiments"
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestFeatureKeys::test_the_api_is_passed_the_key_empty_by_default",
+    "test:backend/tests/integration/api/test_llm_experiments_api.py::TestGeminiComplete::test_success_returns_the_completion",
+]
+
+[[unit]]
 text = "Run an external PostgreSQL server with its TimeZone set to UTC."
 by = ["exempt:instruction"]
+
+[[unit]]
+text = "The last four settings are optional."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestFeatureKeys::test_the_api_is_passed_the_key_empty_by_default",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "A key set to an empty value is the same as a key that is not set, and both compose files pass these keys empty by default."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestFeatureKeys::test_the_api_is_passed_the_key_empty_by_default",
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_api_is_passed_each_feature_key_empty_by_default",
+    "test:backend/tests/unit/infrastructure/test_compose_feature_keys.py::test_an_empty_warehouse_key_list_is_not_an_error",
+    "test:modules/backend/tests/unit/core/test_credential_crypto.py::TestTheSetting::test_an_empty_value_from_the_environment_reads_as_not_set",
+    "test:backend/tests/unit/infrastructure/test_compose_feature_keys.py::test_the_anthropic_sdk_reads_an_empty_key_as_none",
+    "test:backend/tests/unit/infrastructure/test_compose_feature_keys.py::test_the_openai_sdk_refuses_an_empty_key_as_it_refuses_none",
+    "test:backend/tests/unit/infrastructure/test_compose_feature_keys.py::test_the_gemini_provider_refuses_an_empty_key_before_sending",
+    "test:backend/tests/unit/infrastructure/test_compose_feature_keys.py::test_ai_design_uses_its_templates_with_an_empty_key",
+]
+
+[[unit]]
+text = "Put each key in the .env file next to the compose file: a key exported in another terminal does not reach the container, and one exported in the terminal that runs docker compose up does."
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "The image lines name the images of this file's own release, ghcr.io/controlvar/controlvar:<profile>-X.Y.Z and ghcr.io/controlvar/controlvar-web:<profile>-X.Y.Z."
@@ -370,4 +426,78 @@ by = [
     "workflow:compose-production.yml",
     "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_it_rehearses_in_the_compose_topology",
     "test:backend/tests/unit/infrastructure/test_production_compose.py::TestWorkflow::test_it_refuses_the_demo_login_and_checks_only_the_dashboard_publishes",
+]
+
+[[unit]]
+text = "FORWARDED_ALLOW_IPS | a TLS proxy on another machine whose X-Forwarded-For the API should believe; empty for a proxy on this host that connects to 127.0.0.1 (see Users' addresses)"
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestForwardedAllowIps::test_the_api_is_passed_the_setting_empty_by_default",
+    "test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_compose_believes_web_and_the_gateway_and_no_lan_client",
+]
+
+[[unit]]
+text = "Users' addresses"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The API counts its rate limits per user address and writes that address on its access lines."
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestGetClientIp::test_it_uses_the_resolved_client_and_not_the_header",
+    "test:backend/tests/unit/core/test_aws_settings_and_clients.py::test_each_request_reaches_the_access_log_with_its_path_and_status",
+]
+
+[[unit]]
+text = "Behind your TLS reverse proxy it reads the address from the X-Forwarded-For header, so set your proxy to send it; in nginx that is proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;."
+by = [
+    "test:backend/tests/unit/infrastructure/test_proxy_headers_trust.py::TestTheEntrypoint::test_it_still_reads_proxy_headers_at_all",
+    "test:backend/tests/unit/infrastructure/test_proxy_headers_trust.py::test_every_location_that_proxies_to_the_api_appends_x_forwarded_for",
+]
+
+[[unit]]
+text = "The API believes that header from the dashboard container and from a TLS proxy on this host that connects to 127.0.0.1, as above, and from the proxies in FORWARDED_ALLOW_IPS: IP addresses and networks, separated by commas."
+by = [
+    "test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_compose_believes_web_and_the_gateway_and_no_lan_client",
+    "test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_entries_add_to_the_own_networks_and_each_appears_once",
+]
+
+[[unit]]
+text = "Leave it empty for a proxy on this host that connects to 127.0.0.1."
+by = ["test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_compose_believes_web_and_the_gateway_and_no_lan_client"]
+
+[[unit]]
+text = "For a proxy on another machine, put its address in .env, such as FORWARDED_ALLOW_IPS=192.0.2.10 for a proxy at 192.0.2.10, and run docker compose up -d."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestForwardedAllowIps::test_the_config_check_follows_it_through_compose",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "A proxy in a container on a Docker network of its own connects from that network: give the network's subnet, which docker network inspect shows."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Behind a TLS proxy, keep HTTP_BIND at 127.0.0.1, so that the proxy is the only way in."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Check it once people have used the dashboard:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Each line is an address and the number of API requests from it."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Your users' addresses mean it works."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "If every request comes from one private address, such as 172.18.0.1, the API sees a proxy instead of your users: either your TLS proxy sends no X-Forwarded-For, or it is on another machine (or connects to this host's network address rather than 127.0.0.1) and FORWARDED_ALLOW_IPS does not list it."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "docker compose logs web ends each line with the X-Forwarded-For the dashboard received, \"-\" when there was none, and docker compose logs api 2>&1 | grep 'trusted proxies' shows what the API believes."
+by = [
+    "test:backend/tests/unit/infrastructure/test_proxy_headers_trust.py::test_the_dashboard_access_log_ends_with_the_x_forwarded_for_it_received",
+    "test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_the_start_up_line_says_what_is_believed",
 ]

@@ -208,6 +208,16 @@ describe('validateForm and its three checks', () => {
     expect(checkMetrics([M(), M({ is_primary: false })])).toBe('Metric names must be unique.');
   });
 
+  it('refuses a version at 0% even when the total is 100 (#1424)', () => {
+    const zero = [V(), V({ name: 'B', is_control: false, traffic_allocation: 0 }), V({ name: 'C', is_control: false, traffic_allocation: 50 })];
+    expect(checkVariants(zero)).toBe(
+      '“B”: This version gets 0% of traffic. Give it a share, or remove it.',
+    );
+    // A real split with no 0% version is unchanged.
+    expect(checkVariants([V(), V({ name: 'B', is_control: false })])).toBeNull();
+    expect(checkVariants([V({ traffic_allocation: 100 })])).toBeNull();
+  });
+
   it('compares metric names as they are sent: trimmed, and case-sensitive like the API', () => {
     expect(checkMetrics([M(), M({ name: '  Conv', is_primary: false })])).toBe('Metric names must be unique.');
     expect(checkMetrics([M(), M({ name: 'conv', is_primary: false })])).toBeNull();

@@ -407,6 +407,7 @@ def source_out(source: WarehouseSource) -> Dict[str, Any]:
         "metric_type": source.metric_type,
         "conversion_window_hours": source.conversion_window_hours,
         "cap_value": source.cap_value,
+        "lower_is_better": sources.lower_is_better(source),
         "validated_at": _utc(source.validated_at),
         "created_at": _utc(source.created_at),
         "updated_at": _utc(source.updated_at),
@@ -955,6 +956,8 @@ def _apply_source(source: WarehouseSource, body: Any, rules: Any) -> None:
         source.metric_type = body.metric_type
         source.conversion_window_hours = body.conversion_window_hours
         source.cap_value = body.cap_value
+        # The body is the whole definition: a PUT without it sets false.
+        source.lower_is_better = body.lower_is_better
 
 
 def _name_taken() -> HTTPException:
@@ -1469,12 +1472,16 @@ def start_run(
         diagnostics = build_diagnostics_query(
             client.dialect, mapping, experiment.key, window
         )
+        # Each metric's direction is read from its own source here, in the
+        # request, and frozen in the plan: an edit after admission does not
+        # change a queued or running analysis (#1386).
         metric_plans = tuple(
             runner.MetricPlan(
                 source_id=metric.id,
                 name=metric.name,
                 metric_type=metric.metric_type,
                 is_primary=index == 0,
+                lower_is_better=metric.lower_is_better is True,
                 query=build_metric_query(
                     client.dialect,
                     mapping,

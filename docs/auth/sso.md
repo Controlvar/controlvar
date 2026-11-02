@@ -113,6 +113,7 @@ The browser returns to `<dashboard>/login?sso_error=<code>` and the sign-in page
 | `sso_failed` | anything else, including a provider that is not supported yet |
 | `sso_rate_limited` | the dashboard's own code: the exchange was rate-limited |
 | `sso_unreachable` | the dashboard's own code: the API could not be reached |
+| `sso_timed_out` | the dashboard's own code: the sign-in request got no answer within its deadline (30 seconds); the page says "Sign-in did not finish: the API did not answer within 30 seconds. Try again in a moment." |
 
 For `sso_failed`, `sso_account` and `sso_email` the page shows a Request ID when the API sent one; search the API log for it. A refusal in the callback is logged at WARNING with its `sso_error`, status, detail and request ID, and an unexpected error at ERROR with its traceback. The API log writes the callback's query values (the provider's `code` and `state`, and anything else it sends) as `[redacted]`.
 

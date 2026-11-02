@@ -512,6 +512,10 @@ text = "So does a draft whose targeting conditions would not be applied as writt
 by = ["test:backend/tests/unit/api/test_experiment_wizard_endpoints.py::TestSubmitDraft::test_invalid_targeting_is_refused_with_fixed_text"]
 
 [[unit]]
+text = "So does a draft whose metric names repeat, such as a guardrail metric that is also the primary metric: errors is [\"metrics: duplicate metric name; each name may appear once per experiment (first seen at metrics[0], repeated at metrics[1])\"], and no experiment is created."
+by = ["test:backend/tests/integration/api/test_experiment_metric_names.py::test_the_wizard_refuses_a_guardrail_that_repeats_the_primary_metric"]
+
+[[unit]]
 text = "The error names the condition, for example targeting_rules: Value error, groups[0].conditions[0].operator: unknown operator, and no experiment is created."
 by = ["exempt:baseline"]
 

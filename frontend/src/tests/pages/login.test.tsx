@@ -220,6 +220,34 @@ describe('LoginPage', () => {
     );
   });
 
+  it('a sign-in the API does not answer within 30 seconds says it did not finish (#1040)', async () => {
+    jest.useFakeTimers();
+    try {
+      // As a browser does: the request fails once its signal aborts.
+      mockFetch.mockImplementationOnce(
+        (_url: unknown, init?: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () =>
+              reject(new DOMException('The operation was aborted.', 'AbortError')),
+            );
+          }),
+      );
+      renderLogin();
+      await fillAndSubmit();
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(30_000);
+      });
+      const alert = screen.getByRole('alert');
+      expect(alert).toHaveTextContent(
+        'Sign-in did not finish: the API did not answer within 30 seconds. Try again in a moment.',
+      );
+      expect(alert).not.toHaveTextContent("Can't reach");
+      expect(alert).not.toHaveTextContent('may or may not');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('disables the button and marks inputs read-only while submitting', async () => {
     let resolveLogin: (value: Response) => void = () => {};
     mockFetch.mockImplementationOnce(

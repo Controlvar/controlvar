@@ -86,6 +86,7 @@ export function source(overrides: Partial<Source> = {}): Source {
     metric_type: null,
     conversion_window_hours: null,
     cap_value: null,
+    lower_is_better: null,
     validated_at: '2026-09-28T11:00:00Z',
     created_at: '2026-09-28T10:30:00Z',
     updated_at: '2026-09-28T11:00:00Z',
@@ -102,6 +103,7 @@ export function metricSource(overrides: Partial<Source> = {}): Source {
     columns: { unit_id: { name: 'user_id', type: 'STRING' }, event_at: { name: 'purchased_at', type: 'TIMESTAMP' } },
     metric_type: 'proportion',
     conversion_window_hours: 168,
+    lower_is_better: false,
     ...overrides,
   });
 }

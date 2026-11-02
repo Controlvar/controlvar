@@ -103,4 +103,10 @@ describe('FirstRunChecklist', () => {
     );
     expect(assignCurlSample('http://api.test')).toBe(curl);
   });
+
+  it('underlines the SDK link at rest: colour alone is 1.09:1 against the text (#1533)', () => {
+    const link = within(steps()[2]).getByRole('link', { name: 'SDK' }) as HTMLElement;
+    expect(link).toHaveAttribute('href', '/docs');
+    expect(link.className.split(/\s+/)).toContain('underline');
+  });
 });

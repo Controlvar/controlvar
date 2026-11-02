@@ -39,7 +39,8 @@ SCHEDULER_NAME = "experiment"
 #: is the only value in it, never the experiment's name or anything a user typed.
 NOT_READY_TO_START = (
     "Scheduled start skipped for experiment %s: it is not ready to start (it "
-    "needs at least two variants, a control and a metric), so it stays a draft"
+    "needs at least two variants, a control and a metric, and a split URL "
+    "experiment needs a valid split_url_config), so it stays a draft"
 )
 
 

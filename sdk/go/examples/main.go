@@ -34,7 +34,8 @@ func main() {
 
 	ctx := context.Background()
 
-	// Attributes are sent as the assignment "context" for targeting rules.
+	// Attributes are sent as "context" on assignment and flag evaluation, for
+	// targeting rules.
 	user := &exp.User{
 		ID: "user-123",
 		Attributes: map[string]interface{}{

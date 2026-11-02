@@ -18,6 +18,7 @@ export const ROLLOUT_ERROR_COPY: Record<number, string> & { fallback: string } =
   400: 'The schedule has changed since the page loaded. Reload the page to see it.',
   403: "Changing this flag's rollout requires the ADMIN or DEVELOPER role.",
   404: 'This schedule no longer exists. Reload the page to see it.',
+  409: "Something changed since the page loaded: a stage has started, or another schedule is now running this flag's rollout. Reload the page to see the rollout as it is now.",
   422: "The schedule was not accepted. Check each stage's name and target, and that targets never go down.",
   fallback: 'Could not change the rollout schedule. Try again.',
 };
@@ -39,6 +40,8 @@ export const SCHEDULE_NAME_REQUIRED = 'Give the schedule a name.';
 export const stageNameRequired = (n: number) => `Give stage ${n} a name.`;
 export const targetBelowPrevious = (n: number, previous: number) =>
   `Stage ${n}'s target must be at least ${previous}%, stage ${n - 1}'s target.`;
+export const targetAboveMaximum = (n: number, max: number) =>
+  `Stage ${n}'s target must be at most ${max}%, the schedule's maximum.`;
 export const timeAfterManualNote = (n: number) =>
   `Stage ${n} is time-based but follows a manual stage, so it starts only after you complete stage ${n - 1}.`;
 
@@ -60,9 +63,13 @@ const STAGE_STATUS_COLORS: Record<string, string> = {
   failed: 'bg-red-100 text-red-800',
 };
 
-/** The fixed sentence for a failed request, chosen by the answer's status only. */
+/**
+ * The fixed sentence for a failed request, chosen by the answer's status only;
+ * a time-out shows the dashboard's own time-out sentence (#1040).
+ */
 export function rolloutErrorCopy(err: unknown): string {
   if (!isApiError(err)) return ROLLOUT_ERROR_COPY.fallback;
+  if (err.timedOut) return err.message;
   if (err.status === 0) return UNREACHABLE;
   return ROLLOUT_ERROR_COPY[err.status] ?? ROLLOUT_ERROR_COPY.fallback;
 }
@@ -194,8 +201,8 @@ export function localInputToDate(value: string): Date | null {
 
 /**
  * A `datetime-local` value as naive UTC, `YYYY-MM-DDTHH:MM:SS`, with no `Z` and
- * no offset: what a rollout stage's `start_date` takes (PE 2). An aware value
- * would be converted by the database session's zone before it is stored.
+ * no offset. Stage dates are sent as naive UTC; the API takes a value with no
+ * zone as UTC (`UTCDateTime`).
  */
 export function localInputToNaiveUtc(value: string): string | null {
   const d = localInputToDate(value);
@@ -276,9 +283,10 @@ function wholePercent(value: string): number | null {
  * API checks a new schedule and more: every stage named, every target a whole
  * number from 0 to 100, and no target below the one before it, in
  * `stage_order`. The API checks the order only on create, and by list
- * position, so the form runs this before every create, add and update.
+ * position, so the form runs this before every create, add and update. A
+ * target above `max` (the schedule's `max_percentage`) is refused too.
  */
-export function checkStages(stages: Array<{ name: string; target: string }>): StageProblem[] {
+export function checkStages(stages: Array<{ name: string; target: string }>, max: number): StageProblem[] {
   const problems: StageProblem[] = [];
   let previous: number | null = null;
   stages.forEach((stage, index) => {
@@ -287,6 +295,8 @@ export function checkStages(stages: Array<{ name: string; target: string }>): St
     const target = wholePercent(stage.target);
     if (target === null) {
       problems.push({ index, field: 'target', message: TARGET_RANGE });
+    } else if (target > max) {
+      problems.push({ index, field: 'target', message: targetAboveMaximum(n, max) });
     } else if (previous !== null && target < previous) {
       problems.push({ index, field: 'target', message: targetBelowPrevious(n, previous) });
     }
@@ -555,7 +565,7 @@ export function RolloutScheduleManager({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   /** Where focus goes next: a button that is still there, or `section` (the heading) after a change landed. */
-  const [returnFocus, setReturnFocus] = useState<'create' | 'edit' | 'pause' | 'section' | ConfirmKind | null>(null);
+  const [returnFocus, setReturnFocus] = useState<'create' | 'edit' | 'pause' | 'section' | ConfirmKind | `save-${string}` | null>(null);
 
   const createButton = useRef<HTMLButtonElement>(null);
   const editButton = useRef<HTMLButtonElement>(null);
@@ -609,9 +619,13 @@ export function RolloutScheduleManager({
       complete: advanceButton,
       section: headingRef,
     };
-    target[returnFocus]?.current?.focus();
+    if (returnFocus.startsWith('save-')) {
+      document.getElementById(`${uid}-${returnFocus}`)?.focus();
+    } else {
+      target[returnFocus]?.current?.focus();
+    }
     setReturnFocus(null);
-  }, [returnFocus, busy, headingRef]);
+  }, [returnFocus, busy, headingRef, uid]);
 
   const run = async (key: string, request: () => Promise<unknown>, flagMoved = false): Promise<boolean> => {
     setError(null);
@@ -656,7 +670,7 @@ export function RolloutScheduleManager({
     event.preventDefault();
     const found: FormProblem[] = [];
     if (createName.trim() === '') found.push({ inputId: `${uid}-schedule-name`, message: SCHEDULE_NAME_REQUIRED });
-    for (const p of checkStages(createStages)) {
+    for (const p of checkStages(createStages, 100)) {
       found.push({ inputId: `${uid}-create-${p.index}-${p.field}`, message: p.message });
     }
     setProblems(found);
@@ -699,7 +713,7 @@ export function RolloutScheduleManager({
 
   /** Problems of the whole list with one change applied; stored stages map to their inputs. */
   const editProblems = (list: Array<{ name: string; target: string }>, newIndex: number | null) =>
-    checkStages(list).map((p): FormProblem => {
+    checkStages(list, schedule?.max_percentage ?? 100).map((p): FormProblem => {
       const isNew = newIndex !== null && p.index === newIndex;
       const stage = stored[p.index];
       const inputId = isNew
@@ -719,6 +733,8 @@ export function RolloutScheduleManager({
     const body = stageChanges(stage, draft);
     if (Object.keys(body).length === 0) return;
     const ok = await run(`save-${stage.id}`, () => RolloutSchedulesService.updateStage(stage.id, body));
+    // Refused: nothing changed, so focus goes back to the button that asked, beside the error.
+    if (!ok) setReturnFocus(`save-${stage.id}`);
     if (ok) {
       setEditDrafts((drafts) => {
         const rest = { ...drafts };
@@ -1153,6 +1169,7 @@ export function RolloutScheduleManager({
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
+                        id={`${uid}-save-${stage.id}`}
                         onClick={() => void saveStage(stage, i)}
                         disabled={busy}
                         className={PRIMARY}

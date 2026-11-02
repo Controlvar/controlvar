@@ -358,6 +358,12 @@ count = 4
 reason = "C9: the chart keeps its directory; every reference to it"
 
 [[keep]]
+path = "backend/tests/unit/scripts/contributor_guard_tree.txt"
+literal = "charts/experimently"
+count = 23
+reason = "C9: the chart keeps its directory; a frozen listing of every tracked path, which names each file under it"
+
+[[keep]]
 path = "docs/_claims/docs/self-hosting/kubernetes.md.toml"
 literal = "charts/experimently"
 count = 2
@@ -451,6 +457,18 @@ reason = "C9: the chart's directory, built from parts"
 path = "backend/tests/unit/chart/test_chart_render.py"
 literal = "\"charts\" / \"experimently\""
 count = 1
+reason = "C9: the chart's directory, built from parts"
+
+[[keep]]
+path = "backend/tests/unit/infrastructure/test_proxy_trust.py"
+literal = "\"charts\" / \"experimently\""
+count = 1
+reason = "C9: the chart's directory, built from parts"
+
+[[keep]]
+path = "backend/tests/unit/docs/test_proxies_docs.py"
+literal = "\"charts\" / \"experimently\""
+count = 2
 reason = "C9: the chart's directory, built from parts"
 
 [[keep]]
@@ -1656,7 +1674,7 @@ reason = "K18: local image tag"
 [[keep]]
 path = ".github/workflows/pr-qa-gate.yml"
 literal = "experimently-api"
-count = 23
+count = 24
 reason = "K18: local image tag"
 
 [[keep]]
@@ -2112,6 +2130,18 @@ reason = "the guide's example release, namespace and secret: an existing install
 [[keep]]
 path = "docs/_claims/charts/experimently/README.md.toml"
 literal = "deploy/experimently-api"
+count = 1
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "docs/self-hosting/proxies.md"
+literal = "deploy/experimently-api"
+count = 1
+reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
+
+[[keep]]
+path = "docs/self-hosting/proxies.md"
+literal = "-n experimently"
 count = 1
 reason = "the guide's example release, namespace and secret: an existing install keeps them, and the chart's resource stem is 'experimently' (D4, S3)"
 

@@ -153,6 +153,27 @@ jobs:
       - name: Start the stack (no build, no pull)
         run: docker compose -f "$PROD_COMPOSE" up -d --wait --no-build --pull never
 
+      # The API believes X-Forwarded-For from the network its container is
+      # attached to (backend/app/core/proxy_trust.py reads it from /proc), and
+      # nothing else by default. Its start line must name exactly the subnet
+      # Docker gave the project's network. Reads the log; sends no request.
+      - name: The API believes the project network
+        run: |
+          set -euo pipefail
+          docker inspect "$(docker compose -f "$PROD_COMPOSE" ps -q api)" > api-container.json
+          network=$(jq -er '.[0].NetworkSettings.Networks | keys | if length == 1 then .[0] else error("not one network") end' api-container.json)
+          echo "NETWORK=${network}" >> "$GITHUB_ENV"
+          docker network inspect "$network" > network.json
+          subnet=$(jq -er '[.[0].IPAM.Config[].Subnet | select(contains(":") | not)] | if length == 1 then .[0] else error("not one IPv4 subnet") end' network.json)
+          docker compose -f "$PROD_COMPOSE" logs --no-color --no-log-prefix api > api-start.log
+          expected="[entrypoint] trusted proxies: 127.0.0.1 ::1; this container's networks: ${subnet}; FORWARDED_ALLOW_IPS: (none)"
+          if ! grep -qxF -- "$expected" api-start.log; then
+            grep -F 'trusted proxies' api-start.log || true
+            echo "::error::the API does not trust its own network ${subnet}: expected the line '${expected}'"
+            exit 1
+          fi
+          echo "ok  the API believes ${subnet}, the project network, and nothing else by default"
+
       - name: Rehearse through the dashboard port
         run: |
           set -euo pipefail
@@ -167,6 +188,28 @@ jobs:
           ADMIN_EMAIL="$FIRST_SUPERUSER" \
           ADMIN_PASSWORD="$FIRST_SUPERUSER_PASSWORD" \
             bash tests/alb/rehearse.sh
+
+      # A TLS proxy on this host connects to the published loopback port, as
+      # rehearse.sh's curl did just now (it sends no X-Forwarded-For), and the
+      # dashboard sees it arrive from the project network's gateway -- the
+      # address the API must believe for such a proxy. Reads the dashboard's
+      # access log; sends no request.
+      - name: A same-host client reaches the dashboard as the network's gateway
+        run: |
+          set -euo pipefail
+          gateway=$(jq -er '[.[0].IPAM.Config[].Gateway | select(. != null and (contains(":") | not))] | if length == 1 then .[0] else error("not one IPv4 gateway") end' network.json)
+          docker compose -f "$PROD_COMPOSE" logs --no-color --no-log-prefix web > web-access.log
+          if ! grep -F '"curl/' web-access.log > curl-lines.txt; then
+            echo "::error::the dashboard's access log has no request from rehearse.sh's curl"
+            exit 1
+          fi
+          cut -d' ' -f1 curl-lines.txt | sort -u > curl-peers.txt
+          if [ "$(cat curl-peers.txt)" != "$gateway" ]; then
+            echo "curl's requests reached the dashboard from: $(tr '\n' ' ' < curl-peers.txt)"
+            echo "::error::a same-host client did not arrive as the gateway ${gateway} of ${NETWORK}"
+            exit 1
+          fi
+          echo "ok  a same-host client arrives at the dashboard as ${gateway}, the network's gateway"
 
       - name: Production facts
         run: |

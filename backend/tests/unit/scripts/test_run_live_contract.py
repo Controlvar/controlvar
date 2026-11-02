@@ -45,6 +45,27 @@ GOOD = {
     "track": {"ok": True},
     "fanout": {"ok": True},
 }
+#: What the smoke of an SDK in EXPOSURE_SDKS adds: one hook call, for the
+#: contract experiment and the variant GOOD was assigned.
+EXPOSURE = {
+    "calls": 1,
+    "payload": {
+        "experiment_key": "sdk_contract_ab",
+        "variant_name": "control",
+        "variant_id": "v-control",
+        "user_id": "smoke-user",
+    },
+}
+
+
+def good(runner, sdk: str, experiment_key: str = "sdk_contract_ab") -> dict:
+    """A passing report from *sdk*'s smoke: GOOD, with EXPOSURE only if the
+    runner lists *sdk* in EXPOSURE_SDKS (an unlisted SDK may not report one)."""
+    report = {"sdk": sdk, **GOOD}
+    if sdk in runner.EXPOSURE_SDKS:
+        hook = {**EXPOSURE["payload"], "experiment_key": experiment_key}
+        report["exposure"] = {**EXPOSURE, "payload": hook}
+    return report
 
 
 @pytest.fixture
@@ -78,7 +99,7 @@ def run_main(
     def fake_run(command, env, timeout):
         ran.append((command, env))
         sdk = next(name for name, (cmd, _) in runner.MANIFEST.items() if cmd == command)
-        return "PASS", "0.1s", {"sdk": sdk, **GOOD}
+        return "PASS", "0.1s", good(runner, sdk, env["CONTRACT_EXPERIMENT_KEY"])
 
     monkeypatch.setattr(runner, "_run_command", fake_run)
     monkeypatch.setattr(sys, "argv", ["run_live_contract.py", *args])
@@ -131,16 +152,109 @@ def test_strict_fails_on_a_missing_toolchain_and_the_default_skips_it(
 def test_a_smoke_must_report_a_sticky_assignment_an_enabled_flag_and_both_tracks(
     runner,
 ):
-    assert runner.validate("python", {"sdk": "python", **GOOD}) == []
-    for change, problem in (
-        ({"assign": {**GOOD["assign"], "sticky": False}}, "assignment was not sticky"),
-        ({"flag": {"enabled": False}}, "flag.enabled=False (seeded flag is 100% on)"),
-        ({"track": {"ok": False}}, "track failed"),
-        ({"fanout": {"ok": False}}, "fan-out track failed"),
-    ):
-        assert runner.validate("python", {"sdk": "python", **GOOD, **change}) == [
-            problem
-        ]
+    # Every SDK the runner knows, with the report its smoke gives: an SDK that
+    # joins EXPOSURE_SDKS is checked here with its exposure block.
+    for sdk in runner.MANIFEST:
+        report = good(runner, sdk)
+        assert runner.validate(sdk, report) == [], sdk
+        for change, problem in (
+            (
+                {"assign": {**GOOD["assign"], "sticky": False}},
+                "assignment was not sticky",
+            ),
+            (
+                {"flag": {"enabled": False}},
+                "flag.enabled=False (seeded flag is 100% on)",
+            ),
+            ({"track": {"ok": False}}, "track failed"),
+            ({"fanout": {"ok": False}}, "fan-out track failed"),
+        ):
+            assert runner.validate(sdk, {**report, **change}) == [problem], sdk
+
+
+def test_a_listed_sdk_passes_with_one_exposure_and_an_unlisted_one_without_any(
+    monkeypatch, runner
+):
+    monkeypatch.setattr(runner, "EXPOSURE_SDKS", frozenset({"js"}))
+    listed, unlisted = good(runner, "js"), good(runner, "python")
+    assert listed["exposure"] == EXPOSURE and "exposure" not in unlisted
+    assert runner.validate("js", listed) == []
+    assert runner.validate("python", unlisted) == []
+
+
+@pytest.mark.parametrize(
+    ("sdk", "exposure", "problem"),
+    [
+        pytest.param(
+            "js",
+            {**EXPOSURE, "calls": 0},
+            "exposure.calls=0 (two assigns on one client; expected 1)",
+            id="calls-0",
+        ),
+        pytest.param(
+            "js",
+            {**EXPOSURE, "calls": 2},
+            "exposure.calls=2 (two assigns on one client; expected 1)",
+            id="calls-2",
+        ),
+        pytest.param(
+            "js",
+            None,
+            "exposure missing (js is in EXPOSURE_SDKS)",
+            id="missing",
+        ),
+        pytest.param(
+            "js",
+            {
+                **EXPOSURE,
+                "payload": {**EXPOSURE["payload"], "variant_name": "treatment"},
+            },
+            "exposure.payload.variant_name='treatment' != assign.variant_name='control'",
+            id="wrong-variant",
+        ),
+        pytest.param(
+            "python",
+            EXPOSURE,
+            "exposure reported but python is not in EXPOSURE_SDKS",
+            id="unlisted",
+        ),
+        pytest.param(
+            "js",
+            {**EXPOSURE, "calls": True},
+            "exposure.calls=True (two assigns on one client; expected 1)",
+            id="calls-true",
+        ),
+        pytest.param(
+            "js",
+            {**EXPOSURE, "payload": {**EXPOSURE["payload"], "experiment_key": "other"}},
+            "exposure.payload.experiment_key='other', expected 'sdk_contract_ab'",
+            id="wrong-experiment",
+        ),
+    ],
+)
+def test_each_wrong_exposure_report_gives_exactly_its_problem(
+    monkeypatch, runner, sdk, exposure, problem
+):
+    """The gate's own planted reports, with "js" listed and "python" not."""
+    monkeypatch.setattr(runner, "EXPOSURE_SDKS", frozenset({"js"}))
+    report = {"sdk": sdk, **GOOD}
+    if exposure is not None:
+        report["exposure"] = exposure
+    assert runner.validate(sdk, report) == [problem]
+
+
+def test_a_run_checks_the_exposure_against_the_experiment_it_gave_the_smoke(
+    monkeypatch, runner, capsys
+):
+    """main() hands validate() the CONTRACT_EXPERIMENT_KEY the smoke was given,
+    not the default."""
+    monkeypatch.setattr(runner, "EXPOSURE_SDKS", frozenset({"go"}))
+    monkeypatch.setenv("CONTRACT_EXPERIMENT_KEY", "another_ab")
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: f"/usr/bin/{tool}")
+    status, ran = run_main(monkeypatch, runner, "--sdk", "go")
+    assert ran[0][1]["CONTRACT_EXPERIMENT_KEY"] == "another_ab"
+    assert "PASS go" in " ".join(capsys.readouterr().out.split())
+    assert status == 0
 
 
 def test_the_seed_creates_the_fixtures_the_runner_defaults_to(monkeypatch, runner):

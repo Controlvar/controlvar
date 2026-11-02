@@ -200,6 +200,15 @@ jq '{key, status, experiment_type}' <<<"$EXP"
 <!-- expect: "status": "draft" -->
 <!-- expect: "experiment_type": "a_b" -->
 
+Each metric's `name` may appear once in an experiment, compared exactly: case and spaces
+count, so `Revenue` and `revenue` are two metrics. A list that repeats a name answers 422 at
+`["body", "metrics"]`, and nothing is written. The `msg` gives the 0-based positions of the
+first repeated pair and never the name, for example `duplicate metric name; each name may
+appear once per experiment (first seen at metrics[0], repeated at metrics[2])`.
+`PUT /api/v1/experiments/{experiment_id}` gives the same answer, and refuses an empty
+`metrics` list with 422 as a create does; leaving `metrics` out, or sending `null`, leaves the
+metrics as they are.
+
 A new experiment is a `draft`. Its dates are not part of the create request: schedule it
 with `PUT /api/v1/experiments/{experiment_id}/schedule`, or start it now:
 
@@ -374,6 +383,8 @@ It prints the new account. Its `role` is `VIEWER`; change it with
 Limits are counted per client address and per path: most routes allow 300 requests a
 minute to each path from one address, and a path with an id in it, such as
 `/api/v1/experiments/{experiment_id}`, counts separately for each id.
+Behind a proxy, the client address is the one the proxy reports, when the API is set to
+believe it ([Users' addresses behind a proxy](../self-hosting/proxies.md)).
 AI design (`POST /api/v1/ai/design`) allows 10 a minute, and AI results
 interpretation (`POST /api/v1/ai/interpret/{experiment_id}`) 10 a minute for every
 experiment id together. For the other routes with a limit of their own, see
@@ -958,7 +969,7 @@ Each 400 carries the detail `This flag is archived. Unarchive it before turning 
 ## Tracking Endpoints
 
 All tracking endpoints use API-key authentication (`X-API-Key`). They address experiments and flags by
-their public `key`, except `POST /api/v1/tracking/events`, which takes ids. They share the per-IP `SDK_RATE_LIMIT_PER_MINUTE` ceiling (default 6000/min), except
+their public `key`, except `POST /api/v1/tracking/events`, which takes ids. They use the same `SDK_RATE_LIMIT_PER_MINUTE` limit (default 6000/min), counted per client address and per path, so each flag key, user id or other id in a path is its own counter; the exception is
 `POST /api/v1/tracking/assign/batch`, which has its own limit of 60 requests a minute.
 
 ### Assign User to Experiment
@@ -1614,7 +1625,10 @@ the caller's role, superusers included:
   is set to now; a scheduled `end_date` is kept. An experiment with no
   `start_date` whose `end_date` has passed is refused with 400 and nothing is
   changed; set a later `end_date`, or clear it with `null`, through
-  `PUT /api/v1/experiments/{experiment_id}/schedule` and start it again.
+  `PUT /api/v1/experiments/{experiment_id}/schedule` and start it again. A
+  split URL experiment is also refused with 400 when its `split_url_config`
+  is missing or cannot split; see
+  [Starting a split URL experiment](split-url.md#starting-a-split-url-experiment).
 - `POST /api/v1/experiments/{experiment_id}/pause`: `active` to `paused`.
 - `POST /api/v1/experiments/{experiment_id}/complete`: `active` or `paused` to
   `completed`, and sets `end_date` to now. An experiment that an earlier
@@ -2274,4 +2288,7 @@ it does not predict the edge router.
 ```
 
 At least two URL variants, with `traffic_allocation` values (0-100) that sum to 100.
+In a `split_url` experiment the URL variants name the experiment's variants one to one,
+with the same allocations, and each `url` is an absolute `http://` or `https://` URL; see
+[Validation Rules](split-url.md#validation-rules).
 `cookie_name` and `cookie_ttl_days` (default 30) are optional.

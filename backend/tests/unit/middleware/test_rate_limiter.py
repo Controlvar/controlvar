@@ -32,6 +32,7 @@ from backend.app.middleware.rate_limiter import (
     RedisRateLimiter,
     SlidingWindowRateLimiter,
     _get_client_ip,
+    rate_limit_key,
     resolve_rate_limit,
 )
 
@@ -984,3 +985,76 @@ class TestExportRateLimit:
 
         # Other routes keep their own budget.
         assert client.get("/api/v1/experiments/").status_code == 200
+
+
+class TestSdkRateLimitIsPerPath:
+    """SDK routes share a limit, not a counter: each path is charged on its own."""
+
+    @pytest.mark.parametrize(
+        "first, second",
+        [
+            ("/api/v1/feature-flags/evaluate/a", "/api/v1/feature-flags/evaluate/b"),
+            ("/api/v1/feature-flags/user/u1", "/api/v1/feature-flags/user/u2"),
+        ],
+    )
+    def test_sdk_paths_with_different_ids_are_counted_separately(self, first, second):
+        assert rate_limit_key("203.0.113.7", first) != rate_limit_key(
+            "203.0.113.7", second
+        )
+        assert resolve_rate_limit(first) == resolve_rate_limit(second)
+        assert resolve_rate_limit(first) == (DEFAULT_SDK_RATE_LIMIT_PER_MINUTE, 60)
+
+    def test_the_same_path_from_two_addresses_is_counted_separately(self):
+        path = "/api/v1/feature-flags/evaluate/a"
+        assert rate_limit_key("203.0.113.7", path) != rate_limit_key(
+            "203.0.113.8", path
+        )
+
+
+@pytest.mark.unit
+@pytest.mark.regression
+class TestRateLimitWarningFields:
+    """The "Rate limit exceeded" line keeps its fields in the JSON log."""
+
+    async def test_warning_carries_client_ip_path_and_limit(self):
+        from starlette.requests import Request
+
+        class _Denies:
+            def is_allowed(self, key, limit, window_seconds):
+                return False, 0
+
+        middleware = RateLimitMiddleware(MagicMock(), enabled=False)
+        middleware._enabled = True
+        middleware._limiter = _Denies()
+        path = "/api/v1/auth/login"
+        request = Request(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": path,
+                "headers": [],
+                "query_string": b"",
+                "client": ("203.0.113.9", 4321),
+            }
+        )
+
+        async def _unreached(_request):
+            raise AssertionError("a denied request must not reach the app")
+
+        with _json_logs() as buffer:
+            response = await middleware.dispatch(request, _unreached)
+        assert response.status_code == 429
+
+        lines = [
+            line
+            for line in _limiter_lines(buffer)
+            if line.get("event") == "Rate limit exceeded"
+        ]
+        assert len(lines) == 1, lines
+        line = lines[0]
+        expected_limit = resolve_rate_limit(path, middleware._sdk_limit)[0]
+        assert line.get("client_ip") == "203.0.113.9", (
+            'client_ip missing from the rendered "Rate limit exceeded" line'
+        )
+        assert line.get("path") == path
+        assert line.get("limit") == expected_limit

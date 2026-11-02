@@ -453,6 +453,25 @@ jobs:
           done
           echo "both task definition families were deployed for profile=${PROFILE}"
 
+      # The API image builds its list of trusted proxies at start-up, and on
+      # AWS the load balancer is on none of the task's own networks: only the
+      # API family's FORWARDED_ALLOW_IPS (the VPC's range, set by `cdk deploy`
+      # of the Fargate stack) puts it on that list. The registration below
+      # copies the family's newest revision, so a stack last deployed from an
+      # older checkout is refused here, read-only, before anything is built.
+      # A release whose entrypoint still passes the old fixed list is not
+      # checked (a notice says so). The same script reads the registered
+      # revision back before the CodeDeploy deployment, below. Never in
+      # rollback.yml: a rollback target from before the change needs nothing.
+      - name: Refuse an API task definition family without FORWARDED_ALLOW_IPS
+        run: |
+          set -euo pipefail
+          python3 -I -S scripts/refuse_api_revision_without_forwarded_allow_ips.py \
+            --family "$ECS_BACKEND_TASK_FAMILY" \
+            --release release \
+            --environment "$TARGET_ENV" \
+            --fargate-stack "$FARGATE_STACK"
+
       # The task definitions inject these (infrastructure/cdk/stacks/
       # fargate_service_stack.py, migration_task_stack.py), and the image ships
       # no .env file: they are the only way the container gets a real value for
@@ -853,7 +872,7 @@ jobs:
       # when the Fargate stack was last deployed from an older checkout. This
       # reads back what ECS stored for the ARN and refuses before
       # CodeDeploy is asked for anything. No `if:`: a failure here ends the
-      # job before the next step, which creates the deployment.
+      # job before the step that creates the deployment.
       - name: Refuse an API revision that would run migrations on start
         id: api-td-check
         env:
@@ -862,6 +881,22 @@ jobs:
           set -euo pipefail
           python3 scripts/refuse_migrating_api_revision.py \
             --task-definition "$TASK_DEFINITION" \
+            --environment "$TARGET_ENV" \
+            --fargate-stack "$FARGATE_STACK"
+
+      # The family check before the build, read back on what ECS stored for
+      # the registered ARN: the newest revision can change between the two (a
+      # `cdk deploy` meanwhile). Same rules, same release check. No `if:`: a
+      # refusal ends the job before the next step creates the deployment.
+      - name: Refuse an API revision without FORWARDED_ALLOW_IPS
+        id: api-td-proxy-check
+        env:
+          TASK_DEFINITION: ${{ steps.api-td.outputs.arn }}
+        run: |
+          set -euo pipefail
+          python3 -I -S scripts/refuse_api_revision_without_forwarded_allow_ips.py \
+            --task-definition "$TASK_DEFINITION" \
+            --release release \
             --environment "$TARGET_ENV" \
             --fargate-stack "$FARGATE_STACK"
 

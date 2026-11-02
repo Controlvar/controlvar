@@ -638,6 +638,10 @@ by = [
 ]
 
 [[unit]]
+text = "\"Sign-in did not finish: the API did not answer within 30 seconds. Try again in a moment.\" | The API had not started to answer after 30 seconds, so the dashboard gave up | Try again; if it keeps happening, check that the API is healthy"
+by = ["test:frontend/src/tests/pages/login.test.tsx::a sign-in the API does not answer within 30 seconds says it did not finish (#1040)"]
+
+[[unit]]
 text = "Token Errors"
 by = ["exempt:baseline"]
 

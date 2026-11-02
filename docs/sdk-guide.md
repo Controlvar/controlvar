@@ -43,7 +43,7 @@ A flag's targeting rules — as written in the dashboard rule editor — evaluat
 `reason` (`targeting_rule` / `rollout` / `inactive` / `error`) says which path decided. Attribute lookup is
 aliased: a top-level `country` also matches a rule on `user.country` (likewise `device.` / `app.` prefixes),
 and nested objects flatten to dotted keys (`{"app": {"version": "3.2.1"}}` answers `app.version`). The
-JavaScript, Python and React SDKs send it on both calls; each SDK's page says what that SDK sends.
+JavaScript, Python, React and Go SDKs send it on both calls; each SDK's page says what that SDK sends.
 
 ## SDK status
 
@@ -55,6 +55,9 @@ global holdout kept out, for example): holdout results count those users' events
 (the golden-vector tests still cover it). It is not the function the server buckets flag rollouts with,
 and nothing uses it to decide a flag or a variant; local evaluation (JavaScript and Python, opt-in) uses
 the server's `md5-mod100-v1` bucketing instead.
+
+How long a cached answer keeps a flag change from your users, SDK by SDK:
+[Turning a Flag Off](feature-flags/kill-switch.md).
 
 "Verified live" means the SDK's `contract_smoke` entry point passed
 `tests/sdk-contract/live/run_live_contract.py` against a running backend (see

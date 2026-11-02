@@ -107,6 +107,7 @@ def _mean_plan(name: str = "Revenue", *, primary: bool = True) -> runner.MetricP
         name=name,
         metric_type="mean",
         is_primary=primary,
+        lower_is_better=False,
         query=_metric_query(name),
     )
 
@@ -253,6 +254,7 @@ def test_a_proportion_and_a_mean_metric_in_one_run(monkeypatch):
         name="Purchased",
         metric_type="proportion",
         is_primary=True,
+        lower_is_better=False,
         query=_metric_query("Purchased"),
     )
     results = _run(

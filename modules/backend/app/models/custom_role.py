@@ -69,6 +69,11 @@ class UserCustomRole(Base, BaseModel):
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+    #: The assignment's activation time (#891).  Nothing writes or reads it
+    #: yet, so every row has none.  No default: ``modules_0004_rbac_activation``
+    #: adds the column empty, and the previous release's INSERTs, which do not
+    #: name it, leave it empty.
+    activated_at = Column(DateTime(timezone=True), nullable=True)
 
     role = relationship("CustomRole", back_populates="user_assignments")
 
@@ -108,6 +113,11 @@ class DirectPermissionGrant(Base, BaseModel):
     reason = Column(Text, nullable=True)
     expires_at = Column(DateTime(timezone=True), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
+    #: The grant's activation time (#891).  Nothing writes or reads it yet, so
+    #: every row has none.  No default: ``modules_0004_rbac_activation`` adds
+    #: the column empty, and the previous release's INSERTs, which do not name
+    #: it, leave it empty.
+    activated_at = Column(DateTime(timezone=True), nullable=True)
 
     @property
     def is_expired(self) -> bool:

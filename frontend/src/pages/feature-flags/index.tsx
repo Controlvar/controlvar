@@ -246,7 +246,7 @@ export default function FeatureFlagsPage() {
 
         {!loading && !error && flags.length > 0 && (
           <div
-            className="bg-white rounded-lg border border-slate-200 overflow-hidden"
+            className="bg-white rounded-lg border border-slate-200 overflow-x-auto"
             data-testid="flags-table"
           >
             <table className="w-full text-sm">

@@ -66,8 +66,9 @@ text = "Rate limits"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "An API in the development environment, which is what the Quick Start stack and the command above run, answers 429 to an address that passes a route's rate limit: 6000 requests a minute for each SDK route (/api/v1/tracking/, /api/v1/feature-flags/evaluate/)."
+text = "An API in the development environment, which is what the Quick Start stack and the command above run, answers 429 to an address that passes a route's rate limit: 6000 requests a minute for each SDK route (/api/v1/tracking/, /api/v1/feature-flags/evaluate/), counted per address and per path."
 by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestSdkRateLimitIsPerPath::test_sdk_paths_with_different_ids_are_counted_separately",
     "test:backend/tests/unit/scripts/test_load_test_runner_cli.py::test_a_development_api_answers_429_past_6000_requests_a_minute_on_an_sdk_route",
     "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitMiddleware::test_returns_429_when_limit_exceeded",
 ]

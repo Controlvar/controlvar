@@ -159,7 +159,7 @@ python -m alembic -c backend/app/db/alembic.ini heads
 ```
 
 It prints two, such as `<core head id> (head)` and
-`modules_0002_warehouse_analysis (modules) (head)`.
+`modules_0004_rbac_activation (modules) (head)`.
 The core head is the one without `(modules)`. Generate the revision on it, with your own
 message in place of `describe the change`:
 
@@ -392,3 +392,23 @@ Rules that are easy to get wrong:
 
 Keep pull requests focused. A refactor and a bug fix in one branch takes three
 times as long to review, and a reverted refactor takes the fix with it.
+
+## What to expect
+
+### Why your checks are waiting
+
+Every pull request from a fork waits for a maintainer to approve its checks
+before they run, not only your first one. After each push they wait again. If
+your pull request shows "Workflows awaiting approval" and no results, that is
+this safety step, not a verdict on your change, and there is nothing for you to
+do. Once a maintainer approves the run, the checks start.
+
+### Merging
+
+Pull requests are squash-merged: the commits on your branch become one commit
+on `main`, and the pull request title becomes its subject, which is why the
+title should use the same conventional-commit prefixes as a commit. Branches are not updated
+for you, so if `main` has moved and the pull request conflicts, you may be
+asked to rebase or merge `main` into it. Leaving **Allow edits from
+maintainers** ticked (it is the default when you open a pull request from a
+fork) lets a maintainer push a small fix to your branch instead.

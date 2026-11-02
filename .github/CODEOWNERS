@@ -1,7 +1,8 @@
 # Code owners for Controlvar.
 #
-# Every entry here requires a review from the listed owner before a pull request
-# that touches those paths can merge. Order matters: the LAST matching pattern
+# Intent, not an enforced rule today: main's branch protection requires no review
+# (scripts/configure-repo.sh writes none), so these owners are requested as
+# reviewers but a pull request that touches those paths is not blocked on them. Order matters: the LAST matching pattern
 # wins, so the SDK directory is listed last.
 #
 # Replace @amarkanday with the org team handle when the repository moves to its

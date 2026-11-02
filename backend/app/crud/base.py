@@ -5,6 +5,7 @@ This module provides a generic base class for CRUD operations
 that can be extended for specific models.
 """
 
+from enum import Enum
 from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union
 from uuid import UUID
 
@@ -76,7 +77,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         *,
         skip: int = 0,
         limit: int = 100,
-        status: Optional[str] = None,
+        status: Optional[Union[str, Enum]] = None,
         search: Optional[str] = None,
     ) -> List[ModelType]:
         """
@@ -86,7 +87,8 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             db: Database session
             skip: Number of records to skip
             limit: Maximum number of records to return
-            status: Optional status filter
+            status: Optional status filter: the model's enum member, or a
+                value the column accepts as it is
             search: Optional search term
 
         Returns:
@@ -161,14 +163,18 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         return query.offset(skip).limit(limit).all()
 
     def count(
-        self, db: Session, status: Optional[str] = None, search: Optional[str] = None
+        self,
+        db: Session,
+        status: Optional[Union[str, Enum]] = None,
+        search: Optional[str] = None,
     ) -> int:
         """
         Count records with optional filtering.
 
         Args:
             db: Database session
-            status: Optional status filter
+            status: Optional status filter: the model's enum member, or a
+                value the column accepts as it is
             search: Optional search term
 
         Returns:

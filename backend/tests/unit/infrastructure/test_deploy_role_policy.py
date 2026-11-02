@@ -117,6 +117,8 @@ EXPECTED: dict[str, set[str]] = {
         "scripts/check_dashboard_image.py: aws ecs describe-task-definition",
         "scripts/check_task_secrets.py: aws ecs describe-task-definition",
         "scripts/ecs_rolling_rollout.sh: aws ecs describe-task-definition",
+        "scripts/refuse_api_revision_without_forwarded_allow_ips.py: "
+        "aws ecs describe-task-definition",
         "scripts/refuse_migrating_api_revision.py: aws ecs describe-task-definition",
         "scripts/register_task_definition.sh: aws ecs describe-task-definition",
     },

@@ -110,7 +110,11 @@ def test_the_flag_goes_through_openfeature_and_the_rest_through_provider_client(
         "POST /api/v1/tracking/batch",
         "POST /api/v1/tracking/batch",
     ]
-    assert transport.requests[2].query == {"user_id": "user-a"}
+    # The context's attributes reach the evaluate call as its `context`.
+    assert transport.requests[2].query == {
+        "user_id": "user-a",
+        "context": '{"source":"contract_smoke","sdk":"openfeature-python"}',
+    }
     assert len(capsys.readouterr().out.strip().splitlines()) == 1
 
 

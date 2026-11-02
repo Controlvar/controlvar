@@ -158,6 +158,18 @@ class _MetricSourceBody(BaseModel):
     cap_value: Optional[
         Annotated[float, Field(strict=True, gt=0, le=1e15, allow_inf_nan=False)]
     ] = None
+    #: Strict: a JSON boolean only ("true", 1 and null are refused).  The body
+    #: replaces the whole definition, so a PUT that leaves it out sets false,
+    #: as an omitted cap_value clears the cap (#1386).
+    lower_is_better: StrictBool = Field(
+        default=False,
+        description=(
+            "True for a metric where a decrease is the improvement, such as an "
+            "error rate or churn: an analysis started afterwards names a winner "
+            "only for a significant decrease. Omitted means false, on a PUT as "
+            "on a POST."
+        ),
+    )
     filters: Filters = []
 
     @model_validator(mode="after")

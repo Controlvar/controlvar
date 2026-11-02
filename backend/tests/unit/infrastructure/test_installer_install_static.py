@@ -9,6 +9,8 @@
   has (botocore's models), and every field its --query names is one the call prints; the
   one customization is on an exact list.
 * H3: nothing bash 3.2 lacks and no GNU-only flag; every array expansion is guarded.
+* E3 (static half): the deploy step's wait runs no command substitution, $(...), in
+  which bash would drop a Ctrl-C (#1558).
 * A7 (static half): no file but lib/names.sh spells an infrastructure/cdk name.
 * C4 (static half): the tools step runs npm with --ignore-scripts and pip with
   --require-hashes; pins/ agrees with infrastructure/cdk/requirements.txt's shared pins
@@ -382,6 +384,36 @@ def test_every_array_expansion_is_guarded():
         for number, line in _code(path):
             if re.search(r"\$\{\w+\[[@*]\]\}", guarded.sub("", line)):
                 found.append(f"{path.relative_to(INSTALLER)}:{number}: {line}")
+    assert found == [], "\n".join(found)
+
+
+# --- E3 (static half) ----------------------------------------------------------------------------
+
+
+def _function(path: Path, name: str) -> list[tuple[int, str]]:
+    """The code lines of the function ``name`` in ``path``: from ``name() {`` to the
+    first line that is only its closing brace."""
+    raw = path.read_text().splitlines()
+    start = raw.index(f"{name}() {{") + 1
+    end = raw.index("}", start) + 1
+    return [(number, line) for number, line in _code(path) if start < number < end]
+
+
+@pytest.mark.regression
+def test_the_deploy_steps_wait_runs_no_command_substitution():
+    """#1558: bash drops an INT that arrives while it waits for a command substitution
+    whose command then ends normally, though INT is trapped, so a Ctrl-C during the
+    deploy step's wait was sometimes lost and the deploy carried on. The wait runs none
+    itself; the heartbeat's run in a subshell it waits for (installer_sweeps'
+    test_an_interrupt_while_the_deploy_wait_reads_the_clock_stops_the_install holds
+    both kinds open while it sends INT)."""
+    body = _function(LIB / "steps.sh", "cv_deploy_wait")
+    assert len(body) > 10, body
+    found = [
+        f"lib/steps.sh:{number}: {line}"
+        for number, line in body
+        if re.search(r"\$\((?!\()|`", line)
+    ]
     assert found == [], "\n".join(found)
 
 

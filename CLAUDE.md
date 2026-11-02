@@ -225,7 +225,7 @@ source venv/bin/activate && pytest -m "unit" -v
 - `/tracking/assign` routes new users by `BanditState.variant_weights` for `optimization_type != "fixed"`; existing assignments are always kept.
 
 #### Rate limits and CORS
-- SDK paths (`/api/v1/tracking/*`, `/feature-flags/evaluate/*`, `/feature-flags/user/*`, `/api/v1/sdk/*`) share `SDK_RATE_LIMIT_PER_MINUTE` (default 6000/min per IP); auth endpoints stay strict; every `/api/v1/export/*` path shares ONE counter of 10/min per IP (`EXPORT_RATE_LIMIT`, keyed on the prefix by `rate_limit_key()`); everything else 300/min. Limits resolve via `resolve_rate_limit()` in `backend/app/middleware/rate_limiter.py`. If Redis fails, `RedisRateLimiter` counts per process (limits multiply by the number of API processes) and retries Redis every 30 s (`REDIS_RETRY_SECONDS`) with client retries off (`retry=Retry(NoBackoff(), 0)` -- redis-py's default ten retries would block the event loop for seconds on every retry); each switch logs once with a `rate_limiter` field.
+- SDK paths (`/api/v1/tracking/*`, `/feature-flags/evaluate/*`, `/feature-flags/user/*`, `/api/v1/sdk/*`) use the limit `SDK_RATE_LIMIT_PER_MINUTE` (default 6000/min), counted per client address AND per path, so every flag key, user id or other id in a path is its own counter; auth endpoints stay strict; only `/api/v1/export/*` (`EXPORT_RATE_LIMIT`, 10/min) and `/api/v1/ai/interpret/*` share ONE counter per address, which `rate_limit_key()` keys on the prefix; everything else 300/min. Limits resolve via `resolve_rate_limit()` in `backend/app/middleware/rate_limiter.py`. If Redis fails, `RedisRateLimiter` counts per process (limits multiply by the number of API processes) and retries Redis every 30 s (`REDIS_RETRY_SECONDS`) with client retries off (`retry=Retry(NoBackoff(), 0)` -- redis-py's default ten retries would block the event loop for seconds on every retry); each switch logs once with a `rate_limiter` field.
 - `CORS_ORIGINS` is a plain comma-separated list (annotated `NoDecode`); `BACKEND_CORS_ORIGINS` must be a JSON array. Dev defaults include ports 3000, 3001, 3100, 3200, 8000.
 
 #### Demo applications
@@ -238,7 +238,7 @@ source venv/bin/activate && pytest -m "unit" -v
 - SDKs send user attributes as `context` (URL-encoded JSON) on `GET /feature-flags/evaluate/{key}`; responses carry `reason` (`targeting_rule|rollout|inactive|error`).
 - `GET /api/v1/sdk/ruleset` (beta, #226) serves every flag normalised for server-side SDK-local evaluation, built by `backend/app/services/sdk_ruleset.py`; it requires an API key with the `sdk:ruleset` scope (`backend/app/api/sdk_scope.py`; `backend/tests/smoke/test_sdk_scoped_routes.py` pins which routes need it). `tests/sdk-contract/ruleset-vectors.json` is generated from the server (`python -m backend.scripts.generate_ruleset_vectors`); any change to the rules engine, the targeting adapter or the flag service's evaluation that moves an answer fails `test_sdk_ruleset_vectors.py` until the file is regenerated, and then the SDKs must agree with it.
 - `AssignmentService.assign_user` checks global holdout → mutual exclusion group → experiment targeting for NEW users; ineligible users get HTTP 200 with the control variant and `assigned: false, reason: holdout|mutual_exclusion|targeting`, no assignment row, no exposure.
-- Errors are reported with `POST /api/v1/tracking/errors[/batch]` (API key) → `error_logs`, stamped `request_data.source` `"server"` or `"client"` from the presented key (`report_source`). The safety monitor counts every row except `"client"` ones (`SafetyService.get_error_metrics`, `IS DISTINCT FROM`, so evaluation failures count), divides them by flag evaluations and rolls back to the config's `rollback_percentage`. Only an `sdk:ruleset` key whose owner can change flags stamps `"server"` (`presented_key_is_server_key`); any other key's reports are stored and shown as `uncounted_error_count`. A new `error_logs` writer must be listed in `backend/tests/smoke/test_error_log_writers.py`. Cadences: `SAFETY_CHECK_INTERVAL_MINUTES`, `ROLLOUT_CHECK_INTERVAL_MINUTES`, `BANDIT_UPDATE_INTERVAL_MINUTES`.
+- Errors are reported with `POST /api/v1/tracking/errors[/batch]` (API key) → `error_logs`, stamped `request_data.source` `"server"` or `"client"` from the presented key (`report_source`). The safety monitor counts every row except `"client"` ones (`SafetyService.get_error_metrics`, `IS DISTINCT FROM`, so evaluation failures count), divides them by every evaluation of the flag in the same 15-minute window, whichever API key asked (each `GET /feature-flags/user/{user_id}` counts one evaluation per active flag; SDK local-evaluation counts add to it), so `error_rate` follows traffic while `error_count` does not, and rolls back to the config's `rollback_percentage`. Only an `sdk:ruleset` key whose owner can change flags stamps `"server"` (`presented_key_is_server_key`); any other key's reports are stored and shown as `uncounted_error_count`. A new `error_logs` writer must be listed in `backend/tests/smoke/test_error_log_writers.py`. Cadences: `SAFETY_CHECK_INTERVAL_MINUTES`, `ROLLOUT_CHECK_INTERVAL_MINUTES`, `BANDIT_UPDATE_INTERVAL_MINUTES`.
 - `backend.app.models.register_core_models()` imports every *core* model module so standalone scripts can configure the SQLAlchemy mappers; add a new core model to `CORE_MODEL_MODULES` there. Module models are registered through `hooks.register_model_module()` by the modules registration (`modules/backend/app/register.py`), and schema builders load them with `modules_loader.require_modules_or_absent()`.
 
 #### Metrics Import Standards
@@ -1101,16 +1101,20 @@ genuinely cannot be public lives in `getexperimently/experimently-internal`.
 What remains non-obvious, every item of which cost a wrong report or a failed
 deploy:
 
-### A `GITHUB_TOKEN` event triggers no workflow
+### A `GITHUB_TOKEN` event triggers no workflow, and the release pull request's checks wait for approval
 
 GitHub refuses to run workflows for events its own token created, to stop
 recursion. Two consequences, both certain to recur:
 
-- **The release-please pull request has ZERO checks.** With 20 required, it can
-  never satisfy branch protection. It is not blocked on anything you can fix in
-  the pull request; merge it with `--admin` after confirming the diff is only
-  the eight files it owns: CHANGELOG.md, VERSION, `.release-please-manifest.json`
-  and the five `extra-files` (see the next section).
+- **The release-please pull request's checks never run on their own.** Its
+  `pull_request` runs exist but sit at `action_required`, waiting for a
+  maintainer's approval like a fork's (measured on #1483: 15 runs, actor
+  `github-actions[bot]`, all `action_required`), so it shows no check results
+  and does not satisfy branch protection as it stands. It is not blocked on
+  anything you can fix in the pull request; merge it with `--admin` after
+  confirming the diff is only the eight files it owns: CHANGELOG.md, VERSION,
+  `.release-please-manifest.json` and the five `extra-files` (see the next
+  section).
 - **The tag it pushes triggers nothing -- but `release.yml` does not need it
   to.** `release-please.yml` calls `release.yml` itself (`uses:
   ./.github/workflows/release.yml`, a `workflow_call`) when `release_created`

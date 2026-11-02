@@ -17,6 +17,7 @@ source is deleted with its connection.
 from __future__ import annotations
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Column,
     DateTime,
@@ -25,6 +26,7 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    false,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.declarative import declared_attr
@@ -64,6 +66,14 @@ class WarehouseSource(Base, BaseModel):
     metric_type = Column(String(20), nullable=True)
     conversion_window_hours = Column(Integer, nullable=True)
     cap_value = Column(Double, nullable=True)
+    #: Whether a decrease is the improvement for this metric (#1386).  False on
+    #: every source until something sets it, which is how every analysis
+    #: before this column read a metric.  The server default is load-bearing:
+    #: the previous release's INSERTs do not name the column
+    #: (``modules_0003_lower_is_better``).
+    lower_is_better = Column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
     #: When the table and columns were last checked against the warehouse.
     validated_at = Column(DateTime(timezone=True), nullable=True)
     created_by = Column(

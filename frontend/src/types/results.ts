@@ -72,18 +72,41 @@ export interface VariantResult {
   /** The test behind p_value; null for the control variant. */
   statistical_test_used?: StatisticalTestUsed | null;
   /**
-   * For a metric analysed as a mean (revenue, count, duration or custom):
-   * this variant's mean minus the control's, per assigned user. Null for the
-   * control, for a proportion metric, and when either variant has fewer than
-   * 2 users. Absent from a server older than the field.
+   * This variant's mean minus the control's, in the unit of `mean`: for a
+   * metric analysed as a proportion a difference of shares (0.012 is 1.2
+   * percentage points), for one analysed as a mean a difference per assigned
+   * user. Null for the control; for a proportion when either variant has no
+   * users; for a mean when either has fewer than 2. Absent from a server
+   * older than the field, and null for every proportion from a server older
+   * than #1496.
    */
   absolute_difference?: number | null;
   /**
    * The interval of `absolute_difference` at the response's
    * confidence_level, not adjusted for multiple comparisons. Null when
-   * `absolute_difference` is, and when neither variant's per-user values vary.
+   * `absolute_difference` is, and for a mean when neither variant's per-user
+   * values vary.
    */
   absolute_difference_ci?: [number, number] | null;
+  /**
+   * The interval of `relative_improvement_pct`, in percent, at the
+   * response's confidence_level and not adjusted (#1496). A proportion's
+   * lower end is never below -100%; it is null when the control has no
+   * conversions. A mean's is also null when the control's mean is 0, or when
+   * its mean plus or minus its margin reaches 0. Absent from a server older
+   * than the field.
+   */
+  relative_improvement_pct_ci?: [number, number] | null;
+  /**
+   * `absolute_difference` times this variant's `sample_size`: converting
+   * users for a proportion, the total of the users' values (or, for a count,
+   * events) for a mean. A plain number, never projected. Null for the control
+   * and when `absolute_difference` is. Absent from a server older than #1496:
+   * the table then has no Impact column.
+   */
+  incremental_impact?: number | null;
+  /** `absolute_difference_ci` times `sample_size`, not adjusted; null when it is. */
+  incremental_impact_ci?: [number, number] | null;
 }
 
 /**

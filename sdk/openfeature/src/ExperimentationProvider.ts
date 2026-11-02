@@ -2,23 +2,31 @@
  * OpenFeature Provider for Controlvar.
  *
  * Implements the @openfeature/server-sdk `Provider` interface on top of
- * `@controlvar/js-sdk`. Every evaluation is decided by the
- * server (`GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…`); the
+ * `@controlvar/js-sdk`. Every evaluation is decided by the server
+ * (`GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…`); the
  * JS SDK caches successful answers per user + flag for `cacheTtlMs` and never
  * caches failures.
  *
- * Resolution rules:
- *   boolean → `enabled`
- *   string, number, object → the caller's default with reason DEFAULT. The
- *   evaluate endpoint returns `config: null` for every flag, so there is
- *   nothing to read. The provider would read `config.variant` (or `config`
- *   itself, for a string), `config.value` (or `config` itself, for a number)
- *   and `config` (for an object) if the server ever sent one.
- *   A disabled flag yields the default with reason DISABLED for non-boolean types.
+ * Resolution rules, the same for every call type: the value the flag serves
+ * when the flag is of the type the call reads (a boolean call reads a boolean
+ * flag, whose value is `enabled`; an object call reads a json flag): its on
+ * value when the flag is on for the user, its off value otherwise, an inactive
+ * flag included. The reason is the server's: `targeting_rule` →
+ * TARGETING_MATCH, `rollout` → SPLIT, `inactive` → DISABLED (anything else
+ * UNKNOWN), or CACHED when the SDK's cache answered; the variant is "on" or
+ * "off". Otherwise the caller's default with reason ERROR: TYPE_MISMATCH when
+ * the flag serves another type, GENERAL for `reason: "error"` or an answer
+ * with no value, PARSE_ERROR for a value that is not of the flag's type. A
+ * server without flag values sends no `value_type`: a boolean call there
+ * answers `enabled`.
  *
- * Context mapping: `targetingKey` → `user_id`. Other context attributes are
- * NOT sent: the evaluate endpoint takes a `context`, which this provider does
- * not send yet.
+ * Context mapping: `targetingKey` → `user_id`. Every other key of the
+ * evaluation context is passed to the SDK as the user's attributes, which it
+ * sends as the evaluate call's `context`; a Date, at any depth, as an ISO 8601
+ * string. The SDK's cache key is user + flag, not the attributes: within
+ * `cacheTtlMs` a user's answer is reused whatever attributes come with the
+ * next call. A client with local evaluation answers each call it can from its
+ * ruleset, with that call's attributes, and such an answer is never CACHED.
  *
  * Experiments and event tracking are not OpenFeature concepts; use
  * `provider.client` (the underlying JS SDK client) for `getAssignment`,
@@ -49,15 +57,145 @@ const DEFAULT_BASE_URL = 'http://localhost:8000';
 const DEFAULT_CACHE_TTL_MS = 300_000;
 const DEFAULT_TIMEOUT_MS = 5_000;
 
-type Lookup =
-  | { ok: true; evaluation: FlagEvaluation; reason: string }
-  | { ok: false; errorCode: ErrorCode; errorMessage: string };
+interface Failure {
+  errorCode: ErrorCode;
+  errorMessage: string;
+}
 
-function configField(config: unknown, field: string): unknown {
-  if (config && typeof config === 'object' && !Array.isArray(config)) {
-    return (config as Record<string, unknown>)[field];
+type Lookup = { ok: true; evaluation: FlagEvaluation; cached: boolean } | ({ ok: false } & Failure);
+
+/** The calls, and the flag type (`value_type`) each one reads. */
+type Call = 'boolean' | 'string' | 'number' | 'object';
+
+function servedTypeFor(call: Call): 'boolean' | 'string' | 'number' | 'json' {
+  return call === 'object' ? 'json' : call;
+}
+
+/**
+ * The evaluation context minus `targetingKey`: the user's attributes, as the JS SDK sends them
+ * (`context`). A Date, at any depth, becomes its ISO 8601 string (an invalid Date, `null`, as
+ * `JSON.stringify` writes it), so a local answer and the server's see the same text.
+ */
+function attributesOf(context: EvaluationContext): Record<string, unknown> {
+  return plainEntries(Object.entries(context).filter(([key]) => key !== 'targetingKey'));
+}
+
+/**
+ * An object of these entries, each value plain. `fromEntries` defines each key, so a `__proto__`
+ * key stays an ordinary key.
+ */
+function plainEntries(entries: Array<[string, unknown]>): Record<string, unknown> {
+  return Object.fromEntries(entries.map(([key, value]) => [key, plain(value)]));
+}
+
+function plain(value: unknown): unknown {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString();
+  if (Array.isArray(value)) return value.map(plain);
+  if (value !== null && typeof value === 'object') return plainEntries(Object.entries(value));
+  return value;
+}
+
+/** The flag's type: the server's `value_type`, or the JSON type of its `value` when it sent none. */
+function servedType(evaluation: FlagEvaluation): string | undefined {
+  if (typeof evaluation.valueType === 'string') return evaluation.valueType;
+  const { value } = evaluation;
+  if (value === undefined || value === null) return undefined;
+  return typeof value === 'object' ? 'json' : typeof value;
+}
+
+function isValueOfType(value: unknown, type: string): boolean {
+  switch (type) {
+    case 'string':
+      return typeof value === 'string';
+    case 'number':
+      return typeof value === 'number' && Number.isFinite(value);
+    case 'json':
+      return value !== null && typeof value === 'object';
+    default:
+      return false;
   }
-  return undefined;
+}
+
+/** A flag type as the error messages name it. */
+function describeType(type: string): string {
+  switch (type) {
+    case 'boolean':
+      return 'a boolean';
+    case 'string':
+      return 'a string';
+    case 'number':
+      return 'a number';
+    case 'json':
+      return 'a JSON value';
+    default:
+      return `a value of type ${JSON.stringify(type.slice(0, 64))}`;
+  }
+}
+
+function describeCall(call: Call): string {
+  return call === 'object' ? 'an object' : `a ${call}`;
+}
+
+/** OpenFeature's reason for the server's `reason`. */
+function reasonOf(serverReason: string | undefined): string {
+  switch (serverReason) {
+    case 'targeting_rule':
+      return StandardResolutionReasons.TARGETING_MATCH;
+    case 'rollout':
+      return StandardResolutionReasons.SPLIT;
+    case 'inactive':
+      return StandardResolutionReasons.DISABLED;
+    default:
+      return StandardResolutionReasons.UNKNOWN;
+  }
+}
+
+/** A copy that shares nothing with the SDK's cached evaluation (a JSON value came from JSON). */
+function copyValue<T>(value: T): T {
+  return value !== null && typeof value === 'object' ? (JSON.parse(JSON.stringify(value)) as T) : value;
+}
+
+/**
+ * A boolean call's value: `enabled`, for a boolean flag or for a server that sends no
+ * `value_type` (one without flag values, where every flag is boolean).
+ */
+function booleanValue(evaluation: FlagEvaluation, flag: string): { value: unknown } | Failure {
+  const type = evaluation.valueType;
+  if (type !== undefined && type !== 'boolean') {
+    return {
+      errorCode: ErrorCode.TYPE_MISMATCH,
+      errorMessage: `Flag ${flag} serves ${describeType(type)}; it was resolved as ${describeCall('boolean')}`,
+    };
+  }
+  return { value: evaluation.enabled };
+}
+
+/** A string, number or object call's value: the flag's `value` (a copy) when it is of that type. */
+function typedValue(evaluation: FlagEvaluation, call: Call, flag: string): { value: unknown } | Failure {
+  const noValue = {
+    errorCode: ErrorCode.GENERAL,
+    errorMessage:
+      `Flag ${flag} came back without a value (from a server without flag values, or one that ` +
+      `cannot serve this flag's stored value)`,
+  };
+  const served = servedType(evaluation);
+  if (served === undefined) return noValue;
+  const wanted = servedTypeFor(call);
+  if (served !== wanted) {
+    return {
+      errorCode: ErrorCode.TYPE_MISMATCH,
+      errorMessage: `Flag ${flag} serves ${describeType(served)}; it was resolved as ${describeCall(call)}`,
+    };
+  }
+  const { value } = evaluation;
+  if (value === undefined || value === null) return noValue;
+  if (!isValueOfType(value, wanted)) {
+    return {
+      errorCode: ErrorCode.PARSE_ERROR,
+      errorMessage: `Flag ${flag} serves ${describeType(wanted)}, but the server's value is not one`,
+    };
+  }
+  return { value: copyValue(value) };
 }
 
 export class ExperimentationProvider implements Provider {
@@ -133,15 +271,7 @@ export class ExperimentationProvider implements Provider {
     context: EvaluationContext = {},
     _logger?: Logger,
   ): Promise<ResolutionDetails<boolean>> {
-    const result = await this.evaluate(flagKey, context);
-    if (!result.ok) return this.errorDetails(defaultValue, result);
-    const { evaluation } = result;
-    return {
-      value: evaluation.enabled,
-      reason: evaluation.enabled ? result.reason : StandardResolutionReasons.DISABLED,
-      variant: this.variantOf(evaluation),
-      flagMetadata: this.metadataFor(evaluation),
-    };
+    return this.resolve(flagKey, defaultValue, context, 'boolean');
   }
 
   async resolveStringEvaluation(
@@ -150,25 +280,7 @@ export class ExperimentationProvider implements Provider {
     context: EvaluationContext = {},
     _logger?: Logger,
   ): Promise<ResolutionDetails<string>> {
-    const result = await this.evaluate(flagKey, context);
-    if (!result.ok) return this.errorDetails(defaultValue, result);
-    const { evaluation } = result;
-    if (!evaluation.enabled) return this.disabledDetails(defaultValue, evaluation);
-
-    const variant = configField(evaluation.config, 'variant');
-    const value =
-      typeof variant === 'string'
-        ? variant
-        : typeof evaluation.config === 'string'
-          ? evaluation.config
-          : undefined;
-    if (value === undefined) return this.defaultDetails(defaultValue, evaluation);
-    return {
-      value,
-      reason: result.reason,
-      variant: this.variantOf(evaluation),
-      flagMetadata: this.metadataFor(evaluation),
-    };
+    return this.resolve(flagKey, defaultValue, context, 'string');
   }
 
   async resolveNumberEvaluation(
@@ -177,25 +289,7 @@ export class ExperimentationProvider implements Provider {
     context: EvaluationContext = {},
     _logger?: Logger,
   ): Promise<ResolutionDetails<number>> {
-    const result = await this.evaluate(flagKey, context);
-    if (!result.ok) return this.errorDetails(defaultValue, result);
-    const { evaluation } = result;
-    if (!evaluation.enabled) return this.disabledDetails(defaultValue, evaluation);
-
-    const field = configField(evaluation.config, 'value');
-    const value =
-      typeof field === 'number'
-        ? field
-        : typeof evaluation.config === 'number'
-          ? evaluation.config
-          : undefined;
-    if (value === undefined) return this.defaultDetails(defaultValue, evaluation);
-    return {
-      value,
-      reason: result.reason,
-      variant: this.variantOf(evaluation),
-      flagMetadata: this.metadataFor(evaluation),
-    };
+    return this.resolve(flagKey, defaultValue, context, 'number');
   }
 
   async resolveObjectEvaluation<T extends JsonValue>(
@@ -204,27 +298,48 @@ export class ExperimentationProvider implements Provider {
     context: EvaluationContext = {},
     _logger?: Logger,
   ): Promise<ResolutionDetails<T>> {
-    const result = await this.evaluate(flagKey, context);
-    if (!result.ok) return this.errorDetails(defaultValue, result);
-    const { evaluation } = result;
-    if (!evaluation.enabled) return this.disabledDetails(defaultValue, evaluation);
-
-    if (evaluation.config === null || typeof evaluation.config !== 'object') {
-      return this.defaultDetails(defaultValue, evaluation);
-    }
-    return {
-      value: evaluation.config as T,
-      reason: result.reason,
-      variant: this.variantOf(evaluation),
-      flagMetadata: this.metadataFor(evaluation),
-    };
+    return this.resolve(flagKey, defaultValue, context, 'object');
   }
 
   // ---------------------------------------------------------------------------
   // Internals
   // ---------------------------------------------------------------------------
 
-  /** Resolve `targetingKey` → `user_id` and evaluate through the JS SDK (cached per user + flag). */
+  /**
+   * Every call's one body: the flag's value when it serves the type `call` reads (a boolean
+   * flag's is `enabled`; a JSON value is a new copy each call), and otherwise `defaultValue`
+   * with an error.
+   */
+  private async resolve<T>(
+    flagKey: string,
+    defaultValue: T,
+    context: EvaluationContext,
+    call: Call,
+  ): Promise<ResolutionDetails<T>> {
+    const result = await this.evaluate(flagKey, context);
+    if (!result.ok) return this.errorDetails(defaultValue, result);
+    const { evaluation } = result;
+    const flag = JSON.stringify(String(flagKey));
+    if (evaluation.reason === 'error') {
+      return this.errorDetails(defaultValue, {
+        errorCode: ErrorCode.GENERAL,
+        errorMessage: `The server could not evaluate flag ${flag} for this user`,
+      });
+    }
+    const value = call === 'boolean' ? booleanValue(evaluation, flag) : typedValue(evaluation, call, flag);
+    if ('errorCode' in value) return this.errorDetails(defaultValue, value);
+    return {
+      value: value.value as T,
+      reason: result.cached ? StandardResolutionReasons.CACHED : reasonOf(evaluation.reason),
+      variant: evaluation.enabled ? 'on' : 'off',
+      flagMetadata: this.metadataFor(evaluation),
+    };
+  }
+
+  /**
+   * Resolve `targetingKey` → `user_id`, the rest of the context → the user's attributes, and
+   * evaluate through the JS SDK (cached per user + flag, whatever the attributes).
+   */
   private async evaluate(flagKey: string, context: EvaluationContext | undefined): Promise<Lookup> {
     const userId = context?.targetingKey;
     if (typeof userId !== 'string' || userId.length === 0) {
@@ -235,14 +350,14 @@ export class ExperimentationProvider implements Provider {
       };
     }
 
-    const cached = this.client.getEvaluatedFlags(userId).includes(flagKey);
+    const held = this.client.getEvaluatedFlags(userId).includes(flagKey);
     try {
-      const evaluation = await this.client.evaluateFlag(flagKey, { userId });
-      return {
-        ok: true,
-        evaluation,
-        reason: cached ? StandardResolutionReasons.CACHED : StandardResolutionReasons.TARGETING_MATCH,
-      };
+      const attributes = attributesOf(context ?? {});
+      const evaluation = await this.client.evaluateFlag(flagKey, { userId, attributes });
+      // A client with local evaluation keeps its local answers in the same cache, but computes
+      // each one afresh from this call's attributes: only an answer it did not compute is a hit.
+      const cached = held && evaluation.source !== 'local';
+      return { ok: true, evaluation, cached };
     } catch (err) {
       const status = (err as { status?: number })?.status;
       const code = (err as { code?: string })?.code;
@@ -261,37 +376,16 @@ export class ExperimentationProvider implements Provider {
     }
   }
 
-  private variantOf(evaluation: FlagEvaluation): string | undefined {
-    const variant = configField(evaluation.config, 'variant');
-    return typeof variant === 'string' ? variant : undefined;
-  }
-
   private metadataFor(evaluation: FlagEvaluation): ExperimentationFlagMetadata {
     return { flagKey: evaluation.key, enabled: evaluation.enabled };
   }
 
-  private errorDetails<T>(value: T, result: Extract<Lookup, { ok: false }>): ResolutionDetails<T> {
+  private errorDetails<T>(value: T, failure: Failure): ResolutionDetails<T> {
     return {
       value,
       reason: StandardResolutionReasons.ERROR,
-      errorCode: result.errorCode,
-      errorMessage: result.errorMessage,
-    };
-  }
-
-  private disabledDetails<T>(value: T, evaluation: FlagEvaluation): ResolutionDetails<T> {
-    return {
-      value,
-      reason: StandardResolutionReasons.DISABLED,
-      flagMetadata: this.metadataFor(evaluation),
-    };
-  }
-
-  private defaultDetails<T>(value: T, evaluation: FlagEvaluation): ResolutionDetails<T> {
-    return {
-      value,
-      reason: StandardResolutionReasons.DEFAULT,
-      flagMetadata: this.metadataFor(evaluation),
+      errorCode: failure.errorCode,
+      errorMessage: failure.errorMessage,
     };
   }
 }

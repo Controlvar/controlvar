@@ -183,6 +183,27 @@ describe('NewExperimentPage', () => {
     expect(screen.queryByTestId('variant-row-2')).not.toBeInTheDocument();
   });
 
+  it('flags a version left at 0% of traffic, clears it once given a share, and refuses to create with it (#1424)', async () => {
+    render(<NewExperimentPage />);
+    const message = 'This version gets 0% of traffic. Give it a share, or remove it.';
+    // Control (control) 50 and Treatment 50: no version is at 0%, so nothing is flagged (control case).
+    expect(screen.queryByText(message)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('add-variant'));
+    // The total still reads 100% and valid, but the new version has no users.
+    expect(screen.getByTestId('allocation-total')).toHaveTextContent('Currently 100%');
+    expect(screen.getByTestId('variant-no-share-2')).toHaveTextContent(message);
+    setValue('experiment-name', 'Zero share');
+    fireEvent.click(screen.getByTestId('submit-experiment'));
+    expect(await screen.findByTestId('form-error')).toHaveTextContent(message);
+    expect(mockedApiFetch).not.toHaveBeenCalled();
+    // Give it a share: 40 / 30 / 30.
+    setValue('variant-allocation-0', '40');
+    setValue('variant-allocation-1', '30');
+    setValue('variant-allocation-2', '30');
+    expect(screen.queryByTestId('variant-no-share-2')).not.toBeInTheDocument();
+    expect(screen.queryByText(message)).not.toBeInTheDocument();
+  });
+
   it('removing the primary metric promotes the next one', () => {
     render(<NewExperimentPage />);
     fireEvent.click(screen.getByTestId('add-metric'));

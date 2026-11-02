@@ -55,7 +55,20 @@ CLIENT_SECRET = "cl1ent.v4l"
 ISS = "iss.v4l"
 API_KEY = "ap1key.v4l"
 PASSWORD = "p4ssw.v4l"
-VALUES = (CODE, STATE, TOKEN, ID_TOKEN, CLIENT_SECRET, ISS, API_KEY, PASSWORD)
+# An attribute value inside the URL-encoded JSON an SDK sends as ``context``.
+CONTEXT_VALUE = "c0ntext.v4l"
+CONTEXT = f"%7B%22plan%22%3A%22{CONTEXT_VALUE}%22%7D"
+VALUES = (
+    CODE,
+    STATE,
+    TOKEN,
+    ID_TOKEN,
+    CLIENT_SECRET,
+    ISS,
+    API_KEY,
+    PASSWORD,
+    CONTEXT_VALUE,
+)
 REDACTED = "[redacted]"
 
 
@@ -122,6 +135,11 @@ def test_uvicorns_access_and_websocket_lines_carry_names_not_values(rendered_log
             "&page=2",
             timeout=10,
         )
+        # What an SDK sends to evaluate a flag (#1552).
+        httpx.get(
+            f"{base}/api/v1/feature-flags/evaluate/k?user_id=u&context={CONTEXT}",
+            timeout=10,
+        )
         with ws_connect(f"ws://127.0.0.1:{port}/ws?token={TOKEN}&page=3") as ws:
             ws.close()
     finally:
@@ -141,6 +159,7 @@ def test_uvicorns_access_and_websocket_lines_carry_names_not_values(rendered_log
         f"/api/v1/experiments?Token={REDACTED}&id_token={REDACTED}"
         f"&client_secret={REDACTED}&API_KEY={REDACTED}&password={REDACTED}&page=2"
     ) in log
+    assert f"/api/v1/feature-flags/evaluate/k?user_id=u&context={REDACTED}" in log
     assert f'"WebSocket /ws?token={REDACTED}&page=3" [accepted]' in log
 
 

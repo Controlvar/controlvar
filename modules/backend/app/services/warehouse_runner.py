@@ -364,10 +364,18 @@ class VariantInfo:
 
 @dataclass(frozen=True)
 class MetricPlan:
+    """One metric of a run, as its source stood when the run was admitted.
+
+    ``lower_is_better`` is the source's direction (#1386) and has no default:
+    a construction site that forgets it fails with ``TypeError`` instead of
+    analysing the metric as higher is better.
+    """
+
     source_id: UUID
     name: str
     metric_type: str
     is_primary: bool
+    lower_is_better: bool
     query: BuiltQuery
 
 
@@ -567,7 +575,11 @@ def _metric_result(
                 alpha=plan.alpha,
                 correction_method=plan.correction_method,
                 metric=warehouse_estimators.MetricRef(
-                    metric.source_id, metric.name, metric.is_primary, "mean"
+                    metric.source_id,
+                    metric.name,
+                    metric.is_primary,
+                    "mean",
+                    lower_is_better=metric.lower_is_better,
                 ),
                 estimator=plan.mean_estimator,
             )
@@ -587,7 +599,10 @@ def _metric_result(
             alpha=plan.alpha,
             correction_method=plan.correction_method,
             metric=warehouse_estimators.MetricRef(
-                metric.source_id, metric.name, metric.is_primary
+                metric.source_id,
+                metric.name,
+                metric.is_primary,
+                lower_is_better=metric.lower_is_better,
             ),
             estimator=plan.estimator,
         )

@@ -107,23 +107,26 @@ class MutualExclusionService:
         )
 
     def list_groups(
-        self, status: Optional[str] = None, skip: int = 0, limit: int = 100
+        self,
+        status: Optional[MutualExclusionGroupStatus] = None,
+        skip: int = 0,
+        limit: int = 100,
     ) -> List[MutualExclusionGroup]:
-        """List mutual exclusion groups with optional status filter."""
+        """List mutual exclusion groups with optional status filter.
+
+        *status* is a member, never request text: the route turns the query's
+        text into a member, in any case, or answers 422 (#955).
+        """
         query = self.db.query(MutualExclusionGroup)
-        if status:
-            query = query.filter(
-                MutualExclusionGroup.status == MutualExclusionGroupStatus(status)
-            )
+        if status is not None:
+            query = query.filter(MutualExclusionGroup.status == status)
         return query.offset(skip).limit(limit).all()
 
-    def count_groups(self, status: Optional[str] = None) -> int:
-        """Count mutual exclusion groups with optional status filter."""
+    def count_groups(self, status: Optional[MutualExclusionGroupStatus] = None) -> int:
+        """Count mutual exclusion groups with optional status filter (a member)."""
         query = self.db.query(MutualExclusionGroup)
-        if status:
-            query = query.filter(
-                MutualExclusionGroup.status == MutualExclusionGroupStatus(status)
-            )
+        if status is not None:
+            query = query.filter(MutualExclusionGroup.status == status)
         return query.count()
 
     def update_group(

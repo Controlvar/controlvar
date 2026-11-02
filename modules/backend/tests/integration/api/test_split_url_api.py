@@ -158,12 +158,17 @@ class TestCreateSplitUrlExperiment:
         assert len(exp["metrics"]) == 1
 
     def test_three_variant_split_url_creates_successfully(self, admin_client):
-        """Split URL experiment with 3 URL variants (traffic=33/33/34) is accepted."""
+        """Split URL experiment with 3 URL variants (traffic=34/33/33) is accepted.
+
+        Each URL variant's allocation is its experiment variant's (#393): this
+        used to send 33/33/34 against the experiment's 34/33/33, and was
+        accepted.
+        """
         three_way_variants = [
             {
                 "name": "Control",
                 "url": "https://example.com/a",
-                "traffic_allocation": 33.0,
+                "traffic_allocation": 34.0,
             },
             {
                 "name": "Variant B",
@@ -173,7 +178,7 @@ class TestCreateSplitUrlExperiment:
             {
                 "name": "Variant C",
                 "url": "https://example.com/c",
-                "traffic_allocation": 34.0,
+                "traffic_allocation": 33.0,
             },
         ]
         payload = _split_url_payload("Three Way Split Test", three_way_variants)

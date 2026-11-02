@@ -153,6 +153,9 @@ only, so call `clear_cache()` after changing a user's attributes.
   (default 300 s). Failures are never cached, so the next call retries.
 - A `429` is retried once after `Retry-After` seconds (capped at 5 s; 1 s when the header is
   missing or unparseable). Any other non-2xx status raises immediately.
+- `track` returns `False` on a timeout even when the server stored the event. See
+  [How events count](../guides/how-events-count.md#sending-an-event-again) before you send it
+  again.
 - The cache is checked before any request, so a cached value is returned even if the backend is
   currently unreachable.
 

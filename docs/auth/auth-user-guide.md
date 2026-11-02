@@ -255,6 +255,7 @@ What the dashboard's sign-in form shows (`AUTH_PROVIDER=local`):
 | "Too many failed login attempts; account temporarily locked. Retry in N seconds." | Ten failed sign-ins for this email within 15 minutes (`LOCAL_AUTH_MAX_FAILED_ATTEMPTS`, `LOCAL_AUTH_LOCKOUT_MINUTES`); the API answers `423` | Wait the seconds it names. Every attempt until then is refused, even with the right password |
 | "Too many attempts. Please wait a moment and try again." | More than ten sign-ins in a minute from one address (`429`) | Wait a minute |
 | "Can't reach the API at …" | The dashboard got no answer from the API | Check that the API is running and that the dashboard's origin is in `CORS_ORIGINS` |
+| "Sign-in did not finish: the API did not answer within 30 seconds. Try again in a moment." | The API had not started to answer after 30 seconds, so the dashboard gave up | Try again; if it keeps happening, check that the API is healthy |
 
 ### Token Errors
 

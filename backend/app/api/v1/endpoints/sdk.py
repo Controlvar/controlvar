@@ -91,7 +91,10 @@ class SdkRulesetDefaultRule(BaseModel):
 
 class SdkRulesetFlag(BaseModel):
     """One flag. Inactive flags carry only ``key`` and ``active``, plus
-    ``value_type`` and ``off_value`` for a string, number or json flag."""
+    ``value_type`` and ``off_value`` for a string, number or json flag. The
+    exception is a flag whose stored values cannot be served: it is a remote
+    entry whatever its status, so turning it off reaches a local SDK through
+    the SDK's cache of the server's answer (up to 300 s by default)."""
 
     key: str
     active: bool
@@ -105,7 +108,7 @@ class SdkRulesetFlag(BaseModel):
     rollout_percentage: Optional[int] = None
     rules: Optional[List[SdkRulesetRule]] = None
     default_rule: Optional[SdkRulesetDefaultRule] = None
-    value_type: Optional[Literal["string", "number", "json"]] = Field(
+    value_type: Optional[str] = Field(
         None,
         description=(
             "What the flag serves: string, number, or json (an object or an "
@@ -220,6 +223,10 @@ def get_ruleset(
     `{"key", "active": false}`. A string, number or json flag also carries
     `value_type` and its two values: `on_value` and `off_value` on a local
     entry, `off_value` on an inactive one. A remote entry carries no value.
+    A flag whose stored values cannot be served is a remote entry whatever its
+    status, so switching it off reaches a local SDK only when its cached
+    answer from the server expires (up to 300 s by default in the 0.1.1 and
+    0.2.0 SDKs); `getAllFlags` always asks the server.
     """
     # Every column the builder reads, loaded by this one query: a column left
     # out would be loaded by one more query per flag (PF-2).

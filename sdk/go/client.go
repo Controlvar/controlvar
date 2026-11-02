@@ -17,9 +17,13 @@ const batchLimit = 100
 // Implementations must be safe for concurrent use by multiple goroutines.
 type Client interface {
 	// EvaluateFlag evaluates a feature flag for the given user via
-	// GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=... The server
-	// decides; successful results are cached per user + key for the cache TTL.
-	// On failure it returns a disabled EvalResult together with the error.
+	// GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=...&context=...,
+	// where context is user.Attributes as JSON, sent only when there are any,
+	// so the flag's targeting rules can match them. The server decides;
+	// successful results are cached per user + key for the cache TTL, and the
+	// attributes are not part of that key. On failure it returns a disabled
+	// EvalResult together with the error; attributes that cannot be encoded as
+	// JSON are a failure that sends nothing.
 	// Each call returns an EvalResult of its own; a string, number or json
 	// flag's value is read with its StringValue, NumberValue or DecodeValue.
 	EvaluateFlag(ctx context.Context, flagKey string, user *User) (*EvalResult, error)
@@ -134,8 +138,14 @@ func (c *client) EvaluateFlag(ctx context.Context, flagKey string, user *User) (
 		}
 	}
 
+	query, err := contextQuery(user.Attributes)
+	if err != nil {
+		// Nothing is sent and nothing is cached, as GetAssignment does with
+		// attributes it cannot encode.
+		return &EvalResult{Key: flagKey, Enabled: false}, fmt.Errorf("evaluate flag %q: %w", flagKey, err)
+	}
 	path := "/api/v1/feature-flags/evaluate/" + url.PathEscape(flagKey) +
-		"?user_id=" + url.QueryEscape(user.ID)
+		"?user_id=" + url.QueryEscape(user.ID) + query
 
 	var resp evaluateResponse
 	if err := c.http.Get(ctx, path, &resp); err != nil {
@@ -159,6 +169,22 @@ func (c *client) EvaluateFlag(ctx context.Context, flagKey string, user *User) (
 
 	c.cache.Set(key, &cachedFlag{userID: user.ID, result: result})
 	return result.clone(), nil
+}
+
+// contextQuery is "&context=" and the attributes as compact JSON, URL-encoded:
+// what the JS and Python SDKs append to a flag evaluation. It is "" when there
+// are no attributes, so the URL is then the one sent without them. The
+// server's limits on a context are not checked here; a context over them is
+// the server's 422.
+func contextQuery(attributes map[string]interface{}) (string, error) {
+	if len(attributes) == 0 {
+		return "", nil
+	}
+	encoded, err := json.Marshal(attributes)
+	if err != nil {
+		return "", fmt.Errorf("marshal user attributes: %w", err)
+	}
+	return "&context=" + url.QueryEscape(string(encoded)), nil
 }
 
 // assignRequest is the body of POST /api/v1/tracking/assign.

@@ -13,8 +13,8 @@ import {
   analysedAsMean,
   analysedAsRate,
   buyersWithNoValue,
+  differenceLine,
   formatAmount,
-  formatDifferencePerUser,
   formatSignedAmount,
   meanDescription,
   meanLabelForType,
@@ -105,6 +105,26 @@ describe('analysedAsMean / analysedAsRate', () => {
   });
 });
 
+/**
+ * The difference line a mean row shows (`differenceLine`), as its visible
+ * text: the lead, then the interval in parentheses.
+ */
+function perUser(v: VariantResult, level: number, unadjusted: boolean): string | null {
+  const metric: MetricResult = {
+    metric_id: 'm',
+    metric_name: 'Order value',
+    metric_type: 'revenue',
+    is_primary: true,
+    analysis: 'mean',
+    variants: [variant({ variant_id: 'c', is_control: true }), v],
+  };
+  const line = differenceLine(metric, v, level, unadjusted);
+  if (!line) return null;
+  const i = line.interval;
+  if (!i) return line.lead;
+  return `${line.lead} (${i.level} CI${i.unadjusted ? ', unadjusted,' : ''} ${i.lower} to ${i.upper})`;
+}
+
 describe('amounts per user', () => {
   it.each([
     [5.66, '5.66', '+5.66'],
@@ -120,33 +140,33 @@ describe('amounts per user', () => {
 
   it('writes the difference with its interval, at the given level', () => {
     const v = variant({ absolute_difference: 0.4, absolute_difference_ci: [0.1, 0.7] });
-    expect(formatDifferencePerUser(v, 0.95, false)).toBe('+0.40 per user (95% CI +0.10 to +0.70)');
-    expect(formatDifferencePerUser(v, 0.9, true)).toBe(
+    expect(perUser(v, 0.95, false)).toBe('+0.40 per user (95% CI +0.10 to +0.70)');
+    expect(perUser(v, 0.9, true)).toBe(
       '+0.40 per user (90% CI, unadjusted, +0.10 to +0.70)',
     );
-    expect(formatDifferencePerUser(v, 0.975, false)).toBe(
+    expect(perUser(v, 0.975, false)).toBe(
       '+0.40 per user (97.5% CI +0.10 to +0.70)',
     );
   });
 
   it('gives nothing for the control, a missing difference or a non-finite one', () => {
     const diff = { absolute_difference: 0.4, absolute_difference_ci: [0.1, 0.7] as [number, number] };
-    expect(formatDifferencePerUser(variant({ ...diff, is_control: true }), 0.95, false)).toBeNull();
-    expect(formatDifferencePerUser(variant(), 0.95, false)).toBeNull();
-    expect(formatDifferencePerUser(variant({ absolute_difference: null }), 0.95, false)).toBeNull();
-    expect(formatDifferencePerUser(variant({ absolute_difference: NaN }), 0.95, false)).toBeNull();
+    expect(perUser(variant({ ...diff, is_control: true }), 0.95, false)).toBeNull();
+    expect(perUser(variant(), 0.95, false)).toBeNull();
+    expect(perUser(variant({ absolute_difference: null }), 0.95, false)).toBeNull();
+    expect(perUser(variant({ absolute_difference: NaN }), 0.95, false)).toBeNull();
   });
 
   it('drops an interval that is missing or not finite', () => {
     expect(
-      formatDifferencePerUser(
+      perUser(
         variant({ absolute_difference: -1.5, absolute_difference_ci: null }),
         0.95,
         false,
       ),
     ).toBe('−1.50 per user');
     expect(
-      formatDifferencePerUser(
+      perUser(
         variant({ absolute_difference: -1.5, absolute_difference_ci: [-Infinity, 0.2] }),
         0.95,
         false,
@@ -157,7 +177,7 @@ describe('amounts per user', () => {
   it("gives nothing for a 0.00 difference with no interval (every user's total is the same)", () => {
     for (const diff of [0, 0.004, -0.004]) {
       expect(
-        formatDifferencePerUser(
+        perUser(
           variant({ absolute_difference: diff, absolute_difference_ci: null }),
           0.95,
           false,
@@ -166,7 +186,7 @@ describe('amounts per user', () => {
     }
     // With an interval, a difference of 0.00 is an estimate and is shown.
     expect(
-      formatDifferencePerUser(
+      perUser(
         variant({ absolute_difference: 0, absolute_difference_ci: [-0.5, 0.5] }),
         0.95,
         false,
