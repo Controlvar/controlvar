@@ -1,5 +1,7 @@
 package com.controlvar.sdk.config;
 
+import com.controlvar.sdk.ExposureListener;
+
 /**
  * Configuration for the Controlvar SDK client.
  *
@@ -18,6 +20,7 @@ public class SdkConfig {
     private final int timeoutMs;
     private final int cacheSize;
     private final long cacheTtlMs;
+    private final ExposureListener exposureListener;
 
     private SdkConfig(Builder builder) {
         this.apiKey = builder.apiKey;
@@ -25,6 +28,7 @@ public class SdkConfig {
         this.timeoutMs = builder.timeoutMs;
         this.cacheSize = builder.cacheSize;
         this.cacheTtlMs = builder.cacheTtlMs;
+        this.exposureListener = builder.exposureListener;
     }
 
     /**
@@ -63,6 +67,16 @@ public class SdkConfig {
     }
 
     /**
+     * Returns the function the client calls once for each experiment exposure the server
+     * recorded (see {@link ExposureListener}).
+     *
+     * @return the listener, or {@code null} when none is set
+     */
+    public ExposureListener getExposureListener() {
+        return exposureListener;
+    }
+
+    /**
      * Creates a new builder for {@link SdkConfig}.
      *
      * @param apiKey  the API key (required, must be non-empty)
@@ -82,6 +96,7 @@ public class SdkConfig {
         private int timeoutMs = 5000;
         private int cacheSize = 1000;
         private long cacheTtlMs = 300_000L; // 5 minutes
+        private ExposureListener exposureListener;
 
         /**
          * Constructs a builder with the required fields.
@@ -141,6 +156,18 @@ public class SdkConfig {
                 throw new IllegalArgumentException("cacheTtlMs must be positive");
             }
             this.cacheTtlMs = ms;
+            return this;
+        }
+
+        /**
+         * Sets the function the client calls once each time the server enrols the user in an
+         * experiment and the answer is not cached (see {@link ExposureListener}). Default: none.
+         *
+         * @param listener the listener, or {@code null} to set none
+         * @return this builder
+         */
+        public Builder exposureListener(ExposureListener listener) {
+            this.exposureListener = listener;
             return this;
         }
 
