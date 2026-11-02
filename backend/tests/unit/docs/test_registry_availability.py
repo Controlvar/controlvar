@@ -82,9 +82,11 @@ _ONE = (
     + "|".join(pattern for pattern, _ in REGISTRIES)
     + r")(?![\w-])\]?(?:\([^()\s]{1,300}\))?"
 )
-#: ``on``/``from``/``to`` and one registry, or a list of them.
+#: ``on``/``from``/``to`` (optionally followed by ``the``), or ``in the``, and
+#: one registry, or a list of them: "is on npm", "is published to the npm
+#: registry", "is available in the npm registry".
 CLAIM = re.compile(
-    r"\b(?:on|from|to) (?P<registries>"
+    r"\b(?:(?:on|from|to)(?: the)?|in the) (?P<registries>"
     + _ONE
     + r"(?:(?:,| and| or|, and|, or) "
     + _ONE
@@ -637,6 +639,14 @@ REFUSED = (
         "sdk/react-native is not in ON_REGISTRY",
     ),
     ("The Java SDK is on Maven Central.", "sdk/java is not in ON_REGISTRY"),
+    (
+        "`@controlvar/react-native-sdk` is published to the npm registry.",
+        "sdk/react-native is not in ON_REGISTRY",
+    ),
+    (
+        "The .NET SDK is available in the NuGet gallery.",
+        "sdk/dotnet is not in ON_REGISTRY",
+    ),
     ("The .NET SDK is on NuGet.", "sdk/dotnet is not in ON_REGISTRY"),
     (
         "`pip install controlvar-openfeature` works: `controlvar-openfeature` is on PyPI.",
