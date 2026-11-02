@@ -26,9 +26,11 @@ the harness owns its Compose project:
   would point the scale stack's migrations and fixtures at another database.
   ``generate-env.sh`` gets the same environment plus ``ENV_FILE``;
 * it refuses ``compose.yml``'s own project name (read from the file, see
-  :func:`selfhost_project`) and the env file ``deploy/compose/.env``, and it
-  only ever uses an env file it wrote itself (one carrying
-  :data:`ENV_MARKER`), so it never edits someone's real settings.
+  :func:`selfhost_project`), a work directory that is ``deploy/compose`` by
+  any spelling or holds a Compose file (:func:`work_dir`), and the env file
+  ``deploy/compose/.env``. It reads any other env file only to look for
+  :data:`ENV_MARKER`, and uses only one that carries it (one it wrote
+  itself), so it never edits someone's real settings.
 
 ``up`` writes ``<work>/.env`` once (``generate-env.sh``, then the port, the
 public URL and the metrics token), starts the stack, waits for
@@ -39,6 +41,17 @@ API at no more than 4 requests a second, writes ``<work>/fixtures.json``
 ``tests/scale/preload.sql``. ``down`` runs ``down -v`` on this project only.
 
 There is no option to aim it at anything but its own stack.
+
+The rest of the scale tooling takes the fixtures' shape from this module and
+must not copy it: :data:`RULE`, :data:`RULE_CONTEXT`, :func:`flag_payloads`,
+:data:`FLAG_PREFIX`, :data:`RULE_FLAG_COUNT`, :data:`EXPERIMENT_KEY`,
+:data:`VARIANT_NAMES`, :data:`RETURNING_USER_PREFIX` and
+:data:`RETURNING_USER_WIDTH`. Callers load this file by path (``scripts/``
+has no ``__init__.py``), and such a loader must put the module in
+``sys.modules`` before ``exec_module``: the :class:`Io` dataclass (with
+``from __future__ import annotations``) looks its module up there, and the
+load otherwise fails with ``AttributeError: 'NoneType' object has no
+attribute '__dict__'``.
 
 Standard library only. Exit status: 0 done, 1 failed, 2 refused or misused.
 """
@@ -67,6 +80,15 @@ GENERATE_ENV = ROOT / "deploy" / "compose" / "generate-env.sh"
 #: The self-hosted stack's own settings: never read, never written.
 SELFHOST_ENV_FILE = ROOT / "deploy" / "compose" / ".env"
 PRELOAD_SQL = ROOT / "tests" / "scale" / "preload.sql"
+
+#: The files ``docker compose`` looks for in a directory: a work directory
+#: holding one is some Compose project's, and is refused.
+COMPOSE_FILE_NAMES = (
+    "compose.yaml",
+    "compose.yml",
+    "docker-compose.yaml",
+    "docker-compose.yml",
+)
 
 PROJECT = "controlvar-scale"
 #: What a child process inherits: ``scripts/check_compose_config.py``'s list.
@@ -165,16 +187,32 @@ def child_env(
     return env
 
 
+def _same_directory(one: Path, other: Path) -> bool:
+    """The same directory by any spelling: a link, or another case on a
+    case-insensitive filesystem, which ``resolve()`` leaves as it is."""
+    if one == other.resolve():
+        return True
+    return one.is_dir() and other.is_dir() and os.path.samefile(one, other)
+
+
 def work_dir(path: Path) -> Path:
     """*path* as the harness's work directory, refused if it is the
-    self-hosted stack's (directly or through a link)."""
+    self-hosted stack's (by any spelling) or any directory that holds a
+    Compose file, such as another checkout's ``deploy/compose``."""
     work = Path(path).expanduser().resolve()
-    if work == SELFHOST_ENV_FILE.parent.resolve():
+    if _same_directory(work, SELFHOST_ENV_FILE.parent):
         raise Refused(
             f"--work {path} is deploy/compose, the self-hosted stack's directory: "
             f"its .env holds a real installation's settings. Give the harness a "
             f"directory of its own."
         )
+    for name in COMPOSE_FILE_NAMES:
+        if os.path.lexists(work / name):
+            raise Refused(
+                f"--work {path} holds {name}: it is a Compose project's directory, "
+                f"and its .env may hold a real installation's settings. Give the "
+                f"harness a directory of its own."
+            )
     return work
 
 
@@ -661,10 +699,18 @@ def _count(value: Any, name: str, minimum: int) -> int:
     return value
 
 
-def preload_input(users: int, events: int, raw_metrics: int) -> bytes:
-    """What psql reads: the file's bytes unchanged, then the one call."""
+def preload_input(
+    users: int, events: int, raw_metrics: int, schema: str = SCHEMA
+) -> bytes:
+    """What psql reads: the file's bytes unchanged, then the one call.
+
+    *schema* is the shipped stack's; the integration test passes its own, so
+    it runs exactly these bytes.
+    """
+    if not re.fullmatch(r"[a-z_][a-z0-9_]{0,62}", schema):
+        raise Refused(f"{schema!r} is not a plain lower-case schema name")
     call = (
-        f"SELECT pg_temp.scale_preload('{SCHEMA}', "
+        f"SELECT pg_temp.scale_preload('{schema}', "
         f"{_count(users, 'users', 1)}, {_count(events, 'events', 0)}, "
         f"{_count(raw_metrics, 'raw_metrics', 0)}, "
         f"'{RETURNING_USER_PREFIX}', {RETURNING_USER_WIDTH});\n"

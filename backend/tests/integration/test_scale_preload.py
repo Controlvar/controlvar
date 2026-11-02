@@ -4,10 +4,11 @@
 
 The scale harness pipes this file, then one call, to psql inside its own
 stack's postgres container (``scripts/scale_stack.py fixtures``). This test
-drives the same bytes through psycopg2, with no psql anywhere, at small
-counts, then reads the rows back through the models. So a column the
-preload writes that a model renames, or a psql-only line in the file (a
-``\\set``, a ``:variable``), fails here before it fails on a runner.
+sends exactly the bytes the harness builds (``preload_input``, with this
+test's schema) through psycopg2, with no psql anywhere, at small counts,
+then reads the rows back through the models. So a column the preload writes
+that a model renames, or a psql-only line in the file (a ``\\set``, a
+``:variable``), fails here before it fails on a runner.
 
 It also pins the rule the harness relies on to check a returning user's
 assignment without asking the server: user i is ``<prefix><i, zero-padded>``
@@ -18,6 +19,8 @@ locale's order disagree ("Treatment" before "control").
 
 from __future__ import annotations
 
+import importlib.util
+import sys
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -33,22 +36,32 @@ from backend.app.models.metrics.metric import RawMetric
 
 pytestmark = pytest.mark.integration
 
-PRELOAD = Path(__file__).resolve().parents[3] / "tests" / "scale" / "preload.sql"
+SCRIPT = Path(__file__).resolve().parents[3] / "scripts" / "scale_stack.py"
+
+
+def _load():
+    # In sys.modules before exec_module, as the module's docstring requires.
+    spec = importlib.util.spec_from_file_location("scale_stack_for_preload", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+ss = _load()
+
 SCHEMA = "test_experimentation"
-PREFIX = "scale-user-"
-WIDTH = 7
+PREFIX = ss.RETURNING_USER_PREFIX
+WIDTH = ss.RETURNING_USER_WIDTH
 
 
 def _preload(engine, users: int, events: int, raw_metrics: int) -> str:
-    """The file's bytes, unchanged, then the call: one session, as psql runs."""
+    """Exactly what the harness pipes to psql -- the file's bytes, then the
+    one call -- in one session."""
     conn = engine.raw_connection()
     try:
         cur = conn.cursor()
-        cur.execute(PRELOAD.read_bytes())
-        cur.execute(
-            "SELECT pg_temp.scale_preload(%s, %s, %s, %s, %s, %s)",
-            (SCHEMA, users, events, raw_metrics, PREFIX, WIDTH),
-        )
+        cur.execute(ss.preload_input(users, events, raw_metrics, schema=SCHEMA))
         (answer,) = cur.fetchone()
         conn.commit()
         return answer

@@ -347,6 +347,41 @@ def test_a_child_environment_is_the_keep_list_and_only_what_the_harness_sets(
         )
 
 
+#: A child that writes the environment it was started with to argv[1].
+_DUMP_ENVIRONMENT = (
+    "import json, os, sys\n"
+    "with open(sys.argv[1], 'w') as out:\n"
+    "    json.dump(dict(os.environ), out)\n"
+)
+
+
+@pytest.mark.parametrize("stdin", [None, b""], ids=["no input", "an input"])
+def test_the_real_process_runner_starts_a_child_with_only_what_it_is_given(
+    tmp_path, monkeypatch, stdin
+):
+    """Every other test replaces Io.run, so this is the one that runs the
+    real one: what reaches a real child is what the harness built, and
+    nothing from the shell."""
+    for key, value in PLANTED.items():
+        monkeypatch.setenv(key, value)
+    assert ss.Io().run is ss.run_process
+    dump = tmp_path / "environment.json"
+    result = ss.run_process(
+        [sys.executable, "-I", "-c", _DUMP_ENVIRONMENT, str(dump)],
+        ss.child_env({"ENV_FILE": "set-by-the-harness"}),
+        input=stdin,
+    )
+    assert result.returncode == 0
+    seen = json.loads(dump.read_text())
+    # Not an exact match: on macOS a Python child adds LC_CTYPE and
+    # __CF_USER_TEXT_ENCODING to its own environment.
+    leaked = sorted(set(PLANTED) & set(seen))
+    assert not leaked, f"leaked into the real child: {leaked}"
+    assert seen["ENV_FILE"] == "set-by-the-harness"
+    for name in ss.KEEP_ENV:
+        assert seen.get(name) == os.environ.get(name), name
+
+
 def test_the_shell_cannot_reach_the_env_file_generate_env_writes(work, monkeypatch):
     """generate-env.sh reads PUBLIC_BASE_URL and FIRST_SUPERUSER (and the
     profile) from its environment: planted, they must not land."""
@@ -448,6 +483,30 @@ def test_the_self_hosted_env_file_is_refused(tmp_path, capsys, make_work, comman
     assert "deploy/compose" in capsys.readouterr().err
     assert world.calls == [] and world.requests == []
     assert ss.SELFHOST_ENV_FILE.exists() == existed
+
+
+def test_deploy_compose_spelled_in_another_case_is_refused():
+    """On a case-insensitive filesystem (macOS by default) ``DEPLOY/Compose``
+    is deploy/compose, and ``resolve()`` keeps the case it was given."""
+    recased = REPO_ROOT / "DEPLOY" / "Compose"
+    if not recased.is_dir():
+        pytest.skip("a case-sensitive filesystem: DEPLOY/Compose is not deploy/compose")
+    with pytest.raises(ss.Refused, match=r"is deploy/compose, the self-hosted"):
+        ss.work_dir(recased)
+
+
+@pytest.mark.parametrize("name", ss.COMPOSE_FILE_NAMES)
+def test_a_work_directory_holding_a_compose_file_is_refused(tmp_path, capsys, name):
+    """Another checkout's deploy/compose, or any Compose project's directory:
+    its .env may be a real installation's."""
+    other = tmp_path / "another-checkout" / "deploy" / "compose"
+    other.mkdir(parents=True)
+    (other / name).write_text(ss.COMPOSE_FILE.read_text())
+    world = World()
+    assert world.main("up", "--work", other) == 2
+    assert f"holds {name}" in capsys.readouterr().err
+    assert world.calls == [] and world.requests == []
+    assert [p.name for p in other.iterdir()] == [name]
 
 
 @pytest.mark.parametrize("command", ["up", "fixtures", "down"])
@@ -710,6 +769,30 @@ def test_the_preload_counts_are_whole_numbers(counts):
         ss.preload_input(*counts)
 
 
+def test_the_preload_call_names_the_schema_it_is_given():
+    """The integration test runs these bytes against its own schema."""
+    assert ss.preload_input(1, 0, 0, schema="test_experimentation").endswith(
+        b"\nSELECT pg_temp.scale_preload('test_experimentation', 1, 0, 0, "
+        b"'scale-user-', 7);\n"
+    )
+
+
+@pytest.mark.parametrize("schema", ["x'y", "Experimentation", "a b", "a;b", ""])
+def test_the_preload_schema_is_a_plain_name(schema):
+    with pytest.raises(ss.Refused):
+        ss.preload_input(1, 0, 0, schema=schema)
+
+
+def test_the_preload_orders_the_variants_in_byte_order():
+    """The rule is variant (i mod 2) in byte order of name. The integration
+    job's PostgreSQL uses musl, whose default collation is byte order
+    already, so it passes without the COLLATE; this pins the text."""
+    count = ss.PRELOAD_SQL.read_text().count('ORDER BY name COLLATE "C"')
+    assert count == 1, (
+        f'preload.sql orders the variants by name COLLATE "C" {count} times, not once'
+    )
+
+
 def test_a_failed_preload_fails_the_command(work):
     world = World()
     assert _up(world, work) == 0
@@ -772,11 +855,70 @@ def test_the_override_changes_only_what_it_says():
         assert set(services[name]) == {"cpuset"}, f"the override changes {name}"
 
 
-def test_each_service_has_a_fixed_cpu_and_none_takes_the_generators():
+def _cpus(cpuset) -> set:
+    """The CPUs a cpuset string names: ``"1"``, ``"0,2"``, ``"0-2"``."""
+    cpus = set()
+    for part in str(cpuset).split(","):
+        low, _, high = part.strip().partition("-")
+        cpus.update(range(int(low), int(high or low) + 1))
+    return cpus
+
+
+def test_the_stack_runs_on_cpus_0_and_1_and_leaves_2_and_3_to_the_harness():
+    """The api on CPU 0 and the rest of the stack on its sibling, CPU 1;
+    CPUs 2 and 3 (the other pair of hardware threads on the runner probed)
+    are for the samplers, the harness and the load generator."""
     services = _override()["services"]
-    cpus = {name: str(service["cpuset"]) for name, service in services.items()}
-    assert cpus == {"api": "0", "postgres": "1", "redis": "2", "web": "2"}
-    assert "3" not in cpus.values()
+    cpusets = {name: str(service["cpuset"]) for name, service in services.items()}
+    assert cpusets == {"api": "0", "postgres": "1", "redis": "1", "web": "1"}
+    on_theirs = {name: sorted(_cpus(c) & {2, 3}) for name, c in cpusets.items()}
+    assert not any(on_theirs.values()), (
+        f"the system under test is on the harness's CPUs: {on_theirs}"
+    )
+
+
+def _volume_source(entry):
+    """A service volume's (type, source): the short ``source:target[:mode]``
+    or the long form. An anonymous volume has no source."""
+    if isinstance(entry, dict):
+        return entry.get("type"), entry.get("source")
+    source, colon, _ = str(entry).partition(":")
+    return "volume", source if colon else None
+
+
+def test_the_project_name_alone_keeps_the_scale_stack_apart():
+    """``-p controlvar-scale`` separates the scale stack from a real
+    installation only because neither file names a container, a volume or a
+    network itself: Compose prefixes each of those with the project. A
+    ``container_name``, a volume or network with its own ``name:`` or
+    ``external:``, or a bind mount is the same one whatever the project, so
+    the scale stack could start against, load its fixtures into, or (for a
+    named volume) ``down -v`` remove a real installation's."""
+    paths = (ss.COMPOSE_FILE, ss.OVERRIDE_FILE)
+    files = {path.name: yaml.safe_load(path.read_text()) for path in paths}
+    problems, declared, mounts = [], set(), []
+    for file, data in files.items():
+        for kind in ("volumes", "networks"):
+            for name, spec in (data.get(kind) or {}).items():
+                if kind == "volumes":
+                    declared.add(name)
+                for key in sorted(set(spec or {}) & {"name", "external"}):
+                    problems.append(f"{file}: the {kind[:-1]} {name} sets {key}")
+    for file, data in files.items():
+        for service, spec in (data.get("services") or {}).items():
+            if "container_name" in spec:
+                problems.append(f"{file}: {service} sets container_name")
+            for entry in spec.get("volumes") or []:
+                kind, source = _volume_source(entry)
+                if kind != "volume" or source not in declared:
+                    problems.append(
+                        f"{file}: {service} mounts {entry!r}, not a named volume "
+                        f"the files declare"
+                    )
+                else:
+                    mounts.append((service, source))
+    assert not problems, problems
+    assert ("postgres", "postgres_data") in mounts, mounts
 
 
 # -- the HTTP client --------------------------------------------------------------
