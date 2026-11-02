@@ -814,6 +814,10 @@ def _wait_for_a_lock_wait(engine, deadline: float = 10.0) -> bool:
             ).scalar()
             if waiting:
                 return True
+            # pg_stat_activity is a snapshot taken once per transaction, so end
+            # this one before polling again; otherwise every poll reads the
+            # first snapshot and a wait that starts later is never seen.
+            conn.rollback()
             time.sleep(0.05)
     return False
 
