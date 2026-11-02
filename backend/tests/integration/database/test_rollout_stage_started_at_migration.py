@@ -88,6 +88,8 @@ BOTH_PROFILES = [CORE, pytest.param(FULL, marks=pytest.mark.modules)]
 #: The instants the stored stages carry: fixed, never computed from the clock.
 STARTED = datetime(2026, 10, 30, 9, 15, 30, 123456)
 EDITED = datetime(2026, 10, 31, 16, 0)
+#: How long before its ``updated_at`` each stored stage was created.
+CREATED_BEFORE_UPDATED = timedelta(days=7)
 
 
 def _scratch(test_db, prefix: str):
@@ -143,7 +145,9 @@ def _tables(engine, schema: str) -> set[str]:
 
 def _insert_stages(engine, schema: str) -> dict[str, str]:
     """A flag, a schedule and three stages, as the previous release stores them
-    (no ``started_at`` named): {status: stage id}."""
+    (no ``started_at`` named): {status: stage id}. Each stage was created a
+    week before its ``updated_at``, so a backfill from ``created_at`` is told
+    apart from one from ``updated_at`` (#1632 review F3)."""
     flag_id, schedule_id = str(uuid.uuid4()), str(uuid.uuid4())
     ids = {
         status: str(uuid.uuid4()) for status in ("COMPLETED", "IN_PROGRESS", "PENDING")
@@ -181,7 +185,7 @@ def _insert_stages(engine, schema: str) -> dict[str, str]:
                     "target_percentage, status, trigger_type, "
                     "trigger_configuration, created_at, updated_at) "
                     "VALUES (:id, :schedule, :name, :order, :target, :status, "
-                    "'TIME_BASED', CAST(:config AS jsonb), :at, :at)"
+                    "'TIME_BASED', CAST(:config AS jsonb), :created, :at)"
                 ),
                 {
                     "id": ids[status],
@@ -191,6 +195,7 @@ def _insert_stages(engine, schema: str) -> dict[str, str]:
                     "target": order * 25,
                     "status": status,
                     "config": json.dumps({"duration": 1}),
+                    "created": updated_at - CREATED_BEFORE_UPDATED,
                     "at": updated_at,
                 },
             )
