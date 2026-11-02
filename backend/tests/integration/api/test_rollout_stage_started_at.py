@@ -325,10 +325,36 @@ def test_every_start_transition_records_the_start(
     client, developer, new_flag, session_factory, fresh, site
 ):
     if site == "scheduler":
-        created, timed = _started_one_hour_stage(
-            client, developer, new_flag, session_factory, fresh
+        # A stage whose start_date passed three hours before the tick that
+        # starts it (a stage started late): its start is the tick, not the
+        # start_date (#1632 review F2), so its duration runs from the tick.
+        late = T0 - timedelta(hours=3)
+        created = create(
+            client,
+            developer,
+            new_flag(),
+            [
+                stage(
+                    1,
+                    10,
+                    "time_based",
+                    name="timed",
+                    start_date=late.isoformat(),
+                    trigger_configuration={"duration": 1},
+                ),
+                stage(2, 50, name="manual"),
+            ],
         )
-        assert _started(fresh, timed) == _naive(T0)
+        ok(send(client, "POST", f"{SCHEDULES}/{created['id']}/activate", developer))
+        timed = created["ids"]["timed"]
+        assert _started(fresh, timed) is None
+        assert _tick(session_factory, created["id"], T0) == 1
+        assert _row(fresh, timed)["status"] == "IN_PROGRESS"
+        started_at = _started(fresh, timed)
+        assert started_at == _naive(T0), (
+            f"the start is {started_at}, not the tick {_naive(T0)} "
+            f"(the start_date was {_naive(late)})"
+        )
         return
 
     created = create(
