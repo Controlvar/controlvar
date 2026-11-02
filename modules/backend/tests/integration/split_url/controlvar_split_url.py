@@ -7,6 +7,7 @@ experiment the visitor is in.
 """
 
 import asyncio
+import http.client
 import json
 import logging
 import time
@@ -21,6 +22,10 @@ ROUTES_TIMEOUT = 1.0
 ASSIGN_TIMEOUT = 1.5
 SKIP_SECONDS = 30
 NOT_ENROLLED = {"holdout", "mutual_exclusion", "targeting", "not_entry"}
+MAX_QUERY_LENGTH = 8192
+MAX_USER_AGENT_LENGTH = 1024
+# A 4xx about one request: logged, and the next visitor is still asked about.
+ONE_REQUEST = {str(status) for status in range(400, 500)} - {"401", "403", "429"}
 
 log = logging.getLogger("controlvar.split_url")
 
@@ -73,6 +78,29 @@ def entry_of(host, raw_path):
     return host, raw_path
 
 
+def storable(text):
+    """Whether the API accepts text: no NUL and no lone surrogate."""
+    return not any(c == "\x00" or "\ud800" <= c <= "\udfff" for c in text)
+
+
+def query_to_send(query):
+    """The query string when the API accepts it (at most 8192 characters, no
+    #, whitespace or control character), else None: the visitor is still
+    routed, without it."""
+    if not query or len(query) > MAX_QUERY_LENGTH or not storable(query):
+        return None
+    if any(c == "#" or c.isspace() or ord(c) < 32 or ord(c) == 127 for c in query):
+        return None
+    return query
+
+
+def user_agent_to_send(user_agent):
+    """The User-Agent's first 1024 characters when the API accepts them, else
+    None."""
+    user_agent = (user_agent or "")[:MAX_USER_AGENT_LENGTH]
+    return user_agent if user_agent and storable(user_agent) else None
+
+
 class SplitUrl:
     def __init__(
         self, api_url, api_key, cookie_domain=None, http=http_call, clock=time.monotonic
@@ -103,7 +131,7 @@ class SplitUrl:
                 "timeout" if isinstance(error.reason, TimeoutError) else "unreachable"
             )
             raise Failed(word) from None
-        except (OSError, ValueError):
+        except (OSError, ValueError, http.client.HTTPException):
             raise Failed("unreachable") from None
         if status != 200:
             raise Failed(str(status))
@@ -138,6 +166,13 @@ class SplitUrl:
             return self.table or {}
         self.table, self.expires = table, now + max_age
         return table
+
+    def may_split(self, host, raw_path):
+        """False when the routes table in hand is current and has no entry for
+        the request, which then needs no call and no thread."""
+        if self.table is not None and self.clock() < self.expires:
+            return entry_of(host, raw_path) in self.table
+        return True
 
     def _cookie(self, value):
         cookie = (
@@ -188,10 +223,10 @@ class SplitUrl:
         payload = {
             "experiment_key": route["experiment_key"],
             "user_id": uid,
-            "host": host,
+            "host": route["host"],
             "path": raw_path,
-            "query": query or None,
-            "user_agent": (user_agent or "")[:1024] or None,
+            "query": query_to_send(query),
+            "user_agent": user_agent_to_send(user_agent),
         }
         try:
             reply = self._call(
@@ -203,7 +238,7 @@ class SplitUrl:
                 reply["reason"],
             )
         except Failed as failure:
-            self._failed(failure)
+            self._failed(failure, skip=str(failure) not in ONE_REQUEST)
             return failed
         except (KeyError, TypeError):
             self._failed("unparseable")
@@ -213,7 +248,7 @@ class SplitUrl:
                 not isinstance(location, str)
                 or "\r" in location
                 or "\n" in location
-                or not location.startswith(("http://", "https://"))
+                or not location[:8].lower().startswith(("http://", "https://"))
             ):
                 self._failed("unparseable", skip=False)
                 return failed
@@ -272,18 +307,26 @@ class SplitUrlMiddleware:
             for n, v in scope["headers"]
         ]
         first = dict(reversed(headers))
+        host = first.get("host", "")
+        raw_path = scope["raw_path"].decode("latin-1").split("?")[0]
+        if not self.split_url.may_split(host, raw_path):
+            return await self.app(scope, receive, send)
         purpose = first.get("sec-purpose", "") + first.get("purpose", "")
-        answer = await asyncio.to_thread(
-            self.split_url.answer,
-            scope["method"],
-            first.get("host", ""),
-            scope["raw_path"].decode("latin-1").split("?")[0],
-            scope["query_string"].decode("latin-1"),
-            "; ".join(v for n, v in headers if n == "cookie"),
-            first.get("user-agent"),
-            "prefetch" in purpose.lower(),
-            self.consented(scope),
-        )
+        try:
+            answer = await asyncio.to_thread(
+                self.split_url.answer,
+                scope["method"],
+                host,
+                raw_path,
+                scope["query_string"].decode("latin-1"),
+                "; ".join(v for n, v in headers if n == "cookie"),
+                first.get("user-agent"),
+                "prefetch" in purpose.lower(),
+                self.consented(scope),
+            )
+        except Exception:
+            log.warning("split_url_failed status=error")
+            return await self.app(scope, receive, send)
         if answer.status == 302:
             encoded = [
                 (n.encode("latin-1"), v.encode("latin-1")) for n, v in answer.headers

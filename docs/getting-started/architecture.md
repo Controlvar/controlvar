@@ -156,7 +156,7 @@ Visitor asks for https://shop.example.com/checkout?utm_source=mail
   |     reads the visitor's id cookie, or makes one; asks Controlvar (API key)
   +-- Controlvar assigns the visitor as /tracking/assign does
   |     (a stored assignment first; holdout, mutual exclusion, targeting; bandit weights)
-  +-- Treatment: 302 to the variant's URL, query string kept
+  +-- Treatment: 302 to the variant's URL (with the query string when the variant is on the control URL's host)
   +-- Control, not eligible, not running, or no answer in time: the page they asked for
 ```
 

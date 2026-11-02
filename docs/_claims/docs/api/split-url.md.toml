@@ -442,8 +442,15 @@ by = [
 ]
 
 [[unit]]
-text = "Ask POST /api/v1/tracking/split-url/assign with the key from the table, the visitor's id, and the host, path, query string and User-Agent they sent."
-by = ["test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_the_location_is_the_api_s"]
+text = "Ask POST /api/v1/tracking/split-url/assign with the key from the table, the visitor's id, the entry's host, the path they sent, and their query string and User-Agent."
+by = [
+    "test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_the_location_is_the_api_s",
+    "test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_only_what_the_api_accepts_is_sent",
+]
+
+[[unit]]
+text = "Send only what the API accepts: a query string longer than 8192 characters, or with a #, whitespace or a control character, is left out, and the visitor is still sent to their variant."
+by = ["test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_only_what_the_api_accepts_is_sent"]
 
 [[unit]]
 text = "On redirect, answer 302 with Location and Cache-Control: no-store."
@@ -454,11 +461,16 @@ text = "On serve, serve the page they asked for."
 by = ["test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_the_middleware_adds_its_headers_to_the_page"]
 
 [[unit]]
-text = "On anything else (no answer within 1.5 seconds, a status other than 200, or an answer that is not JSON) serve the page they asked for, log the HTTP status, and stop asking for 30 seconds."
+text = "On anything else (no answer within 1.5 seconds, a status other than 200, or an answer that is not JSON) serve the page they asked for and log the HTTP status."
 by = [
     "test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_a_failure_serves_the_page_and_logs_its_status",
     "test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_the_timeouts_are_one_and_a_half_seconds",
+    "test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_a_broken_routes_answer_serves_the_page",
 ]
+
+[[unit]]
+text = "Then stop asking for 30 seconds, unless the status is a 4xx other than 401, 403 and 429, which refuses only that request."
+by = ["test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_a_failure_serves_the_page_and_logs_its_status"]
 
 [[unit]]
 text = "A reference integration"
@@ -472,7 +484,7 @@ by = [
 ]
 
 [[unit]]
-text = "Save it as controlvar_split_url.py:"
+text = "Save it as controlvar_split_url.py (here, in a new, empty directory):"
 by = ["exempt:instruction"]
 
 [[unit]]

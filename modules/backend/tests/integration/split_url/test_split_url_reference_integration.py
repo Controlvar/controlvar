@@ -10,14 +10,19 @@ against the in-process API for every location vector:
   was minted -- whatever the API answered -- and never otherwise;
 * a served entry page carries ``Cache-Control: private`` unless it said
   ``no-store``;
-* every failure serves the page, logs one line with the HTTP status or a
-  fixed word, and skips the API for 30 seconds;
-* the routes table is kept for its clamped ``max_age``.
+* every failure serves the page and logs one line with the HTTP status or a
+  fixed word; the API is skipped for 30 seconds, except after a 4xx about
+  one request (any 4xx but 401, 403 and 429);
+* it sends only what the API accepts: the entry's host, and the query string
+  and User-Agent only within the API's limits;
+* the routes table is kept for its clamped ``max_age``, and a request that is
+  not in a current table takes no thread.
 """
 
 from __future__ import annotations
 
 import asyncio
+import http.client
 import json
 import logging
 from pathlib import Path
@@ -95,6 +100,10 @@ def split_url(api: FakeApi, clock: Optional[Clock] = None, **kwargs) -> ref.Spli
 
 def visit(integration, cookie="", host="e.com", path="/checkout", **kwargs):
     return integration.answer("GET", host, path, "utm_source=x", cookie, **kwargs)
+
+
+def logged(caplog) -> List[str]:
+    return [r.getMessage() for r in caplog.records if r.name == "controlvar.split_url"]
 
 
 def test_a_redirect_is_exact():
@@ -200,15 +209,21 @@ def test_only_a_get_with_consent_is_split(method, kwargs):
 
 FAILURES = {
     "transport": (ConnectionRefusedError(), "unreachable"),
+    "protocol": (http.client.IncompleteRead(b""), "unreachable"),
+    "bad-status-line": (http.client.BadStatusLine("garbage"), "unreachable"),
     "401": ((401, b'{"detail": "Invalid API Key"}'), "401"),
+    "403": ((403, b"{}"), "403"),
     "404": ((404, b"{}"), "404"),
     "409": ((409, b"{}"), "409"),
+    "422": ((422, b'{"detail": []}'), "422"),
     "429": ((429, b'{"detail": "Too many requests"}'), "429"),
     "500": ((500, b"oops"), "500"),
     "timeout": (TimeoutError(), "timeout"),
     "malformed": ((200, b"<html>"), "unparseable"),
     "missing-fields": ((200, b'{"action": "redirect"}'), "unparseable"),
 }
+#: A refusal of one request: it does not pause routing.
+ABOUT_ONE_REQUEST = {"404", "409", "422"}
 
 
 @pytest.mark.regression
@@ -216,8 +231,9 @@ FAILURES = {
 def test_a_failure_serves_the_page_and_logs_its_status(kind, caplog):
     """V15 for the reference integration: the page is served; X-Split-URL is
     failed; the cookie is set with the minted id whatever the API answered;
-    exactly one log line, with the HTTP status or a fixed word; the API is
-    skipped for 30 s, then asked again."""
+    exactly one log line, with the HTTP status or a fixed word. The API is
+    then skipped for 30 s and asked again, except after a refusal of one
+    request, when the next visitor is asked about at once."""
     failure, logged = FAILURES[kind]
     api, clock = FakeApi(assign=failure), Clock()
     integration = split_url(api, clock)
@@ -235,12 +251,13 @@ def test_a_failure_serves_the_page_and_logs_its_status(kind, caplog):
     assert lines == [f"split_url_failed status={logged}"], kind
 
     clock.now += 29
-    assert visit(integration).outcome == "failed"
-    assert len(api.assign_calls()) == 1
-    clock.now += 2
     api.assign = REDIRECT
-    assert visit(integration).status == 302
-    assert len(api.assign_calls()) == 2
+    following = visit(integration)
+    if kind not in ABOUT_ONE_REQUEST:
+        assert (following.outcome, len(api.assign_calls())) == ("failed", 1), kind
+        clock.now += 2
+        following = visit(integration)
+    assert (following.status, len(api.assign_calls())) == (302, 2), kind
 
 
 def test_the_timeouts_are_one_and_a_half_seconds():
@@ -265,6 +282,16 @@ def test_a_location_that_is_not_an_http_url_is_not_followed(location):
     assert answer.status is None
     assert answer.outcome == "failed"
     assert not [n for n, _ in answer.headers if n == "Location"]
+
+
+@pytest.mark.regression
+def test_a_location_whose_scheme_is_in_upper_case_is_followed():
+    """The validation rules accept a scheme in any case, and so does the
+    integration."""
+    api = FakeApi(assign={**REDIRECT, "location": "HTTPS://e.com/b"})
+    answer = visit(split_url(api))
+    assert answer.status == 302
+    assert dict(answer.headers)["Location"] == "HTTPS://e.com/b"
 
 
 def test_the_routes_table_is_kept_for_its_max_age():
@@ -334,7 +361,49 @@ def test_the_location_is_the_api_s(admin_client, split_experiment, vector):
         assert answer.status == 302
 
 
-def run_middleware(scope_overrides, answer_api: FakeApi, page_headers=()):
+#: A visitor's host, query or User-Agent beyond what the API accepts, and the
+#: Location they are sent to: the entry's host is sent, and a query string or
+#: User-Agent the API does not accept is left out.
+BEYOND_THE_LIMITS = {
+    "host-with-a-space": ({"host": "e.com:1 2"}, "https://e.com/checkout-v2?q=1"),
+    "host-too-long": ({"host": "e.com:" + "1" * 300}, "https://e.com/checkout-v2?q=1"),
+    "query-with-a-hash": ({"query": "a=1#x"}, "https://e.com/checkout-v2"),
+    "query-too-long": ({"query": "a=" + "x" * 9000}, "https://e.com/checkout-v2"),
+    "query-with-a-space": ({"query": "a=1 2"}, "https://e.com/checkout-v2"),
+    "query-with-a-control": ({"query": "a=1\x01"}, "https://e.com/checkout-v2"),
+    "user-agent-with-nul": ({"ua": "Mozilla/5.0\x00"}, "https://e.com/checkout-v2?q=1"),
+}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("kind", sorted(BEYOND_THE_LIMITS))
+def test_only_what_the_api_accepts_is_sent(admin_client, split_experiment, kind):
+    """Against the in-process API: a treatment visitor whose host, query or
+    User-Agent the API would not accept is still sent to the treatment, and
+    the next visitor is still asked about."""
+    split_experiment(
+        "split-accepted",
+        optimization_type="thompson_sampling",
+        bandit_weights={"Control": 0.0, "Treatment": 1.0},
+    )
+    beyond, expected = BEYOND_THE_LIMITS[kind]
+    visitor = {"host": "e.com", "query": "q=1", "ua": "Mozilla/5.0", **beyond}
+    calls = []
+    integration = ref.SplitUrl(
+        "http://api", "key", http=client_transport(admin_client, calls)
+    )
+    first = integration.answer(
+        "GET", visitor["host"], "/checkout", visitor["query"], "", visitor["ua"]
+    )
+    following = integration.answer("GET", "e.com", "/checkout", "q=1", "")
+    assigned = [c for c in calls if c[1].endswith("/assign")]
+    assert (first.status, dict(first.headers).get("Location")) == (302, expected)
+    assert (following.status, len(assigned)) == (302, 2), kind
+
+
+def run_middleware(
+    scope_overrides, answer_api: FakeApi, page_headers=(), integration=None
+):
     """Drive SplitUrlMiddleware around a one-page ASGI app; what it sent."""
     sent, pages = [], []
 
@@ -364,7 +433,7 @@ def run_middleware(scope_overrides, answer_api: FakeApi, page_headers=()):
         "headers": [(b"host", b"e.com")],
         **scope_overrides,
     }
-    middleware = ref.SplitUrlMiddleware(page, split_url(answer_api))
+    middleware = ref.SplitUrlMiddleware(page, integration or split_url(answer_api))
     asyncio.run(middleware(scope, receive, send))
     return sent, pages
 
@@ -417,3 +486,59 @@ def test_the_middleware_serves_as_it_is_without_a_raw_path():
     assert pages == ["/checkout"]
     assert api.calls == []
     assert sent[0]["headers"] == []
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "broken",
+    [http.client.IncompleteRead(b""), http.client.BadStatusLine("garbage")],
+    ids=["incomplete-read", "bad-status-line"],
+)
+def test_a_broken_routes_answer_serves_the_page(broken, caplog):
+    """A routes answer that is not well-formed HTTP is a failure like any
+    other: the page is served as it is, with one log line."""
+    api = FakeApi()
+    api.routes = broken
+    with caplog.at_level(logging.WARNING, logger="controlvar.split_url"):
+        sent, pages = run_middleware({"path": "/about", "raw_path": b"/about"}, api)
+    assert pages == ["/about"]
+    assert (sent[0]["status"], sent[0]["headers"]) == (200, [])
+    assert logged(caplog) == ["split_url_failed status=unreachable"]
+
+
+@pytest.mark.regression
+def test_an_unexpected_error_serves_the_page(caplog):
+    """Anything else the integration raises is logged with a fixed word, and
+    the page is served as it is."""
+    api = FakeApi()
+    api.routes = RuntimeError("unexpected")
+    with caplog.at_level(logging.WARNING, logger="controlvar.split_url"):
+        sent, pages = run_middleware({}, api)
+    assert pages == ["/checkout"]
+    assert (sent[0]["status"], sent[0]["headers"]) == (200, [])
+    assert logged(caplog) == ["split_url_failed status=error"]
+
+
+def test_a_request_that_is_not_in_a_current_table_takes_no_thread(monkeypatch):
+    """With a current routes table in hand, a request that is not an entry is
+    served without a thread; an entry, or any request once the table is due,
+    takes one."""
+    threads = []
+    to_thread = asyncio.to_thread
+
+    async def counted(function, *args):
+        threads.append(args[2])
+        return await to_thread(function, *args)
+
+    monkeypatch.setattr(ref.asyncio, "to_thread", counted)
+    api, clock = FakeApi(assign=SERVE), Clock()
+    integration = split_url(api, clock)
+    integration.routes()
+    asset = {"path": "/static/app.css", "raw_path": b"/static/app.css"}
+    _, pages = run_middleware(asset, api, integration=integration)
+    assert (pages, threads) == (["/static/app.css"], [])
+    run_middleware({}, api, integration=integration)
+    assert threads == ["/checkout"]
+    clock.now += 61
+    run_middleware(asset, api, integration=integration)
+    assert threads == ["/checkout", "/static/app.css"]
