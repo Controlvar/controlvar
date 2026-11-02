@@ -1010,7 +1010,7 @@ Resolved with `license-checker-rseidelsohn --production`.
 | `charenc` | 0.0.2 |
 | `crypt` | 0.0.2 |
 | `ieee754` | 1.2.1 |
-| `joi` | 17.13.8 |
+| `joi` | 17.13.9 |
 | `makeerror` | 1.0.12 |
 | `md5` | 2.3.0 |
 | `source-map` | 0.5.7 |
