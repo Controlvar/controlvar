@@ -28,6 +28,33 @@ FIXTURES = Path(__file__).resolve().parent / "scale_fixtures"
 FULL_SIZE = FIXTURES / "results_full.json"
 VARIANTS = ["control", "treatment"]
 
+#: The layout the override applies (#1614): the API on cpu0; PostgreSQL, nginx
+#: and Redis on cpu1, the API's sibling; the database sampler on cpu2; k6 alone
+#: on cpu3.
+SPLIT = {
+    "api": "0",
+    "postgres": "1",
+    "web": "1",
+    "redis": "1",
+    "pg_sampler": "2",
+    "generator": "3",
+}
+#: The first layout, before the runner was probed: web and Redis on k6's core.
+OLD_SPLIT = {
+    "api": "0",
+    "postgres": "1",
+    "web": "2",
+    "redis": "2",
+    "pg_sampler": "2",
+    "generator": "3",
+}
+#: The runner the probe measured: 4 vCPUs, 2 cores of 2 hardware threads.
+SMT = {"cpu0": "0-1", "cpu1": "0-1", "cpu2": "2-3", "cpu3": "2-3"}
+#: Siblings paired across the numbering: cpu0 with cpu2, cpu1 with cpu3.
+INTERLEAVED = {"cpu0": "0,2", "cpu1": "1,3", "cpu2": "0,2", "cpu3": "1,3"}
+#: No SMT: every hardware thread a core of its own.
+NO_SMT = {"cpu0": "0", "cpu1": "1", "cpu2": "2", "cpu3": "3"}
+
 
 def module() -> Any:
     """tests/scale/scale_evidence.py, loaded by path (it is not a package)."""
@@ -163,16 +190,21 @@ def observation(
         "time_unit_ms": unit,
         "dropped": 0,
         "variants": list(VARIANTS),
+        "cpu_split": dict(SPLIT),
         "sampled": True,
         "samples": window["measure_s"],
         "cpu_permille": {
             "api": 400,
             "postgres": 200,
-            "web_redis": 150,
+            "web": 80,
+            "redis": 70,
+            "pg_sampler": 20,
             "generator": 120,
         },
-        "cores": {
+        "threads": {
             "cpu0": {"busy_permille": 420, "steal_permille": 5},
+            "cpu1": {"busy_permille": 360, "steal_permille": 5},
+            "cpu2": {"busy_permille": 50, "steal_permille": 5},
             "cpu3": {"busy_permille": 140, "steal_permille": 5},
         },
         "pg": {
@@ -222,15 +254,40 @@ def metrics(
 # Steps as facts (for runs and whole results files)
 # ---------------------------------------------------------------------------
 def step_facts(
-    meth: Dict[str, Any], scenario: str, number: int, **changes: Any
+    meth: Dict[str, Any],
+    scenario: str,
+    number: int,
+    split: Optional[Dict[str, str]] = None,
+    **changes: Any,
 ) -> Dict[str, Any]:
     """A step record as the summariser writes it, built from facts (no rows):
-    healthy unless ``changes`` say otherwise; the judgement is the rules'."""
+    healthy unless ``changes`` say otherwise; the judgement is the rules'.
+
+    A hardware thread's busy time, unless ``changes`` give it, is what the
+    containers pinned to it used plus 10 per-mille of other work."""
     se = module()
+    split = split or SPLIT
     rate, unit = se.rate_pair(se.step_rates(meth, scenario)[number - 1])
     window = se.ranges(meth)
     scheduled = se.scheduled_count(rate, unit, window["settle_s"] + window["measure_s"])
     measured = scheduled - se.first_measured(rate, unit, window["settle_s"])
+    cpu = {
+        "api": min(880, 120 + 45 * number),
+        "postgres": min(450, 40 + 20 * number),
+        "web": min(150, 15 + 6 * number),
+        "redis": min(150, 10 + 5 * number),
+        "pg_sampler": 20,
+        "generator": min(600, 30 + 20 * number),
+    }
+    threads: Dict[str, int] = {}
+    for thread, steal in zip(se.THREADS, (4, 4, 3, 3)):
+        threads.update(
+            {
+                f"{thread}_busy_permille": 0,
+                f"{thread}_steal_permille": steal,
+                f"{thread}_foreign_permille": 0,
+            }
+        )
     step: Dict[str, Any] = {
         "step": number,
         "rate": rate,
@@ -253,16 +310,8 @@ def step_facts(
         "start_lag_p99_us": 1000,
         "sampled": True,
         "samples": window["measure_s"],
-        "api_core_permille": min(880, 120 + 45 * number),
-        "postgres_core_permille": min(700, 60 + 25 * number),
-        "web_redis_core_permille": min(500, 40 + 15 * number),
-        "generator_cpu_permille": min(600, 30 + 20 * number),
-        "cpu0_busy_permille": min(900, 130 + 45 * number),
-        "cpu0_steal_permille": 4,
-        "cpu0_foreign_permille": 0,
-        "cpu3_busy_permille": min(640, 40 + 20 * number),
-        "cpu3_steal_permille": 3,
-        "cpu3_foreign_permille": 0,
+        **{f"{name}_cpu_permille": value for name, value in cpu.items()},
+        **threads,
         "active_backend_samples_by_count": [6, 20, 4],
         "active_backend_share_permille": 0,
         "max_active_backends": 0,
@@ -285,14 +334,24 @@ def step_facts(
     if scenario == "ruleset":
         step["not_modified"] = measured - measured // 50
     step.update(changes)
-    step.update(se._derived(step, meth))
-    fields, _ = se.judge_step(meth, scenario, step)
+    pinned = se._pinned(split)
+    for index, thread in enumerate(se.THREADS):
+        key = f"{thread}_busy_permille"
+        if key not in changes:
+            used = sum(step[f"{name}_cpu_permille"] for name in pinned.get(index, []))
+            step[key] = min(1000, used + 10)
+    step.update(se._derived(step, meth, split))
+    fields, _ = se.judge_step(meth, scenario, step, split)
     step.update(fields)
     return step
 
 
 def failing_step(
-    meth: Dict[str, Any], scenario: str, number: int, kind: str
+    meth: Dict[str, Any],
+    scenario: str,
+    number: int,
+    kind: str,
+    split: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """A step that did not keep up, in one of the ways a real one fails."""
     if kind == "p99":
@@ -300,10 +359,10 @@ def failing_step(
             meth,
             scenario,
             number,
+            split,
             p99_us=1_000_000 + 37_000 * number,
             p95_us=600_000,
-            api_core_permille=610,
-            cpu0_busy_permille=630,
+            api_cpu_permille=610,
             active_backend_samples_by_count=[2, 27, 1],
         )
     if kind == "dropped":
@@ -317,6 +376,7 @@ def failing_step(
             meth,
             scenario,
             number,
+            split,
             rows=scheduled - drops,
             server_count=scheduled - drops,
             dropped=drops,
@@ -324,39 +384,46 @@ def failing_step(
             - drops
             - module().first_measured(rate, unit, window["settle_s"]),
             p99_us=2_400_000,
-            api_core_permille=960,
-            cpu0_busy_permille=975,
+            api_cpu_permille=960,
         )
     if kind == "errors":
-        return step_facts(meth, scenario, number, errors=12 + number)
+        return step_facts(meth, scenario, number, split, errors=12 + number)
     raise ValueError(kind)
 
 
 def rep_steps(
-    meth: Dict[str, Any], scenario: str, knee: int, kinds: Sequence[str]
+    meth: Dict[str, Any],
+    scenario: str,
+    knee: int,
+    kinds: Sequence[str],
+    split: Optional[Dict[str, str]] = None,
 ) -> List[Dict[str, Any]]:
     """Steps 1..knee keep up; then one failing step per kind."""
-    steps = [step_facts(meth, scenario, n) for n in range(1, knee + 1)]
+    steps = [step_facts(meth, scenario, n, split) for n in range(1, knee + 1)]
     steps += [
-        failing_step(meth, scenario, knee + 1 + i, kind) for i, kind in enumerate(kinds)
+        failing_step(meth, scenario, knee + 1 + i, kind, split)
+        for i, kind in enumerate(kinds)
     ]
     return steps
 
 
-def host(rep: int, exclusive: bool = True) -> Dict[str, Any]:
+def host(
+    rep: int,
+    siblings: Optional[Dict[str, str]] = None,
+    split: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    """A rep's runner as it recorded itself; by default the measured topology."""
+    se = module()
+    siblings = dict(siblings or SMT)
+    generator = se._cpus((split or SPLIT)["generator"])
     return {
         "runner_image": f"ubuntu24/2026102{rep % 3}.1",
         "cpu_model": "AMD EPYC 7763 64-Core Processor",
         "kernel": "6.8.0-1036-azure",
         "nproc": 4,
         "machine": "x86_64",
-        "thread_siblings": {
-            "cpu0": "0",
-            "cpu1": "1",
-            "cpu2": "2" if exclusive else "2-3",
-            "cpu3": "3" if exclusive else "2-3",
-        },
-        "generator_core_exclusive": exclusive,
+        "thread_siblings": siblings,
+        "generator_core_exclusive": se._core(siblings, generator) == generator,
     }
 
 
@@ -373,7 +440,12 @@ def counts(meth: Dict[str, Any], **changes: int) -> Dict[str, int]:
 
 
 def rep(
-    meth: Dict[str, Any], scenario: str, number: int, steps: List[Dict[str, Any]]
+    meth: Dict[str, Any],
+    scenario: str,
+    number: int,
+    steps: List[Dict[str, Any]],
+    split: Optional[Dict[str, str]] = None,
+    siblings: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     se = module()
     after = counts(meth)
@@ -381,18 +453,21 @@ def rep(
         after["assignments"] += sum(step["rows"] for step in steps)
     out = {
         "rep": number,
-        "host": host(number),
+        "host": host(number, siblings, split),
         "api_machine": "x86_64",
         "counts_before": counts(meth),
         "counts_after": after,
         "steps": steps,
     }
-    out.update(se.assess_rep(meth, steps))
+    out.update(se.assess_rep(meth, steps, split or SPLIT))
     return out
 
 
 def results(
-    meth: Dict[str, Any], reps: Dict[str, List[Dict[str, Any]]], label: str = "unit"
+    meth: Dict[str, Any],
+    reps: Dict[str, List[Dict[str, Any]]],
+    label: str = "unit",
+    split: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """A whole results file around the given runs, every field realistic."""
     se = module()
@@ -446,14 +521,7 @@ def results(
                 "synchronous_commit": "on",
                 "wal_sync_method": "fdatasync",
             },
-            "cpu_split": {
-                "api": "0",
-                "postgres": "1",
-                "web": "2",
-                "redis": "2",
-                "pg_sampler": "2",
-                "generator": "3",
-            },
+            "cpu_split": dict(split or SPLIT),
         },
         "generator": {
             "tool": "k6",
@@ -476,21 +544,36 @@ def results(
     }
 
 
-def small(meth: Optional[Dict[str, Any]] = None, **knees: int) -> Dict[str, Any]:
-    """A publishable results file: every scenario, three runs, knees near step 4."""
+def small(
+    meth: Optional[Dict[str, Any]] = None,
+    split: Optional[Dict[str, str]] = None,
+    siblings: Optional[Dict[str, str]] = None,
+    **knees: int,
+) -> Dict[str, Any]:
+    """A results file of every scenario, three runs, knees near step 4:
+    publishable with the default split and the measured topology."""
     meth = meth or method()
     reps = {}
     for name in module().SCENARIOS:
         knee = knees.get(name, 4)
         reps[name] = [
-            rep(meth, name, n, rep_steps(meth, name, knee + (n == 2), ["p99", "p99"]))
+            rep(
+                meth,
+                name,
+                n,
+                rep_steps(meth, name, knee + (n == 2), ["p99", "p99"], split),
+                split,
+                siblings,
+            )
             for n in (1, 2, 3)
         ]
-    return results(meth, reps)
+    return results(meth, reps, split=split)
 
 
 def full_size() -> Dict[str, Any]:
-    """18 jobs of about 16 steps: six scenarios, three runs each (EMS-15)."""
+    """18 jobs of about 16 steps: six scenarios, three runs each (EMS-15), on
+    the measured topology (siblings 0-1, 0-1, 2-3, 2-3) and the override's
+    split."""
     meth = method()
     se = module()
     kinds = (["p99", "p99"], ["dropped", "dropped"], ["p99", "dropped"])

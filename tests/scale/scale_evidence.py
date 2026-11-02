@@ -4,18 +4,21 @@
 """The scale evidence: the method file, the summariser and the render (#1608).
 
 Standard library only. It imports nothing from ``backend`` or ``modules``; the
-one repository file it reads as code is ``scripts/doc_claims.py`` (also
-standard library only), for the unit splitter the claims registries use.
+two repository files it reads as code, both standard library only, are
+``scripts/doc_claims.py``, for the unit splitter the claims registries use,
+and ``scripts/scale_stack.py``, the harness that creates the fixtures, for the
+flag design it creates.
 
 Commands (``python tests/scale/scale_evidence.py <command> --help``):
 
 ``summarise``
     One step of one run: the generator's per-request rows (CSV, ``ROW_FIELDS``)
-    and the step's observation (JSON: the rate pair, the drops, the samplers'
-    readings) and the API's ``/metrics`` before and after, judged by the method
-    in ``config.json``. Writes the step's record. Exit 0 when the step is
-    VALID (whether or not it kept up), 1 when it is INVALID (the record is
-    still written, with its reason), 2 on a refusal (nothing written).
+    and the step's observation (JSON: the rate pair, the drops, each container's
+    recorded cpuset, the samplers' readings) and the API's ``/metrics`` before
+    and after, judged by the method in ``config.json``. Writes the step's
+    record. Exit 0 when the step is VALID (whether or not it kept up), 1 when
+    it is INVALID (the record is still written, with its reason), 2 on a
+    refusal (nothing written).
 ``merge``
     The per-job results files of one run (one scenario, one repetition each)
     into the one results file, with each scenario's summary computed from its
@@ -35,9 +38,8 @@ Commands (``python tests/scale/scale_evidence.py <command> --help``):
     (``gh run download``): byte for byte, the same commit, and an artifact that
     still exists. An expired artifact fails; it is never skipped.
 
-The harness commands (``up``, ``down``, ``fixtures``, ``run``) are not in this
-file. ``HARNESS_MODULE`` beside it, when present, adds them (see
-``_harness_commands``).
+The harness's own commands (``up``, ``fixtures``, ``down``) are
+``scripts/scale_stack.py``'s, with their own command line; this file has none.
 
 Every number is an integer, in units the key names (``_us``, ``_ms``, ``_s``,
 ``_milli_rps``, ``_permille``, ``_milli``, or a bare count). The results file
@@ -53,6 +55,7 @@ import decimal
 import hashlib
 import importlib.util
 import io
+import itertools
 import json
 import math
 import os
@@ -68,7 +71,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1]
 CONFIG = HERE / "config.json"
 DOC_CLAIMS = REPO_ROOT / "scripts" / "doc_claims.py"
-HARNESS_MODULE = "scale_harness"
+SCALE_STACK = REPO_ROOT / "scripts" / "scale_stack.py"
 
 SCHEMA = "controlvar-scale-results/1"
 
@@ -104,37 +107,42 @@ LABELS: Dict[str, str] = {
     "ruleset": "GET /api/v1/sdk/ruleset",
 }
 
-# The fixture design the scenarios rest on (PLAN 3.4): 100 ACTIVE flags, half
-# of them with one 3-condition dashboard-shape rule, every flag at a 50% rollout,
-# and scale_ab's two variants. The evaluate scenario sends RULE_FLAG_CONTEXT to
-# a rule flag and no context to a plain one, so each class has one expected
-# reason, which the method file states and an in-process test pins (EMS-5).
-FIXTURE_FLAGS = 100
-FIXTURE_RULE_FLAGS = 50
-FIXTURE_ROLLOUT_PERCENTAGE = 50
-RULE_FLAG_RULES: Dict[str, Any] = {
-    "logical_operator": "AND",
-    "rollout_percentage": 50,
-    "groups": [
-        {
-            "logical_operator": "AND",
-            "conditions": [
-                {"attribute": "plan", "operator": "equals", "value": "scale"},
-                {
-                    "attribute": "app_version",
-                    "operator": "semver_gte",
-                    "value": "2.0.0",
-                },
-                {"attribute": "country", "operator": "in", "value": ["GB", "US", "CA"]},
-            ],
-        }
-    ],
+#: The containers the harness pins, each to one hardware thread. Their cpusets
+#: are recorded as Docker applied them (``docker inspect``'s
+#: ``HostConfig.CpusetCpus``, the load generator's included) and never copied
+#: from a configuration: the method file holds no CPU split (its schema is
+#: closed).
+CONTAINERS: Tuple[str, ...] = (
+    "api",
+    "postgres",
+    "web",
+    "redis",
+    "pg_sampler",
+    "generator",
+)
+#: The containers whose CPU can be what stopped a run, and which must not share
+#: a physical core with the load generator.
+SYSTEM_UNDER_TEST: Tuple[str, ...] = ("api", "postgres", "web", "redis")
+#: The hardware threads the samplers read from /proc/stat, as the VM numbers
+#: them. A hardware thread is what the VM calls a CPU; it is not a core.
+THREADS: Tuple[str, ...] = ("cpu0", "cpu1", "cpu2", "cpu3")
+#: How the page names each container.
+NAMES: Dict[str, str] = {
+    "api": "the API",
+    "postgres": "PostgreSQL",
+    "web": "nginx",
+    "redis": "Redis",
+    "pg_sampler": "the database sampler",
+    "generator": "the load generator",
 }
-RULE_FLAG_CONTEXT: Dict[str, str] = {
-    "plan": "scale",
-    "app_version": "2.3.1",
-    "country": "GB",
-}
+#: ``cpu:`` and the containers pinned to one hardware thread, joined by ``+``
+#: in CONTAINERS order: every group that holds part of the system under test.
+CPU_GROUPS: Tuple[str, ...] = tuple(
+    "cpu:" + "+".join(group)
+    for size in range(1, len(CONTAINERS) + 1)
+    for group in itertools.combinations(CONTAINERS, size)
+    if set(group) & set(SYSTEM_UNDER_TEST)
+)
 #: One batch request carries this many events.
 BATCH_EVENTS = 100
 #: Connections one API process may hold: pool_size 20 + max_overflow 20
@@ -164,9 +172,7 @@ INVALID_REASONS: Tuple[str, ...] = (
 FAIL_REASONS: Tuple[str, ...] = ("none", "invalid", "dropped", "errors", "p99")
 #: What stopped a run (A3), plus "not-reached" for a run that never failed.
 BOTTLENECKS: Tuple[str, ...] = (
-    "cpu:api",
-    "cpu:postgres",
-    "cpu:web-redis",
+    *CPU_GROUPS,
     "postgres-io",
     "db-pool",
     "serialised",
@@ -222,6 +228,46 @@ ROW_FIELDS: Tuple[str, ...] = (
 
 class Refused(Exception):
     """A refusal: the message names the cause and, where there is one, the fix."""
+
+
+def _load(name: str, path: pathlib.Path) -> Any:
+    """A standard-library-only repository script, loaded by path, once.
+
+    The module is in ``sys.modules`` before it runs: a dataclass declared under
+    ``from __future__ import annotations`` looks its module up there.
+    """
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(name, path)
+        if spec is None or spec.loader is None:
+            raise Refused(f"cannot load {path}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        try:
+            spec.loader.exec_module(module)
+        except BaseException:
+            del sys.modules[name]
+            raise
+    return sys.modules[name]
+
+
+def stack() -> Any:
+    """``scripts/scale_stack.py``: the harness, whose code creates the fixtures."""
+    return _load("_scale_evidence_scale_stack", SCALE_STACK)
+
+
+# The fixture design the scenarios rest on (PLAN 3.4) is the one the harness
+# creates, read from scripts/scale_stack.py and never copied here: 100 ACTIVE
+# flags, the first 50 with one 3-condition dashboard-shape rule, every flag at
+# a 50% rollout, and scale_ab's two variants. The evaluate scenario sends
+# RULE_FLAG_CONTEXT to a rule flag and no context to a plain one, so each class
+# has one expected reason, which the method file states and an in-process test
+# pins through the harness's own flag payloads (EMS-5).
+RULE_FLAG_RULES: Dict[str, Any] = stack().RULE
+RULE_FLAG_CONTEXT: Dict[str, str] = stack().RULE_CONTEXT
+FIXTURE_FLAGS = len(stack().flag_payloads())
+FIXTURE_RULE_FLAGS = sum(
+    1 for flag in stack().flag_payloads() if "targeting_rules" in flag
+)
 
 
 # ---------------------------------------------------------------------------
@@ -491,16 +537,15 @@ STEP_SPEC = obj(
     start_lag_p99_us=Int(0),
     sampled=Bool(),
     samples=Int(0),
-    api_core_permille=Int(0),
-    postgres_core_permille=Int(0),
-    web_redis_core_permille=Int(0),
-    generator_cpu_permille=Int(0),
-    cpu0_busy_permille=PERMILLE,
-    cpu0_steal_permille=PERMILLE,
-    cpu0_foreign_permille=PERMILLE,
-    cpu3_busy_permille=PERMILLE,
-    cpu3_steal_permille=PERMILLE,
-    cpu3_foreign_permille=PERMILLE,
+    # Each container's cgroup CPU, in per-mille of one hardware thread.
+    **{f"{name}_cpu_permille": Int(0) for name in CONTAINERS},
+    # Each hardware thread's /proc/stat busy and steal, and the foreign CPU
+    # computed from them: busy minus the containers pinned to the thread.
+    **{
+        f"{thread}_{what}_permille": PERMILLE
+        for thread in THREADS
+        for what in ("busy", "steal", "foreign")
+    },
     active_backend_samples_by_count=ListOf(Int(0), 0, 1000),
     active_backend_share_permille=PERMILLE,
     max_active_backends=Int(0),
@@ -525,9 +570,12 @@ HOST_SPEC = obj(
     kernel=Str(r"[0-9][A-Za-z0-9._+-]{0,60}", "a kernel release"),
     nproc=Int(1),
     machine=Enum(("x86_64", "aarch64")),
-    thread_siblings=obj(cpu0=CPULIST, cpu1=CPULIST, cpu2=CPULIST, cpu3=CPULIST),
+    # Each hardware thread's thread_siblings_list, as this rep's VM reported it.
+    thread_siblings=obj(**dict.fromkeys(THREADS, CPULIST)),
     generator_core_exclusive=Bool(),
 )
+#: Each container's cpuset as Docker applied it (see CONTAINERS).
+CPU_SPLIT_SPEC = obj(**dict.fromkeys(CONTAINERS, CPULIST))
 REP_SPEC = obj(
     rep=Int(1),
     host=HOST_SPEC,
@@ -613,14 +661,7 @@ RESULTS_SPEC = obj(
             synchronous_commit=WORD,
             wal_sync_method=WORD,
         ),
-        cpu_split=obj(
-            api=CPULIST,
-            postgres=CPULIST,
-            web=CPULIST,
-            redis=CPULIST,
-            pg_sampler=CPULIST,
-            generator=CPULIST,
-        ),
+        cpu_split=CPU_SPLIT_SPEC,
     ),
     generator=obj(
         tool=Enum(tuple(GENERATOR_LICENCES)),
@@ -669,6 +710,11 @@ def config_problems(config: Any) -> List[str]:
         problems.append(
             f"measure_s: {config['measure_s']} s is a smoke window; publication "
             "mode measures at least 30 s"
+        )
+    if config["repetitions"] % 2 == 0:
+        problems.append(
+            f"repetitions: {config['repetitions']} is even; the page states the "
+            "median run's knee, which only an odd count has"
         )
     lag = config["validity"]["max_start_lag_p99_us"]
     if lag % 1000:
@@ -775,6 +821,35 @@ def vus(method: Mapping[str, Any], milli_rps: int) -> int:
 # /metrics, read as sums only
 # ---------------------------------------------------------------------------
 _METRIC_NAME = re.compile(r"[A-Za-z_:][A-Za-z0-9_:]{0,200}")
+#: An unlabelled counter the API always exports, from its first scrape: a
+#: scrape without it is not the API's /metrics (an empty or failed one), and
+#: would make every counter rule pass on nothing.
+REQUIRED_SERIES = "rate_limit_redis_fallbacks_total"
+
+
+def _sample(line: str, number: int) -> Tuple[str, str]:
+    """A sample line's name, and what follows the name and its labels.
+
+    The labels end at the first ``}`` outside a quoted value, found in one pass
+    (a label value may hold ``}``; nothing after the value may).
+    """
+    brace = line.find("{")
+    space = line.find(" ")
+    if brace == -1 or -1 < space < brace:
+        name, _, rest = line.partition(" ")
+        return name, rest
+    quoted = escaped = False
+    for index in range(brace + 1, len(line)):
+        char = line[index]
+        if escaped:
+            escaped = False
+        elif quoted and char == "\\":
+            escaped = True
+        elif char == '"':
+            quoted = not quoted
+        elif char == "}" and not quoted:
+            return line[:brace], line[index + 1 :]
+    raise Refused(f"metrics line {number}: its labels are not closed")
 
 
 def metric_sums(text: str) -> Dict[str, decimal.Decimal]:
@@ -782,21 +857,24 @@ def metric_sums(text: str) -> Dict[str, decimal.Decimal]:
 
     A sample's labels are read past and dropped: nothing here keeps, compares or
     records a label value, so two expositions whose label sets differ give the
-    same sums when their totals agree.
+    same sums when their totals agree. A sample is ``name{labels} value`` and
+    nothing else: an OpenMetrics exemplar or a timestamp after the value is
+    refused, never read as the value.
     """
     sums: Dict[str, decimal.Decimal] = {}
     for number, raw in enumerate(text.splitlines(), 1):
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
-        if "{" in line:
-            name, _, rest = line.partition("{")
-            rest = rest[rest.rfind("}") + 1 :] if "}" in rest else ""
-        else:
-            name, _, rest = line.partition(" ")
+        name, rest = _sample(line, number)
         fields = rest.split()
-        if not _METRIC_NAME.fullmatch(name) or not 1 <= len(fields) <= 2:
+        if not _METRIC_NAME.fullmatch(name) or not fields:
             raise Refused(f"metrics line {number} is not a sample")
+        if len(fields) > 1:
+            raise Refused(
+                f"metrics line {number}: something follows the value (an exemplar "
+                "or a timestamp); only `name{labels} value` is read"
+            )
         try:
             value = decimal.Decimal(fields[0])
         except decimal.InvalidOperation:
@@ -936,12 +1014,110 @@ def _median(values: Sequence[int]) -> int:
 
 
 # ---------------------------------------------------------------------------
+# The recorded CPU split and topology
+# ---------------------------------------------------------------------------
+def _cpus(cpulist: str) -> set:
+    found: set = set()
+    for part in cpulist.split(","):
+        low, _, high = part.partition("-")
+        found.update(range(int(low), int(high or low) + 1))
+    return found
+
+
+def split_problems(split: Mapping[str, str], where: str = "cpu_split") -> List[str]:
+    """Each container pinned to exactly one of the sampled hardware threads, so
+    that its CPU belongs to that thread's group."""
+    problems: List[str] = []
+    for name in CONTAINERS:
+        cpus = _cpus(split[name])
+        if len(cpus) != 1:
+            problems.append(
+                f"{where}.{name} is {split[name]!r}: each container is pinned to "
+                "one hardware thread, so that its CPU is that thread's"
+            )
+        elif not cpus <= set(range(len(THREADS))):
+            problems.append(
+                f"{where}.{name}: cpu{min(cpus)} is not one of the sampled hardware "
+                f"threads cpu0 to cpu{len(THREADS) - 1}"
+            )
+    return problems
+
+
+def _pinned(split: Mapping[str, str]) -> Dict[int, List[str]]:
+    """Each hardware thread and the containers pinned to it, in CONTAINERS order."""
+    pinned: Dict[int, List[str]] = {}
+    for name in CONTAINERS:
+        for cpu in sorted(_cpus(split[name])):
+            pinned.setdefault(cpu, []).append(name)
+    return pinned
+
+
+def _thread_of(split: Mapping[str, str], name: str) -> int:
+    cpus = _cpus(split[name])
+    if len(cpus) != 1:
+        raise Refused(f"cpu_split.{name} is {split[name]!r}, not one hardware thread")
+    return min(cpus)
+
+
+def _measured_threads(split: Mapping[str, str]) -> List[int]:
+    """The hardware threads that run part of the system under test."""
+    return [
+        cpu
+        for cpu, names in sorted(_pinned(split).items())
+        if set(names) & set(SYSTEM_UNDER_TEST)
+    ]
+
+
+def siblings_problems(siblings: Mapping[str, str]) -> List[str]:
+    """Each hardware thread lists itself, and threads that list each other agree."""
+    problems: List[str] = []
+    for index, thread in enumerate(THREADS):
+        own = _cpus(siblings[thread])
+        if index not in own:
+            problems.append(
+                f"thread_siblings.{thread} is {siblings[thread]!r}, which does not "
+                f"list {thread} itself"
+            )
+            continue
+        for other in sorted(own):
+            name = f"cpu{other}"
+            if name in siblings and _cpus(siblings[name]) != own:
+                problems.append(
+                    f"thread_siblings.{thread} is {siblings[thread]!r} but "
+                    f"{name}'s is {siblings[name]!r}"
+                )
+    return problems
+
+
+def _core(siblings: Mapping[str, str], cpus: set) -> set:
+    """``cpus`` and every hardware thread the VM reports as their siblings."""
+    core = set(cpus)
+    for cpu in cpus:
+        core |= _cpus(siblings.get(f"cpu{cpu}", str(cpu)))
+    return core
+
+
+def _and(items: Sequence[str]) -> str:
+    if len(items) < 2:
+        return "".join(items)
+    return ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def _threads_text(cpus: set) -> str:
+    return _and([f"cpu{cpu}" for cpu in sorted(cpus)])
+
+
+# ---------------------------------------------------------------------------
 # One step: the rules (A3)
 # ---------------------------------------------------------------------------
 def judge_step(
-    method: Mapping[str, Any], scenario: str, step: Mapping[str, Any]
+    method: Mapping[str, Any],
+    scenario: str,
+    step: Mapping[str, Any],
+    split: Mapping[str, str],
 ) -> Tuple[Dict[str, Any], List[str]]:
-    """VALID, KEEPS UP and their reasons, from a step's recorded facts.
+    """VALID, KEEPS UP and their reasons, from a step's recorded facts and the
+    recorded CPU split (which hardware thread is the load generator's).
 
     Returns the four judgement fields and the messages for every rule that
     failed (the first one is the step's ``invalid_reason``).
@@ -980,12 +1156,14 @@ def judge_step(
         )
     else:
         foreign = validity["max_foreign_cpu_permille"]
-        if step["cpu3_foreign_permille"] > foreign:
+        thread = _thread_of(split, "generator")
+        other = step[f"cpu{thread}_foreign_permille"]
+        if other > foreign:
             failed.append(
                 (
                     "foreign-cpu",
-                    f"step {number}: other work used {step['cpu3_foreign_permille']} "
-                    f"per-mille of the generator's core (limit {foreign})",
+                    f"step {number}: other work used {other} per-mille of the "
+                    f"generator's hardware thread, cpu{thread} (limit {foreign})",
                 )
             )
         ceiling = validity["max_generator_cpu_permille"]
@@ -994,8 +1172,9 @@ def judge_step(
                 (
                     "generator-cpu",
                     f"step {number}: the generator used "
-                    f"{step['generator_cpu_permille']} per-mille of its core "
-                    f"(limit below {ceiling}): this step measures the generator",
+                    f"{step['generator_cpu_permille']} per-mille of its hardware "
+                    f"thread (limit below {ceiling}): this step measures the "
+                    "generator",
                 )
             )
     limit = method["sdk_rate_limit_per_minute"]
@@ -1082,8 +1261,10 @@ def judge_step(
     return fields, messages
 
 
-def _derived(step: Mapping[str, Any], method: Mapping[str, Any]) -> Dict[str, Any]:
-    """The step fields computed from its other fields."""
+def _derived(
+    step: Mapping[str, Any], method: Mapping[str, Any], split: Mapping[str, str]
+) -> Dict[str, Any]:
+    """The step fields computed from its other fields and the recorded split."""
     window = ranges(method)
     histogram = step["active_backend_samples_by_count"]
     samples = sum(histogram)
@@ -1092,18 +1273,20 @@ def _derived(step: Mapping[str, Any], method: Mapping[str, Any]) -> Dict[str, An
     )
     observations = sum(count * active for active, count in enumerate(histogram))
     highest = max((i for i, count in enumerate(histogram) if count), default=0)
+    pinned = _pinned(split)
+    foreign = {}
+    for index, thread in enumerate(THREADS):
+        used = sum(step[f"{name}_cpu_permille"] for name in pinned.get(index, []))
+        foreign[f"{thread}_foreign_permille"] = max(
+            0, step[f"{thread}_busy_permille"] - used
+        )
     return {
         "milli_rps": milli_rps_of(step["rate"], step["time_unit_ms"]),
         "scheduled": scheduled_count(
             step["rate"], step["time_unit_ms"], window["settle_s"] + window["measure_s"]
         ),
         "achieved_milli_rps": step["measured"] * 1000 // window["measure_s"],
-        "cpu0_foreign_permille": max(
-            0, step["cpu0_busy_permille"] - step["api_core_permille"]
-        ),
-        "cpu3_foreign_permille": max(
-            0, step["cpu3_busy_permille"] - step["generator_cpu_permille"]
-        ),
+        **foreign,
         "active_backend_share_permille": 1000 * within // samples if samples else 0,
         "max_active_backends": highest,
         "io_wait_share_permille": (
@@ -1134,6 +1317,10 @@ def summarise_step(
         raise Refused(
             f"the observation is of {observation['scenario']!r}, not {scenario!r}"
         )
+    split = observation["cpu_split"]
+    problems = split_problems(split, "observation.cpu_split")
+    if problems:
+        raise Refused("; ".join(problems))
     number = observation["step"]
     rate, unit = observation["rate"], observation["time_unit_ms"]
     milli = milli_rps_of(rate, unit)
@@ -1185,10 +1372,25 @@ def summarise_step(
             reasons[code] = reasons.get(code, 0) + 1
     sums_before = metric_sums(metrics_before)
     sums_after = metric_sums(metrics_after)
+    for when, sums in (("before", sums_before), ("after", sums_after)):
+        if REQUIRED_SERIES not in sums:
+            raise Refused(
+                f"the metrics {when} step {number} have no {REQUIRED_SERIES}, which "
+                "the API always exports: an empty or failed scrape, or not the "
+                "API's /metrics"
+            )
     sampled = observation["sampled"]
     cpu = observation["cpu_permille"]
-    cores = observation["cores"]
+    threads = observation["threads"]
     pg = observation["pg"]
+    cpu_fields: Dict[str, int] = {
+        f"{name}_cpu_permille": cpu[name] if sampled else 0 for name in CONTAINERS
+    }
+    for thread in THREADS:
+        for what in ("busy", "steal"):
+            key = f"{what}_permille"
+            cpu_fields[f"{thread}_{key}"] = threads[thread][key] if sampled else 0
+        cpu_fields[f"{thread}_foreign_permille"] = 0
     delta = observation["assignments_after"] - observation["assignments_before"]
     if delta < 0:
         raise Refused(f"step {number}: the assignments count went down by {-delta}")
@@ -1214,16 +1416,7 @@ def summarise_step(
         "start_lag_p99_us": percentile(lags, 99),
         "sampled": sampled,
         "samples": observation["samples"] if sampled else 0,
-        "api_core_permille": cpu["api"] if sampled else 0,
-        "postgres_core_permille": cpu["postgres"] if sampled else 0,
-        "web_redis_core_permille": cpu["web_redis"] if sampled else 0,
-        "generator_cpu_permille": cpu["generator"] if sampled else 0,
-        "cpu0_busy_permille": cores["cpu0"]["busy_permille"] if sampled else 0,
-        "cpu0_steal_permille": cores["cpu0"]["steal_permille"] if sampled else 0,
-        "cpu0_foreign_permille": 0,
-        "cpu3_busy_permille": cores["cpu3"]["busy_permille"] if sampled else 0,
-        "cpu3_steal_permille": cores["cpu3"]["steal_permille"] if sampled else 0,
-        "cpu3_foreign_permille": 0,
+        **cpu_fields,
         "active_backend_samples_by_count": (
             list(pg["active_backend_samples_by_count"]) if sampled else []
         ),
@@ -1244,8 +1437,8 @@ def summarise_step(
         "reasons": reasons,
         "not_modified": sum(1 for row, _ in measured if row["status"] == "304"),
     }
-    step.update(_derived(step, method))
-    fields, messages = judge_step(method, scenario, step)
+    step.update(_derived(step, method, split))
+    fields, messages = judge_step(method, scenario, step, split)
     step.update(fields)
     return step, messages
 
@@ -1257,12 +1450,19 @@ OBSERVATION_SPEC = obj(
     time_unit_ms=Int(1),
     dropped=Int(0),
     variants=ListOf(Str(r"[A-Za-z0-9_.-]{1,64}", "a variant name"), 2, 2),
+    # Each container's cpuset as Docker applied it (``docker inspect``), the
+    # load generator's included; an unpinned container's empty value is refused.
+    cpu_split=CPU_SPLIT_SPEC,
     sampled=Bool(),
     samples=Int(0),
-    cpu_permille=obj(api=Int(0), postgres=Int(0), web_redis=Int(0), generator=Int(0)),
-    cores=obj(
-        cpu0=obj(busy_permille=PERMILLE, steal_permille=PERMILLE),
-        cpu3=obj(busy_permille=PERMILLE, steal_permille=PERMILLE),
+    # Each container's cgroup CPU over the window.
+    cpu_permille=obj(**{name: Int(0) for name in CONTAINERS}),
+    # Every hardware thread's /proc/stat busy and steal over the window.
+    threads=obj(
+        **{
+            thread: obj(busy_permille=PERMILLE, steal_permille=PERMILLE)
+            for thread in THREADS
+        }
     ),
     pg=obj(
         active_backend_samples_by_count=ListOf(Int(0), 0, 1000),
@@ -1279,16 +1479,25 @@ OBSERVATION_SPEC = obj(
 # ---------------------------------------------------------------------------
 # A repetition, and what stopped it
 # ---------------------------------------------------------------------------
-def attribute(method: Mapping[str, Any], step: Mapping[str, Any]) -> str:
-    """What stopped a run, from its first failing step; first match wins (A3)."""
+def attribute(
+    method: Mapping[str, Any], step: Mapping[str, Any], split: Mapping[str, str]
+) -> str:
+    """What stopped a run, from its first failing step; first match wins (A3).
+
+    A CPU group is a hardware thread's pinned containers, from the recorded
+    split: their CPU is added up, because on one thread they compete for it.
+    """
     if not step["valid"]:
         return "invalid"
     rule = method["bottleneck"]
-    groups = (
-        ("cpu:api", step["api_core_permille"]),
-        ("cpu:postgres", step["postgres_core_permille"]),
-        ("cpu:web-redis", step["web_redis_core_permille"]),
-    )
+    pinned = _pinned(split)
+    groups = [
+        (
+            "cpu:" + "+".join(pinned[cpu]),
+            sum(step[f"{name}_cpu_permille"] for name in pinned[cpu]),
+        )
+        for cpu in _measured_threads(split)
+    ]
     hot = [group for group in groups if group[1] >= rule["cpu_permille"]]
     if hot:
         return max(hot, key=lambda group: group[1])[0]
@@ -1304,13 +1513,20 @@ def attribute(method: Mapping[str, Any], step: Mapping[str, Any]) -> str:
     serial = rule["serialised"]
     samples = sum(histogram)
     within = sum(histogram[: serial["max_active_backends"] + 1])
-    starved = step["cpu0_steal_permille"] + step["cpu0_foreign_permille"]
+    # Steal and foreign work on any thread of the system under test delay the
+    # calls the API waits on, and would fake this signature: each is checked.
+    starved = [
+        step[f"cpu{cpu}_steal_permille"] + step[f"cpu{cpu}_foreign_permille"]
+        for cpu in _measured_threads(split)
+    ]
     on_latency = (
         step["p99_us"] > method["keeps_up"]["max_p99_ms"] * 1000 or step["dropped"] > 0
     )
     if (
-        step["api_core_permille"] < serial["max_cpu_permille"]
-        and starved <= method["validity"]["max_foreign_cpu_permille"]
+        step["api_cpu_permille"] < serial["max_cpu_permille"]
+        and all(
+            value <= method["validity"]["max_foreign_cpu_permille"] for value in starved
+        )
         and samples
         and 1000 * within >= serial["min_share_permille"] * samples
         and on_latency
@@ -1320,7 +1536,9 @@ def attribute(method: Mapping[str, Any], step: Mapping[str, Any]) -> str:
 
 
 def assess_rep(
-    method: Mapping[str, Any], steps: Sequence[Mapping[str, Any]]
+    method: Mapping[str, Any],
+    steps: Sequence[Mapping[str, Any]],
+    split: Mapping[str, str],
 ) -> Dict[str, Any]:
     """A run's knee, its first failing step and what stopped it."""
     numbers = [step["step"] for step in steps]
@@ -1340,7 +1558,7 @@ def assess_rep(
         "knee_step": failing["step"] - 1,
         "first_failing_step": failing["step"],
         "first_failing_reason": failing["fail_reason"],
-        "bottleneck": attribute(method, failing),
+        "bottleneck": attribute(method, failing, split),
     }
 
 
@@ -1381,7 +1599,7 @@ def summarise_scenario(
     spread = max(knees) - min(knees)
     unstable = spread > method["max_knee_spread_steps"]
     blocked: List[str] = []
-    if len(reps) < method["repetitions"]:
+    if len(reps) != method["repetitions"]:
         blocked.append("reps")
     if not all(rep["valid"] for rep in reps):
         blocked.append("invalid-rep")
@@ -1440,21 +1658,37 @@ def summarise_scenario(
 # A results file: schema, recomputation, publication
 # ---------------------------------------------------------------------------
 def recompute_problems(results: Mapping[str, Any]) -> List[str]:
-    """Every judgement and summary, recomputed from the step data it rests on."""
+    """Every judgement and summary, recomputed from the step data it rests on,
+    and every step's rate against the method's series."""
     method = results["method"]
-    problems: List[str] = []
+    split = results["system_under_test"]["cpu_split"]
+    problems: List[str] = split_problems(split)
+    if problems:
+        return problems
     for scenario in results["scenarios"]:
         name = scenario["name"]
+        try:
+            rates = step_rates(method, name)
+        except Refused as error:
+            problems.append(f"{name}: {error}")
+            continue
         for rep in scenario["reps"]:
             where = f"{name} run {rep['rep']}"
             for step in rep["steps"]:
                 try:
-                    derived = _derived(step, method)
+                    derived = _derived(step, method, split)
                 except Refused as error:
                     problems.append(f"{where} step {step['step']}: {error}")
                     continue
+                number = step["step"]
+                planned = rates[number - 1] if number <= len(rates) else "none"
+                if derived["milli_rps"] != planned:
+                    problems.append(
+                        f"{where} step {number}: ran at {derived['milli_rps']} "
+                        f"milli-rps; the method's step {number} is {planned}"
+                    )
                 expected = dict(derived)
-                expected.update(judge_step(method, name, {**step, **derived})[0])
+                expected.update(judge_step(method, name, {**step, **derived}, split)[0])
                 for key, value in expected.items():
                     if step[key] != value:
                         problems.append(
@@ -1462,7 +1696,7 @@ def recompute_problems(results: Mapping[str, Any]) -> List[str]:
                             f"{value!r} recomputed from its facts"
                         )
             try:
-                assessed = assess_rep(method, rep["steps"])
+                assessed = assess_rep(method, rep["steps"], split)
             except Refused as error:
                 problems.append(f"{where}: {error}")
                 continue
@@ -1512,15 +1746,23 @@ def results_problems(results: Any) -> List[str]:
     if problems:
         return problems
     problems += [f"method: {problem}" for problem in config_problems(results["method"])]
+    split = results["system_under_test"]["cpu_split"]
+    problems += split_problems(split, "system_under_test.cpu_split")
     if problems:
         return problems
+    generator = _cpus(split["generator"])
     for scenario in results["scenarios"]:
         for rep in scenario["reps"]:
-            siblings = _cpus(rep["host"]["thread_siblings"]["cpu3"])
-            if rep["host"]["generator_core_exclusive"] != (siblings == {3}):
+            where = f"{scenario['name']} run {rep['rep']}"
+            siblings = rep["host"]["thread_siblings"]
+            problems += [
+                f"{where}: {problem}" for problem in siblings_problems(siblings)
+            ]
+            core = _core(siblings, generator)
+            if rep["host"]["generator_core_exclusive"] != (core == generator):
                 problems.append(
-                    f"{scenario['name']} run {rep['rep']}: generator_core_exclusive "
-                    f"disagrees with cpu3's siblings {sorted(siblings)}"
+                    f"{where}: generator_core_exclusive disagrees with the load "
+                    f"generator's siblings {_threads_text(core)}"
                 )
     return problems + recompute_problems(results)
 
@@ -1535,14 +1777,6 @@ def load_results(text: str) -> Dict[str, Any]:
         )
         raise Refused("the results file is refused: " + "; ".join(shown))
     return results
-
-
-def _cpus(cpulist: str) -> set:
-    found: set = set()
-    for part in cpulist.split(","):
-        low, _, high = part.partition("-")
-        found.update(range(int(low), int(high or low) + 1))
-    return found
 
 
 PLATFORMS = {"x86_64": "linux/amd64", "aarch64": "linux/arm64"}
@@ -1598,11 +1832,11 @@ def publication_problems(results: Mapping[str, Any]) -> List[str]:
     if results["generator"]["timeout_ms"] != method["timeout_ms"]:
         problems.append("the generator's timeout is not the method's")
     split = sut["cpu_split"]
+    problems += split_problems(split)
     generator = _cpus(split["generator"])
-    for service in ("api", "postgres", "web", "redis", "pg_sampler"):
-        shared = generator & _cpus(split[service])
-        if shared:
-            problems.append(f"the generator shares cpu {sorted(shared)} with {service}")
+    shared = generator & _cpus(split["pg_sampler"])
+    if shared:
+        problems.append(f"the generator shares cpu {sorted(shared)} with pg_sampler")
     names = [scenario["name"] for scenario in results["scenarios"]]
     if SMOKE_ONLY in names:
         problems.append("mix is smoke only: refusing a mix row")
@@ -1620,7 +1854,7 @@ def publication_problems(results: Mapping[str, Any]) -> List[str]:
             continue
         label = LABELS[scenario["name"]]
         summary = scenario["summary"]
-        if summary["reps"] < method["repetitions"]:
+        if summary["reps"] != method["repetitions"]:
             problems.append(
                 f"{label}: {summary['reps']} runs; the method says {method['repetitions']}"
             )
@@ -1635,6 +1869,29 @@ def publication_problems(results: Mapping[str, Any]) -> List[str]:
                 problems.append(
                     f"API runs {platform} emulated on {host}: refusing to publish"
                 )
+            where = f"{label} run {rep['rep']}"
+            siblings = rep["host"]["thread_siblings"]
+            listed = set().union(*(_cpus(siblings[thread]) for thread in THREADS))
+            if rep["host"]["nproc"] != len(THREADS) or not listed <= set(
+                range(len(THREADS))
+            ):
+                problems.append(
+                    f"{where}: the VM reports {rep['host']['nproc']} vCPUs and "
+                    f"siblings {_threads_text(listed)}; the record holds the "
+                    f"topology of cpu0 to cpu{len(THREADS) - 1} only"
+                )
+            # Physical isolation, per rep: no part of the system under test on
+            # any hardware thread of the load generator's core, as this rep's
+            # VM reported its siblings.
+            core = _core(siblings, generator)
+            for service in SYSTEM_UNDER_TEST:
+                on = sorted(core & _cpus(split[service]))
+                if on:
+                    problems.append(
+                        f"{where}: {NAMES[service]} ran on cpu{on[0]}, a hardware "
+                        f"thread of the load generator's core ({_threads_text(core)}, "
+                        "as the VM reported it): refusing to publish"
+                    )
             problems += [
                 f"{label} run {rep['rep']}: {problem}"
                 for problem in precondition_problems(method, rep["counts_before"])
@@ -1740,7 +1997,7 @@ def _percentile(us: int, lower_bound: bool) -> str:
 
 
 FAIL_WORDS = {
-    "dropped": "requests it could not send",
+    "dropped": "the server did not keep up: scheduled requests could not be sent",
     "errors": "too many errors",
     "p99": "the 99th percentile over the limit",
     "invalid": "an invalid step",
@@ -1748,24 +2005,43 @@ FAIL_WORDS = {
 }
 
 
-def _stopped(method: Mapping[str, Any], code: str) -> str:
-    """What was measured at the first step that did not keep up, for one code."""
+def _group_words(code: str, split: Mapping[str, str], cpu: str) -> str:
+    """A CPU group's words: its containers, and the hardware thread they share."""
+    names = code[len("cpu:") :].split("+")
+    pinned = _pinned(split)
+    thread = next((t for t, group in pinned.items() if group == names), None)
+    if code not in CPU_GROUPS or thread is None:
+        raise Refused(f"no words for the bottleneck {code!r}: it is not publishable")
+    who = _and([NAMES[name] for name in names])
+    if len(names) == 1:
+        return f"{who} kept its hardware thread, cpu{thread}, busy at least {cpu} of the time"
+    return (
+        f"{who} together kept their hardware thread, cpu{thread}, busy at least "
+        f"{cpu} of the time"
+    )
+
+
+def _stopped(method: Mapping[str, Any], code: str, split: Mapping[str, str]) -> str:
+    """What was measured at the first step that did not keep up, for one code.
+
+    The words say CPU or hardware thread, never core: a container's CPU is
+    measured against the one hardware thread it is pinned to.
+    """
     rule = method["bottleneck"]
     serial = rule["serialised"]
     pool = POOL_CONNECTIONS_PER_WORKER * method["expected_web_concurrency"]
     cpu = _percent(rule["cpu_permille"])
+    if code.startswith("cpu:"):
+        return _group_words(code, split, cpu)
     words = {
-        "cpu:api": f"the API's core was busy at least {cpu} of the time",
-        "cpu:postgres": f"PostgreSQL's core was busy at least {cpu} of the time",
-        "cpu:web-redis": f"the core nginx and Redis share was busy at least {cpu} "
-        "of the time",
         "postgres-io": f"at least {_percent(rule['io_wait_permille'])} of the active "
         "database connections the sampler saw were waiting on disk or on the "
         "write-ahead log",
         "db-pool": "the active database connections reached "
         f"{_percent(rule['pool_permille'])} of the {pool} the API may open",
-        "serialised": f"the API's core was below {_percent(serial['max_cpu_permille'])} "
-        f"busy, at most {serial['max_active_backends']} database connection was "
+        "serialised": f"the API kept its hardware thread, cpu{_thread_of(split, 'api')}, "
+        f"busy less than {_percent(serial['max_cpu_permille'])} of the time, at most "
+        f"{serial['max_active_backends']} database connection was "
         f"active in at least {_percent(serial['min_share_permille'])} of the "
         "database samples, and the step failed on latency",
         "none-at-limit": "no resource the samplers measure had reached its limit",
@@ -1791,7 +2067,9 @@ def _runs(numbers: Sequence[int]) -> str:
     return "runs " + ", ".join(map(str, numbers[:-1])) + f" and {numbers[-1]}"
 
 
-def _stopped_line(method: Mapping[str, Any], scenario: Mapping[str, Any]) -> str:
+def _stopped_line(
+    method: Mapping[str, Any], scenario: Mapping[str, Any], split: Mapping[str, str]
+) -> str:
     """One request type's line in "What stopped it"."""
     label = LABELS[scenario["name"]]
     by_code: Dict[str, List[int]] = {}
@@ -1800,10 +2078,10 @@ def _stopped_line(method: Mapping[str, Any], scenario: Mapping[str, Any]) -> str
     first = "at the first step that did not keep up"
     if len(by_code) == 1:
         (code,) = by_code
-        text = f"{first[0].upper()}{first[1:]}, {_stopped(method, code)}."
+        text = f"{first[0].upper()}{first[1:]}, {_stopped(method, code, split)}."
     else:
         parts = [
-            f"in {_runs(numbers)}, {_stopped(method, code)}"
+            f"in {_runs(numbers)}, {_stopped(method, code, split)}"
             for code, numbers in by_code.items()
         ]
         text = f"The runs differed {first}: " + "; ".join(parts) + "."
@@ -1824,6 +2102,49 @@ def _starts(method: Mapping[str, Any]) -> str:
     ]
     text = rps(common)
     return f"{text} ({'; '.join(others)})" if others else text
+
+
+def _on_threads(split: Mapping[str, str], cpus: Sequence[int]) -> List[str]:
+    """The words "the API on cpu0" and the like, for each of ``cpus`` that has
+    something pinned to it."""
+    pinned = _pinned(split)
+    return [
+        f"{_and([NAMES[name] for name in pinned[cpu]])} on cpu{cpu}"
+        for cpu in cpus
+        if cpu in pinned
+    ]
+
+
+def _topology(host: Mapping[str, Any]) -> Tuple[int, Tuple[Tuple[int, ...], ...]]:
+    """A rep's vCPU count and its cores, each the hardware threads the VM
+    reported as siblings."""
+    siblings = host["thread_siblings"]
+    cores = {
+        tuple(sorted(_cpus(siblings[thread]) | {index}))
+        for index, thread in enumerate(THREADS)
+    }
+    return host["nproc"], tuple(sorted(cores))
+
+
+def _topology_text(
+    nproc: int, cores: Sequence[Sequence[int]], split: Mapping[str, str]
+) -> str:
+    """The topology as the VM reported it, naming what ran on each core."""
+    sizes = {len(core) for core in cores}
+    if sizes == {1}:
+        shape = f"{len(cores)} cores of one hardware thread each"
+    elif len(sizes) == 1:
+        shape = f"{len(cores)} cores of {sizes.pop()} hardware threads"
+    else:
+        shape = f"{len(cores)} cores"
+    parts = []
+    for core in cores:
+        ran = _on_threads(split, core)
+        where = f"the core of {_threads_text(set(core))}"
+        parts.append(
+            f"{where} ran {_and(ran)}" if ran else f"{where} ran nothing pinned"
+        )
+    return f"{nproc} vCPUs, which the VM reports as {shape}: " + "; ".join(parts)
 
 
 def render_block(results: Mapping[str, Any], results_link: str) -> str:
@@ -1900,8 +2221,11 @@ def render_block(results: Mapping[str, Any], results_link: str) -> str:
         f"stopped after {method['stop_after_failing_steps']} failing steps in a row or "
         f"at {rps(method['step_cap_milli_rps'])}. Each request type ran {reps} times, "
         f"each on a fresh runner and a fresh stack, after a {window['warmup_s']} s "
-        "warm-up that is not counted. The figures above are the median run's; the "
-        "percentiles and errors are at the step it kept up with.",
+        f"warm-up that is not counted. Kept up with is the median of the {reps} "
+        "runs' knees, a run's knee being the last rate it kept up with before its "
+        "first failing step. Beside it, each percentile is the median of the runs "
+        "that reached that step, and Errors adds up those runs' failed and "
+        "measured requests.",
         "",
         "Each request's time runs from when it started to its last byte, including "
         "any wait for a connection. Each request's start lag was recorded: a step "
@@ -1933,20 +2257,22 @@ def render_block(results: Mapping[str, Any], results_link: str) -> str:
                 f"{_percentile(step['p99_us'], bound)} | {step['errors']:,} of "
                 f"{step['measured']:,} |"
             )
+    split = sut["cpu_split"]
     lines += ["", "## What stopped it", ""]
-    lines += [_stopped_line(method, scenarios[name]) for name in SCENARIOS]
+    lines += [_stopped_line(method, scenarios[name], split) for name in SCENARIOS]
     hosts = [
         rep["host"] for scenario in results["scenarios"] for rep in scenario["reps"]
     ]
-    siblings = sorted(
-        set().union(*(_cpus(host["thread_siblings"]["cpu3"]) for host in hosts)) - {3}
-    )
-    topology = (
-        "alone on its core"
-        if all(host["generator_core_exclusive"] for host in hosts)
-        else "sharing a physical core with cpu " + ", ".join(map(str, siblings))
-    )
-    split = sut["cpu_split"]
+    # Each distinct topology the reps recorded, with how many reps had it.
+    shapes: Dict[Tuple[int, Tuple[Tuple[int, ...], ...]], int] = {}
+    for host in hosts:
+        key = _topology(host)
+        shapes[key] = shapes.get(key, 0) + 1
+    topology_rows = [
+        f"| Hardware threads in {count} of {len(hosts)} runs | "
+        f"{_topology_text(*key, split)} |"
+        for key, count in sorted(shapes.items(), key=lambda item: (-item[1], item[0]))
+    ]
     settings = sut["postgres_settings"]
     preload = method["preload"]
     generator = results["generator"]
@@ -1962,12 +2288,10 @@ def render_block(results: Mapping[str, Any], results_link: str) -> str:
         f"| Web image | {sut['images']['web']['digest']} |",
         f"| Machine | a GitHub-hosted runner, image "
         f"{', '.join(sorted({h['runner_image'] for h in hosts}))}; "
-        f"{', '.join(sorted({str(h['nproc']) for h in hosts}))} vCPUs; "
         f"{', '.join(sorted({h['cpu_model'] for h in hosts}))} |",
-        f"| CPU split | the API on cpu {split['api']}; PostgreSQL on cpu "
-        f"{split['postgres']}; nginx, Redis and the samplers on cpu {split['web']}; "
-        f"the load generator on cpu {split['generator']} |",
-        f"| The load generator's core | {topology} |",
+        "| CPU split, as each container's cpuset was recorded | "
+        f"{'; '.join(_on_threads(split, sorted(_pinned(split))))} |",
+        *topology_rows,
         f"| API processes | {sut['web_concurrency_observed']} |",
         f"| Database connections | up to {POOL_CONNECTIONS_PER_WORKER} per API process |",
         f"| PostgreSQL | max_connections {settings['max_connections']}, shared_buffers "
@@ -1992,15 +2316,7 @@ def render_block(results: Mapping[str, Any], results_link: str) -> str:
 
 def _doc_claims() -> Any:
     """scripts/doc_claims.py, loaded by path (it is standard library only)."""
-    name = "_scale_evidence_doc_claims"
-    if name not in sys.modules:
-        spec = importlib.util.spec_from_file_location(name, DOC_CLAIMS)
-        if spec is None or spec.loader is None:
-            raise Refused(f"cannot load {DOC_CLAIMS}")
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[name] = module
-        spec.loader.exec_module(module)
-    return sys.modules[name]
+    return _load("_scale_evidence_doc_claims", DOC_CLAIMS)
 
 
 def split_page(page: str) -> Tuple[str, str, str]:
@@ -2095,7 +2411,9 @@ def check_page(
     results_link: str,
     mechanism: str = MECHANISM,
 ) -> List[str]:
-    """The page's block and the block's registry entries against render."""
+    """The page's block and the block's registry entries against render: every
+    unit of the block has render's entry, and every entry ``mechanism`` holds is
+    a unit of the block."""
     problems: List[str] = []
     block = render_block(results, results_link)
     _, old, _ = split_page(page)
@@ -2127,6 +2445,12 @@ def check_page(
         if entry != wanted:
             problems.append(
                 f"registry entry for unit {number} ({text[:60]!r}) differs from render"
+            )
+    for entry in entries:
+        if mechanism in entry.get("by", []) and entry["text"] not in counts:
+            problems.append(
+                f"registry entry {entry['text'][:60]!r} is held by {mechanism} but is "
+                "not a unit of the block"
             )
     return problems
 
@@ -2313,28 +2637,6 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     return 1 if problems else 0
 
 
-def _harness_commands(commands: Any) -> None:
-    """The extension point for the harness commands (up, down, fixtures, run).
-
-    They live in their own module, ``HARNESS_MODULE``.py beside this file. When
-    it exists and defines ``add_commands(subparsers)``, that adds them here, each
-    with ``set_defaults(handler=...)`` like the commands below. Nothing else in
-    this file knows about them.
-    """
-    path = HERE / f"{HARNESS_MODULE}.py"
-    if not path.is_file():
-        return
-    spec = importlib.util.spec_from_file_location(HARNESS_MODULE, path)
-    if spec is None or spec.loader is None:
-        raise Refused(f"cannot load {path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[HARNESS_MODULE] = module
-    spec.loader.exec_module(module)
-    add = getattr(module, "add_commands", None)
-    if add is not None:
-        add(commands)
-
-
 def parser() -> argparse.ArgumentParser:
     top = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     commands = top.add_subparsers(dest="command", required=True)
@@ -2377,8 +2679,6 @@ def parser() -> argparse.ArgumentParser:
     proof.add_argument("--run", required=True, type=int)
     proof.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY", ""))
     proof.set_defaults(handler=_cmd_verify)
-
-    _harness_commands(commands)
     return top
 
 

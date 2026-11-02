@@ -12,6 +12,7 @@ through FastAPI's TestClient with the flag lookup served from memory.
 
 from __future__ import annotations
 
+import ast
 import copy
 import json
 import re
@@ -143,9 +144,14 @@ DELETE = object()
         ({"validity__max_start_lag_p99_us": 2500}, "not a whole number of ms"),
         ({"validity__max_start_lag_p99_us": 1000}, "must be at least 2000"),
         ({"keeps_up__max_p99_ms": 0}, "keeps_up.max_p99_ms: must be at least 1"),
+        ({"repetitions": 4}, "repetitions: 4 is even"),
+        ({"cpu_split": dict(fx.SPLIT)}, "cpu_split: unknown key"),
     ],
 )
 def test_the_loader_refuses_a_wrong_method_file_and_names_the_key(changes, named):
+    """Among them: an even repetition count, which has no median run, and a
+    CPU split, which the method file never holds (the split is recorded from
+    the running containers, never copied from a configuration)."""
     message = refused(se.load_config, _broken(**changes))
     assert named in message
 
@@ -266,6 +272,43 @@ def test_a_counter_delta_is_a_whole_number_that_only_grows():
     )
 
 
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "line",
+    [
+        'rate_limit_rejections_total{endpoint="track"} 5.0 # {trace_id="x"} 1.0',
+        'rate_limit_redis_fallbacks_total 5.0 # {trace_id="x"} 1.0',
+        'rate_limit_rejections_total{endpoint="track"} 5.0 1762000000000',
+    ],
+    ids=["exemplar-after-labels", "exemplar-unlabelled", "timestamp"],
+)
+def test_anything_after_the_value_is_refused_never_read_as_the_value(line):
+    """An OpenMetrics exemplar used to be read as the value: the old parser
+    took the text after the last ``}``, so ``5.0 # {...} 1.0`` summed to 1.0."""
+    message = refused(se.metric_sums, line + "\n")
+    assert "metrics line 1: something follows the value" in message
+
+
+def test_a_label_value_may_hold_a_closing_brace():
+    sums = se.metric_sums('x_total{a="}",b="\\"}"} 3.0\n')
+    assert sums == {"x_total": 3}
+    assert "its labels are not closed" in refused(se.metric_sums, 'x_total{a="}" 3\n')
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("which", ["before", "after"])
+def test_a_scrape_without_the_fallback_counter_is_refused(which):
+    """An empty /metrics scrape at both ends used to give counter deltas of 0
+    and a VALID step: the counter legs of the limiter rules passed on nothing."""
+    empty = {f"metrics_{which}": ""}
+    message = refused(summarise, **empty)
+    assert f"the metrics {which} step 4 have no rate_limit_redis_fallbacks_total" in (
+        message
+    )
+    other = {f"metrics_{which}": 'rate_limit_hits_total{endpoint="track"} 5.0\n'}
+    assert "have no rate_limit_redis_fallbacks_total" in refused(summarise, **other)
+
+
 # ---------------------------------------------------------------------------
 # What passed (R2, V20)
 # ---------------------------------------------------------------------------
@@ -380,7 +423,7 @@ def test_the_real_stale_csv_pair_is_invalid():
     method = se.load_config()
     step = fx.step_facts(method, "track", 4)
     step.update(rows=5863, scheduled=5905, server_count=5863)
-    fields, messages = se.judge_step(method, "track", step)
+    fields, messages = se.judge_step(method, "track", step, fx.SPLIT)
     assert fields["invalid_reason"] == "sent-identity"
     assert messages[0] == "step 4: rows 5863 + dropped 0 != scheduled 5905"
 
@@ -417,7 +460,7 @@ def test_a_step_with_dropped_requests_never_keeps_up():
         "rows": step["rows"] - 1,
         "server_count": step["rows"] - 1,
     }
-    fields, _ = se.judge_step(method, "track", one_dropped)
+    fields, _ = se.judge_step(method, "track", one_dropped, fx.SPLIT)
     assert fields == {
         "valid": True,
         "invalid_reason": "none",
@@ -456,14 +499,65 @@ def test_a_step_that_measures_the_generator_is_invalid(changes, reason):
     assert step["fail_reason"] == "invalid" and not step["keeps_up"]
 
 
+METHOD = se.load_config()
+N = METHOD["validity"]["max_start_lag_p99_us"]
+F = METHOD["validity"]["max_foreign_cpu_permille"]
+G = METHOD["validity"]["max_generator_cpu_permille"]
+
+
+@pytest.mark.parametrize(
+    "changes, reason",
+    [
+        ({"start_lag_p99_us": N}, "none"),
+        ({"start_lag_p99_us": N + 1}, "start-lag"),
+        ({"generator_cpu_permille": 100, "cpu3_busy_permille": 100 + F}, "none"),
+        (
+            {"generator_cpu_permille": 100, "cpu3_busy_permille": 101 + F},
+            "foreign-cpu",
+        ),
+        ({"generator_cpu_permille": G - 1, "cpu3_busy_permille": G + 9}, "none"),
+        ({"generator_cpu_permille": G, "cpu3_busy_permille": G + 10}, "generator-cpu"),
+    ],
+    ids=[
+        "start-lag-equal-to-N",
+        "start-lag-N-plus-1",
+        "foreign-equal-to-F",
+        "foreign-F-plus-1",
+        "generator-at-899",
+        "generator-at-900",
+    ],
+)
+def test_the_generator_rules_hold_at_their_boundaries(changes, reason):
+    """VALID rules 2, 3 and 4 at their limits, as V29 pins 24 and 23 of 30: a
+    start lag of exactly N and a foreign CPU of exactly F are VALID, one more
+    is not; the generator at 900 per-mille is INVALID and at 899 is not."""
+    step = fx.step_facts(METHOD, "track", 5, **changes)
+    assert step["invalid_reason"] == reason
+    assert step["valid"] is (reason == "none")
+
+
 def test_the_start_lag_message():
     method = se.load_config()
     step = fx.step_facts(method, "track", 5)
-    _, messages = se.judge_step(method, "track", {**step, "start_lag_p99_us": 41_000})
+    _, messages = se.judge_step(
+        method, "track", {**step, "start_lag_p99_us": 41_000}, fx.SPLIT
+    )
     assert messages[0] == (
         "step 5: p99 start lag 41 ms over the limit of 5 ms: this step measures the "
         "generator"
     )
+
+
+def test_the_generator_s_thread_is_the_recorded_one():
+    """Rule 3 reads the foreign CPU of the thread the split pins k6 to, not a
+    thread named in the code."""
+    method = se.load_config()
+    moved = {**fx.SPLIT, "generator": "2", "pg_sampler": "3"}
+    step = fx.step_facts(method, "track", 5, moved, cpu2_busy_permille=400)
+    assert step["invalid_reason"] == "foreign-cpu"
+    _, messages = se.judge_step(method, "track", step, moved)
+    assert "of the generator's hardware thread, cpu2 (limit 100)" in messages[0]
+    assert fx.step_facts(method, "track", 5, cpu2_busy_permille=400)["valid"]
 
 
 def test_a_rate_limiter_answer_without_the_header_is_invalid():
@@ -515,6 +609,7 @@ def test_client_and_server_counts_must_agree():
         method,
         "track",
         {**step, "rows": 5863, "scheduled": 5863, "server_count": 5905},
+        fx.SPLIT,
     )
     assert fields["invalid_reason"] == "client-server"
     assert messages[0].startswith(
@@ -585,9 +680,61 @@ def test_mix_is_smoke_only():
     observation = fx.observation(smoke, "mix", 1, rows=len(rows), samples=20)
     observation.update(scenario="mix")
     step, _ = se.summarise_step(
-        smoke, "mix", se.read_rows(fx.csv_text(rows)), observation, "", ""
+        smoke,
+        "mix",
+        se.read_rows(fx.csv_text(rows)),
+        observation,
+        fx.metrics("a"),
+        fx.metrics("a"),
     )
     assert step["valid"] and step["keeps_up"] and step["scheduled"] == 125
+
+
+def test_the_observation_carries_every_container_and_every_thread():
+    """Per-container CPU and /proc/stat busy and steal for all four hardware
+    threads, and the split as recorded: a missing one is refused, and so is an
+    unpinned container (docker inspect's empty cpuset) or one on two threads."""
+    method = se.load_config()
+    rows = se.read_rows(fx.csv_text(fx.step_rows(method, "track", 4)))
+
+    def observed(edit):
+        observation = fx.observation(method, "track", 4)
+        edit(observation)
+        return refused(
+            se.summarise_step,
+            method,
+            "track",
+            rows,
+            observation,
+            fx.metrics("a"),
+            fx.metrics("a"),
+        )
+
+    assert "observation.threads.cpu2: missing key" in observed(
+        lambda o: o["threads"].pop("cpu2")
+    )
+    assert "observation.cpu_permille.redis: missing key" in observed(
+        lambda o: o["cpu_permille"].pop("redis")
+    )
+    assert "observation.cpu_split.generator: missing key" in observed(
+        lambda o: o["cpu_split"].pop("generator")
+    )
+    assert "observation.cpu_split.generator must be a CPU list" in observed(
+        lambda o: o["cpu_split"].update(generator="")
+    )
+    assert "observation.cpu_split.web is '1-2': each container is pinned" in observed(
+        lambda o: o["cpu_split"].update(web="1-2")
+    )
+    assert "observation.cpu_split.redis: cpu5 is not one of the sampled" in observed(
+        lambda o: o["cpu_split"].update(redis="5")
+    )
+
+
+def test_foreign_cpu_is_each_thread_s_busy_minus_its_pinned_containers():
+    """cpu1 holds PostgreSQL, nginx and Redis: 200 + 80 + 70 of its 360."""
+    step, _ = summarise("track", 4)
+    assert [step[f"cpu{i}_foreign_permille"] for i in range(4)] == [20, 10, 30, 20]
+    assert step["web_cpu_permille"] == 80 and step["redis_cpu_permille"] == 70
 
 
 def test_a_step_off_the_method_series_is_refused():
@@ -612,7 +759,7 @@ def test_a_row_twice_is_refused():
 def test_the_knee_is_the_step_before_the_first_failing_one(kind):
     method = se.load_config()
     steps = fx.rep_steps(method, "track", 4, [kind, kind])
-    assessed = se.assess_rep(method, steps)
+    assessed = se.assess_rep(method, steps, fx.SPLIT)
     assert (assessed["knee_step"], assessed["first_failing_step"]) == (4, 5)
     assert assessed["first_failing_reason"] == kind
     assert assessed["valid"]
@@ -623,7 +770,7 @@ def test_a_run_whose_first_failing_step_is_invalid_is_not_valid():
     steps = fx.rep_steps(method, "track", 4, ["p99"])
     steps.append(fx.step_facts(method, "track", 6))
     steps[4] = fx.step_facts(method, "track", 5, generator_cpu_permille=950)
-    assessed = se.assess_rep(method, steps)
+    assessed = se.assess_rep(method, steps, fx.SPLIT)
     assert assessed == {
         "valid": False,
         "knee_step": 4,
@@ -633,17 +780,25 @@ def test_a_run_whose_first_failing_step_is_invalid_is_not_valid():
     }
 
 
-def _failing(**changes):
+def _failing(split=None, **changes):
     method = se.load_config()
     base = {
         "p99_us": 1_400_000,
-        "api_core_permille": 600,
+        "api_cpu_permille": 600,
         "cpu0_busy_permille": 620,
         "active_backend_samples_by_count": [0, 27, 3],
         "io_wait_observations": 0,
     }
     base.update(changes)
-    return method, fx.step_facts(method, "track", 6, **base)
+    return method, fx.step_facts(method, "track", 6, split, **base)
+
+
+# On cpu1, PostgreSQL, nginx and Redis use 300 + 100 + 100 = 500 per-mille.
+CPU1 = {
+    "postgres_cpu_permille": 300,
+    "web_cpu_permille": 100,
+    "redis_cpu_permille": 100,
+}
 
 
 @pytest.mark.parametrize(
@@ -651,9 +806,16 @@ def _failing(**changes):
     [
         ({}, "serialised"),
         ({"active_backend_samples_by_count": [0, 12, 18]}, "none-at-limit"),
-        ({"api_core_permille": 950, "cpu0_busy_permille": 960}, "cpu:api"),
-        ({"postgres_core_permille": 930}, "cpu:postgres"),
-        ({"web_redis_core_permille": 910}, "cpu:web-redis"),
+        ({"api_cpu_permille": 950, "cpu0_busy_permille": 960}, "cpu:api"),
+        ({"postgres_cpu_permille": 930}, "cpu:postgres+web+redis"),
+        (
+            {
+                "postgres_cpu_permille": 500,
+                "web_cpu_permille": 250,
+                "redis_cpu_permille": 200,
+            },
+            "cpu:postgres+web+redis",
+        ),
         (
             {"active_backend_samples_by_count": [0, 0, 30], "io_wait_observations": 40},
             "postgres-io",
@@ -662,33 +824,63 @@ def _failing(**changes):
         ({"active_backend_samples_by_count": [0, 24, 6]}, "serialised"),
         ({"active_backend_samples_by_count": [0, 23, 7]}, "none-at-limit"),
         ({"cpu0_steal_permille": 60, "cpu0_busy_permille": 650}, "none-at-limit"),
+        (
+            {**CPU1, "cpu1_steal_permille": 60, "cpu1_busy_permille": 550},
+            "none-at-limit",
+        ),
+        ({**CPU1, "cpu1_steal_permille": 60, "cpu1_busy_permille": 540}, "serialised"),
         ({"p99_us": 900_000}, "none-at-limit"),
     ],
     ids=[
         "1-api-at-60-one-backend-in-90-percent",
         "2-one-backend-in-40-percent",
-        "3-api-core-at-95",
-        "postgres-core",
-        "web-redis-core",
+        "3-api-thread-at-95",
+        "postgres-thread",
+        "cpu1-group-500-plus-450-reaches-900",
         "4-io-wait-in-most-samples",
         "db-pool-at-36-of-40",
         "5-boundary-24-of-30-fires",
         "5-boundary-23-of-30-does-not",
         "6-cpu0-steal-and-foreign-over-the-limit",
+        "6b-cpu1-steal-and-foreign-over-the-limit",
+        "6b-cpu1-steal-and-foreign-at-the-limit",
         "not-failed-on-latency",
     ],
 )
 def test_what_stopped_it_is_computed(changes, expected):
-    """V29's fixtures. 24 of 30 is 1000 x 24 >= 800 x 30; 23 of 30 is not. A
-    comparison written ``>`` or a share of 750 or 850 moves one of the two."""
+    """V29's fixtures, on the override's split. 24 of 30 is 1000 x 24 >= 800 x
+    30; 23 of 30 is not. A comparison written ``>`` or a share of 750 or 850
+    moves one of the two. A CPU group is a hardware thread's pinned containers:
+    PostgreSQL at 500 with nginx and Redis at 450 is cpu1 at 950, which no
+    single container reaches. Steal plus foreign CPU over F on cpu0 or on cpu1
+    (6, 6b: 60 + 50) is not ``serialised``; exactly F (60 + 40) still is."""
     method, step = _failing(**changes)
-    assert se.attribute(method, step) == expected
+    assert se.attribute(method, step, fx.SPLIT) == expected
+
+
+@pytest.mark.parametrize(
+    "changes, expected",
+    [
+        ({"postgres_cpu_permille": 930}, "cpu:postgres"),
+        (
+            {"web_cpu_permille": 500, "redis_cpu_permille": 410},
+            "cpu:web+redis+pg_sampler",
+        ),
+        ({"cpu1_steal_permille": 60, "cpu1_busy_permille": 360}, "none-at-limit"),
+    ],
+    ids=["postgres-alone-on-cpu1", "web-redis-sampler-on-cpu2", "cpu1-starved"],
+)
+def test_the_groups_follow_whatever_split_was_recorded(changes, expected):
+    """The first layout (web, Redis and the sampler on cpu2) gives other groups:
+    nothing about which container shares a thread is written in the code."""
+    method, step = _failing(fx.OLD_SPLIT, **changes)
+    assert se.attribute(method, step, fx.OLD_SPLIT) == expected
 
 
 def test_an_invalid_first_failing_step_gives_invalid_never_serialised():
     method, step = _failing(generator_cpu_permille=950, cpu3_busy_permille=960)
     assert step["valid"] is False
-    assert se.attribute(method, step) == "invalid"
+    assert se.attribute(method, step, fx.SPLIT) == "invalid"
 
 
 def test_the_issue_is_linked_only_when_serialised_is_the_result():
@@ -703,7 +895,9 @@ def test_the_issue_is_linked_only_when_serialised_is_the_result():
         for name in se.SCENARIOS
     }
     hot = se.render_block(fx.results(meth, reps), LINK)
-    assert "the API's core was busy at least 90% of the time" in hot
+    assert (
+        "the API kept its hardware thread, cpu0, busy at least 90% of the time" in hot
+    )
     assert se.TRACKING_ISSUE not in hot
     assert "#823" not in hot
 
@@ -751,6 +945,59 @@ def test_any_float_is_refused_with_its_path():
     text = text.replace(f'"p99_us": {p99},', '"p99_us": 1199.97,', 1)
     message = refused(se.load_results, text)
     assert "float 1199.97 at scenarios[0].reps[0].steps[3].p99_us" in message
+
+
+@pytest.mark.regression
+def test_runs_off_the_method_s_rate_series_are_refused():
+    """One request type's runs built from 4,000 milli-rps instead of the
+    method's 5,000: every step consistent with itself, so only a comparison
+    with the method's series catches it (the page would still say the first
+    step offered 5.00)."""
+    meth = fx.method()
+    other = copy.deepcopy(meth)
+    other["start_milli_rps"]["track"] = 4000
+    reps = {
+        name: [
+            fx.rep(
+                meth,
+                name,
+                n,
+                fx.rep_steps(other if name == "track" else meth, name, 4, ["p99"] * 2),
+            )
+            for n in (1, 2, 3)
+        ]
+        for name in se.SCENARIOS
+    }
+    results = fx.results(meth, reps)
+    problems = se.recompute_problems(results)
+    assert problems[:1] == [
+        "track run 1 step 1: ran at 4000 milli-rps; the method's step 1 is 5000"
+    ]
+    assert all(problem.startswith("track run ") for problem in problems)
+    assert len(problems) == 3 * 6
+    assert "the method's step 1 is 5000" in refused(se.load_results, se.dumps(results))
+
+
+def test_the_siblings_and_the_split_are_consistent_records():
+    results = fx.small()
+    results["scenarios"][0]["reps"][1]["host"]["thread_siblings"]["cpu3"] = "3"
+    problems = se.results_problems(results)
+    assert (
+        "evaluate_get run 2: thread_siblings.cpu2 is '2-3' but cpu3's is '3'"
+        in problems
+    )
+    results = fx.small()
+    results["scenarios"][0]["reps"][0]["host"]["generator_core_exclusive"] = True
+    assert se.results_problems(results) == [
+        "evaluate_get run 1: generator_core_exclusive disagrees with the load "
+        "generator's siblings cpu2 and cpu3"
+    ]
+    results = fx.small()
+    results["system_under_test"]["cpu_split"]["api"] = "0-1"
+    assert se.results_problems(results) == [
+        "system_under_test.cpu_split.api is '0-1': each container is pinned to one "
+        "hardware thread, so that its CPU is that thread's"
+    ]
 
 
 def test_an_edited_aggregate_is_caught_by_the_recomputation():
@@ -826,8 +1073,8 @@ def test_a_mix_row_and_a_missing_request_are_refused():
             "the api image's revision 111111111111 is not v0.40.0's commit",
         ),
         (
-            lambda r: r["system_under_test"]["cpu_split"].update(generator="2-3"),
-            "the generator shares cpu [2] with web",
+            lambda r: r["system_under_test"]["cpu_split"].update(generator="2"),
+            "the generator shares cpu [2] with pg_sampler",
         ),
         (
             lambda r: r["system_under_test"].update(sdk_rate_limit_per_minute=6000),
@@ -841,7 +1088,7 @@ def test_a_mix_row_and_a_missing_request_are_refused():
         "environment-test",
         "compose-not-the-release",
         "revision-not-the-tag",
-        "generator-shares-a-core",
+        "generator-shares-the-sampler-s-thread",
         "default-rate-limit",
         "interrupted",
     ],
@@ -854,6 +1101,97 @@ def test_a_file_that_is_not_the_shipped_shape_is_not_published(edit, named):
     edit(results)
     assert any(named in problem for problem in se.publication_problems(results))
     assert named in refused(se.render_block, results, LINK)
+
+
+@pytest.mark.parametrize(
+    "split, siblings, named",
+    [
+        (
+            fx.OLD_SPLIT,
+            fx.SMT,
+            [
+                "run 1: nginx ran on cpu2, a hardware thread of the load generator's "
+                "core (cpu2 and cpu3, as the VM reported it): refusing to publish",
+                "run 1: Redis ran on cpu2",
+            ],
+        ),
+        (
+            fx.SPLIT,
+            fx.INTERLEAVED,
+            [
+                "run 1: PostgreSQL ran on cpu1, a hardware thread of the load "
+                "generator's core (cpu1 and cpu3, as the VM reported it)",
+                "run 1: nginx ran on cpu1",
+                "run 1: Redis ran on cpu1",
+            ],
+        ),
+        (fx.SPLIT, fx.SMT, []),
+        (fx.SPLIT, fx.NO_SMT, []),
+    ],
+    ids=[
+        "old-split-siblings-2-3-refused",
+        "new-split-interleaved-siblings-refused",
+        "new-split-siblings-0-1-and-2-3-accepted",
+        "new-split-no-smt-accepted",
+    ],
+)
+def test_nothing_under_test_shares_the_load_generator_s_physical_core(
+    split, siblings, named
+):
+    """The generator's recorded cpuset expanded by each rep's thread siblings:
+    the logically disjoint first layout put nginx and Redis on k6's core."""
+    results = fx.small(split=split, siblings=siblings)
+    assert se.results_problems(results) == []
+    problems = se.publication_problems(results)
+    if not named:
+        assert problems == []
+        assert se.render_block(results, LINK)
+    for want in named:
+        assert any(want in problem for problem in problems), problems
+    for problem in problems:
+        assert "refusing to publish" in problem
+
+
+def test_the_isolation_check_runs_per_rep():
+    """One rep whose VM paired its threads differently is named, and only it."""
+    results = fx.small()
+    rep = results["scenarios"][4]["reps"][2]
+    rep["host"] = fx.host(3, fx.INTERLEAVED)
+    problems = se.publication_problems(results)
+    assert problems == [
+        f"POST /api/v1/tracking/batch (100 events each) run 3: {name} ran on cpu1, "
+        "a hardware thread of the load generator's core (cpu1 and cpu3, as the VM "
+        "reported it): refusing to publish"
+        for name in ("PostgreSQL", "nginx", "Redis")
+    ]
+
+
+def test_a_topology_beyond_the_four_recorded_threads_is_not_published():
+    results = fx.small()
+    results["scenarios"][0]["reps"][0]["host"]["nproc"] = 8
+    assert (
+        "GET /api/v1/feature-flags/evaluate/{key} run 1: the VM reports 8 vCPUs and "
+        "siblings cpu0, cpu1, cpu2 and cpu3; the record holds the topology of cpu0 "
+        "to cpu3 only" in se.publication_problems(results)
+    )
+
+
+def test_more_runs_than_the_method_s_are_not_published():
+    """The page says "Over 3 runs" and states the median run's knee."""
+    meth = fx.method()
+    reps = [
+        fx.rep(meth, "track", n, fx.rep_steps(meth, "track", 4, ["p99", "p99"]))
+        for n in (1, 2, 3, 4)
+    ]
+    summary = se.summarise_scenario(meth, reps)
+    assert summary["not_publishable"] == ["reps"]
+    results = fx.small()
+    results["scenarios"][3]["reps"] = reps
+    results["scenarios"][3]["summary"] = summary
+    assert (
+        "POST /api/v1/tracking/track: 4 runs; the method says 3"
+        in se.publication_problems(results)
+    )
 
 
 def test_an_emulated_api_is_not_published():
@@ -1014,15 +1352,109 @@ def test_the_setup_states_the_limit_the_tool_and_the_method_commit():
         in block
     )
     assert f"the harness at commit {results['run']['harness_commit']}" in block
-    assert "| The load generator's core | alone on its core |" in block
 
 
-def test_the_topology_is_stated_from_the_record():
-    results = fx.small()
-    rep = results["scenarios"][0]["reps"][0]
-    rep["host"] = fx.host(1, exclusive=False)
+@pytest.mark.regression
+def test_the_page_says_what_kept_up_with_and_its_columns_are():
+    """F1: the old sentence said the figures were the median run's; the
+    percentiles are each a median over the runs at that step, and the errors
+    are those runs added up (0 of 1,797 is 599 in each of 3)."""
+    block = se.render_block(fx.small(), LINK)
+    assert "median run's" not in block
+    assert (
+        "Kept up with is the median of the 3 runs' knees, a run's knee being the "
+        "last rate it kept up with before its first failing step. Beside it, each "
+        "percentile is the median of the runs that reached that step, and Errors "
+        "adds up those runs' failed and measured requests." in block
+    )
+
+
+@pytest.mark.regression
+def test_a_step_that_dropped_requests_says_the_server_did_not_keep_up():
+    """F2: "requests it could not send" read as the load generator failing."""
+    meth = fx.method()
+    reps = {
+        name: [
+            fx.rep(meth, name, n, fx.rep_steps(meth, name, 4, ["dropped", "dropped"]))
+            for n in (1, 2, 3)
+        ]
+        for name in se.SCENARIOS
+    }
+    block = se.render_block(fx.results(meth, reps), LINK)
+    row = next(
+        line for line in block.split("\n") if line.startswith("| POST /api/v1/t")
+    )
+    assert "| the server did not keep up: scheduled requests could not be sent |" in row
+    assert "could not send" not in block
+
+
+NEW_LAYOUT_ROWS = [
+    "| CPU split, as each container's cpuset was recorded | the API on cpu0; "
+    "PostgreSQL, nginx and Redis on cpu1; the database sampler on cpu2; the load "
+    "generator on cpu3 |",
+    "| Hardware threads in 18 of 18 runs | 4 vCPUs, which the VM reports as 2 cores "
+    "of 2 hardware threads: the core of cpu0 and cpu1 ran the API on cpu0 and "
+    "PostgreSQL, nginx and Redis on cpu1; the core of cpu2 and cpu3 ran the "
+    "database sampler on cpu2 and the load generator on cpu3 |",
+]
+
+
+def test_the_setup_names_what_ran_on_each_physical_core():
+    """The new layout's render names PostgreSQL, nginx and Redis on the API's
+    physical core, from the recorded split and siblings."""
+    block = se.render_block(se.load_results(fx.FULL_SIZE.read_text("utf-8")), LINK)
+    for row in NEW_LAYOUT_ROWS:
+        assert row in block.split("\n")
+
+
+def test_the_page_never_calls_a_hardware_thread_a_core():
+    """The word core appears only where the VM's physical cores are described; nothing
+    says alone, dedicated or full core, and nothing equates a thread with a
+    Fargate task."""
+    results = se.load_results(fx.FULL_SIZE.read_text("utf-8"))
     block = se.render_block(results, LINK)
-    assert "| The load generator's core | sharing a physical core with cpu 2 |" in block
+    models = {r["host"]["cpu_model"] for s in results["scenarios"] for r in s["reps"]}
+    for line in block.split("\n"):
+        # "core profile" is the release's profile, and the CPU model is the
+        # vendor's recorded name: neither is the page's wording.
+        words = line.replace("core profile", "")
+        for model in models:
+            words = words.replace(model, "")
+        if "core" in words.lower():
+            assert line.startswith("| Hardware threads in "), line
+    lowered = block.lower()
+    for phrase in ("alone on", "dedicated", "full core", "fargate", "its core"):
+        assert phrase not in lowered, phrase
+    assert lowered.count("vcpu") == 1
+
+
+def test_each_service_s_thread_is_rendered_from_the_split():
+    """F5: the row used to print web's CPU for nginx, Redis and the samplers."""
+    split = {**fx.SPLIT, "redis": "0"}
+    block = se.render_block(fx.small(split=split), LINK)
+    assert (
+        "| CPU split, as each container's cpuset was recorded | the API and Redis on "
+        "cpu0; PostgreSQL and nginx on cpu1; the database sampler on cpu2; the load "
+        "generator on cpu3 |" in block
+    )
+    assert "ran the API and Redis on cpu0 and PostgreSQL and nginx on cpu1" in block
+
+
+def test_each_distinct_topology_is_rendered_with_its_count():
+    """Per rep, not a union across hosts: one rep on a VM without SMT."""
+    results = fx.small()
+    results["scenarios"][0]["reps"][0]["host"] = fx.host(1, fx.NO_SMT)
+    assert se.results_problems(results) == []
+    block = se.render_block(results, LINK)
+    rows = [line for line in block.split("\n") if line.startswith("| Hardware")]
+    assert rows == [
+        NEW_LAYOUT_ROWS[1].replace("18 of 18", "17 of 18"),
+        "| Hardware threads in 1 of 18 runs | 4 vCPUs, which the VM reports as 4 "
+        "cores of one hardware thread each: the core of cpu0 ran the API on cpu0; "
+        "the core of cpu1 ran PostgreSQL, nginx and Redis on cpu1; the core of cpu2 "
+        "ran the database sampler on cpu2; the core of cpu3 ran the load generator "
+        "on cpu3 |",
+    ]
 
 
 def test_a_step_with_drops_shows_its_percentiles_as_at_least():
@@ -1139,6 +1571,25 @@ def test_check_page_names_a_changed_file_with_the_page_left_alone():
     assert "25 ms" in problems[0] and "24 ms" in problems[0]
 
 
+@pytest.mark.regression
+def test_check_page_names_a_stale_entry_the_mechanism_holds():
+    """F7: an extra entry held by the mechanism, for text no longer in the
+    block, used to pass check (only doc_claims named it)."""
+    results, page, registry = _rendered()
+    entries = tomllib.loads(registry)["unit"]
+    stale = {"text": "It served 5,000 requests a second.", "by": [se.MECHANISM]}
+    entries.insert(3, stale)
+    planted = se._doc_claims().registry_text("capacity.md", entries)
+    assert se.check_page(results, page, planted, LINK) == [
+        "registry entry 'It served 5,000 requests a second.' is held by "
+        f"{se.MECHANISM} but is not a unit of the block"
+    ]
+    other = {"text": "It served 5,000 requests a second.", "by": ["exempt:advice"]}
+    entries[3] = other
+    unheld = se._doc_claims().registry_text("capacity.md", entries)
+    assert se.check_page(results, page, unheld, LINK) == []
+
+
 def test_render_refuses_what_it_cannot_keep_apart():
     block = se.render_block(fx.small(), LINK)
     registry = _registry(OUTSIDE)
@@ -1202,6 +1653,41 @@ def test_the_full_size_fixture_has_the_real_file_s_shape():
     assert len(set(re.findall(r"sha256:[0-9a-f]{64}", text))) >= 8
     for line in text.splitlines():
         assert '": "/' not in line, line
+
+
+def test_the_full_size_fixture_is_on_the_measured_topology_and_split():
+    """The probe's runner: siblings 0-1, 0-1, 2-3, 2-3 in every rep; the
+    override's split (#1614): the API on cpu0, PostgreSQL, nginx and Redis on
+    cpu1, the sampler on cpu2, k6 on cpu3."""
+    results = se.load_results(fx.FULL_SIZE.read_text("utf-8"))
+    assert results["system_under_test"]["cpu_split"] == {
+        "api": "0",
+        "postgres": "1",
+        "web": "1",
+        "redis": "1",
+        "pg_sampler": "2",
+        "generator": "3",
+    }
+    for scenario in results["scenarios"]:
+        for rep in scenario["reps"]:
+            assert rep["host"]["thread_siblings"] == {
+                "cpu0": "0-1",
+                "cpu1": "0-1",
+                "cpu2": "2-3",
+                "cpu3": "2-3",
+            }
+            assert rep["host"]["generator_core_exclusive"] is False
+
+
+def test_the_fixture_split_is_the_override_s():
+    """The fixtures' system-under-test cpusets are the ones the harness's
+    override applies, so the renders above show the layout that is measured."""
+    import yaml
+
+    override = yaml.safe_load((SCALE_DIR / "compose.scale.yml").read_text("utf-8"))
+    services = override["services"]
+    applied = {name: str(service["cpuset"]) for name, service in services.items()}
+    assert applied == {name: fx.SPLIT[name] for name in se.SYSTEM_UNDER_TEST}
 
 
 def test_the_leak_guard_names_a_planted_path_or_environment_in_the_fixture():
@@ -1398,28 +1884,6 @@ def test_merge_render_and_check_on_the_command_line(tmp_path):
     assert edited.returncode == 1 and "block line" in edited.stderr
 
 
-def test_the_harness_commands_plug_in_beside_the_module(tmp_path):
-    (tmp_path / "scale_evidence.py").write_text(
-        (SCALE_DIR / "scale_evidence.py").read_text("utf-8"), "utf-8"
-    )
-    (tmp_path / "scale_harness.py").write_text(
-        "def add_commands(commands):\n"
-        "    up = commands.add_parser('up')\n"
-        "    up.set_defaults(handler=lambda args: 7)\n",
-        "utf-8",
-    )
-    result = subprocess.run(
-        [sys.executable, "-B", str(tmp_path / "scale_evidence.py"), "up"],
-        stdin=subprocess.DEVNULL,
-        capture_output=True,
-        text=True,
-        cwd=tmp_path,
-        timeout=120,
-    )
-    assert result.returncode == 7, result.stderr
-    assert _cli("up").returncode == 2
-
-
 # ---------------------------------------------------------------------------
 # The k6 script's tags (V45, PE-S2)
 # ---------------------------------------------------------------------------
@@ -1515,35 +1979,75 @@ def test_the_pool_constant_is_the_engine_s():
     assert sum(sizes) == se.POOL_CONNECTIONS_PER_WORKER
 
 
+def _imports(path: Path) -> set:
+    """The top-level packages a file imports (absolute imports only)."""
+    found = set()
+    for node in ast.walk(ast.parse(path.read_text("utf-8"))):
+        if isinstance(node, ast.Import):
+            found |= {alias.name.split(".")[0] for alias in node.names}
+        elif isinstance(node, ast.ImportFrom) and node.level == 0:
+            found.add(node.module.split(".")[0])
+    return found
+
+
+@pytest.mark.parametrize(
+    "path",
+    [SCALE_DIR / "scale_evidence.py", REPO_ROOT / "scripts" / "scale_stack.py"],
+    ids=["scale_evidence", "scale_stack"],
+)
+def test_the_summariser_and_the_harness_it_reads_are_standard_library_only(path):
+    """render and check run where nothing is installed, and they load
+    scripts/scale_stack.py for the flag design: it must stay standard library
+    only too."""
+    assert _imports(path) - set(sys.stdlib_module_names) == set()
+
+
+def test_the_flag_design_is_the_harness_s_own_never_a_copy():
+    """One source: the rule, its context and the flag counts are the objects
+    scripts/scale_stack.py creates the fixtures from."""
+    stack = se.stack()
+    assert se.RULE_FLAG_RULES is stack.RULE
+    assert se.RULE_FLAG_CONTEXT is stack.RULE_CONTEXT
+    payloads = stack.flag_payloads()
+    assert se.FIXTURE_FLAGS == len(payloads) == 100
+    assert se.FIXTURE_RULE_FLAGS == stack.RULE_FLAG_COUNT == 50
+    assert [p["targeting_rules"] for p in payloads[:50]] == [stack.RULE] * 50
+
+
 # ---------------------------------------------------------------------------
 # The evaluate body check, pinned against the real evaluation (EMS-5)
 # ---------------------------------------------------------------------------
 def test_the_expected_evaluate_reasons_are_what_the_evaluation_answers():
     """A rule flag sent the scenario's matching context, and a plain flag sent
-    none, through the real route, targeting adapter and flag service. Only the
-    flag lookup and the API key are served from memory."""
+    none, through the real route, targeting adapter and flag service. The two
+    flags are the harness's own payloads (scripts/scale_stack.py, the code
+    that creates the fixtures). Only the flag lookup and the API key are served
+    from memory."""
     from fastapi.testclient import TestClient
 
     from backend.app.api import deps
     from backend.app.main import app
     from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 
-    def flag(key, rules):
+    stack = se.stack()
+    payloads = stack.flag_payloads()
+    rule_flag = next(p for p in payloads if "targeting_rules" in p)
+    plain_flag = next(p for p in payloads if "targeting_rules" not in p)
+
+    def flag(payload):
+        assert payload["is_active"] is True
         return FeatureFlag(
             id=uuid.uuid4(),
-            key=key,
-            name=key,
+            key=payload["key"],
+            name=payload["name"],
             status=FeatureFlagStatus.ACTIVE.value,
             owner_id=uuid.uuid4(),
-            rollout_percentage=se.FIXTURE_ROLLOUT_PERCENTAGE,
-            targeting_rules=copy.deepcopy(rules),
+            rollout_percentage=payload["rollout_percentage"],
+            targeting_rules=copy.deepcopy(payload.get("targeting_rules")),
             value_type="boolean",
         )
 
-    flags = {
-        "scale_flag_000": flag("scale_flag_000", se.RULE_FLAG_RULES),
-        "scale_flag_001": flag("scale_flag_001", None),
-    }
+    flags = {payload["key"]: flag(payload) for payload in (rule_flag, plain_flag)}
 
     class Lookup:
         def __init__(self, model):
@@ -1579,16 +2083,16 @@ def test_the_expected_evaluate_reasons_are_what_the_evaluation_answers():
     app.dependency_overrides[deps.get_api_key] = lambda: {"scopes": []}
     try:
         client = TestClient(app)
-        context = json.dumps(se.RULE_FLAG_CONTEXT)
+        context = json.dumps(stack.RULE_CONTEXT)
         answers = {}
         for user in ("user-00001", "user-00002", "user-00003", "user-00004"):
             rule = client.get(
-                "/api/v1/feature-flags/evaluate/scale_flag_000",
+                f"/api/v1/feature-flags/evaluate/{rule_flag['key']}",
                 params={"user_id": user, "context": context},
                 headers={"X-API-Key": "in-memory"},
             )
             plain = client.get(
-                "/api/v1/feature-flags/evaluate/scale_flag_001",
+                f"/api/v1/feature-flags/evaluate/{plain_flag['key']}",
                 params={"user_id": user},
                 headers={"X-API-Key": "in-memory"},
             )
