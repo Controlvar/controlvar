@@ -353,7 +353,7 @@ by = [
 
 [[unit]]
 text = "100% | Everyone"
-by = ["journey:feature-flag-rollout#users-at-hundred"]
+by = ["test:backend/tests/integration/services/test_feature_flag_evaluation.py::TestFeatureFlagEvaluationService::test_active_flag_at_100pct_evaluates_to_true"]
 
 [[unit]]
 text = "Each user always lands on the same side of the percentage."

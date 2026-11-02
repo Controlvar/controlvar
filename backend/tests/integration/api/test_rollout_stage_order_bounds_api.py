@@ -33,8 +33,14 @@ from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.models.rollout_schedule import RolloutSchedule, RolloutStage
 from backend.app.models.user import User, UserRole
 from backend.app.schemas.rollout_schedule import MAX_STAGE_ORDER
+from backend.tests.integration.api.rollout_rules import rollout_invariants
 
-pytestmark = [pytest.mark.integration, pytest.mark.requires_db]
+# Gate 3e (#1460): after every test, no schedule it wrote breaks a rule.
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.requires_db,
+    pytest.mark.usefixtures("rollout_invariants"),
+]
 
 SCHEDULES = "/api/v1/rollout-schedules"
 PREFIX = "stageorder"

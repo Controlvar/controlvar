@@ -36,7 +36,7 @@ from backend.app.services.audit_service import (
     audit_changes,
     audit_snapshot,
 )
-from backend.app.services.rollout_service import RolloutService
+from backend.app.services.rollout_service import RolloutRuleConflict, RolloutService
 
 logger = get_logger(__name__)
 
@@ -140,6 +140,8 @@ def create_rollout_schedule(
         )
         _record_rollout(db, current_user, flag.id, before, "created")
         return schedule
+    except RolloutRuleConflict as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
@@ -256,8 +258,12 @@ def update_rollout_schedule(
         _record_rollout(db, current_user, flag.id, before, "updated")
 
         return schedule
+    except RolloutRuleConflict as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except HTTPException:
+        raise  # this route's own 404: not an unexpected failure
     except Exception as e:
         logger.error(f"Error updating rollout schedule: {e!s}")
         raise HTTPException(
@@ -337,8 +343,12 @@ def activate_rollout_schedule(
         _record_rollout(db, current_user, flag.id, before, "activated")
 
         return schedule
+    except RolloutRuleConflict as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except HTTPException:
+        raise  # this route's own 404: not an unexpected failure
     except Exception as e:
         logger.error(f"Error activating rollout schedule: {e!s}")
         raise HTTPException(
@@ -463,8 +473,12 @@ def add_rollout_stage(
         _record_rollout(db, current_user, flag.id, before, "stage added")
 
         return stage
+    except RolloutRuleConflict as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except HTTPException:
+        raise  # this route's own 404: not an unexpected failure
     except Exception as e:
         logger.error(f"Error adding rollout stage: {e!s}")
         raise HTTPException(
@@ -504,8 +518,12 @@ def update_rollout_stage(
         _record_rollout(db, current_user, flag.id, before, "stage updated")
 
         return stage
+    except RolloutRuleConflict as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except HTTPException:
+        raise  # this route's own 404: not an unexpected failure
     except Exception as e:
         logger.error(f"Error updating rollout stage: {e!s}")
         raise HTTPException(
@@ -583,8 +601,12 @@ def manually_advance_stage(
         _record_rollout(db, current_user, flag.id, before, "stage advanced")
 
         return stage
+    except RolloutRuleConflict as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except HTTPException:
+        raise  # this route's own 404: not an unexpected failure
     except Exception as e:
         logger.error(f"Error advancing rollout stage: {e!s}")
         raise HTTPException(
