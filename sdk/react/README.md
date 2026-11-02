@@ -160,7 +160,7 @@ cache: the moment the server records the exposure. It receives an `Exposure`: `e
 ```
 
 It is not called for an answer from the client's cache, a user the experiment did not enrol
-(`assigned: false`), a call that fails or a feature flag. A server render calls nothing:
+(`assigned: false`), a call that fails or a feature flag. A Provider rendered on the server calls nothing:
 `useExperiment` asks for the assignment in the browser, after the first render. If it throws, or
 returns a Promise that rejects, the answer is unchanged, and nothing reports the error: this SDK has
 no `onError`.

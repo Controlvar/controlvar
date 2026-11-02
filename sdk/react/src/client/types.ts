@@ -11,8 +11,9 @@ export interface SdkConfig {
    * did not come from the client's cache: the moment the server records the
    * exposure. Not called for a cached answer, a request another caller
    * already started, an `assigned: false` answer, an answer without
-   * `assigned`, a failed call or a flag, and never during a server render
-   * (`useExperiment` assigns in an effect). What it throws, and a rejection of
+   * `assigned`, a failed call or a flag, and never from a Provider rendered
+   * on the server (`useExperiment` assigns in an effect); a `ServerClient`
+   * calls its own for the assignments it makes, wherever it runs. What it throws, and a rejection of
    * a Promise it returns, is dropped: the answer is unchanged. `null` or
    * `undefined` sets none; any other value that is not a function is refused
    * with `onExposure must be a function`.

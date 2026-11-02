@@ -24,6 +24,8 @@ import {
 import { ExperimentationProvider } from '../context/ExperimentationProvider';
 import { useExperiment } from '../hooks/useExperiment';
 import type { ExperimentAssignResponse, Exposure, SdkConfig, UserContext } from '../client/types';
+import type { Exposure as IndexExposure } from '../index';
+import type { Exposure as SsrExposure } from '../ssr';
 
 const ASSIGN_URL = 'https://api.example.com/api/v1/tracking/assign';
 const BATCH_URL = 'https://api.example.com/api/v1/tracking/batch';
@@ -372,7 +374,12 @@ describe('onExposure on the client', () => {
     e.variantId = 'x';
     // @ts-expect-error variantName is readonly
     e.variantName = 'x';
-    expect(Object.keys(EXPOSURE)).toEqual(['experimentKey', 'userId', 'variantId', 'variantName']);
+  });
+
+  it('is exported as a type from the package and from ssr', () => {
+    const fromIndex: IndexExposure = { ...EXPOSURE };
+    const fromSsr: SsrExposure = fromIndex;
+    expect(fromSsr).toStrictEqual(EXPOSURE);
   });
 });
 

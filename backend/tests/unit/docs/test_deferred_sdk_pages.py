@@ -1080,8 +1080,8 @@ REACT_EXPOSURE_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ..
         ),
     ),
     (
-        "A server render calls nothing: `useExperiment` asks for the assignment in the"
-        " browser, after the first render.",
+        "A Provider rendered on the server calls nothing: `useExperiment` asks for the"
+        " assignment in the browser, after the first render.",
         (REACT_README,),
         ("is not called, and the render makes no request",),
     ),
@@ -1160,6 +1160,31 @@ REACT_EXPOSURE_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ..
             "calls its own onExposure once for two assignments of one user",
             "never calls the onExposure of a Provider",
         ),
+    ),
+    (
+        "the server records two exposures, and each client that has `onExposure` calls its"
+        " own.",
+        (REACT_PAGE,),
+        (
+            "calls its own onExposure once for two assignments of one user",
+            "never calls the onExposure of a Provider",
+        ),
+    ),
+    (
+        "A `ServerClient` created in each request, as in the `getServerSideProps` example"
+        " above, starts with an empty cache, so it calls `onExposure` on every request that"
+        " assigns, and the server records an exposure on each.",
+        (REACT_PAGE,),
+        (
+            "in a new client",
+            "calls its own onExposure once for two assignments of one user",
+        ),
+    ),
+    (
+        "interface Exposure {          // what onExposure receives; also exported from"
+        " '@controlvar/react-sdk/ssr'",
+        (REACT_PAGE,),
+        ("is exported as a type from the package and from ssr",),
     ),
     (
         "The Provider and `ServerClient` throw `onExposure must be a function` for any other"
