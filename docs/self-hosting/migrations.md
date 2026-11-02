@@ -91,7 +91,8 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini history
 Output, for example:
 
 ```text
-607c51a59bf5 -> 7b6b4b4fe246 (head), Rollout stages: record when each stage started
+85dd4796bb8b -> 7b6b4b4fe246 (head), Rollout stages: record when each stage started
+607c51a59bf5 -> 85dd4796bb8b, Events: an event_id is stored once per user, experiment, flag and event name
 4c2c09a2b3e8 -> 607c51a59bf5, Feature flags: a value type and two values, held by one check
 ...
 <base> -> 84a772608a6e, Initial schema
@@ -401,6 +402,10 @@ any flag is a string, number or json flag**: that downgrade refuses, names those
 flags, and changes nothing (see
 [`607c51a59bf5`](#607c51a59bf5-gives-each-flag-a-value-type-and-two-values)).
 
+Past `85dd4796bb8b` it also drops the table `event_dedup_keys`, and with it every
+stored `event_id` (see
+[`85dd4796bb8b`](#85dd4796bb8b-stores-an-event-sent-again-with-its-event_id-once)).
+
 Past `7b6b4b4fe246` it first runs that revision's downgrade, which drops
 `rollout_stages.started_at`, the recorded start of every rollout stage (see
 [`7b6b4b4fe246`](#7b6b4b4fe246-records-when-each-rollout-stage-started)).
@@ -475,6 +480,8 @@ From a release that carries `607c51a59bf5`, the same downgrade first runs that
 revision's downgrade, which drops each flag's value type and values and refuses
 while any flag is a string, number or json flag (see
 [`607c51a59bf5`](#607c51a59bf5-gives-each-flag-a-value-type-and-two-values)).
+From a release that carries `85dd4796bb8b`, it also drops the table
+`event_dedup_keys` before that.
 From a release that carries `7b6b4b4fe246`, it also runs that revision's
 downgrade, which drops `rollout_stages.started_at`, the recorded start of every
 rollout stage (see
@@ -538,7 +545,28 @@ nor the downgrade can be emitted as SQL (`--sql`).
 
 From a release that carries `7b6b4b4fe246`, a downgrade to `4c2c09a2b3e8` first
 runs that revision's downgrade, which drops `rollout_stages.started_at`, the
-recorded start of every rollout stage (see the next section).
+recorded start of every rollout stage (see
+[`7b6b4b4fe246`](#7b6b4b4fe246-records-when-each-rollout-stage-started)).
+
+### `85dd4796bb8b` stores an event sent again with its event_id once
+
+This revision adds the table `event_dedup_keys`: one row per event stored with
+an `event_id`, holding the user id and a key made from the event's experiment,
+flag, event name and `event_id`
+([How events count](../guides/how-events-count.md#sending-an-event-again)). It
+changes nothing in `events`, and it has no foreign key to `events`, so it takes
+no lock on `events` and completes while the previous release keeps writing
+events.
+
+The previous release runs against this schema unchanged: it never reads or
+writes the table, so an event it stores during the deploy is stored as every
+event was before, even when it carries an `event_id`.
+
+**The downgrade drops the table and every key in it.** No event is changed or
+removed. Until the API is rolled back too, this release answers `500` to an
+event that carries an `event_id`, because the table is gone, and stores every
+other event as before; so roll the API back straight after the downgrade, as the
+rollback runbook does.
 
 ### `7b6b4b4fe246` records when each rollout stage started
 
@@ -572,7 +600,7 @@ running, and with the Engineering Lead's approval at the moment it runs when
 any stage is `IN_PROGRESS`:
 
 ```{.bash skip reason="destructive: drops rollout_stages.started_at"}
-docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade 607c51a59bf5
+docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade 85dd4796bb8b
 ```
 
 On Helm, run the same command in an API pod with `kubectl exec`. Then start the
@@ -795,7 +823,7 @@ names:
 A third way, when the newer release's migrations can be undone: with the newer
 release still running, downgrade to the older release's core head, then start
 the older image. For example, to go back from the release that added
-`7b6b4b4fe246` to the one before it, downgrade to `607c51a59bf5` first, which
+`7b6b4b4fe246` to the one before it, downgrade to `85dd4796bb8b` first, which
 drops the recorded start of every rollout stage (see
 [`7b6b4b4fe246`](#7b6b4b4fe246-records-when-each-rollout-stage-started)).
 
@@ -868,6 +896,9 @@ What this means for you:
   is backward-compatible for a rollback too, and undoing it drops each flag's
   value type and values; it refuses while any flag is a string, number or json
   flag.
+  [`85dd4796bb8b`](#85dd4796bb8b-stores-an-event-sent-again-with-its-event_id-once)
+  is backward-compatible for a rollback too, and undoing it drops
+  `event_dedup_keys`, every stored `event_id`, and no event.
   [`7b6b4b4fe246`](#7b6b4b4fe246-records-when-each-rollout-stage-started)
   is backward-compatible for a rollback too, and undoing it drops the recorded
   start of every rollout stage; an upgrade afterwards sets each stage in

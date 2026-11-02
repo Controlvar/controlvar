@@ -192,7 +192,7 @@ def test_a_missing_target_is_refused(tree: Path) -> None:
 def test_a_name_mismatch_is_refused(tree: Path) -> None:
     _write(
         tree / "react" / "package.json",
-        {"name": "@controlvar/react-sdk", "version": "1.1.0"},
+        {"name": "@controlvar/react-sdk", "version": "0.1.0"},
     )
     _provider(tree, {"@controlvar/js-sdk": "file:../react"})
     result = _run(tree / "openfeature")

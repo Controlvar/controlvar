@@ -739,6 +739,31 @@ describe('getAllFlags', () => {
   });
 });
 
+// ─── #1520: the context React Native must send byte for byte ─────────────────
+
+describe('regression #1520 — the context query React Native matches', () => {
+  // The same seven literal rows as sdk/react-native/__tests__/client.test.ts
+  // (describe 'regression #1520'): `&context=` + encodeURIComponent(JSON.stringify(attributes)).
+  const FIXTURE: Array<[string, Record<string, unknown>, string]> = [
+    ['a space', { plan: 'a b' }, '%7B%22plan%22%3A%22a%20b%22%7D'],
+    ['non-ASCII', { city: 'été' }, '%7B%22city%22%3A%22%C3%A9t%C3%A9%22%7D'],
+    ['nested', { user: { tier: 'gold' } }, '%7B%22user%22%3A%7B%22tier%22%3A%22gold%22%7D%7D'],
+    ['a number', { age: 42 }, '%7B%22age%22%3A42%7D'],
+    ['a boolean', { beta: true }, '%7B%22beta%22%3Atrue%7D'],
+    ['null', { x: null }, '%7B%22x%22%3Anull%7D'],
+    ['a non-empty array', ['a'] as unknown as Record<string, unknown>, '%5B%22a%22%5D'],
+  ];
+
+  it.each(FIXTURE)('evaluateFlag sends %s as context=<encodeURIComponent(JSON)>', async (_name, attributes, encoded) => {
+    const fetchMock = mockFetch(flagOn);
+    const client = new ExperimentationClient(baseConfig);
+    await client.evaluateFlag('dark-mode', { userId: 'user-1', attributes });
+    expect(call(fetchMock).url).toBe(
+      `https://api.example.com/api/v1/feature-flags/evaluate/dark-mode?user_id=user-1&context=${encoded}`
+    );
+  });
+});
+
 // ─── Typed values ─────────────────────────────────────────────────────────────
 
 type Getter = 'getStringValue' | 'getNumberValue' | 'getJsonValue';

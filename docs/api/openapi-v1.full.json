@@ -277,9 +277,6 @@
       },
       "AggregatedMetricResponse": {
         "description": "Schema for aggregated metric response.",
-        "metadata": {
-          "alias": "meta_data"
-        },
         "properties": {
           "count": {
             "description": "Number of occurrences",
@@ -4662,9 +4659,6 @@
       },
       "ErrorLogResponse": {
         "description": "Schema for error log response.",
-        "metadata": {
-          "alias": "meta_data"
-        },
         "properties": {
           "created_at": {
             "format": "date-time",
@@ -4817,6 +4811,7 @@
       "EventBatchResponse": {
         "description": "Model for batch event tracking response.",
         "example": {
+          "duplicate_count": 0,
           "errors": [
             {
               "error": "Invalid experiment key",
@@ -4829,6 +4824,11 @@
           "success_count": 1
         },
         "properties": {
+          "duplicate_count": {
+            "description": "Number of events already stored: an earlier one had the same event_id, user, experiment, flag and event name. Each is counted in success_count too, and nothing was written for it.",
+            "title": "Duplicate Count",
+            "type": "integer"
+          },
           "errors": {
             "anyOf": [
               {
@@ -4851,14 +4851,15 @@
             "type": "integer"
           },
           "success_count": {
-            "description": "Number of events successfully tracked",
+            "description": "Number of events stored, or already stored (see duplicate_count)",
             "title": "Success Count",
             "type": "integer"
           }
         },
         "required": [
           "success_count",
-          "failure_count"
+          "failure_count",
+          "duplicate_count"
         ],
         "title": "EventBatchResponse",
         "type": "object"
@@ -4866,6 +4867,19 @@
       "EventCreate": {
         "description": "Model for creating a new event.",
         "properties": {
+          "event_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Names one occurrence of the event. An event sent again with the same event_id, user, experiment, flag and event name is stored once: the later one is answered as a duplicate and writes nothing. At most 255 characters, compared exactly; an empty string or null means none.",
+            "title": "Event Id"
+          },
           "event_name": {
             "maxLength": 100,
             "minLength": 1,
@@ -5007,6 +5021,19 @@
           "value": 49.99
         },
         "properties": {
+          "event_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Names one occurrence of the event. An event sent again with the same event_id, user, experiment, flag and event name is stored once: the later one is answered as a duplicate and writes nothing. At most 255 characters, compared exactly; an empty string or null means none.",
+            "title": "Event Id"
+          },
           "event_name": {
             "anyOf": [
               {
@@ -5099,12 +5126,30 @@
         "type": "object"
       },
       "EventResponse": {
-        "description": "Model for event responses.",
+        "description": "An event as stored.\n\nFor an event already stored with the same event_id, user, experiment, flag\nand event name, duplicate is true, id is the stored event's, and every other\nfield is this request's or this request's time.",
         "properties": {
           "created_at": {
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "duplicate": {
+            "default": false,
+            "description": "True when an event with the same event_id, user, experiment, flag and event name was already stored: nothing was written, and id is the stored event's.",
+            "title": "Duplicate",
+            "type": "boolean"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The event_id this request sent, or null.",
+            "title": "Event Id"
           },
           "event_name": {
             "maxLength": 100,
@@ -12228,13 +12273,15 @@
           "min_stage_duration": {
             "anyOf": [
               {
+                "maximum": 8760,
+                "minimum": 0,
                 "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Minimum time (hours) between stages",
+            "description": "Minimum time (hours) between stages: a whole number from 0 to 8760, or null for no minimum",
             "title": "Min Stage Duration"
           },
           "name": {
@@ -12546,13 +12593,15 @@
           "min_stage_duration": {
             "anyOf": [
               {
+                "maximum": 8760,
+                "minimum": 0,
                 "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Minimum time (hours) between stages",
+            "description": "Minimum time (hours) between stages: a whole number from 0 to 8760, or null for no minimum; null clears a stored minimum",
             "title": "Min Stage Duration"
           },
           "name": {
@@ -12581,7 +12630,8 @@
                 "type": "null"
               }
             ],
-            "description": "Updated rollout stages",
+            "deprecated": true,
+            "description": "Not accepted. A request that contains `stages`, with any value including null, is refused with 422. Add a stage with `POST /api/v1/rollout-schedules/{schedule_id}/stages` and change one with `PUT /api/v1/rollout-schedules/stages/{stage_id}`.",
             "title": "Stages"
           },
           "start_date": {
@@ -12683,7 +12733,7 @@
                 "type": "null"
               }
             ],
-            "description": "Configuration for the trigger",
+            "description": "Configuration for the trigger. When it has `duration`, that is the number of hours from 0 to 8760 a time-based stage runs before the scheduler completes it; without `duration` the default is 24. The rest of the object is not checked.",
             "title": "Trigger Configuration"
           },
           "trigger_type": {
@@ -12931,7 +12981,7 @@
                 "type": "null"
               }
             ],
-            "description": "Configuration for the trigger",
+            "description": "Configuration for the trigger. When it has `duration`, that is the number of hours from 0 to 8760 a time-based stage runs before the scheduler completes it; without `duration` the default is 24. The rest of the object is not checked.",
             "title": "Trigger Configuration"
           },
           "trigger_type": {
@@ -31865,7 +31915,7 @@
         ]
       },
       "put": {
-        "description": "Update an existing rollout schedule.\n\nThis endpoint allows updating the properties of a rollout schedule,\nincluding its stages and status transitions.",
+        "description": "Update an existing rollout schedule.\n\nThis endpoint updates the properties of a rollout schedule. It does not\ntake `stages`: a request that contains it answers 422. Add a stage with\n`POST /api/v1/rollout-schedules/{schedule_id}/stages` and change one with\n`PUT /api/v1/rollout-schedules/stages/{stage_id}`.",
         "operationId": "update_rollout_schedule_api_v1_rollout_schedules__schedule_id__put",
         "parameters": [
           {

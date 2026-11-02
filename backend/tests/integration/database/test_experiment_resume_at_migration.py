@@ -48,8 +48,8 @@ CORE_HEAD = "7b6b4b4fe246"
 #: head to this test's target unapplies those revisions too.  ``37dcb2969766``
 #: (#440) drops ``segment_members``; ``d29a479daafe`` (#445) drops
 #: ``holdout_population``; ``806901fb7735`` (#580) drops columns and checks, no
-#: table.
-LATER_DOWNGRADE_TABLES = {"holdout_population", "segment_members"}
+#: table; ``85dd4796bb8b`` (#1543) drops ``event_dedup_keys``.
+LATER_DOWNGRADE_TABLES = {"holdout_population", "segment_members", "event_dedup_keys"}
 #: The modules branch's head in this tree, recorded on both sides of every
 #: step here: this file is about the core chain.
 MODULES_HEAD = "modules_0004_rbac_activation"

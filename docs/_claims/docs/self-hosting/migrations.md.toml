@@ -666,6 +666,13 @@ text = "So it also stops while any flag is a string, number or json flag: that d
 by = ["test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_downgrade_refuses_while_a_value_flag_exists"]
 
 [[unit]]
+text = "Past 85dd4796bb8b it also drops the table event_dedup_keys, and with it every stored event_id (see 85dd4796bb8b)."
+by = [
+    "test:backend/tests/unit/db/test_alembic_commands.py::test_past_1ab99332f0ba_its_rerun_downgrade_also_undoes_the_later_revisions",
+    "test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m5_the_downgrade_removes_exactly_the_table_online",
+]
+
+[[unit]]
 text = "Past 7b6b4b4fe246 it first runs that revision's downgrade, which drops rollout_stages.started_at, the recorded start of every rollout stage (see 7b6b4b4fe246)."
 by = [
     "test:backend/tests/unit/db/test_alembic_commands.py::test_past_1ab99332f0ba_its_rerun_downgrade_also_undoes_the_later_revisions",
@@ -777,6 +784,13 @@ text = "From a release that carries 607c51a59bf5, the same downgrade first runs 
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_downgrade_refuses_while_a_value_flag_exists",
+]
+
+[[unit]]
+text = "From a release that carries 85dd4796bb8b, it also drops the table event_dedup_keys before that."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_segment_members_migration.py::test_downgrade_with_the_override_runs",
 ]
 
 [[unit]]
@@ -896,11 +910,48 @@ text = "Neither the upgrade nor the downgrade can be emitted as SQL (--sql)."
 by = ["test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_downgrade_and_the_upgrade_refuse_offline_mode"]
 
 [[unit]]
-text = "From a release that carries 7b6b4b4fe246, a downgrade to 4c2c09a2b3e8 first runs that revision's downgrade, which drops rollout_stages.started_at, the recorded start of every rollout stage (see the next section)."
+text = "From a release that carries 7b6b4b4fe246, a downgrade to 4c2c09a2b3e8 first runs that revision's downgrade, which drops rollout_stages.started_at, the recorded start of every rollout stage (see 7b6b4b4fe246)."
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_downgrade_drops_the_column_only_and_an_upgrade_sets_it_from_updated_at",
 ]
+
+[[unit]]
+text = "85dd4796bb8b stores an event sent again with its event_id once"
+by = [
+    "test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m1_a_database_at_the_previous_release_gains_the_table",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
+]
+
+[[unit]]
+text = "This revision adds the table event_dedup_keys: one row per event stored with an event_id, holding the user id and a key made from the event's experiment, flag, event name and event_id (How events count)."
+by = [
+    "test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m2_an_upgraded_database_and_a_bootstrapped_one_have_the_same_table",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r4_one_event_through_track_batch_and_events_is_one_row",
+]
+
+[[unit]]
+text = "It changes nothing in events, and it has no foreign key to events, so it takes no lock on events and completes while the previous release keeps writing events."
+by = [
+    "test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m1_a_database_at_the_previous_release_gains_the_table",
+    "test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m1b_the_upgrade_completes_beside_an_uncommitted_events_writer",
+]
+
+[[unit]]
+text = "The previous release runs against this schema unchanged: it never reads or writes the table, so an event it stores during the deploy is stored as every event was before, even when it carries an event_id."
+by = ["test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m3_the_previous_releases_write_path_stores_events_on_this_schema"]
+
+[[unit]]
+text = "The downgrade drops the table and every key in it."
+by = ["test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m5_the_downgrade_removes_exactly_the_table_online"]
+
+[[unit]]
+text = "No event is changed or removed."
+by = ["test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m5_the_downgrade_removes_exactly_the_table_online"]
+
+[[unit]]
+text = "Until the API is rolled back too, this release answers 500 to an event that carries an event_id, because the table is gone, and stores every other event as before; so roll the API back straight after the downgrade, as the rollback runbook does."
+by = ["test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_after_the_downgrade_this_release_refuses_only_events_with_an_event_id"]
 
 [[unit]]
 text = "7b6b4b4fe246 records when each rollout stage started"
@@ -1312,7 +1363,7 @@ text = "A third way, when the newer release's migrations can be undone: with the
 by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts"]
 
 [[unit]]
-text = "For example, to go back from the release that added 7b6b4b4fe246 to the one before it, downgrade to 607c51a59bf5 first, which drops the recorded start of every rollout stage (see 7b6b4b4fe246)."
+text = "For example, to go back from the release that added 7b6b4b4fe246 to the one before it, downgrade to 85dd4796bb8b first, which drops the recorded start of every rollout stage (see 7b6b4b4fe246)."
 by = [
     "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_previous_release_starts_only_after_the_downgrade",
     "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_downgrade_drops_the_column_only_and_an_upgrade_sets_it_from_updated_at",
@@ -1463,6 +1514,13 @@ text = "607c51a59bf5 is backward-compatible for a rollback too, and undoing it d
 by = [
     "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_previous_release_writes_and_lists_flags_on_this_schema",
     "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_downgrade_refuses_while_a_value_flag_exists",
+]
+
+[[unit]]
+text = "85dd4796bb8b is backward-compatible for a rollback too, and undoing it drops event_dedup_keys, every stored event_id, and no event."
+by = [
+    "test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m3_the_previous_releases_write_path_stores_events_on_this_schema",
+    "test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m5_the_downgrade_removes_exactly_the_table_online",
 ]
 
 [[unit]]

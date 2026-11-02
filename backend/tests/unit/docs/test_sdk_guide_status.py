@@ -11,7 +11,9 @@ two sentences around it and holds each to the files CI reads:
   the SDK Live Contract job in pr-qa-gate.yml; "including local evaluation"
   exactly for the SDKs with a local-evaluation smoke in the live runner; "not
   yet" for an SDK with a ``contract_smoke`` entry point in the runner that the
-  job does not run, and whose unit tests are in the nightly tier;
+  job does not run, and whose unit tests are in the nightly tier; "no: ..."
+  for a directory that is not an SDK (the MCP server), which is in neither
+  the job's list nor the runner;
 * every SDK in the job's list has a row, and the sentence that lists the job's
   SDKs lists exactly them, in its order;
 * each page a row links to exists.
@@ -193,6 +195,16 @@ def problems(page: str) -> List[str]:
                 found.append(
                     f"{where}: says its unit tests run nightly; {directory!r} is not in the nightly tier"
                 )
+        elif live.startswith("no: "):
+            # Not an SDK (the MCP server): no smoke, and so not in the job.
+            if directory in gate:
+                found.append(
+                    f"{where}: says no; {directory!r} is in the job's sdks: list"
+                )
+            if directory in manifests["MANIFEST"]:
+                found.append(
+                    f"{where}: says it has no contract smoke; the live runner has one for {directory!r}"
+                )
         else:
             found.append(
                 f"{where}: 'Verified live' is neither yes nor not yet: {live!r}"
@@ -247,6 +259,16 @@ def test_the_status_table_agrees_with_ci():
             "row 'Python': 'including local evaluation' disagrees with the runner's LOCAL_MANIFEST",
         ),
         ("ruby, php and dotnet", "ruby and php", "the sentence lists"),
+        (
+            "| MCP server (not an SDK; not yet published) | `sdk/mcp` | jest | no: it is not an SDK, and has no contract smoke |",
+            "| MCP server (not an SDK; not yet published) | `sdk/mcp` | jest | yes |",
+            "row 'MCP server (not an SDK; not yet published)': says verified live; 'mcp' is not in the job's sdks: list",
+        ),
+        (
+            "| MCP server (not an SDK; not yet published) | `sdk/mcp` | jest | no: it is not an SDK, and has no contract smoke |",
+            "| MCP server (not an SDK; not yet published) | `sdk/go` | `go test` | no: it is not an SDK, and has no contract smoke |",
+            "row 'MCP server (not an SDK; not yet published)': says no; 'go' is in the job's sdks: list",
+        ),
     ],
 )
 def test_a_planted_defect_is_refused(old, new, expected):

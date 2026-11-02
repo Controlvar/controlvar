@@ -7,7 +7,7 @@ schema built by ``create_all`` already has the column, so the other transition
 tests -- which rewind such a schema's ``alembic_version`` -- never run the
 ``ADD COLUMN``. The tests that start from the previous release instead take a
 bootstrapped schema with the column DROPPED and ``alembic_version`` at
-``607c51a59bf5``, in each profile, and run the documented ``alembic upgrade
+``85dd4796bb8b``, in each profile, and run the documented ``alembic upgrade
 heads``. Then:
 
 1. the ``alembic_version`` rows are this release's, the column has the model's
@@ -53,9 +53,10 @@ from backend.tests.integration.database.tree_profiles import CORE, FULL
 
 pytestmark = [pytest.mark.integration]
 
-#: This revision, and the core revision it extends.
+#: This revision, and the core revision it extends: ``85dd4796bb8b`` (#1543),
+#: which reached main before it.
 REVISION = "7b6b4b4fe246"
-PREVIOUS_CORE_HEAD = "607c51a59bf5"
+PREVIOUS_CORE_HEAD = "85dd4796bb8b"
 #: The core head of this tree.
 CORE_HEAD = "7b6b4b4fe246"
 #: The modules branch's head in this tree, recorded on both sides of every
@@ -595,7 +596,7 @@ def test_the_previous_release_starts_only_after_the_downgrade(
 ):
     """Docker Compose and the Helm chart's init container run the bootstrap
     on every start. Against this revision the previous release's bootstrap
-    refuses; after ``downgrade 607c51a59bf5``, run with this release, it
+    refuses; after ``downgrade 85dd4796bb8b``, run with this release, it
     starts."""
     tree = _bootstrapped_at_previous_release(test_db, profile, scratch_schema, tmp_path)
     _upgrade(tree, scratch_schema)

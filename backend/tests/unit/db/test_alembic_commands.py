@@ -186,6 +186,8 @@ def test_past_1ab99332f0ba_its_rerun_downgrade_also_undoes_the_later_revisions()
     # and the stage start's (#1528), which drops rollout_stages.started_at.
     assert "607c51a59bf5" in from_head
     assert "7b6b4b4fe246" in from_head
+    # And the event_id keys' (#1543), which drops the table event_dedup_keys.
+    assert "85dd4796bb8b" in from_head
 
 
 def _bootstrap_url(env: dict[str, str]) -> str:

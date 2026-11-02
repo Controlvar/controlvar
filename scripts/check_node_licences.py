@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 #: Every Node closure that is published to npm or shipped in an image. The
-#: same six ``scripts/generate_third_party_licenses.py`` enumerates, and for
+#: same ones ``scripts/generate_third_party_licenses.py`` enumerates, and for
 #: the same reason: those are the trees whose licences reach somebody else.
 #: The first version of this gate checked only ``frontend``, which left the
 #: five SDKs that are actually *published to users* ungated -- a GPL or SSPL

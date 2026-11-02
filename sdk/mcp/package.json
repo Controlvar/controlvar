@@ -1,0 +1,66 @@
+{
+  "name": "@controlvar/mcp-server",
+  "version": "0.1.0",
+  "description": "A read-only MCP server for a Controlvar instance: an AI assistant starts it on your computer, over stdio, to read feature flags, experiments and results with your API key",
+  "bin": {
+    "controlvar-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "npm-shrinkwrap.json"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.json && jest",
+    "tools-json": "tsc -p tsconfig.json && node scripts/write-tools-json.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "feature-flags",
+    "experimentation",
+    "ab-testing"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Controlvar/controlvar.git",
+    "directory": "sdk/mcp"
+  },
+  "homepage": "https://github.com/Controlvar/controlvar/tree/main/sdk/mcp#readme",
+  "bugs": {
+    "url": "https://github.com/Controlvar/controlvar/issues"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/jest": "30.0.0",
+    "@types/node": "22.20.5",
+    "jest": "30.5.2",
+    "ts-jest": "29.4.14",
+    "typescript": "5.9.3"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/__tests__/**/*.test.ts"
+    ],
+    "transform": {
+      "^.+\\.ts$": [
+        "ts-jest",
+        {
+          "tsconfig": "tsconfig.test.json"
+        }
+      ]
+    },
+    "testTimeout": 30000,
+    "watchman": false
+  }
+}

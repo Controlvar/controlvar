@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { RbacService } from '@modules/rbac';
 
 interface EffectivePermissionsModalProps {
@@ -8,25 +8,37 @@ interface EffectivePermissionsModalProps {
   onClose: () => void;
 }
 
+const RESOURCE_LABELS: Record<string, string> = {
+  experiment: 'Experiments',
+  feature_flag: 'Feature flags',
+  audit_log: 'Audit log',
+};
+
+/** `experiment` -> `Experiments`; a resource without a label is shown as the API names it. */
+function resourceLabel(resource: string): string {
+  return RESOURCE_LABELS[resource] ?? resource.charAt(0).toUpperCase() + resource.slice(1).replace(/_/g, ' ');
+}
+
 export function EffectivePermissionsModal({
   isOpen,
   userId,
   userEmail,
   onClose,
 }: EffectivePermissionsModalProps) {
-  const [permissions, setPermissions] = useState<string[]>([]);
+  const [permissions, setPermissions] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (isOpen && userId) {
       setLoading(true);
       setError(null);
-      setPermissions([]);
+      setPermissions({});
 
       RbacService.getUserPermissions(userId)
         .then((data) => {
-          setPermissions(data.permissions);
+          setPermissions(data.permissions ?? {});
         })
         .catch((err: Error) => {
           setError(err.message || 'Failed to load permissions');
@@ -37,7 +49,24 @@ export function EffectivePermissionsModal({
     }
   }, [isOpen, userId]);
 
+  // Escape closes the dialog, as the Close buttons do.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, onClose]);
+
+  // Focus moves into the dialog when it opens.
+  useEffect(() => {
+    if (isOpen) closeRef.current?.focus();
+  }, [isOpen]);
+
   if (!isOpen) return null;
+
+  const rows = Object.entries(permissions).filter(([, actions]) => actions.length > 0);
 
   return (
     <div
@@ -61,8 +90,9 @@ export function EffectivePermissionsModal({
           <button
             type="button"
             data-testid="permissions-close-button"
+            ref={closeRef}
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600"
+            className="text-slate-600 hover:text-slate-900"
             aria-label="Close"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -103,22 +133,16 @@ export function EffectivePermissionsModal({
         {/* Permissions List */}
         {!loading && !error && (
           <>
-            {permissions.length === 0 ? (
-              <p className="text-sm text-slate-500 py-4">No permissions assigned.</p>
+            {rows.length === 0 ? (
+              <p className="text-sm text-slate-600 py-4">No permissions assigned.</p>
             ) : (
-              <div
-                data-testid="permissions-list"
-                className="flex flex-wrap gap-2 py-2"
-              >
-                {permissions.map((perm) => (
-                  <span
-                    key={perm}
-                    className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-800 border border-blue-200"
-                  >
-                    {perm}
-                  </span>
+              <ul data-testid="permissions-list" className="py-2 space-y-1 text-sm text-slate-800">
+                {rows.map(([resource, actions]) => (
+                  <li key={resource}>
+                    {resourceLabel(resource)}: {actions.join(', ')}
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </>
         )}

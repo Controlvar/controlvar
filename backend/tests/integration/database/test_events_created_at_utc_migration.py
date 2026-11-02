@@ -85,8 +85,8 @@ REVISION = "1ab99332f0ba"
 PARENT = "a89544fb1075"
 #: The core head of this tree, which ``upgrade heads`` runs on to past this
 #: revision, through ``806901fb7735`` (#580), ``d29a479daafe`` (#445),
-#: ``37dcb2969766`` (#440), ``4c2c09a2b3e8`` (#1206) and ``607c51a59bf5``
-#: (#1497): ``7b6b4b4fe246`` (#1528).
+#: ``37dcb2969766`` (#440), ``4c2c09a2b3e8`` (#1206), ``607c51a59bf5``
+#: (#1497) and ``85dd4796bb8b`` (#1543): ``7b6b4b4fe246`` (#1528).
 CORE_HEAD = "7b6b4b4fe246"
 #: The core head of the previous release (0.16.2), with ``d12cbd384bbe`` and
 #: ``a89544fb1075`` pending in front of this revision.

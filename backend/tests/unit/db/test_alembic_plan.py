@@ -47,9 +47,12 @@ pytestmark = pytest.mark.unit
 
 #: The core chain's head: each rollout stage records when it started (#1528).
 CORE_HEAD = "7b6b4b4fe246"
-#: A feature flag's value type and its two values, held by one check (#1497),
+#: The table that stores an event sent again with its event_id once (#1543),
 #: the revision before it.
-VALUE_COLUMNS = "607c51a59bf5"
+EVENT_DEDUP = "85dd4796bb8b"
+#: A feature flag's value type and its two values, held by one check (#1497),
+#: the revision before that.
+FLAG_VALUES = "607c51a59bf5"
 #: A rollback record's safety configuration is optional, and its foreign key ON
 #: DELETE SET NULL (#1206), the revision before that.
 ROLLBACK_RECORDS = "4c2c09a2b3e8"
@@ -139,7 +142,8 @@ CORE_PLAN = [
     HOLDOUT,
     SEGMENT_MEMBERS,
     ROLLBACK_RECORDS,
-    VALUE_COLUMNS,
+    FLAG_VALUES,
+    EVENT_DEDUP,
     CORE_HEAD,
 ]
 
@@ -148,7 +152,7 @@ CORE_PLAN = [
 #: whole reason the edge exists, and before the core marker and everything the
 #: core chain adds after it.
 FULL_PLAN = [
-    *CORE_PLAN[:-12],
+    *CORE_PLAN[:-13],
     *MODULES_BRANCH_PLAN,
     CORE_MARKER,
     SDK_COUNTERS,
@@ -160,7 +164,8 @@ FULL_PLAN = [
     HOLDOUT,
     SEGMENT_MEMBERS,
     ROLLBACK_RECORDS,
-    VALUE_COLUMNS,
+    FLAG_VALUES,
+    EVENT_DEDUP,
     CORE_HEAD,
 ]
 
@@ -281,8 +286,8 @@ def test_unapplying_the_branch_is_one_revision_and_modules_at_base_is_all_of_the
     assert _downgrade_plan(script, UNAPPLY_WHOLE_MODULES_BRANCH) == list(
         reversed(MODULES_BRANCH_PLAN)
     )
-    # 40: the 36 core revisions (through 7b6b4b4fe246, #1528) and the branch's 4.
-    assert len(_downgrade_plan(script, "modules@base")) == len(FULL_PLAN) == 40
+    # 41: the 37 core revisions (through 7b6b4b4fe246, #1528) and the branch's 4.
+    assert len(_downgrade_plan(script, "modules@base")) == len(FULL_PLAN) == 41
 
 
 #: A command line, not a mention of one: the three documents all warn about

@@ -41,13 +41,14 @@ and a bootstrapped one end with the same column, the backfill, that autogenerate
 is empty on the upgraded database, that the previous release's code creates,
 starts and advances stages against this schema, and the downgrade.
 
-Core chain, extending the core head ``607c51a59bf5`` (created with
-``revision --head 607c51a59bf5``).  Nothing here touches a module table, so a
-full checkout still has exactly two heads: this revision and the modules
-branch's head.
+Core chain, extending the core head ``85dd4796bb8b`` (#1543).  It was created
+with ``revision --head 607c51a59bf5``, and moved onto ``85dd4796bb8b`` when that
+revision reached main first; nothing in either revision touches the other's
+table.  Nothing here touches a module table, so a full checkout still has
+exactly two heads: this revision and the modules branch's head.
 
 Revision ID: 7b6b4b4fe246
-Revises: 607c51a59bf5
+Revises: 85dd4796bb8b
 Create Date: 2026-11-02
 """
 
@@ -59,7 +60,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "7b6b4b4fe246"
-down_revision: Union[str, None] = "607c51a59bf5"
+down_revision: Union[str, None] = "85dd4796bb8b"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

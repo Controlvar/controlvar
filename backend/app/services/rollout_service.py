@@ -447,36 +447,12 @@ class RolloutService:
         ):
             _refuse_another_active(db, schedule)
 
-        # Handle stages update if provided
-        stages_data = update_data.pop("stages", None)
+        # ``stages`` is refused by RolloutScheduleUpdate (#1529); stages change
+        # through the stage routes only. Never set it as a schedule attribute.
+        update_data.pop("stages", None)
 
         for key, value in update_data.items():
             setattr(schedule, key, value)
-
-        # Update stages if provided
-        if stages_data:
-            # First, update existing stages
-            existing_stages = (
-                db.query(RolloutStage)
-                .filter(RolloutStage.rollout_schedule_id == schedule_id)
-                .all()
-            )
-
-            # Create a lookup map for existing stages
-            existing_stage_map = {stage.id: stage for stage in existing_stages}
-
-            for stage_data in stages_data:
-                stage_id = getattr(stage_data, "id", None)
-
-                if stage_id and stage_id in existing_stage_map:
-                    # Update existing stage
-                    stage = existing_stage_map[stage_id]
-                    stage_update_data = stage_data.model_dump(exclude_unset=True)
-
-                    for key, value in stage_update_data.items():
-                        setattr(stage, key, value)
-
-                    db.add(stage)
 
         db.add(schedule)
         db.commit()
