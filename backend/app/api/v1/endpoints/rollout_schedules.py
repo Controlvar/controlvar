@@ -36,7 +36,7 @@ from backend.app.services.audit_service import (
     audit_changes,
     audit_snapshot,
 )
-from backend.app.services.rollout_service import RolloutService
+from backend.app.services.rollout_service import RolloutRuleConflict, RolloutService
 
 logger = get_logger(__name__)
 
@@ -140,6 +140,8 @@ def create_rollout_schedule(
         )
         _record_rollout(db, current_user, flag.id, before, "created")
         return schedule
+    except RolloutRuleConflict as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
@@ -256,6 +258,8 @@ def update_rollout_schedule(
         _record_rollout(db, current_user, flag.id, before, "updated")
 
         return schedule
+    except RolloutRuleConflict as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
@@ -337,6 +341,8 @@ def activate_rollout_schedule(
         _record_rollout(db, current_user, flag.id, before, "activated")
 
         return schedule
+    except RolloutRuleConflict as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
@@ -463,6 +469,8 @@ def add_rollout_stage(
         _record_rollout(db, current_user, flag.id, before, "stage added")
 
         return stage
+    except RolloutRuleConflict as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
@@ -504,6 +512,8 @@ def update_rollout_stage(
         _record_rollout(db, current_user, flag.id, before, "stage updated")
 
         return stage
+    except RolloutRuleConflict as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
@@ -583,6 +593,8 @@ def manually_advance_stage(
         _record_rollout(db, current_user, flag.id, before, "stage advanced")
 
         return stage
+    except RolloutRuleConflict as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:

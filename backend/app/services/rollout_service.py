@@ -31,6 +31,63 @@ from backend.app.schemas.rollout_schedule import (
 logger = get_logger(__name__)
 
 
+class RolloutRuleConflict(ValueError):
+    """A change that a schedule's rules, as they are stored now, refuse (#1460).
+
+    The routes answer it with 409, in an ``except`` placed before their
+    ``except ValueError`` (400). It is a ``ValueError`` so that a route that
+    lacks the mapping still refuses the change, with 400. Its text is built
+    only from stored or validated values (stage orders, percentages, statuses
+    and a schedule id), never from text a request sent.
+    """
+
+
+def _lock_schedule_for_change(
+    db: Session, schedule: RolloutSchedule
+) -> Tuple[Optional[FeatureFlag], RolloutSchedule, List[RolloutStage]]:
+    """Lock the schedule's flag, then the schedule, and read its stages again.
+
+    Every change that a schedule's rules judge takes this first. The flag row
+    is locked ``FOR UPDATE``, then the schedule row: the order the manual
+    advance, the rollout scheduler and the safety rollback use, so two of them
+    never wait on each other in a cycle. The schedule and its stages are then
+    read from the database (``populate_existing``), replacing the copies the
+    session holds: a change committed while this call waited, by another
+    request or by the scheduler, is seen, and the rules are judged on it.
+
+    Nothing is changed before this point, so a refusal after it leaves nothing
+    pending; the locks go when the session's transaction ends.
+
+    Returns ``(flag or None, schedule, stages in stage_order)``.
+
+    Raises:
+        ValueError: the schedule was deleted while this call waited.
+    """
+    feature_flag = (
+        db.query(FeatureFlag)
+        .filter(FeatureFlag.id == schedule.feature_flag_id)
+        .with_for_update()
+        .first()
+    )
+    current = (
+        db.query(RolloutSchedule)
+        .filter(RolloutSchedule.id == schedule.id)
+        .populate_existing()
+        .with_for_update()
+        .one_or_none()
+    )
+    if current is None:
+        raise ValueError("Schedule not found")
+    stages = (
+        db.query(RolloutStage)
+        .filter(RolloutStage.rollout_schedule_id == current.id)
+        .populate_existing()
+        .order_by(RolloutStage.stage_order, RolloutStage.id)
+        .all()
+    )
+    return feature_flag, current, stages
+
+
 class RolloutService:
     """
     Service for managing feature flag rollout schedules.
@@ -662,28 +719,16 @@ class RolloutService:
         # Take the flag lock, then read the schedule again from the database
         # and lock it (#629). The check above used an unlocked read: a pause
         # committed since then, possibly by a writer holding this flag lock,
-        # is seen here. ``populate_existing`` replaces the copy in the
-        # session rather than trusting it. Nothing is changed before this
-        # point, so a refusal leaves nothing pending.
-        feature_flag = (
-            db.query(FeatureFlag)
-            .filter(FeatureFlag.id == schedule.feature_flag_id)
-            .with_for_update()
-            .first()
-        )
-        schedule = (
-            db.query(RolloutSchedule)
-            .filter(RolloutSchedule.id == stage.rollout_schedule_id)
-            .populate_existing()
-            .with_for_update()
-            .one_or_none()
-        )
-        if not schedule:
-            raise ValueError("Schedule not found")
+        # is seen here. ``populate_existing`` replaces the copies in the
+        # session rather than trusting them, the stages' included. Nothing is
+        # changed before this point, so a refusal leaves nothing pending.
+        feature_flag, schedule, stages = _lock_schedule_for_change(db, schedule)
         if schedule.status != RolloutScheduleStatus.ACTIVE:
             raise ValueError(
                 f"Cannot advance stage for schedule in {schedule.status.value} status"
             )
+        if stage.status not in valid_statuses:
+            raise ValueError(f"Cannot advance stage in {stage.status.value} status")
 
         current_time = datetime.now(timezone.utc)
 
@@ -704,18 +749,17 @@ class RolloutService:
             stage.completed_date = current_time
             stage.updated_at = current_time
 
-            # Check for next stage
-            next_stage = (
-                db.query(RolloutStage)
-                .filter(
-                    and_(
-                        RolloutStage.rollout_schedule_id == schedule.id,
-                        RolloutStage.stage_order > stage.stage_order,
-                        RolloutStage.status == RolloutStageStatus.PENDING,
-                    )
-                )
-                .order_by(RolloutStage.stage_order)
-                .first()
+            # The next stage: the lowest pending one after it, from the
+            # stages read under the lock.
+            next_stage = min(
+                (
+                    s
+                    for s in stages
+                    if s.stage_order > stage.stage_order
+                    and s.status == RolloutStageStatus.PENDING
+                ),
+                key=lambda s: s.stage_order,
+                default=None,
             )
 
             if next_stage:
