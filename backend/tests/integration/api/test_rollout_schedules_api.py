@@ -828,11 +828,20 @@ class TestRolloutStages:
         assert response.status_code == 400, response.text
 
     def test_advance_manual_stage_on_active_schedule(self, shared_client, flag_id):
-        """Manually advancing a PENDING manual stage on ACTIVE schedule returns 200."""
-        data = _create_schedule_via_api(shared_client, flag_id, "Advance Stage")
+        """Manually advancing a PENDING manual stage on ACTIVE schedule returns 200.
+
+        The manual stage is the first one: stages start in stage_order, so a
+        later stage cannot be advanced while an earlier one is pending (#1460).
+        """
+        payload = _valid_schedule_payload(flag_id, "Advance Stage")
+        payload["stages"][0]["trigger_type"] = "manual"
+        del payload["stages"][0]["start_date"]
+        created = shared_client.post("/api/v1/rollout-schedules/", json=payload)
+        assert created.status_code == 201, created.text
+        data = created.json()
         schedule_id = data["id"]
 
-        manual_stage = next(s for s in data["stages"] if s["trigger_type"] == "manual")
+        manual_stage = next(s for s in data["stages"] if s["stage_order"] == 1)
         shared_client.post(f"/api/v1/rollout-schedules/{schedule_id}/activate")
 
         response = shared_client.post(

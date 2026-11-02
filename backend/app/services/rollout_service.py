@@ -168,6 +168,36 @@ def _refuse_another_active(db: Session, schedule: RolloutSchedule) -> None:
         )
 
 
+def _check_starts_in_order(stages: List[RolloutStage], stage: RolloutStage) -> None:
+    """Refuse to start ``stage`` while another is in progress or an earlier one
+    has not completed: stages start in ``stage_order``, one at a time."""
+    blocking = next(
+        (
+            s
+            for s in stages
+            if s.id != stage.id and s.status == RolloutStageStatus.IN_PROGRESS
+        ),
+        None,
+    )
+    if blocking is None:
+        blocking = next(
+            (
+                s
+                for s in stages
+                if s.id != stage.id
+                and s.stage_order < stage.stage_order
+                and s.status != RolloutStageStatus.COMPLETED
+            ),
+            None,
+        )
+    if blocking is not None:
+        raise RolloutRuleConflict(
+            "Stages start in stage_order, one at a time: "
+            f"stage_order {blocking.stage_order} is {blocking.status.value}, "
+            "so this stage cannot start yet."
+        )
+
+
 class RolloutService:
     """
     Service for managing feature flag rollout schedules.
@@ -871,6 +901,9 @@ class RolloutService:
         current_time = datetime.now(timezone.utc)
 
         if stage.status == RolloutStageStatus.PENDING:
+            # Stages start in stage_order, one at a time (#1460).
+            _check_starts_in_order(stages, stage)
+
             # Activate the stage
             stage.status = RolloutStageStatus.IN_PROGRESS
             stage.updated_at = current_time
