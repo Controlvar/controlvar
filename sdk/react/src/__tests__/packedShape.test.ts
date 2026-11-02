@@ -1,25 +1,32 @@
 /**
  * @jest-environment node
  *
- * The shape of the packed package: `@controlvar/react-sdk/ssr` resolves from
- * the tarball `npm pack` makes, and what it loads is server-safe.
+ * The shape of the packed package: `@controlvar/react-sdk` and
+ * `@controlvar/react-sdk/ssr` resolve from the tarball `npm pack` makes, and
+ * what the `ssr` entry loads is server-safe.
  *
- * `ssr` is a physical directory with its own package.json (no `exports` map).
- * What this verifies: CommonJS `require` resolves it (the probe below),
- * bundlers do (Next App Router, per the plan's P18), and TypeScript finds its
- * types under node10, bundler, node16 and nodenext resolution. What it does
- * NOT cover: an unbundled Node ES module (`import` in .mjs, or a dynamic
- * `import()`) cannot import `@controlvar/react-sdk/ssr` today
- * (ERR_UNSUPPORTED_DIR_IMPORT); `@controlvar/react-sdk/dist/ssr/index.js`
- * works there. The test builds the package the way the release does, packs it,
- * unpacks the tarball into a scratch node_modules and resolves the subpath
- * from there, so a `files` list that drops `ssr`, a `main` that points at a
- * missing file or an `exports` map added later fails here.
+ * The package has an `exports` map with exactly `.`, `./ssr` and
+ * `./package.json`, each mapping `types` then `default` into the CommonJS
+ * `dist`, and keeps the physical `ssr/package.json` for resolvers that ignore
+ * `exports` (TypeScript's node10, older tools). What this verifies, on the
+ * installed tarball: a Node ES module `import` of `/ssr` and of the root; a
+ * CommonJS `require` of both, and that `/ssr` never loads the provider; and
+ * TypeScript's own resolver finding `/ssr`'s types under node10, node16
+ * (CommonJS and ES module), nodenext (ES module) and bundler resolution. The
+ * Next App Router is not built here: a `next build` on the earlier shape found
+ * `/ssr` (the plan's P18), and is to be repeated on this shape before the
+ * 0.1.0 publish.
+ *
+ * The test builds the package the way the release does, packs it, unpacks the
+ * tarball into a scratch node_modules and resolves from there, so removing the
+ * `exports` map or its `./ssr` entry, a `files` list that drops `ssr`, a
+ * missing stub or a `main` that disagrees with `exports['.']` fails here.
  */
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import * as ts from 'typescript';
 
 const PKG_DIR = path.resolve(__dirname, '..', '..');
 
@@ -29,6 +36,7 @@ function run(cmd: string, args: string[], cwd: string): string {
 
 describe('packed package shape', () => {
   let scratch: string;
+  let consumer: string;
   let installed: string;
   let tarballFiles: string[];
   const manifest = JSON.parse(fs.readFileSync(path.join(PKG_DIR, 'package.json'), 'utf8'));
@@ -59,14 +67,15 @@ describe('packed package shape', () => {
     const tgz = path.join(out, packed[0].filename);
     tarballFiles = packed[0].files.map((f: { path: string }) => f.path);
 
-    installed = path.join(scratch, 'consumer', 'node_modules', '@controlvar', 'react-sdk');
+    consumer = path.join(scratch, 'consumer');
+    installed = path.join(consumer, 'node_modules', '@controlvar', 'react-sdk');
     fs.mkdirSync(installed, { recursive: true });
-    // The consumer needs react to resolve, so that a provider re-exported from
-    // the ssr entry reaches the module-graph assertion below rather than
-    // crashing the probe on a missing module.
+    // The consumer needs react to resolve: the root entry loads it, and a
+    // provider re-exported from the ssr entry must reach the module-graph
+    // assertion below rather than crash the probe on a missing module.
     fs.symlinkSync(
       path.join(PKG_DIR, 'node_modules', 'react'),
-      path.join(scratch, 'consumer', 'node_modules', 'react'),
+      path.join(consumer, 'node_modules', 'react'),
     );
     run('tar', ['-xzf', tgz, '-C', installed, '--strip-components=1'], scratch);
   }, 180000);
@@ -75,14 +84,19 @@ describe('packed package shape', () => {
     if (scratch) fs.rmSync(scratch, { recursive: true, force: true });
   });
 
+  function probe(file: string, source: string): Record<string, unknown> {
+    fs.writeFileSync(path.join(consumer, file), source);
+    return JSON.parse(run(process.execPath, [file], consumer));
+  }
+
   test('the tarball carries the ssr directory and the built entry it points at', () => {
     expect(tarballFiles).toContain('ssr/package.json');
     expect(tarballFiles).toContain('dist/ssr/index.js');
     expect(tarballFiles).toContain('dist/ssr/index.d.ts');
   });
 
-  test('the package declares no exports map', () => {
-    expect(manifest.exports).toBeUndefined();
+  test('the package declares an exports map and still ships dist, ssr and the README', () => {
+    expect(manifest.exports).toBeDefined();
     expect(manifest.files).toEqual(expect.arrayContaining(['dist', 'ssr', 'README.md']));
   });
 
@@ -92,9 +106,25 @@ describe('packed package shape', () => {
     expect(fs.existsSync(path.resolve(installed, 'ssr', ssr.types))).toBe(true);
   });
 
-  test('@controlvar/react-sdk/ssr resolves from the installed tarball and exports ServerClient', () => {
-    const consumer = path.join(scratch, 'consumer');
-    const script = `
+  test('(a) a Node ES module import of @controlvar/react-sdk/ssr gives ServerClient', () => {
+    const result = probe(
+      'probe-ssr.mjs',
+      `
+      import { ServerClient } from '@controlvar/react-sdk/ssr';
+      console.log(JSON.stringify({
+        resolved: import.meta.resolve('@controlvar/react-sdk/ssr'),
+        serverClient: typeof ServerClient,
+      }));
+    `,
+    );
+    expect(result.resolved).toMatch(/\/react-sdk\/dist\/ssr\/index\.js$/);
+    expect(result.serverClient).toBe('function');
+  });
+
+  test('(b) a CommonJS require of @controlvar/react-sdk/ssr gives ServerClient and never loads the provider', () => {
+    const result = probe(
+      'probe-ssr.cjs',
+      `
       const Module = require('module');
       const loaded = [];
       const orig = Module._load;
@@ -110,9 +140,8 @@ describe('packed package shape', () => {
         serverClient: typeof mod.ServerClient,
         loaded,
       }));
-    `;
-    fs.writeFileSync(path.join(consumer, 'probe.js'), script);
-    const result = JSON.parse(run(process.execPath, ['probe.js'], consumer));
+    `,
+    );
     expect(result.resolved).toContain(path.join('react-sdk', 'dist', 'ssr', 'index.js'));
     expect(result.serverClient).toBe('function');
     // Server-safe: the provider (which calls createContext at import time and
@@ -121,4 +150,75 @@ describe('packed package shape', () => {
     expect(names.filter((f) => /ExperimentationProvider/.test(f))).toEqual([]);
     expect(names.filter((f) => /\/node_modules\/react\//.test(f))).toEqual([]);
   });
+
+  test('(c) the package root imports from a Node ES module and requires from CommonJS', () => {
+    const expected = { ServerClient: 'function', ExperimentationProvider: 'function', useFeatureFlag: 'function' };
+    const esm = probe(
+      'probe-root.mjs',
+      `
+      import { ServerClient, ExperimentationProvider, useFeatureFlag } from '@controlvar/react-sdk';
+      console.log(JSON.stringify({
+        resolved: import.meta.resolve('@controlvar/react-sdk'),
+        kinds: {
+          ServerClient: typeof ServerClient,
+          ExperimentationProvider: typeof ExperimentationProvider,
+          useFeatureFlag: typeof useFeatureFlag,
+        },
+      }));
+    `,
+    );
+    expect(esm.resolved).toMatch(/\/react-sdk\/dist\/index\.js$/);
+    expect(esm.kinds).toEqual(expected);
+    const cjs = probe(
+      'probe-root.cjs',
+      `
+      const mod = require('@controlvar/react-sdk');
+      console.log(JSON.stringify({
+        resolved: require.resolve('@controlvar/react-sdk'),
+        kinds: {
+          ServerClient: typeof mod.ServerClient,
+          ExperimentationProvider: typeof mod.ExperimentationProvider,
+          useFeatureFlag: typeof mod.useFeatureFlag,
+        },
+      }));
+    `,
+    );
+    expect(cjs.resolved).toContain(path.join('react-sdk', 'dist', 'index.js'));
+    expect(cjs.kinds).toEqual(expected);
+  });
+
+  test("(d) the exports map has exactly '.', './ssr' and './package.json', and main and types agree with exports['.']", () => {
+    // The package.json the tarball ships, not the source copy.
+    const shipped = JSON.parse(fs.readFileSync(path.join(installed, 'package.json'), 'utf8'));
+    const strip = (p: unknown) => (typeof p === 'string' ? p.replace(/^\.\//, '') : p);
+    expect(Object.keys(shipped.exports ?? {}).sort()).toEqual(['.', './package.json', './ssr']);
+    expect(strip(shipped.main)).toBe(strip(shipped.exports?.['.']?.default));
+    expect(strip(shipped.types)).toBe(strip(shipped.exports?.['.']?.types));
+  });
+
+  // (e) TypeScript's own resolver, against the installed tarball: an ES module
+  // file under node16 or nodenext must find the types the runtime import loads.
+  test.each([
+    ['node10', ts.ModuleResolutionKind.Node10, ts.ModuleKind.CommonJS, 'index.ts', undefined],
+    ['node16, CommonJS', ts.ModuleResolutionKind.Node16, ts.ModuleKind.Node16, 'index.cts', ts.ModuleKind.CommonJS],
+    ['node16, ES module', ts.ModuleResolutionKind.Node16, ts.ModuleKind.Node16, 'index.mts', ts.ModuleKind.ESNext],
+    ['nodenext, ES module', ts.ModuleResolutionKind.NodeNext, ts.ModuleKind.NodeNext, 'index.mts', ts.ModuleKind.ESNext],
+    ['bundler', ts.ModuleResolutionKind.Bundler, ts.ModuleKind.ESNext, 'index.ts', undefined],
+  ] as const)(
+    '(e) TypeScript resolves @controlvar/react-sdk/ssr to dist/ssr/index.d.ts under %s',
+    (_name, moduleResolution, module, containing, mode) => {
+      const result = ts.resolveModuleName(
+        '@controlvar/react-sdk/ssr',
+        path.join(consumer, containing),
+        { moduleResolution, module, strict: true },
+        ts.sys,
+        undefined,
+        undefined,
+        mode,
+      );
+      expect(result.resolvedModule?.resolvedFileName ?? 'UNRESOLVED').toMatch(
+        /\/node_modules\/@controlvar\/react-sdk\/dist\/ssr\/index\.d\.ts$/,
+      );
+    },
+  );
 });

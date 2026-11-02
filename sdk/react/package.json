@@ -4,6 +4,17 @@
   "description": "React hooks, a context provider and an SSR client for Controlvar feature flags and experiments",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./ssr": {
+      "types": "./dist/ssr/index.d.ts",
+      "default": "./dist/ssr/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "files": ["dist", "ssr", "README.md"],
   "scripts": {
     "build": "tsc",

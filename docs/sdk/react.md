@@ -264,9 +264,8 @@ export const getServerSideProps: GetServerSideProps = async ({ req }) => {
 In the App Router, import `ServerClient` from `@controlvar/react-sdk/ssr` in an async server
 component and call the same methods there. Use the `/ssr` subpath rather than the package root: the
 root also loads the provider, which a React Server Component cannot import. The `/ssr` subpath
-resolves for CommonJS `require`, for bundlers and for TypeScript; an unbundled Node ES module
-(`import` in a `.mjs` file, or a dynamic `import()`) cannot import it, and imports
-`@controlvar/react-sdk/dist/ssr/index.js` instead.
+resolves for a CommonJS `require`, for a Node ES module `import`, and for TypeScript under
+`node10`, `node16`, `nodenext` and `bundler` module resolution.
 
 ### `ServerClient` API
 

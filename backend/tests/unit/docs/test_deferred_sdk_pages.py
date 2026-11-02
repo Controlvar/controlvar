@@ -946,7 +946,8 @@ def test_the_react_page_names_the_ssr_entry_the_package_ships():
     The page is in ``CLAIMS_DEFERRED``, so no claims entry binds its App Router
     sentence. It once told readers to call ``ServerClient`` from a server
     component without naming an import path that exists (#1518); this holds the
-    fixed sentence, and the files that make the path real, in place.
+    fixed sentence, and the files that make the path real, in place, and keeps
+    the page from naming a path inside the package's ``dist``.
     """
     page = fold(text("docs/sdk/react.md"))
     assert "@controlvar/react-sdk/ssr" in page
@@ -954,6 +955,9 @@ def test_the_react_page_names_the_ssr_entry_the_package_ships():
         "In the App Router call the same methods from an async server component."
         not in page
     )
+    # The package's `exports` map refuses deep imports, so a page that sends
+    # readers into `dist` gives an instruction Node rejects.
+    assert "@controlvar/react-sdk/dist" not in page
     manifest = json.loads((REPO_ROOT / "sdk/react/package.json").read_text("utf-8"))
     assert "ssr" in manifest["files"]
     assert (REPO_ROOT / "sdk/react/ssr/package.json").is_file()
