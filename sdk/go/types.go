@@ -62,6 +62,20 @@ type Assignment struct {
 	Configuration map[string]any `json:"configuration,omitempty"`
 }
 
+// Exposure is what the function given to WithOnExposure receives: one
+// experiment exposure the server recorded. Its fields are the Assignment's
+// first four, in the same order. Each call gets an Exposure of its own.
+type Exposure struct {
+	// ExperimentKey is the experiment's key.
+	ExperimentKey string
+	// UserID is the user's ID.
+	UserID string
+	// VariantID is the variant UUID, or "" when the server sent none.
+	VariantID string
+	// VariantName is the variant's name, e.g. "control" or "treatment".
+	VariantName string
+}
+
 // TrackEvent is an analytics event recorded with Client.Track / Client.TrackBatch.
 type TrackEvent struct {
 	// UserID is required.
