@@ -30,6 +30,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from backend.app.main import app
+from backend.app.models.audit_log import AuditLog
 from backend.app.models.user import User
 from backend.tests.integration.conftest import make_client_for_user
 from modules.backend.app.models.custom_role import CustomRole, DirectPermissionGrant
@@ -79,6 +80,20 @@ def system_role(db_session: Session):
         db_session.rollback()
         db_session.query(CustomRole).filter(CustomRole.name == role.name).delete()
         db_session.commit()
+
+
+def _role_entries(db_session: Session, action: str, name: str) -> int:
+    """How many audit entries of *action* name the custom role *name*."""
+    db_session.expire_all()
+    return (
+        db_session.query(AuditLog)
+        .filter(
+            AuditLog.action_type == action,
+            AuditLog.entity_type == "role",
+            AuditLog.entity_name == name,
+        )
+        .count()
+    )
 
 
 def _create_role(client: TestClient, name: str = None) -> dict:
@@ -502,8 +517,9 @@ class TestUpdateRole:
         )
         assert resp.status_code == 404, resp.text
 
-    def test_cannot_update_system_role(self, admin_client, system_role):
-        """Updating a system role answers 400 and leaves it as it was."""
+    def test_cannot_update_system_role(self, admin_client, system_role, db_session):
+        """Updating a system role answers 400, leaves it as it was, and writes
+        no role_update entry (#891)."""
         resp = admin_client.put(
             f"/api/v1/rbac/roles/{system_role}",
             json={
@@ -521,6 +537,17 @@ class TestUpdateRole:
         assert after.json()["permissions"] == [
             {"resource": "experiment", "actions": ["read"]}
         ]
+        assert _role_entries(db_session, "role_update", system_role) == 0, (
+            "a role_update entry was written for the refused update"
+        )
+        # Positive control: the same query sees a custom role's update.
+        name = _unique_role_name()
+        _create_role(admin_client, name)
+        changed = admin_client.put(
+            f"/api/v1/rbac/roles/{name}", json={"description": "changed"}
+        )
+        assert changed.status_code == 200, changed.text
+        assert _role_entries(db_session, "role_update", name) == 1
 
     def test_update_role_empty_payload_is_no_op(self, admin_client):
         """PUT with an empty body leaves the role name unchanged."""
@@ -584,8 +611,9 @@ class TestDeleteRole:
         finally:
             app.dependency_overrides.clear()
 
-    def test_cannot_delete_system_role(self, admin_client, system_role):
-        """Deleting a system role answers 400 and the role is still there."""
+    def test_cannot_delete_system_role(self, admin_client, system_role, db_session):
+        """Deleting a system role answers 400, the role is still there, and no
+        role_delete entry is written (#891)."""
         resp = admin_client.delete(f"/api/v1/rbac/roles/{system_role}")
         assert resp.status_code == 400, resp.text
         assert resp.json()["detail"] == "Cannot delete system roles"
@@ -593,6 +621,15 @@ class TestDeleteRole:
         after = admin_client.get(f"/api/v1/rbac/roles/{system_role}")
         assert after.status_code == 200, after.text
         assert after.json()["is_system_role"] is True
+        assert _role_entries(db_session, "role_delete", system_role) == 0, (
+            "a role_delete entry was written for the refused delete"
+        )
+        # Positive control: the same query sees a custom role's delete.
+        name = _unique_role_name()
+        _create_role(admin_client, name)
+        gone = admin_client.delete(f"/api/v1/rbac/roles/{name}")
+        assert gone.status_code == 204, gone.text
+        assert _role_entries(db_session, "role_delete", name) == 1
 
     def test_deleted_role_not_in_list(self, admin_client):
         """After deletion, role does not appear in list response."""
