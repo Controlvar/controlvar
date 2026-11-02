@@ -538,6 +538,27 @@ def test_the_routers_own_headers_are_its_own(event):
     assert "visitor-9" not in json.dumps(delivery.response)
 
 
+def test_the_routers_own_headers_are_its_own_while_it_waits():
+    """The same in the 30 seconds after a failure, when the API is not asked."""
+    api, clock = FakeApi(assign=(500, b"")), Clock()
+    router = make_router(api, clock)
+    deliver(router, viewer_request(request_id="first"))
+    event = viewer_request(
+        request_id="second",
+        extra=[("X-Controlvar-Split", "served"), ("X-Controlvar-Set-Uid", "v-9")],
+    )
+    delivery = deliver(router, event)
+    internal = {
+        name: entries
+        for name, entries in delivery.forwarded["headers"].items()
+        if name.startswith("x-controlvar-")
+    }
+    assert internal == {
+        "x-controlvar-split": [{"key": "X-Controlvar-Split", "value": "failed"}]
+    }
+    assert len(api.assign_calls()) == 1
+
+
 @pytest.mark.parametrize("value", ["redirected", "<b>", "served\r\nX: 1", ""])
 def test_viewer_response_names_only_an_outcome_it_can_have(value):
     """Viewer response turns the internal header into X-Split-URL only for
