@@ -1352,9 +1352,11 @@ class FakeWorld:
         nproc=4,
         generator_cpus=(),
         errors_from=None,
+        unlogged_from=None,
     ):
         self.tmp = tmp
         self.errors_from = errors_from
+        self.unlogged_from = unlogged_from
         self.generator_cpus = list(generator_cpus)
         self.now = 1_793_600_000_000
         self.latency_us = latency_us
@@ -1604,7 +1606,8 @@ class FakeWorld:
             ),
             "utf-8",
         )
-        self.step_rows = len(records)
+        short = self.unlogged_from is not None and step >= self.unlogged_from
+        self.step_rows = len(records) - (3 if short else 0)
         self.k6 = {"start": self.now, "seconds": seconds, "code": 0}
         assert variables["SCALE_BASE_URL"] == "http://web:8080"
         assert variables["SCALE_HOST"] == "localhost:18080"
@@ -1699,6 +1702,15 @@ def test_a_smoke_step_with_a_failed_request_fails_the_smoke(tmp_path):
     status, _, said = _run(world, tmp_path)
     assert status == 1
     assert "smoke: step 2: 20 of 200 requests failed" in said
+
+
+def test_an_invalid_smoke_step_fails_the_smoke(tmp_path):
+    """V19 at smoke scale: nginx logged three requests fewer than k6 sent."""
+    world = FakeWorld(tmp_path, unlogged_from=2)
+    status, _, said = _run(world, tmp_path)
+    assert status == 1
+    assert "smoke: step 2: INVALID (client-server)" in said
+    assert "step 2: client 250, server 247: 3 requests unaccounted" in said
 
 
 def test_a_slow_smoke_step_is_reported_but_never_fails_the_smoke(tmp_path):
