@@ -772,3 +772,11 @@ by = [
     "test:backend/tests/integration/api/test_metric_responses_metadata.py::test_aggregated_metrics_return_a_stored_row_with_its_metadata",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
 ]
+
+[[unit]]
+text = "GET /api/v1/metrics/errors | #956 | A start_date or end_date whose UTC offset is 16 hours or more either way (such as +16:00 or -19:52) answers 422 at [\"query\", <field>] with the msg Value error, the UTC offset must be less than 16 hours; it used to answer 500, because the database cannot store such an offset. The message does not repeat the value sent. Every other request answers as before, offsets up to 15:59 either way included. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_metrics_errors_dates.py::test_an_offset_of_16_hours_or_more_answers_422",
+    "test:backend/tests/integration/api/test_metrics_errors_dates.py::test_offsets_under_16_hours_utc_and_naive_dates_are_answered",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
