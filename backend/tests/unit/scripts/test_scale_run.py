@@ -1351,8 +1351,10 @@ class FakeWorld:
         siblings=None,
         nproc=4,
         generator_cpus=(),
+        errors_from=None,
     ):
         self.tmp = tmp
+        self.errors_from = errors_from
         self.generator_cpus = list(generator_cpus)
         self.now = 1_793_600_000_000
         self.latency_us = latency_us
@@ -1579,9 +1581,11 @@ class FakeWorld:
                         scenario = name
                         break
                     slot -= weight
+            erring = self.errors_from is not None and step >= self.errors_from
             row = fx.row(
                 scenario,
                 i,
+                status=503 if erring and i % 10 == 0 else 200,
                 latency_us=1_500_000 if failing else self.latency_us + i % 900,
             )
             record = {name: row.get(name, "") for name in sr.RECORD_FIELDS}
@@ -1688,11 +1692,23 @@ def test_a_publication_run_stops_after_two_failing_steps_and_is_valid(tmp_path):
     assert rep["valid"]
 
 
-def test_a_smoke_step_that_does_not_keep_up_fails_the_smoke(tmp_path):
-    world = FakeWorld(tmp_path, failing_from=2)
+def test_a_smoke_step_with_a_failed_request_fails_the_smoke(tmp_path):
+    """V20 at smoke scale: a 2xx that did not do its work, or a wrong status,
+    fails the smoke."""
+    world = FakeWorld(tmp_path, errors_from=2)
     status, _, said = _run(world, tmp_path)
     assert status == 1
-    assert "smoke: step 2: did not keep up (p99)" in said
+    assert "smoke: step 2: 20 of 200 requests failed" in said
+
+
+def test_a_slow_smoke_step_is_reported_but_never_fails_the_smoke(tmp_path):
+    """No pull-request gate asserts a wall-clock timing (PLAN 3.9): the first
+    live smoke's batch requests took over a second at 10 requests a second."""
+    world = FakeWorld(tmp_path, failing_from=2)
+    status, _, said = _run(world, tmp_path)
+    assert status == 0, said
+    assert "step 2: 10.0 requests a second: valid, did not keep up (p99)" in said
+    assert "smoke:" not in said
 
 
 @pytest.mark.parametrize(

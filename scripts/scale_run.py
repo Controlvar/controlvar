@@ -40,8 +40,8 @@ There is no option to aim it at anything but its own stack: the target is the
 project's ``web`` service, found through ``docker compose``.
 
 Standard library only. Exit status: 0 done (and, for ``run``, the run is
-valid; in smoke mode every step is valid and kept up), 1 failed or written but
-not valid, 2 refused or misused.
+valid; in smoke mode every step is valid and every request did its work), 1
+failed or written but not valid, 2 refused or misused.
 """
 
 from __future__ import annotations
@@ -819,17 +819,21 @@ def pg_needed(method: Mapping[str, Any]) -> int:
 
 
 def smoke_problems(steps: Sequence[Mapping[str, Any]]) -> List[str]:
-    """In smoke mode every step must be valid and keep up."""
-    return [
-        f"step {step['step']}: "
-        + (
-            f"INVALID ({step['invalid_reason']})"
-            if not step["valid"]
-            else f"did not keep up ({step['fail_reason']})"
-        )
-        for step in steps
-        if not (step["valid"] and step["keeps_up"])
-    ]
+    """In smoke mode every step must be VALID and every measured request must
+    have done its work (no wrong status, body, timeout or connection error).
+    Its latency and drops are recorded and printed, never judged here: no
+    pull-request gate asserts a wall-clock timing (PLAN 3.9), and the mix's
+    batch requests alone can put the p99 over the publication limit."""
+    problems = []
+    for step in steps:
+        if not step["valid"]:
+            problems.append(f"step {step['step']}: INVALID ({step['invalid_reason']})")
+        elif step["errors"]:
+            problems.append(
+                f"step {step['step']}: {step['errors']} of {step['measured']} "
+                "requests failed"
+            )
+    return problems
 
 
 # ---------------------------------------------------------------------------
