@@ -595,7 +595,13 @@ class TestUpdateRolloutSchedule:
         assert response.json()["name"] == "Updated Name"
 
     def test_update_description_and_max_percentage(self, shared_client, flag_id):
-        data = _create_schedule_via_api(shared_client, flag_id, "Multi Update")
+        # Stages of 25% and 75%, so a max_percentage of 75 is below no
+        # stage's target (one below a target answers 409, #1460).
+        payload = _valid_schedule_payload(flag_id, "Multi Update")
+        payload["stages"][1]["target_percentage"] = 75
+        created = shared_client.post("/api/v1/rollout-schedules/", json=payload)
+        assert created.status_code == 201, created.text
+        data = created.json()
         response = shared_client.put(
             f"/api/v1/rollout-schedules/{data['id']}",
             json={"description": "New desc", "max_percentage": 75},

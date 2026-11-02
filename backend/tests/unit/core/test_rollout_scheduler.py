@@ -112,6 +112,11 @@ class TestRolloutScheduler:
         mock_schedules_query.filter.return_value = mock_schedules_query
         mock_schedules_query.order_by.return_value = mock_schedules_query
         mock_schedules_query.all.return_value = [mock_schedule]
+        # The tick locks the flag and re-reads the schedule before it reads
+        # the stages (#1536).
+        mock_schedules_query.populate_existing.return_value = mock_schedules_query
+        mock_schedules_query.with_for_update.return_value = mock_schedules_query
+        mock_schedules_query.one_or_none.return_value = mock_schedule
 
         mock_active_stage_query = MagicMock()
         mock_pending_stage_query = MagicMock()
@@ -137,10 +142,14 @@ class TestRolloutScheduler:
         mock_session.query.side_effect = mock_query_side_effect
 
         # No active stages
+        mock_active_stage_query.populate_existing.return_value = mock_active_stage_query
         mock_active_stage_query.filter.return_value = mock_active_stage_query
         mock_active_stage_query.first.return_value = None
 
         # One pending stage
+        mock_pending_stage_query.populate_existing.return_value = (
+            mock_pending_stage_query
+        )
         mock_pending_stage_query.filter.return_value = mock_pending_stage_query
         mock_pending_stage_query.order_by.return_value = mock_pending_stage_query
         mock_pending_stage_query.all.return_value = [mock_stage]
@@ -206,6 +215,11 @@ class TestRolloutScheduler:
         mock_schedules_query.filter.return_value = mock_schedules_query
         mock_schedules_query.order_by.return_value = mock_schedules_query
         mock_schedules_query.all.return_value = [mock_schedule]
+        # The tick locks the flag and re-reads the schedule before it reads
+        # the stages (#1536).
+        mock_schedules_query.populate_existing.return_value = mock_schedules_query
+        mock_schedules_query.with_for_update.return_value = mock_schedules_query
+        mock_schedules_query.one_or_none.return_value = mock_schedule
 
         mock_active_stage_query = MagicMock()
         mock_pending_stage_query = MagicMock()
@@ -231,10 +245,14 @@ class TestRolloutScheduler:
         mock_session.query.side_effect = mock_query_side_effect
 
         # One active stage
+        mock_active_stage_query.populate_existing.return_value = mock_active_stage_query
         mock_active_stage_query.filter.return_value = mock_active_stage_query
         mock_active_stage_query.first.return_value = mock_active_stage
 
         # One pending stage
+        mock_pending_stage_query.populate_existing.return_value = (
+            mock_pending_stage_query
+        )
         mock_pending_stage_query.filter.return_value = mock_pending_stage_query
         mock_pending_stage_query.order_by.return_value = mock_pending_stage_query
         mock_pending_stage_query.all.return_value = [mock_pending_stage]
@@ -326,10 +344,14 @@ class TestRolloutScheduler:
         mock_session.query.side_effect = mock_query_side_effect
 
         # One active stage
+        mock_active_stage_query.populate_existing.return_value = mock_active_stage_query
         mock_active_stage_query.filter.return_value = mock_active_stage_query
         mock_active_stage_query.first.return_value = mock_active_stage
 
         # No pending stages
+        mock_pending_stage_query.populate_existing.return_value = (
+            mock_pending_stage_query
+        )
         mock_pending_stage_query.filter.return_value = mock_pending_stage_query
         mock_pending_stage_query.order_by.return_value = mock_pending_stage_query
         mock_pending_stage_query.all.return_value = []

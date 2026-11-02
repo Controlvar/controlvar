@@ -412,10 +412,13 @@ class TestRolloutSchedulerNotifications:
         schedules_query.populate_existing.return_value = schedules_query
         schedules_query.with_for_update.return_value = schedules_query
         schedules_query.one_or_none.return_value = mock_schedule
+        # The stages are read under that lock, from the database (#1536).
         active_query = MagicMock()
+        active_query.populate_existing.return_value = active_query
         active_query.filter.return_value = active_query
         active_query.first.return_value = None
         pending_query = MagicMock()
+        pending_query.populate_existing.return_value = pending_query
         pending_query.filter.return_value = pending_query
         pending_query.order_by.return_value = pending_query
         pending_query.all.return_value = [mock_stage]

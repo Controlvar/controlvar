@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 from uuid import UUID
 
-from sqlalchemy import and_, func
+from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from backend.app.core.logging import get_logger
@@ -40,6 +40,18 @@ class RolloutRuleConflict(ValueError):
     only from stored or validated values (stage orders, percentages, statuses
     and a schedule id), never from text a request sent.
     """
+
+
+#: A stage in one of these states has started: it keeps its target and its
+#: place in the order, and no stage may be added or moved at or before it.
+STARTED_STAGE_STATUSES = (
+    RolloutStageStatus.IN_PROGRESS,
+    RolloutStageStatus.COMPLETED,
+    RolloutStageStatus.FAILED,
+)
+
+#: What a request may still change on a stage that is in progress.
+IN_PROGRESS_FIXED_FIELDS = frozenset({"target_percentage", "stage_order"})
 
 
 def _lock_schedule_for_change(
@@ -86,6 +98,48 @@ def _lock_schedule_for_change(
         .all()
     )
     return feature_flag, current, stages
+
+
+def _check_targets(entries: List[Tuple[int, int]], max_percentage: int) -> None:
+    """Refuse targets that decrease in ``stage_order`` or exceed the maximum.
+
+    ``entries`` is ``(stage_order, target_percentage)`` for every stage of the
+    schedule as the change would leave it. The whole schedule is judged, so a
+    schedule that already breaks a rule accepts only a change that mends it.
+    """
+    ordered = sorted(entries, key=lambda entry: entry[0])
+    for (a, p), (b, q) in zip(ordered, ordered[1:]):
+        if q < p:
+            raise RolloutRuleConflict(
+                "Stage targets must not decrease in stage_order: "
+                f"stage_order {a} targets {p}% and stage_order {b} would target {q}%."
+            )
+    for b, q in ordered:
+        if q > max_percentage:
+            raise RolloutRuleConflict(
+                "A stage's target cannot exceed the schedule's max_percentage: "
+                f"stage_order {b} would target {q}% and max_percentage is "
+                f"{max_percentage}%."
+            )
+
+
+def _check_after_started(stages: List[RolloutStage], new_order: int) -> None:
+    """Refuse a stage added or moved at or before a stage that has started (#1536).
+
+    The scheduler starts the lowest pending stage when no pending stage comes
+    after the one in progress, so a pending stage placed before a started one
+    would move the flag backwards.
+    """
+    started = [s for s in stages if s.status in STARTED_STAGE_STATUSES]
+    if not started:
+        return
+    top = max(started, key=lambda s: s.stage_order)
+    if new_order <= top.stage_order:
+        raise RolloutRuleConflict(
+            "Stages that have started keep their place: "
+            f"stage_order {top.stage_order} is {top.status.value}, "
+            "so a stage can only be added or moved after it."
+        )
 
 
 class RolloutService:
@@ -267,8 +321,20 @@ class RolloutService:
                 if stages_count == 0:
                     raise ValueError("Cannot activate a schedule with no stages")
 
+        _, schedule, stages = _lock_schedule_for_change(db, schedule)
+
         # Update basic fields
         update_data = data.model_dump(exclude_unset=True)
+
+        # Lowering max_percentage below a stage's target (#1460).
+        new_max = update_data.get("max_percentage")
+        if new_max is not None:
+            over = next((s for s in stages if s.target_percentage > new_max), None)
+            if over is not None:
+                raise RolloutRuleConflict(
+                    "max_percentage cannot be below a stage's target: "
+                    f"stage_order {over.stage_order} targets {over.target_percentage}%."
+                )
 
         # Handle stages update if provided
         stages_data = update_data.pop("stages", None)
@@ -329,32 +395,35 @@ class RolloutService:
         if not schedule:
             return None
 
+        _, schedule, stages = _lock_schedule_for_change(db, schedule)
+
         # Get max order of existing stages
-        max_order = (
-            db.query(func.max(RolloutStage.stage_order))
-            .filter(RolloutStage.rollout_schedule_id == schedule_id)
-            .scalar()
-            or 0
-        )
+        max_order = max((s.stage_order for s in stages), default=0)
 
         # If no order is specified, put it at the end
         if data.stage_order is None:
             data.stage_order = max_order + 1
 
-        # If order is in the middle, we need to shift other stages
-        if data.stage_order <= max_order:
-            stages_to_shift = (
-                db.query(RolloutStage)
-                .filter(
-                    and_(
-                        RolloutStage.rollout_schedule_id == schedule_id,
-                        RolloutStage.stage_order >= data.stage_order,
-                    )
+        # The rules, on the schedule as the change would leave it: the stages
+        # at or after the new order move one place on (#1460, #1536).
+        _check_after_started(stages, data.stage_order)
+        _check_targets(
+            [
+                (
+                    s.stage_order + 1
+                    if s.stage_order >= data.stage_order
+                    else s.stage_order,
+                    s.target_percentage,
                 )
-                .all()
-            )
+                for s in stages
+            ]
+            + [(data.stage_order, data.target_percentage)],
+            schedule.max_percentage,
+        )
 
-            for stage in stages_to_shift:
+        # If order is in the middle, we need to shift other stages
+        for stage in stages:
+            if stage.stage_order >= data.stage_order:
                 stage.stage_order += 1
                 db.add(stage)
 
@@ -397,62 +466,82 @@ class RolloutService:
         if not stage:
             return None
 
-        # If changing order, handle order shifts
-        if data.stage_order is not None and data.stage_order != stage.stage_order:
-            # Get the schedule to validate
-            schedule = (
-                db.query(RolloutSchedule)
-                .filter(RolloutSchedule.id == stage.rollout_schedule_id)
-                .first()
+        schedule = (
+            db.query(RolloutSchedule)
+            .filter(RolloutSchedule.id == stage.rollout_schedule_id)
+            .first()
+        )
+        if not schedule:
+            raise ValueError("Schedule not found")
+
+        # ``stage`` is one of the rows read again here, so its status is the
+        # stored one from now on.
+        _, schedule, stages = _lock_schedule_for_change(db, schedule)
+        if not any(s.id == stage.id for s in stages):
+            return None  # deleted while this request waited
+
+        # The fields the request body sets (#1460): a stage that has
+        # completed or failed takes none; one in progress keeps its target
+        # and its place in the order.
+        sent = data.model_fields_set
+        if sent and stage.status in (
+            RolloutStageStatus.COMPLETED,
+            RolloutStageStatus.FAILED,
+        ):
+            raise RolloutRuleConflict(
+                f"A stage that is {stage.status.value} cannot be changed."
+            )
+        if stage.status == RolloutStageStatus.IN_PROGRESS and (
+            sent & IN_PROGRESS_FIXED_FIELDS
+        ):
+            raise RolloutRuleConflict(
+                "target_percentage and stage_order cannot be changed on a stage "
+                "that is in_progress; its name, description, trigger_type, "
+                "trigger_configuration and start_date still can."
             )
 
-            if not schedule:
-                raise ValueError("Schedule not found")
+        old_order = stage.stage_order
+        new_order = data.stage_order if data.stage_order is not None else old_order
 
-            # Don't allow changing order for stages that are not in PENDING status
-            if stage.status != RolloutStageStatus.PENDING:
-                raise ValueError(
-                    "Cannot change order of stages that are not in PENDING status"
+        def order_after(s: RolloutStage) -> int:
+            """Where ``s`` is once the stage moves from old_order to new_order."""
+            if s.id == stage.id:
+                return new_order
+            if new_order > old_order and old_order < s.stage_order <= new_order:
+                return s.stage_order - 1
+            if new_order < old_order and new_order <= s.stage_order < old_order:
+                return s.stage_order + 1
+            return s.stage_order
+
+        # A pending stage is not moved at or before a stage that has started
+        # (#1536), and the schedule as the change would leave it keeps its
+        # targets in order and within max_percentage (#1460).
+        if data.stage_order is not None:
+            _check_after_started(
+                [s for s in stages if s.id != stage.id], data.stage_order
+            )
+        new_target = (
+            data.target_percentage
+            if data.target_percentage is not None
+            else stage.target_percentage
+        )
+        _check_targets(
+            [
+                (
+                    order_after(s),
+                    new_target if s.id == stage.id else s.target_percentage,
                 )
+                for s in stages
+            ],
+            schedule.max_percentage,
+        )
 
-            # Handle shifting other stages
-            if data.stage_order > stage.stage_order:
-                # Moving down - shift up stages in between
-                stages_to_shift = (
-                    db.query(RolloutStage)
-                    .filter(
-                        and_(
-                            RolloutStage.rollout_schedule_id
-                            == stage.rollout_schedule_id,
-                            RolloutStage.stage_order > stage.stage_order,
-                            RolloutStage.stage_order <= data.stage_order,
-                            RolloutStage.id != stage.id,
-                        )
-                    )
-                    .all()
-                )
-
-                for s in stages_to_shift:
-                    s.stage_order -= 1
-                    db.add(s)
-            else:
-                # Moving up - shift down stages in between
-                stages_to_shift = (
-                    db.query(RolloutStage)
-                    .filter(
-                        and_(
-                            RolloutStage.rollout_schedule_id
-                            == stage.rollout_schedule_id,
-                            RolloutStage.stage_order < stage.stage_order,
-                            RolloutStage.stage_order >= data.stage_order,
-                            RolloutStage.id != stage.id,
-                        )
-                    )
-                    .all()
-                )
-
-                for s in stages_to_shift:
-                    s.stage_order += 1
+        # Move the stages between the old and the new order one place.
+        if new_order != old_order:
+            for s in stages:
+                moved = order_after(s)
+                if s.id != stage.id and moved != s.stage_order:
+                    s.stage_order = moved
                     db.add(s)
 
         # Update fields
