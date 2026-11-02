@@ -3,13 +3,17 @@ package com.controlvar.sdk.examples;
 import com.controlvar.sdk.ExperimentationClient;
 import com.controlvar.sdk.config.SdkConfig;
 import com.controlvar.sdk.model.ExperimentAssignment;
+import com.controlvar.sdk.model.Exposure;
 import com.controlvar.sdk.model.FlagEvaluation;
 import com.controlvar.sdk.model.TrackEvent;
 import com.controlvar.sdk.model.User;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -88,6 +92,40 @@ public final class ContractSmoke {
                     TrackEvent.builder(userId, "page_view").experimentKey(experimentKey).build(),
                     TrackEvent.builder(userId, "page_view").featureFlagKey(flagKey).build()));
 
+            // 5. The exposure listener (#1499): a NEW client with a listener assigns the same
+            //    user twice, with no clearCache() in between. The server records an exposure for
+            //    the first request (assigned: true) and the second answer comes from the cache,
+            //    so the listener is called once. The runner checks the count, the experiment key
+            //    and the variant; the user id is checked here, the one place that knows it.
+            List<Exposure> exposures = Collections.synchronizedList(new ArrayList<>());
+            SdkConfig listened = SdkConfig.builder(apiKey, baseUrl).timeoutMs(10_000)
+                    .exposureListener(exposures::add).build();
+            try (ExperimentationClient hooked = new ExperimentationClient(listened)) {
+                hooked.getExperimentAssignment(user, experimentKey);
+                hooked.getExperimentAssignment(user, experimentKey);
+            }
+            for (Exposure e : exposures) {
+                if (!userId.equals(e.getUserId())) {
+                    fail("the exposure listener received user \"" + e.getUserId() + "\", expected \"" + userId + "\"");
+                }
+            }
+
+            // 5b. A listener that throws an Error, as a missing analytics library does: the
+            //     client must catch it (an Error escapes this smoke's catch and exits 1) and
+            //     answer the same variant.
+            SdkConfig throwing = SdkConfig.builder(apiKey, baseUrl).timeoutMs(10_000)
+                    .exposureListener(e -> {
+                        throw new NoClassDefFoundError("com/example/analytics/Analytics");
+                    }).build();
+            ExperimentAssignment fromThrowing;
+            try (ExperimentationClient failing = new ExperimentationClient(throwing)) {
+                fromThrowing = failing.getExperimentAssignment(user, experimentKey);
+            }
+            if (!sameVariant(first, fromThrowing)) {
+                fail("the client whose exposure listener throws answered " + fromThrowing.getVariantName()
+                        + ", not " + first.getVariantName());
+            }
+
             Map<String, Object> assign = new LinkedHashMap<>();
             assign.put("variant_name", first.getVariantName());
             assign.put("is_control", first.isControl());
@@ -99,6 +137,20 @@ public final class ContractSmoke {
             report.put("flag", Map.of("enabled", flag.isEnabled()));
             report.put("track", Map.of("ok", true));
             report.put("fanout", Map.of("ok", true));
+
+            Map<String, Object> payload = null;
+            if (!exposures.isEmpty()) {
+                Exposure e = exposures.get(0);
+                payload = new LinkedHashMap<>(); // LinkedHashMap: variant_id may be null
+                payload.put("experiment_key", e.getExperimentKey());
+                payload.put("variant_name", e.getVariantName());
+                payload.put("variant_id", e.getVariantId());
+                payload.put("user_id", e.getUserId());
+            }
+            Map<String, Object> exposure = new LinkedHashMap<>();
+            exposure.put("calls", exposures.size());
+            exposure.put("payload", payload);
+            report.put("exposure", exposure);
 
             System.out.println(new ObjectMapper().writeValueAsString(report));
         } catch (Exception e) {

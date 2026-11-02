@@ -39,8 +39,11 @@ by = [
 ]
 
 [[unit]]
-text = "In the full profile it also records custom roles assigned and revoked, a workspace member's role changes, and single sign-on (SSO) sign-ins."
-by = ["test:modules/backend/tests/integration/api/test_audit_module_events.py"]
+text = "In the full profile it also records custom roles defined, changed, deleted, assigned and revoked, direct permissions granted and revoked, a workspace member's role changes, and single sign-on (SSO) sign-ins."
+by = [
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py",
+    "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_the_inventory_is_exact",
+]
 
 [[unit]]
 text = "Action Types lists every action and when it is written."
@@ -649,6 +652,41 @@ by = [
 ]
 
 [[unit]]
+text = "role_create | role | POST /rbac/roles defines a custom role; new_value is {\"description\", \"permissions\"}, reason is custom role created"
+by = [
+    "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_the_inventory_is_exact",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_creating_a_custom_role_writes_one_role_create",
+]
+
+[[unit]]
+text = "role_update | role | PUT /rbac/roles/{role_name} changes a custom role's description or permissions; old_value and new_value hold the fields that changed, reason is custom role changed"
+by = [
+    "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_the_inventory_is_exact",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_changing_a_custom_role_writes_one_role_update_per_change",
+]
+
+[[unit]]
+text = "role_delete | role | DELETE /rbac/roles/{role_name} deletes a custom role; old_value is {\"description\", \"permissions\", \"assigned_users\"}, where assigned_users is how many users had it, reason is custom role deleted"
+by = [
+    "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_the_inventory_is_exact",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_deleting_a_custom_role_writes_one_role_delete",
+]
+
+[[unit]]
+text = "permission_grant | user | POST /rbac/users/{user_id}/grant grants a user a direct permission; new_value is {\"resource\", \"actions\", \"expires_at\", \"grant_id\", \"reason\"}, its reason the one sent with the request, and the entry's reason is direct permission granted"
+by = [
+    "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_the_inventory_is_exact",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_granting_a_direct_permission_writes_one_permission_grant",
+]
+
+[[unit]]
+text = "permission_revoke | user | DELETE /rbac/users/{user_id}/grant/{resource} deletes the user's direct grants of that resource, when there is at least one; old_value is {\"resource\", \"count\"}, reason is direct permission revoked"
+by = [
+    "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_the_inventory_is_exact",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_revoking_a_direct_permission_writes_one_permission_revoke",
+]
+
+[[unit]]
 text = "role_assign | user | PUT /workspaces/{id}/members/{user_id} changes a member's workspace role; old_value and new_value are {\"workspace_id\", \"workspace_role\"}, reason is workspace role changed"
 by = [
     "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_the_inventory_is_exact",
@@ -679,14 +717,16 @@ by = [
 ]
 
 [[unit]]
-text = "A request that changes nothing (a custom role already held, a workspace role or SSO role already equal) writes no entry."
+text = "A request that changes nothing (a custom role already held, a custom role update that sends what is stored, a revoke with no grant to delete, a workspace role or SSO role already equal) writes no entry."
 by = [
     "test:modules/backend/tests/integration/api/test_audit_module_events.py",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_changing_a_custom_role_writes_one_role_update_per_change",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_revoking_a_direct_permission_writes_one_permission_revoke",
     "test:backend/tests/integration/services/test_audit_service_sites.py::test_unchanged_groups_write_nothing",
 ]
 
 [[unit]]
-text = "Assigning a direct permission, defining a custom role, adding or removing a workspace member, invites, SSO configuration and the other module routes write none."
+text = "Adding or removing a workspace member, invites, SSO configuration and the other module routes write none."
 by = ["test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_the_inventory_is_exact"]
 
 [[unit]]
@@ -701,21 +741,24 @@ by = [
 ]
 
 [[unit]]
-text = "ActionType also defines user_update, user_logout, permission_grant, permission_revoke and safety_config_update."
+text = "ActionType also defines user_update, user_logout and safety_config_update."
 by = [
     "test:backend/tests/smoke/test_audit_inventory.py::test_written_action_types_are_what_the_inventory_writes",
     "test:backend/tests/smoke/test_audit_action_types_json.py",
 ]
 
 [[unit]]
-text = "You can filter on them, but nothing in this release writes them (role_unassign is written only with the modules installed)."
-by = ["exempt:baseline"]
+text = "You can filter on them, but nothing in this release writes them."
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_written_action_types_are_what_the_inventory_writes",
+    "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_modules_only_action_types_are_what_the_modules_add",
+]
 
 [[unit]]
-text = "Granting and revoking a direct permission are not recorded because no permission check reads direct grants yet (#891)."
+text = "role_unassign, role_create, role_update, role_delete, permission_grant and permission_revoke are written only with the modules installed."
 by = [
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_granting_and_revoking_a_direct_permission_write_no_audit_entry",
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_no_permission_check_reads_custom_roles_or_direct_grants",
+    "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_modules_only_action_types_are_what_the_modules_add",
+    "test:backend/tests/smoke/test_audit_action_types_json.py::test_modules_only_actions_are_not_written_by_core",
 ]
 
 [[unit]]
@@ -850,6 +893,14 @@ by = [
 [[unit]]
 text = "A superuser's change to a user's role, superuser flag or active status | Nothing is saved and the response is 500; resend it once the problem is fixed"
 by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_patch_under_a_failed_audit_write_keeps_neither"]
+
+[[unit]]
+text = "A custom role defined, changed, deleted, assigned or revoked, or a direct permission granted or revoked (full profile) | The change is kept and the response is 2xx; there is no entry. Unlike a change to a user's built-in role, it is not refused"
+by = [
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_a_refused_entry_keeps_the_role_and_the_grant",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_a_refused_entry_keeps_the_custom_role",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_patch_under_a_failed_audit_write_keeps_neither",
+]
 
 [[unit]]
 text = "A safety rollback, manual or by the safety monitor | The rollback is kept; there is no entry"

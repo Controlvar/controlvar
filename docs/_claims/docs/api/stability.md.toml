@@ -697,6 +697,17 @@ by = [
 ]
 
 [[unit]]
+text = "POST /api/v1/rbac/roles, PUT /api/v1/rbac/roles/{role_name}, POST /api/v1/rbac/users/{user_id}/grant (full profile) | #891 | A custom role or a direct grant can hold only experiment and feature_flag with create, read, update, delete and list, and audit_log with read. A request that sends any other resource or action answers 422 with \"type\": \"not_grantable\", at [\"body\", \"permissions\"] on the two role operations (on PUT only when permissions is sent) and at [\"body\"] on the grant, and nothing is written; every resource and action used to be accepted. Roles and grants stored before the change read back unchanged, a PUT that sends only description still answers 200, and DELETE /api/v1/rbac/users/{user_id}/grant/{resource} still deletes a grant of any resource. The OpenAPI document does not change. See RBAC."
+by = [
+    "test:modules/backend/tests/unit/schemas/test_rbac_schemas.py::test_exactly_the_eleven_pairs_are_accepted",
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_creating_a_role_with_a_pair_no_role_may_hold_is_refused",
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_changing_a_roles_permissions_to_a_pair_no_role_may_hold_is_refused",
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_granting_a_pair_no_grant_may_hold_is_refused",
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_a_role_and_a_grant_stored_before_the_check_read_and_clean_up",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "POST /api/v1/feature-flags/, PUT /api/v1/feature-flags/{flag_id}, POST /api/v1/experiments/, PUT /api/v1/experiments/{experiment_id}, POST /api/v1/segments, PUT /api/v1/segments/{segment_id} | #1204 | Targeting rules that use a word their evaluator does not know answer 422 at [\"body\", \"targeting_rules\"] (segments: [\"body\", \"rules\"]), where they used to be accepted and the condition never held. The words are: on a flag, the operators json_path and percentage_bucket, which flag evaluation does not implement (experiments still accept both); a semantic_version comparison other than eq, gt, gte, lt and lte; an array_length comparison other than those and between; a geo_distance comparison other than lte, lt, gt, gte and eq; a distance unit other than km, kilometers, kilometre, kilometres, miles, mi, meters, metres and m, in any case; and, in the native shape, a time_window the engine cannot read, such as one given only as start and end. The msg names the place and the reason, for example Value error, groups[0].conditions[1].value: unknown distance unit; use km, mi or m, or leave it out for km, and nothing is written. A request that does not send the rules is unaffected, but one that sends back stored rules using such a word answers 422 until they are corrected. Stored rules are evaluated as before, and python -m backend.scripts.check_targeting_rules lists them. Clone still copies stored rules as they are. The OpenAPI document does not change. See Targeting Rules: Operator Reference."
 by = [
     "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py",
@@ -748,4 +759,35 @@ by = [
     "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_admin_all_sees_everyone",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/tracking/track, POST /api/v1/tracking/batch, POST /api/v1/tracking/events | #1543 | Each event takes an optional event_id: text of at most 255 characters, compared exactly. Missing, null and \"\" mean none, and an event without one is stored as before. An event sent again with the same event_id, user, experiment, flag and event name is not stored again: /track and /events answer 200 with \"duplicate\": true and the stored event's id, and /batch counts it in success_count and in the new duplicate_count. The answers of /track and /events gain duplicate and event_id, and the answer of /batch gains duplicate_count. An event_id these routes ignored before is now refused with 422 when it is not a string (a number, say), is over 255 characters, or holds NUL or a lone surrogate; in /batch one such entry refuses the whole request, and nothing in it is stored. The OpenAPI document changes only in these three operations' request and response schemas. See How events count."
+by = [
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r2_the_same_item_twice_in_one_batch_is_stored_once",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r4_one_event_through_track_batch_and_events_is_one_row",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r8_without_an_event_id_two_identical_purchases_are_both_stored",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r12_an_invalid_event_id_is_refused_and_a_batch_with_one_stores_nothing",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r12_an_empty_or_null_event_id_means_none",
+    "test:backend/tests/unit/schemas/test_tracking_event_id.py::test_an_invalid_event_id_is_refused",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "GET /api/v1/metrics/errors, GET /api/v1/metrics/aggregated | #1625 | A stored row is returned with its metadata (the stored meta_data), where any answer holding a row answered 500. An empty answer is unchanged. The OpenAPI document changes: the two response schemas lose a metadata keyword that described an alias the code never had; no field, type or requirement changes."
+by = [
+    "test:backend/tests/integration/api/test_metric_responses_metadata.py::test_the_error_log_returns_a_stored_row_with_its_metadata",
+    "test:backend/tests/integration/api/test_metric_responses_metadata.py::test_the_error_log_returns_a_row_with_no_metadata",
+    "test:backend/tests/integration/api/test_metric_responses_metadata.py::test_aggregated_metrics_return_a_stored_row_with_its_metadata",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "GET /api/v1/metrics/errors | #956 | A start_date or end_date whose UTC offset is 16 hours or more either way (such as +16:00 or -19:52) answers 422 at [\"query\", <field>] with the msg Value error, the UTC offset must be less than 16 hours; it used to answer 500, because the database cannot store such an offset. The message does not repeat the value sent. Every other request answers as before, offsets up to 15:59 either way included. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_metrics_errors_dates.py::test_an_offset_of_16_hours_or_more_answers_422",
+    "test:backend/tests/integration/api/test_metrics_errors_dates.py::test_offsets_under_16_hours_utc_and_naive_dates_are_answered",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
 ]

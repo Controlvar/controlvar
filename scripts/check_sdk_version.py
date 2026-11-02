@@ -54,6 +54,8 @@ ECOSYSTEMS: dict[str, str] = {
     "openfeature": "npm",
     "react": "npm",
     "react-native": "npm",
+    # The MCP server, @controlvar/mcp-server: not an SDK, released the same way.
+    "mcp": "npm",
     "go": "tag-only",
     "java": "maven",
     "dotnet": "nuget",

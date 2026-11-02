@@ -42,8 +42,19 @@ experiment_assignments_total: Counter = Counter(
 
 events_tracked_total: Counter = Counter(
     "events_tracked_total",
-    "Total events tracked",
+    "Events stored by the tracking API (a duplicate is not counted here)",
     ["event_type"],
+)
+
+# An event the tracking API answered as already stored: an earlier one had the
+# same event_id, user, experiment, flag and event name, so nothing was written
+# (#1543). ``route`` is one of ``DUPLICATE_ROUTES``; never the event type,
+# which is client text.
+events_duplicate_total: Counter = Counter(
+    "events_duplicate_total",
+    "Events answered as already stored (same event_id, user, experiment, flag "
+    "and event name); nothing was written",
+    ["route"],
 )
 
 feature_flag_evaluations_total: Counter = Counter(
@@ -204,8 +215,27 @@ def event_type_label(event_type: str) -> str:
 
 
 def record_event_tracked(event_type: str) -> None:
-    """Increment the events-tracked counter (label cardinality is bounded)."""
+    """Increment the events-tracked counter (label cardinality is bounded).
+
+    Called only when a row was written: a duplicate goes to
+    :func:`record_event_duplicate` instead.
+    """
     events_tracked_total.labels(event_type=event_type_label(event_type)).inc()
+
+
+#: The tracking routes that recognise an event sent again by its ``event_id``.
+DUPLICATE_ROUTES: frozenset = frozenset({"track", "batch", "events"})
+
+
+def record_event_duplicate(route: str) -> None:
+    """Count an event answered as already stored, by the route that answered.
+
+    ``route`` must be one of :data:`DUPLICATE_ROUTES`; anything else raises
+    ``ValueError`` rather than adding a label value.
+    """
+    if route not in DUPLICATE_ROUTES:
+        raise ValueError(f"not a duplicate route: {route!r}")
+    events_duplicate_total.labels(route=route).inc()
 
 
 def record_flag_evaluation(flag_key: str, result: str) -> None:

@@ -152,7 +152,7 @@ asks it and does what it is told:
 
 ```text
 Visitor asks for https://shop.example.com/checkout?utm_source=mail
-  +-- Your server or edge
+  +-- Your server or edge (or, on AWS, the optional CloudFront router)
   |     reads the visitor's id cookie, or makes one; asks Controlvar (API key)
   +-- Controlvar assigns the visitor as /tracking/assign does
   |     (a stored assignment first; holdout, mutual exclusion, targeting; bandit weights)
@@ -160,12 +160,12 @@ Visitor asks for https://shop.example.com/checkout?utm_source=mail
   +-- Control, not eligible, not running, or no answer in time: the page they asked for
 ```
 
-The split-URL module also ships a CloudFront construct (`modules/infrastructure/constructs/split_url_distribution.py`) with a
-Lambda@Edge `viewer-request` router. The CloudFront edge router does not split traffic yet.
-**No stack uses it**: `infrastructure/cdk/app.py` creates no CloudFront distribution, so a
-deployment has it only if you add it to a stack yourself. The construct does not set
-`X-Split-URL-Config`, the only place the router reads its configuration from. Lambda@Edge
-functions must be deployed in `us-east-1`. See [Split URL testing](../api/split-url.md).
+On AWS, the split-URL module's CloudFront edge router (beta) can do the asking: a CloudFront
+distribution in front of the site, with a Lambda@Edge function at viewer request and viewer
+response that follows the same rules as any server or edge. It is a CDK app of its own
+(`modules/infrastructure/split_url_edge/`), in `us-east-1`, which nothing deploys but you:
+`infrastructure/cdk/app.py` creates no CloudFront distribution. See
+[Split URL testing](../api/split-url.md#the-cloudfront-edge-router).
 
 ---
 
@@ -207,8 +207,8 @@ The Fargate stack runs the dashboard as its own ECS service behind the API's loa
 balancer: `/api/*`, `/health`, `/health/*` and `/metrics` go to the API, everything
 else to the dashboard. `cdk deploy` starts it on `experimentation-platform/web:bootstrap`;
 the Deploy workflow rolls each release onto it by digest, after the API. No
-stack creates CloudFront. The split-URL module's CloudFront construct
-exists but `app.py` does not use it. See [AWS CDK Deployment](../self-hosting/cdk.md).
+stack creates CloudFront. The split URL edge router is a CDK app of its own,
+which `app.py` does not include. See [AWS CDK Deployment](../self-hosting/cdk.md).
 
 ### Stacks
 

@@ -470,6 +470,10 @@ text = "The SDK guide says how, and what CI runs for each one."
 by = ["exempt:navigation"]
 
 [[unit]]
+text = "sdk/mcp holds the Controlvar MCP server, which is not an SDK and is not yet published; it is meant for an AI assistant such as Claude Code to start on your computer, to read your instance's feature flags, experiments and results with your API key."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_sdk_mcp_is_the_mcp_server_and_not_an_sdk"]
+
+[[unit]]
 text = "Documentation"
 by = ["exempt:label"]
 
@@ -638,10 +642,10 @@ by = [
 ]
 
 [[unit]]
-text = "split_url | Split URL experiments: each variant is its own URL. Your server or edge asks the API where to send each visitor; the CloudFront edge router does not split traffic yet (#393). The AWS installer installs the core profile, so it does not include them"
+text = "split_url | Split URL experiments: each variant is its own URL. Your server or edge asks the API where to send each visitor (on AWS an optional CloudFront router can). The AWS installer installs the core profile, so it does not include them"
 by = [
     "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_a_split_url_experiment_splits_its_visitors",
-    "test:modules/backend/tests/unit/test_split_url_edge_wiring.py::test_the_router_redirects_only_on_the_header",
+    "test:modules/backend/tests/integration/split_url/test_split_url_router_e2e.py::test_a_split_url_experiment_splits_its_visitors_through_the_router",
     "test:backend/tests/installer_sweeps/test_install_run.py::test_the_full_profile_stops_before_the_deploy",
 ]
 

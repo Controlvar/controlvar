@@ -222,6 +222,51 @@ class TestTrackingCounters:
         assert body["success_count"] == 2 and body["failure_count"] == 1
         assert sample("events_tracked_total", {"event_type": "custom"}) == before + 2
 
+    @pytest.mark.regression
+    @pytest.mark.parametrize("route", ["track", "batch", "events"])
+    def test_a_duplicate_counts_in_events_duplicate_total_only(
+        self, client, live_experiment, route
+    ):
+        """An event sent again with its ``event_id`` (#1543) increments
+        ``events_duplicate_total{route}`` and not ``events_tracked_total``,
+        which counts rows written."""
+        event_id = f"dup-{uuid.uuid4()}"
+        user_id = f"u-dup-{uuid.uuid4().hex[:8]}"
+        if route == "events":
+            url = "/api/v1/tracking/events"
+            body = {
+                "experiment_id": str(live_experiment.id),
+                "user_id": user_id,
+                "event_type": "click",
+                "event_name": "click",
+                "event_id": event_id,
+            }
+        else:
+            url = f"/api/v1/tracking/{route}"
+            event = {
+                "experiment_key": live_experiment.key,
+                "user_id": user_id,
+                "event_type": "click",
+                "event_id": event_id,
+            }
+            body = {"events": [event]} if route == "batch" else event
+        tracked = {"event_type": "click"}
+        duplicates = {"route": route}
+
+        first = client.post(url, json=body)
+        assert first.status_code == 200, first.text
+        after_first = (
+            sample("events_tracked_total", tracked),
+            sample("events_duplicate_total", duplicates),
+        )
+        again = client.post(url, json=body)
+        assert again.status_code == 200, again.text
+
+        assert (
+            sample("events_tracked_total", tracked),
+            sample("events_duplicate_total", duplicates),
+        ) == (after_first[0], after_first[1] + 1)
+
 
 # ---------------------------------------------------------------------------
 # Feature flag evaluation

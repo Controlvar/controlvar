@@ -81,9 +81,19 @@ JOURNEYS = REPO_ROOT / "tests" / "acceptance" / "docs" / "journeys"
 NPM = ("js", "react", "react-native", "openfeature", "edge")
 #: Python distribution -> its manifest directory under sdk/.
 PYPI = ("python", "openfeature-python")
-#: The SDK directories whose package is on its registry. PyPI and npm show the
-#: README of each as the package's page.
+#: The published SDK directories whose README is held STRICT here (every
+#: version on it is its manifest's) and whose release scripts/rc_evidence.py
+#: verifies (its ``PACKAGES``, which test_rc_evidence_workflow.py holds equal
+#: to this). PyPI and npm show the README of each as the package's page.
 PUBLISHED = ("python", "js")
+#: Every SDK directory whose package is on its registry (npm, PyPI, Maven
+#: Central or NuGet): ``PUBLISHED``, and each package published since whose
+#: README is not STRICT (a frozen I-README one, DECISIONS T230, or none). A
+#: directory joins in the change that says it is on its registry, once the
+#: registry serves it. test_deferred_sdk_pages.py reads it (a registry install
+#: line, and "not yet published"), and so does test_registry_availability.py
+#: (every sentence that says an SDK is on a registry).
+ON_REGISTRY = ("python", "js")
 #: Pages on which the bare name `controlvar` means the Python SDK.
 PYTHON_PAGES = {
     "docs/sdk/python.md",
@@ -216,7 +226,8 @@ def manifest_versions() -> Dict[str, str]:
 
 
 def published_names() -> Dict[str, str]:
-    """Each published SDK's package name -> its directory under sdk/."""
+    """Each STRICT published SDK's package name -> its directory under sdk/.
+    It reads ``PUBLISHED`` (npm and PyPI manifests only), not ``ON_REGISTRY``."""
     names = {}
     for directory in PUBLISHED:
         if (SDK_DIR / directory / "package.json").is_file():

@@ -157,10 +157,11 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
             "Set optimization_type to one of thompson_sampling, ucb1 or epsilon_greedy when you create the experiment"
         ),
     ),
-    "Full profile: give each variant its own URL. Your server or edge asks Controlvar where to send each visitor, and conversions count for the variant they saw.": (
+    "Full profile: give each variant its own URL. Your server or edge, or on AWS an optional CloudFront router, asks Controlvar where to send each visitor, and conversions count for the variant they saw.": (
         lede("present in the full profile"),
         lede("A split URL experiment gives each variant its own page"),
         lede("your server or edge asks Controlvar which variant the visitor is in"),
+        lede("On AWS, an optional CloudFront router can do the asking for your site"),
         lede(
             "conversions tracked with their id and the experiment count for the variant they saw"
         ),
@@ -259,7 +260,7 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
     "useFlag and useExperiment hooks, Provider, AsyncStorage offline support.": (
         lede("a context provider, three hooks"),
         lede("AsyncStorage-backed offline fallback"),
-        says("### useFlag(flagKey): FlagState"),
+        says("### useFlag(flagKey, attributes?): FlagState"),
         says("### useExperiment(experimentKey): ExperimentState"),
     ),
     "Describes the API's tools for AI assistants.": (

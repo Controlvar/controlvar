@@ -4,9 +4,65 @@ RBAC Post-MVP schemas — API contract for custom roles and permission managemen
 
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional, Tuple
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic_core import PydanticCustomError
+
+#: Every (resource, action) pair a custom role or a direct grant may hold
+#: (#891). A request that would store any other pair is refused with a 422 of
+#: type ``not_grantable`` (:func:`not_grantable_message`), and nothing is
+#: written. Roles and grants stored before the check read back unchanged.
+GRANTABLE: frozenset = frozenset(
+    {("experiment", a) for a in ("create", "read", "update", "delete", "list")}
+    | {("feature_flag", a) for a in ("create", "read", "update", "delete", "list")}
+    | {("audit_log", "read")}
+)
+
+#: The end of the ``not_grantable`` message: what may be held, in words.
+NOT_GRANTABLE_TAIL = (
+    "cannot be granted. A custom role or a direct grant can hold only "
+    "experiment (create, read, update, delete, list), "
+    "feature_flag (create, read, update, delete, list) and audit_log (read)"
+)
+
+
+def _text(value: object) -> str:
+    """An enum member's value, or the string itself."""
+    return value.value if isinstance(value, Enum) else str(value)
+
+
+def not_grantable_message(
+    grants: Iterable[Tuple[object, Iterable[object]]],
+) -> Optional[str]:
+    """The ``not_grantable`` message for *grants*, or None if all may be held.
+
+    *grants* is (resource, actions) in request order. Each resource with a
+    refused action is named once, as ``resource (action, action)``, with only
+    its refused actions, in the order they were sent and without repeats; the
+    resources are joined as "A", "A and B", "A, B and C".
+    """
+    refused: Dict[str, List[str]] = {}
+    for resource, actions in grants:
+        name = _text(resource)
+        for action in actions:
+            verb = _text(action)
+            if (name, verb) in GRANTABLE:
+                continue
+            listed = refused.setdefault(name, [])
+            if verb not in listed:
+                listed.append(verb)
+    if not refused:
+        return None
+    parts = [f"{name} ({', '.join(verbs)})" for name, verbs in refused.items()]
+    named = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
+    return f"{named} {NOT_GRANTABLE_TAIL}"
+
+
+def _refuse_ungrantable(grants: Iterable[Tuple[object, Iterable[object]]]) -> None:
+    message = not_grantable_message(grants)
+    if message is not None:
+        raise PydanticCustomError("not_grantable", message)
 
 
 class PermissionAction(str, Enum):
@@ -38,6 +94,13 @@ class CustomRoleCreate(BaseModel):
     description: Optional[str] = Field(None, max_length=256)
     permissions: List[PermissionGrant] = Field(default_factory=list)
 
+    @field_validator("permissions")
+    @classmethod
+    def _only_grantable(cls, value: List[PermissionGrant]) -> List[PermissionGrant]:
+        # A field validator, so the error's loc is ["body", "permissions"].
+        _refuse_ungrantable((p.resource, p.actions) for p in value)
+        return value
+
 
 # Rebuild to resolve forward references (PermissionGrant used in CustomRoleCreate)
 CustomRoleCreate.model_rebuild()
@@ -46,6 +109,17 @@ CustomRoleCreate.model_rebuild()
 class CustomRoleUpdate(BaseModel):
     description: Optional[str] = Field(None, max_length=256)
     permissions: Optional[List[PermissionGrant]] = None
+
+    @field_validator("permissions")
+    @classmethod
+    def _only_grantable(
+        cls, value: Optional[List[PermissionGrant]]
+    ) -> Optional[List[PermissionGrant]]:
+        # Only when permissions are sent: a description-only update of a role
+        # stored with other pairs is accepted.
+        if value is not None:
+            _refuse_ungrantable((p.resource, p.actions) for p in value)
+        return value
 
 
 class CustomRoleResponse(BaseModel):
@@ -90,3 +164,9 @@ class DelegatePermissionRequest(BaseModel):
     actions: List[PermissionAction] = Field(..., min_length=1)
     reason: Optional[str] = Field(None, max_length=256)
     expires_at: Optional[datetime] = None  # Optional expiry for temporary grants
+
+    @model_validator(mode="after")
+    def _only_grantable(self) -> "DelegatePermissionRequest":
+        # A model validator: the pair is two fields, so the loc is ["body"].
+        _refuse_ungrantable([(self.resource, self.actions)])
+        return self

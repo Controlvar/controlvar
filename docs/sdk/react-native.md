@@ -8,11 +8,10 @@ Flag evaluation and experiment assignment are decided **by the server**: every c
 public API with your `X-API-Key`, the server buckets the user (sticky per user + experiment), and
 the SDK caches the answer per user + key. Nothing is bucketed locally.
 
-> **Flag evaluation sends only the user id.** `GET /api/v1/feature-flags/evaluate/{key}?user_id=…`
-> carries none of the user's attributes, so the server evaluates a flag's targeting rules against
-> an empty context. Experiment assignment sends them: `getAssignment` (and `useExperiment`, with the provider's `attributes`) sends the attributes as
-> `context`. To evaluate a flag with attributes, call the evaluate endpoint with a `context`
-> query parameter (a URL-encoded JSON object of the attributes).
+Flag evaluation and experiment assignment both send the user's attributes, so targeting rules match as in the JavaScript SDK: flag
+evaluation sends them as the `context` query parameter (a URL-encoded JSON object; nothing is
+sent for missing or empty attributes), and experiment assignment sends them as `context` in the
+request body.
 
 Source: `sdk/react-native`. Example app: `sdk/react-native/example/App.tsx`.
 
@@ -25,7 +24,8 @@ SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlv
 
 **Not yet published.** `@controlvar/react-native-sdk` is not on npm, so build it from
 source: pack it from a clone of this repository (it ships TypeScript source, so there is no build
-step) and install the tarball. No CI job packs the tarball or installs it into a React Native app.
+step) and install the tarball. The SDK Unit Tests workflow packs it and type-checks it in a
+TypeScript React Native app on every pull request that changes it; no CI job runs it on a device.
 `npm pack` writes `controlvar-react-native-sdk-0.1.0.tgz`:
 
 ```bash
@@ -34,18 +34,30 @@ cd controlvar/sdk/react-native
 npm pack
 ```
 
-Then, in your app, install the tarball. `@react-native-async-storage/async-storage` and `md5` are
-dependencies of the package (its peer dependencies are `react` and `react-native`); the command
-names them too, so they are direct dependencies of your app:
+Then, in your app, install the tarball:
 
 ```bash
-npm install /path/to/controlvar/sdk/react-native/controlvar-react-native-sdk-0.1.0.tgz @react-native-async-storage/async-storage md5
+npm install /path/to/controlvar/sdk/react-native/controlvar-react-native-sdk-0.1.0.tgz
 ```
+
+Its peer dependencies are `react` (>= 16.8), `react-native` (>= 0.65) and
+`@react-native-async-storage/async-storage` (`>=1.21.0 <4`: majors 1, 2 and 3 are supported).
+React Native links a native module only from your app's own dependencies, so AsyncStorage must be
+one of them. If your app does not have it yet, add it:
+
+```bash
+npm install @react-native-async-storage/async-storage
+```
+
+An app that already has AsyncStorage keeps its version. Do not put a version or range of
+AsyncStorage on that line (such as `@latest`): npm saves it, which moves an app on 1.x or 2.x to
+3.x. Your app's own AsyncStorage already satisfies the peer.
 
 - **iOS**: `cd ios && pod install` (required by `@react-native-async-storage/async-storage`).
 - **Android**: no additional setup (minSdk 21).
-- `md5` is imported when the package loads (its entry point re-exports `hashUser`), so it must
-  resolve even if you never call `hashUser`.
+- `md5` is a dependency of the package, imported when the package loads (its entry point
+  re-exports `hashUser`), so it must resolve even if you never call `hashUser`. Its type
+  declarations, `@types/md5`, are a dependency too, so an app's `tsc` finds them.
 
 ---
 
@@ -108,11 +120,22 @@ function Home() {
 |------|------|----------|-------------|
 | `client` | `ExperimentationClient` | Yes | The client instance (create it once) |
 | `userId` | `string` | Yes | Stable identifier used by the server for bucketing |
-| `attributes` | `Record<string, unknown>` | No | Sent as `context` on experiment assignment (targeting rules); not sent on flag evaluation |
+| `attributes` | `Record<string, unknown>` | No | Sent as `context` on flag evaluation and on experiment assignment (targeting rules) |
 
 The context value is memoised on `client`, `userId` and `attributes`. Hooks re-run when `client`,
-`userId` or the key they were given changes; `useExperiment` deliberately ignores `attributes`
-changes because assignment is sticky per user.
+`userId` or the key they were given changes; neither `useExperiment` nor `useFlag` re-runs when
+`attributes` changes (assignment is sticky per user, and an inline object is new on every render).
+
+**After the user's attributes change,** the SDK keys its memory cache, its AsyncStorage entries
+and its in-flight requests by user + key, as the JavaScript SDK does, so an answer already stored
+for that user and flag is served until it expires, with the attributes it was asked with. To ask
+again with the new attributes, call `client.clearCache()` and `await client.clearStorage()`, then
+mount the components that read flags again (a new `key` on the provider does it). `clearStorage()`
+also removes the stored assignments, so the next `useExperiment` asks again; the variant is the
+same because assignment is sticky, and the server records another exposure. With a client
+constructed with `offlineFallback: false`, which keeps nothing in AsyncStorage, `clearCache()` plus
+a remount is enough; either one alone is not, because a mounted hook does not ask again and a
+remount is answered from the memory cache.
 
 ### Client configuration (`SdkConfig`)
 
@@ -129,11 +152,11 @@ changes because assignment is sticky per user.
 
 ## Hooks
 
-### `useFlag(flagKey): FlagState`
+### `useFlag(flagKey, attributes?): FlagState`
 
 Evaluates one flag for the provider's user via
-`GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…`. A second `attributes` argument is
-accepted for signature compatibility but not sent.
+`GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…&context=…`. It sends its `attributes`
+argument as `context`; when it has none, the provider's `attributes`. The two are not merged.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -196,9 +219,9 @@ const result = await client.trackBatch([
 
 | Method | Signature | Returns | On failure |
 |--------|-----------|---------|------------|
-| `evaluateFlag` | `(flagKey, userId) => Promise<FlagEvaluation>` | `{ key, enabled, config }` | `{ key, enabled: false, config: null }` (or the last-known AsyncStorage value) |
-| `isFeatureEnabled` | `(flagKey, userId) => Promise<boolean>` | `enabled` | `false` |
-| `getAllFlags` | `(userId) => Promise<Record<string, boolean>>` | `{ flagKey: enabled }`; not cached, not part of the fan-out | `{}` |
+| `evaluateFlag` | `(flagKey, userId, attributes?) => Promise<FlagEvaluation>` | `{ key, enabled, config }` | `{ key, enabled: false, config: null }` (or the last-known AsyncStorage value). Attributes that cannot be sent (`JSON.stringify` throws, or the server answers 422 for a context over 8,192 bytes or nested more than 10 levels) are reported to `onError` and answered the same way |
+| `isFeatureEnabled` | `(flagKey, userId, attributes?) => Promise<boolean>` | `enabled` | `false` |
+| `getAllFlags` | `(userId, attributes?) => Promise<Record<string, boolean>>` | `{ flagKey: enabled }`; not cached, not part of the fan-out | `{}` |
 | `getAssignment` | `(experimentKey, userId, attributes?) => Promise<Assignment \| null>` | `{ experimentKey, userId, variantId, variantName, isControl, configuration }` | `null` (or the last-known AsyncStorage value) |
 | `getVariant` | `(experimentKey, userId, attributes?) => Promise<string \| null>` | `variantName` | `null` |
 | `track` | `(eventName, userId, properties?, options?) => Promise<void>` | — | Never rejects; reported to `onError` |
@@ -263,13 +286,13 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | SDK call | Method and path | Body / query | 200 response |
 |---|---|---|---|
 | `getAssignment`, `getVariant`, `useExperiment` | `POST /api/v1/tracking/assign` | `{"experiment_key","user_id","context"?: object}` | `{"experiment_key","user_id","variant_id","variant_name","is_control","configuration"}` |
-| `evaluateFlag`, `isFeatureEnabled`, `useFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<id>` | — | `{"key","enabled","config"}` |
-| `getAllFlags` | `GET /api/v1/feature-flags/user/{user_id}` | — | `{"<flag_key>": bool, ...}` |
+| `evaluateFlag`, `isFeatureEnabled`, `useFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<id>&context=<url-encoded JSON>` (no `context` for missing or empty attributes) | — | `{"key","enabled","config"}` |
+| `getAllFlags` | `GET /api/v1/feature-flags/user/{user_id}?context=<url-encoded JSON>` (no `context` for missing or empty attributes) | — | `{"<flag_key>": bool, ...}` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{"event_type","event_name","user_id","experiment_key"?,"feature_flag_key"?,"value"?,"metadata"?,"timestamp"?}` | stored event (ignored) |
 | `track` without a key, `trackBatch` | `POST /api/v1/tracking/batch` | `{"events":[<track body>...]}` (max 100) | `{"success_count","failure_count","errors"}` |
 
-Errors: 401 bad key; 404 an unknown experiment or flag key, or a draft experiment with no control variant; 422 invalid
-event; 429 rate limited (`Retry-After` header).
+Errors: 401 bad key; 404 an unknown experiment or flag key, or a draft experiment with no control variant; 422 an invalid
+event, or a targeting context over 8,192 bytes or 10 levels deep; 429 rate limited (`Retry-After` header).
 
 ---
 
@@ -293,6 +316,18 @@ hashUser('user-123', 'my-flag'); // ≈ 0.6927449859
 ## Testing
 
 ### Jest setup
+
+React Native's Jest preset does not transform code under `node_modules`, and the package is
+TypeScript source, so add it to the preset's `transformIgnorePatterns` in your Jest config:
+
+```json
+{
+  "preset": "react-native",
+  "transformIgnorePatterns": [
+    "node_modules/(?!((jest-)?react-native|@react-native(-community)?|@controlvar/react-native-sdk)/)"
+  ]
+}
+```
 
 This repository has an in-memory Jest mock for AsyncStorage,
 `sdk/react-native/__mocks__/@react-native-async-storage/async-storage.ts`. The package does not
@@ -348,8 +383,9 @@ test('useFlag reflects the server decision', async () => {
 
 ### Running the SDK's own tests
 
-`npx jest` runs the client, hook and hash tests, with `fetch` mocked. `npx tsc --noEmit`
-type-checks `src/`, and `npm run typecheck:tests` type-checks the tests too:
+`npx jest` runs the client, hook, hash and storage tests, with `fetch` mocked (the storage tests
+run against the AsyncStorage 1.x and 3.x shapes). `npx tsc --noEmit` type-checks `src/`, and
+`npm run typecheck:tests` type-checks the tests too. The SDK Unit Tests workflow runs all three:
 
 ```bash
 cd sdk/react-native && npm install
@@ -360,6 +396,9 @@ npm run typecheck:tests
 
 The contract smoke, `examples/contract_smoke.test.ts`, runs under Jest in Node, with no device
 runtime; the live runner runs it with `python tests/sdk-contract/live/run_live_contract.py --sdk react-native --strict`.
+Besides assigning, evaluating and tracking, it evaluates the seed's `sdk_contract_targeted` flag
+(0% rollout, one rule: `plan` equals `pro`) with the attributes `{ plan: 'pro' }` and then
+`{ plan: 'free' }`, and the runner requires the first on, by that rule, and the second off.
 
 ---
 
@@ -373,5 +412,16 @@ at the `ApiError.status`: 401 means a bad `apiKey`, 404 means an unknown key or 
 control variant (a flag that is not ACTIVE comes back disabled, and an experiment that is not ACTIVE answers its
 control variant: neither is an error), a plain `Error` means the network/timeout. Check that `baseUrl` is the origin
 only (no `/api/v1`). With `offlineFallback: true` the last-known value is served during outages.
+An `ApiError` message gives the request path without its query.
 
-**Type errors with `md5`** — `npm install --save-dev @types/md5`.
+**A flag with an attribute rule is off for a user who matches it** — check that the provider (or
+`useFlag`'s second argument) carries the attribute, and that the answer was not cached before the
+attributes changed (see "After the user's attributes change" under Provider): the answer stored
+for that user and flag is served until it expires, whatever attributes the new call sends. Call
+`clearCache()` and `await clearStorage()`, then remount; with a client constructed with
+`offlineFallback: false`, `clearCache()` plus a remount is enough.
+
+**Type errors in `node_modules/@controlvar/react-native-sdk/src`** — the package is TypeScript
+source, so your app's `tsc` checks it with your app's AsyncStorage. Check that AsyncStorage is a
+major the peer range allows (1, 2 or 3), and that `@types/md5`, which comes with the package, is
+installed.

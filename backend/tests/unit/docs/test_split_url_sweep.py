@@ -3,9 +3,12 @@
 The claims registries hold a registered page's sentences to their tests, but a
 sentence that is left unchanged stays registered, and a page or a code comment
 outside the registries is held by nothing. So this sweeps the tree for the
-sentences that #393's assign API made false: that split URL experiments
-split no traffic, that the preview hashes on its own and predicts nothing,
-that they ignore the global holdout.
+sentences that #393 made false: that split URL experiments split no traffic,
+that the preview hashes on its own and predicts nothing, that they ignore the
+global holdout (the assign API); and that the CloudFront edge router reads
+its configuration from ``X-Split-URL-Config``, which nothing sets, hashes the
+viewer's IP address and User-Agent, passes every request through, is used by
+no stack, and does not split traffic yet (the router).
 
 * Every text file of the tree (Markdown, Python, TypeScript, TOML, YAML, JSON
   and plain text) except ``CHANGELOG.md`` (history), the claims registries
@@ -18,11 +21,6 @@ that they ignore the global holdout.
   split across comment lines is still found.
 * A hit counts only in split URL context: a paragraph that names split URL
   testing, or a file whose path does.
-
-The CloudFront edge router's own sentences (it reads ``X-Split-URL-Config``,
-which nothing sets) stay true until the router asks the API, and are not
-swept here; "The CloudFront edge router does not split traffic yet" is the
-sentence the pages say instead.
 """
 
 from __future__ import annotations
@@ -38,7 +36,8 @@ pytestmark = [pytest.mark.unit]
 REPO_ROOT = Path(__file__).resolve().parents[4]
 SELF = Path(__file__).resolve()
 
-#: Lower case. What #393's assign API made false.
+#: Lower case. What #393's assign API made false, then what its CloudFront
+#: edge router made false.
 PHRASES: Tuple[str, ...] = (
     "does not split traffic in this release",
     "splits no traffic",
@@ -50,6 +49,12 @@ PHRASES: Tuple[str, ...] = (
     "hashes the user_id you pass",
     "split-url experiments ignore",
     "split url experiments ignore",
+    "x-split-url-config",
+    "ip address and user-agent",
+    "ip + user-agent",
+    "passes every request through",
+    "no stack uses it",
+    "does not split traffic yet",
 )
 
 SUFFIXES = {".md", ".py", ".ts", ".tsx", ".toml", ".yml", ".yaml", ".json", ".txt"}
