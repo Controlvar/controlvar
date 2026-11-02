@@ -28,9 +28,11 @@ pytestmark = [pytest.mark.unit]
 ALLOWED = {
     "hashlib",
     "http.client",
+    "io",
     "json",
     "logging",
     "os",
+    "socket",
     "ssl",
     "string",
     "time",

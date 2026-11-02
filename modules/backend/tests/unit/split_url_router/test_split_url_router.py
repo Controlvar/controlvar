@@ -18,6 +18,8 @@ held equal to it and to the core helpers where they share one:
 * every failure serves the page, logs one line with the HTTP status or a
   fixed word, and skips the API for 30 seconds, except after a 4xx about one
   request; nothing raises;
+* each call to the API has one deadline, from its start to the answer's last
+  byte, so a slow API is a timeout like any other failure;
 * only a GET of an entry is split; it sends the entry's host, and the query
   string and User-Agent only within the API's limits;
 * the routes table is kept for its clamped ``max_age``, by one loader both
@@ -31,9 +33,11 @@ import http.server
 import json
 import logging
 import random
+import socket
 import threading
+import time
 import uuid
-from typing import List
+from typing import List, Optional
 
 import pytest
 
@@ -41,9 +45,11 @@ from backend.app.schemas.split_url_config import normalize_host, normalize_path
 from modules.backend.tests.integration.split_url import controlvar_split_url as ref
 from modules.backend.tests.unit.split_url_router.harness import (
     REDIRECT,
+    ROUTE,
     ROUTER_FILE,
     SAMPLE_REQUEST_ID,
     SERVE,
+    SETTINGS,
     VECTORS,
     Clock,
     FakeApi,
@@ -404,6 +410,85 @@ def test_the_entry_point_reads_its_settings_file(monkeypatch, tmp_path):
     assert {c["headers"]["X-API-Key"] for c in api.calls} == {"key-9"}
 
 
+#: Carried by the router's settings and by what the API answers below; the
+#: router's log lines carry none of it.
+MARK = "mark-5d1f0c27"
+
+
+@pytest.mark.regression
+def test_the_routers_log_lines_carry_only_event_phase_and_status(
+    caplog, monkeypatch, tmp_path
+):
+    """Every line logged while the router runs, at any level, on every
+    failure and on the paths that succeed, in both phases and at its entry
+    point: the router's own are each one JSON object with event, phase and
+    status, and no line carries anything from its settings or from the
+    API's answers."""
+    caplog.set_level(0)
+    caplog.set_level(0, logger=LOGGER)
+    settings = {"api_key": "key-" + MARK, "cookie_domain": "e.com"}
+    answers = [failure for failure, _ in FAILURES.values()] + [
+        (500, MARK.encode()),
+        (401, json.dumps({"detail": MARK}).encode()),
+        (200, b"not json " + MARK.encode()),
+        (200, json.dumps({"action": MARK}).encode()),
+        ConnectionRefusedError(MARK),
+        TimeoutError(MARK),
+        http.client.BadStatusLine(MARK),
+        RuntimeError(MARK),
+        {**REDIRECT, "location": "https://e.com/" + MARK},
+        {**REDIRECT, "location": "javascript:" + MARK},
+        {**SERVE, "reason": MARK},
+        REDIRECT,
+        SERVE,
+    ]
+    events = [
+        viewer_request(),
+        viewer_request(cookies=["controlvar_uid=visitor-" + MARK]),
+        viewer_request(cookies=["controlvar_uid=" + MARK + "\t"]),
+        viewer_request(method="HEAD"),
+        viewer_request(uri="/about"),
+        viewer_request(request_id=None),
+    ]
+    for answer in answers:
+        for event in events:
+            deliver(make_router(FakeApi(assign=answer), **settings), event)
+    for routes in (
+        (503, MARK.encode()),
+        (200, MARK.encode()),
+        {"routes": [{"host": MARK, "path": "/"}], "max_age": 60},
+        TimeoutError(MARK),
+        RuntimeError(MARK),
+    ):
+        api, cold_api = FakeApi(), FakeApi()
+        api.routes = cold_api.routes = routes
+        deliver(
+            make_router(api, **settings),
+            viewer_request(),
+            response_router=make_router(cold_api, **settings),
+        )
+    bundle = tmp_path / "handler.py"
+    bundle.write_bytes(ROUTER_FILE.read_bytes())
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({"api_key": "key-" + MARK}), encoding="utf-8")
+    bundled = load_router("split_url_router_logging", bundle)
+    bundled.handler(viewer_request(), None)
+    bundled.handler(viewer_response({"headers": {}}, SAMPLE_REQUEST_ID), None)
+    config.write_text(
+        json.dumps({"api_url": "https://api.example.com", "api_key": "key-" + MARK}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(bundled, "http_call", FakeApi(assign=(500, MARK.encode())))
+    bundled.handler(viewer_request(), None)
+
+    records = [r for r in caplog.records if r.name == LOGGER]
+    assert len(records) > len(answers)
+    for record in caplog.records:
+        assert MARK not in logging.Formatter().format(record), record.name
+    for record in records:
+        assert sorted(json.loads(record.getMessage())) == ["event", "phase", "status"]
+
+
 @pytest.mark.parametrize(
     "location",
     ["https://e.com/a\r\nSet-Cookie: x=1", "javascript:alert(1)", "//e.com/b", None],
@@ -682,6 +767,29 @@ def test_a_routes_answer_it_cannot_read_is_a_failure(routes, caplog):
 
 
 @pytest.mark.regression
+@pytest.mark.parametrize("max_age", [b"1e999", b"-1e999"], ids=["inf", "minus-inf"])
+def test_a_max_age_read_as_infinite_is_an_answer_it_cannot_read(max_age, caplog):
+    """JSON reads 1e999 as infinity, which is no number of seconds: the
+    answer is unparseable, logged once, and starts the 30 s window, so the
+    table is not loaded again on every request of either phase."""
+    api, clock = FakeApi(), Clock()
+    api.routes = (200, b'{"routes": [], "max_age": ' + max_age + b"}")
+    router = make_router(api, clock)
+    with caplog.at_level(logging.WARNING, logger=LOGGER):
+        for i in range(3):
+            deliver(router, viewer_request(request_id=f"request-{i}"))
+    assert len(api.calls) == 1
+    assert logged(caplog) == [
+        {
+            "event": "split_url_failed",
+            "phase": "viewer-request",
+            "status": "unparseable",
+        }
+    ]
+    assert router.skip_until == clock.now + 30
+
+
+@pytest.mark.regression
 def test_viewer_response_in_a_cold_container_sets_the_cookie():
     """EM393-5: viewer response runs in a container that has no routes table
     yet. It loads one through the same loader, and sets the cookie with the
@@ -692,6 +800,23 @@ def test_viewer_response_in_a_cold_container_sets_the_cookie():
     assert cookie_id(delivery) == sent_ids(request_api)[0]
     assert [c["url"].rsplit("/", 1)[1] for c in response_api.calls] == ["routes"]
     assert response_api.calls[0]["timeout"] == 1.0
+
+
+def test_viewer_response_without_a_routes_table_sets_no_cookie():
+    """The one visit of a visitor without the cookie that gets none: viewer
+    response runs in a container that cannot get the routes table (a cold
+    container whose own load fails), so it cannot tell the page is an entry.
+    Viewer request in another container had asked the API."""
+    request_api, response_api = FakeApi(assign=SERVE), FakeApi(assign=SERVE)
+    response_api.routes = (503, b"")
+    delivery = deliver(
+        make_router(request_api),
+        viewer_request(),
+        response_router=make_router(response_api),
+    )
+    assert len(request_api.assign_calls()) == 1
+    assert [c["url"].rsplit("/", 1)[1] for c in response_api.calls] == ["routes"]
+    assert delivery.headers("Set-Cookie") == []
 
 
 def test_viewer_response_sets_the_cookie_when_the_request_failed():
@@ -785,3 +910,175 @@ def test_the_router_follows_no_redirect_with_its_key():
 def test_the_transport_refuses_another_scheme():
     with pytest.raises(ValueError):
         router_module.http_call("GET", "ftp://e.com/x", {}, None, 1.0)
+
+
+def _listener() -> socket.socket:
+    """A listening socket on 127.0.0.1, on a free port above 55000."""
+    rng = random.Random()
+    for _ in range(50):
+        sock = socket.socket()
+        try:
+            sock.bind(("127.0.0.1", rng.randint(55001, 64999)))
+        except OSError:
+            sock.close()
+            continue
+        sock.listen(8)
+        return sock
+    raise RuntimeError("no free port above 55000")
+
+
+def _http_answer(payload) -> bytes:
+    """An answer that ends the connection, so http.client closes its own
+    socket before it reads the body, as many servers' answers make it do."""
+    body = json.dumps(payload).encode()
+    head = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n"
+    return f"{head}Content-Length: {len(body)}\r\n\r\n".encode() + body
+
+
+class _SlowApi:
+    """An API on 127.0.0.1 that sends its slow answer in ``pieces`` parts,
+    ``gap`` seconds apart: each part comes well within the time any one
+    socket operation may wait, so only a deadline for the whole call stops
+    the caller before the answer is complete. A GET gets ``fast``, at once,
+    when it is given. ``sent`` counts the parts of the slow answer that had
+    gone out; ``connections`` the connections accepted."""
+
+    def __init__(self, slow: bytes, fast: Optional[bytes] = None, gap: float = 0.1):
+        self.slow, self.fast, self.gap = slow, fast, gap
+        self.size = -(-len(slow) // 40)
+        self.pieces = len(range(0, len(slow), self.size))
+        self.sent = self.connections = 0
+        self.stopped = False
+        self.listener = _listener()
+        self.listener.settimeout(0.1)
+        self.port = self.listener.getsockname()[1]
+        self.thread = threading.Thread(target=self._serve, daemon=True)
+        self.thread.start()
+
+    def _serve(self) -> None:
+        while not self.stopped:
+            try:
+                conn, _ = self.listener.accept()
+            except (TimeoutError, OSError):
+                continue
+            self.connections += 1
+            with conn:
+                conn.settimeout(10)
+                try:
+                    request = conn.recv(65536)
+                    while request[:1] != b"\x16" and b"\r\n\r\n" not in request:
+                        data = conn.recv(65536)
+                        if not data:
+                            break
+                        request += data
+                    if self.fast is not None and request.startswith(b"GET"):
+                        conn.sendall(self.fast)
+                        continue
+                    for start in range(0, len(self.slow), self.size):
+                        time.sleep(self.gap)
+                        conn.sendall(self.slow[start : start + self.size])
+                        self.sent += 1
+                except OSError:
+                    pass
+
+    def close(self) -> None:
+        self.stopped = True
+        self.thread.join(10)
+        self.listener.close()
+
+
+@pytest.mark.regression
+def test_a_slow_answer_ends_the_call_at_its_deadline():
+    """The timeout is one deadline for the whole call, not a timeout for each
+    socket operation: an API that keeps sending, each part well inside the
+    time one operation may wait, is cut off when the call's time is up, with
+    TimeoutError, and part of its answer still unsent. Checked by that
+    outcome and what was left to send, never by a measured time."""
+    api = _SlowApi(_http_answer(SERVE))
+    try:
+        with pytest.raises(TimeoutError):
+            router_module.http_call(
+                "POST",
+                f"http://127.0.0.1:{api.port}/api/v1/tracking/split-url/assign",
+                {"X-API-Key": "key-1", "Content-Type": "application/json"},
+                b"{}",
+                0.3,
+            )
+        sent = api.sent
+    finally:
+        api.close()
+    assert sent < api.pieces
+
+
+@pytest.mark.regression
+def test_a_slow_api_is_a_timeout_and_the_page_is_served(monkeypatch, caplog):
+    """The same through the router, over the real transport: the routes
+    table comes at once and is read whole, the slow assign call is the
+    failure ``timeout``, the visitor is served the page with the cookie, and
+    the API is not asked again for 30 seconds."""
+    api = _SlowApi(
+        _http_answer(SERVE), fast=_http_answer({"routes": [ROUTE], "max_age": 60})
+    )
+    monkeypatch.setattr(router_module, "ASSIGN_TIMEOUT", 0.3)
+    clock = Clock()
+    router = router_module.Router(
+        {**SETTINGS, "api_url": f"http://127.0.0.1:{api.port}"}, clock=clock
+    )
+    try:
+        with caplog.at_level(logging.WARNING, logger=LOGGER):
+            delivery = deliver(router, viewer_request())
+        sent = api.sent
+    finally:
+        api.close()
+    assert list(router.table) == [("e.com", "/checkout")]
+    assert delivery.generated is None
+    assert delivery.header("X-Split-URL") == "failed"
+    assert cookie_id(delivery) == router_module.visitor_id(SAMPLE_REQUEST_ID)
+    assert logged(caplog) == [
+        {"event": "split_url_failed", "phase": "viewer-request", "status": "timeout"}
+    ]
+    assert router.skip_until == clock.now + 30
+    assert sent < api.pieces
+
+
+def test_a_slow_tls_handshake_ends_at_the_calls_deadline():
+    """The TLS handshake is under the same deadline: an API that sends its
+    side of the handshake a byte at a time is cut off with TimeoutError, its
+    side still unsent (CPython bounds the whole handshake by the socket's
+    timeout, which the router sets to the time left)."""
+    record = b"\x16\x03\x03\x40\x00"
+    api = _SlowApi(record + bytes(35))
+    try:
+        with pytest.raises(TimeoutError):
+            router_module.http_call(
+                "GET", f"https://127.0.0.1:{api.port}/x", {}, None, 0.3
+            )
+        sent = api.sent
+    finally:
+        api.close()
+    assert sent < api.pieces
+
+
+def test_the_host_name_lookup_counts_towards_the_deadline(monkeypatch):
+    """Looking up the API's host name is not cut short, and its time counts:
+    a lookup that ends after the call's time is up ends the call with
+    TimeoutError, with no connection made."""
+    api = _SlowApi(_http_answer(SERVE))
+    lookups = []
+    lookup = socket.getaddrinfo
+
+    def slow_lookup(*args, **kwargs):
+        time.sleep(0.4)
+        lookups.append("finished")
+        return lookup(*args, **kwargs)
+
+    monkeypatch.setattr(router_module.socket, "getaddrinfo", slow_lookup)
+    try:
+        with pytest.raises(TimeoutError):
+            router_module.http_call(
+                "GET", f"http://127.0.0.1:{api.port}/x", {}, None, 0.2
+            )
+    finally:
+        api.close()
+    assert lookups == ["finished"]
+    assert api.connections == 0

@@ -30,9 +30,11 @@ API.
 
 import hashlib
 import http.client
+import io
 import json
 import logging
 import os
+import socket
 import ssl
 import string
 import time
@@ -41,6 +43,10 @@ import uuid
 
 ROUTES_PATH = "/api/v1/tracking/split-url/routes"
 ASSIGN_PATH = "/api/v1/tracking/split-url/assign"
+#: Each call's whole time, from its start to the answer's last byte
+#: (http_call). A viewer-request event makes at most one routes load and one
+#: assign call, 2.5 s together, and a viewer-response event at most one
+#: routes load, against the function's own timeout of 5 s (the construct).
 ROUTES_TIMEOUT = 1.0
 ASSIGN_TIMEOUT = 1.5
 SKIP_SECONDS = 30
@@ -72,28 +78,120 @@ def _tls_context():
     return _tls
 
 
+def _time_left(deadline):
+    """The seconds until ``deadline`` (a ``time.monotonic()`` value);
+    TimeoutError once it has passed."""
+    left = deadline - time.monotonic()
+    if left <= 0:
+        raise TimeoutError("the call's time is up")
+    return left
+
+
+class _Socket:
+    """The connected socket as http.client uses it (``sendall``,
+    ``makefile``, ``close``), under the call's one deadline: before every
+    send and every receive, its timeout is set to the time left."""
+
+    def __init__(self, sock, deadline):
+        self._sock = sock
+        self._deadline = deadline
+
+    def _ready(self):
+        self._sock.settimeout(_time_left(self._deadline))
+        return self._sock
+
+    def sendall(self, data):
+        view = memoryview(data).cast("B")
+        while view:
+            view = view[self._ready().send(view) :]
+
+    def recv_into(self, buffer):
+        return self._ready().recv_into(buffer)
+
+    def makefile(self, mode="rb", *args, **kwargs):
+        return io.BufferedReader(_Reader(self))
+
+    def close(self):
+        """Nothing: http.client closes its socket as soon as an answer says
+        the connection ends, before reading the body. http_call closes the
+        real socket when the call ends."""
+
+
+class _Reader(io.RawIOBase):
+    """What http.client reads the answer's head and body through: one
+    receive at a time, each under the deadline."""
+
+    def __init__(self, sock):
+        super().__init__()
+        self._sock = sock
+
+    def readable(self):
+        return True
+
+    def readinto(self, buffer):
+        return self._sock.recv_into(buffer)
+
+
+def _connect(host, port, deadline):
+    """A TCP connection to the API before the deadline: each address the
+    host name has is tried with the time left. The lookup itself
+    (``getaddrinfo``) cannot be cut short; its time counts towards the
+    deadline."""
+    error = OSError("the API's host name has no address")
+    for family, kind, proto, _, address in socket.getaddrinfo(
+        host, port, type=socket.SOCK_STREAM
+    ):
+        left = _time_left(deadline)
+        sock = socket.socket(family, kind, proto)
+        try:
+            sock.settimeout(left)
+            sock.connect(address)
+        except OSError as failure:
+            sock.close()
+            error = failure
+            continue
+        try:
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except OSError:
+            pass
+        return sock
+    raise error
+
+
 def http_call(method, url, headers, body, timeout):
     """One request with http.client: (status, body). Raises when there is no
-    response. It follows no redirect: a 3xx is an answer like any other, so
-    the key goes only to the API's own URL."""
+    response, and TimeoutError when the call has not ended ``timeout``
+    seconds after it started: one deadline for the whole call (connecting,
+    the TLS handshake, sending, and every receive of the answer's head and
+    body), not a timeout for each socket operation, so an API that keeps
+    answering slowly cannot hold the function past its own timeout. It
+    follows no redirect: a 3xx is an answer like any other, so the key goes
+    only to the API's own URL."""
+    deadline = time.monotonic() + timeout
     parts = urllib.parse.urlsplit(url)
     if parts.scheme == "https":
         connection = http.client.HTTPSConnection(
-            parts.hostname, parts.port, timeout=timeout, context=_tls_context()
+            parts.hostname, parts.port, context=_tls_context()
         )
     elif parts.scheme == "http":
-        connection = http.client.HTTPConnection(
-            parts.hostname, parts.port, timeout=timeout
-        )
+        connection = http.client.HTTPConnection(parts.hostname, parts.port)
     else:
         raise ValueError("the API URL is not http(s)")
     target = parts.path + ("?" + parts.query if parts.query else "")
+    sock = _connect(connection.host, connection.port, deadline)
     try:
+        if parts.scheme == "https":
+            # The handshake is one operation, and CPython bounds the whole of
+            # it by the socket's timeout, here the time left
+            # (test_a_slow_tls_handshake_ends_at_the_calls_deadline).
+            sock.settimeout(_time_left(deadline))
+            sock = _tls_context().wrap_socket(sock, server_hostname=connection.host)
+        connection.sock = _Socket(sock, deadline)
         connection.request(method, target, body=body, headers=headers)
         response = connection.getresponse()
         return response.status, response.read()
     finally:
-        connection.close()
+        sock.close()
 
 
 class Failed(Exception):
@@ -277,7 +375,7 @@ class Router:
         except Failed as failure:
             self._failed(phase, failure)
             return self.table or {}
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, TypeError, ValueError, OverflowError):
             self._failed(phase, "unparseable")
             return self.table or {}
         self.table, self.expires = table, now + max_age
