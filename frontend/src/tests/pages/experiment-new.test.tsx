@@ -94,6 +94,9 @@ describe('NewExperimentPage', () => {
       'href',
       docsUrl('api/multi-armed-bandit'),
     );
+    // No SDK creates an experiment: they are created through the API (#393).
+    expect(note).toHaveTextContent(/create them through the API\.$/);
+    expect(note.textContent).not.toMatch(/sdk/i);
   });
 
   it('auto-generates the key from the name until the key is edited', () => {

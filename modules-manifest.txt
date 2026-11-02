@@ -271,9 +271,13 @@ modules/backend/tests/unit/services/test_etl_service.py
 # keeps the enum label.
 # infrastructure/constructs/split_url_distribution.py has no referrer in
 # infrastructure/cdk/app.py today.
+# The routes a server or edge calls (#393), GET /tracking/split-url/routes and
+# POST /tracking/split-url/assign, are declared only in
+# endpoints/split_url_routing.py: a core deployment answers 404 for both.
 # ─────────────────────────────────────────────────────────────────────────────
 modules/backend/app/services/split_url_service.py
 modules/backend/app/api/v1/endpoints/experiments_split_url.py
+modules/backend/app/api/v1/endpoints/split_url_routing.py
 modules/lambda/split_url_router
 modules/infrastructure/constructs/split_url_distribution.py
 modules/backend/tests/unit/api/test_split_url_experiment_api.py

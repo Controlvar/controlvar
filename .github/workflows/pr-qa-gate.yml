@@ -222,8 +222,10 @@ jobs:
       # The warehouse tests must all RUN: a skip there (a missing duckdb or
       # sqlglot turned into a skip, say) would leave the SQL semantics, the
       # identifier gate, the runner and the routes unchecked under a green job.
-      - name: No warehouse test was skipped
-        run: python3 scripts/check_junit_skips.py module-junit.xml modules/backend/tests/unit/warehouse modules/backend/tests/integration/warehouse
+      # So must the split URL routing tests (#393): the exact per-visitor
+      # counts and the reference integration's contract are there.
+      - name: No warehouse or split URL test was skipped
+        run: python3 scripts/check_junit_skips.py module-junit.xml modules/backend/tests/unit/warehouse modules/backend/tests/integration/warehouse modules/backend/tests/integration/split_url
 
   base-requirements-only:
     needs: changes

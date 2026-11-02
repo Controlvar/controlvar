@@ -87,6 +87,13 @@ by = ["test:backend/tests/installer_sweeps/test_install_run.py::test_the_clean_r
 count = 2
 
 [[unit]]
+text = "It does not run split URL experiments: they need the full profile."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_full_profile_stops_before_the_deploy",
+    "test:backend/tests/unit/core/test_optional_modules.py::TestSplitUrlRefusedWithoutRouting::test_create_split_url_experiment_returns_501",
+]
+
+[[unit]]
 text = "To try the platform with demo data, use the Quick Start."
 by = ["exempt:navigation"]
 
