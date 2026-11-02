@@ -1,13 +1,30 @@
 package com.controlvar.sdk.spring;
 
 import com.controlvar.sdk.ExperimentationClient;
+import com.controlvar.sdk.ExposureListener;
 import com.controlvar.sdk.config.SdkConfig;
+import com.controlvar.sdk.model.Exposure;
+import com.controlvar.sdk.model.User;
+import com.sun.net.httpserver.HttpServer;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.NoUniqueBeanDefinitionException;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.UncheckedIOException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -26,6 +43,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  *       are correctly wired into the created bean.</li>
  *   <li><b>Custom bean override</b> — verifies {@code @ConditionalOnMissingBean}
  *       behaviour: a user-defined bean suppresses the auto-configured one.</li>
+ *   <li><b>Exposure listener</b> — one {@code ExposureListener} bean is wired into the
+ *       client; two stop the application at startup.</li>
  * </ul>
  */
 @DisplayName("ExperimentationAutoConfiguration")
@@ -280,6 +299,111 @@ class ExperimentationAutoConfigurationTest {
                 });
     }
 
+    // ── ExposureListener bean (#1499) ──────────────────────────────────────────
+    //
+    // These assign through the client bean against a local fake of POST
+    // /api/v1/tracking/assign that answers "assigned": true, so "wired" means the listener
+    // bean really received the exposure.
+
+    @Test
+    @DisplayName("one ExposureListener bean is the auto-configured client's listener: it receives the exposure once")
+    void oneExposureListenerBeanIsWired() {
+        contextRunner
+                .withPropertyValues("experimentation.api-key=test-key", "experimentation.base-url=" + FakeAssignApi.url())
+                .withUserConfiguration(OneListenerConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    RecordingListener listener = (RecordingListener) context.getBean(ExposureListener.class);
+                    ExperimentationClient client = context.getBean(ExperimentationClient.class);
+
+                    client.getExperimentAssignment(User.builder("u-1").build(), "exp-1");
+                    client.getExperimentAssignment(User.builder("u-1").build(), "exp-1");
+
+                    assertThat(listener.received).containsExactly(new Exposure("exp-1", "u-1", "v-2", "treatment"));
+                });
+    }
+
+    @Test
+    @DisplayName("with no ExposureListener bean the client is created and assigns as before")
+    void noExposureListenerBean() {
+        contextRunner
+                .withPropertyValues("experimentation.api-key=test-key", "experimentation.base-url=" + FakeAssignApi.url())
+                .run(context -> {
+                    assertThat(context).hasSingleBean(ExperimentationClient.class);
+                    assertThat(context).doesNotHaveBean(ExposureListener.class);
+                    assertThat(context.getBean(ExperimentationClient.class)
+                            .getExperimentAssignment(User.builder("u-1").build(), "exp-1").getVariantName())
+                            .isEqualTo("treatment");
+                });
+    }
+
+    @Test
+    @DisplayName("two ExposureListener beans stop the application at startup, even when one is named like the auto-configuration's parameter")
+    void twoExposureListenerBeansFailAtStartup() {
+        // One of the two beans is named "exposureListener", exactly the name of the
+        // ObjectProvider<ExposureListener> parameter of
+        // ExperimentationAutoConfiguration#experimentationClient. Compiled without -parameters
+        // (as now), Spring cannot see that name and getIfAvailable() refuses two beans. Compiled
+        // with -parameters, Spring would pick the bean named like the parameter and silently
+        // ignore the other, the context would start, and this test would fail.
+        contextRunner
+                .withPropertyValues("experimentation.api-key=test-key")
+                .withUserConfiguration(TwoListenersConfiguration.class)
+                .run(context -> {
+                    assertThat(context)
+                            .as("two ExposureListener beans must stop the application. This context started:"
+                                    + " either the starter was compiled with -parameters and Spring chose the bean"
+                                    + " named exposureListener, or the listener is read with something other than"
+                                    + " getIfAvailable(), such as getIfUnique(), which gives none for two")
+                            .hasFailed();
+                    // The message names both beans. Requiring the name "exposureListener" in it
+                    // pins this test's bean to the parameter's name: a rename of the bean makes
+                    // this test fail instead of silently losing what it guards.
+                    assertThat(context.getStartupFailure())
+                            .hasRootCauseInstanceOf(NoUniqueBeanDefinitionException.class)
+                            .rootCause()
+                            .hasMessageContaining(ExposureListener.class.getName())
+                            .hasMessageMatching("(?s).*found 2: (exposureListener,otherExposureListener"
+                                    + "|otherExposureListener,exposureListener)\\b.*");
+                });
+    }
+
+    @Test
+    @DisplayName("the auto-configuration is compiled without -parameters, which the two-bean failure depends on")
+    void compiledWithoutParameterNames() throws NoSuchMethodException {
+        Method factory = ExperimentationAutoConfiguration.class.getMethod(
+                "experimentationClient", ExperimentationProperties.class, ObjectProvider.class);
+        for (Parameter parameter : factory.getParameters()) {
+            assertThat(parameter.isNamePresent())
+                    .as("%s carries its name, so the starter was compiled with -parameters: Spring would then"
+                            + " choose an ExposureListener bean named like it and ignore a second one", parameter)
+                    .isFalse();
+        }
+    }
+
+    @Test
+    @DisplayName("a user-defined ExperimentationClient bean wins, and does not get the ExposureListener bean")
+    void userDefinedClientDoesNotGetTheListenerBean() {
+        contextRunner
+                .withPropertyValues("experimentation.api-key=test-key")
+                .withUserConfiguration(OneListenerConfiguration.class, FakeApiClientConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasSingleBean(ExperimentationClient.class);
+                    assertThat(context).doesNotHaveBean("experimentationClient");
+                    RecordingListener listener = (RecordingListener) context.getBean(ExposureListener.class);
+
+                    assertThat(context.getBean(ExperimentationClient.class)
+                            .getExperimentAssignment(User.builder("u-1").build(), "exp-1").getVariantName())
+                            .isEqualTo("treatment");
+                    assertThat(listener.received).isEmpty();
+                });
+    }
+
+    @AfterAll
+    static void stopFakeAssignApi() {
+        FakeAssignApi.stop();
+    }
+
     // ── Helper configuration classes ──────────────────────────────────────────
 
     /**
@@ -295,6 +419,89 @@ class ExperimentationAutoConfigurationTest {
                     .timeoutMs(1000)
                     .build();
             return new ExperimentationClient(config);
+        }
+    }
+
+    /** An ExposureListener that records what it receives. */
+    static final class RecordingListener implements ExposureListener {
+        final List<Exposure> received = new CopyOnWriteArrayList<>();
+
+        @Override
+        public void onExposure(Exposure exposure) {
+            received.add(exposure);
+        }
+    }
+
+    @Configuration
+    static class OneListenerConfiguration {
+
+        @Bean
+        ExposureListener recordingExposureListener() {
+            return new RecordingListener();
+        }
+    }
+
+    /** Two listener beans; the first is named exactly like the auto-configuration's parameter. */
+    @Configuration
+    static class TwoListenersConfiguration {
+
+        @Bean
+        ExposureListener exposureListener() {
+            return new RecordingListener();
+        }
+
+        @Bean
+        ExposureListener otherExposureListener() {
+            return new RecordingListener();
+        }
+    }
+
+    /** A user-defined client, pointed at the fake API, configured without a listener. */
+    @Configuration
+    static class FakeApiClientConfiguration {
+
+        @Bean
+        ExperimentationClient customExperimentationClient() {
+            return new ExperimentationClient(SdkConfig.builder("custom-key", FakeAssignApi.url()).build());
+        }
+    }
+
+    /**
+     * A local fake of {@code POST /api/v1/tracking/assign} on an ephemeral 127.0.0.1 port (the
+     * JDK's own HTTP server, so the starter gains no test dependency). It answers every request
+     * as the server answers an enrolled user.
+     */
+    static final class FakeAssignApi {
+        private static final String ASSIGNED = "{\"experiment_key\":\"exp-1\",\"user_id\":\"u-1\","
+                + "\"variant_id\":\"v-2\",\"variant_name\":\"treatment\",\"is_control\":false,"
+                + "\"configuration\":null,\"assigned\":true,\"reason\":\"assigned\"}";
+        private static HttpServer server;
+
+        static synchronized String url() {
+            if (server == null) {
+                try {
+                    server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+                server.createContext("/api/v1/tracking/assign", exchange -> {
+                    byte[] body = ASSIGNED.getBytes(StandardCharsets.UTF_8);
+                    exchange.getResponseHeaders().set("Content-Type", "application/json");
+                    exchange.sendResponseHeaders(200, body.length);
+                    try (OutputStream out = exchange.getResponseBody()) {
+                        out.write(body);
+                    }
+                });
+                server.start();
+            }
+            return "http://127.0.0.1:" + server.getAddress().getPort();
+        }
+
+        static synchronized void stop() {
+            if (server != null) {
+                server.stop(0);
+                server = null;
+            }
         }
     }
 }
