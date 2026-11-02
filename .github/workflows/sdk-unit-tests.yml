@@ -81,6 +81,8 @@ jobs:
             react-native:
               - *all
               - 'sdk/react-native/**'
+              # the real-npm app check the react-native leg runs on the packed tarball
+              - 'scripts/check_react_native_app.py'
             edge:
               - *all
               - 'sdk/edge/**'

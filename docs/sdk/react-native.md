@@ -49,8 +49,9 @@ one of them. If your app does not have it yet, add it:
 npm install @react-native-async-storage/async-storage
 ```
 
-An app that already has AsyncStorage keeps its version. Do not add AsyncStorage to the tarball's
-install command: naming it there moves the app to its newest major.
+An app that already has AsyncStorage keeps its version. Do not put a version or range of
+AsyncStorage on that line (such as `@latest`): npm saves it, which moves an app on 1.x or 2.x to
+3.x. Your app's own AsyncStorage already satisfies the peer.
 
 - **iOS**: `cd ios && pod install` (required by `@react-native-async-storage/async-storage`).
 - **Android**: no additional setup (minSdk 21).

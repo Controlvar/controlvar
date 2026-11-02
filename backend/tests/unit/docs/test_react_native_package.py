@@ -6,11 +6,13 @@ The package takes AsyncStorage as a peer at ``>=1.21.0 <4`` (PP-4 (b)), so:
 * the README and the SDK page state that range, and the ``react`` and
   ``react-native`` floors, exactly as package.json's ``peerDependencies``
   spell them;
-* no install command on either names AsyncStorage on the same line as the
-  SDK (its tarball or its npm name), and none names AsyncStorage with a
-  version or a range: either would move an app already on 1.x or 2.x to
-  another AsyncStorage (npm saves what it is told to install). The one
-  AsyncStorage line is the bare add for an app that has none;
+* no install command on either names AsyncStorage with a version, a range
+  or a tag (such as ``@latest``): npm saves what it is told to install, which
+  moves an app already on 1.x or 2.x to 3.x. A bare name does NOT move the
+  app (measured with npm 10.8.2 and 11.5.1: it keeps the app's range), so
+  refusing a bare name on the SDK's own install line is conservative, not
+  a claim that npm would move it. The one AsyncStorage line is the bare add
+  for an app that has none;
 * the page's install of the tarball is the tarball alone, which is the
   command scripts/check_react_native_app.py runs in an app on each major;
 * both carry the consumer-Jest ``transformIgnorePatterns`` line, which names
@@ -67,7 +69,11 @@ def install_commands(page_text: str) -> List[str]:
 
 
 def asyncstorage_problems(command: str) -> List[str]:
-    """Why an install command would move the app's AsyncStorage, if it would."""
+    """Why an install command may move the app's AsyncStorage, if it may.
+
+    A version, range or tag after the name does move it (npm saves it). A bare
+    name on the SDK's line does not (measured), so refusing it is conservative.
+    """
     if STORAGE not in command:
         return []
     problems = []

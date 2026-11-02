@@ -9,7 +9,9 @@ the script exists to catch, and the script must fail on it, on every leg it
 applies to and no other:
 
 * the documented install moving the app's AsyncStorage to the newest major
-  (an install line that names AsyncStorage: EMP-P-8's C6 plant);
+  (an install line that names AsyncStorage at a version or range such as
+  ``@">=1.21.0 <4"`` or ``@latest``, which npm saves; a bare name does not
+  move the app: EMP-P-8's C6 plant);
 * a second copy of AsyncStorage nested under the SDK (AsyncStorage as a
   dependency instead of a peer);
 * ``tsc`` failing under 3.x only (a bare ``multiRemove``: TS2339);
@@ -160,8 +162,8 @@ def test_storage_copies_finds_nested_and_scoped_copies(tmp_path: Path) -> None:
 #: a tarball as the SDK, and `typescript` brings a `tsc` that fails when
 #: FAKE_TSC_FAILS names the installed AsyncStorage major. `pack` writes a
 #: tarball. FAKE_NPM_PLANT makes the tarball install misbehave: `names-storage`
-#: also installs AsyncStorage's newest version as the app's own (an install
-#: line naming it), `nested` puts a second copy under the SDK, `fail` exits 1;
+#: also installs AsyncStorage's newest version as the app's own (what an install
+#: line naming it at a version, range or tag does; a bare name would not), `nested` puts a second copy under the SDK, `fail` exits 1;
 #: `setup-fails` fails the app's first install.
 FAKE_NPM = r"""
 import json, os, pathlib, sys
@@ -281,8 +283,9 @@ def test_every_leg_passes_and_runs_the_documented_install(
 def test_an_install_that_moves_the_apps_asyncstorage_fails_those_legs(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
-    """EMP-P-8's C6 plant: an install line that names AsyncStorage moves the
-    1.x and 2.x apps to 3.x; those two legs fail, each saying so."""
+    """EMP-P-8's C6 plant: an install line that names AsyncStorage at a version
+    or range (npm saves it; a bare name would not move the app) moves the 1.x
+    and 2.x apps to 3.x; those two legs fail, each saying so."""
     status, out, _, _ = _run(tmp_path, monkeypatch, capsys, plant="names-storage")
     assert status == 1, out
     assert _failed_legs(out) == ["1.24.0", "2.2.0"], out
