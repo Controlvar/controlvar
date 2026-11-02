@@ -2,7 +2,11 @@
 
 A VIEWER holds every pair of the vocabulary (8 resources x 5 actions, the 40
 a role or grant could store before the 422), activated, through a custom role
-and through direct grants, planted by SQL. Through real sign-in, every route
+and through direct grants, planted by SQL; and, as only SQL could store them,
+the five ``api_key`` pairs too. No check reads ``user``, ``role``,
+``permission`` or ``report``, so without ``api_key`` a server that dropped the
+``GRANTABLE`` filter would pass this test; with it, ``api-keys?all=true``
+answers 200 (the plant that proves the gate). Through real sign-in, every route
 that a grantable pair does not govern still answers exactly 403, each sent
 with a valid body (FastAPI answers 422 before the endpoint's own check):
 
@@ -54,6 +58,8 @@ RESOURCES = (
     "report",
     "audit_log",
     "export",
+    # Not in the vocabulary: only SQL could store it. The filter must drop it.
+    "api_key",
 )
 ACTIONS = ["create", "read", "update", "delete", "list"]
 
@@ -85,7 +91,7 @@ def _cleanup(db_session):
 
 @pytest.fixture
 def holder(db_session):
-    """A VIEWER holding all forty pairs, through a role and through grants."""
+    """A VIEWER holding all forty pairs and api_key, through a role and grants."""
     user = make_user(db_session, UserRole.VIEWER, tag=TAG)
     role_id = uuid.uuid4()
     db_session.execute(
