@@ -127,17 +127,42 @@ describe('useFlag', () => {
     expect(latest().error?.message).toBe('API error');
   });
 
-  test('calls client.evaluateFlag(flagKey, userId) — attributes are not sent', async () => {
+  test('regression #1520: calls client.evaluateFlag(flagKey, userId, attributes) with its own argument', async () => {
     const evaluateFlag = jest.fn().mockResolvedValue(enabledFlag);
     const client = makeClient({ evaluateFlag });
     renderHookInProvider(() => useFlag('specific-flag', { plan: 'pro' }), {
       client,
       userId: 'specific-user',
-      attributes: { plan: 'pro' },
+      attributes: { plan: 'free' },
     });
 
     await waitFor(() => expect(evaluateFlag).toHaveBeenCalledTimes(1));
-    expect(evaluateFlag.mock.calls[0]).toEqual(['specific-flag', 'specific-user']);
+    expect(evaluateFlag.mock.calls[0]).toEqual(['specific-flag', 'specific-user', { plan: 'pro' }]);
+  });
+
+  test('regression #1520: without its own argument it sends the provider attributes (no merge)', async () => {
+    const evaluateFlag = jest.fn().mockResolvedValue(enabledFlag);
+    renderHookInProvider(() => useFlag('f'), {
+      client: makeClient({ evaluateFlag }),
+      userId: 'u1',
+      attributes: { plan: 'pro' },
+    });
+    await waitFor(() => expect(evaluateFlag).toHaveBeenCalledTimes(1));
+    expect(evaluateFlag.mock.calls[0]).toEqual(['f', 'u1', { plan: 'pro' }]);
+  });
+
+  test('regression #1520: an equal inline object re-rendered 3 times asks once', async () => {
+    const evaluateFlag = jest.fn().mockResolvedValue(enabledFlag);
+    const client = makeClient({ evaluateFlag });
+    const { latest, rerenderWith } = renderHookInProvider(() => useFlag('f', { plan: 'pro' }), {
+      client,
+      userId: 'u1',
+      attributes: { plan: 'pro' },
+    });
+    await waitFor(() => expect(settled(latest())).toBe(true));
+    for (let i = 0; i < 3; i++) rerenderWith({ client, userId: 'u1', attributes: { plan: 'pro' } });
+    await act(async () => {});
+    expect(evaluateFlag).toHaveBeenCalledTimes(1);
   });
 
   test('re-evaluates (and goes back to loading) when the flag key changes', async () => {
@@ -165,9 +190,9 @@ describe('useFlag', () => {
     const client = makeClient({ evaluateFlag });
     const { rerenderWith } = renderHookInProvider(() => useFlag('dark-mode'), { client, userId: 'user-A' });
 
-    await waitFor(() => expect(evaluateFlag).toHaveBeenCalledWith('dark-mode', 'user-A'));
+    await waitFor(() => expect(evaluateFlag).toHaveBeenCalledWith('dark-mode', 'user-A', undefined));
     rerenderWith({ client, userId: 'user-B' });
-    await waitFor(() => expect(evaluateFlag).toHaveBeenCalledWith('dark-mode', 'user-B'));
+    await waitFor(() => expect(evaluateFlag).toHaveBeenCalledWith('dark-mode', 'user-B', undefined));
     expect(evaluateFlag).toHaveBeenCalledTimes(2);
   });
 
@@ -525,6 +550,19 @@ describe('hooks with a real ExperimentationClient', () => {
     expect(url).toBe(`${BASE_URL}/api/v1/feature-flags/evaluate/dark-mode?user_id=user%201`);
     expect(init.method).toBe('GET');
     expect(init.headers['X-API-Key']).toBe('k');
+  });
+
+  test('regression #1520: useFlag puts the attributes on the wire', async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce(jsonResponse({ key: 'f', enabled: true, config: null }));
+    const { latest } = renderHookInProvider(() => useFlag('f'), {
+      client: realClient(),
+      userId: 'u1',
+      attributes: { plan: 'pro' },
+    });
+    await waitFor(() => expect(settled(latest())).toBe(true));
+    expect((global.fetch as jest.Mock).mock.calls[0][0]).toBe(
+      `${BASE_URL}/api/v1/feature-flags/evaluate/f?user_id=u1&context=%7B%22plan%22%3A%22pro%22%7D`
+    );
   });
 
   // #1519: the kill-switch page says a component already on screen keeps its answer until it

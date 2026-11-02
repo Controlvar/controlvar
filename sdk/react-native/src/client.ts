@@ -66,6 +66,25 @@ function encode(value: string): string {
   return encodeURIComponent(value);
 }
 
+/**
+ * `&context=<url-encoded JSON>` for a flag query string, or `''` when the
+ * attributes are missing or an empty object (nothing is sent then). The same
+ * rule as the JavaScript SDK's `contextQuery`.
+ */
+export function contextQuery(attributes: Record<string, unknown> | undefined): string {
+  if (!attributes || typeof attributes !== 'object' || Object.keys(attributes).length === 0) return '';
+  return `&context=${encode(JSON.stringify(attributes))}`;
+}
+
+/**
+ * A request path without its query string, as a request error message names
+ * it: the query holds the user's id and attributes.
+ */
+function withoutQuery(path: string): string {
+  const question = path.indexOf('?');
+  return question === -1 ? path : path.slice(0, question);
+}
+
 function toIso(timestamp: Date | string): string {
   return timestamp instanceof Date ? timestamp.toISOString() : String(timestamp);
 }
@@ -110,6 +129,11 @@ export class ExperimentationClient {
 
   /**
    * Evaluates `flagKey` for `userId` via `GET /api/v1/feature-flags/evaluate/{key}?user_id=…`.
+   * `attributes` is sent as `context` (URL-encoded JSON, nothing for `{}`), so targeting
+   * rules match. Cache, AsyncStorage and in-flight keys stay user + flag, as in the
+   * JavaScript SDK: after the attributes change, `clearCache()` and `await clearStorage()`
+   * (or construct the client with `offlineFallback: false`). A context the server refuses
+   * (422) or that cannot be serialised goes to `onError`, and nothing is cached.
    *
    * Evaluation order:
    *   1. In-memory cache (fast path).
@@ -118,7 +142,11 @@ export class ExperimentationClient {
    *   4. On failure: the last-known AsyncStorage value, even if expired (if `offlineFallback`).
    *   5. `{ key, enabled: false, config: null }` as the safe default (not cached).
    */
-  async evaluateFlag(flagKey: string, userId: string): Promise<FlagEvaluation> {
+  async evaluateFlag(
+    flagKey: string,
+    userId: string,
+    attributes?: Record<string, unknown>
+  ): Promise<FlagEvaluation> {
     const cached = this.flagCache.get(userId, flagKey);
     if (cached) return cached;
 
@@ -131,7 +159,7 @@ export class ExperimentationClient {
 
       try {
         const data = await this.requestJson<FlagEvaluateResponse>(
-          `/api/v1/feature-flags/evaluate/${encode(flagKey)}?user_id=${encode(userId)}`
+          `/api/v1/feature-flags/evaluate/${encode(flagKey)}?user_id=${encode(userId)}${contextQuery(attributes)}`
         );
         const evaluation: FlagEvaluation = {
           key: flagKey,
@@ -149,17 +177,25 @@ export class ExperimentationClient {
   }
 
   /** `true` only when the server (or the offline fallback) says the flag is enabled; `false` on failure. */
-  async isFeatureEnabled(flagKey: string, userId: string): Promise<boolean> {
-    return (await this.evaluateFlag(flagKey, userId)).enabled;
+  async isFeatureEnabled(
+    flagKey: string,
+    userId: string,
+    attributes?: Record<string, unknown>
+  ): Promise<boolean> {
+    return (await this.evaluateFlag(flagKey, userId, attributes)).enabled;
   }
 
   /**
    * All flags for a user via `GET /api/v1/feature-flags/user/{user_id}` → `{flagKey: enabled}`.
+   * `attributes` is sent as `?context=` the same way as in `evaluateFlag`.
    * Not cached and not part of the tracking fan-out (it carries no `config`). `{}` on failure.
    */
-  async getAllFlags(userId: string): Promise<Record<string, boolean>> {
+  async getAllFlags(userId: string, attributes?: Record<string, unknown>): Promise<Record<string, boolean>> {
     try {
-      const data = await this.requestJson<Record<string, unknown>>(`/api/v1/feature-flags/user/${encode(userId)}`);
+      const query = contextQuery(attributes).replace('&', '?');
+      const data = await this.requestJson<Record<string, unknown>>(
+        `/api/v1/feature-flags/user/${encode(userId)}${query}`
+      );
       const flags: Record<string, boolean> = {};
       if (data && typeof data === 'object') {
         for (const [key, value] of Object.entries(data)) flags[key] = Boolean(value);
@@ -409,12 +445,12 @@ export class ExperimentationClient {
   /** Perform a request and throw on a non-2xx status; the body is ignored. */
   private async requestOk(path: string, init: RequestInitLite = {}): Promise<void> {
     const response = await this.request(path, init);
-    if (!response.ok) throw new ApiError(response.status, `API error ${response.status} (${path})`);
+    if (!response.ok) throw new ApiError(response.status, `API error ${response.status} (${withoutQuery(path)})`);
   }
 
   private async requestJson<T>(path: string, init: RequestInitLite = {}): Promise<T> {
     const response = await this.request(path, init);
-    if (!response.ok) throw new ApiError(response.status, `API error ${response.status} (${path})`);
+    if (!response.ok) throw new ApiError(response.status, `API error ${response.status} (${withoutQuery(path)})`);
     return (await response.json()) as T;
   }
 }

@@ -761,7 +761,6 @@ SENDS_NO_CONTEXT = {
     "ios",
     "java",
     "php",
-    "react-native",
     "ruby",
 }
 

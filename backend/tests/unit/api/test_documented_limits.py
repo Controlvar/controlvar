@@ -419,11 +419,6 @@ NATIVE_SDKS = {
         ],
         [("suspend fun getAssignment(", "suspend fun track(")],
     ),
-    "react-native": (
-        "sdk/react-native/src/client.ts",
-        [("async evaluateFlag(", "async isFeatureEnabled(")],
-        [("async getAssignment(", "async getVariant(")],
-    ),
     "flutter": (
         "sdk/flutter/lib/src/client.dart",
         [("Future<EvalResult> evaluateFlag(", "Future<bool> isEnabled(")],
@@ -451,8 +446,8 @@ def _native_code(rel: str, bounds) -> str:
 
 @pytest.mark.parametrize("sdk", sorted(NATIVE_SDKS))
 def test_the_native_sdks_send_no_context_on_flag_evaluation(sdk):
-    """iOS, Android, React Native and Flutter evaluate a flag with the user id
-    alone (#438), so a flag rule on attributes cannot match from them; each
+    """iOS, Android and Flutter evaluate a flag with the user id
+    alone (#438; React Native sends the attributes since #1520), so a flag rule on attributes cannot match from them; each
     sends the attributes as the context of an experiment assignment. When this
     fails, the SDK has started to send a context on flag evaluation: say so on
     the pages whose registries name this test."""

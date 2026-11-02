@@ -259,7 +259,7 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
     "useFlag and useExperiment hooks, Provider, AsyncStorage offline support.": (
         lede("a context provider, three hooks"),
         lede("AsyncStorage-backed offline fallback"),
-        says("### useFlag(flagKey): FlagState"),
+        says("### useFlag(flagKey, attributes?): FlagState"),
         says("### useExperiment(experimentKey): ExperimentState"),
     ),
     "Describes the API's tools for AI assistants.": (
