@@ -546,6 +546,65 @@ def test_cors_origins_reach_the_api_as_one_list():
     assert config["CORS_ORIGINS"] == "https://shop.example.com,http://localhost:3100"
 
 
+#: The chart's default for api.forwardedAllowIps (values.yaml).
+FORWARDED_ALLOW_IPS_DEFAULT = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+
+
+@pytest.mark.regression
+def test_the_proxies_the_api_believes_default_to_the_private_ranges():
+    """Always rendered, into the ConfigMap both API containers read: the image
+    alone believes only loopback and the pod's own network, and an ingress
+    controller on another node is on neither."""
+    docs = render("core")
+    for name in ("api", "migrate"):
+        environment = api_environment(docs, name)
+        assert environment.get("FORWARDED_ALLOW_IPS") == FORWARDED_ALLOW_IPS_DEFAULT, (
+            name,
+            environment.get("FORWARDED_ALLOW_IPS"),
+        )
+
+
+@pytest.mark.regression
+def test_a_set_value_is_rendered_exactly():
+    docs = render("core", "--set-string", "api.forwardedAllowIps=10.244.0.0/16")
+    config = one(docs, "ConfigMap", f"{FULLNAME}-config")["data"]
+    assert config["FORWARDED_ALLOW_IPS"] == "10.244.0.0/16"
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "setting",
+    [
+        ("--set-string", "api.forwardedAllowIps="),
+        ("--set-string", "api.forwardedAllowIps=   "),
+        ("--set", "api.forwardedAllowIps=null"),
+    ],
+    ids=["empty", "blank", "null"],
+)
+def test_an_empty_value_is_refused_by_the_template_too(setting):
+    error = refused("core", "--skip-schema-validation", *setting)
+    assert "api.forwardedAllowIps is empty" in error, (
+        f"expected the chart to refuse an empty api.forwardedAllowIps:\n{error}"
+    )
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("how", ["--set", "values file"])
+def test_a_null_value_is_refused_by_the_schema(how, tmp_path):
+    """Helm drops a key whose value is null before it checks the schema, so
+    `minLength` never sees it; the `api` object requires the key, and the
+    chart's own default always supplies it."""
+    if how == "--set":
+        args = ("--set", "api.forwardedAllowIps=null")
+    else:
+        values = tmp_path / "null.yaml"
+        values.write_text("api:\n  forwardedAllowIps: ~\n", encoding="utf-8")
+        args = ("-f", str(values))
+    error = refused("core", *args)
+    assert "values don't meet the specifications of the schema" in error, error
+    assert "forwardedAllowIps" in error, error
+
+
 @pytest.mark.parametrize(
     "url", ["http://10.0.0.5", "https://controlvar.example.com:8443", "http://[::1]"]
 )
@@ -679,6 +738,11 @@ REFUSALS = [
         "/secrets/secretKey",
     ),
     ("zero API replicas", {"api.replicaCount": 0}, "/api/replicaCount"),
+    (
+        "empty forwardedAllowIps",
+        {"api.forwardedAllowIps": ""},
+        "/api/forwardedAllowIps",
+    ),
     ("zero web replicas", {"web.replicaCount": 0}, "/web/replicaCount"),
     ("floating tag", {"image.tag": "core"}, "/image/tag"),
     ("latest tag", {"image.tag": "latest"}, "/image/tag"),

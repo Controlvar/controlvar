@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import tomllib
 import xml.etree.ElementTree as ET
@@ -36,10 +37,14 @@ ROOT = Path(__file__).resolve().parents[1]
 #:                      the Central Portal for validation; a person publishes
 #:                      it there.  The version is the parent POM's, and every
 #:                      module must name it as its parent's.
+#: ``nuget``            the workflow builds, tests and packs the one project
+#:                      in ``NUGET_PROJECTS`` and pushes that package to
+#:                      nuget.org.  The version and the package id are that
+#:                      project file's.
 #: ``tag-only``         Go: `go get` resolves the tag itself, there is no
 #:                      registry upload, so the tag *is* the release.
 #: ``unwired``          a real SDK with a real manifest, but no publishing
-#:                      identity yet (NuGet, RubyGems, Hex, pub.dev).
+#:                      identity yet (RubyGems, Hex, pub.dev).
 #:                      Tagging one is refused rather than ignored.
 ECOSYSTEMS: dict[str, str] = {
     "python": "pypi",
@@ -51,7 +56,7 @@ ECOSYSTEMS: dict[str, str] = {
     "react-native": "npm",
     "go": "tag-only",
     "java": "maven",
-    "dotnet": "unwired",
+    "dotnet": "nuget",
     "ruby": "unwired",
     "php": "unwired",
     "elixir": "unwired",
@@ -59,6 +64,72 @@ ECOSYSTEMS: dict[str, str] = {
     "android": "unwired",
     "ios": "unwired",
 }
+
+
+#: The project each ``nuget`` SDK packs, relative to its directory. The release
+#: packs this file and nothing else (the solution also holds the tests and the
+#: examples), so this is the file whose version and id the tag is held to.
+NUGET_PROJECTS: dict[str, str] = {
+    "dotnet": "src/Controlvar/Controlvar.csproj",
+}
+#: Properties that would make the packed version differ from ``<Version>``.
+NUGET_VERSION_OVERRIDES = ("PackageVersion", "VersionPrefix", "VersionSuffix")
+
+
+def read_nuget_version(sdk: str, directory: Path) -> tuple[str, str]:
+    """Return ``(version, package id)`` from the project the SDK packs.
+
+    Each of ``<Version>`` and ``<PackageId>`` must appear exactly once, with a
+    value, and not under a ``Condition``; and nothing may override the version
+    (``PackageVersion``, ``VersionPrefix``, ``VersionSuffix``).
+    """
+    relative = NUGET_PROJECTS.get(sdk)
+    if relative is None:
+        raise SystemExit(f"error: sdk/{sdk} names no project in NUGET_PROJECTS")
+    project_path = directory / relative
+    if not project_path.is_file():
+        raise SystemExit(f"error: sdk/{sdk}/{relative} does not exist")
+    project = ET.parse(project_path).getroot()
+    where = f"sdk/{sdk}/{relative}"
+    parents = {child: parent for parent in project.iter() for child in parent}
+
+    def values(name: str) -> list[str]:
+        """Each property ``name`` the project sets (an element of that name in
+        a PropertyGroup, not item metadata of the same name)."""
+        found = []
+        for element in project.iter(name):
+            if parents[element].tag != "PropertyGroup":
+                continue
+            node = element
+            while node is not None:
+                if "Condition" in node.attrib:
+                    raise SystemExit(
+                        f"error: {where} sets <{name}> under a Condition; "
+                        "the release reads one unconditional value"
+                    )
+                node = parents.get(node)
+            found.append((element.text or "").strip())
+        return found
+
+    for name in NUGET_VERSION_OVERRIDES:
+        if values(name):
+            raise SystemExit(
+                f"error: {where} sets <{name}>, which would change the version "
+                "the package is packed at; set <Version> alone"
+            )
+    result = []
+    for name in ("Version", "PackageId"):
+        found = values(name)
+        if len(found) != 1 or not found[0]:
+            raise SystemExit(
+                f"error: {where} must set <{name}> exactly once, with a value; "
+                f"found {found}"
+            )
+        result.append(found[0])
+    version, package_id = result
+    if not re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z.+-]*", version):
+        raise SystemExit(f"error: {where} sets <Version> to {version!r}")
+    return version, package_id
 
 
 POM_NAMESPACE = {"m": "http://maven.apache.org/POM/4.0.0"}
@@ -139,6 +210,8 @@ def read_manifest_version(sdk: str) -> tuple[str, str]:
 
     if ECOSYSTEMS.get(sdk) == "maven":
         return read_maven_version(sdk, directory)
+    if ECOSYSTEMS.get(sdk) == "nuget":
+        return read_nuget_version(sdk, directory)
 
     package_json = directory / "package.json"
     if package_json.is_file():

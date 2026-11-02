@@ -42,6 +42,19 @@ by = [
 ]
 
 [[unit]]
+text = "A flag turned off for every user at once | Each client keeps the answer it has until its cache expires; a React or React Native component already on screen keeps its answer until it mounts again; and an iOS, Android, Flutter or React Native app that cannot reach the API keeps serving the last answer it stored. See Turning a Flag Off."
+by = [
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_cache_lifetime_is_the_number_the_page_states",
+    "test:sdk/js/__tests__/client.test.ts::caches a success for 300000 ms by default",
+    "test:sdk/react/src/__tests__/useFeatureFlag.test.tsx::a mounted hook does not ask again: past the cache lifetime it keeps its answer, one request",
+    "test:sdk/react-native/__tests__/hooks.test.tsx::a mounted useFlag does not ask again: past the cache lifetime it keeps its answer, one request",
+    "test:sdk/react-native/__tests__/client.test.ts::on API failure returns the last-known evaluation however long ago it expired",
+    "test:sdk/ios/Tests/ControlvarTests/ExperimentationClientTests.swift::testEvaluateFlag_networkErrorFallsBackToOfflineStore",
+    "test:sdk/android/sdk/src/test/kotlin/ExperimentationClientTest.kt::evaluateFlag falls back to offline store on server error",
+    "test:sdk/flutter/test/client_test.dart::stores the evaluation and serves it when the network fails",
+]
+
+[[unit]]
 text = "Experiments and results"
 by = ["exempt:label"]
 
@@ -51,6 +64,13 @@ by = [
     "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_values_that_are_not_finite_or_too_large_add_nothing",
     "test:backend/tests/integration/api/test_value_metrics_results.py::test_duration_and_custom_add_up_each_users_values",
     "test:backend/tests/integration/api/test_value_metrics_results.py::test_a_count_does_not_read_the_value",
+]
+
+[[unit]]
+text = "An event sent twice counted once | It is stored and counted twice: a count metric counts it again, and a revenue, duration or custom metric adds its value again. A request that timed out may have been stored, so sending it again can double it (#1543). A conversion rate counts each user once and is not affected. See How events count."
+by = [
+    "test:backend/tests/integration/api/test_how_events_count.py::test_an_event_sent_again_is_stored_and_counted_again",
+    "test:sdk/python/tests/test_client.py::TestTrackNeverRaises::test_a_timeout_returns_false_although_the_event_was_sent",
 ]
 
 [[unit]]
@@ -84,6 +104,15 @@ by = [
     "test:backend/tests/unit/services/test_difference_intervals.py::test_every_none_on_the_architects_grid_is_counted",
     "test:backend/tests/unit/services/test_difference_intervals.py::test_a_low_count_control_has_a_bounded_relative_interval",
     "test:backend/tests/unit/services/test_difference_intervals.py::test_a_mean_control_whose_interval_reaches_0_has_no_relative_interval",
+]
+
+[[unit]]
+text = "A relative-change interval bound above +1,000,000% | The dashboard shows a bound beyond 1,000,000% in either direction as 'above +1,000,000%' or 'below −1,000,000%'; the API returns the exact number."
+by = [
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::abbreviates only past the boundary: 1,000,000.0 is written out, 1,000,000.04 is not",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::writes an upper bound above +1,000,000% as \"above +1,000,000%\" (server: 500/1000 against 1/100000)",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::writes a lower bound below -1,000,000% as \"below −1,000,000%\" (server: a custom mean)",
+    "test:backend/tests/unit/scripts/test_results_interval_fixtures.py::test_the_quoted_numbers",
 ]
 
 [[unit]]
@@ -132,13 +161,6 @@ text = "An LLM experiment that picks the variant with the lowest value | An LLM 
 by = [
     "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_winner_is_variant_with_higher_business_metric",
     "test:backend/tests/unit/services/test_llm_analytics.py::TestGetExperimentResults::test_winner_based_on_auto_eval_when_no_business_metric",
-]
-
-[[unit]]
-text = "A warehouse analysis of a metric where lower is better | A warehouse analysis treats every metric as higher is better: a warehouse metric source has no lower-is-better setting, so its results report lower_is_better: false and name a winner only for a significant increase (#1386)."
-by = [
-    "test:modules/backend/tests/unit/test_warehouse_lower_is_better.py::test_a_warehouse_result_names_a_winner_only_for_a_significant_increase",
-    "test:modules/backend/tests/unit/test_warehouse_lower_is_better.py::test_a_warehouse_metric_source_has_no_lower_is_better_setting",
 ]
 
 [[unit]]

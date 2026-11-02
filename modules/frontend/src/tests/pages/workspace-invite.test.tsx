@@ -171,6 +171,8 @@ describe('/workspaces/invites/[token]', () => {
       ),
     );
     expect(mockLogout).toHaveBeenCalledTimes(1);
+    // The logout names the same page, so the guard's redirect agrees (#1006).
+    expect(mockLogout).toHaveBeenCalledWith({ next: '/workspaces/invites/tok123' });
     expect(acceptInvite).not.toHaveBeenCalled();
   });
 

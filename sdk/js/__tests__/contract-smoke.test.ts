@@ -24,8 +24,10 @@ globalThis.fetch = async (url, init = {}) => {
   seen.push({ url: String(url), method: init.method || 'GET', key: (init.headers || {})['X-API-Key'], body });
   const path = new URL(String(url)).pathname;
   if (path === '/api/v1/tracking/assign') {
+    // The server answers an enrolled user with assigned: true; FAKE_NO_ASSIGNED drops the field.
+    const enrolled = process.env.FAKE_NO_ASSIGNED ? {} : { assigned: true, reason: 'assigned' };
     return reply({ experiment_key: body.experiment_key, user_id: body.user_id, variant_id: 'v-1',
-      variant_name: 'control', is_control: true, configuration: null });
+      variant_name: 'control', is_control: true, configuration: null, ...enrolled });
   }
   if (path.startsWith('/api/v1/feature-flags/evaluate/')) {
     return reply({ key: decodeURIComponent(path.split('/').pop()), enabled: true, config: null });
@@ -101,6 +103,10 @@ test('it assigns twice, evaluates the flag, tracks with and without a key and se
     'POST /api/v1/tracking/track',
     'POST /api/v1/tracking/batch',
     'POST /api/v1/tracking/batch',
+    // The exposure hook's new client: two assigns, the second from its cache.
+    'POST /api/v1/tracking/assign',
+    // The client whose hook rejects.
+    'POST /api/v1/tracking/assign',
   ]);
   expect(seen[3].body).toMatchObject({ event_name: 'purchase', experiment_key: 'exp_a', user_id: 'user-a' });
   expect(seen[4].body!.events.map((e: Record<string, string>) => [e.event_name, e.experiment_key, e.feature_flag_key])).toEqual([
@@ -116,7 +122,25 @@ test('it assigns twice, evaluates the flag, tracks with and without a key and se
     flag: { enabled: true },
     track: { ok: true },
     fanout: { ok: true },
+    exposure: {
+      calls: 1,
+      payload: { experiment_key: 'exp_a', variant_name: 'control', variant_id: 'v-1', user_id: 'user-a' },
+    },
   });
+  expect(seen.slice(6).map(r => r.body)).toEqual([
+    { experiment_key: 'exp_a', user_id: 'user-a' },
+    { experiment_key: 'exp_a', user_id: 'user-a' },
+  ]);
+});
+
+test('without assigned in the answer no hook is called, and it fails on the rejecting hook', () => {
+  const { run, seen } = runSmoke({ CONTROLVAR_API_KEY: 'k', CONTRACT_USER_ID: 'user-a', FAKE_NO_ASSIGNED: '1' });
+  expect(run.status).toBe(1);
+  expect(run.stdout).toBe('');
+  expect(run.stderr).toBe(
+    'js contract smoke failed: the rejecting hook was reported as [], expected ["exposure/HOOK_ERROR"]\n'
+  );
+  expect(seen.filter(r => new URL(r.url).pathname === '/api/v1/tracking/assign')).toHaveLength(4);
 });
 
 test('it stops without a key and sends nothing', () => {

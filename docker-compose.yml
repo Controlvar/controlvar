@@ -114,6 +114,14 @@ services:
       # production set CORS_ORIGINS to the sites that run the browser SDK.
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3100,http://localhost:3200,http://localhost:3300}
       METRICS_TOKEN: ${METRICS_TOKEN:-}
+      # --- optional features: empty by default, and an empty key is the same
+      #     as an unset one. Each turns a feature on when it is set:
+      #     warehouse analysis (the full profile), then LLM experiment
+      #     variants by provider ---
+      WAREHOUSE_CREDENTIALS_KEYS: ${WAREHOUSE_CREDENTIALS_KEYS:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       # --- demo profile: where the seeds write the demo apps' API keys and the
       #     fixed keys baked into the demo images (see the shoplab/streampulse
       #     services below) ---

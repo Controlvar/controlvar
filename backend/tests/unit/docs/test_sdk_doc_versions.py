@@ -18,7 +18,13 @@ manifest:
   `com.controlvar:controlvar-sdk` (v0.1.0) ``, a Gradle coordinate
   ``com.controlvar:controlvar-sdk:0.1.0``, and a ``<dependency>`` whose
   ``<artifactId>controlvar-...</artifactId>`` is followed by its
-  ``<version>`` (a comment or a javadoc ``*`` may sit between them).
+  ``<version>`` (a comment or a javadoc ``*`` may sit between them);
+* the .NET SDK's NuGet forms, held to its project's ``<Version>``:
+  `` `Controlvar.SDK` (v0.1.0) ``, ``dotnet add package Controlvar.SDK
+  --version 0.1.0``, ``<PackageReference Include="Controlvar.SDK"
+  Version="0.1.0" />``, and the .NET 10 SDK's ``dotnet package add
+  Controlvar.SDK@0.1.0`` and ``dotnet package add Controlvar.SDK --version
+  0.1.0``.
 
 The pages read are every SDK page, the SDK guide, the FAQ, the two SDK docs
 journeys, the README each published package carries to its registry
@@ -39,7 +45,7 @@ A quote in a form this file does not read would go stale unseen, so:
   below theirs must be one of the forms above.
 
 Every README a package ships (``readme`` in pyproject.toml; npm always ships
-README.md) links only to absolute URLs: a registry renders the README away
+README.md; a .NET project's ``PackageReadmeFile``) links only to absolute URLs: a registry renders the README away
 from this repository, where ``../../docs/x.md`` leads nowhere. A published
 package's README does not say it is unpublished, whatever its markup.
 
@@ -130,7 +136,52 @@ FORMS: Tuple[Tuple[str, "re.Pattern[str]"], ...] = (
             + r"</version>"
         ),
     ),
+    ("nuget quoted", re.compile(r"`(Controlvar\.SDK)` \(?" + VERSION)),
+    (
+        "nuget add",
+        re.compile(r"\bdotnet add package (Controlvar\.SDK) --version " + VERSION),
+    ),
+    (
+        "nuget reference",
+        re.compile(
+            r"<PackageReference Include=\"(Controlvar\.SDK)\" Version=\"" + VERSION
+        ),
+    ),
+    # The .NET 10 SDK's noun-first command, `dotnet package add <id>@<version>`
+    # or `... <id> --version <version>`.
+    (
+        "nuget package add, at",
+        re.compile(r"\bdotnet package add (Controlvar\.SDK)@" + VERSION),
+    ),
+    (
+        "nuget package add, version",
+        re.compile(r"\bdotnet package add (Controlvar\.SDK) --version " + VERSION),
+    ),
 )
+#: The NuGet forms that no page quotes yet: D's install line is the first.
+#: Each is held to a sample below instead, and the scan fails once a page
+#: quotes it, so that this set is emptied then.
+NOT_ON_A_PAGE_YET = {
+    "nuget add",
+    "nuget reference",
+    "nuget package add, at",
+    "nuget package add, version",
+}
+
+#: The .NET project whose ``<Version>`` and ``<PackageId>`` the package has.
+DOTNET_PROJECT = SDK_DIR / "dotnet" / "src" / "Controlvar" / "Controlvar.csproj"
+
+
+def dotnet_version() -> Tuple[str, str]:
+    """(package id, version) from the .NET project's properties."""
+    root = ET.parse(DOTNET_PROJECT).getroot()
+    properties = {
+        child.tag: (child.text or "").strip()
+        for group in root.iter("PropertyGroup")
+        for child in group
+    }
+    return properties["PackageId"], properties["Version"]
+
 
 POM_NAMESPACE = {"m": "http://maven.apache.org/POM/4.0.0"}
 
@@ -159,6 +210,8 @@ def manifest_versions() -> Dict[str, str]:
         )
         versions[data["project"]["name"]] = data["project"]["version"]
     versions.update(maven_versions())
+    package_id, version = dotnet_version()
+    versions[package_id] = version
     return versions
 
 
@@ -348,14 +401,47 @@ def test_the_scan_finds_the_quotes_it_exists_for():
         ("sdk/java/README.md", "com.controlvar:controlvar-sdk"),
         ("sdk/java/README.md", "com.controlvar:controlvar-spring-boot-starter"),
         (rel(STARTER_JAVADOC), "com.controlvar:controlvar-spring-boot-starter"),
+        ("docs/sdk/dotnet.md", "Controlvar.SDK"),
     } <= found
     forms = {
         form
         for form, pattern in FORMS
-        for page in ABOUT_PUBLISHED + JAVA_PAGES
+        for page in ABOUT_PUBLISHED + JAVA_PAGES + [DOCS / "sdk" / "dotnet.md"]
         if pattern.search(fold(page.read_text("utf-8")))
     }
-    assert forms == {form for form, _ in FORMS}, "a form matches nothing it exists for"
+    assert forms == {form for form, _ in FORMS} - NOT_ON_A_PAGE_YET, (
+        "a form matches nothing it exists for, or a page now quotes one in "
+        "NOT_ON_A_PAGE_YET (take it out of that set)"
+    )
+    on_any_page = {
+        form
+        for form, pattern in FORMS
+        for page in PAGES
+        if pattern.search(fold(page.read_text("utf-8")))
+    }
+    assert not NOT_ON_A_PAGE_YET & on_any_page, NOT_ON_A_PAGE_YET & on_any_page
+
+
+@pytest.mark.parametrize(
+    "sample",
+    [
+        "`Controlvar.SDK` (v{v}) provides feature flag evaluation",
+        "dotnet add package Controlvar.SDK --version {v}",
+        '<PackageReference Include="Controlvar.SDK" Version="{v}" />',
+        # The .NET 10 SDK's noun-first command, in both of its spellings.
+        "dotnet package add Controlvar.SDK@{v}",
+        "dotnet package add Controlvar.SDK --version {v}",
+    ],
+)
+def test_each_nuget_form_is_read_and_compared(sample):
+    """R1b: a NuGet quote left at another version than the project's is
+    refused, in each form."""
+    versions = manifest_versions()
+    package_id, version = dotnet_version()
+    assert mismatches("docs/x.md", sample.format(v="9.9.9"), versions) == [
+        f"{package_id} is quoted as 9.9.9; the manifest says {version}"
+    ]
+    assert mismatches("docs/x.md", sample.format(v=version), versions) == []
 
 
 @pytest.mark.parametrize("page", PAGES, ids=rel)
@@ -611,9 +697,33 @@ LINK_TARGETS = (
 ABSOLUTE = re.compile(r"(?:https?|mailto):", re.I)
 
 
+def csproj_readme(project: Path) -> Optional[Path]:
+    """The README a .NET project packs as its ``PackageReadmeFile``: the
+    packed item (``Pack="true"``) with that file name, or None if it names
+    none. A name with no packed item is an error: ``dotnet pack`` refuses it."""
+    root = ET.parse(project).getroot()
+    names = [
+        (element.text or "").strip()
+        for element in root.iter("PackageReadmeFile")
+        if (element.text or "").strip()
+    ]
+    if not names:
+        return None
+    assert len(names) == 1, f"{rel(project)} names {names} as its README"
+    packed = [
+        item.get("Include", "").replace("\\", "/")
+        for item in root.iter()
+        if item.get("Pack", "").lower() == "true"
+        and item.get("Include", "").replace("\\", "/").rsplit("/", 1)[-1] == names[0]
+    ]
+    assert len(packed) == 1, f"{rel(project)} packs {packed} as {names[0]}"
+    return (project.parent / packed[0]).resolve()
+
+
 def packaged_readmes() -> List[Path]:
-    """Every README a package under sdk/ ships: npm always ships README.md, and
-    a pyproject.toml names its own."""
+    """Every README a package under sdk/ ships: npm always ships README.md, a
+    pyproject.toml names its own, and so does a .NET project
+    (``PackageReadmeFile``)."""
     found = []
     for manifest in sorted(SDK_DIR.glob("*/package.json")):
         if (manifest.parent / "README.md").is_file():
@@ -624,6 +734,10 @@ def packaged_readmes() -> List[Path]:
         )
         if isinstance(readme, str):
             found.append(manifest.parent / readme)
+    for project in sorted(SDK_DIR.glob("*/src/*/*.csproj")):
+        readme = csproj_readme(project)
+        if readme is not None:
+            found.append(readme)
     return found
 
 
@@ -647,6 +761,8 @@ def test_every_packaged_readme_links_only_to_absolute_urls():
     assert {rel(SDK_DIR / d / "README.md") for d in PUBLISHED} <= {
         rel(r) for r in readmes
     }
+    # The .NET project's PackageReadmeFile is read too (C3).
+    assert "sdk/dotnet/README.md" in {rel(r) for r in readmes}
     wrong = {rel(r): relative_links(r.read_text("utf-8")) for r in readmes}
     wrong = {page: links for page, links in wrong.items() if links}
     assert not wrong, (

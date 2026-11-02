@@ -362,6 +362,38 @@ describe('FeatureFlagsPage', () => {
     fireEvent.click(screen.getByTestId('flags-retry'));
     expect(await screen.findByTestId('flags-table')).toBeInTheDocument();
   });
+
+  it("shows each flag's type in a Type column after Name (#1497)", async () => {
+    mockedApiFetch.mockImplementation(
+      routedApi([
+        {
+          path: '/api/v1/feature-flags',
+          handler: () =>
+            list([
+              flag({ id: 'f-1', key: 'dark_mode', value_type: 'boolean', on_value: true, off_value: false }),
+              flag({ id: 'f-2', key: 'label', value_type: 'string', on_value: 'Complete purchase', off_value: 'Buy now' }),
+              flag({ id: 'f-3', key: 'retries', value_type: 'number', on_value: 5, off_value: 3 }),
+              flag({ id: 'f-4', key: 'theme', value_type: 'json', on_value: { color: 'blue' }, off_value: { color: 'grey' } }),
+              // A server without values sends no type: the flag is boolean.
+              flag({ id: 'f-5', key: 'legacy' }),
+            ]),
+        },
+      ]) as unknown as typeof apiFetch,
+    );
+    render(<FeatureFlagsPage />);
+    const table = await screen.findByTestId('flags-table');
+    const headers = within(table).getAllByRole('columnheader').map((th) => th.textContent);
+    expect(headers.slice(0, 3)).toEqual(['Key', 'Name', 'Type']);
+    expect(within(table).getAllByTestId('flag-value-type').map((td) => td.textContent)).toEqual([
+      'Boolean',
+      'String',
+      'Number',
+      'JSON',
+      'Boolean',
+    ]);
+    // No value is shown in the list.
+    expect(table).not.toHaveTextContent('Complete purchase');
+  });
 });
 
 describe('who may change flags (#917)', () => {
@@ -389,7 +421,15 @@ describe('who may change flags (#917)', () => {
       expect(screen.queryByTestId('flag-toggle-dark_mode')).toBeNull();
       expect(screen.queryByRole('switch')).toBeNull();
       expect(within(table).queryByText('On / Off')).toBeNull();
-      expect(within(table).getAllByRole('columnheader')).toHaveLength(5);
+      // Key, Name, Type (#1497), Status, Rollout, Updated: no On / Off.
+      expect(within(table).getAllByRole('columnheader').map((th) => th.textContent)).toEqual([
+        'Key',
+        'Name',
+        'Type',
+        'Status',
+        'Rollout',
+        'Updated',
+      ]);
 
       expect(screen.queryByTestId('new-flag-btn')).toBeNull();
       const note = screen.getByTestId('flags-role-note');

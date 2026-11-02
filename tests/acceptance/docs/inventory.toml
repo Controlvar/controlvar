@@ -167,10 +167,18 @@ class = "journey"
 journey = "feature-flag-safety"
 reason = "the configuration, the check healthy and then unhealthy from reported errors, a manual rollback and the way back, seen on the dashboard's Safety page, and the safety monitor's automatic rollback at the stack's 5-minute interval, with a healthy control flag left on; its API steps run in Doc Examples"
 
+[pages."feature-flags/kill-switch.md"]
+class = "reference"
+reason = "how long a flag turned off takes to reach each client; no steps to follow, and each number is read from its SDK's source by backend/tests/unit/sdk/test_kill_switch_numbers.py"
+
 [pages."guides/user-guide.md"]
 class = "journey"
 journey = "experiment-results"
 reason = "running an experiment and reading its results page after seeded traffic: counts, p-value and the sample-ratio check; then a 300/200 split that fails the check, and a significant result under the minimum sample"
+
+[pages."guides/how-events-count.md"]
+class = "reference"
+reason = "the rules for which events count in results; no steps to follow, and each rule is held by the tests its claims registry names"
 
 [pages."guides/guided-examples.md"]
 class = "journey"
@@ -403,6 +411,10 @@ reason = "its compose commands run in Doc Examples in the API container of a fre
 [pages."self-hosting/releases.md"]
 class = "exec"
 reason = "its verification steps run in Doc Examples: cosign checks the newest final release's signature and SBOM on ghcr.io with no login, and its labels are read from the registry"
+
+[pages."self-hosting/proxies.md"]
+class = "reference"
+reason = "the proxies the API believes X-Forwarded-For from; its claims are held by the helper, start-up check, chart and CDK tests its registry names, and its two commands read a running API's logs, so they are skips whose pipelines test_proxies_docs.py runs on rendered access lines"
 
 [pages."self-hosting/upgrading-to-controlvar.md"]
 class = "reference"
@@ -690,7 +702,7 @@ note = "sign-in per role and a password change, a first API key used for an assi
 # above says what each field means.
 # ---------------------------------------------------------------------------
 [meta]
-walked = 151
+walked = 154
 
 # The front door, and the policy beside it.
 
@@ -834,7 +846,7 @@ reason = "not walked: the README says the package is not on Packagist yet; #1107
 [documents."sdk/dotnet/README.md"]
 scope = "in"
 class = "reference"
-reason = "not walked: the README says the package is not on NuGet yet; #1107 tests its flows"
+reason = "not walked: the package is not on NuGet yet (docs/sdk/dotnet.md says so; the README is the one NuGet will show, so it names no status); #1107 tests its flows"
 
 [documents."sdk/elixir/README.md"]
 scope = "in"

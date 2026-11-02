@@ -168,7 +168,7 @@ class TestListSegments:
         """list_segments without status filter queries all segments."""
         db = MagicMock()
         mock_seg = _make_mock_segment()
-        db.query.return_value.offset.return_value.limit.return_value.all.return_value = [
+        db.query.return_value.order_by.return_value.offset.return_value.limit.return_value.all.return_value = [
             mock_seg
         ]
 
@@ -178,7 +178,7 @@ class TestListSegments:
     def test_list_segments_filters_by_status(self):
         """list_segments with status filter applies filter to query."""
         db = MagicMock()
-        db.query.return_value.filter.return_value.offset.return_value.limit.return_value.all.return_value = []
+        db.query.return_value.filter.return_value.order_by.return_value.offset.return_value.limit.return_value.all.return_value = []
 
         AudienceService.list_segments(db, status=SegmentStatus.INACTIVE)
         db.query.return_value.filter.assert_called_once()

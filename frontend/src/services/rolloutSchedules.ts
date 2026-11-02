@@ -9,9 +9,8 @@ import type { RolloutSchedule, RolloutStage } from '@/services/featureFlags';
  * (`_require_update_on_flag`): ADMIN, DEVELOPER or a superuser, which is
  * `canChangeFeatureFlags`.
  *
- * Stage dates are naive UTC, `YYYY-MM-DDTHH:MM:SS` with no `Z` and no offset:
- * `RolloutStage.start_date` is a plain `DateTime` column, and an aware value is
- * converted by the database session's zone before it is stored.
+ * Stage dates are sent as naive UTC (`YYYY-MM-DDTHH:MM:SS`); the API takes a
+ * value with no zone as UTC (`UTCDateTime`).
  */
 
 /** The two triggers the dashboard offers. `metric_based` never starts by itself. */

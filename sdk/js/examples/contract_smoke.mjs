@@ -77,6 +77,38 @@ try {
     fail(`batch: ${JSON.stringify(batch)}`);
   }
 
+  // 5. The exposure hook (#1499): a NEW client with onExposure assigns the same user twice,
+  //    with no clearCache() in between. The server records an exposure for the first request
+  //    (assigned: true) and the second answer comes from the cache, so the hook is called once.
+  //    The runner checks the count, the experiment key and the variant; the user id is checked
+  //    here, the one place that knows it.
+  const exposures = [];
+  const hooked = new ExperimentationClient({ apiUrl, apiKey, onExposure: e => exposures.push({ ...e }) });
+  await hooked.getAssignment(experimentKey, { userId });
+  await hooked.getAssignment(experimentKey, { userId });
+  const wrongUser = exposures.find(e => e.userId !== userId);
+  if (wrongUser) fail(`onExposure received user ${JSON.stringify(wrongUser.userId)}, expected ${JSON.stringify(userId)}`);
+
+  // 5b. A hook that returns a rejected Promise: the client must handle the rejection (in plain
+  //     node an unhandled one ends this process with exit 1) and pass it to onError as
+  //     'exposure' with code HOOK_ERROR, the answer unchanged.
+  const hookErrors = [];
+  const rejecting = new ExperimentationClient({
+    apiUrl,
+    apiKey,
+    onExposure: () => Promise.reject(new Error('async boom')),
+    onError: (error, operation) => hookErrors.push(`${operation}/${error.code}`),
+  });
+  const fromRejecting = await rejecting.getAssignment(experimentKey, { userId });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  if (fromRejecting.variantName !== second.variantName) {
+    fail(`the client with a rejecting hook answered ${fromRejecting.variantName}, not ${second.variantName}`);
+  }
+  if (hookErrors.join() !== 'exposure/HOOK_ERROR') {
+    fail(`the rejecting hook was reported as ${JSON.stringify(hookErrors)}, expected ["exposure/HOOK_ERROR"]`);
+  }
+
+  const [exposure] = exposures;
   process.stdout.write(
     JSON.stringify({
       sdk: 'js',
@@ -84,6 +116,17 @@ try {
       flag: { enabled: flag.enabled },
       track: { ok: true },
       fanout: { ok: true },
+      exposure: {
+        calls: exposures.length,
+        payload: exposure
+          ? {
+              experiment_key: exposure.experimentKey,
+              variant_name: exposure.variantName,
+              variant_id: exposure.variantId,
+              user_id: exposure.userId,
+            }
+          : null,
+      },
     }) + '\n'
   );
 } catch (err) {

@@ -209,8 +209,10 @@ by = [
 ]
 
 [[unit]]
-text = "The JavaScript, Python and React SDKs send it on both calls; each SDK's page says what that SDK sends."
+text = "The JavaScript, Python, React and Go SDKs send it on both calls; each SDK's page says what that SDK sends."
 by = [
+    "test:sdk/go/client_test.go::TestClient_GetAssignment_RequestAndMapping",
+    "test:sdk/go/context_test.go::TestEvaluateFlag_SendsAttributesAsCompactJSONContext",
     "test:sdk/js/__tests__/client.test.ts::sends {experiment_key, user_id, context: attributes} as the JSON body",
     "test:sdk/js/__tests__/client.test.ts::appends context=<url-encoded JSON of user.attributes> when the user has attributes",
     "test:sdk/python/tests/test_client.py::TestGetAssignment::test_sends_post_with_context",
@@ -260,6 +262,10 @@ by = [
     "test:sdk/js/__tests__/evaluator.test.ts::is not the cross-SDK consistentHash",
     "test:sdk/python/tests/test_evaluator.py::test_the_bucket_is_not_consistent_hash",
 ]
+
+[[unit]]
+text = "How long a cached answer keeps a flag change from your users, SDK by SDK: Turning a Flag Off."
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "\"Verified live\" means the SDK's contract_smoke entry point passed tests/sdk-contract/live/run_live_contract.py against a running backend (see tests/sdk-contract/README.md); the SDK Live Contract CI job repeats this on every pull request, with --strict, for python, openfeature-python, js, openfeature, edge, react, react-native, go, java, android, ruby, php and dotnet (the sdks: list of the job in pr-qa-gate.yml)."

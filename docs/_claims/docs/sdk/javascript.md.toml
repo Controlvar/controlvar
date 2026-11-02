@@ -638,7 +638,7 @@ by = [
 ]
 
 [[unit]]
-text = "Caching, dedupe and retries"
+text = "Caching, shared requests and retries"
 by = ["exempt:label"]
 
 [[unit]]

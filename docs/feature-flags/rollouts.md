@@ -233,8 +233,13 @@ For `time_based` stages, set a `start_date` in UTC, in ISO 8601 form:
 The scheduler checks every 15 minutes, so a stage set for 09:00 UTC may not start until
 09:15. Plan your schedule with this buffer in mind.
 
-All dates are in UTC. If your business runs on a specific timezone, convert before setting
-dates.
+A `start_date` with a zone, `Z` or an offset such as `-08:00`, is stored as that moment in
+UTC; one with no zone is taken as UTC. So `2027-01-08T00:00:00Z`, `2027-01-07T16:00:00-08:00`
+and `2027-01-08T00:00:00` are the same moment. Responses give stage dates in UTC with no zone
+(`2027-01-08T00:00:00`).
+
+Editing an in-progress stage, a rename included, restarts its clock: the scheduler measures
+time-based completion and `min_stage_duration` from the stage's last update.
 
 ---
 

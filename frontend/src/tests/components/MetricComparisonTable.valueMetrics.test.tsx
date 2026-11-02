@@ -23,6 +23,7 @@ import { render, screen, within } from '@testing-library/react';
 import axe from 'axe-core';
 import { MetricComparisonTable } from '@/components/results/MetricComparison/MetricComparisonTable';
 import { MetricResult, VariantResult } from '@/types/results';
+import { visibleText } from '@/tests/helpers/visibleText';
 
 function variant(overrides: Partial<VariantResult>): VariantResult {
   return {
@@ -97,10 +98,11 @@ function rowsOf(name: string): HTMLElement[] {
   return screen.getAllByRole('row').filter((r) => r.textContent?.startsWith(name));
 }
 
+/** Each cell's text as it is seen: an interval's screen-reader twin left out. */
 function cells(r: HTMLElement): string[] {
   return within(r)
     .getAllByRole('cell')
-    .map((c) => c.textContent ?? '');
+    .map((c) => visibleText(c));
 }
 
 const LABELS: Record<MeanType, string> = {

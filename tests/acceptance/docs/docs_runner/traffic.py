@@ -404,6 +404,27 @@ def expected_answer(
     return reason == "targeting_rule", reason
 
 
+def same_value(answered: Any, expected: Any) -> bool:
+    """Whether a flag's answered ``value`` is the *expected* one, as JSON.
+
+    Python's ``==`` with one guard: ``True == 1``, but a boolean is never a
+    number in JSON.
+    """
+    if isinstance(answered, bool) or isinstance(expected, bool):
+        return answered is expected
+    if isinstance(answered, dict) and isinstance(expected, dict):
+        return answered.keys() == expected.keys() and all(
+            same_value(answered[k], expected[k]) for k in answered
+        )
+    if isinstance(answered, list) and isinstance(expected, list):
+        return len(answered) == len(expected) and all(
+            same_value(a, e) for a, e in zip(answered, expected)
+        )
+    if isinstance(answered, (dict, list)) or isinstance(expected, (dict, list)):
+        return False
+    return answered == expected
+
+
 def evaluate(
     fetch: Fetch,
     *,
@@ -412,11 +433,15 @@ def evaluate(
     reason: str,
     rollout: Optional[int],
     query: str = "",
+    values: Optional[Tuple[Any, Any]] = None,
 ) -> Outcome:
     """Evaluate the flag for each user; a problem per answer other than expected.
 
     *query* is appended to each request's ``user_id`` (the URL-encoded
-    ``context``, say). Stops once ``PROBLEMS_KEPT`` problems are found.
+    ``context``, say). *values*, a value flag's ``(on_value, off_value)``
+    (#1497), makes each answer's ``value`` count too: the on value for a user
+    who gets the flag, the off value for one who does not. Stops once
+    ``PROBLEMS_KEPT`` problems are found.
     """
     outcome = Outcome(experiment_key=flag_key, prefix="")
     counts = {"evaluated": 0, "enabled": 0, "expected_enabled": 0}
@@ -440,6 +465,17 @@ def evaluate(
                 f" {answer.get('reason')!r}; expected enabled {enabled}, reason {why!r}",
             ):
                 break
+            continue
+        if values is not None:
+            expected = values[0] if enabled else values[1]
+            if "value" not in answer or not same_value(answer["value"], expected):
+                answered = repr(answer["value"]) if "value" in answer else "no value"
+                if _full(
+                    outcome,
+                    f"{user}: value {answered}; expected the"
+                    f" {'on' if enabled else 'off'} value {expected!r}",
+                ):
+                    break
     return outcome
 
 

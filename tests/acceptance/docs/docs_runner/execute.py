@@ -962,6 +962,9 @@ class JourneyRunner:
                 document = None
             return sent.status, document
 
+        values = None
+        if plan.on_value is not None and plan.off_value is not None:
+            values = (plan.on_value, plan.off_value)
         outcome = population.evaluate(
             fetch,
             flag_key=plan.flag,
@@ -969,6 +972,7 @@ class JourneyRunner:
             reason=plan.reason,
             rollout=plan.rollout,
             query=query,
+            values=values,
         )
         counts = outcome.variants[plan.flag]
         record = {
@@ -977,6 +981,7 @@ class JourneyRunner:
             "count": plan.count,
             "reason": plan.reason,
             "rollout": plan.rollout,
+            **({"on_value": values[0], "off_value": values[1]} if values else {}),
             **counts,
             "requests": outcome.requests,
             "problems": outcome.problems,

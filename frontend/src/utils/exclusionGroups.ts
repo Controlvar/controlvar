@@ -130,9 +130,13 @@ const ACTION_COPY: Record<GroupAction, Record<number, string> & { fallback: stri
   remove: { 403: GROUP_COPY.refused, 404: GROUP_COPY.notFound, fallback: GROUP_COPY.saveFailed },
 };
 
-/** The fixed sentence for a failed call, chosen by its status only. */
+/**
+ * The fixed sentence for a failed call, chosen by its status only; a time-out
+ * shows the dashboard's own time-out sentence (#1040).
+ */
 export function groupErrorCopy(action: GroupAction, err: unknown): string {
   if (!isApiError(err)) return ACTION_COPY[action].fallback;
+  if (err.timedOut) return err.message;
   if (err.status === 0) return UNREACHABLE;
   return ACTION_COPY[action][err.status] ?? ACTION_COPY[action].fallback;
 }

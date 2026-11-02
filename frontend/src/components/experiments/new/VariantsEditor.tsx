@@ -3,7 +3,9 @@ import {
   allocationTotalOf,
   configurationProblems,
   ExperimentFormAction,
+  hasNoShare,
   VariantFormData,
+  ZERO_SHARE,
 } from './formState';
 import { smallInputClass } from './fieldStyles';
 
@@ -156,6 +158,11 @@ export function VariantsEditor({
                   <span className="text-xs text-slate-500">%</span>
                 </div>
               </div>
+              {hasNoShare(variant) && (
+                <p className="text-xs text-red-700" data-testid={`variant-no-share-${index}`}>
+                  {ZERO_SHARE}
+                </p>
+              )}
               <label className="inline-flex items-center gap-1.5 text-xs text-slate-600">
                 <input
                   type="radio"

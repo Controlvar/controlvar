@@ -17,6 +17,8 @@ from typing import Any, Dict, Optional, Tuple
 import pytest
 import yaml
 
+from backend.tests.unit.infrastructure._compose_feature_keys import FEATURE_KEYS
+
 pytestmark = [pytest.mark.unit]
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -161,6 +163,32 @@ def test_the_api_reads_the_settings_the_page_names(services):
     assert environment["AUTH_PROVIDER"] == "${AUTH_PROVIDER:-local}"
     assert environment["DEV_AUTH_BYPASS"] == "${DEV_AUTH_BYPASS:-false}"
     assert environment["SEED"] == "${SEED-demo}"
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("name", FEATURE_KEYS)
+def test_the_api_is_passed_each_feature_key_empty_by_default(services, name):
+    """#1253, #256: the development stack passes WAREHOUSE_CREDENTIALS_KEYS and
+    the LLM provider keys as the production file does, so one set in `.env`
+    reaches the API, and one left unset reaches it empty."""
+    environment = services["api"]["environment"]
+    assert name in environment, f"{name} is not passed to the api service"
+    assert environment[name] == f"${{{name}:-}}", (
+        f"{name} must be ${{{name}:-}}, got {environment[name]!r}"
+    )
+
+
+@pytest.mark.regression
+def test_no_feature_key_has_a_default_anywhere_in_the_file():
+    """A default on a feature key would turn the feature on with a value
+    everyone can read, in any service that names it."""
+    text = COMPOSE.read_text(encoding="utf-8")
+    seen = set()
+    for name, default in re.findall(r"\$\{([A-Z_]+):?-([^}]*)\}", text):
+        if name in FEATURE_KEYS:
+            seen.add(name)
+            assert default == "", f"{name} has the default {default!r}"
+    assert seen == set(FEATURE_KEYS)
 
 
 def test_the_api_is_not_given_cognito_or_aws_keys(services):

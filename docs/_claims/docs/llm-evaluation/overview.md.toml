@@ -66,6 +66,28 @@ text = "With no GEMINI_API_KEY, that variant's /complete answers 502 {\"detail\"
 by = ["exempt:baseline"]
 
 [[unit]]
+text = "Both compose files pass ANTHROPIC_API_KEY, OPENAI_API_KEY and GEMINI_API_KEY to the API."
+by = [
+    "test:backend/tests/unit/infrastructure/test_compose_feature_keys.py::test_each_compose_file_passes_exactly_the_provider_keys",
+    "test:backend/tests/unit/infrastructure/test_compose_feature_keys.py::test_the_table_names_every_llm_provider",
+]
+
+[[unit]]
+text = "A key set to an empty value is the same as a key that is not set, and both compose files pass these keys empty by default."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestFeatureKeys::test_the_api_is_passed_the_key_empty_by_default",
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_api_is_passed_each_feature_key_empty_by_default",
+    "test:backend/tests/unit/infrastructure/test_compose_feature_keys.py::test_the_anthropic_sdk_reads_an_empty_key_as_none",
+    "test:backend/tests/unit/infrastructure/test_compose_feature_keys.py::test_the_openai_sdk_refuses_an_empty_key_as_it_refuses_none",
+    "test:backend/tests/unit/infrastructure/test_compose_feature_keys.py::test_the_gemini_provider_refuses_an_empty_key_before_sending",
+    "test:backend/tests/unit/infrastructure/test_compose_feature_keys.py::test_ai_design_uses_its_templates_with_an_empty_key",
+]
+
+[[unit]]
+text = "Put each key in the .env file next to the compose file: a key exported in another terminal does not reach the container, and one exported in the terminal that runs docker compose up does."
+by = ["exempt:third-party"]
+
+[[unit]]
 text = "Task types and evaluation metrics"
 by = ["exempt:label"]
 

@@ -453,6 +453,57 @@ class InstallWorld(World):
         )
         shim.chmod(0o755)
 
+    def hold_a_clock_read(self, args: str, once_the_deploy_blocks: bool) -> None:
+        """``date <args>`` run by the installer's own shell (its process group: not the
+        watcher's, whose group is its own), held once: it prints the time and closes its
+        output, so the installer has its answer and is waiting for it to end, and it ends,
+        normally, only once release_the_clock() is called. It ignores INT meanwhile, as a
+        command that has already ended would. With ``once_the_deploy_blocks``, only a call
+        made after the fake cdk deploy has blocked (pids.log) is held: the deploy step's
+        wait's, not the step announcements' before it. clock_held() says when it is held.
+        """
+        real = shutil.which("date") or "/bin/date"
+        held, release = self.fake_dir / "clock-held", self.fake_dir / "clock-release"
+        hold = (
+            "import os, signal, subprocess, sys, time\n"
+            "held, release, real, args = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4:]\n"
+            "if os.getpgid(0) != os.getsid(0):\n"
+            "    os.execv(real, [real] + args)\n"
+            "try:\n"
+            '    os.mkdir(held + ".once")\n'
+            "except FileExistsError:\n"
+            "    os.execv(real, [real] + args)\n"
+            "signal.signal(signal.SIGINT, signal.SIG_IGN)\n"
+            "subprocess.run([real] + args)\n"
+            "os.dup2(os.open(os.devnull, os.O_WRONLY), 1)\n"
+            'with open(held + ".new", "w") as handle:\n'
+            '    handle.write(str(os.getpid()) + "\\n")\n'
+            'os.rename(held + ".new", held)\n'
+            f"deadline = time.time() + {SAFETY_NET_SECONDS}\n"
+            "while not os.path.exists(release) and time.time() < deadline:\n"
+            "    time.sleep(0.01)\n"
+        )
+        blocked = (
+            f'grep -q " cdk deploy$" "{self.fake_dir / "pids.log"}" 2> /dev/null'
+            if once_the_deploy_blocks
+            else "true"
+        )
+        shim = self.bin / "date"
+        shim.write_text(
+            "#!/bin/sh\n"
+            f'if [ "$*" = "{args}" ] && [ ! -e "{held}" ] && {blocked}; then\n'
+            f'    exec "{sys.executable}" -I -S -c \'{hold}\' "{held}" "{release}" "{real}" "$@"\n'
+            "fi\n"
+            f'exec "{real}" "$@"\n'
+        )
+        shim.chmod(0o755)
+
+    def clock_held(self) -> bool:
+        return (self.fake_dir / "clock-held").exists()
+
+    def release_the_clock(self) -> None:
+        (self.fake_dir / "clock-release").touch()
+
     def effect(self, **spec) -> None:
         """Something that happens on this computer during a call (fake_aws.effects)."""
         self.edit(lambda s: s.setdefault("effects", []).append(spec))

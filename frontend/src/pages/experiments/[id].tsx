@@ -667,7 +667,7 @@ export default function ExperimentDetailPage() {
         {!(designOpen && status === 'draft') && (
           <div className="grid gap-6 lg:grid-cols-5" data-testid="experiment-design-cards">
             {/* Variants */}
-            <section className="lg:col-span-3 bg-white rounded-lg border border-slate-200 overflow-hidden">
+            <section className="lg:col-span-3 bg-white rounded-lg border border-slate-200 overflow-x-auto">
               <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
                 <h2 className="text-base font-semibold text-slate-800">Variants</h2>
                 <span className="text-xs text-slate-500">{experiment.variants.length} total</span>
@@ -733,7 +733,7 @@ export default function ExperimentDetailPage() {
             </section>
 
             {/* Metrics */}
-            <section className="lg:col-span-2 bg-white rounded-lg border border-slate-200 overflow-hidden">
+            <section className="lg:col-span-2 bg-white rounded-lg border border-slate-200 overflow-x-auto">
               <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
                 <h2 className="text-base font-semibold text-slate-800">Metrics</h2>
                 <span className="text-xs text-slate-500">{experiment.metrics.length} total</span>

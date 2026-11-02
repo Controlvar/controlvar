@@ -3,6 +3,7 @@
  * validate, preview (counts only) and delete, with the API's role matrix.
  */
 import React from 'react';
+import axe from 'axe-core';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ModulesProvider } from '@/contexts/ModulesContext';
 import type { UserMe } from '@/services/api';
@@ -96,6 +97,59 @@ describe('new source', () => {
       cap_value: 500,
       filters: [{ column: 'country', operator: 'in', value: ['GB', 'FR'] }],
     });
+  });
+
+  it('sends lower_is_better: true only when "Lower is better" is ticked', async () => {
+    mockQuery = { kind: 'metric' };
+    svc.createSource.mockResolvedValue(metricSource({ id: 's-new' }));
+    renderWith(<NewSourcePage />);
+    await screen.findByTestId('warehouse-source-form');
+    const box = screen.getByRole('checkbox', { name: 'Lower is better' });
+    expect(box).not.toBeChecked();
+    expect(box).toHaveAccessibleDescription(expect.stringContaining('such as an error rate or churn'));
+    type(/^Name/, 'Checkout errors');
+    type(/^Table or view/, 'acme-billing.experiments.errors');
+    type(/^User ID column/, 'user_id');
+    type(/^Event time column/, 'failed_at');
+    fireEvent.click(box);
+    fireEvent.click(screen.getByRole('button', { name: 'Save source' }));
+    await waitFor(() => expect(svc.createSource).toHaveBeenCalledTimes(1));
+    expect(svc.createSource.mock.calls[0][0]).toEqual({
+      kind: 'metric',
+      connection_id: 'c-1',
+      name: 'Checkout errors',
+      table: 'acme-billing.experiments.errors',
+      columns: { unit_id: 'user_id', event_at: 'failed_at' },
+      metric_type: 'proportion',
+      conversion_window_hours: 168,
+      lower_is_better: true,
+      filters: [],
+    });
+  });
+
+  it('keeps the box ticked when the metric type changes', async () => {
+    mockQuery = { kind: 'metric' };
+    renderWith(<NewSourcePage />);
+    await screen.findByTestId('warehouse-source-form');
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Lower is better' }));
+    fireEvent.click(screen.getByLabelText('Mean'));
+    expect(screen.getByRole('checkbox', { name: 'Lower is better' })).toBeChecked();
+  });
+
+  it('has no "Lower is better" for an assignment source', async () => {
+    mockQuery = { kind: 'assignment' };
+    renderWith(<NewSourcePage />);
+    await screen.findByTestId('warehouse-source-form');
+    expect(screen.queryByRole('checkbox', { name: 'Lower is better' })).not.toBeInTheDocument();
+  });
+
+  it.each([false, true])('the metric form (ticked: %s) has no axe violations', async (ticked) => {
+    mockQuery = { kind: 'metric' };
+    const { container } = renderWith(<NewSourcePage />);
+    await screen.findByTestId('warehouse-source-form');
+    if (ticked) fireEvent.click(screen.getByRole('checkbox', { name: 'Lower is better' }));
+    const result = await axe.run(container, { rules: { 'color-contrast': { enabled: false } } });
+    expect(result.violations.map((v) => v.id)).toEqual([]);
   });
 
   it('refuses ANALYST an assignment source, with the API’s wording', async () => {
@@ -300,6 +354,54 @@ describe('source detail', () => {
     const body = svc.updateSource.mock.calls[0][1];
     expect(body).not.toHaveProperty('connection_id');
     expect(body).toMatchObject({ kind: 'assignment', name: 'Exposures v2' });
+  });
+
+  it.each([
+    [true, 'Yes'],
+    [false, 'No'],
+  ])('shows a metric source marked lower is better: %s as "%s"', async (lower, text) => {
+    svc.getSource.mockResolvedValue(metricSource({ lower_is_better: lower }));
+    renderWith(<SourcePage />);
+    const details = await screen.findByTestId('warehouse-source-details');
+    const term = within(details).getByText('Lower is better');
+    expect(term.nextElementSibling).toHaveTextContent(text);
+  });
+
+  it('shows no direction for an assignment source', async () => {
+    renderWith(<SourcePage />);
+    const details = await screen.findByTestId('warehouse-source-details');
+    expect(within(details).queryByText('Lower is better')).not.toBeInTheDocument();
+  });
+
+  it('keeps a stored "lower is better" when an edit changes only the name', async () => {
+    svc.getSource.mockResolvedValue(metricSource({ lower_is_better: true }));
+    svc.updateSource.mockImplementation(async (_id, body) => metricSource({ name: body.name, validated_at: null }));
+    renderWith(<SourcePage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    expect(screen.getByRole('checkbox', { name: 'Lower is better' })).toBeChecked();
+    type(/^Name/, 'Checkout errors');
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(svc.updateSource).toHaveBeenCalledTimes(1));
+    expect(svc.updateSource.mock.calls[0][1]).toMatchObject({ name: 'Checkout errors', lower_is_better: true });
+  });
+
+  it('sends no lower_is_better once it is unticked, which the API reads as false', async () => {
+    svc.getSource.mockResolvedValue(metricSource({ lower_is_better: true }));
+    svc.updateSource.mockImplementation(async () => metricSource({ validated_at: null }));
+    renderWith(<SourcePage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Lower is better' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(svc.updateSource).toHaveBeenCalledTimes(1));
+    expect(svc.updateSource.mock.calls[0][1]).not.toHaveProperty('lower_is_better');
+  });
+
+  it('the metric source page has no axe violations', async () => {
+    svc.getSource.mockResolvedValue(metricSource({ lower_is_better: true }));
+    const { container } = renderWith(<SourcePage />);
+    await screen.findByTestId('warehouse-source-details');
+    const result = await axe.run(container, { rules: { 'color-contrast': { enabled: false } } });
+    expect(result.violations.map((v) => v.id)).toEqual([]);
   });
 
   it('deletes after confirming', async () => {

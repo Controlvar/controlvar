@@ -84,6 +84,50 @@ text = "What the dashboard does, and what is API only lists, row by row, what ha
 by = ["exempt:navigation"]
 
 [[unit]]
+text = "Request time-outs"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The dashboard gives up on a request when the API has not started to answer within 30 seconds: 120 seconds for results, for the audit-log export and for warehouse connection and source checks, and 31 minutes for a warehouse preview."
+by = [
+    "test:frontend/src/tests/services/api.test.ts::D1 fires at exactly the default deadline, and aborts the request",
+    "test:frontend/src/tests/services/api.test.ts::D5 %s waits past the default, until its own deadline",
+    "test:modules/frontend/src/tests/services/request-timeouts.test.ts::D5 %s gives up at exactly its own deadline",
+    "test:modules/frontend/src/tests/services/request-timeouts.test.ts::a preview waits for the largest query limit plus both margins: 1860 seconds",
+]
+
+[[unit]]
+text = "A read that times out says the API did not answer."
+by = ["test:frontend/src/tests/services/api.test.ts::D3 a timed-out %s says only that the API did not answer"]
+
+[[unit]]
+text = "A change that times out says the request may or may not have been carried out, because the API may still finish it: reload the page and check before you try again."
+by = ["test:frontend/src/tests/services/api.test.ts::D3 a timed-out %s says the request may or may not have been carried out, once"]
+
+[[unit]]
+text = "Two things the deadline does not cover."
+by = [
+    "test:frontend/src/tests/services/api.test.ts::D2 a body that stalls after its headers is not aborted: the stated residual",
+    "test:frontend/src/tests/services/api.test.ts::D7 they find exactly the classified places (the control is this set, not a number)",
+]
+
+[[unit]]
+text = "First, it ends when the API starts to answer, so a response that begins and then stalls while its body arrives (a download or export that stops partway) is not timed out, and the page can keep waiting."
+by = ["test:frontend/src/tests/services/api.test.ts::D2 a body that stalls after its headers is not aborted: the stated residual"]
+
+[[unit]]
+text = "Second, only the places that were checked show the time-out wording: some other error messages put the underlying message inside their own fixed sentence, so a time-out there can read as an ordinary failure."
+by = ["test:frontend/src/tests/services/api.test.ts::D7 they find exactly the classified places (the control is this set, not a number)"]
+
+[[unit]]
+text = "User deletion is fixed; the others were not audited one by one."
+by = ["test:frontend/src/tests/services/api.test.ts::D10 shows that the user may or may not have been deleted, in exactly these words"]
+
+[[unit]]
+text = "If you raise WAREHOUSE_MAX_QUERY_TIMEOUT_SECONDS above 1800, the dashboard still gives up on a warehouse preview after 31 minutes."
+by = ["test:modules/frontend/src/tests/services/request-timeouts.test.ts::a preview waits for the largest query limit plus both margins: 1860 seconds"]
+
+[[unit]]
 text = "Experiments"
 by = ["exempt:baseline"]
 
@@ -457,11 +501,12 @@ by = [
 ]
 
 [[unit]]
-text = "A draft that is not ready to start (it needs two variants, a control and a metric) stays a draft until it is."
+text = "A draft that is not ready to start (it needs two variants, a control and a metric, and a split URL experiment needs a valid split_url_config) stays a draft until it is."
 by = [
     "test:backend/tests/integration/services/test_scheduler_draft_validation.py::test_d1_a_one_variant_draft_stays_a_draft_until_it_has_two",
     "test:backend/tests/integration/services/test_scheduler_draft_validation.py::test_d2_a_draft_whose_metrics_were_removed_after_scheduling_stays_a_draft",
     "test:backend/tests/integration/services/test_scheduler_draft_validation.py::test_d3_a_valid_draft_starts_in_the_same_tick_as_one_that_cannot",
+    "test:backend/tests/integration/services/test_scheduler_draft_validation.py::test_d7_a_split_url_draft_that_cannot_split_stays_a_draft",
 ]
 
 [[unit]]
@@ -636,6 +681,10 @@ by = [
 ]
 
 [[unit]]
+text = "Which events count, and which do not, is on How events count."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "Experiment Summary Card"
 by = ["exempt:baseline"]
 
@@ -709,6 +758,18 @@ by = [
     "journey:experiment-results#ratio-results-page",
     "journey:experiment-results#floor-results-page",
 ]
+
+[[unit]]
+text = "Impact on the primary metric: one line per treatment, its impact with its interval, for example \"One page: +124 converting users (95% CI +40 to +208)\", followed by \", not significant\" when the treatment is not significant."
+by = [
+    "test:frontend/src/tests/components/ExperimentSummary.impact.test.tsx::names the primary metric and gives each treatment its impact with its interval",
+    "test:frontend/src/tests/components/ExperimentSummary.impact.test.tsx::adds \", not significant\" to a treatment that is not",
+    "test:frontend/src/tests/components/ExperimentSummary.impact.test.tsx::is about the metric marked primary, not the first one",
+]
+
+[[unit]]
+text = "When the sample-ratio check fails, the same warning as on a leading variant follows the lines."
+by = ["test:frontend/src/tests/components/ExperimentSummary.impact.test.tsx::adds the SRM qualifier when the sample-ratio check failed"]
 
 [[unit]]
 text = "Analysis: the confidence level and correction the results use, which are the experiment's own settings."
@@ -855,13 +916,26 @@ by = [
 ]
 
 [[unit]]
-text = "Change | Relative change vs. control (e.g., +12.3%). A significant change also says better or worse in the metric's direction, so a fall is better when lower is better. For a revenue, count, duration or custom metric a second line gives the difference per user with its confidence interval, e.g. +1.19 per user (95% CI −0.47 to +2.84), marked unadjusted when the p-value beside it is adjusted"
+text = "Change | Relative change vs. control (e.g., +12.3%). A significant change also says better or worse in the metric's direction, so a fall is better when lower is better. A treatment's Change cell shows the change from the control, its confidence interval, and the difference with its interval. For a metric whose control's average is too uncertain around 0 to bound the relative change, the cell says so in place of the interval. For a conversion metric the difference is in percentage points; for a revenue, count, duration or custom metric it is the difference per user with its confidence interval, e.g. +1.19 per user (95% CI −0.47 to +2.84). Every interval on a row is marked unadjusted when the p-value beside it is adjusted"
 by = [
     "journey:experiment-results#results-page",
     "test:frontend/src/tests/components/MetricComparisonTable.lowerIsBetter.test.tsx::lower is better: a significant fall is green \"better\", a significant rise red \"worse\"",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::writes the relative interval with grouping and one decimal: +226.1% to +26,001.9%",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::gives the difference in percentage points and the impact in converting users",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::says why there is no interval, from the server: the change, then the sentence, then the difference",
     "test:frontend/src/tests/components/MetricComparisonTable.revenue.test.tsx::gives the difference per user and its interval in the change cell",
     "test:frontend/src/tests/components/MetricComparisonTable.valueMetrics.test.tsx::labels its value by what it is per user, with the difference per user",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::is on every interval of a row whose p-value is shown adjusted (three variants, Benjamini-Hochberg)",
     "test:frontend/src/tests/components/MetricComparisonTable.revenue.test.tsx::says \"unadjusted\" when the row shows an adjusted p-value (a correction with two treatments)",
+]
+
+[[unit]]
+text = "Impact | The difference times the treatment's own assigned users (converting users, events, or the total of the values sent), with its interval. It is not projected beyond those users and has no currency or unit."
+by = [
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::gives the difference in percentage points and the impact in converting users",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::groups whole numbers of events: +2,700 events (server: 10,000 users per arm)",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::writes values to 2 places with grouping and no currency: in revenue, in duration",
+    "test:backend/tests/unit/services/test_difference_intervals.py::test_the_proportion_impact_is_the_difference_times_the_treatments_users",
 ]
 
 [[unit]]

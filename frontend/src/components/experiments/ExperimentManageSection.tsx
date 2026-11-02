@@ -72,9 +72,14 @@ export const SAVED = 'Details saved.';
 
 export const DESIGN_SAVED = 'Variants and metrics saved.';
 
-/** The fixed sentence for a failed action, chosen by the answer's status only. */
+/**
+ * The fixed sentence for a failed action, chosen by the answer's status only.
+ * A time-out shows the dashboard's own time-out sentence instead (#1040): the
+ * API may still carry out the change, and "could not reach" invites a repeat.
+ */
 export function errorCopy(action: ManageAction, err: unknown): string {
   if (!isApiError(err)) return ERROR_COPY[action].fallback;
+  if (err.timedOut) return err.message;
   if (err.status === 0) return UNREACHABLE;
   return ERROR_COPY[action][err.status] ?? ERROR_COPY[action].fallback;
 }

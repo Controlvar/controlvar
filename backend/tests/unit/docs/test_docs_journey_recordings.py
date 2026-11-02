@@ -161,12 +161,14 @@ def test_the_walkthrough_segments_are_the_ones_planned():
     assert segments["R8-onboarding"] == ("demo-admin-log-out", "viewer-new-accepted")
     assert segments["R5-reading-results"] == ("sign-in-page", "results-api")
     assert segments["R5-srm-warning"] == ("ratio-results-page", "ratio-results-page")
+    # R6 is the boolean flag, from sign-in to its users answered off; the
+    # string flag the journey makes after it (#1497) is not in the walkthrough.
+    assert segments["R6-feature-flag"] == ("sign-in-page", "off-users")
     assert whole == {
         "R1-quick-start",
         "R2-docker-guide",
         "R3-experiment-wizard",
         "R4-power-analysis",
-        "R6-feature-flag",
     }
 
 

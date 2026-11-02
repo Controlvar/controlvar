@@ -71,9 +71,15 @@ serviceAccount:
 
 api:
   replicaCount: 1
-  # -- Proxies whose X-Forwarded-* headers are trusted. Empty keeps the image
-  # default (loopback and the RFC 1918 ranges).
-  forwardedAllowIps: ""
+  # -- Proxies whose X-Forwarded-For the API believes, in addition to
+  # 127.0.0.1, ::1 and the API pod's own network: IP addresses and networks,
+  # comma-separated. It cannot be empty. The default, the private ranges,
+  # covers an ingress controller on a private pod network. To believe only
+  # your ingress controller, set the network its pods get their addresses
+  # from, e.g. 10.244.0.0/16 on kind. For more than one network in --set,
+  # quote the whole argument and escape each comma:
+  # --set 'api.forwardedAllowIps=10.0.0.0/8\,192.168.0.0/16'
+  forwardedAllowIps: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
   resources:
     requests:
       cpu: 250m

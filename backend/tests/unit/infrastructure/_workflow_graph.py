@@ -51,7 +51,12 @@ def load(path: Path) -> Dict[str, Any]:
 
 
 def triggers(workflow: Dict[str, Any]) -> Dict[str, Any]:
-    # The bare key `on` is the boolean True to a YAML 1.1 loader.
+    # The bare key `on` is the boolean True to a YAML 1.1 loader; a quoted
+    # "on" is the string. GitHub reads both as `on`, so a workflow with both
+    # is refused rather than read one way (load() refuses it too; this covers
+    # a mapping that came from another loader).
+    if "on" in workflow and any(key is True for key in workflow):
+        raise ValueError("both forms of the trigger key (bare and quoted `on`)")
     on = workflow.get("on", workflow.get(True))
     if isinstance(on, str):
         return {on: None}

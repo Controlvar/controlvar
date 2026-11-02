@@ -31,6 +31,7 @@ export type {
   BatchResult,
   AssignmentRecord,
   SwallowedOperation,
+  Exposure,
   EvaluationMode,
   AssignResponse,
   FlagEvaluateResponse,

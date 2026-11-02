@@ -271,6 +271,13 @@ text = "See Signing in under Cognito."
 by = ["exempt:navigation"]
 
 [[unit]]
+text = "The compose file passes WAREHOUSE_CREDENTIALS_KEYS, ANTHROPIC_API_KEY, OPENAI_API_KEY and GEMINI_API_KEY to the api service, empty by default: set them in .env to turn on warehouse analysis and the LLM experiment variants (see the Quick Start)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_api_is_passed_each_feature_key_empty_by_default",
+    "test:backend/tests/unit/infrastructure/test_compose_feature_keys.py::test_each_compose_file_passes_exactly_the_provider_keys",
+]
+
+[[unit]]
 text = "DEV_AUTH_BYPASS defaults to false in the compose file and is refused by the API unless ENVIRONMENT is development or test."
 by = [
     "test:backend/tests/unit/core/test_config_environment.py::TestAuthSettings::test_bypass_rejected_in_staging_and_production",

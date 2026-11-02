@@ -114,6 +114,10 @@ does not pass them through. The dashboard does not yet sign in with Cognito. Sig
 the API with `POST /api/v1/auth/token`. SSO sign-in needs `AUTH_PROVIDER=local`. See
 [Signing in under Cognito](../cognito_integration.md#signing-in-under-cognito).
 
+The compose file passes `WAREHOUSE_CREDENTIALS_KEYS`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`
+and `GEMINI_API_KEY` to the `api` service, empty by default: set them in `.env` to turn on
+warehouse analysis and the LLM experiment variants (see the [Quick Start](quick-start.md)).
+
 `DEV_AUTH_BYPASS` defaults to `false` in the compose file and is refused by the API unless
 `ENVIRONMENT` is `development` or `test`.
 

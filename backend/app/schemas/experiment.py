@@ -8,7 +8,7 @@ These models are used for request/response validation and documentation.
 from datetime import datetime, timedelta, timezone, tzinfo
 from enum import Enum
 from functools import lru_cache
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 from zoneinfo import ZoneInfo, available_timezones
 
 from pydantic import (
@@ -16,11 +16,12 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    ValidationError,
     ValidationInfo,
     field_validator,
     model_validator,
 )
-from pydantic_core import PydanticCustomError
+from pydantic_core import InitErrorDetails, PydanticCustomError
 
 from backend.app.core.targeting_adapter import (
     TargetingRulesError,
@@ -29,7 +30,11 @@ from backend.app.core.targeting_adapter import (
 from backend.app.schemas.bandit import OptimizationType
 from backend.app.schemas.bayesian import BayesianConfig
 from backend.app.schemas.results import CorrectionMethod
-from backend.app.schemas.split_url_config import SplitUrlConfig
+from backend.app.schemas.split_url_config import (
+    SPLIT_URL_CONFIG_ERROR,
+    SplitUrlConfig,
+    find_split_url_config_problem,
+)
 from backend.app.schemas.variance_reduction import VarianceReductionConfig
 
 
@@ -265,6 +270,53 @@ class MetricBase(BaseModel):
     )
 
 
+#: The 422 message for a metric name that repeats in one request (#1461). It
+#: gives the 0-based positions of the first repeated pair and never a name, so
+#: nothing from the request is echoed.
+DUPLICATE_METRIC_MESSAGE = (
+    "duplicate metric name; each name may appear once per experiment "
+    "(first seen at metrics[{first}], repeated at metrics[{second}])"
+)
+
+#: What ``metrics`` takes on a create and an update, in their descriptions.
+METRIC_NAMES_DESCRIPTION = (
+    "Each name may appear once: names are compared exactly, so case and spaces "
+    "count (`Revenue` and `revenue` are two metrics), and a repeated name is "
+    "refused with 422."
+)
+
+
+def refuse_duplicate_metric_names(
+    metrics: Optional[List[MetricBase]],
+) -> Optional[List[MetricBase]]:
+    """Refuse a metric list in which a name repeats (#1461).
+
+    Names are compared exactly, as the unique index on (experiment, name)
+    compares them: nothing is trimmed or case-folded, so a pair the database
+    stores side by side (``Revenue`` and ``revenue``) is still accepted.
+
+    The error is ``value_error`` with :data:`DUPLICATE_METRIC_MESSAGE` filled
+    in for the first name that repeats, scanning in order: the position where
+    it was first seen and the position where it repeats.
+
+    Pure: it reads the list and returns it unchanged, so a second run over the
+    same list gives the same answer. The create route builds
+    ``ExperimentCreate`` twice, and the wizard builds it once from its own
+    payload. ``None`` (an update that leaves the metrics as they are) passes.
+    """
+    if metrics is None:
+        return None
+    first_seen: Dict[str, int] = {}
+    for position, metric in enumerate(metrics):
+        first = first_seen.setdefault(metric.name, position)
+        if first != position:
+            raise PydanticCustomError(
+                "value_error",
+                DUPLICATE_METRIC_MESSAGE.format(first=first, second=position),
+            )
+    return metrics
+
+
 class VariantBase(BaseModel):
     """Base model for variant data."""
 
@@ -316,6 +368,23 @@ def _checked_targeting_rules(
     except TargetingRulesError as err:
         raise ValueError(str(err)) from None
     return value
+
+
+def split_url_config_error(
+    title: str, loc: Tuple[Union[str, int], ...], message: str
+) -> ValidationError:
+    """A refusal of ``split_url_config`` at *loc* inside it, raised from its
+    field validator so the 422 names the rule's place (#393)."""
+    return ValidationError.from_exception_data(
+        title,
+        [
+            InitErrorDetails(
+                type=PydanticCustomError(SPLIT_URL_CONFIG_ERROR, message),
+                loc=loc,
+                input=None,
+            )
+        ],
+    )
 
 
 class ExperimentBase(BaseModel):
@@ -418,7 +487,11 @@ class ExperimentCreate(ExperimentBase):
     variants: List[VariantBase] = Field(
         ..., min_length=1, description="Experiment variants"
     )
-    metrics: List[MetricBase] = Field(..., min_length=1, description="Metrics to track")
+    metrics: List[MetricBase] = Field(
+        ...,
+        min_length=1,
+        description="Metrics to track, at least one. " + METRIC_NAMES_DESCRIPTION,
+    )
 
     # EP-021: Sequential testing
     sequential_testing_enabled: bool = Field(
@@ -454,7 +527,8 @@ class ExperimentCreate(ExperimentBase):
         description="Traffic optimization algorithm (default: fixed A/B split).",
     )
 
-    # EP-036: Split URL testing configuration
+    # EP-036: Split URL testing configuration. Declared after `variants` and
+    # `experiment_type`, which its validator reads.
     split_url_config: Optional[SplitUrlConfig] = Field(
         default=None,
         description="Split URL experiment configuration (required when experiment_type=split_url).",
@@ -552,6 +626,35 @@ class ExperimentCreate(ExperimentBase):
         """
         return _checked_targeting_rules(value)
 
+    @field_validator("metrics")
+    @classmethod
+    def validate_metric_names(cls, value: List[MetricBase]) -> List[MetricBase]:
+        """Refuse a repeated metric name (#1461); the list is returned as is."""
+        return refuse_duplicate_metric_names(value)
+
+    @field_validator("split_url_config")
+    @classmethod
+    def validate_split_url_config(
+        cls, config: Optional[SplitUrlConfig], info: ValidationInfo
+    ) -> Optional[SplitUrlConfig]:
+        """A split_url experiment's URL variants match its variants (#393).
+
+        The 422 is at the rule's place inside ``split_url_config``. When
+        ``variants`` was refused on its own there is nothing to compare.
+        """
+        experiment_type = info.data.get("experiment_type")
+        variants = info.data.get("variants")
+        if (
+            config is None
+            or variants is None
+            or getattr(experiment_type, "value", experiment_type) != "split_url"
+        ):
+            return config
+        problem = find_split_url_config_problem(config, variants)
+        if problem is not None:
+            raise split_url_config_error(cls.__name__, problem.loc, problem.message)
+        return config
+
     @model_validator(mode="after")
     def default_bayesian_config(self):
         """Turning Bayesian analysis on without a config stores the defaults."""
@@ -631,7 +734,17 @@ class ExperimentUpdate(BaseModel):
     variants: Optional[List[VariantBase]] = Field(
         None, description="Experiment variants"
     )
-    metrics: Optional[List[MetricBase]] = Field(None, description="Metrics to track")
+    metrics: Optional[List[MetricBase]] = Field(
+        None,
+        min_length=1,
+        description=(
+            "Metrics to track, replacing the stored ones: at least one, so an "
+            "empty list is refused with 422. "
+            + METRIC_NAMES_DESCRIPTION
+            + " Left out or null, the metrics are not changed. Changeable only "
+            "while the experiment is a draft."
+        ),
+    )
     # Declared only so a request carrying it is refused (#595). Without the
     # declaration pydantic's default ``extra="ignore"`` would drop the key and
     # answer 200, which is the defect: the update never applied a schedule.
@@ -740,6 +853,18 @@ class ExperimentUpdate(BaseModel):
     ) -> Optional[Dict[str, Any]]:
         """Refuse rules assignment would not apply as they read."""
         return _checked_targeting_rules(value)
+
+    @field_validator("metrics")
+    @classmethod
+    def validate_metric_names(
+        cls, value: Optional[List[MetricBase]]
+    ) -> Optional[List[MetricBase]]:
+        """Refuse a repeated metric name (#1461), as a create does.
+
+        Runs after ``min_length``, so an empty list keeps the ``too_short``
+        error a create gives it; null passes and changes nothing.
+        """
+        return refuse_duplicate_metric_names(value)
 
     @model_validator(mode="after")
     def validate_variants(self):

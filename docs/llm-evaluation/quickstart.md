@@ -11,6 +11,12 @@ ones before it.
 each provider your variants use. Steps 1, 2 and 6 need no key, and only they are commands
 to run here.
 
+On the stack from the Quick Start, put each key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+`GEMINI_API_KEY`) in the `.env` file next to `docker-compose.yml`, then run
+`docker compose up -d --wait` again, which re-creates the API container with it.
+[Supported providers](overview.md#supported-providers-and-models) says what each key
+turns on.
+
 ---
 
 ## 1. Create an Experiment

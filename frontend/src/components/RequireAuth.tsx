@@ -24,11 +24,13 @@ export interface RequireAuthProps {
  * Client-side gate for protected pages (the API is the real enforcement).
  *
  * - `loading`    → spinner
- * - `anonymous`  → `router.replace('/login?next=<current path>')`
+ * - `anonymous`  → `router.replace('/login?next=<current path>')`, or, after
+ *                  a logout in this tab, to the logout's own sign-in path
+ *                  (`afterLogoutPath`, plain `/login` unless it named a `next`)
  * - wrong role   → inline 403 view (`data-testid="require-auth-forbidden"`)
  */
 export function RequireAuth({ children, roles, superuser, fallbackPath = '/experiments', loading }: RequireAuthProps) {
-  const { status, user } = useAuth();
+  const { status, user, afterLogoutPath } = useAuth();
   const router = useRouter();
 
   const { isReady, asPath } = router;
@@ -38,6 +40,13 @@ export function RequireAuth({ children, roles, superuser, fallbackPath = '/exper
     // On a static export `asPath` is the route pattern (`/experiments/[id]`)
     // until the router is ready; wait so `next=` carries the real URL.
     if (!isReady) return;
+    // After a logout, this page belonged to the person who signed out: as
+    // `next` it took the next person to sign in there (#1006). The logout's
+    // path is also where its caller navigates, so the two cannot disagree.
+    if (afterLogoutPath) {
+      void router.replace(afterLogoutPath);
+      return;
+    }
     const next = safeNextPath(asPath, '/');
     const target =
       next === '/' || next.startsWith(LOGIN_PATH)
@@ -45,7 +54,7 @@ export function RequireAuth({ children, roles, superuser, fallbackPath = '/exper
         : `${LOGIN_PATH}?next=${encodeURIComponent(next)}`;
     void router.replace(target);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, isReady, asPath]);
+  }, [status, isReady, asPath, afterLogoutPath]);
 
   if (status === 'loading' || status === 'anonymous' || !user) {
     return (

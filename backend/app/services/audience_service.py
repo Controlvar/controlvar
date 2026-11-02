@@ -309,6 +309,10 @@ class AudienceService:
         if status is not None:
             model_status = _segment_status_to_model(status)
             query = query.filter(Segment.status == model_status)
+        # A total order: created_at alone leaves ties (rows made in one
+        # transaction share a timestamp), and a page boundary inside a tie
+        # repeats or drops a row. ``id`` breaks the tie (#272).
+        query = query.order_by(Segment.created_at, Segment.id)
         return query.offset(offset).limit(limit).all()
 
     @staticmethod

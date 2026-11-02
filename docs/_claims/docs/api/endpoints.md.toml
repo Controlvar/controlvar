@@ -287,6 +287,35 @@ text = "key is what the tracking API and the SDKs call it by:"
 by = ["docex:docs/api/endpoints.md#\"assigned\": true"]
 
 [[unit]]
+text = "Each metric's name may appear once in an experiment, compared exactly: case and spaces count, so Revenue and revenue are two metrics."
+by = [
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_create_and_update_answer_the_same_list_alike",
+    "test:backend/tests/unit/schemas/test_experiment_metric_names.py::test_names_are_compared_exactly",
+]
+
+[[unit]]
+text = "A list that repeats a name answers 422 at [\"body\", \"metrics\"], and nothing is written."
+by = [
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_create_and_update_answer_the_same_list_alike",
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_an_update_repeating_a_name_is_422_and_keeps_the_stored_metrics",
+]
+
+[[unit]]
+text = "The msg gives the 0-based positions of the first repeated pair and never the name, for example duplicate metric name; each name may appear once per experiment (first seen at metrics[0], repeated at metrics[2])."
+by = [
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_an_update_repeating_a_name_is_422_and_keeps_the_stored_metrics",
+    "test:backend/tests/unit/schemas/test_experiment_metric_names.py::test_a_repeat_is_refused_naming_the_first_repeated_pair",
+]
+
+[[unit]]
+text = "PUT /api/v1/experiments/{experiment_id} gives the same answer, and refuses an empty metrics list with 422 as a create does; leaving metrics out, or sending null, leaves the metrics as they are."
+by = [
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_an_update_with_an_empty_list_is_422_too_short_as_on_create",
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_create_and_update_answer_the_same_list_alike",
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_an_update_without_metrics_leaves_them_unchanged",
+]
+
+[[unit]]
 text = "A new experiment is a draft."
 by = ["docex:docs/api/endpoints.md#\"key\": \"button_color_test\""]
 
@@ -415,6 +444,7 @@ by = ["exempt:label"]
 [[unit]]
 text = "Limits are counted per client address and per path: most routes allow 300 requests a minute to each path from one address, and a path with an id in it, such as /api/v1/experiments/{experiment_id}, counts separately for each id."
 by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestSdkRateLimitIsPerPath::test_sdk_paths_with_different_ids_are_counted_separately",
     "test:backend/tests/unit/middleware/test_ai_rate_limits.py::test_the_neighbouring_paths_keep_their_limits",
     "test:backend/tests/unit/middleware/test_rate_limiter.py::TestExportRateLimit::test_neighbouring_paths_keep_their_limits",
 ]
@@ -1461,8 +1491,9 @@ text = "They address experiments and flags by their public key, except POST /api
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
-text = "They share the per-IP SDK_RATE_LIMIT_PER_MINUTE ceiling (default 6000/min), except POST /api/v1/tracking/assign/batch, which has its own limit of 60 requests a minute."
+text = "They use the same SDK_RATE_LIMIT_PER_MINUTE limit (default 6000/min), counted per client address and per path, so each flag key, user id or other id in a path is its own counter; the exception is POST /api/v1/tracking/assign/batch, which has its own limit of 60 requests a minute."
 by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestSdkRateLimitIsPerPath::test_sdk_paths_with_different_ids_are_counted_separately",
     "test:backend/tests/unit/middleware/test_rate_limiter.py::TestExportRateLimit::test_neighbouring_paths_keep_their_limits",
     "test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_limit_is_sixty_a_minute",
 ]
@@ -2503,6 +2534,15 @@ text = "An experiment with no start_date whose end_date has passed is refused wi
 by = ["test:backend/tests/integration/api/test_start_after_end_date.py::test_starting_a_draft_whose_end_date_has_passed_answers_400"]
 
 [[unit]]
+text = "A split URL experiment is also refused with 400 when its split_url_config is missing or cannot split; see Starting a split URL experiment."
+by = [
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_refuses_a_split_url_experiment_with_no_config",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_refuses_a_config_that_cannot_split_saying_why",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_refuses_the_same_control_page_as_an_active_experiment",
+    "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_refuses_a_chain_either_way",
+]
+
+[[unit]]
 text = "POST /api/v1/experiments/{experiment_id}/pause: active to paused."
 by = ["test:backend/tests/integration/api/test_experiment_status_lifecycle_only.py::test_the_lifecycle_endpoints_still_move_the_status"]
 
@@ -3401,8 +3441,22 @@ text = "At least two URL variants, with traffic_allocation values (0-100) that s
 by = ["test:backend/tests/unit/schemas/test_split_url_schemas.py"]
 
 [[unit]]
+text = "In a split_url experiment the URL variants name the experiment's variants one to one, with the same allocations, and each url is an absolute http:// or https:// URL; see Validation Rules."
+by = [
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_config_that_does_not_match_its_variants_is_refused_at_its_loc",
+    "test:backend/tests/unit/schemas/test_split_url_config_rules.py::test_a_url_no_visitor_could_be_sent_to_is_refused_at_its_loc",
+]
+
+[[unit]]
 text = "cookie_name and cookie_ttl_days (default 30) are optional."
 by = [
     "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigOptionalFields::test_cookie_ttl_days_default_30",
     "test:backend/tests/unit/schemas/test_split_url_schemas.py::TestSplitUrlConfigOptionalFields::test_cookie_name_defaults_to_none",
+]
+
+[[unit]]
+text = "Behind a proxy, the client address is the one the proxy reports, when the API is set to believe it (Users' addresses behind a proxy)."
+by = [
+    "test:backend/tests/unit/infrastructure/test_proxy_headers_trust.py::TestUvicornItself::test_the_private_ranges_return_the_real_client",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestGetClientIp::test_it_uses_the_resolved_client_and_not_the_header",
 ]

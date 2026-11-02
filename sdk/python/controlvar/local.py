@@ -18,6 +18,10 @@ Ruleset response                           Without a ruleset             With a 
 401/403/404 and an unknown format are reported once (until a refresh succeeds) and retried every
 10 minutes. "Goes to the server" means the call is made exactly as in server mode.
 
+A valid ruleset may hold a flag entry this SDK cannot read (an unknown ``evaluation`` or
+``value_type``, or a mistyped value): that one flag goes to the server, and the rest of the
+ruleset is used as usual.
+
 Only the regular refresh interval is jittered (+/-10%). A backoff step, the 5-minute backoff cap,
 a ``Retry-After`` wait and the 10-minute retry are exact: ``Retry-After`` is a floor and the caps
 are ceilings.
@@ -48,6 +52,7 @@ from .evaluator import (
     evaluate_locally,
     index_ruleset,
     is_supported_format,
+    reads_locally,
     to_wire_context,
 )
 from .transport import Response
@@ -120,7 +125,8 @@ class LocalEvaluationStatus:
     last_refresh_at: Optional[datetime] = None
     #: The last refresh failure, cleared by a successful refresh.
     last_error: Optional[ExperimentationError] = None
-    #: Active flags the server evaluates even in local mode (their rules are not portable).
+    #: Active flags the server evaluates even in local mode: their rules are not portable, or
+    #: their entry is one this SDK cannot read (a newer server's shape or value type).
     server_evaluated_flags: List[str] = field(default_factory=list)
 
 
@@ -338,7 +344,7 @@ class LocalEvaluation:
         remote = sorted(
             key
             for key, flag in (ruleset.flags.items() if ruleset is not None else [])
-            if flag["active"] and flag.get("evaluation") != "local"
+            if flag["active"] and not reads_locally(flag)
         )
         return LocalEvaluationStatus(
             evaluation="local",

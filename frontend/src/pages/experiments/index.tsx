@@ -153,7 +153,7 @@ export default function ExperimentsPage() {
         {/* Experiments table */}
         {!isLoading && !error && experiments.length > 0 && (
           <div
-            className="bg-white rounded-lg border border-slate-200 overflow-hidden"
+            className="bg-white rounded-lg border border-slate-200 overflow-x-auto"
             data-testid="experiments-table"
           >
             <table className="w-full text-sm">

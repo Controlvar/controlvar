@@ -18,6 +18,29 @@ from .types import ExperimentationError
 __all__ = ["Response", "Transport", "TransportError", "UrllibTransport"]
 
 
+def without_query(url: str) -> str:
+    """*url* up to its ``?``: what a request error message names.
+
+    The query holds the user's id and attributes (``?user_id=...&context=...``).
+    """
+    return url.partition("?")[0]
+
+
+def failure_message(method: str, url: str, exc: BaseException) -> str:
+    """``"<method> <url without its query> failed: <exc>"``.
+
+    Where *exc*'s own text repeats the URL, whole (urllib's ``unknown url type``
+    does) or as the request target, path and query (http.client's ``InvalidURL``
+    does), its query is removed too.
+    """
+    shown = without_query(url)
+    detail = str(exc)
+    query = url[len(shown) :]
+    if len(query) > 1:
+        detail = detail.replace(query, "")
+    return f"{method} {shown} failed: {detail}"
+
+
 class TransportError(ExperimentationError):
     """A request could not be completed (DNS/connection failure, timeout, ...).
 
@@ -98,4 +121,4 @@ class UrllibTransport:
         except (OSError, http.client.HTTPException, ValueError) as exc:
             # URLError, socket.timeout/TimeoutError and ConnectionError are OSError
             # subclasses; ValueError covers malformed URLs.
-            raise TransportError(f"{method} {url} failed: {exc}") from exc
+            raise TransportError(failure_message(method, url, exc)) from exc

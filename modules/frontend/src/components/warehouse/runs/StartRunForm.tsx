@@ -250,6 +250,7 @@ export default function StartRunForm({ experimentId, hasStartDate, onStarted }: 
                       {m.name}{' '}
                       <span className="text-slate-600">
                         ({isMean ? 'mean' : 'proportion'}
+                        {m.lower_is_better === true ? ', lower is better' : ''}
                         {position === 0 ? ', primary' : ''})
                       </span>
                     </span>

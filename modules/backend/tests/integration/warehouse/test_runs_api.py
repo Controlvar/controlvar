@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from datetime import datetime, timezone
 
 import pytest
@@ -65,6 +66,7 @@ def test_proportion_run_end_to_end(wh):
         "name": "Purchases",
         "metric_type": "conversion",
         "is_primary": True,
+        "lower_is_better": False,
     }
     assert [
         (v["variant_name"], v["n"], v["n_converted"]) for v in call["variants"]
@@ -87,7 +89,7 @@ def test_proportion_run_end_to_end(wh):
     assert run["window_end"].startswith("2026-09-10T00:00:00")
 
 
-def _seed_results(wh, experiment, rows, *, is_primary=False):
+def _seed_results(wh, experiment, rows, *, is_primary=False, lower_is_better=None):
     """The same units in the platform's own tables, as /results reads them."""
     variants = {v.name: v for v in experiment.variants}
     metric = Metric(
@@ -96,6 +98,7 @@ def _seed_results(wh, experiment, rows, *, is_primary=False):
         event_name="purchase",
         metric_type=MetricType.CONVERSION,
         is_primary=is_primary,
+        lower_is_better=lower_is_better,
     )
     wh.db.add(metric)
     for user, variant, conversions in rows:
@@ -172,26 +175,29 @@ def test_proportion_counts_match_results_on_restricted_fixture(wh):
     )
 
 
-def test_proportion_results_equal_results_on_restricted_fixture(wh):
+#: A significant drop (Fisher p = 0.0011, below the run's alpha of 0.1): nine
+#: of ten control units convert and one of ten treatment units.  A fixture
+#: whose change is not significant names no winner in either direction, so
+#: the winner would agree for the wrong reason.
+SIGNIFICANT_DROP = [
+    (f"c{i}", "control", [ts(3), ts(4)] if i < 9 else []) for i in range(10)
+] + [(f"t{i}", "treatment", [ts(5)] if i < 1 else []) for i in range(10)]
+
+
+@pytest.mark.parametrize("lower", [False, True], ids=["higher", "lower"])
+def test_proportion_results_equal_results_on_restricted_fixture(wh, lower):
     """On the counts /results also computes, the warehouse result is /results'
     result: every variant's numbers, significance and winner (only the metric's
-    id differs -- a warehouse source is not a platform metric)."""
+    id differs -- a warehouse source is not a platform metric), in either
+    direction, the source and the platform metric marked alike (#1386)."""
     import json
 
     experiment = wh.experiment(end=ts(10))
-    rows = [
-        ("q1", "control", [ts(3), ts(4)]),
-        ("q2", "control", []),
-        ("q3", "control", [ts(5)]),
-        ("q4", "control", []),
-        ("q5", "treatment", [ts(3)]),
-        ("q6", "treatment", [ts(4)]),
-        ("q7", "treatment", [ts(6)]),
-    ]
-    _seed_results(wh, experiment, rows, is_primary=True)
+    rows = SIGNIFICANT_DROP
+    _seed_results(wh, experiment, rows, is_primary=True, lower_is_better=lower)
     wh.exposures([(u, experiment.key, v, ts(2)) for u, v, _ in rows])
     wh.events([(u, w, None) for u, _, ws in rows for w in ws])
-    ids = wh.ready(wh.as_("ADMIN"))
+    ids = wh.ready(wh.as_("ADMIN"), lower_is_better=lower)
     client = wh.as_("ADMIN")
     response = wh.start_run(
         client, experiment, ids, confidence_level=0.9, correction_method="bonferroni"
@@ -199,6 +205,9 @@ def test_proportion_results_equal_results_on_restricted_fixture(wh):
     run = wh.wait_for_run(client, response.json()["run_id"])
     assert run["status"] == "succeeded", run
     warehouse = dict(run["results"]["metrics"][0]["result"])
+    treatment = next(v for v in experiment.variants if not v.is_control)
+    assert warehouse["lower_is_better"] is lower
+    assert warehouse["winning_variant_id"] == (str(treatment.id) if lower else None)
     results = AnalysisService(wh.db).get_experiment_results(
         experiment.id, confidence_level=0.9, correction_method="bonferroni"
     )["metrics"][0]
@@ -383,6 +392,9 @@ def test_a_metric_that_cannot_be_computed_says_why_never_zero(wh):
     assert metric["not_computed_reason"] == "join_key_mismatch"
     assert metric["message"].startswith("Not computed: ")
     assert metric["result"] is None
+    # Nothing was analysed, so nothing states a direction: the direction is
+    # the computed result's ``lower_is_better``, never the wrapper's (#1386).
+    assert "lower_is_better" not in metric
     assert recording_estimator.CALLS == []
 
 
@@ -652,3 +664,162 @@ def test_starting_a_run_is_audited(wh):
     assert str(rows[0].actor_id) == str(wh.user("DEVELOPER").id)
     assert rows[0].new_value["metric_source_ids"] == [ids["metric_source_id"]]
     assert "total_seconds" not in rows[0].new_value
+
+
+# ---------------------------------------------------------------------------
+# A metric source's direction (#1386)
+# ---------------------------------------------------------------------------
+
+#: Per unit, the summed value of a mean metric: the treatment's mean is about
+#: half the control's, a significant drop with ten units a variant.
+CONTROL_VALUES = [10.0, 11.0, 9.0, 10.0, 12.0, 8.0, 10.0, 11.0, 9.0, 10.0]
+TREATMENT_VALUES = [5.0, 6.0, 4.0, 5.0, 7.0, 3.0, 5.0, 6.0, 4.0, 5.0]
+
+
+def _a_significant_drop(wh, key: str, kind: str) -> None:
+    if kind == "proportion":
+        rows = SIGNIFICANT_DROP
+        wh.exposures([(u, key, variant, ts(2)) for u, variant, _ in rows])
+        wh.events([(u, when, None) for u, _, whens in rows for when in whens])
+        return
+    units = [(f"c{i}", "control", y) for i, y in enumerate(CONTROL_VALUES)] + [
+        (f"t{i}", "treatment", y) for i, y in enumerate(TREATMENT_VALUES)
+    ]
+    wh.exposures([(u, key, variant, ts(2)) for u, variant, _ in units])
+    wh.events([(u, ts(3), y) for u, _, y in units])
+
+
+def _metric_body(kind: str) -> dict:
+    if kind == "proportion":
+        return {"name": "Checkout errors"}
+    return {
+        "name": "Support minutes",
+        "metric_type": "mean",
+        "columns": {"unit_id": "user_id", "event_at": "event_at", "value": "amount"},
+    }
+
+
+def _treatment(experiment):
+    return next(v for v in experiment.variants if not v.is_control)
+
+
+def _finished(wh, client, response):
+    assert response.status_code == 202, response.text
+    run = wh.wait_for_run(client, response.json()["run_id"])
+    assert run["status"] == "succeeded", run
+    return run
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("kind", ["proportion", "mean"])
+@pytest.mark.parametrize("lower", [True, False], ids=["lower", "higher"])
+def test_a_lower_is_better_source_names_a_significant_drop_the_winner(wh, kind, lower):
+    """Through the API: the source stores its direction, and a run names the
+    treatment with a significant drop the winner only when the source is
+    lower is better.  Before #1386 the source API refused the field, and every
+    run read every metric as higher is better."""
+    experiment = wh.experiment(end=ts(10))
+    _a_significant_drop(wh, experiment.key, kind)
+    admin = wh.as_("ADMIN")
+    ids = wh.ready(admin, lower_is_better=lower, **_metric_body(kind))
+    stored = admin.get(f"{WA}/sources/{ids['metric_source_id']}")
+    assert stored.json()["lower_is_better"] is lower
+
+    run = _finished(wh, admin, wh.start_run(admin, experiment, ids))
+
+    (metric,) = run["results"]["metrics"]
+    result = metric["result"]
+    treatment = _treatment(experiment)
+    row = next(v for v in result["variants"] if v["variant_id"] == str(treatment.id))
+    assert row["is_significant"] is True and row["relative_improvement_pct"] < 0
+    assert result["lower_is_better"] is lower
+    assert result["winning_variant_id"] == (str(treatment.id) if lower else None)
+
+
+def test_each_metric_takes_the_direction_of_its_own_source(wh):
+    """Two metrics with the same significant drop, one source marked lower is
+    better and one not: each result follows its own source."""
+    experiment = wh.experiment(end=ts(10))
+    _a_significant_drop(wh, experiment.key, "proportion")
+    admin = wh.as_("ADMIN")
+    ids = wh.ready(admin, name="Checkout errors", lower_is_better=True)
+    second = wh.metric_source(
+        admin, ids["connection_id"], name="Purchases", lower_is_better=False
+    )
+    wh.validate(admin, second["id"])
+
+    run = _finished(
+        wh,
+        admin,
+        wh.start_run(
+            admin,
+            experiment,
+            ids,
+            metric_source_ids=[ids["metric_source_id"], second["id"]],
+        ),
+    )
+
+    primary, secondary = (m["result"] for m in run["results"]["metrics"])
+    treatment = str(_treatment(experiment).id)
+    assert (primary["lower_is_better"], primary["winning_variant_id"]) == (
+        True,
+        treatment,
+    )
+    assert (secondary["lower_is_better"], secondary["winning_variant_id"]) == (
+        False,
+        None,
+    )
+
+
+def test_an_edit_after_a_run_is_admitted_does_not_change_its_direction(wh):
+    """The direction is read when the run is admitted and frozen in its plan:
+    a source edited while the run is waiting on the warehouse does not
+    change it."""
+    experiment = wh.experiment(end=ts(10))
+    _a_significant_drop(wh, experiment.key, "proportion")
+    admin = wh.as_("ADMIN")
+    ids = wh.ready(admin, name="Checkout errors", lower_is_better=True)
+    wh.gate = threading.Event()
+    response = wh.start_run(admin, experiment, ids)
+    assert response.status_code == 202, response.text
+    assert wh.entered.acquire(timeout=10), "the run never reached the warehouse"
+
+    # A PUT without the field sets it to false.
+    edited = admin.put(
+        f"{WA}/sources/{ids['metric_source_id']}",
+        json={
+            "kind": "metric",
+            "name": "Checkout errors",
+            "table": "main.events",
+            "columns": {"unit_id": "user_id", "event_at": "event_at"},
+            "metric_type": "proportion",
+        },
+    )
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["lower_is_better"] is False
+    wh.gate.set()
+
+    run = wh.wait_for_run(admin, response.json()["run_id"])
+    assert run["status"] == "succeeded", run
+    result = run["results"]["metrics"][0]["result"]
+    assert result["lower_is_better"] is True
+    assert result["winning_variant_id"] == str(_treatment(experiment).id)
+
+
+def test_the_direction_is_the_sources_not_the_experiments_metric(wh):
+    """An experiment metric of the same name marked lower is better does not
+    change a warehouse analysis: a source has one direction, its own, in
+    every experiment that analyses it."""
+    experiment = wh.experiment(end=ts(10))
+    _seed_results(
+        wh, experiment, SIGNIFICANT_DROP, is_primary=True, lower_is_better=True
+    )
+    _a_significant_drop(wh, experiment.key, "proportion")
+    admin = wh.as_("ADMIN")
+    ids = wh.ready(admin)  # a source named Purchases, not marked
+
+    run = _finished(wh, admin, wh.start_run(admin, experiment, ids))
+
+    result = run["results"]["metrics"][0]["result"]
+    assert result["lower_is_better"] is False
+    assert result["winning_variant_id"] is None

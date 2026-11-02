@@ -89,7 +89,7 @@ touches the database.
 An API in the `development` environment, which is what the Quick Start stack and the
 command above run, answers 429 to an address that passes a route's rate limit: 6000
 requests a minute for each SDK route (`/api/v1/tracking/*`,
-`/api/v1/feature-flags/evaluate/*`). Locust counts a 429 as a failed request, so the
+`/api/v1/feature-flags/evaluate/*`), counted per address and per path. Locust counts a 429 as a failed request, so the
 run fails. So against a development API, keep a run small and short, as Option B
 does. For a real load, run
 the API in the `test` environment, where rate limiting is off, as Option C's

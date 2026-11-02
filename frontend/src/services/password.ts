@@ -30,6 +30,7 @@ export type PasswordChangeOutcome =
   | 'locked'
   | 'unavailable'
   | 'network'
+  | 'timed-out'
   | 'failed';
 
 /** The rules, stated on the page before the user types. */
@@ -40,7 +41,7 @@ export const PASSWORD_RULES =
 export const NOT_LOCAL_SENTENCE =
   'Your account signs in through your identity provider, so its password is changed there, not in Controlvar.';
 
-const SENTENCES: Record<Exclude<PasswordChangeOutcome, 'locked'>, string> = {
+const SENTENCES: Record<Exclude<PasswordChangeOutcome, 'locked' | 'timed-out'>, string> = {
   changed:
     'Your password has been changed. Use the new one the next time you sign in. ' +
     'Anywhere else you are signed in stays signed in until that session expires.',
@@ -60,6 +61,8 @@ export interface PasswordChangeResult {
   outcome: PasswordChangeOutcome;
   /** Seconds from the 423's `Retry-After` header, when it sent one. */
   retryAfter?: number;
+  /** For `timed-out`: the dashboard's own time-out sentence, from the error. */
+  message?: string;
 }
 
 /** Send the change. Resolves on 204; throws `ApiError` otherwise. */
@@ -70,9 +73,14 @@ export async function changeOwnPassword(currentPassword: string, newPassword: st
   });
 }
 
-/** Class a failed change. Reads the status, the header and the three known 403 details only. */
+/**
+ * Class a failed change. Reads the status, the header and the three known 403
+ * details only. A time-out keeps the dashboard's own time-out sentence (#1040):
+ * the change may have been made, so "could not be reached" would be wrong.
+ */
 export function classifyPasswordError(err: unknown): PasswordChangeResult {
   if (!isApiError(err)) return { outcome: 'failed' };
+  if (err.timedOut) return { outcome: 'timed-out', message: err.message };
   switch (err.status) {
     case 0:
       return { outcome: 'network' };
@@ -104,5 +112,6 @@ export function passwordOutcomeSentence(result: PasswordChangeResult): string {
     }
     return `Too many failed attempts. Try again in ${seconds} ${seconds === 1 ? 'second' : 'seconds'}.`;
   }
+  if (result.outcome === 'timed-out') return result.message ?? SENTENCES.failed;
   return SENTENCES[result.outcome];
 }

@@ -421,6 +421,52 @@ def test_cap_value_accepts_json_numbers(cap):
     assert ws.MetricSourceCreate.model_validate(_metric(cap_value=cap)).cap_value == cap
 
 
+@pytest.mark.parametrize("value", ["true", "false", 1, 0, "yes", None, [True]])
+@pytest.mark.parametrize("model", [ws.MetricSourceCreate, ws.MetricSourceUpdate])
+def test_lower_is_better_is_a_json_boolean_only(model, value):
+    """A string, a number or null is refused (bool_type), not coerced (#1386)."""
+    body = _metric(lower_is_better=value)
+    if model is ws.MetricSourceUpdate:
+        body.pop("connection_id")
+    with pytest.raises(ValidationError) as refused:
+        model.model_validate(body)
+    (error,) = refused.value.errors()
+    assert (error["type"], error["loc"]) == ("bool_type", ("lower_is_better",))
+
+
+@pytest.mark.parametrize("value", [True, False])
+def test_lower_is_better_takes_a_boolean_and_defaults_to_false(value):
+    assert ws.MetricSourceCreate.model_validate(_metric()).lower_is_better is False
+    body = _metric(lower_is_better=value)
+    assert ws.MetricSourceCreate.model_validate(body).lower_is_better is value
+
+
+@pytest.mark.parametrize("value", [True, False])
+@pytest.mark.parametrize(
+    "model", [ws.AssignmentSourceCreate, ws.AssignmentSourceUpdate]
+)
+def test_an_assignment_body_refuses_lower_is_better(model, value):
+    """An assignment source has no direction: the field is an unknown one."""
+    body = {
+        "kind": "assignment",
+        "name": "Exposures",
+        "table": "ANALYTICS.PUBLIC.EXPOSURES",
+        "columns": {
+            "unit_id": "USER_ID",
+            "experiment_key": "EXPERIMENT_KEY",
+            "variant": "VARIANT",
+            "exposed_at": "EXPOSED_AT",
+        },
+        "lower_is_better": value,
+    }
+    if model is ws.AssignmentSourceCreate:
+        body["connection_id"] = str(uuid.uuid4())
+    with pytest.raises(ValidationError) as refused:
+        model.model_validate(body)
+    (error,) = refused.value.errors()
+    assert (error["type"], error["loc"]) == ("extra_forbidden", ("lower_is_better",))
+
+
 @pytest.mark.regression
 def test_filter_integers_are_described_as_int64_not_as_bounds():
     # 2**63 - 1 is not a number a double holds; written as `maximum` it came

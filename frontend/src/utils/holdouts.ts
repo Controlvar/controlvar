@@ -151,10 +151,12 @@ export function holdoutChanges(holdout: HoldoutDetail, draft: HoldoutDraft): Hol
 /**
  * The fixed sentence for a failed call. A 409 means a name another holdout
  * has, or an activation that raced another: a request that activates reads it
- * as the race, any other as the name.
+ * as the race, any other as the name. A time-out shows the dashboard's own
+ * time-out sentence (#1040), here and in the two functions below.
  */
 export function holdoutErrorCopy(err: unknown, { activates = false }: { activates?: boolean } = {}): string {
   if (!isApiError(err)) return HOLDOUT_COPY.saveFailed;
+  if (err.timedOut) return err.message;
   switch (err.status) {
     case 0:
       return UNREACHABLE;
@@ -172,6 +174,7 @@ export function holdoutErrorCopy(err: unknown, { activates = false }: { activate
 }
 
 export function loadErrorCopy(err: unknown): string {
+  if (isApiError(err) && err.timedOut) return err.message;
   if (isApiError(err) && err.status === 0) return UNREACHABLE;
   if (isApiError(err) && err.status === 404) return HOLDOUT_COPY.notFound;
   return HOLDOUT_COPY.loadFailed;
@@ -179,6 +182,7 @@ export function loadErrorCopy(err: unknown): string {
 
 export function resultsErrorCopy(err: unknown): string {
   if (!isApiError(err)) return HOLDOUT_COPY.resultsFailed;
+  if (err.timedOut) return err.message;
   if (err.status === 0) return UNREACHABLE;
   if (err.status === 403) return HOLDOUT_COPY.refused;
   if (err.status === 404) return HOLDOUT_COPY.notFound;

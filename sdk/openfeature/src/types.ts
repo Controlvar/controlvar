@@ -3,7 +3,8 @@
  *
  * The provider delegates every network call to `@controlvar/js-sdk`;
  * the flag shape it works with is that SDK's `FlagEvaluation`
- * (`{key, enabled, config}` from `GET /api/v1/feature-flags/evaluate/{key}?user_id=…`).
+ * (`{key, enabled, config, reason, value, valueType}` from
+ * `GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=…`).
  */
 
 import type { ExperimentationClient } from '@controlvar/js-sdk';
@@ -13,7 +14,11 @@ export interface ExperimentationProviderOptions {
   apiKey: string;
   /** Backend origin (the SDK appends `/api/v1/...`). Defaults to http://localhost:8000. */
   baseUrl?: string;
-  /** How long a successful evaluation is reused per user + flag, in ms. Defaults to 300 000 (5 min). */
+  /**
+   * How long a successful evaluation is reused per user + flag, in ms. Defaults to 300 000 (5 min).
+   * The attributes are not part of the cache key: a user's changed attribute is seen once the
+   * answer expires. 0 caches nothing.
+   */
   cacheTtlMs?: number;
   /** HTTP request timeout in milliseconds. Defaults to 5 000 (5 s). */
   timeout?: number;
@@ -37,4 +42,4 @@ export interface ExperimentationFlagMetadata {
 }
 
 /** Resolution reasons this provider emits (a subset of OpenFeature's `StandardResolutionReasons`). */
-export type EvalReason = 'TARGETING_MATCH' | 'CACHED' | 'DISABLED' | 'DEFAULT' | 'ERROR';
+export type EvalReason = 'TARGETING_MATCH' | 'SPLIT' | 'CACHED' | 'DISABLED' | 'UNKNOWN' | 'ERROR';

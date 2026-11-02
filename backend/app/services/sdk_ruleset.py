@@ -60,7 +60,11 @@ The contract (``schema`` 1, beta)::
   :func:`~backend.app.core.flag_values.servable_values`, the evaluate route's
   own test) is ``{"key", "active": true, "evaluation": "remote"}`` whatever
   its status: the SDK asks the server, which answers it without a value. Its
-  values never reach the document.
+  values never reach the document. The cost is when an inactive such flag
+  (a kill switch) reaches a local client: the 0.1.1 and 0.2.0 SDKs answer a
+  remote entry from their cache of the server's answer for the same user and
+  flag, kept up to 300 s by default, and ``getAllFlags`` always asks the
+  server.
 * Nothing else about a flag is included: not its name, description, owner,
   tags, variants or workspace.
 * ``version`` is the sha256 of the canonical JSON of everything else

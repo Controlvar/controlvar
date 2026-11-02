@@ -108,3 +108,47 @@ by = ["test:backend/tests/unit/chart/test_chart_render.py::test_the_bundled_post
 [[unit]]
 text = "Back up the database before every upgrade."
 by = ["exempt:advice"]
+
+[[unit]]
+text = "Users' addresses"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The Ingress sends API requests to the API's Service, so the API reads each user's address from the X-Forwarded-For header your ingress controller adds."
+by = [
+    "test:backend/tests/unit/chart/test_chart_render.py::test_the_ingress_host_is_the_public_base_url_hostname",
+    "test:backend/tests/unit/infrastructure/test_proxy_headers_trust.py::TestTheEntrypoint::test_it_still_reads_proxy_headers_at_all",
+]
+
+[[unit]]
+text = "It believes that header from the API pod's own network and from the addresses and networks in api.forwardedAllowIps, which defaults to the private ranges, 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16."
+by = [
+    "test:backend/tests/unit/chart/test_chart_render.py::test_the_proxies_the_api_believes_default_to_the_private_ranges",
+    "test:backend/tests/unit/infrastructure/test_proxy_trust.py::test_the_own_networks_of_each_topology",
+]
+
+[[unit]]
+text = "That covers an ingress controller on a private pod network."
+by = ["test:backend/tests/unit/infrastructure/test_proxy_headers_trust.py::test_the_list_each_topology_starts_with_believes_its_proxies_only"]
+
+[[unit]]
+text = "To believe only your ingress controller, set it to the network its pods get their addresses from, as Kubernetes (Helm) shows."
+by = ["test:backend/tests/unit/chart/test_chart_render.py::test_a_set_value_is_rendered_exactly"]
+
+[[unit]]
+text = "It cannot be empty."
+by = [
+    "test:backend/tests/unit/chart/test_chart_render.py::test_schema_refuses",
+    "test:backend/tests/unit/chart/test_chart_render.py::test_an_empty_value_is_refused_by_the_template_too",
+]
+
+[[unit]]
+text = "An entry that is not an address or a network stops the migrate init container, and its log names the entry."
+by = [
+    "test:backend/tests/unit/core/test_preflight.py::test_main_exits_78_for_a_refused_entry",
+    "test:backend/tests/unit/infrastructure/test_upgrade_on_start.py::test_the_migrate_init_container_upgrades_while_the_old_pods_keep_serving",
+]
+
+[[unit]]
+text = "Whatever reaches the API's Service must connect from an address in api.forwardedAllowIps for the API to read users' addresses from its X-Forwarded-For."
+by = ["test:backend/tests/unit/infrastructure/test_proxy_headers_trust.py::test_the_list_each_topology_starts_with_believes_its_proxies_only"]

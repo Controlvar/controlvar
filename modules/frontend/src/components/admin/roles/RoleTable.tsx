@@ -43,7 +43,7 @@ export function RoleTable({ onEditRole }: RoleTableProps) {
   };
 
   return (
-    <div data-testid="role-table" className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+    <div data-testid="role-table" className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
       {loading && (
         <div data-testid="role-table-loading" className="p-8 flex justify-center">
           <div className="animate-spin h-6 w-6 rounded-full border-2 border-blue-600 border-t-transparent" />

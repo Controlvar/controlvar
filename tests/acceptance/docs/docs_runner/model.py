@@ -143,7 +143,10 @@ What an API answers can be kept for later steps and checked against an oracle
   users through ``GET /api/v1/feature-flags/evaluate/{key}`` with an API key:
   every answer must give the ``reason`` the step names, and with ``reason:
   rollout`` a user gets the flag exactly when the documented rollout hash puts
-  them below ``rollout`` percent. Its check is the action itself.
+  them below ``rollout`` percent. With ``on_value`` and ``off_value`` (a flag
+  that serves values, #1497), every answer's ``value`` must also be the on
+  value when the user gets the flag and the off value otherwise. Its check is
+  the action itself.
 * ``traffic`` (compose-dev only) sends an experiment a population the journey
   chooses: per variant, how many users are assigned and how many of them send
   the metric's event, through the tracking API with an API key. Its check is
@@ -687,6 +690,12 @@ class Traffic(_Strict):
         return self
 
 
+#: A flag's value as the evaluate route answers it: a string, a number, or a
+#: JSON object or array (#1497). Not a boolean: a boolean flag's value is its
+#: ``enabled``, which the step already checks.
+FlagValue = Union[StrictStr, StrictInt, StrictFloat, List[Any], Dict[StrictStr, Any]]
+
+
 class Evaluations(_Strict):
     """Users evaluated for one flag through the SDK route (``traffic.py``).
 
@@ -694,6 +703,11 @@ class Evaluations(_Strict):
     the flag exactly when the documented rollout hash puts them below
     ``rollout`` percent), ``targeting_rule`` (every user gets it) or
     ``inactive`` (no user gets it).
+
+    ``on_value`` and ``off_value``, given together, are a value flag's two
+    values (#1497): every answer's ``value`` must then be the on value when
+    the user gets the flag and the off value when not. Left out, ``value`` is
+    not read.
     """
 
     flag: OneLine
@@ -705,12 +719,22 @@ class Evaluations(_Strict):
     ] = None
     reason: Literal["rollout", "targeting_rule", "inactive"]
     rollout: Optional[StrictInt] = Field(default=None, ge=0, le=100)
+    on_value: Optional[FlagValue] = None
+    off_value: Optional[FlagValue] = None
 
     @model_validator(mode="after")
     def _rollout_iff_reason_rollout(self) -> "Evaluations":
         if (self.reason == "rollout") != (self.rollout is not None):
             raise ValueError(
                 "rollout is the percentage for reason: rollout, and only for it"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _both_values_or_neither(self) -> "Evaluations":
+        if (self.on_value is None) != (self.off_value is None):
+            raise ValueError(
+                "on_value and off_value are a flag's two values: give both, or neither"
             )
         return self
 

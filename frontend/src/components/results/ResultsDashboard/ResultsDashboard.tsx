@@ -394,9 +394,10 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
       />
       <SrmNotice srm={results.srm} metrics={results.metrics} />
 
-      {/* Tab navigation */}
+      {/* Tab navigation. On a phone the tabs are wider than the screen, so
+          the row scrolls inside itself rather than widening the page. */}
       <nav
-        className="flex gap-1 border-b border-slate-200"
+        className="flex gap-1 overflow-x-auto border-b border-slate-200"
         aria-label="Results sections"
         role="tablist"
       >

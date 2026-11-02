@@ -204,6 +204,12 @@ function SourcesPanel({ data, kind }: { data: Data; kind: SourceKind }) {
                     <Link href={`/warehouse/sources/${s.id}`} className="font-medium text-blue-700 hover:underline">
                       {s.name}
                     </Link>
+                    {/* Outside the link, so the link's name stays the source's name. */}
+                    {s.lower_is_better === true && (
+                      <span className="ml-1.5 text-xs text-slate-600" data-testid="warehouse-lower-is-better">
+                        lower is better
+                      </span>
+                    )}
                   </td>
                   <td className="py-2 pr-4 text-slate-800">{byId.get(s.connection_id)?.name ?? '—'}</td>
                   <td className="py-2 pr-4 font-mono text-xs text-slate-800">{s.table}</td>

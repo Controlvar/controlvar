@@ -12,7 +12,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.enum_filters import enum_filter
 from backend.app.core.permissions import Action, ResourceType, check_permission
+from backend.app.models.llm_experiment import LLMExperimentStatus, LLMTaskType
 from backend.app.models.user import User
 from backend.app.schemas.llm_experiments import (
     CreateLLMExperimentRequest,
@@ -27,6 +29,29 @@ from backend.app.services.llm_experiment_service import LLMExperimentService
 
 router = APIRouter(tags=["LLM Experiments"])
 _service = LLMExperimentService()
+
+#: The list's filter values, as the responses spell them (#955).
+LLM_STATUS_SPELLINGS = ("DRAFT", "ACTIVE", "PAUSED", "COMPLETED")
+LLM_TASK_TYPE_SPELLINGS = (
+    "chat_completion",
+    "text_generation",
+    "classification",
+    "summarization",
+    "code_generation",
+    "embedding",
+)
+
+LLM_STATUS_FILTER_DESCRIPTION = (
+    "Only experiments with this status: `DRAFT`, `ACTIVE`, `PAUSED` or "
+    "`COMPLETED`, in any case. Any other value answers 422; an empty value "
+    "means no filter."
+)
+LLM_TASK_TYPE_DESCRIPTION = (
+    "Only experiments with this task type: `chat_completion`, "
+    "`text_generation`, `classification`, `summarization`, `code_generation` "
+    "or `embedding`, in any case. Any other value answers 422; an empty value "
+    "means no filter."
+)
 
 
 def _to_variant_response(v) -> LLMVariantResponse:
@@ -103,8 +128,10 @@ def create_llm_experiment(
     summary="List LLM experiments",
 )
 def list_llm_experiments(
-    status_filter: Optional[str] = Query(None, alias="status"),
-    task_type: Optional[str] = Query(None),
+    status_filter: Optional[str] = Query(
+        None, alias="status", description=LLM_STATUS_FILTER_DESCRIPTION
+    ),
+    task_type: Optional[str] = Query(None, description=LLM_TASK_TYPE_DESCRIPTION),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(deps.get_db),
@@ -116,10 +143,17 @@ def list_llm_experiments(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions",
         )
+    # After the permission check (#955); the members go to the query.
+    status_member = enum_filter(
+        status_filter, LLMExperimentStatus, "status", LLM_STATUS_SPELLINGS
+    )
+    task_type_member = enum_filter(
+        task_type, LLMTaskType, "task_type", LLM_TASK_TYPE_SPELLINGS
+    )
     items, total = _service.list_experiments(
         db,
-        status=status_filter,
-        task_type=task_type,
+        status=status_member,
+        task_type=task_type_member,
         page=page,
         page_size=page_size,
     )

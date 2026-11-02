@@ -324,6 +324,7 @@ function SourcePage() {
           {s.kind === 'metric' && (
             <>
               <Row label="Metric type">{s.metric_type === 'mean' ? 'Mean' : 'Proportion'}</Row>
+              <Row label="Lower is better">{s.lower_is_better === true ? 'Yes' : 'No'}</Row>
               <Row label="Conversion window">{s.conversion_window_hours} hours after assignment</Row>
               {s.cap_value !== null && <Row label="Cap per user">{s.cap_value}</Row>}
             </>

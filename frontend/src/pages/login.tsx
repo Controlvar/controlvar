@@ -1,7 +1,7 @@
 import React, { FormEvent, useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/contexts/AuthContext';
-import { ApiError, safeNextPath, unreachableMessage } from '@/services/api';
+import { ApiError, safeNextPath, signInTimeoutMessage, unreachableMessage } from '@/services/api';
 import { PageTitle } from '@/components/PageTitle';
 import { Wordmark } from '@/components/Wordmark';
 // The SSO button and `/login?sso_error=` copy: the SSO module's; a core build
@@ -46,6 +46,7 @@ export function loginErrorMessage(err: unknown): string {
         : 'Too many failed attempts. Try again in a few minutes.';
     }
     if (err.status === 429) return RATE_LIMITED_MESSAGE;
+    if (err.timedOut) return signInTimeoutMessage();
     if (err.status === 0) return unreachableMessage();
     return err.message;
   }

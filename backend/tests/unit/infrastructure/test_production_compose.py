@@ -28,6 +28,8 @@ from urllib.parse import urlparse
 import pytest
 import yaml
 
+from backend.tests.unit.infrastructure._compose_feature_keys import FEATURE_KEYS
+
 REPO_ROOT = Path(__file__).resolve().parents[4]
 COMPOSE_DIR = REPO_ROOT / "deploy" / "compose"
 COMPOSE = COMPOSE_DIR / "compose.yml"
@@ -43,8 +45,10 @@ REQUIRED = (
     "POSTGRES_PASSWORD",
     "PUBLIC_BASE_URL",
 )
-#: Secret, but optional: the only default either may have is empty.
-OPTIONAL_SECRETS = ("AUDIT_HMAC_KEY", "METRICS_TOKEN")
+#: Secret, but optional: the only default any of them may have is empty. The
+#: feature keys (#1253, #256) are WAREHOUSE_CREDENTIALS_KEYS and the LLM
+#: provider keys, from ``_compose_feature_keys``.
+OPTIONAL_SECRETS = ("AUDIT_HMAC_KEY", "METRICS_TOKEN") + FEATURE_KEYS
 
 API_REPO = "ghcr.io/controlvar/controlvar"
 WEB_REPO = "ghcr.io/controlvar/controlvar-web"
@@ -217,6 +221,63 @@ class TestApiEnvironment:
     def test_the_host_allow_list_is_derived_not_set(self, env):
         """ALLOWED_HOSTS would take precedence and hide a wrong PUBLIC_BASE_URL."""
         assert "ALLOWED_HOSTS" not in env
+
+
+@pytest.mark.regression
+class TestFeatureKeys:
+    """The api is given each feature key, empty unless .env sets it (#1253, #256).
+
+    The file passed none of them, so a key put in `.env`, where the README
+    says settings go, never reached the container: saving a warehouse
+    connection answered 503 and every Anthropic, OpenAI and Gemini variant
+    failed. Exactly
+    ``${NAME:-}``: a default would be a value everyone can read.
+    """
+
+    @pytest.mark.parametrize("name", FEATURE_KEYS)
+    def test_the_api_is_passed_the_key_empty_by_default(self, services, name):
+        env = services["api"]["environment"]
+        assert name in env, f"{name} is not passed to the api service"
+        assert env[name] == f"${{{name}:-}}", (
+            f"{name} must be ${{{name}:-}}, got {env[name]!r}"
+        )
+
+
+@pytest.mark.unit
+@pytest.mark.regression
+class TestForwardedAllowIps:
+    """The proxies the API believes besides its own network reach it from
+    `.env`. The file passed no such setting, so a value in `.env` never
+    reached the container. Exactly ``${FORWARDED_ALLOW_IPS:-}``: empty adds
+    nothing, and `-` without the colon would hand an unset value on as
+    unset rather than empty."""
+
+    def test_the_api_is_passed_the_setting_empty_by_default(self, services):
+        env = services["api"]["environment"]
+        assert env["FORWARDED_ALLOW_IPS"] == "${FORWARDED_ALLOW_IPS:-}"
+
+    def test_the_config_check_follows_it_through_compose(self):
+        """scripts/check_compose_config.py, which the Compose Production job
+        runs through `docker compose config`, checks it the way it checks the
+        feature keys: empty from a `.env` without it, its value from one
+        that sets it."""
+        import importlib.util
+
+        script = REPO_ROOT / "scripts" / "check_compose_config.py"
+        spec = importlib.util.spec_from_file_location("check_compose_config", script)
+        check = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(check)
+        names = check.PASSED_SETTINGS
+        assert names == ("FORWARDED_ALLOW_IPS",)
+        assert check.feature_key_failures({"FORWARDED_ALLOW_IPS": ""}, {}, names) == []
+        given = {"FORWARDED_ALLOW_IPS": "192.0.2.10"}
+        assert check.feature_key_failures(dict(given), given, names) == []
+        assert check.feature_key_failures({}, given, names) == [
+            "FORWARDED_ALLOW_IPS is not passed to the api service"
+        ]
+        assert check.feature_key_failures({"FORWARDED_ALLOW_IPS": "x"}, {}, names) == [
+            "FORWARDED_ALLOW_IPS on the api service is not empty, and .env does not set it"
+        ]
 
 
 class TestText:

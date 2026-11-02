@@ -143,6 +143,33 @@ describe("the flag page's rollout schedule section", () => {
 });
 
 /**
+ * A flag's Type and value fields (#1497), on the new-flag form and a value
+ * flag's page. The nightly audit (tests/e2e/accessibility.spec.ts) scans the
+ * form and a value flag's header and Values section, but only nightly, and
+ * jsdom cannot measure contrast, so this is their pull-request-time pin: no
+ * grey lighter than slate-600 (7.58:1 on white; the read-only values sit on
+ * slate-50), and each refusal red-700 (6.47:1 on white) or darker.
+ */
+describe("a flag's Type and value fields", () => {
+  const FILE = 'components/feature-flags/FlagValueFields.tsx';
+
+  it('use no grey lighter than slate-600', () => {
+    const source = fs.readFileSync(path.join(SRC, FILE), 'utf8');
+    const shades = Array.from(source.matchAll(/(?<!placeholder:)\btext-slate-(\d+)\b/g)).map((m) => Number(m[1]));
+    // The pattern reads the file's greys: the labels, the hints, the values.
+    expect(shades.length).toBeGreaterThanOrEqual(5);
+    expect(shades.filter((shade) => shade < 600)).toEqual([]);
+  });
+
+  it('show each refusal in red-700 or darker', () => {
+    const source = fs.readFileSync(path.join(SRC, FILE), 'utf8');
+    const reds = Array.from(source.matchAll(/\btext-red-(\d+)\b/g)).map((m) => Number(m[1]));
+    expect(reds.length).toBeGreaterThanOrEqual(1);
+    expect(reds.filter((shade) => shade < 700)).toEqual([]);
+  });
+});
+
+/**
  * The experiment page's header terms (#1449). The whole page is in FILES, which
  * refuses slate-400; this is stricter on its header `<dl>`, the page's only
  * one: no `dt` is slate-400 or lighter. The nightly audit never opens this

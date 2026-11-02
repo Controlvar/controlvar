@@ -31,9 +31,30 @@ import type { SafetyCheckResponse } from '@/types/safety';
 import { PageTitle } from '@/components/PageTitle';
 import { FlagToggle } from '@/components/feature-flags/FlagToggle';
 import { RolloutScheduleManager } from '@/components/feature-flags/RolloutScheduleManager';
+import {
+  FlagValueFields,
+  FlagValueReadOnly,
+  useFlagValueFields,
+} from '@/components/feature-flags/FlagValueFields';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { FLAG_ROLE_NOTE, canChangeFeatureFlags } from '@/utils/experimentPermissions';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
+import {
+  ROLLOUT_VALUE_HINT,
+  TYPE_FIXED_ON_PAGE,
+  VALUE_FIELDS,
+  VALUE_FLAG_STATUS_OFF,
+  VALUE_FLAG_STATUS_ON,
+  ValueField,
+  ValueTexts,
+  checkEditedValues,
+  firstInvalid,
+  flagValueType,
+  isValueFlagType,
+  typeLabel,
+  valueRefusals,
+  valueToText,
+} from '@/utils/flagValues';
 
 // The rollout schedule's stage summary lives with the component that draws
 // it; the page's tests read it from here.
@@ -154,9 +175,42 @@ export default function FeatureFlagDetailPage() {
   const [rolloutPercentage, setRolloutPercentage] = useState(0);
   const saveErrorRef = useRef<HTMLDivElement>(null);
 
+  // A value flag's two values (#1497). `storedValues` is the pair as last
+  // loaded or saved; `initialTexts` the text each field started from, so a
+  // save sends a value only when its field was changed.
+  const [storedValues, setStoredValues] = useState<Record<ValueField, unknown>>({
+    on_value: undefined,
+    off_value: undefined,
+  });
+  const [initialTexts, setInitialTexts] = useState<ValueTexts>({ on_value: '', off_value: '' });
+  const {
+    texts: valueTexts,
+    setTexts: setValueTexts,
+    errors: valueErrors,
+    setErrors: setValueErrors,
+    showErrors: showValueErrors,
+    change: handleValueChange,
+    fieldRefs: valueRefs,
+  } = useFlagValueFields();
+
   useEffect(() => {
     if (saveError) saveErrorRef.current?.focus();
   }, [saveError]);
+
+  /** Show *values* as the flag's stored pair, in the fields when it has a type the page can edit. */
+  const loadValues = useCallback(
+    (type: string, values: Record<ValueField, unknown>) => {
+      setStoredValues(values);
+      const texts: ValueTexts = { on_value: '', off_value: '' };
+      if (isValueFlagType(type)) {
+        for (const field of VALUE_FIELDS) texts[field] = valueToText(type, values[field]);
+      }
+      setValueTexts(texts);
+      setInitialTexts(texts);
+      setValueErrors({});
+    },
+    [setValueTexts, setValueErrors],
+  );
 
   /** Show `value` as the stored rules: in the builder when it can, read-only otherwise. */
   const loadRules = useCallback((value: unknown) => {
@@ -238,6 +292,7 @@ export default function FeatureFlagDetailPage() {
         if (cancelled) return;
         setFlag(data);
         loadRules(storedRules(data));
+        loadValues(flagValueType(data), { on_value: data.on_value, off_value: data.off_value });
         setRolloutPercentage(data.rollout_percentage ?? 0);
         // Secondary panels load in parallel; their failures are non-fatal.
         void loadSchedules(id);
@@ -257,7 +312,7 @@ export default function FeatureFlagDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [id, loadSchedules, loadSafety, loadRules]);
+  }, [id, loadSchedules, loadSafety, loadRules, loadValues]);
 
   const handleToggle = async (next: boolean) => {
     if (!flag) return;
@@ -285,6 +340,21 @@ export default function FeatureFlagDetailPage() {
     setSaveError(null);
     setTargetingError(null);
     setSaveSuccess(false);
+    setValueErrors({});
+
+    // A value is sent only when its field was changed, as the rules are below:
+    // a save that moves only the slider never rewrites a value someone else
+    // has just changed. The type is never sent.
+    const type = flagValueType(flag);
+    let values: Partial<Record<ValueField, unknown>> = {};
+    if (canChange && isValueFlagType(type)) {
+      const checked = checkEditedValues(type, valueTexts, initialTexts, storedValues);
+      if (firstInvalid(checked.errors)) {
+        showValueErrors(checked.errors);
+        return;
+      }
+      values = checked.values;
+    }
 
     // Rules are sent only when they were changed (or replaced), so a save
     // that moves only the rollout leaves the stored rules exactly as they are.
@@ -298,6 +368,9 @@ export default function FeatureFlagDetailPage() {
     }
 
     const body: UpdateFeatureFlagRequest = { rollout_percentage: rolloutPercentage };
+    for (const field of VALUE_FIELDS) {
+      if (field in values) body[field] = values[field];
+    }
     if (targeting !== undefined) body.targeting_rules = targeting;
 
     setIsSaving(true);
@@ -306,14 +379,24 @@ export default function FeatureFlagDetailPage() {
       setFlag((current) => ({ ...(current ?? updated), ...updated }));
       const answered = 'targeting_rules' in updated || 'rules' in updated;
       loadRules(answered ? storedRules(updated) : (targeting ?? stored));
+      const saved = { ...storedValues, ...values };
+      for (const field of VALUE_FIELDS) {
+        if (field in updated) saved[field] = updated[field];
+      }
+      loadValues(type, saved);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
-      const described = describeTargetingSaveError(err);
-      if (described.problems) {
-        setTargetingError(described);
-      } else {
-        setSaveError(err instanceof Error ? err.message : 'Failed to save changes');
+      const refused = valueRefusals(err);
+      if (refused) showValueErrors(refused.fields);
+      const other = refused ? refused.rest : err;
+      if (other) {
+        const described = describeTargetingSaveError(other);
+        if (described.problems) {
+          setTargetingError(described);
+        } else {
+          setSaveError(other instanceof Error ? other.message : 'Failed to save changes');
+        }
       }
     } finally {
       setIsSaving(false);
@@ -357,6 +440,17 @@ export default function FeatureFlagDetailPage() {
 
   const on = isFlagOn(flag);
   const schedule = schedules ? pickSchedule(schedules) : null;
+  // A boolean flag (or one from a server without values) keeps the page it
+  // had: no type, no Values section, "Serving" / "Not serving".
+  const valueType = flagValueType(flag);
+  const valueFlag = valueType !== 'boolean';
+  const statusText = valueFlag
+    ? on
+      ? VALUE_FLAG_STATUS_ON
+      : VALUE_FLAG_STATUS_OFF
+    : on
+      ? 'Serving'
+      : 'Not serving';
 
   return (
     <div className="flex-1 bg-slate-50" data-testid="flag-detail">
@@ -369,7 +463,7 @@ export default function FeatureFlagDetailPage() {
           </Link>
         </div>
 
-        <div className="bg-white rounded-lg border border-slate-200 p-6 mb-6">
+        <div className="bg-white rounded-lg border border-slate-200 p-6 mb-6" data-testid="flag-header">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-3">
@@ -385,6 +479,14 @@ export default function FeatureFlagDetailPage() {
                 >
                   {on ? 'On' : 'Off'}
                 </span>
+                {valueFlag && (
+                  <span
+                    className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700"
+                    data-testid="flag-value-type"
+                  >
+                    {typeLabel(valueType)} flag
+                  </span>
+                )}
               </div>
               <p className="text-sm text-slate-500 mt-1 font-mono" data-testid="flag-key">
                 {flag.key}
@@ -397,7 +499,7 @@ export default function FeatureFlagDetailPage() {
             </div>
 
             <div className="flex items-center gap-3 shrink-0">
-              <span className="text-sm text-slate-600">{on ? 'Serving' : 'Not serving'}</span>
+              <span className="text-sm text-slate-600">{statusText}</span>
               {canChange && (
                 <FlagToggle
                   on={on}
@@ -583,6 +685,37 @@ export default function FeatureFlagDetailPage() {
         </div>
 
         <div className="space-y-6">
+          {/* Values (#1497): a string, number or JSON flag's two values */}
+          {valueFlag && (
+            <section
+              className="bg-white rounded-lg border border-slate-200 p-6 space-y-4"
+              data-testid="flag-values-section"
+            >
+              <div>
+                <h2 className="text-base font-semibold text-slate-800">Values</h2>
+                <p className="mt-2 text-sm text-slate-800" data-testid="flag-values-type">
+                  Type: {typeLabel(valueType)}
+                </p>
+                <p className="text-sm text-slate-600">{TYPE_FIXED_ON_PAGE}</p>
+              </div>
+              {canChange && isValueFlagType(valueType) ? (
+                <FlagValueFields
+                  type={valueType}
+                  texts={valueTexts}
+                  errors={valueErrors}
+                  onChange={handleValueChange}
+                  fieldRefs={valueRefs}
+                />
+              ) : (
+                <div className="space-y-4">
+                  {VALUE_FIELDS.map((field) => (
+                    <FlagValueReadOnly key={field} field={field} value={storedValues[field]} />
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
           {/* Targeting Rules */}
           <section className="bg-white rounded-lg border border-slate-200 p-6" data-testid="flag-targeting-section">
             {rules !== null ? (
@@ -710,6 +843,7 @@ export default function FeatureFlagDetailPage() {
                 value={rolloutPercentage}
                 onChange={(e) => setRolloutPercentage(Number(e.target.value))}
                 disabled={!canChange}
+                aria-describedby={valueFlag ? 'rollout-value-hint' : undefined}
                 className="w-full accent-blue-600"
                 data-testid="rollout-percentage"
               />
@@ -717,6 +851,11 @@ export default function FeatureFlagDetailPage() {
                 <span>0%</span>
                 <span>100%</span>
               </div>
+              {valueFlag && (
+                <p id="rollout-value-hint" className="mt-2 text-sm text-slate-600" data-testid="rollout-value-hint">
+                  {ROLLOUT_VALUE_HINT}
+                </p>
+              )}
               {schedule?.status === 'active' && (
                 <p className="mt-2 text-sm text-slate-600" data-testid="rollout-schedule-slider-note">
                   {SLIDER_SCHEDULE_NOTE}

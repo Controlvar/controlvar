@@ -16,6 +16,10 @@
  * 401/403/404 and an unknown format are reported once (until a refresh succeeds) and retried every
  * 10 minutes. "Goes to the server" means the call is made exactly as in server mode.
  *
+ * A valid ruleset may hold a flag entry this SDK cannot read (an unknown `evaluation` or
+ * `value_type`, or a mistyped value): that one flag goes to the server, and the rest of the
+ * ruleset is used as usual.
+ *
  * Only the regular refresh interval is jittered (±10%). A backoff step, the 5-minute backoff cap,
  * a `Retry-After` wait and the 10-minute retry are exact: `Retry-After` is a floor and the caps are
  * ceilings.
@@ -29,6 +33,7 @@ import {
   evaluateLocally,
   indexRuleset,
   isSupportedFormat,
+  readsLocally,
   toWireContext,
 } from './evaluator';
 
@@ -96,7 +101,10 @@ export interface LocalEvaluationStatus {
   lastRefreshAt: Date | null;
   /** The last refresh failure, cleared by a successful refresh. */
   lastError: ExperimentationError | null;
-  /** Active flags the server evaluates even in local mode (their rules are not portable). */
+  /**
+   * Active flags the server evaluates even in local mode: their rules are not portable, or their
+   * entry is one this SDK cannot read (a newer server's shape or value type).
+   */
   serverEvaluatedFlags: string[];
 }
 
@@ -243,7 +251,7 @@ export class LocalEvaluation {
     const remote: string[] = [];
     if (this.ruleset) {
       for (const [key, flag] of this.ruleset.flags) {
-        if (flag.active && flag.evaluation !== 'local') remote.push(key);
+        if (flag.active && !readsLocally(flag)) remote.push(key);
       }
     }
     return {

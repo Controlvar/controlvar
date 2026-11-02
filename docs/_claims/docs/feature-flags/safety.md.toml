@@ -37,6 +37,13 @@ by = [
 ]
 
 [[unit]]
+text = "A rollback reaches clients as any change to the flag does: see Turning a Flag Off."
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p8_p9_the_monitor_turns_the_flag_off_once",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_every_sdk_but_the_edge_sdk_keeps_an_answer_five_minutes_and_the_edge_sdk_one",
+]
+
+[[unit]]
 text = "For every ACTIVE flag, whatever its rollout_percentage (a flag at 0% still serves the users its targeting rules match), it:"
 by = [
     "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p3_a_rule_only_flag_can_be_rolled_back",
@@ -155,6 +162,37 @@ by = [
     "test:backend/tests/integration/api/test_metrics_summary_error_rule.py::test_the_summary_counts_errors_by_the_safety_checks_rule",
     "test:backend/tests/integration/api/test_metrics_summary_error_rule.py::test_the_summary_still_differs_from_the_check_in_period_and_denominator",
 ]
+
+[[unit]]
+text = "What the error rate divides by"
+by = ["exempt:label"]
+
+[[unit]]
+text = "error_rate divides the errors that count by every evaluation of the flag in the same 15-minute window, whichever API key asked for it, your app's own key included."
+by = [
+    "journey:feature-flag-safety#unhealthy",
+    "journey:feature-flag-safety#control-healthy",
+    "test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_the_check_reads_the_last_15_minutes_of_errors_and_latency",
+]
+
+[[unit]]
+text = "Each GET /api/v1/feature-flags/user/{user_id} counts as one evaluation of every active flag."
+by = ["test:backend/tests/integration/api/test_safety_error_rate_denominator.py::test_a_user_flags_request_counts_one_evaluation_of_every_active_flag"]
+
+[[unit]]
+text = "Evaluation counts that a server-side SDK reports after evaluating locally count too; see Local evaluation."
+by = [
+    "test:backend/tests/integration/api/test_flag_evaluations_api.py::TestRecording::test_the_safety_denominator_counts_the_rows",
+    "test:backend/tests/integration/api/test_flag_evaluations_api.py::test_7c_locally_evaluated_flag_is_rolled_back_by_the_safety_monitor",
+]
+
+[[unit]]
+text = "error_count counts errors only, so it does not change with how often the flag is evaluated."
+by = ["test:backend/tests/integration/api/test_safety_error_rate_denominator.py::test_error_count_does_not_change_with_how_often_the_flag_is_evaluated"]
+
+[[unit]]
+text = "To roll back on a number of errors whatever the traffic, set a critical_threshold on error_count, alone or beside error_rate."
+by = ["test:backend/tests/integration/api/test_safety_error_rate_denominator.py::test_a_critical_threshold_on_error_count_breaches_whatever_the_traffic"]
 
 [[unit]]
 text = "Metrics You Can Monitor"

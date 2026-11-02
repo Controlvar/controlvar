@@ -269,12 +269,22 @@ export function checkName(name: string): string | null {
   return null;
 }
 
+/** Shown on a version left at 0%: the API accepts it, but no user is ever assigned to it. */
+export const ZERO_SHARE = 'This version gets 0% of traffic. Give it a share, or remove it.';
+
+/** True when a variant's allocation is 0 (a blank or invalid entry counts as 0). */
+export function hasNoShare(variant: VariantFormData): boolean {
+  return !(Number(variant.traffic_allocation) > 0);
+}
+
 export function checkVariants(variants: VariantFormData[]): string | null {
   if (variants.length === 0) return 'Add at least one variant.';
   if (variants.some((v) => !v.name.trim())) return 'Every variant needs a name.';
   if (!variants.some((v) => v.is_control)) return 'One variant must be marked as control.';
   const total = allocationTotalOf(variants);
   if (total !== 100) return `Variant allocations must add up to 100% (currently ${total}%).`;
+  const empty = variants.findIndex(hasNoShare);
+  if (empty >= 0) return `“${variants[empty].name.trim()}”: ${ZERO_SHARE}`;
   const problems = configurationProblems(variants);
   const first = problems.findIndex((p) => p !== null);
   if (first >= 0) {
@@ -547,6 +557,8 @@ function variantProblemField(variants: VariantFormData[]): DesignField {
   if (unnamed >= 0) return { list: 'variants', index: unnamed, field: 'name' };
   if (!variants.some((v) => v.is_control)) return { list: 'variants', index: 0, field: 'is_control' };
   if (allocationTotalOf(variants) !== 100) return { list: 'variants', index: 0, field: 'traffic_allocation' };
+  const empty = variants.findIndex(hasNoShare);
+  if (empty >= 0) return { list: 'variants', index: empty, field: 'traffic_allocation' };
   const configuration = configurationProblems(variants).findIndex((p) => p !== null);
   return { list: 'variants', index: Math.max(configuration, 0), field: 'configuration' };
 }

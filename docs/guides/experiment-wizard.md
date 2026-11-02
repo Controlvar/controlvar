@@ -301,6 +301,11 @@ unknown operator or a blank attribute. The error names the condition, for exampl
 `targeting_rules: Value error, groups[0].conditions[0].operator: unknown operator`,
 and no experiment is created.
 
+So does a draft whose metric names repeat, such as a guardrail metric that is also the
+primary metric: `errors` is `["metrics: duplicate metric name; each name may appear once
+per experiment (first seen at metrics[0], repeated at metrics[1])"]`, and no experiment is
+created.
+
 The experiment is an ordinary one. An `ab` draft gets two variants, `Control` and
 `Variant A`, at 50% each; its primary metric counts `checkout_completed`, and carries the
 draft's `mde` as its `expected_effect`, which the results page plans the sample for:

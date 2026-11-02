@@ -12,7 +12,7 @@
 # scripts/doc_examples.py), and each page's residual counts can only fall.
 
 [meta]
-documents = 55
+documents = 56
 exec = 309
 universe = [
     ".github/pull_request_template.md",
@@ -81,6 +81,7 @@ universe = [
     "docs/development/testing-guide.md",
     "docs/development/workflow-explanation.md",
     "docs/feature-flags/create.md",
+    "docs/feature-flags/kill-switch.md",
     "docs/feature-flags/rollouts.md",
     "docs/feature-flags/safety.md",
     "docs/getting-started/README.md",
@@ -100,6 +101,7 @@ universe = [
     "docs/guides/dashboard-and-api.md",
     "docs/guides/experiment-wizard.md",
     "docs/guides/guided-examples.md",
+    "docs/guides/how-events-count.md",
     "docs/guides/segments.md",
     "docs/guides/user-guide.md",
     "docs/hipaa/overview.md",
@@ -139,6 +141,7 @@ universe = [
     "docs/self-hosting/kubernetes.md",
     "docs/self-hosting/migrations.md",
     "docs/self-hosting/monitoring.md",
+    "docs/self-hosting/proxies.md",
     "docs/self-hosting/releases.md",
     "docs/self-hosting/upgrading-to-controlvar.md",
     "docs/statistics/fdr-correction.md",
@@ -596,6 +599,16 @@ environment = "bare"
 exec = 1
 skip = 13
 expects = 8
+
+# Users' addresses behind a proxy: its two blocks read the logs of a running
+# API, so both are skips. backend/tests/unit/docs/test_proxies_docs.py runs
+# their pipelines on access lines rendered by the API's own log configuration.
+[[document]]
+path = "docs/self-hosting/proxies.md"
+environment = "bare"
+exec = 0
+skip = 2
+expects = 0
 
 # The contributor pages: the Quick Start's stack and a development virtual
 # environment at the repository root (stack-dev; CI's dev shards build it).
