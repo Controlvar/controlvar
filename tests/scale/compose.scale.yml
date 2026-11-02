@@ -1,0 +1,33 @@
+# The scale harness's override of the shipped Compose stack (#1608).
+#
+# Only scripts/scale_stack.py uses it, and always as
+#
+#   docker compose -p controlvar-scale --env-file <work>/.env \
+#       -f deploy/compose/compose.yml -f tests/scale/compose.scale.yml ...
+#
+# with a child environment reduced to PATH, HOME and the DOCKER_ settings
+# scripts/check_compose_config.py keeps. Do not run it by hand without -p:
+# deploy/compose/compose.yml names its project experimently-selfhost, which is
+# a real installation's, volumes included.
+#
+# It changes the shipped stack in exactly these ways, and
+# backend/tests/unit/scripts/test_scale_stack.py holds the key set to them:
+#   * each service runs on a fixed CPU, and none of them on cpu3, which is
+#     left for the load generator;
+#   * the api's SDK rate limit is raised to a measurement setting (not advice),
+#     so the limiter stays on but does not refuse the generator's one address;
+#   * the api's /metrics token is set, so the harness can read its counters.
+# Nothing else about the api changes: not ENVIRONMENT, WEB_CONCURRENCY or the
+# image.
+services:
+  api:
+    cpuset: "0"
+    environment:
+      SDK_RATE_LIMIT_PER_MINUTE: "10000000"
+      METRICS_TOKEN: "${SCALE_METRICS_TOKEN:?required: written by scripts/scale_stack.py up}"
+  postgres:
+    cpuset: "1"
+  redis:
+    cpuset: "2"
+  web:
+    cpuset: "2"
