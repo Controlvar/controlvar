@@ -527,6 +527,32 @@ describe('hooks with a real ExperimentationClient', () => {
     expect(init.headers['X-API-Key']).toBe('k');
   });
 
+  // #1519: the kill-switch page says a component already on screen keeps its answer until it
+  // mounts again; the SDK neither polls nor streams.
+  test('a mounted useFlag does not ask again: past the cache lifetime it keeps its answer, one request', async () => {
+    jest.useFakeTimers();
+    try {
+      (global.fetch as jest.Mock).mockResolvedValue(jsonResponse({ key: 'dark-mode', enabled: true, config: null }));
+      const client = realClient();
+      const { latest, rerenderWith } = renderHookInProvider(() => useFlag('dark-mode'), { client, userId: 'u1' });
+      await waitFor(() => expect(settled(latest())).toBe(true));
+      (global.fetch as jest.Mock).mockResolvedValue(jsonResponse({ key: 'dark-mode', enabled: false, config: null }));
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(10 * 60 * 1000);
+      });
+      rerenderWith({ client, userId: 'u1' });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(10 * 60 * 1000);
+      });
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(latest()).toMatchObject({ enabled: true, loading: false });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   test('useExperiment POSTs /api/v1/tracking/assign with the provider attributes as context', async () => {
     (global.fetch as jest.Mock).mockResolvedValueOnce(
       jsonResponse({

@@ -98,6 +98,7 @@ nav:
   - Segments: guides/segments.md
   - Gradual Rollouts: feature-flags/rollouts.md
   - Safety Monitoring: feature-flags/safety.md
+  - Turning a Flag Off: feature-flags/kill-switch.md
 - A/B Testing & Experiments:
   - Running Experiments: guides/user-guide.md
   - How Events Count: guides/how-events-count.md

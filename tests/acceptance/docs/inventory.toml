@@ -167,6 +167,10 @@ class = "journey"
 journey = "feature-flag-safety"
 reason = "the configuration, the check healthy and then unhealthy from reported errors, a manual rollback and the way back, seen on the dashboard's Safety page, and the safety monitor's automatic rollback at the stack's 5-minute interval, with a healthy control flag left on; its API steps run in Doc Examples"
 
+[pages."feature-flags/kill-switch.md"]
+class = "reference"
+reason = "how long a flag turned off takes to reach each client; no steps to follow, and each number is read from its SDK's source by backend/tests/unit/sdk/test_kill_switch_numbers.py"
+
 [pages."guides/user-guide.md"]
 class = "journey"
 journey = "experiment-results"
