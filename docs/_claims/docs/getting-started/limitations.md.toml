@@ -239,10 +239,11 @@ text = "Split URL testing"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Traffic split between URLs with nothing to install | Your server or edge must ask the API where to send each visitor and redirect them; a site with no server or edge of its own in front of its pages cannot split, because nothing redirects in the browser. The CloudFront edge router does not split traffic yet (#393)."
+text = "Traffic split between URLs with nothing to install | Your server or edge must ask the API where to send each visitor and redirect them; a site with no server or edge of its own in front of its pages cannot split, because nothing redirects in the browser. On AWS, the CloudFront edge router (beta) is one you deploy yourself."
 by = [
     "test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_the_middleware_redirects_without_calling_the_page",
-    "test:modules/backend/tests/unit/test_split_url_edge_wiring.py::test_the_router_redirects_only_on_the_header",
+    "test:modules/backend/tests/integration/split_url/test_split_url_router_e2e.py::test_a_split_url_experiment_splits_its_visitors_through_the_router",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_nothing_deploys_the_edge_app",
 ]
 
 [[unit]]
@@ -274,6 +275,13 @@ by = [
 [[unit]]
 text = "Over the limit the API answers 429, and the reference integration serves the page with X-Split-URL: failed and logs split_url_failed status=429."
 by = ["test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_a_failure_serves_the_page_and_logs_its_status"]
+
+[[unit]]
+text = "The CloudFront edge router does the same: it serves the page with X-Split-URL: failed (a header that rests on an AWS behaviour not yet verified, see AWS integration), and its log line carries \"status\": \"429\"."
+by = [
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_failure_serves_the_page_and_logs_its_status",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_the_cookie_does_not_rest_on_the_internal_header",
+]
 
 [[unit]]
 text = "Above the limit, a returning visitor whose assignment is a treatment is served the control page while their conversions still count for the treatment; a site with more than about 100 entry-page views a second is in that range."

@@ -32,6 +32,14 @@ EXPECTED: Dict[Hit, int] = {
         "Custom roles and direct grants are stored and shown, and decide nothing (#1142, #891).",
     ): 1,
     (
+        "modules/frontend/src/components/admin/roles/CreateRoleModal.tsx",
+        "No permission check reads them.`} </p> )} <PermissionCheckboxGrid selectedPermissions={permissions} onChange={setPermissions} /> </div> </div> {/*",
+    ): 1,
+    (
+        "modules/frontend/src/tests/admin/CreateRoleModal.test.tsx",
+        "No permission check reads them.'",
+    ): 1,
+    (
         "modules/frontend/src/pages/admin/roles.tsx",
         "Both are recorded, but they do not change what anyone can do yet: each user's built-in role decides.\"",
     ): 2,
