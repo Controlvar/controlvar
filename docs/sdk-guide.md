@@ -17,8 +17,8 @@ No other SDK buckets locally, and experiments are always assigned by the server.
 | Assign a user to an experiment (sticky) | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}` |
 | Evaluate a flag | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON, optional>` | — | `{key, enabled, value, value_type, config, reason}` |
 | All flags for a user | `GET /api/v1/feature-flags/user/{user_id}` | — | `{flag_key: boolean, …}` |
-| Track one event | `POST /api/v1/tracking/track` | `{event_type, event_name?, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | stored event |
-| Track up to 100 events | `POST /api/v1/tracking/batch` | `{events: [...]}` | `{success_count, failure_count, errors}` |
+| Track one event | `POST /api/v1/tracking/track` | `{event_type, event_name?, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id?}` | stored event, with `duplicate` and `event_id` |
+| Track up to 100 events | `POST /api/v1/tracking/batch` | `{events: [...]}` | `{success_count, failure_count, duplicate_count, errors}` |
 | A user's assignments | `GET /api/v1/tracking/assignments/{user_id}` | — | list |
 
 Each entry of the batch response's `errors` is `{index, event_type, user_id, error}`. `error` says
@@ -34,7 +34,8 @@ ACTIVE answers every user the same way, with `reason` set to its status (`draft`
 `reason` is `assigned`, and every call, sticky ones included, records that the user saw the experiment.
 
 Conversions are matched to experiment metrics by `event_name` (exposures excluded), whatever `event_type`
-an SDK sends. Full request/response examples: [Tracking Endpoints](api/endpoints.md#tracking-endpoints). Per-IP rate
+an SDK sends. An event sent again is stored again unless it carries an `event_id`; see
+[How events count](guides/how-events-count.md#sending-an-event-again). Full request/response examples: [Tracking Endpoints](api/endpoints.md#tracking-endpoints). Per-IP rate
 limit for these paths: `SDK_RATE_LIMIT_PER_MINUTE` (default 6000/min).
 
 **Targeting context.** The user's attributes (`user.attributes` / `user_attributes`) are sent as `context`:

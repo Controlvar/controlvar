@@ -92,6 +92,28 @@ def test_record_event_tracked_bounds_label_cardinality(mocker, raw, expected):
     mock_counter.labels.assert_called_with(event_type=expected)
 
 
+@pytest.mark.parametrize("route", ["track", "batch", "events"])
+def test_record_event_duplicate(mocker, route):
+    """A duplicate (#1543) is counted by route, never by event type."""
+    mock_counter = mocker.patch("backend.app.core.metrics.events_duplicate_total")
+    from backend.app.core.metrics import record_event_duplicate
+
+    record_event_duplicate(route)
+
+    mock_counter.labels.assert_called_once_with(route=route)
+    mock_counter.labels.return_value.inc.assert_called_once()
+
+
+@pytest.mark.parametrize("route", ["purchase", "/api/v1/tracking/track", ""])
+def test_record_event_duplicate_refuses_a_label_it_does_not_know(mocker, route):
+    mock_counter = mocker.patch("backend.app.core.metrics.events_duplicate_total")
+    from backend.app.core.metrics import record_event_duplicate
+
+    with pytest.raises(ValueError):
+        record_event_duplicate(route)
+    mock_counter.labels.assert_not_called()
+
+
 def test_record_flag_evaluation(mocker):
     mock_counter = mocker.patch(
         "backend.app.core.metrics.feature_flag_evaluations_total"

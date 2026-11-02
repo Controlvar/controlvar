@@ -102,6 +102,7 @@ CORE_MODEL_MODULES = (
     "base",
     "compliance_audit_event",
     "event",
+    "event_dedup_key",
     "experiment",
     "feature_flag",
     "global_holdout",
