@@ -273,7 +273,9 @@ def test_java_is_the_sdk_that_sends_one_event_twice_with_one_id(runner):
 @pytest.mark.parametrize(
     ("sdk", "report", "problems"),
     [
-        pytest.param("java", None, ["event_id missing (java is in EVENT_ID_SDKS)"], id="missing"),
+        pytest.param(
+            "java", None, ["event_id missing (java is in EVENT_ID_SDKS)"], id="missing"
+        ),
         pytest.param(
             "java",
             {**EVENT_ID, "sends": 1},
