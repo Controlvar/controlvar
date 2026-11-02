@@ -356,7 +356,7 @@ Resolved with `license-checker-rseidelsohn --production`.
 
 Resolved with `license-checker-rseidelsohn --production`.
 
-#### MIT (478)
+#### MIT (479)
 
 | Package | Version |
 |---|---|
@@ -521,6 +521,7 @@ Resolved with `license-checker-rseidelsohn --production`.
 | `@types/istanbul-lib-coverage` | 2.0.6 |
 | `@types/istanbul-lib-report` | 3.0.3 |
 | `@types/istanbul-reports` | 3.0.4 |
+| `@types/md5` | 2.3.6 |
 | `@types/node` | 26.6.3 |
 | `@types/stack-utils` | 2.0.3 |
 | `@types/yargs` | 15.0.20 |
