@@ -142,6 +142,32 @@ def _check_after_started(stages: List[RolloutStage], new_order: int) -> None:
         )
 
 
+def _refuse_another_active(db: Session, schedule: RolloutSchedule) -> None:
+    """Refuse a second ACTIVE schedule for the schedule's flag.
+
+    Called with the flag locked, so two activations of the flag's schedules
+    take turns and the second sees the first.
+    """
+    other = (
+        db.query(RolloutSchedule)
+        .filter(
+            and_(
+                RolloutSchedule.feature_flag_id == schedule.feature_flag_id,
+                RolloutSchedule.id != schedule.id,
+                RolloutSchedule.status == RolloutScheduleStatus.ACTIVE,
+            )
+        )
+        .populate_existing()
+        .order_by(RolloutSchedule.created_at, RolloutSchedule.id)
+        .first()
+    )
+    if other is not None:
+        raise RolloutRuleConflict(
+            f"Another rollout schedule of this flag is active ({other.id}). "
+            "A flag runs one schedule at a time: pause or cancel that one first."
+        )
+
+
 class RolloutService:
     """
     Service for managing feature flag rollout schedules.
@@ -335,6 +361,16 @@ class RolloutService:
                     "max_percentage cannot be below a stage's target: "
                     f"stage_order {over.stage_order} targets {over.target_percentage}%."
                 )
+
+        # A second ACTIVE schedule for the flag (#1460). The status
+        # transition check above refuses every status a request sends today
+        # (the request's enum is not the model's), so this is reached only
+        # once that check accepts ACTIVE; /activate is the way in.
+        if (
+            data.status is not None
+            and data.status.value == RolloutScheduleStatus.ACTIVE.value
+        ):
+            _refuse_another_active(db, schedule)
 
         # Handle stages update if provided
         stages_data = update_data.pop("stages", None)
@@ -655,6 +691,19 @@ class RolloutService:
 
         if stages_count == 0:
             raise ValueError("Cannot activate a schedule with no stages")
+
+        # With the flag locked, read the schedule again: another request may
+        # have activated it, or another schedule of the flag, while this one
+        # waited (#1460).
+        _, schedule, _ = _lock_schedule_for_change(db, schedule)
+        if (
+            schedule.status != RolloutScheduleStatus.DRAFT
+            and schedule.status != RolloutScheduleStatus.PAUSED
+        ):
+            raise ValueError(
+                f"Cannot activate schedule in {schedule.status.value} status"
+            )
+        _refuse_another_active(db, schedule)
 
         # Update status
         schedule.status = RolloutScheduleStatus.ACTIVE
