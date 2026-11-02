@@ -46,8 +46,11 @@ pytestmark = [pytest.mark.integration, pytest.mark.modules]
 CORE_HEAD = tree_profiles.CORE_HEAD
 #: The modules head of the previous full release, and this revision's parent.
 PREVIOUS_MODULES_HEAD = "modules_0002_warehouse_analysis"
-#: This revision: the modules branch's head.
-MODULES_HEAD = "modules_0003_lower_is_better"
+#: The modules branch's head: not this revision since
+#: ``modules_0004_rbac_activation`` (#891) was added on top of it.  ``upgrade
+#: heads`` runs on to that one, and a downgrade to
+#: :data:`PREVIOUS_MODULES_HEAD` unapplies both.
+MODULES_HEAD = "modules_0004_rbac_activation"
 PREVIOUS_FULL_HEADS = {CORE_HEAD, PREVIOUS_MODULES_HEAD}
 FULL_HEADS = {CORE_HEAD, MODULES_HEAD}
 

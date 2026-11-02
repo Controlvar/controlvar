@@ -29,6 +29,7 @@ import { FeatureFlag } from '@/services/featureFlags';
 import { isEditableTargeting } from '@/utils/experimentTargeting';
 import { NOT_GROUPS_NOTE, isEditableFlagTargeting, targetingToSend, usesNotGroups } from '@/utils/flagTargeting';
 import { FLAG_OPERATOR_OPTIONS, createEmptyRules, getOperatorsForAttribute, jsonToRules } from '@/utils/targeting';
+import vocabularyRefusal from '@/tests/fixtures/targeting-vocabulary-refusal.json';
 import { apiError, makeRouter, routedApi } from './helpers/apiMock';
 
 jest.mock('@/services/api', () => ({
@@ -386,6 +387,23 @@ describe('a save the rules stop', () => {
     ]);
     await waitFor(() => expect(alert).toHaveFocus());
     expect(screen.queryByTestId('save-error')).toBeNull();
+  });
+
+  it('shows an unknown distance unit (#1204) as one line in the builder’s words', async () => {
+    install(BUILDER_IDS_NO_OPERATOR, () => {
+      throw new ApiError({
+        status: 422,
+        detail: [{ loc: ['body', 'targeting_rules'], msg: vocabularyRefusal.msg, type: 'value_error' }],
+      });
+    });
+    render(<FeatureFlagDetailPage />);
+    const s = await section();
+    fireEvent.change(within(s).getByLabelText('Group 1, condition 1 value'), { target: { value: 'team' } });
+    fireEvent.click(screen.getByTestId('save-flag'));
+
+    const alert = await within(s).findByRole('alert');
+    expect(alert).toHaveTextContent('The rules were not accepted:');
+    expect(within(alert).getAllByRole('listitem').map((li) => li.textContent)).toEqual([vocabularyRefusal.shown]);
   });
 
   it('shows the size limit refusal (#828) as the API words it, under the same heading', async () => {

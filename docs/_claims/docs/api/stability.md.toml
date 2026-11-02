@@ -696,6 +696,25 @@ by = [
 ]
 
 [[unit]]
+text = "POST /api/v1/feature-flags/, PUT /api/v1/feature-flags/{flag_id}, POST /api/v1/experiments/, PUT /api/v1/experiments/{experiment_id}, POST /api/v1/segments, PUT /api/v1/segments/{segment_id} | #1204 | Targeting rules that use a word their evaluator does not know answer 422 at [\"body\", \"targeting_rules\"] (segments: [\"body\", \"rules\"]), where they used to be accepted and the condition never held. The words are: on a flag, the operators json_path and percentage_bucket, which flag evaluation does not implement (experiments still accept both); a semantic_version comparison other than eq, gt, gte, lt and lte; an array_length comparison other than those and between; a geo_distance comparison other than lte, lt, gt, gte and eq; a distance unit other than km, kilometers, kilometre, kilometres, miles, mi, meters, metres and m, in any case; and, in the native shape, a time_window the engine cannot read, such as one given only as start and end. The msg names the place and the reason, for example Value error, groups[0].conditions[1].value: unknown distance unit; use km, mi or m, or leave it out for km, and nothing is written. A request that does not send the rules is unaffected, but one that sends back stored rules using such a word answers 422 until they are corrected. Stored rules are evaluated as before, and python -m backend.scripts.check_targeting_rules lists them. Clone still copies stored rules as they are. The OpenAPI document does not change. See Targeting Rules: Operator Reference."
+by = [
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py",
+    "test:backend/tests/unit/core/test_targeting_vocabulary.py",
+    "test:backend/tests/unit/scripts/test_check_targeting_rules.py::test_a_flag_with_a_word_flags_never_match_has_a_line",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/segments/{segment_id}/preview, POST /api/v1/wizard/drafts/{draft_id}/submit | #1204 | The words of the row above are refused here too. The preview takes a segment's body and answers 422 at [\"body\", \"rules\"] with the msg a segment save gives, where it used to estimate the audience with that condition never holding. The wizard's submit answers success: false with the message in errors, as targeting_rules: Value error, <path>: <reason>, and creates no experiment. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_segment_create_update_and_preview_refuse_an_unknown_unit",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_the_wizard_launch_reports_the_refusal_and_creates_nothing",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "POST /api/v1/experiments/, PUT /api/v1/experiments/{experiment_id} | #1461 | Two metrics with the same name answer 422 at [\"body\", \"metrics\"] on create and on update, naming the two positions; create used to answer 400 Something went wrong while creating the experiment, and update answered 500. Names are compared exactly, so Revenue and revenue are different metrics, as before. metrics: [] on update answers 422 as create does, where it removed every metric; metrics absent or null still leaves the metrics unchanged. An experiment already left with no metrics stays so, and cannot be started. The OpenAPI document changes: metrics has a minimum of one item on update, and the descriptions of metrics on both requests and of the update operation say what is refused."
 by = [
     "test:backend/tests/integration/api/test_experiment_metric_names.py::test_create_and_update_answer_the_same_list_alike",

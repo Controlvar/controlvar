@@ -6,6 +6,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import axe from 'axe-core';
 import NewSegmentPage from '@/pages/segments/new';
 import { ApiError, apiFetch } from '@/services/api';
+import vocabularyRefusal from '@/tests/fixtures/targeting-vocabulary-refusal.json';
 import { makeRouter, routedApi } from './helpers/apiMock';
 
 jest.mock('@/services/api', () => ({
@@ -133,6 +134,28 @@ describe('NewSegmentPage', () => {
     expect(error).toHaveTextContent('Group 1, Condition 1: must be text');
     expect(document.body.textContent).not.toContain('PLANTED');
     expect(await violations(container)).toEqual([]);
+  });
+
+  it('an unknown distance unit (#1204) is shown as one line in the builder words', async () => {
+    mocked.mockImplementation(
+      routedApi([
+        {
+          method: 'POST',
+          path: '/api/v1/segments',
+          handler: () => {
+            throw new ApiError({ status: 422, detail: [{ loc: ['body', 'rules'], msg: vocabularyRefusal.msg }] });
+          },
+        },
+      ]) as unknown as typeof apiFetch,
+    );
+    render(<NewSegmentPage />);
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Bay Area' } });
+    fireEvent.change(screen.getByLabelText('Group 1, condition 1 attribute'), { target: { value: 'plan' } });
+    fireEvent.change(screen.getByLabelText('Group 1, condition 1 value'), { target: { value: 'pro' } });
+    fireEvent.click(screen.getByTestId('segment-create'));
+    const error = await screen.findByTestId('segment-new-error');
+    expect(error).toHaveTextContent('The segment was not accepted.');
+    expect(within(error).getAllByRole('listitem').map((li) => li.textContent)).toEqual([vocabularyRefusal.shown]);
   });
 
   it('a 500 shows fixed copy, not its body', async () => {
