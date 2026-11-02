@@ -7,8 +7,9 @@ experiments, rollout schedule changes, API keys, holdouts, mutual exclusion grou
 segments, creating and deleting users, changes to a user's role, superuser flag or active
 status, signing in with a password or through Cognito (`POST /auth/token`; a sign-in
 through the Cognito Hosted UI does not pass through the API and is not recorded), and
-safety rollbacks. In the full profile it also records custom roles assigned and revoked, a
-workspace member's role changes, and single sign-on (SSO) sign-ins.
+safety rollbacks. In the full profile it also records custom roles defined, changed,
+deleted, assigned and revoked, direct permissions granted and revoked, a workspace
+member's role changes, and single sign-on (SSO) sign-ins.
 [Action Types](#action-types) lists every action and when it is written.
 
 It also records the changes the platform makes on its own: scheduled experiment starts and
@@ -315,27 +316,30 @@ With the modules installed (the full profile), these are written too:
 |-------------|--------|--------------|
 | `role_assign` | `user` | `POST /rbac/roles/assign` gives a user a custom role they did not hold; `new_value` is `{"custom_role"}`, `reason` is `custom role assigned` |
 | `role_unassign` | `user` | `POST /rbac/roles/revoke` takes away a custom role the user held; `old_value` is `{"custom_role"}`, `reason` is `custom role revoked` |
+| `role_create` | `role` | `POST /rbac/roles` defines a custom role; `new_value` is `{"description", "permissions"}`, `reason` is `custom role created` |
+| `role_update` | `role` | `PUT /rbac/roles/{role_name}` changes a custom role's description or permissions; `old_value` and `new_value` hold the fields that changed, `reason` is `custom role changed` |
+| `role_delete` | `role` | `DELETE /rbac/roles/{role_name}` deletes a custom role; `old_value` is `{"description", "permissions", "assigned_users"}`, where `assigned_users` is how many users had it, `reason` is `custom role deleted` |
+| `permission_grant` | `user` | `POST /rbac/users/{user_id}/grant` grants a user a direct permission; `new_value` is `{"resource", "actions", "expires_at", "grant_id", "reason"}`, its `reason` the one sent with the request, and the entry's `reason` is `direct permission granted` |
+| `permission_revoke` | `user` | `DELETE /rbac/users/{user_id}/grant/{resource}` deletes the user's direct grants of that resource, when there is at least one; `old_value` is `{"resource", "count"}`, `reason` is `direct permission revoked` |
 | `role_assign` | `user` | `PUT /workspaces/{id}/members/{user_id}` changes a member's workspace role; `old_value` and `new_value` are `{"workspace_id", "workspace_role"}`, `reason` is `workspace role changed` |
 | `user_login` | `user` | An SSO sign-in: the SAML ACS (`POST /auth/sso/saml/{config_id}/acs`), the dashboard's `POST /auth/sso/exchange`, or the OIDC callback when it answers with a token; `new_value` is `{"provider": "sso"}` |
 | `user_create` | `user` | A user's first SSO sign-in creates their account. The actor is the new user; `reason` is `first SSO sign-in` |
 | `role_assign` | `user` | An SSO sign-in changes an existing user's role from a mapped group; `old_value` and `new_value` are `{"role", "is_superuser"}` (SSO never changes the superuser flag, so it is the same in both), `reason` is `SSO groups changed` |
 
-A request that changes nothing (a custom role already held, a workspace role or SSO role
-already equal) writes no entry. Assigning a direct permission, defining a custom role,
-adding or removing a workspace member, invites, SSO configuration and the other module
-routes write none.
+A request that changes nothing (a custom role already held, a custom role update that
+sends what is stored, a revoke with no grant to delete, a workspace role or SSO role
+already equal) writes no entry. Adding or removing a workspace member, invites, SSO
+configuration and the other module routes write none.
 
 User changes record the superuser flag. A change to a user's role, superuser flag or
 active status is saved together with its entry: if the entry cannot be written, the
 change is refused with a `500` and nothing is saved, and sending the same request again
 once the problem is fixed writes it once.
 
-`ActionType` also defines `user_update`, `user_logout`, `permission_grant`,
-`permission_revoke` and `safety_config_update`. You can filter on them, but nothing in this
-release writes them (`role_unassign` is written only with the modules installed).
-Granting and revoking a direct permission are not recorded because no permission check
-reads direct grants yet
-([#891](https://github.com/Controlvar/controlvar/issues/891)).
+`ActionType` also defines `user_update`, `user_logout` and `safety_config_update`. You can
+filter on them, but nothing in this release writes them. `role_unassign`, `role_create`,
+`role_update`, `role_delete`, `permission_grant` and `permission_revoke` are written only
+with the modules installed.
 
 ### Changes the platform makes on its own
 
@@ -377,6 +381,7 @@ Whether a change is kept when its entry cannot be written depends on where it is
 |-------|--------------------------------|
 | A route (all the route actions above) | The change is kept and the response is `2xx`; there is no entry |
 | A superuser's change to a user's role, superuser flag or active status | Nothing is saved and the response is `500`; resend it once the problem is fixed |
+| A custom role defined, changed, deleted, assigned or revoked, or a direct permission granted or revoked (full profile) | The change is kept and the response is `2xx`; there is no entry. Unlike a change to a user's built-in role, it is not refused |
 | A safety rollback, manual or by the safety monitor | The rollback is kept; there is no entry |
 | The experiment scheduler | The start or end is kept; there is no entry, and **it is not written later** |
 | The rollout scheduler | The stage does not start and the rollout percentage does not change; the next run tries both again |

@@ -30,9 +30,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from backend.app.main import app
+from backend.app.models.audit_log import AuditLog
 from backend.app.models.user import User
 from backend.tests.integration.conftest import make_client_for_user
-from modules.backend.app.models.custom_role import CustomRole
+from modules.backend.app.models.custom_role import CustomRole, DirectPermissionGrant
 
 # ---------------------------------------------------------------------------
 # Helper utilities
@@ -79,6 +80,20 @@ def system_role(db_session: Session):
         db_session.rollback()
         db_session.query(CustomRole).filter(CustomRole.name == role.name).delete()
         db_session.commit()
+
+
+def _role_entries(db_session: Session, action: str, name: str) -> int:
+    """How many audit entries of *action* name the custom role *name*."""
+    db_session.expire_all()
+    return (
+        db_session.query(AuditLog)
+        .filter(
+            AuditLog.action_type == action,
+            AuditLog.entity_type == "role",
+            AuditLog.entity_name == name,
+        )
+        .count()
+    )
 
 
 def _create_role(client: TestClient, name: str = None) -> dict:
@@ -297,20 +312,37 @@ class TestCreateRole:
         resp = admin_client.post("/api/v1/rbac/roles", json=payload)
         assert resp.status_code == 422, resp.text
 
-    def test_create_role_with_all_valid_resources(self, admin_client):
-        """Creating a role with all valid resource types is accepted."""
+    def test_create_role_with_all_grantable_resources(self, admin_client):
+        """A role may hold experiment, feature_flag and audit_log read (#891)."""
         payload = {
             "name": _unique_role_name(),
             "description": "All resources role",
             "permissions": [
                 {"resource": "experiment", "actions": ["read"]},
                 {"resource": "feature_flag", "actions": ["read"]},
+                {"resource": "audit_log", "actions": ["read"]},
+            ],
+        }
+        resp = admin_client.post("/api/v1/rbac/roles", json=payload)
+        assert resp.status_code == 201, resp.text
+
+    def test_create_role_with_a_resource_no_role_may_hold_returns_422(
+        self, admin_client
+    ):
+        """``user`` and ``report`` are known resources, refused for a role (#891)."""
+        name = _unique_role_name()
+        payload = {
+            "name": name,
+            "permissions": [
+                {"resource": "experiment", "actions": ["read"]},
                 {"resource": "user", "actions": ["read"]},
                 {"resource": "report", "actions": ["read"]},
             ],
         }
         resp = admin_client.post("/api/v1/rbac/roles", json=payload)
-        assert resp.status_code == 201, resp.text
+        assert resp.status_code == 422, resp.text
+        assert resp.json()["detail"][0]["type"] == "not_grantable"
+        assert admin_client.get(f"/api/v1/rbac/roles/{name}").status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -425,7 +457,7 @@ class TestUpdateRole:
 
         new_permissions = [
             {"resource": "experiment", "actions": ["read", "update", "delete"]},
-            {"resource": "user", "actions": ["read"]},
+            {"resource": "audit_log", "actions": ["read"]},
         ]
         update_payload = {"permissions": new_permissions}
         resp = admin_client.put(f"/api/v1/rbac/roles/{name}", json=update_payload)
@@ -485,8 +517,9 @@ class TestUpdateRole:
         )
         assert resp.status_code == 404, resp.text
 
-    def test_cannot_update_system_role(self, admin_client, system_role):
-        """Updating a system role answers 400 and leaves it as it was."""
+    def test_cannot_update_system_role(self, admin_client, system_role, db_session):
+        """Updating a system role answers 400, leaves it as it was, and writes
+        no role_update entry (#891)."""
         resp = admin_client.put(
             f"/api/v1/rbac/roles/{system_role}",
             json={
@@ -504,6 +537,17 @@ class TestUpdateRole:
         assert after.json()["permissions"] == [
             {"resource": "experiment", "actions": ["read"]}
         ]
+        assert _role_entries(db_session, "role_update", system_role) == 0, (
+            "a role_update entry was written for the refused update"
+        )
+        # Positive control: the same query sees a custom role's update.
+        name = _unique_role_name()
+        _create_role(admin_client, name)
+        changed = admin_client.put(
+            f"/api/v1/rbac/roles/{name}", json={"description": "changed"}
+        )
+        assert changed.status_code == 200, changed.text
+        assert _role_entries(db_session, "role_update", name) == 1
 
     def test_update_role_empty_payload_is_no_op(self, admin_client):
         """PUT with an empty body leaves the role name unchanged."""
@@ -567,8 +611,9 @@ class TestDeleteRole:
         finally:
             app.dependency_overrides.clear()
 
-    def test_cannot_delete_system_role(self, admin_client, system_role):
-        """Deleting a system role answers 400 and the role is still there."""
+    def test_cannot_delete_system_role(self, admin_client, system_role, db_session):
+        """Deleting a system role answers 400, the role is still there, and no
+        role_delete entry is written (#891)."""
         resp = admin_client.delete(f"/api/v1/rbac/roles/{system_role}")
         assert resp.status_code == 400, resp.text
         assert resp.json()["detail"] == "Cannot delete system roles"
@@ -576,6 +621,15 @@ class TestDeleteRole:
         after = admin_client.get(f"/api/v1/rbac/roles/{system_role}")
         assert after.status_code == 200, after.text
         assert after.json()["is_system_role"] is True
+        assert _role_entries(db_session, "role_delete", system_role) == 0, (
+            "a role_delete entry was written for the refused delete"
+        )
+        # Positive control: the same query sees a custom role's delete.
+        name = _unique_role_name()
+        _create_role(admin_client, name)
+        gone = admin_client.delete(f"/api/v1/rbac/roles/{name}")
+        assert gone.status_code == 204, gone.text
+        assert _role_entries(db_session, "role_delete", name) == 1
 
     def test_deleted_role_not_in_list(self, admin_client):
         """After deletion, role does not appear in list response."""
@@ -902,7 +956,7 @@ class TestDirectPermissionGrants:
         user_id = str(admin_user.id)
         payload = {
             "user_id": user_id,
-            "resource": "report",
+            "resource": "experiment",
             "actions": ["create", "read"],
             "reason": "Temporary grant for integration test",
         }
@@ -962,27 +1016,58 @@ class TestDirectPermissionGrants:
         user_id = str(admin_user.id)
         payload = {
             "user_id": user_id,
-            "resource": "export",
+            "resource": "feature_flag",
             "actions": ["read"],
         }
-        admin_client.post(f"/api/v1/rbac/users/{user_id}/grant", json=payload)
+        granted = admin_client.post(f"/api/v1/rbac/users/{user_id}/grant", json=payload)
+        assert granted.status_code == 201, granted.text
 
-        resp = admin_client.delete(f"/api/v1/rbac/users/{user_id}/grant/export")
+        resp = admin_client.delete(f"/api/v1/rbac/users/{user_id}/grant/feature_flag")
         assert resp.status_code == 200, resp.text
-        assert "count" in resp.json()
+        assert resp.json()["count"] >= 1
+
+    def test_revoke_counts_inactive_and_expired_grants(
+        self, admin_client, admin_user, db_session
+    ):
+        """``count`` includes grants that are inactive or expired: the revoke
+        deletes every grant of the resource, whatever its state."""
+        db_session.add_all(
+            [
+                DirectPermissionGrant(
+                    user_id=admin_user.id,
+                    resource="experiment",
+                    actions=["update"],
+                    is_active=False,
+                ),
+                DirectPermissionGrant(
+                    user_id=admin_user.id,
+                    resource="experiment",
+                    actions=["delete"],
+                    is_active=True,
+                    expires_at=datetime.now(timezone.utc) - timedelta(days=1),
+                ),
+            ]
+        )
+        db_session.commit()
+        resp = admin_client.delete(
+            f"/api/v1/rbac/users/{admin_user.id}/grant/experiment"
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json() == {"status": "revoked", "count": 2}
 
     def test_grant_then_revoke_removes_from_effective_perms(
         self, admin_client, admin_user
     ):
         """After grant + revoke, the granted permission has been cleared."""
         user_id = str(admin_user.id)
-        resource = "role"
+        resource = "feature_flag"
         payload = {
             "user_id": user_id,
             "resource": resource,
             "actions": ["delete"],
         }
-        admin_client.post(f"/api/v1/rbac/users/{user_id}/grant", json=payload)
+        granted = admin_client.post(f"/api/v1/rbac/users/{user_id}/grant", json=payload)
+        assert granted.status_code == 201, granted.text
 
         # Revoke it
         revoke_resp = admin_client.delete(
@@ -1029,7 +1114,7 @@ class TestDirectPermissionGrants:
         expires = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
         payload = {
             "user_id": user_id,
-            "resource": "report",
+            "resource": "experiment",
             "actions": ["create"],
             "reason": "Temporary grant expiring in 7 days",
             "expires_at": expires,
@@ -1073,7 +1158,7 @@ class TestDirectPermissionGrants:
         user_id = str(admin_user.id)
         payload = {
             "user_id": user_id,
-            "resource": "user",
+            "resource": "feature_flag",
             "actions": ["list"],
         }
         resp = admin_client.post(f"/api/v1/rbac/users/{user_id}/grant", json=payload)
@@ -1085,7 +1170,7 @@ class TestDirectPermissionGrants:
         user_id = str(admin_user.id)
         payload = {
             "user_id": user_id,
-            "resource": "report",
+            "resource": "experiment",
             "actions": ["read", "create", "update", "delete", "list"],
         }
         resp = admin_client.post(f"/api/v1/rbac/users/{user_id}/grant", json=payload)
