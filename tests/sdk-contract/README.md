@@ -151,7 +151,14 @@ python tests/sdk-contract/published_versions_check.py
 `live/run_live_contract.py` runs every SDK's `contract_smoke` entry point against a real backend
 and checks the JSON it prints: a sticky assignment (`control` / `treatment`), a flag evaluation
 (`enabled: true`), one tracked event with an experiment key, and one key-less event that fans out
-to the cached assignment and flag. Before the SDKs it checks `GET /api/v1/sdk/ruleset` once: the
+to the cached assignment and flag. The smokes of the SDKs in `ATTRIBUTE_SDKS` (`js` and
+`react-native`, #1520) also evaluate the seed's `sdk_contract_targeted` flag (0% rollout, one rule,
+`plan` equals `pro`, at 100%) for one user with `{"plan": "pro"}` and then, with nothing cached,
+`{"plan": "free"}`, and must report `"targeted": {"pro": true, "free": false, "reason":
+"targeting_rule"}`; an SDK that drops the attributes is answered by the 0% rollout and its row
+fails with `targeted.pro=False (seeded rule plan=pro)`. As with `EXPOSURE_SDKS`, an SDK not listed
+may not report it, and CI runs every listed SDK with `--strict`, so a missing toolchain fails the
+row instead of skipping it. Before the SDKs it checks `GET /api/v1/sdk/ruleset` once: the
 seed's plain key gets 403, its `sdk:ruleset` key gets the ruleset with `sdk_contract_flag` in it,
 and sending the ETag back gets 304 (the `ruleset (server)` row; `CONTROLVAR_LOCAL_API_KEY`
 overrides the scoped key). After the SDKs, each SDK with a local mode runs its local smoke with that
@@ -183,7 +190,7 @@ python tests/sdk-contract/live/run_live_contract.py
 python tests/sdk-contract/live/run_live_contract.py --sdk go --sdk python --strict
 ```
 
-- `python backend/scripts/seed_sdk_contract.py`: experiment sdk_contract_ab, flag sdk_contract_flag, a string, a number and a json flag, API keys -> live/.api_key, live/.api_key_local (sdk:ruleset); runs only with ENVIRONMENT development or test, like the demo seeds
+- `python backend/scripts/seed_sdk_contract.py`: experiment sdk_contract_ab, flag sdk_contract_flag, a string, a number and a json flag, the targeted flag sdk_contract_targeted (0%, rule plan=pro at 100%), API keys -> live/.api_key, live/.api_key_local (sdk:ruleset); runs only with ENVIRONMENT development or test, like the demo seeds
 - `uvicorn backend.app.main:app --port 8000 &`: or ./demo/setup-local.sh
 - `python tests/sdk-contract/live/run_live_contract.py`: all SDKs whose toolchain is installed
 

@@ -127,17 +127,53 @@ describe('useFlag', () => {
     expect(latest().error?.message).toBe('API error');
   });
 
-  test('calls client.evaluateFlag(flagKey, userId) — attributes are not sent', async () => {
+  test('regression #1520: calls client.evaluateFlag(flagKey, userId, attributes) with its own argument', async () => {
     const evaluateFlag = jest.fn().mockResolvedValue(enabledFlag);
     const client = makeClient({ evaluateFlag });
     renderHookInProvider(() => useFlag('specific-flag', { plan: 'pro' }), {
       client,
       userId: 'specific-user',
-      attributes: { plan: 'pro' },
+      attributes: { plan: 'free' },
     });
 
     await waitFor(() => expect(evaluateFlag).toHaveBeenCalledTimes(1));
-    expect(evaluateFlag.mock.calls[0]).toEqual(['specific-flag', 'specific-user']);
+    expect(evaluateFlag.mock.calls[0]).toEqual(['specific-flag', 'specific-user', { plan: 'pro' }]);
+  });
+
+  test('regression #1520: without its own argument it sends the provider attributes (no merge)', async () => {
+    const evaluateFlag = jest.fn().mockResolvedValue(enabledFlag);
+    renderHookInProvider(() => useFlag('f'), {
+      client: makeClient({ evaluateFlag }),
+      userId: 'u1',
+      attributes: { plan: 'pro' },
+    });
+    await waitFor(() => expect(evaluateFlag).toHaveBeenCalledTimes(1));
+    expect(evaluateFlag.mock.calls[0]).toEqual(['f', 'u1', { plan: 'pro' }]);
+  });
+
+  test('regression #1520: its own argument replaces the provider attributes; keys of the provider are not merged in', async () => {
+    const evaluateFlag = jest.fn().mockResolvedValue(enabledFlag);
+    renderHookInProvider(() => useFlag('f', { country: 'US' }), {
+      client: makeClient({ evaluateFlag }),
+      userId: 'u1',
+      attributes: { plan: 'pro' },
+    });
+    await waitFor(() => expect(evaluateFlag).toHaveBeenCalledTimes(1));
+    expect(evaluateFlag.mock.calls[0]).toEqual(['f', 'u1', { country: 'US' }]);
+  });
+
+  test('regression #1520: an equal inline object re-rendered 3 times asks once', async () => {
+    const evaluateFlag = jest.fn().mockResolvedValue(enabledFlag);
+    const client = makeClient({ evaluateFlag });
+    const { latest, rerenderWith } = renderHookInProvider(() => useFlag('f', { plan: 'pro' }), {
+      client,
+      userId: 'u1',
+      attributes: { plan: 'pro' },
+    });
+    await waitFor(() => expect(settled(latest())).toBe(true));
+    for (let i = 0; i < 3; i++) rerenderWith({ client, userId: 'u1', attributes: { plan: 'pro' } });
+    await act(async () => {});
+    expect(evaluateFlag).toHaveBeenCalledTimes(1);
   });
 
   test('re-evaluates (and goes back to loading) when the flag key changes', async () => {
@@ -165,9 +201,9 @@ describe('useFlag', () => {
     const client = makeClient({ evaluateFlag });
     const { rerenderWith } = renderHookInProvider(() => useFlag('dark-mode'), { client, userId: 'user-A' });
 
-    await waitFor(() => expect(evaluateFlag).toHaveBeenCalledWith('dark-mode', 'user-A'));
+    await waitFor(() => expect(evaluateFlag).toHaveBeenCalledWith('dark-mode', 'user-A', undefined));
     rerenderWith({ client, userId: 'user-B' });
-    await waitFor(() => expect(evaluateFlag).toHaveBeenCalledWith('dark-mode', 'user-B'));
+    await waitFor(() => expect(evaluateFlag).toHaveBeenCalledWith('dark-mode', 'user-B', undefined));
     expect(evaluateFlag).toHaveBeenCalledTimes(2);
   });
 
@@ -525,6 +561,59 @@ describe('hooks with a real ExperimentationClient', () => {
     expect(url).toBe(`${BASE_URL}/api/v1/feature-flags/evaluate/dark-mode?user_id=user%201`);
     expect(init.method).toBe('GET');
     expect(init.headers['X-API-Key']).toBe('k');
+  });
+
+  test('regression #1520: useFlag puts the attributes on the wire', async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce(jsonResponse({ key: 'f', enabled: true, config: null }));
+    const { latest } = renderHookInProvider(() => useFlag('f'), {
+      client: realClient(),
+      userId: 'u1',
+      attributes: { plan: 'pro' },
+    });
+    await waitFor(() => expect(settled(latest())).toBe(true));
+    expect((global.fetch as jest.Mock).mock.calls[0][0]).toBe(
+      `${BASE_URL}/api/v1/feature-flags/evaluate/f?user_id=u1&context=%7B%22plan%22%3A%22pro%22%7D`
+    );
+  });
+
+  // docs/sdk/react-native.md: with offlineFallback: false, clearCache() plus a remount asks again
+  // with the new attributes; either one alone does not.
+  test('regression #1520: offlineFallback false, new attributes are asked after clearCache() plus a remount only', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(jsonResponse({ key: 'f', enabled: false, config: null }));
+    const client = realClient();
+    const states: FlagState[] = [];
+    function Probe() {
+      const state = useFlag('f');
+      states.push(state);
+      return <Text>{String(state.enabled)}</Text>;
+    }
+    // A new `key` on the provider remounts everything under it.
+    const ui = (attributes: Record<string, unknown>, key: string) => (
+      <ExperimentationProvider key={key} client={client} userId="u1" attributes={attributes}>
+        <Probe />
+      </ExperimentationProvider>
+    );
+    const urls = () => (global.fetch as jest.Mock).mock.calls.map(([url]) => url as string);
+
+    const { rerender } = render(ui({ plan: 'free' }, 'first'));
+    await waitFor(() => expect(settled(states[states.length - 1])).toBe(true));
+    expect(urls()).toEqual([`${BASE_URL}/api/v1/feature-flags/evaluate/f?user_id=u1&context=%7B%22plan%22%3A%22free%22%7D`]);
+
+    // New attributes and a remount, no clearCache(): the memory cache answers.
+    rerender(ui({ plan: 'pro' }, 'second'));
+    await waitFor(() => expect(settled(states[states.length - 1])).toBe(true));
+    expect(urls()).toHaveLength(1);
+
+    // clearCache(), no remount: the mounted hook does not ask again.
+    client.clearCache();
+    rerender(ui({ plan: 'pro' }, 'second'));
+    await act(async () => {});
+    expect(urls()).toHaveLength(1);
+
+    // clearCache() and a remount: one request, with the new attributes.
+    rerender(ui({ plan: 'pro' }, 'third'));
+    await waitFor(() => expect(urls()).toHaveLength(2));
+    expect(urls()[1]).toBe(`${BASE_URL}/api/v1/feature-flags/evaluate/f?user_id=u1&context=%7B%22plan%22%3A%22pro%22%7D`);
   });
 
   // #1519: the kill-switch page says a component already on screen keeps its answer until it

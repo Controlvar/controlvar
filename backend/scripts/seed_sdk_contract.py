@@ -12,6 +12,11 @@ Creates (idempotently):
   ``sdk_contract_value_json``, each with plain-word values; the live contract
   turns them off and on again through the API to show a published SDK's
   local evaluator receives the change (an existing one is turned back on),
+- an ACTIVE flag ``sdk_contract_targeted`` at 0% rollout whose one rule,
+  ``plan`` equals ``pro``, is at 100% (#1520): the smokes of the SDKs in the
+  runner's ``ATTRIBUTE_SDKS`` evaluate it with ``{"plan": "pro"}`` (on, reason
+  ``targeting_rule``) and ``{"plan": "free"}`` (off), so it is on only when
+  the SDK sends the attributes (an existing one is put back to that state),
 - an API key named ``sdk-contract-smoke``, with no ``sdk:ruleset`` scope,
   whose plaintext is written to ``tests/sdk-contract/live/.api_key``;
 - a second key of the same user, ``sdk-contract-local``, with the
@@ -88,6 +93,28 @@ VALUE_FLAGS = {
     "string": ("sdk_contract_value_string", "on-copy", "off-copy"),
     "number": ("sdk_contract_value_number", 10, 2.5),
     "json": ("sdk_contract_value_json", {"color": "blue"}, ["fallback"]),
+}
+#: Off for everyone (0%) except through its one rule, plan equals pro, at 100%
+#: (#1520): only an SDK that sends the attributes on flag evaluation gets it on.
+TARGETED_FLAG_KEY = "sdk_contract_targeted"
+#: Dashboard shape (what the targeting editor writes).
+TARGETED_FLAG_RULES = {
+    "logical_operator": "AND",
+    "rollout_percentage": 100,
+    "groups": [
+        {
+            "id": "grp-plan-pro",
+            "logical_operator": "AND",
+            "conditions": [
+                {
+                    "id": "cond-plan",
+                    "attribute": "plan",
+                    "operator": "equals",
+                    "value": "pro",
+                }
+            ],
+        }
+    ],
 }
 API_KEY_NAME = "sdk-contract-smoke"
 LOCAL_API_KEY_NAME = "sdk-contract-local"
@@ -219,6 +246,42 @@ def seed_value_flags(db, admin_user) -> list[FeatureFlag]:
     return flags
 
 
+def seed_targeted_flag(db, admin_user) -> FeatureFlag:
+    """The flag only a rule on ``plan`` turns on: ACTIVE, 0%, plan=pro at 100%.
+
+    An existing one is put back to exactly that, so a run judges the SDKs and
+    not an edit made to the fixture since.
+    """
+    flag = db.query(FeatureFlag).filter(FeatureFlag.key == TARGETED_FLAG_KEY).first()
+    if flag is not None:
+        flag.status = FeatureFlagStatus.ACTIVE
+        flag.rollout_percentage = 0
+        flag.targeting_rules = TARGETED_FLAG_RULES
+        db.commit()
+        print(
+            f"  Flag '{TARGETED_FLAG_KEY}' already exists (id={flag.id}); "
+            "0%, rule plan=pro at 100%."
+        )
+        return flag
+    flag = FeatureFlag(
+        key=TARGETED_FLAG_KEY,
+        name="SDK contract targeted flag",
+        description="Off except for plan=pro: the live SDK contract checks attributes reach flag evaluation.",
+        status=FeatureFlagStatus.ACTIVE,
+        owner_id=admin_user.id,
+        rollout_percentage=0,
+        targeting_rules=TARGETED_FLAG_RULES,
+        tags=["sdk-contract"],
+    )
+    db.add(flag)
+    db.commit()
+    db.refresh(flag)
+    print(
+        f"  Created flag '{TARGETED_FLAG_KEY}' at 0%, rule plan=pro at 100% (id={flag.id})."
+    )
+    return flag
+
+
 def seed_api_key(
     db,
     admin_user,
@@ -306,7 +369,11 @@ def reset(db) -> None:
         db.query(Metric).filter(Metric.experiment_id == exp.id).delete()
         db.query(Variant).filter(Variant.experiment_id == exp.id).delete()
         db.delete(exp)
-    for key in [FLAG_KEY, *(key for key, _, _ in VALUE_FLAGS.values())]:
+    for key in [
+        FLAG_KEY,
+        *(key for key, _, _ in VALUE_FLAGS.values()),
+        TARGETED_FLAG_KEY,
+    ]:
         flag = db.query(FeatureFlag).filter(FeatureFlag.key == key).first()
         if flag:
             db.query(Event).filter(Event.feature_flag_id == flag.id).delete()
@@ -342,6 +409,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         seed_experiment(db, admin)
         seed_flag(db, admin)
         seed_value_flags(db, admin)
+        seed_targeted_flag(db, admin)
         seed_api_key(db, admin)
         seed_local_api_key(db, admin)
     print("Done. Run: python tests/sdk-contract/live/run_live_contract.py")

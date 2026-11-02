@@ -7,7 +7,11 @@ checks that each one reports a sticky assignment, a flag evaluation and
 successful event tracking. This is the test that proves an SDK actually talks
 to the endpoints the backend serves (the golden-vector tests only cover
 hashing). An SDK listed in ``EXPOSURE_SDKS`` must also report what its
-exposure hook received, and no other SDK may report it.
+exposure hook received, and no other SDK may report it. An SDK listed in
+``ATTRIBUTE_SDKS`` must also report how it evaluated the seed's
+``sdk_contract_targeted`` flag (0% rollout, one rule ``plan`` equals ``pro`` at
+100%) with ``{"plan": "pro"}`` and ``{"plan": "free"}``: on with the server's
+reason ``targeting_rule``, and off. No other SDK may report it.
 
 Before the SDKs, it checks the local-evaluation ruleset endpoint
 (``GET /api/v1/sdk/ruleset``) once: the seed's plain key gets 403, its
@@ -154,9 +158,32 @@ EXPOSURE_SDKS: frozenset[str] = frozenset(
     [
         # One line per SDK, in the form "js",
         "js",
+        "python",
         "go",
     ]
 )
+
+# The SDKs whose contract smoke must report that the user's attributes reach
+# flag evaluation (#1520). A listed SDK's smoke is to evaluate the seed's
+# targeted flag (CONTRACT_TARGETED_FLAG_KEY, default sdk_contract_targeted: 0%
+# rollout, one rule plan equals pro at 100%) for one user with the attributes
+# {"plan": "pro"}, then, with nothing cached, {"plan": "free"}, and report
+#   "targeted": {"pro": <enabled>, "free": <enabled>,
+#                "reason": <the server's reason for the pro answer>}
+# validate() requires {"pro": true, "free": false, "reason": "targeting_rule"}:
+# an SDK that drops the attributes gets pro off, with the reason "rollout". The
+# check runs both ways, as EXPOSURE_SDKS does: a listed SDK whose smoke reports
+# no "targeted" fails, and so does an unlisted SDK whose smoke reports one. CI
+# runs every listed SDK with --strict, so a missing toolchain fails rather than
+# skips (backend/tests/unit/scripts/test_run_live_contract.py pins both).
+ATTRIBUTE_SDKS: frozenset[str] = frozenset(
+    [
+        # One line per SDK, in the form "js",
+        "js",
+        "react-native",
+    ]
+)
+TARGETED_FLAG_KEY = "sdk_contract_targeted"
 
 
 def backend_healthy(api_url: str) -> bool:
@@ -186,6 +213,24 @@ def validate(sdk: str, payload: dict, experiment_key: str = "sdk_contract_ab") -
     if (payload.get("fanout") or {}).get("ok") is not True:
         problems.append("fan-out track failed")
     problems.extend(_exposure_problems(sdk, payload, experiment_key))
+    problems.extend(_targeting_problems(sdk, payload))
+    return problems
+
+
+def _targeting_problems(sdk: str, payload: dict) -> list[str]:
+    """What is wrong with the smoke's ``targeted`` report (see ``ATTRIBUTE_SDKS``)."""
+    if sdk not in ATTRIBUTE_SDKS:
+        return [f"targeted reported but {sdk} is not in ATTRIBUTE_SDKS"] if "targeted" in payload else []
+    targeted = payload.get("targeted")
+    if not isinstance(targeted, dict):
+        return [f"targeted missing ({sdk} is in ATTRIBUTE_SDKS)"]
+    problems: list[str] = []
+    if targeted.get("pro") is not True:
+        problems.append(f"targeted.pro={targeted.get('pro')!r} (seeded rule plan=pro)")
+    if targeted.get("free") is not False:
+        problems.append(f"targeted.free={targeted.get('free')!r} (seeded rollout 0)")
+    if targeted.get("reason") != "targeting_rule":
+        problems.append(f"targeted.reason={targeted.get('reason')!r} (expected 'targeting_rule' for plan=pro)")
     return problems
 
 
@@ -631,6 +676,7 @@ def main() -> int:
     )
     env.setdefault("CONTRACT_EXPERIMENT_KEY", "sdk_contract_ab")
     env.setdefault("CONTRACT_FLAG_KEY", "sdk_contract_flag")
+    env.setdefault("CONTRACT_TARGETED_FLAG_KEY", TARGETED_FLAG_KEY)
 
     selected = args.sdk or list(MANIFEST)
     unknown = [s for s in selected if s not in MANIFEST]

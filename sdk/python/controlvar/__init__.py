@@ -15,7 +15,13 @@ from .client import BATCH_LIMIT, ExperimentationClient
 from .hashing import consistent_hash, md5_hex
 from .local import LocalEvaluationStatus, ReadyResult
 from .transport import Response, Transport, TransportError, UrllibTransport
-from .types import Assignment, BatchResult, ExperimentationError, FlagEvaluation
+from .types import (
+    Assignment,
+    BatchResult,
+    ExperimentationError,
+    Exposure,
+    FlagEvaluation,
+)
 from .version import __version__
 
 __all__ = [
@@ -24,6 +30,7 @@ __all__ = [
     "BatchResult",
     "ExperimentationClient",
     "ExperimentationError",
+    "Exposure",
     "FlagEvaluation",
     "LocalEvaluationStatus",
     "ReadyResult",

@@ -899,31 +899,9 @@ def test_both_workflows_check_the_legs_after_the_tests() -> None:
 
 
 # --------------------------------------------------------------------------
-# The packed README gate (PP-1, EMP-P-3): every SDK whose build job runs it
-# is classified
+# The packed README gate. Which SDKs it classifies, and which build jobs run
+# it, are test_check_packaged_readme.py's and test_sdk_release_readme_gate.py's.
 # --------------------------------------------------------------------------
-
-
-def test_every_sdk_whose_build_runs_the_readme_gate_has_rules() -> None:
-    """The gate refuses an SDK it has no rules for, so a build job that runs
-    it for an unclassified SDK would fail at the release. Each ecosystem whose
-    build job runs the gate has every one of its SDKs in the gate's rules."""
-    gate = _load("check_packaged_readme")
-    jobs = _workflow()["jobs"]
-    gated = set()
-    for job in jobs.values():
-        if any(
-            "scripts/check_packaged_readme.py" in _run_of(s)
-            for s in job.get("steps", [])
-        ):
-            match = re.fullmatch(
-                r"needs\.resolve\.outputs\.ecosystem == '(\w+)'", job.get("if", "")
-            )
-            assert match, job.get("if")
-            gated.add(match.group(1))
-    assert "nuget" in gated
-    sdks = {sdk for sdk, eco in ecosystems().items() if eco in gated}
-    assert sdks <= set(gate.I_README), sorted(sdks - set(gate.I_README))
 
 
 def test_the_readme_gate_runs_on_the_packed_file_before_it_is_recorded() -> None:

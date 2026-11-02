@@ -35,15 +35,16 @@ by = [
 ]
 
 [[unit]]
+text = "Full documentation: the OpenFeature provider page."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "Install"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Install the provider and the Python SDK from the root of a clone of this repository (openfeature-sdk is installed as a dependency):"
-by = [
-    "test:sdk/openfeature-python/tests/test_package.py::test_it_needs_python_3_9_and_openfeature_sdk_0_10",
-    "test:sdk/openfeature-python/tests/test_package.py::test_its_only_other_dependency_is_the_python_sdk_which_has_none",
-]
+text = "To install it, follow the OpenFeature provider page."
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Requires Python 3.9+ and openfeature-sdk 0.10.0 or later."
@@ -52,13 +53,6 @@ by = ["test:sdk/openfeature-python/tests/test_package.py::test_it_needs_python_3
 [[unit]]
 text = "The only other dependency is controlvar, which itself has none."
 by = ["test:sdk/openfeature-python/tests/test_package.py::test_its_only_other_dependency_is_the_python_sdk_which_has_none"]
-
-[[unit]]
-text = "Install it from the same clone, as above: the controlvar 0.2.0 on PyPI reads no flag value, so with it every string, integer, float and object call answers your default with GENERAL."
-by = [
-    "test:sdk/openfeature-python/tests/test_provider.py::TestAgainstA020Sdk::test_the_stub_has_no_value_fields",
-    "test:sdk/openfeature-python/tests/test_provider.py::TestAgainstA020Sdk::test_a_typed_call_answers_the_default_and_never_raises",
-]
 
 [[unit]]
 text = "Quick start"
@@ -338,6 +332,32 @@ by = [
 ]
 
 [[unit]]
+text = "Development"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Install the provider and the Python SDK from the root of a clone of this repository (openfeature-sdk is installed as a dependency):"
+by = [
+    "test:sdk/openfeature-python/tests/test_package.py::test_it_needs_python_3_9_and_openfeature_sdk_0_10",
+    "test:sdk/openfeature-python/tests/test_package.py::test_its_only_other_dependency_is_the_python_sdk_which_has_none",
+]
+
+[[unit]]
+text = "Install controlvar from the same clone, as above: the controlvar 0.2.0 on PyPI reads no flag value, so with it every string, integer, float and object call answers your default with GENERAL."
+by = [
+    "test:sdk/openfeature-python/tests/test_provider.py::TestAgainstA020Sdk::test_the_stub_has_no_value_fields",
+    "test:sdk/openfeature-python/tests/test_provider.py::TestAgainstA020Sdk::test_a_typed_call_answers_the_default_and_never_raises",
+]
+
+[[unit]]
+text = "To run the tests:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "tests/conftest.py puts sdk/python and src/ on sys.path, so neither package needs to be installed."
+by = ["test:sdk/openfeature-python/tests/test_package.py::test_the_tests_import_both_packages_from_the_source_tree"]
+
+[[unit]]
 text = "Contract smoke"
 by = ["exempt:label"]
 
@@ -366,11 +386,3 @@ by = [
     "test:backend/tests/unit/scripts/test_run_live_contract.py::test_each_sdk_runs_its_own_contract_smoke",
     "test:backend/tests/unit/scripts/test_run_live_contract.py::test_strict_fails_on_a_missing_toolchain_and_the_default_skips_it",
 ]
-
-[[unit]]
-text = "Development"
-by = ["exempt:label"]
-
-[[unit]]
-text = "tests/conftest.py puts sdk/python and src/ on sys.path, so neither package needs to be installed."
-by = ["test:sdk/openfeature-python/tests/test_package.py::test_the_tests_import_both_packages_from_the_source_tree"]
