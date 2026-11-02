@@ -5,6 +5,31 @@ export interface SdkConfig {
   timeoutMs?: number;
   /** TTL for the per-user flag/assignment caches (default 300 000 ms). */
   cacheTtlMs?: number;
+  /**
+   * Called once each time the server enrols the user in an experiment
+   * (`POST /api/v1/tracking/assign` answers `assigned: true`) and the answer
+   * did not come from the client's cache: the moment the server records the
+   * exposure. Not called for a cached answer, a request another caller
+   * already started, an `assigned: false` answer, an answer without
+   * `assigned`, a failed call or a flag, and never during a server render
+   * (`useExperiment` assigns in an effect). What it throws, and a rejection of
+   * a Promise it returns, is dropped: the answer is unchanged. `null` or
+   * `undefined` sets none; any other value that is not a function is refused
+   * with `onExposure must be a function`.
+   */
+  onExposure?: ((exposure: Exposure) => void) | null;
+}
+
+/**
+ * What `onExposure` receives: a new object for each call, holding only these
+ * four values (not the user's attributes, not the variant's configuration).
+ */
+export interface Exposure {
+  readonly experimentKey: string;
+  readonly userId: string;
+  /** `null` when the server sends none. */
+  readonly variantId: string | null;
+  readonly variantName: string;
 }
 
 export interface UserContext {

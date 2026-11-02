@@ -73,11 +73,12 @@ function App() {
 | `config.baseUrl` | `string` | Yes | Backend origin, e.g. `https://api.example.com`; the SDK appends `/api/v1/...` |
 | `config.timeoutMs` | `number` | No | Per-request timeout, default `5000` |
 | `config.cacheTtlMs` | `number` | No | How long a successful evaluation/assignment is reused, default `300000` (5 min) |
+| `config.onExposure` | `(exposure: Exposure) => void` | No | Called once each time the server enrols the user in an experiment and the answer is not cached; see [Exposure hook](#exposure-hook) |
 | `user.userId` | `string` | Yes | Stable identifier used for bucketing |
 | `user.attributes` | `Record<string, unknown>` | No | Sent as `context` on experiment assignment and on flag evaluation (targeting rules); see [Targeting context](#targeting-context) |
 
 The client is recreated only when `apiKey`, `baseUrl`, `timeoutMs` or `cacheTtlMs` change (a new
-client starts with empty caches); hooks re-run when `userId` or the attributes change. All hooks
+client starts with empty caches), not when `onExposure` does; hooks re-run when `userId` or the attributes change. All hooks
 return safe defaults while loading and on a network or server error, and do not throw then;
 outside an `<ExperimentationProvider>` they throw.
 
@@ -278,6 +279,86 @@ resolves for a CommonJS `require`, for a Node ES module `import`, and for TypeSc
 
 ---
 
+## Exposure hook
+
+`config.onExposure` is a function you give the client. The client calls it once each time the
+server enrols the user in an experiment and the answer did not come from the client's cache: the
+moment the server records the exposure. Use it to send the exposure to your analytics tool or
+warehouse.
+
+```tsx
+<ExperimentationProvider
+  config={{
+    apiKey: process.env.NEXT_PUBLIC_CONTROLVAR_API_KEY!,
+    baseUrl: process.env.NEXT_PUBLIC_CONTROLVAR_API_URL ?? 'http://localhost:8000',
+    onExposure: (exposure) => {
+      try {
+        // your analytics tool's call goes here
+        console.log('exposure', exposure.experimentKey, exposure.variantName, exposure.userId);
+      } catch (err) {
+        console.error('onExposure failed', err); // this SDK reports nothing itself
+      }
+    },
+  }}
+  user={{ userId: currentUser.id }}
+>
+  <YourApplication />
+</ExperimentationProvider>
+```
+
+It receives an `Exposure`, a new object each time: `experimentKey`, `userId`, `variantId` (`null`
+when the server sends none) and `variantName`. Nothing else: not the user's attributes and not the
+variant's configuration.
+
+It is not called for:
+
+- an answer from the client's cache;
+- a user the experiment did not enrol (`assigned: false`, with `reason` `'holdout'`,
+  `'mutual_exclusion'` or `'targeting'`), or an experiment that is not running (`'draft'`,
+  `'paused'`, `'completed'` or `'archived'`): the server records no exposure for them;
+- a call that fails;
+- a feature flag.
+
+Calls for the same user and experiment that are made while the first is still waiting share its
+request, so together they call it once.
+
+`useExperiment` asks for the assignment in the browser, after the first render, so a server render
+makes no request and calls nothing. A server render followed by hydration calls it once, in the
+browser, and so does React's StrictMode, which runs effects twice in development.
+
+Changing `onExposure` between renders does not create a new client, so nothing is asked again; the
+client calls the function from the latest render.
+
+It is called again, and the server records another exposure, after the cache lifetime
+(`cacheTtlMs`, 5 minutes by default), after `clearCache()`, and in every new client: each page
+load, and each change of `apiKey`, `baseUrl`, `timeoutMs` or `cacheTtlMs`. So your tool can receive
+several exposures for one user and experiment: count users, not events. It never receives one the
+server did not record.
+
+It runs before the assignment resolves, and before every call waiting on the same request, so keep
+it quick: hand the exposure to your analytics library, which sends it later. The client does not
+wait for a Promise it returns.
+
+If it throws, or returns a Promise that rejects, the answer is unchanged, and nothing reports the
+error: this SDK has no `onError`. Catch inside your function, as above, if you need to know.
+
+`ServerClient` takes `onExposure` in its config too, and calls it for the assignments it makes, in
+the same way. It is a separate client with its own cache: if you assign a user with `ServerClient`
+on the server and with `useExperiment` in the browser, the server records two exposures, and each
+client that has `onExposure` calls its own. Set `onExposure` where your analytics library runs: on
+the Provider for a browser library, on `ServerClient` for a server one. A `ServerClient` created in
+each request, as in the `getServerSideProps` example above, starts with an empty cache, so it calls
+`onExposure` on every request that assigns, and the server records an exposure on each.
+
+The Provider and `ServerClient` throw `onExposure must be a function` for any other value; `null`
+and `undefined` set none.
+
+In a test, a mocked `/assign` answer must include `"assigned": true`, or the hook is not called.
+This SDK treats an answer without `assigned` as enrolled for `ExperimentAssignment.assigned`, but
+does not call the hook for it.
+
+---
+
 ## Backend endpoints used
 
 Every request carries `X-API-Key` and `Content-Type: application/json`.
@@ -285,7 +366,7 @@ Every request carries `X-API-Key` and `Content-Type: application/json`.
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
 | `useFeatureFlag`, `useVariant`, `useMultipleFlags`, `ServerClient.evaluateFeatureFlag`/`getAll` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON>` | `context` = `user.attributes` (omitted when empty) | `{key, enabled, config, reason}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
-| `useExperiment`, `ServerClient.assignExperiment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
+| `useExperiment`, `ServerClient.assignExperiment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `useTrackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `useTrackEvent` without keys | `POST /api/v1/tracking/batch` | `{events: [ ...track bodies ]}` (max 100 per request) | ignored |
 
@@ -303,6 +384,7 @@ import type {
   FeatureFlagEvaluation,
   ExperimentAssignment,
   TrackEventOptions,
+  Exposure,
 } from '@controlvar/react-sdk';
 
 interface FeatureFlagEvaluation {
@@ -335,6 +417,13 @@ interface TrackEventOptions {
   eventType?: string;
   timestamp?: Date;
 }
+
+interface Exposure {          // what onExposure receives; also exported from '@controlvar/react-sdk/ssr'
+  readonly experimentKey: string;
+  readonly userId: string;
+  readonly variantId: string | null;
+  readonly variantName: string;
+}
 ```
 
 ---
@@ -345,6 +434,7 @@ interface TrackEventOptions {
 - `useExperiment` returns the control defaults (`variantKey: 'control'`, `isControl: true`,
   `configuration: null`) with `error` set.
 - `useTrackEvent` swallows network failures.
+- A failing `onExposure` changes no answer and is reported nowhere (see [Exposure hook](#exposure-hook)).
 - Failed evaluations and assignments are never cached, so the next render retries.
 - Concurrent calls for the same user + key share one in-flight request, so mounting several
   components that use the same experiment produces one assignment (and one exposure event).
