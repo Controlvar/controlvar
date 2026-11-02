@@ -274,9 +274,9 @@ public class ExperimentationClient implements AutoCloseable {
     //
     // Every event sent carries an event_id: the one set with TrackEvent.Builder#eventId, or a
     // new random UUID made once per event per call and shared by that event's fan-out entries.
-    // OkHttp sends a request again by itself when the connection fails after the request was
-    // written; the request it sends again is the same body, with the same ids, so the server
-    // stores each event once.
+    // OkHttp can send a request again by itself when the connection fails after the request was
+    // written (on a kept-alive connection, or when another route exists); whenever it does, the
+    // request is the same body, with the same ids, so the server stores each event once.
 
     /**
      * Tracks an event with no experiment/flag attribution. Fire-and-forget: never throws.

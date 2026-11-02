@@ -59,6 +59,14 @@ EXPOSURE = {
 #: What the smoke of an SDK in ATTRIBUTE_SDKS adds (#1520): the seed's targeted
 #: flag on for plan=pro through its rule, off for plan=free.
 TARGETED = {"pro": True, "free": False, "reason": "targeting_rule"}
+#: What the smoke of an SDK in EVENT_ID_SDKS adds (#1543, C4): the user and
+#: event name the database is asked about, the one id, and two sends.
+EVENT_ID = {
+    "user_id": "smoke-user",
+    "event_name": "contract_dedup_1",
+    "id": "contract-1",
+    "sends": 2,
+}
 PR_QA_GATE = REPO_ROOT / ".github" / "workflows" / "pr-qa-gate.yml"
 PLATFORM = REPO_ROOT / ".github" / "workflows" / "_platform.yml"
 
@@ -73,6 +81,8 @@ def good(runner, sdk: str, experiment_key: str = "sdk_contract_ab") -> dict:
         report["exposure"] = {**EXPOSURE, "payload": hook}
     if sdk in runner.ATTRIBUTE_SDKS:
         report["targeted"] = dict(TARGETED)
+    if sdk in runner.EVENT_ID_SDKS:
+        report["event_id"] = dict(EVENT_ID)
     return report
 
 
@@ -95,6 +105,9 @@ def runner(monkeypatch, tmp_path):
     ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("CONTROLVAR_API_KEY", "contract-key")
+    # No database here: the one event sent twice is one stored row, unless a
+    # test says otherwise.
+    monkeypatch.setattr(module, "_event_rows", lambda user_id, event_name: 1)
     return module
 
 
@@ -250,6 +263,109 @@ def test_each_wrong_exposure_report_gives_exactly_its_problem(
     if exposure is not None:
         report["exposure"] = exposure
     assert runner.validate(sdk, report) == [problem]
+
+
+def test_java_is_the_sdk_that_sends_one_event_twice_with_one_id(runner):
+    assert runner.EVENT_ID_SDKS == frozenset({"java"})
+    assert runner.validate("java", good(runner, "java")) == []
+
+
+@pytest.mark.parametrize(
+    ("sdk", "report", "problems"),
+    [
+        pytest.param("java", None, ["event_id missing (java is in EVENT_ID_SDKS)"], id="missing"),
+        pytest.param(
+            "java",
+            {**EVENT_ID, "sends": 1},
+            ["event_id.sends=1 (the same event is to be sent twice)"],
+            id="sent-once",
+        ),
+        pytest.param(
+            "java",
+            {**EVENT_ID, "sends": True},
+            ["event_id.sends=True (the same event is to be sent twice)"],
+            id="sends-true",
+        ),
+        pytest.param(
+            "java",
+            {**EVENT_ID, "id": ""},
+            ["event_id.id='' (expected a non-empty string)"],
+            id="no-id",
+        ),
+        pytest.param(
+            "python",
+            EVENT_ID,
+            ["event_id reported but python is not in EVENT_ID_SDKS"],
+            id="unlisted",
+        ),
+    ],
+)
+def test_each_wrong_event_id_report_gives_exactly_its_problems(
+    monkeypatch, runner, sdk, report, problems
+):
+    """The gate's own planted reports, with "java" listed and "python" not."""
+    monkeypatch.setattr(runner, "EVENT_ID_SDKS", frozenset({"java"}))
+    payload = {**good(runner, sdk)}
+    payload.pop("event_id", None)
+    if report is not None:
+        payload["event_id"] = report
+    assert runner.validate(sdk, payload) == problems
+
+
+def test_the_event_sent_twice_must_be_one_stored_row(monkeypatch, runner):
+    asked = []
+
+    def rows(user_id, event_name):
+        asked.append((user_id, event_name))
+        return 1
+
+    monkeypatch.setattr(runner, "_event_rows", rows)
+    monkeypatch.setattr(
+        runner, "_run_command", lambda c, e, t: ("PASS", "0.1s", good(runner, "java"))
+    )
+    env = {"CONTRACT_EXPERIMENT_KEY": "sdk_contract_ab"}
+    assert runner.run_one("java", "cmd", env, 5) == ("PASS", "control in 0.1s")
+    assert asked == [("smoke-user", "contract_dedup_1")]
+
+
+def test_two_stored_rows_for_the_one_event_fail_the_sdk(monkeypatch, runner):
+    """The planted defect: a fresh id per send, or a server that does not dedupe."""
+    monkeypatch.setattr(runner, "_event_rows", lambda user_id, event_name: 2)
+    monkeypatch.setattr(
+        runner, "_run_command", lambda c, e, t: ("PASS", "0.1s", good(runner, "java"))
+    )
+    env = {"CONTRACT_EXPERIMENT_KEY": "sdk_contract_ab"}
+    status, detail = runner.run_one("java", "cmd", env, 5)
+    assert status == "FAIL"
+    assert "left 2 stored row(s)" in detail and "expected 1" in detail
+
+
+def test_no_stored_row_or_no_database_fails_the_sdk(monkeypatch, runner):
+    monkeypatch.setattr(
+        runner, "_run_command", lambda c, e, t: ("PASS", "0.1s", good(runner, "java"))
+    )
+    env = {"CONTRACT_EXPERIMENT_KEY": "sdk_contract_ab"}
+    monkeypatch.setattr(runner, "_event_rows", lambda user_id, event_name: 0)
+    assert runner.run_one("java", "cmd", env, 5)[0] == "FAIL"
+
+    def unreachable(user_id, event_name):
+        raise RuntimeError("no database")
+
+    monkeypatch.setattr(runner, "_event_rows", unreachable)
+    status, detail = runner.run_one("java", "cmd", env, 5)
+    assert status == "FAIL" and "cannot count the stored events: no database" in detail
+
+
+def test_an_sdk_that_is_not_listed_is_not_asked_of_the_database(monkeypatch, runner):
+    def never(user_id, event_name):
+        raise AssertionError("the database was read for an unlisted SDK")
+
+    monkeypatch.setattr(runner, "_event_rows", never)
+    monkeypatch.setattr(
+        runner, "_run_command", lambda c, e, t: ("PASS", "0.1s", good(runner, "go"))
+    )
+    env = {"CONTRACT_EXPERIMENT_KEY": "sdk_contract_ab"}
+    assert runner.run_one("go", "cmd", env, 5)[0] == "PASS"
 
 
 def test_js_and_react_native_must_show_their_attributes_reach_flag_evaluation(runner):

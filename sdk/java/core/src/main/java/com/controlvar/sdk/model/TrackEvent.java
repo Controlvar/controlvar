@@ -80,6 +80,8 @@ public class TrackEvent {
     /**
      * Returns the event id set with {@link Builder#eventId(String)}, or {@code null} when none
      * was set: the client then makes a new one each time the event is tracked.
+     *
+     * @return the caller's event id, or {@code null} when none was set
      */
     public String getEventId() { return eventId; }
 

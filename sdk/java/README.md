@@ -174,8 +174,8 @@ the same `event_id`, user, experiment, flag and event name only once.
 - A fanned-out event carries the same id in every entry. In `trackBatch`, each event has its own id.
 - At most 255 characters, with no NUL and no lone surrogate; the builder throws
   `IllegalArgumentException` for any other id. `null` and `""` set none.
-- OkHttp sends a request again by itself when the connection drops after the request was written.
-  The request it sends again carries the same `event_id`, so the server stores the event once.
+- OkHttp can send a request again by itself when the connection drops after the request was written,
+  for example on a kept-alive connection the server or a proxy has closed. The request it sends again carries the same `event_id`, so the server stores the event once.
 - A request that times out is not sent again. To send it again yourself and have it stored once,
   give the event an `eventId` and send that same id again.
 
