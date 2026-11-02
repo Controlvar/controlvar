@@ -262,6 +262,8 @@ def update_rollout_schedule(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except HTTPException:
+        raise  # this route's own 404: not an unexpected failure
     except Exception as e:
         logger.error(f"Error updating rollout schedule: {e!s}")
         raise HTTPException(
@@ -345,6 +347,8 @@ def activate_rollout_schedule(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except HTTPException:
+        raise  # this route's own 404: not an unexpected failure
     except Exception as e:
         logger.error(f"Error activating rollout schedule: {e!s}")
         raise HTTPException(
@@ -473,6 +477,8 @@ def add_rollout_stage(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except HTTPException:
+        raise  # this route's own 404: not an unexpected failure
     except Exception as e:
         logger.error(f"Error adding rollout stage: {e!s}")
         raise HTTPException(
@@ -516,6 +522,8 @@ def update_rollout_stage(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except HTTPException:
+        raise  # this route's own 404: not an unexpected failure
     except Exception as e:
         logger.error(f"Error updating rollout stage: {e!s}")
         raise HTTPException(
@@ -597,6 +605,8 @@ def manually_advance_stage(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except HTTPException:
+        raise  # this route's own 404: not an unexpected failure
     except Exception as e:
         logger.error(f"Error advancing rollout stage: {e!s}")
         raise HTTPException(

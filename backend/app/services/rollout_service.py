@@ -5,8 +5,9 @@ This module provides functionality for creating, updating, and managing
 rollout schedules for feature flags.
 """
 
+import functools
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple, TypeVar
 from uuid import UUID
 
 from sqlalchemy import and_
@@ -52,6 +53,49 @@ STARTED_STAGE_STATUSES = (
 
 #: What a request may still change on a stage that is in progress.
 IN_PROGRESS_FIXED_FIELDS = frozenset({"target_percentage", "stage_order"})
+
+_Method = TypeVar("_Method", bound=Callable[..., Any])
+
+
+def _end_transaction(db: Session) -> None:
+    """Roll ``db`` back; a failure to do so never hides the error being raised."""
+    try:
+        db.rollback()
+    except Exception:
+        logger.exception("Rolling back a refused rollout change failed")
+
+
+def _ends_transaction_unless_done(method: _Method) -> _Method:
+    """End the session's transaction, in the calling thread, when ``method``
+    raises or finds nothing to change (returns ``None``).
+
+    The methods it wraps take the flag and schedule locks
+    (``_lock_schedule_for_change``) and commit when they succeed. A refusal
+    after the locks (a ``RolloutRuleConflict``, a status re-check, a row
+    deleted while the request waited, any error) used to leave the
+    transaction open, so its locks lasted until the request's session was
+    closed, which ``deps.get_db`` does on the event loop. The rollout tick runs
+    on that same loop and locks the flag of every ACTIVE schedule: a tick that
+    reached the flag first waited on a lock only the loop could release, and
+    the API process hung (#1604 review, finding 1). Rolling back here, in the
+    worker thread that ran the request, releases the locks before control
+    returns to the loop. One place, so that every refusal of these methods,
+    present and future, is covered.
+    """
+
+    @functools.wraps(method)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        db = kwargs["db"] if "db" in kwargs else args[0]
+        try:
+            result = method(*args, **kwargs)
+        except BaseException:
+            _end_transaction(db)
+            raise
+        if result is None:
+            _end_transaction(db)
+        return result
+
+    return wrapper  # type: ignore[return-value]
 
 
 def _lock_schedule_for_change(
@@ -336,6 +380,7 @@ class RolloutService:
         return schedules, total
 
     @staticmethod
+    @_ends_transaction_unless_done
     def update_rollout_schedule(
         db: Session, schedule_id: UUID, data: RolloutScheduleUpdate
     ) -> Optional[RolloutSchedule]:
@@ -440,6 +485,7 @@ class RolloutService:
         return schedule
 
     @staticmethod
+    @_ends_transaction_unless_done
     def add_rollout_stage(
         db: Session, schedule_id: UUID, data: RolloutStageCreate
     ) -> Optional[RolloutStage]:
@@ -513,6 +559,7 @@ class RolloutService:
         return stage
 
     @staticmethod
+    @_ends_transaction_unless_done
     def update_rollout_stage(
         db: Session, stage_id: UUID, data: RolloutStageUpdate
     ) -> Optional[RolloutStage]:
@@ -683,6 +730,7 @@ class RolloutService:
         return True
 
     @staticmethod
+    @_ends_transaction_unless_done
     def activate_rollout_schedule(
         db: Session, schedule_id: UUID
     ) -> Optional[RolloutSchedule]:
@@ -841,6 +889,7 @@ class RolloutService:
         return True
 
     @staticmethod
+    @_ends_transaction_unless_done
     def manually_advance_stage(db: Session, stage_id: UUID) -> Optional[RolloutStage]:
         """
         Manually advance a stage that has manual triggers.
@@ -891,6 +940,8 @@ class RolloutService:
         # session rather than trusting them, the stages' included. Nothing is
         # changed before this point, so a refusal leaves nothing pending.
         feature_flag, schedule, stages = _lock_schedule_for_change(db, schedule)
+        if not any(s.id == stage.id for s in stages):
+            return None  # deleted while this request waited
         if schedule.status != RolloutScheduleStatus.ACTIVE:
             raise ValueError(
                 f"Cannot advance stage for schedule in {schedule.status.value} status"
