@@ -296,6 +296,15 @@ describe('guided setup sends exactly the request the single-page form sends', ()
     expect(radios.map((r) => r.value)).toEqual(FORM_EXPERIMENT_TYPES);
     expect(screen.getByTestId('wizard-type-a_b')).toBeChecked();
   });
+
+  it('describes the Multivariate card as several versions compared with a control, not combinations', () => {
+    render(<NewExperimentPage />);
+    const mvCard = screen.getByTestId('wizard-type-mv').closest('label');
+    expect(mvCard).toHaveTextContent(
+      'Compare several versions against a control, with each user seeing one version.',
+    );
+    expect(mvCard?.textContent?.toLowerCase()).not.toContain('combination');
+  });
 });
 
 describe('views and the URL', () => {
