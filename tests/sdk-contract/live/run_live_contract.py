@@ -162,6 +162,7 @@ EXPOSURE_SDKS: frozenset[str] = frozenset(
         "go",
         "java",
         "react",
+        "react-native",
     ]
 )
 

@@ -1457,3 +1457,286 @@ def test_the_react_refusal_the_pages_quote_is_the_one_the_source_throws():
     source = (REPO_ROOT / "sdk/react/src/client/exposure.ts").read_text("utf-8")
     assert "throw new Error('onExposure must be a function')" in source
     assert "`onExposure must be a function`" in text(REACT_PAGE)
+
+
+# ---------------------------------------------------------------------------
+# 5. The React Native SDK's exposure hook (#1499)
+# ---------------------------------------------------------------------------
+
+#: Where the React Native SDK's jest tests live; every test named below is in one of them.
+RN_TESTS = REPO_ROOT / "sdk" / "react-native" / "__tests__"
+RN_PAGE = "docs/sdk/react-native.md"
+RN_README = "sdk/react-native/README.md"
+
+#: Each sentence docs/sdk/react-native.md states about ``onExposure`` (as
+#: written, folded to one line), and the jest tests that fail when it stops
+#: being true. The page is in ``CLAIMS_DEFERRED``, so no claims registry binds
+#: it; this does. The README is registered, so its sentences are bound in
+#: docs/_claims/sdk/react-native/README.md.toml instead. An ``it.each`` test is
+#: named by its template.
+RN_EXPOSURE_SENTENCES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
+    (
+        "\\| 'trackBatch' \\| 'exposure'` |",
+        (
+            "is reported to onError once, with the operation exposure and the Error it threw,"
+            " never as a request failure",
+        ),
+    ),
+    (
+        "Called once each time the server enrols the user in an experiment and the answer is"
+        " not cached",
+        (
+            "is called once, with exactly the experiment key, user id, variant id and variant"
+            " name, for an assigned: true answer",
+            "a cached answer calls nothing: however often the answer is asked for, one request"
+            " and one call",
+        ),
+    ),
+    (
+        "This SDK's `Assignment` does not say whether the user was enrolled: an `assigned:"
+        " false` answer (a user the experiment did not enrol, or an experiment that is not"
+        " ACTIVE) is cached and returned as the control variant,",
+        (
+            "is not called for assigned: false (%s): the control answer comes back unchanged",
+        ),
+    ),
+    (
+        "`onExposure` is a function you give the client when you create it.",
+        (
+            "the constructor refuses %s as onExposure",
+            "onExposure %s sets no hook, and the assignment works as before",
+        ),
+    ),
+    (
+        "The client calls it once each time the server enrols the user in an experiment and"
+        " the answer did not come from the client's memory cache or from AsyncStorage: the"
+        " moment the server records the exposure.",
+        (
+            "is called once, with exactly the experiment key, user id, variant id and variant"
+            " name, for an assigned: true answer",
+            "a cached answer calls nothing: however often the answer is asked for, one request"
+            " and one call",
+            "an unexpired stored answer, as after an app restart: no request and no call",
+            "calls onExposure once when useExperiment mounts, with the four values",
+        ),
+    ),
+    (
+        "It receives an `Exposure`, a new object each time: `experimentKey`, `userId`,"
+        " `variantId` (`null` when the server sends none) and `variantName`. Nothing else:"
+        " not the user's attributes and not the variant's configuration.",
+        (
+            "is called once, with exactly the experiment key, user id, variant id and variant"
+            " name, for an assigned: true answer",
+            "passes variantId null when the server sends no variant_id",
+            "the hook's object is its own: changing it changes nothing the client keeps",
+            "has four readonly fields, in the order experimentKey, userId, variantId, variantName",
+        ),
+    ),
+    (
+        "`Exposure` is exported from `@controlvar/react-native-sdk` as a type.",
+        ("is exported as a type from the package",),
+    ),
+    (
+        "It is not called for:",
+        (
+            "a cached answer calls nothing: however often the answer is asked for, one request"
+            " and one call",
+        ),
+    ),
+    (
+        "- an answer from the client's memory cache; - an answer read from AsyncStorage: an"
+        " unexpired stored answer (after an app restart, or in a new client) or the offline"
+        " fallback, for which the server recorded no exposure; - a user the experiment did not"
+        " enrol (`assigned: false`, with `reason` `'holdout'`, `'mutual_exclusion'` or"
+        " `'targeting'`), or an experiment that is not running (`'draft'`, `'paused'`,"
+        " `'completed'` or `'archived'`): the server records no exposure for them; - a call"
+        " that fails; - a feature flag.",
+        (
+            "a cached answer calls nothing: however often the answer is asked for, one request"
+            " and one call",
+            "an unexpired stored answer, as after an app restart: no request and no call",
+            "not in a new client with the default offlineFallback: the stored answer is served,"
+            " with no request",
+            "the offline fallback: an expired stored answer is returned when the request fails,"
+            " and onError gets getAssignment once",
+            "is not called for assigned: false (%s): the control answer comes back unchanged",
+            "a failed call calls nothing: %s",
+            "a call that times out calls nothing, even if the server recorded the exposure",
+            "flags never call it: evaluateFlag, isFeatureEnabled and getAllFlags",
+        ),
+    ),
+    (
+        "This SDK's `Assignment` does not say whether the user was enrolled; the hook is not"
+        " called for a user who was not.",
+        (
+            "is not called for assigned: false (%s): the control answer comes back unchanged",
+        ),
+    ),
+    (
+        "It is not called when the server does not send `assigned`; every Controlvar server"
+        " release sends it.",
+        ("is not called when assigned is %s, and the answer is still returned",),
+    ),
+    (
+        "Calls for the same user and experiment that are made while the first is still"
+        " waiting share its request, so together they call it once, and so do components that"
+        " mount `useExperiment` for the same experiment.",
+        (
+            "concurrent first calls share one request and make one call",
+            "two components using one experiment share one request and one call",
+        ),
+    ),
+    (
+        "A call made after `clearCache()` while a request is still in flight makes a second"
+        " request, and the server records a second exposure, but the hook is called once, for"
+        " the answer stored first.",
+        (
+            "clearCache() while a request is in flight: the next call makes a second request,"
+            " and only the answer stored first calls it",
+        ),
+    ),
+    (
+        "With the default `offlineFallback: true`, the answer is kept in AsyncStorage for the"
+        " cache lifetime (`cacheTtlMs`, 5 minutes by default), so on one device neither"
+        " `clearCache()` nor a new client calls it again until that stored answer expires.",
+        (
+            "after the default cache lifetime of 5 minutes, with the default offlineFallback",
+            "not after clearCache() with the default offlineFallback: the stored answer is"
+            " served, with no request",
+            "not in a new client with the default offlineFallback: the stored answer is served,"
+            " with no request",
+        ),
+    ),
+    (
+        "It is called again, and the server records another exposure, after the cache"
+        " lifetime, and, with `offlineFallback: false` or after `await clearStorage()`, after"
+        " `clearCache()` and in every new client.",
+        (
+            "after the cache lifetime (one millisecond past it, never at the boundary), when the"
+            " stored answer has expired too",
+            "after clearCache() with offlineFallback false",
+            "in a new client with offlineFallback false",
+            "after clearCache() and clearStorage()",
+            "in a new client after clearStorage()",
+        ),
+    ),
+    (
+        "It never receives one the server did not record.",
+        (
+            "is not called for assigned: false (%s): the control answer comes back unchanged",
+            "is not called when assigned is %s, and the answer is still returned",
+            "an unexpired stored answer, as after an app restart: no request and no call",
+            "the offline fallback: an expired stored answer is returned when the request fails,"
+            " and onError gets getAssignment once",
+        ),
+    ),
+    (
+        "It runs before `getAssignment` resolves, and before every call waiting on the same"
+        " request,",
+        (
+            "runs before getAssignment resolves",
+            "concurrent first calls share one request and make one call",
+        ),
+    ),
+    (
+        "The client does not wait for a Promise it returns.",
+        ("the client does not wait for a Promise the hook returns",),
+    ),
+    (
+        "If it throws, or returns a Promise that rejects, the answer is unchanged and"
+        " `onError` receives the error with the operation `'exposure'`: what your function"
+        " threw, or an `Error` wrapping it when it is not one.",
+        (
+            "changes nothing: getVariant returns the variant and getAssignment resolves to it",
+            "leaves the answer cached: a second call makes no request and calls nothing",
+            "is reported to onError once, with the operation exposure and the Error it threw,"
+            " never as a request failure",
+            "a thrown value that is not an Error is reported as an Error whose message is that"
+            " value",
+            "a thrown value that cannot be turned into a string is still reported, as an Error"
+            " that says so",
+            "an async hook that rejects is reported to onError with exposure, and the answer is"
+            " unchanged",
+            "reports the rejection of the Promise an async hook returns",
+        ),
+    ),
+    (
+        "The constructor throws `ExperimentationClient: onExposure must be a function` for any"
+        " other value; `null` and `undefined` set none.",
+        (
+            "the constructor refuses %s as onExposure",
+            "onExposure %s sets no hook, and the assignment works as before",
+        ),
+    ),
+    (
+        'In a test, a mocked `/assign` answer must include `"assigned": true`, or the hook is'
+        " not called.",
+        ("is not called when assigned is %s, and the answer is still returned",),
+    ),
+    (
+        '`{"experiment_key","user_id","variant_id","variant_name","is_control",'
+        '"configuration","assigned","reason"}`',
+        (
+            "is not called for assigned: false (%s): the control answer comes back unchanged",
+            "is not called when assigned is %s, and the answer is still returned",
+        ),
+    ),
+)
+
+
+def _rn_test_titles() -> str:
+    return "\n".join(
+        path.read_text("utf-8") for path in sorted(RN_TESTS.glob("*.test.ts*"))
+    )
+
+
+def _section(page: str, heading: str) -> str:
+    """The text under the H2 ``heading`` up to the next H2, fences included."""
+    match = re.search(
+        rf"^##[ \t]+{re.escape(heading)}[ \t]*\n(.*?)(?=^##[ \t]|\Z)",
+        text(page),
+        flags=re.S | re.M,
+    )
+    assert match, f"{page} has no H2 {heading!r}"
+    return match.group(1)
+
+
+def test_the_react_native_pages_give_the_exposure_hook_a_section_of_its_own():
+    """H-M9: an H2 "Exposure hook" (``#exposure-hook``), never in the Quick
+    start; the README links the page's section, absolutely."""
+    for page in (RN_PAGE, RN_README):
+        assert _h2s(page).count("Exposure hook") == 1, (page, _h2s(page))
+        assert "onExposure" not in _section(page, "Quick start"), page
+        assert "onExposure" in _section(page, "Exposure hook"), page
+    assert (
+        "https://github.com/Controlvar/controlvar/blob/main/docs/sdk/react-native.md#exposure-hook"
+        in text(RN_README)
+    )
+
+
+@pytest.mark.parametrize(
+    "sentence, tests",
+    RN_EXPOSURE_SENTENCES,
+    ids=[s[:60] for s, _ in RN_EXPOSURE_SENTENCES],
+)
+def test_each_react_native_exposure_sentence_is_on_its_page_and_held_by_a_test(
+    sentence, tests
+):
+    assert sentence in fold(text(RN_PAGE)), f"no longer said there: {sentence}"
+    titles = _rn_test_titles()
+    missing = [
+        title
+        for title in tests
+        if f"'{title}'" not in titles and f'"{title}"' not in titles
+    ]
+    assert missing == [], "no jest test in sdk/react-native/__tests__ has these names"
+
+
+def test_the_react_native_refusal_the_page_quotes_is_the_one_the_source_throws():
+    source = (REPO_ROOT / "sdk/react-native/src/exposure.ts").read_text("utf-8")
+    assert (
+        "ON_EXPOSURE_REFUSAL = 'ExperimentationClient: onExposure must be a function'"
+        in source
+    )
+    assert "throw new Error(ON_EXPOSURE_REFUSAL)" in source
+    assert "`ExperimentationClient: onExposure must be a function`" in text(RN_PAGE)

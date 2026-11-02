@@ -26,6 +26,7 @@ import { randomUUID } from 'crypto';
 
 import { ExperimentationClient } from '../src/client';
 import type { FlagEvaluation, SwallowedOperation } from '../src/types';
+import type { Exposure } from '../src/types';
 
 const apiUrl =
   process.env.CONTROLVAR_API_URL || process.env.EXPERIMENTLY_API_URL || 'http://localhost:8000';
@@ -124,6 +125,23 @@ describe('react-native SDK against a live backend', () => {
     expect(swallowed).toEqual([]);
     expect(reasons).toHaveLength(2);
 
+    // 6. The exposure hook (#1499). A NEW client with a hook and offlineFallback off, so that
+    //    AsyncStorage, where the first client stored this user's answer, cannot answer it,
+    //    assigns the contract experiment twice with no clear in between. The server answers this
+    //    returning user `assigned: true` and records an exposure, so the runner requires exactly
+    //    one call, for the contract experiment and the variant assigned above. Only this smoke
+    //    knows the user it made, so the user id is checked here.
+    const exposures: Exposure[] = [];
+    const exposing = new ExperimentationClient({
+      ...config,
+      offlineFallback: false,
+      onExposure: (exposure) => void exposures.push(exposure),
+    });
+    await exposing.getAssignment(experimentKey, userId);
+    await exposing.getAssignment(experimentKey, userId);
+    expect(swallowed).toEqual([]);
+    for (const exposure of exposures) expect(exposure.userId).toBe(userId);
+
     writeFileSync(
       REPORT,
       JSON.stringify({
@@ -133,6 +151,17 @@ describe('react-native SDK against a live backend', () => {
         track: { ok: true },
         fanout: { ok: true },
         targeted: { pro: pro.enabled, free: free.enabled, reason: reasons[0] },
+        exposure: {
+          calls: exposures.length,
+          payload: exposures[0]
+            ? {
+                experiment_key: exposures[0].experimentKey,
+                variant_name: exposures[0].variantName,
+                variant_id: exposures[0].variantId,
+                user_id: exposures[0].userId,
+              }
+            : null,
+        },
       }) + '\n'
     );
   });
