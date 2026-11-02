@@ -730,6 +730,16 @@ by = [
 ]
 
 [[unit]]
+text = "GET /api/v1/experiments/{experiment_id}/split-url/preview | #1615 | The preview answers what POST /api/v1/tracking/split-url/assign gives the visitor id now, without recording anything: their stored assignment's variant if they have one, else the variant a new visitor with that id gets, by the bandit weights for a bandit experiment and otherwise by the hash of the id and the experiment's key that POST /api/v1/tracking/assign uses. It used to answer an MD5 hash of the id and the experiment's id, which matched the variant a visitor is assigned for only about half of the ids. It checks no eligibility rule. A stored configuration that does not match the experiment's variants answers 409 with the detail split_url_config is not valid; update it with PUT /api/v1/experiments/{id}, where it answered 200. The fields of the answer are unchanged. The OpenAPI document changes only in the operation's description, its response description and the description of user_id. See Split URL preview."
+by = [
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_preview_agrees_with_the_route_and_records_nothing",
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_preview_of_a_bandit_agrees_with_the_route",
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_preview_answers_a_stored_assignment",
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_contract.py::test_a_stored_configuration_that_breaks_the_rules_answers_409",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
 text = "GET /api/v1/feature-flags/, GET /api/v1/experiments/, GET /api/v1/experiments/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results | #1607 | Each of these four read operations also accepts an API key that carries the mcp:read scope, in the X-API-Key header, where it took a sign-in only. The request then reads as the user who created the key, and the operation's role check is the one a sign-in gets. A valid key without mcp:read answers 403; an unknown, inactive, expired or deleted key, or one whose owner is deactivated, answers 401 Invalid API Key. A request with a bearer token is judged on the token alone, and one with neither credential still answers 401 Not authenticated. Keys already labelled mcp:read gain this access at upgrade; an ADMIN lists keys with GET /api/v1/api-keys?all=true. This is additive for existing clients, and the routes that create, change or delete flags or experiments, and the routes that manage users, still take a sign-in. The OpenAPI document changes: each operation's security adds the MCPReadAPIKey scheme, and that scheme's description names mcp:read. See Scopes."
 by = [
     "test:backend/tests/smoke/test_mcp_read_routes.py",

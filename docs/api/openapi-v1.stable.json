@@ -18623,7 +18623,7 @@
     },
     "/api/v1/experiments/{experiment_id}/split-url/preview": {
       "get": {
-        "description": "Preview the split URL variant assignment for a given user.\n\nThe route is declared here so the URL exists in every profile; the body\nlives in the split_url module (``experiments_split_url``) and is reached\nthrough the ``core.optional_modules`` seam. Builds without split-URL\nrouting answer HTTP 501 rather than a meaningless assignment.",
+        "description": "Returns the URL that visitor id gets now, without recording anything:\ntheir stored variant if they have one, else the variant a new visitor with\nthat id would get (the bandit weights for a bandit experiment, else the\ntraffic allocation). It checks no eligibility rule: a visitor the global\nholdout, mutual exclusion or targeting would keep out is served the\ncontrol page by POST /api/v1/tracking/split-url/assign instead.\n\nFor ADMIN and DEVELOPER users (and superusers). A deployment without split\nURL testing (the core profile) answers 501.",
         "operationId": "preview_split_url_assignment_api_v1_experiments__experiment_id__split_url_preview_get",
         "parameters": [
           {
@@ -18639,12 +18639,12 @@
             }
           },
           {
-            "description": "User ID to simulate assignment for",
+            "description": "The visitor id to preview",
             "in": "query",
             "name": "user_id",
             "required": true,
             "schema": {
-              "description": "User ID to simulate assignment for",
+              "description": "The visitor id to preview",
               "title": "User Id",
               "type": "string"
             }
@@ -18661,7 +18661,7 @@
                 }
               }
             },
-            "description": "Returns the predicted URL variant for the given user"
+            "description": "The URL that visitor id gets now, without recording anything"
           },
           "401": {
             "content": {

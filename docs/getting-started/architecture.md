@@ -144,33 +144,28 @@ OpenSearch domain: created; nothing writes to it
 
 ---
 
-## Split URL Testing (Lambda@Edge)
+## Split URL Testing
 
-A split URL experiment gives each variant its own URL. The split-URL module ships
-a CloudFront construct (`modules/infrastructure/constructs/split_url_distribution.py`) with a
-Lambda@Edge `viewer-request` router. **No stack uses it**: `infrastructure/cdk/app.py` creates
-no CloudFront distribution, so a deployment has it only if you add it to a stack yourself.
-
-The router (`modules/lambda/split_url_router/handler.py`):
+A split URL experiment gives each variant its own URL. The API decides where each visitor
+goes, in the code that answers `POST /api/v1/tracking/assign`; whatever performs the redirect
+asks it and does what it is told:
 
 ```text
-Viewer request
-    |
-    +-- Read the experiment config from the X-Split-URL-Config request header
-    |     - Missing, invalid, or fewer than two variants: pass the request through
-    |
-    +-- Read the assignment cookie
-    |     - Holds a known variant URL: pass through
-    |     - Absent or unknown: hash the client fingerprint (IP + User-Agent) to pick a variant
-    |
-    +-- Return 302 to the variant URL
-    |
-    +-- Set-Cookie with Max-Age of cookie_ttl_days (default 30 days)
+Visitor asks for https://shop.example.com/checkout?utm_source=mail
+  +-- Your server or edge
+  |     reads the visitor's id cookie, or makes one; asks Controlvar (API key)
+  +-- Controlvar assigns the visitor as /tracking/assign does
+  |     (a stored assignment first; holdout, mutual exclusion, targeting; bandit weights)
+  +-- Treatment: 302 to the variant's URL (with the query string when the variant is on the control URL's host)
+  +-- Control, not eligible, not running, or no answer in time: the page they asked for
 ```
 
-The construct does not set `X-Split-URL-Config`, so how the configuration reaches the router is
-left to you. Lambda@Edge functions must be deployed in `us-east-1`. See
-[Split URL testing](../api/split-url.md).
+The split-URL module also ships a CloudFront construct (`modules/infrastructure/constructs/split_url_distribution.py`) with a
+Lambda@Edge `viewer-request` router. The CloudFront edge router does not split traffic yet.
+**No stack uses it**: `infrastructure/cdk/app.py` creates no CloudFront distribution, so a
+deployment has it only if you add it to a stack yourself. The construct does not set
+`X-Split-URL-Config`, the only place the router reads its configuration from. Lambda@Edge
+functions must be deployed in `us-east-1`. See [Split URL testing](../api/split-url.md).
 
 ---
 

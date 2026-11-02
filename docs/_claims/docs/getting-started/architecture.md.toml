@@ -299,7 +299,7 @@ by = [
 ]
 
 [[unit]]
-text = "Split URL Testing (Lambda@Edge)"
+text = "Split URL Testing"
 by = ["exempt:label"]
 
 [[unit]]
@@ -307,10 +307,24 @@ text = "A split URL experiment gives each variant its own URL."
 by = ["test:modules/backend/tests/integration/api/test_split_url_api.py::TestCreateSplitUrlExperiment::test_admin_can_create_split_url_experiment"]
 
 [[unit]]
-text = "The split-URL module ships a CloudFront construct (modules/infrastructure/constructs/split_url_distribution.py) with a Lambda@Edge viewer-request router."
+text = "The API decides where each visitor goes, in the code that answers POST /api/v1/tracking/assign; whatever performs the redirect asks it and does what it is told:"
+by = [
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_variant_seen_is_the_variant_counted",
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_contract.py::test_the_route_resolves_every_dependency_tracking_assign_declares",
+]
+
+[[unit]]
+text = "The split-URL module also ships a CloudFront construct (modules/infrastructure/constructs/split_url_distribution.py) with a Lambda@Edge viewer-request router."
 by = [
     "test:modules/backend/tests/unit/infrastructure/test_split_url_distribution.py::test_cloudfront_distribution_created",
     "test:modules/backend/tests/unit/infrastructure/test_split_url_distribution.py::test_lambda_edge_attached_to_viewer_request",
+]
+
+[[unit]]
+text = "The CloudFront edge router does not split traffic yet."
+by = [
+    "test:modules/backend/tests/unit/test_split_url_edge_wiring.py::test_the_router_redirects_only_on_the_header",
+    "test:modules/backend/tests/unit/test_split_url_edge_wiring.py::test_nothing_but_the_router_names_the_header",
 ]
 
 [[unit]]
@@ -318,12 +332,11 @@ text = "No stack uses it: infrastructure/cdk/app.py creates no CloudFront distri
 by = ["test:infrastructure/tests/test_front_door_cdk.py::test_no_stack_creates_a_waf_cloudfront_or_api_gateway"]
 
 [[unit]]
-text = "The router (modules/lambda/split_url_router/handler.py):"
-by = ["exempt:navigation"]
-
-[[unit]]
-text = "The construct does not set X-Split-URL-Config, so how the configuration reaches the router is left to you."
-by = ["test:modules/backend/tests/unit/test_front_door_module_facts.py::test_the_split_url_construct_sets_no_router_configuration"]
+text = "The construct does not set X-Split-URL-Config, the only place the router reads its configuration from."
+by = [
+    "test:modules/backend/tests/unit/test_front_door_module_facts.py::test_the_split_url_construct_sets_no_router_configuration",
+    "test:modules/backend/tests/unit/test_split_url_edge_wiring.py::test_the_router_redirects_only_on_the_header",
+]
 
 [[unit]]
 text = "Lambda@Edge functions must be deployed in us-east-1."
