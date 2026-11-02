@@ -585,7 +585,7 @@ def test_every_deferred_page_with_an_install_section_is_read():
     request that packs a README moves the second and third."""
     with_section = [page for page in DEFERRED if INSTALL_HEADING.search(text(page))]
     under_the_rule = [page for page in with_section if page not in PACKAGED]
-    assert (len(with_section), len(under_the_rule), len(PACKAGED)) == (24, 23, 1), (
+    assert (len(with_section), len(under_the_rule), len(PACKAGED)) == (24, 21, 4), (
         with_section,
         sorted(PACKAGED),
     )
@@ -596,11 +596,41 @@ def test_every_deferred_page_with_an_install_section_is_read():
 # ---------------------------------------------------------------------------
 
 #: Each README a registry shows, with its SDK: an explicit list, not
-#: ``DEFERRED`` (a packaged README need not be a deferred page). It is held
-#: exactly to the SDKs scripts/check_packaged_readme.py has rules for, and to
-#: the READMEs the packages actually ship.
+#: ``DEFERRED`` (a packaged README need not be a deferred page: the Python
+#: provider's has a claims registry of its own). It is held exactly to the
+#: SDKs scripts/check_packaged_readme.py holds to I-README, and to the
+#: READMEs the packages actually ship.
 PACKAGED: Dict[str, str] = {
     "sdk/dotnet/README.md": "dotnet",
+    "sdk/openfeature-python/README.md": "openfeature-python",
+    "sdk/openfeature/README.md": "openfeature",
+    "sdk/react/README.md": "react",
+}
+
+#: For each packaged README: the heading a planted registry install goes
+#: under (outside the Install section), the line planted, and what the
+#: registry sweep must then find. The plant must change the page.
+PLANTS: Dict[str, Tuple[str, str, Tuple[str, str]]] = {
+    "sdk/dotnet/README.md": (
+        "## Quick Start\n",
+        "`dotnet add package Controlvar.SDK`",
+        ("nuget", "Controlvar.SDK"),
+    ),
+    "sdk/openfeature-python/README.md": (
+        "## Quick start\n",
+        "`pip install controlvar-openfeature`",
+        ("pypi", "controlvar-openfeature"),
+    ),
+    "sdk/openfeature/README.md": (
+        "## Quick start\n",
+        "`npm install @controlvar/openfeature-provider`",
+        ("npm", "@controlvar/openfeature-provider"),
+    ),
+    "sdk/react/README.md": (
+        "## Provider setup\n",
+        "`npm install @controlvar/react-sdk`",
+        ("npm", "@controlvar/react-sdk"),
+    ),
 }
 
 
@@ -646,20 +676,23 @@ def test_a_packaged_readme_claims_no_attribute_targeting_its_client_does_not_sen
         assert attribute_claims(text(page)) == []
 
 
+def test_every_packaged_readme_has_a_plant():
+    assert set(PLANTS) == set(PACKAGED)
+
+
 @pytest.mark.parametrize("page", sorted(PACKAGED))
 def test_a_registry_install_anywhere_in_a_packaged_readme_is_refused(page):
-    """PP-3's plant, in memory: an install line in the Quick Start, outside
-    the Install section, fails both the contract and the registry sweep."""
+    """PP-3's plant, in memory: an install line in a section other than
+    Install fails both the contract and the registry sweep."""
+    heading, line, expected = PLANTS[page]
     original = text(page)
-    planted = original.replace(
-        "## Quick Start\n", "## Quick Start\n\n`dotnet add package Controlvar.SDK`\n", 1
-    )
+    planted = original.replace(heading, f"{heading}\n{line}\n", 1)
     assert planted != original
     assert any(
         "installs this repository's package from a registry" in p
         for p in _contract_problems(page, planted)
     )
-    assert registry_installs(planted) == [("nuget", "Controlvar.SDK")]
+    assert registry_installs(planted) == [expected]
 
 
 #: A link to a page of this repository on GitHub, with a fragment.

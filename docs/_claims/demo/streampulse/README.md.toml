@@ -409,9 +409,9 @@ text = "react and react-dom are aliased to this app's copies to avoid the duplic
 by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_each_app_builds_against_the_react_sdk_source_with_its_own_react"]
 
 [[unit]]
-text = "StreamPulse uses useFeatureFlag(...).reason and useExperiment(...).assigned / .reason (React SDK ≥ 1.1.0 with the assigned/reason fields)."
+text = "StreamPulse uses useFeatureFlag(...).reason and useExperiment(...).assigned / .reason (React SDK 0.1.0 or later, with the assigned/reason fields)."
 by = [
-    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_react_sdk_is_1_1_0_with_the_hooks_the_apps_use",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_react_sdk_is_0_1_0_with_the_hooks_the_apps_use",
     "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::exposes the server reason when the response carries one",
     "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::maps an ineligible user (assigned: false + reason) onto the control variant the server returned",
 ]
@@ -696,7 +696,7 @@ by = [
 [[unit]]
 text = "npm run typecheck fails inside sdk/react/src | The app needs ExperimentAssignment.assigned / .reason and FeatureFlagEvaluation.reason from the React SDK; make sure sdk/react is at the version in this repo."
 by = [
-    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_react_sdk_is_1_1_0_with_the_hooks_the_apps_use",
+    "test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_react_sdk_is_0_1_0_with_the_hooks_the_apps_use",
     "test:sdk/react/src/__tests__/ExperimentationClient.test.ts::exposes the server reason when the response carries one",
 ]
 

@@ -3,9 +3,17 @@
 
 A registry shows the README packed into a version as that version's page for
 as long as the version exists, and nothing on main can change it afterwards.
-So a README that a registry shows (here: NuGet's ``PackageReadmeFile``) is
-written to be true before the publish and after it, for good (DECISIONS
-T230, the note on T228's bullet 3). It has:
+The README read here is the one each registry shows: the ``README.md`` at the
+root of an npm tarball, the long description in a wheel's ``METADATA`` and an
+sdist's ``PKG-INFO`` (pyproject.toml's ``readme``), and the file a NuGet
+package's nuspec names (``PackageReadmeFile``).
+
+Each SDK the release builds for npm, PyPI or NuGet is held to one of two rule
+sets, and an SDK in neither is refused rather than passed:
+
+``I_README`` (DECISIONS T230, the note on T228's bullet 3), for a package
+whose README is written to be true before its first publish and after it, for
+good. It has:
 
 * no status sentence: neither "not yet published" nor "is on <registry>";
 * no install command for one of this repository's packages from a registry,
@@ -19,35 +27,60 @@ T230, the note on T228's bullet 3). It has:
   kind and holds no fenced block. Instructions for building from a clone
   live under Development.
 
+``STRICT``, for a published package whose README quotes its own version and
+installs it from its registry (the STRICT pages of
+backend/tests/unit/docs/test_sdk_doc_versions.py, which hold those quotes to
+the manifest; the version-bump PR is the commit its tag points at, T228's
+bullet 1). Its README is present, links only absolute URLs, and does not say
+the package is not yet published.
+
 The check reads the README out of the built artefact, so it judges the bytes
 the release would upload. It is a sweep, not a proof: a paraphrase passes,
 and review catches the rest.
 
-An SDK the gate has no rules for is refused rather than passed.
-
 Usage::
 
     python scripts/check_packaged_readme.py --sdk dotnet Controlvar.SDK.0.1.0.nupkg
+    python scripts/check_packaged_readme.py --sdk react controlvar-react-sdk-0.1.0.tgz
+    python scripts/check_packaged_readme.py --sdk openfeature-python dist/*
+    python scripts/check_packaged_readme.py --sdk react --print-rule-set
 
-Exit 0 prints ``<artefact>: README checked``; exit 1 prints each problem.
-Standard library only, so the runner's python3 is enough.
+Exit 0 prints ``<artefact>: README checked`` for each artefact; exit 1 prints
+each problem. ``--print-rule-set`` prints ``i-readme``, ``strict`` or ``none``
+and reads no artefact. Standard library only, so the runner's python3 is
+enough.
 """
 
 from __future__ import annotations
 
 import argparse
+import email.parser
+import email.policy
+import json
 import re
 import sys
+import tarfile
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path, PurePosixPath
+from typing import Callable
 
-#: The SDKs whose packed README this contract holds, each with the page its
-#: Install section links. backend/tests/smoke/test_sdk_release_nuget.py pins
-#: that every SDK whose build job runs this gate is named here.
+#: The SDKs whose packed README the I-README contract holds, each with the
+#: page its Install section links. backend/tests/unit/scripts/
+#: test_check_packaged_readme.py pins this and ``STRICT`` against
+#: scripts/check_sdk_version.py's ECOSYSTEMS, so every SDK the release builds
+#: for npm, PyPI or NuGet is in one of them or refused by design, and
+#: backend/tests/unit/docs/test_deferred_sdk_pages.py holds these READMEs in
+#: the tree to the same contract.
 I_README: dict[str, str] = {
     "dotnet": "docs/sdk/dotnet.md",
+    "openfeature": "docs/sdk/openfeature.md",
+    "openfeature-python": "docs/sdk/openfeature.md",
+    "react": "docs/sdk/react.md",
 }
+#: The published SDKs whose README quotes its version and its registry
+#: install line: present, absolute links, and not "not yet published".
+STRICT: frozenset[str] = frozenset({"js", "python"})
 PAGE_URL = "https://github.com/Controlvar/controlvar/blob/main/"
 
 #: A registry's name, as a status sentence spells it.
@@ -216,13 +249,41 @@ def own_version_quotes(text: str, version: str) -> list[str]:
     return found
 
 
+def rule_set(sdk: str) -> str:
+    """``i-readme``, ``strict`` or ``none``: the rules the gate holds the
+    README of ``sdk`` to. ``none`` is refused."""
+    if sdk in I_README:
+        return "i-readme"
+    if sdk in STRICT:
+        return "strict"
+    return "none"
+
+
+def strict_problems(text: str) -> list[str]:
+    """Each way the README of a STRICT package breaks its rules."""
+    found = []
+    if says_unpublished(text):
+        found.append("the README says the package is not yet published")
+    links = relative_links(text)
+    if links:
+        found.append(
+            f"the README links relative paths, which lead nowhere on a registry: {links}"
+        )
+    return found
+
+
 def problems(sdk: str, text: str, version: str) -> list[str]:
-    """Each way the README ``text`` of ``sdk`` at ``version`` breaks the contract."""
-    if sdk not in I_README:
+    """Each way the README ``text`` of ``sdk`` at ``version`` breaks its rules."""
+    rules = rule_set(sdk)
+    if rules == "none":
         return [
             f"sdk/{sdk} is not classified: this gate has no rules for its README "
-            "(scripts/check_packaged_readme.py, I_README)"
+            "(scripts/check_packaged_readme.py, I_README and STRICT)"
         ]
+    if not text.strip():
+        return ["the README is empty, so the registry would show no README"]
+    if rules == "strict":
+        return strict_problems(text)
     found = []
     plain = fold(MARKDOWN_LINK.sub(r"\1", re.sub(r"[*_`]", "", text))).lower()
     if says_unpublished(text):
@@ -299,43 +360,163 @@ def read_nupkg(path: Path) -> tuple[str, str]:
         return archive.read(entry).decode("utf-8"), metadata.get("version", "")
 
 
+#: The README npm takes from a tarball: a file at the package root named
+#: README, with any extension, in any case. npm packs one of them.
+TGZ_README = re.compile(r"package/readme(?:\.[a-z]{1,10})?", re.IGNORECASE)
+
+
+def read_tgz(path: Path) -> tuple[str, str]:
+    """Return ``(README text, version)`` from an npm tarball: the README at
+    the package root, and ``package/package.json``'s ``version``."""
+    with tarfile.open(path, "r:gz") as archive:
+        members = {member.name: member for member in archive.getmembers()}
+        manifest = members.get("package/package.json")
+        if manifest is None or not manifest.isfile():
+            raise ValueError("the tarball holds no package/package.json")
+        readmes = sorted(
+            name
+            for name, member in members.items()
+            if TGZ_README.fullmatch(name) and member.isfile()
+        )
+        if len(readmes) != 1:
+            raise ValueError(
+                f"expected one README at the package root, found {readmes}, so npm "
+                "would show no README or an unchecked one"
+            )
+        data = json.load(archive.extractfile(manifest))
+        text = archive.extractfile(members[readmes[0]]).read().decode("utf-8")
+    version = data.get("version", "") if isinstance(data, dict) else ""
+    return text, version if isinstance(version, str) else ""
+
+
+def _long_description(raw: bytes, where: str) -> tuple[str, str]:
+    """Return ``(long description, version)`` from core metadata (a wheel's
+    METADATA, an sdist's PKG-INFO): the body after the headers, which is what
+    PyPI renders as the project's page, or a ``Description`` header in the
+    older layout."""
+    message = email.parser.Parser(policy=email.policy.compat32).parsestr(
+        raw.decode("utf-8")
+    )
+    body = message.get_payload()
+    text = body if isinstance(body, str) else ""
+    if not text.strip():
+        text = str(message.get("Description") or "")
+    if not text.strip():
+        raise ValueError(
+            f"{where} has no long description, so PyPI would show no README "
+            "(readme in pyproject.toml)"
+        )
+    return text, str(message.get("Version") or "").strip()
+
+
+#: A wheel's core metadata: ``<name>-<version>.dist-info/METADATA``.
+WHEEL_METADATA = re.compile(r"[^/]{1,200}\.dist-info/METADATA")
+#: An sdist's core metadata, at its top directory: ``<name>-<version>/PKG-INFO``.
+SDIST_METADATA = re.compile(r"[^/]{1,200}/PKG-INFO")
+
+
+def read_wheel(path: Path) -> tuple[str, str]:
+    """Return ``(README text, version)`` from a wheel's METADATA."""
+    with zipfile.ZipFile(path) as archive:
+        found = [n for n in archive.namelist() if WHEEL_METADATA.fullmatch(n)]
+        if len(found) != 1:
+            raise ValueError(f"expected one .dist-info/METADATA, found {found}")
+        return _long_description(archive.read(found[0]), found[0])
+
+
+def read_sdist(path: Path) -> tuple[str, str]:
+    """Return ``(README text, version)`` from an sdist's top-level PKG-INFO."""
+    with tarfile.open(path, "r:gz") as archive:
+        found = [
+            member
+            for member in archive.getmembers()
+            if SDIST_METADATA.fullmatch(member.name) and member.isfile()
+        ]
+        if len(found) != 1:
+            raise ValueError(
+                f"expected one PKG-INFO at the sdist's top directory, found "
+                f"{[member.name for member in found]}"
+            )
+        return _long_description(archive.extractfile(found[0]).read(), found[0].name)
+
+
+#: Each artefact this gate reads, by the end of its file name.
+READERS: tuple[tuple[str, Callable[[Path], tuple[str, str]]], ...] = (
+    (".nupkg", read_nupkg),
+    (".tgz", read_tgz),
+    (".whl", read_wheel),
+    (".tar.gz", read_sdist),
+)
+
+
+def check(sdk: str, artefact: Path) -> int:
+    """Check one artefact's README; print each problem, or that it passed."""
+    readers = [read for end, read in READERS if artefact.name.endswith(end)]
+    if not readers:
+        print(
+            f"error: {artefact}: this gate reads a .nupkg, a .tgz, a .whl or a .tar.gz",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        text, version = readers[0](artefact)
+    except (
+        OSError,
+        ValueError,
+        zipfile.BadZipFile,
+        tarfile.TarError,
+        ET.ParseError,
+        UnicodeDecodeError,
+    ) as error:
+        print(f"error: {artefact}: {error}", file=sys.stderr)
+        return 1
+    if not version:
+        print(f"error: {artefact}: the package has no version", file=sys.stderr)
+        return 1
+    found = problems(sdk, text, version)
+    for problem in found:
+        print(f"error: {artefact}: {problem}", file=sys.stderr)
+    if found:
+        return 1
+    print(f"{artefact}: README checked")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument(
         "--sdk", required=True, help="Directory name under sdk/, e.g. dotnet."
     )
-    parser.add_argument("artefact", type=Path, help="The built package (.nupkg).")
+    parser.add_argument(
+        "--print-rule-set",
+        action="store_true",
+        help="Print the SDK's rule set (i-readme, strict or none) and exit.",
+    )
+    parser.add_argument(
+        "artefacts",
+        type=Path,
+        nargs="*",
+        help="The built packages: a .nupkg, an npm .tgz, a wheel or an sdist.",
+    )
     args = parser.parse_args(argv)
 
-    if args.sdk not in I_README:
-        print(
-            f"error: {args.artefact}: {problems(args.sdk, '', '')[0]}", file=sys.stderr
-        )
+    if args.print_rule_set:
+        if args.artefacts:
+            parser.error("--print-rule-set reads no artefact")
+        print(rule_set(args.sdk))
+        return 0
+    if not args.artefacts:
+        parser.error("name at least one artefact")
+    if rule_set(args.sdk) == "none":
+        for artefact in args.artefacts:
+            print(
+                f"error: {artefact}: {problems(args.sdk, '', '')[0]}", file=sys.stderr
+            )
         return 1
-    if args.artefact.suffix != ".nupkg":
-        print(f"error: {args.artefact}: this gate reads a .nupkg", file=sys.stderr)
-        return 1
-    try:
-        text, version = read_nupkg(args.artefact)
-    except (
-        OSError,
-        ValueError,
-        zipfile.BadZipFile,
-        ET.ParseError,
-        UnicodeDecodeError,
-    ) as error:
-        print(f"error: {args.artefact}: {error}", file=sys.stderr)
-        return 1
-    if not version:
-        print(f"error: {args.artefact}: the nuspec has no <version>", file=sys.stderr)
-        return 1
-    found = problems(args.sdk, text, version)
-    for problem in found:
-        print(f"error: {args.artefact}: {problem}", file=sys.stderr)
-    if found:
-        return 1
-    print(f"{args.artefact}: README checked")
-    return 0
+    status = 0
+    for artefact in args.artefacts:
+        status |= check(args.sdk, artefact)
+    return status
 
 
 if __name__ == "__main__":
