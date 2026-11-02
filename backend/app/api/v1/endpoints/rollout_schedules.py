@@ -9,6 +9,8 @@ from typing import Any, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi.exceptions import RequestValidationError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
@@ -23,6 +25,7 @@ from backend.app.models.rollout_schedule import (
 )
 from backend.app.models.user import User
 from backend.app.schemas.rollout_schedule import (
+    END_DATE_AFTER_START,
     RolloutScheduleCreate,
     RolloutScheduleListResponse,
     RolloutScheduleResponse,
@@ -41,6 +44,37 @@ from backend.app.services.rollout_service import RolloutRuleConflict, RolloutSer
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+#: The database's rule that a schedule's end is after its start (#962).
+SCHEDULE_DATES_CONSTRAINT = "check_rollout_schedule_dates"
+
+
+def _violated_constraint(error: IntegrityError) -> Optional[str]:
+    """The name of the constraint the database refused the write on, or None.
+
+    psycopg2 reports it as ``diag.constraint_name``; a NOT NULL violation, for
+    one, names none. Matched by name only, never by the message's text.
+    """
+    diag = getattr(error.orig, "diag", None)
+    return getattr(diag, "constraint_name", None)
+
+
+def _schedule_dates_refused() -> RequestValidationError:
+    """The 422 for a schedule whose end would not be after its start.
+
+    The same ``type``, ``loc`` and ``msg`` as the request model's own refusal,
+    for the case only the database can judge: a PUT that sends one date,
+    compared with the stored other one. Nothing in it comes from the request.
+    """
+    return RequestValidationError(
+        [
+            {
+                "type": "value_error",
+                "loc": ("body",),
+                "msg": f"Value error, {END_DATE_AFTER_START}",
+            }
+        ]
+    )
 
 
 def _require_update_on_flag(
@@ -144,6 +178,18 @@ def create_rollout_schedule(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except IntegrityError as e:
+        if _violated_constraint(e) == SCHEDULE_DATES_CONSTRAINT:
+            db.rollback()
+            raise _schedule_dates_refused() from None
+        # Every other constraint keeps the answer and the log line of the
+        # ``except Exception`` below. Not a bare ``raise``: an exception
+        # leaving this handler does not reach that one.
+        logger.error(f"Error creating rollout schedule: {e!s}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while creating the rollout schedule",
+        )
     except Exception as e:
         logger.error(f"Error creating rollout schedule: {e!s}")
         raise HTTPException(
@@ -240,8 +286,10 @@ def update_rollout_schedule(
     """
     Update an existing rollout schedule.
 
-    This endpoint allows updating the properties of a rollout schedule,
-    including its stages and status transitions.
+    This endpoint updates the properties of a rollout schedule. It does not
+    take `stages`: a request that contains it answers 422. Add a stage with
+    `POST /api/v1/rollout-schedules/{schedule_id}/stages` and change one with
+    `PUT /api/v1/rollout-schedules/stages/{stage_id}`.
     """
     flag = _require_update_on_flag(db, current_user, schedule_id=schedule_id)
     before = audit_snapshot(EntityType.FEATURE_FLAG, flag)
@@ -264,6 +312,18 @@ def update_rollout_schedule(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except HTTPException:
         raise  # this route's own 404: not an unexpected failure
+    except IntegrityError as e:
+        if _violated_constraint(e) == SCHEDULE_DATES_CONSTRAINT:
+            db.rollback()
+            raise _schedule_dates_refused() from None
+        # Every other constraint keeps the answer and the log line of the
+        # ``except Exception`` below. Not a bare ``raise``: an exception
+        # leaving this handler does not reach that one.
+        logger.error(f"Error updating rollout schedule: {e!s}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while updating the rollout schedule",
+        )
     except Exception as e:
         logger.error(f"Error updating rollout schedule: {e!s}")
         raise HTTPException(
