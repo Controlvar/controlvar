@@ -60,7 +60,7 @@ the dashboard checks:
 | Third-party integrations | `integrations` | Jira, Salesforce and GitHub |
 | Counters | `counters` | Routes to increment and read assignment and conversion counters in DynamoDB; assignment and tracking do not write them |
 | ETL | `etl` | Glue crawlers, Athena partitions and scheduled jobs |
-| Split URL testing | `split_url` | Server-side URL splitting at the edge. The edge router has no configuration source in this release, so it does not split traffic yet; experiments, their URL configuration and the preview work ([#393](https://github.com/Controlvar/controlvar/issues/393)) |
+| Split URL testing | `split_url` | Split URL experiments: each variant is its own URL. Your server or edge asks the API where to send each visitor; the CloudFront edge router does not split traffic yet ([#393](https://github.com/Controlvar/controlvar/issues/393)). The AWS installer installs the core profile, so it does not include them |
 
 The split is along "one team running the product" versus "an organisation
 administering it".

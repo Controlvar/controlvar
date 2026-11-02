@@ -13,10 +13,11 @@ The keys are the contract with ``modules.register(hooks)``
 (``modules/backend/app/register.py``):
 
 ``split_url.routing``
-    The routing function itself.  Read through
-    :func:`split_url_routing_available`, which gates *creation* of
-    ``experiment_type=split_url`` -- without routing, a core-profile user
-    could store a split-URL experiment that nothing ever routes.
+    The routing resolver itself (the variant a visitor gets now, without
+    recording anything).  Read through :func:`split_url_routing_available`,
+    which gates *creation* of ``experiment_type=split_url`` -- without
+    routing, a core-profile user could store a split-URL experiment that
+    nothing ever routes.
 
 ``split_url.preview``
     The body of ``GET /experiments/{id}/split-url/preview``.
