@@ -7,9 +7,7 @@ A split URL experiment gives each variant its own page. When a visitor asks for 
 
 Creating a split URL experiment is an API call, shown on this page. Starting, pausing and ending it, and reading its results, are in the dashboard, as for any experiment. Nothing sends a visitor anywhere until your server or edge asks Controlvar for each one: an active experiment with nothing installed in front of the site shows only as zero visitors in its results.
 
-!!! warning "The CloudFront edge router does not split traffic yet"
-    The CloudFront edge router does not split traffic yet; use your server or edge, as this
-    page shows ([#393](https://github.com/Controlvar/controlvar/issues/393)).
+On AWS, an optional CloudFront router can do the asking for your site: the [CloudFront edge router](#the-cloudfront-edge-router) (beta), a Lambda@Edge function you deploy on its own, which follows the same rules as any server or edge.
 
 ---
 
@@ -17,11 +15,14 @@ Creating a split URL experiment is an API call, shown on this page. Starting, pa
 
 | Deployment | Split URL experiments | What sends each visitor to their variant |
 |---|---|---|
-| Docker Compose | Full profile only (the default is the core profile) | Your server or edge |
-| Helm chart | Full profile only: `profile: full` (the default is `core`) | Your server or edge |
-| AWS CDK app | Yes: a full checkout deploys the full profile | Your server or edge |
+| Docker Compose | Full profile only (the default is the core profile) | Your server or edge, or the CloudFront edge router |
+| Helm chart | Full profile only: `profile: full` (the default is `core`) | Your server or edge, or the CloudFront edge router |
+| AWS CDK app | Yes: a full checkout deploys the full profile | Your server or edge, or the CloudFront edge router |
 | AWS installer (beta) | No: it installs the core profile, which answers `501` to creating one | Nothing |
 | Development checkout | Yes | Your server or edge |
+
+The CloudFront edge router asks the API from AWS's edge, so the API it calls must be
+reachable from the internet over https, with a valid certificate.
 
 ---
 
@@ -696,7 +697,9 @@ Controlvar for them. Check, in order:
    or `/index.html` the control URL does not have.
 2. An entry page your server serves carries an `X-Split-URL` header. None means the request
    did not match an entry; `failed` means the API did not answer, and the integration's log
-   says why, with the HTTP status (`401` for a revoked key, `429` for the rate limit).
+   says why, with the HTTP status (`401` for a revoked key, `429` for the rate limit). The
+   CloudFront edge router's log is in CloudWatch (see
+   [AWS integration](../integrations/aws.md#the-split-url-edge-router)).
 3. Conversions are sent with the visitor-id cookie's value as `user_id`, and name the
    experiment, as in [Count conversions](#count-conversions).
 
@@ -762,7 +765,10 @@ with `; Domain=<domain>` added when you give the integration a cookie domain, an
 without the cookie gets a new random id, and the integration sets the cookie whenever it made
 up an id, whatever the API answered, so a visitor whose request failed keeps the same id next
 time. A cookie that is there but unusable (empty, longer than 255 characters, or with a control
-character) is left as it is, and the visitor is served the page.
+character) is left as it is, and the visitor is served the page. The CloudFront edge router
+follows the same rule, with an id it derives from CloudFront's id for the request (see
+[The CloudFront edge router](#the-cloudfront-edge-router)), and with settings of its own for
+the cookie's name, lifetime and domain.
 
 The cookie is Secure, so a browser keeps it only on https pages, and on localhost.
 
@@ -773,6 +779,10 @@ visitors split and its conversions are not counted.
 A site that needs consent before it sets an identifying cookie makes no call and sets no
 cookie until the visitor consents, and serves the page they asked for until then: the
 reference integration takes a `consented` function for this.
+
+The CloudFront router sets the visitor-id cookie on entry pages without asking. A site that
+must have consent before it sets an identifying cookie uses a server-side integration
+instead, which makes no call and sets no cookie until the visitor consents.
 
 ---
 
@@ -810,11 +820,23 @@ variant's `traffic_allocation`.
 
 ---
 
-## CloudFront CDK construct
+## The CloudFront edge router
 
-The module also holds a CloudFront distribution construct with a Lambda@Edge router. The
-CloudFront edge router does not split traffic yet: put the redirect in your server or edge.
-See [AWS integration](../integrations/aws.md).
+The CloudFront edge router (beta) puts a CloudFront distribution in front of your site, with
+a Lambda@Edge function that follows the rules in
+[Set it up in your server or edge](#set-it-up-in-your-server-or-edge): it keeps the routes
+table, asks the assign route about each `GET` of an entry page, and redirects or serves. It
+runs at two of the distribution's events:
+
+- at viewer request, it asks where to send the visitor, and answers a treatment's `302`
+  itself, with the visitor-id cookie for a visitor who arrived without one;
+- at viewer response, it sets the visitor-id cookie on an entry page served to a visitor who
+  arrived without one, whatever the API answered, and adds `X-Split-URL`.
+
+A visitor without the cookie gets an id the router derives from CloudFront's id for the
+request, which both events carry, so the cookie holds the id the API was sent. Deploying it,
+its settings, what it costs and where its logs are: see
+[AWS integration](../integrations/aws.md#the-split-url-edge-router).
 
 ---
 
@@ -829,6 +851,11 @@ See [AWS integration](../integrations/aws.md).
 - `SDK_RATE_LIMIT_PER_MINUTE` raises it, for every SDK route and every address.
 - Over the limit the API answers `429`, and the reference integration serves the page with
   `X-Split-URL: failed` and logs `split_url_failed status=429`.
+- The CloudFront edge router does the same over the limit: it serves the page with
+  `X-Split-URL: failed`, and its log line carries `"status": "429"`.
+- The CloudFront edge router sends no targeting attributes (`context`), so a new visitor of
+  an experiment with targeting rules is not enrolled: they are served the page they asked
+  for, with `X-Split-URL: not-enrolled`.
 - Above the limit, a returning visitor whose assignment is a treatment is served the control
   page while their conversions still count for the treatment; a site with more than about 100
   entry-page views a second is in that range.

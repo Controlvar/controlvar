@@ -61,17 +61,11 @@ text = "Nothing sends a visitor anywhere until your server or edge asks Controlv
 by = ["test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_preview_agrees_with_the_route_and_records_nothing"]
 
 [[unit]]
-text = "The CloudFront edge router does not split traffic yet"
+text = "On AWS, an optional CloudFront router can do the asking for your site: the CloudFront edge router (beta), a Lambda@Edge function you deploy on its own, which follows the same rules as any server or edge."
 by = [
-    "test:modules/backend/tests/unit/test_split_url_edge_wiring.py::test_the_router_redirects_only_on_the_header",
-    "test:modules/backend/tests/unit/test_split_url_edge_wiring.py::test_nothing_but_the_router_names_the_header",
-]
-
-[[unit]]
-text = "The CloudFront edge router does not split traffic yet; use your server or edge, as this page shows (#393)."
-by = [
-    "test:modules/backend/tests/unit/test_split_url_edge_wiring.py::test_the_router_redirects_only_on_the_header",
-    "test:modules/backend/tests/unit/test_split_url_edge_wiring.py::test_nothing_but_the_router_names_the_header",
+    "test:modules/backend/tests/integration/split_url/test_split_url_router_e2e.py::test_a_split_url_experiment_splits_its_visitors_through_the_router",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_the_routers_rules_are_the_ones_the_api_and_the_reference_use",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_nothing_deploys_the_edge_app",
 ]
 
 [[unit]]
@@ -83,22 +77,27 @@ text = "Deployment | Split URL experiments | What sends each visitor to their va
 by = ["exempt:label"]
 
 [[unit]]
-text = "Docker Compose | Full profile only (the default is the core profile) | Your server or edge"
+text = "Docker Compose | Full profile only (the default is the core profile) | Your server or edge, or the CloudFront edge router"
 by = [
     "test:backend/tests/unit/infrastructure/test_dev_compose_services.py::test_the_profile_picks_the_api_build_target",
     "test:backend/tests/unit/core/test_optional_modules.py::TestSplitUrlRefusedWithoutRouting::test_create_split_url_experiment_returns_501",
+    "test:modules/backend/tests/integration/split_url/test_split_url_router_e2e.py::test_a_split_url_experiment_splits_its_visitors_through_the_router",
 ]
 
 [[unit]]
-text = "Helm chart | Full profile only: profile: full (the default is core) | Your server or edge"
+text = "Helm chart | Full profile only: profile: full (the default is core) | Your server or edge, or the CloudFront edge router"
 by = [
     "test:backend/tests/unit/chart/test_chart_render.py::test_images_are_profile_dash_app_version",
     "test:backend/tests/unit/core/test_optional_modules.py::TestSplitUrlRefusedWithoutRouting::test_create_split_url_experiment_returns_501",
+    "test:modules/backend/tests/integration/split_url/test_split_url_router_e2e.py::test_a_split_url_experiment_splits_its_visitors_through_the_router",
 ]
 
 [[unit]]
-text = "AWS CDK app | Yes: a full checkout deploys the full profile | Your server or edge"
-by = ["test:backend/tests/unit/infrastructure/test_deploy_profile.py::TestTheProfileIsAnExplicitInput::test_the_workflow_takes_a_profile_input_defaulting_to_full"]
+text = "AWS CDK app | Yes: a full checkout deploys the full profile | Your server or edge, or the CloudFront edge router"
+by = [
+    "test:backend/tests/unit/infrastructure/test_deploy_profile.py::TestTheProfileIsAnExplicitInput::test_the_workflow_takes_a_profile_input_defaulting_to_full",
+    "test:modules/backend/tests/integration/split_url/test_split_url_router_e2e.py::test_a_split_url_experiment_splits_its_visitors_through_the_router",
+]
 
 [[unit]]
 text = "AWS installer (beta) | No: it installs the core profile, which answers 501 to creating one | Nothing"
@@ -110,6 +109,10 @@ by = [
 [[unit]]
 text = "Development checkout | Yes | Your server or edge"
 by = ["docex:docs/api/split-url.md#\"split_url\""]
+
+[[unit]]
+text = "The CloudFront edge router asks the API from AWS's edge, so the API it calls must be reachable from the internet over https, with a valid certificate."
+by = ["test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_synth_is_refused_for_each_wrong_setting"]
 
 [[unit]]
 text = "Create and start one"
@@ -631,6 +634,10 @@ by = [
 ]
 
 [[unit]]
+text = "The CloudFront edge router's log is in CloudWatch (see AWS integration)."
+by = ["exempt:third-party"]
+
+[[unit]]
 text = "Conversions are sent with the visitor-id cookie's value as user_id, and name the experiment, as in Count conversions."
 by = ["exempt:instruction"]
 
@@ -797,6 +804,15 @@ text = "A cookie that is there but unusable (empty, longer than 255 characters, 
 by = ["test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_an_unusable_cookie_is_skipped_and_never_overwritten"]
 
 [[unit]]
+text = "The CloudFront edge router follows the same rule, with an id it derives from CloudFront's id for the request (see The CloudFront edge router), and with settings of its own for the cookie's name, lifetime and domain."
+by = [
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_viewer_response_sets_the_cookie_when_the_request_failed",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_an_unusable_cookie_is_skipped_and_never_overwritten",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_the_visitor_id_is_derived_from_the_request_id",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_router_is_bundled_with_its_settings",
+]
+
+[[unit]]
 text = "The cookie is Secure, so a browser keeps it only on https pages, and on localhost."
 by = ["test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_the_cookie_is_exact"]
 
@@ -813,6 +829,17 @@ by = ["test:modules/backend/tests/integration/split_url/test_split_url_assign_e2
 
 [[unit]]
 text = "A site that needs consent before it sets an identifying cookie makes no call and sets no cookie until the visitor consents, and serves the page they asked for until then: the reference integration takes a consented function for this."
+by = ["test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_only_a_get_with_consent_is_split"]
+
+[[unit]]
+text = "The CloudFront router sets the visitor-id cookie on entry pages without asking."
+by = [
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_served_page_keeps_its_own_headers_and_gets_the_routers",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_redirect_is_exact",
+]
+
+[[unit]]
+text = "A site that must have consent before it sets an identifying cookie uses a server-side integration instead, which makes no call and sets no cookie until the visitor consents."
 by = ["test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_only_a_get_with_consent_is_split"]
 
 [[unit]]
@@ -871,25 +898,44 @@ by = [
 ]
 
 [[unit]]
-text = "CloudFront CDK construct"
+text = "The CloudFront edge router"
 by = ["exempt:label"]
 
 [[unit]]
-text = "The module also holds a CloudFront distribution construct with a Lambda@Edge router."
+text = "The CloudFront edge router (beta) puts a CloudFront distribution in front of your site, with a Lambda@Edge function that follows the rules in Set it up in your server or edge: it keeps the routes table, asks the assign route about each GET of an entry page, and redirects or serves."
 by = [
-    "test:modules/backend/tests/unit/infrastructure/test_split_url_distribution.py::test_cloudfront_distribution_created",
-    "test:modules/backend/tests/unit/infrastructure/test_split_url_distribution.py::test_lambda_edge_attached_to_viewer_request",
+    "test:modules/backend/tests/integration/split_url/test_split_url_router_e2e.py::test_a_split_url_experiment_splits_its_visitors_through_the_router",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_the_routes_table_is_kept_for_its_max_age",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_only_a_get_is_split",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_edge_app_runs_the_router_at_both_viewer_events",
 ]
 
 [[unit]]
-text = "The CloudFront edge router does not split traffic yet: put the redirect in your server or edge."
+text = "It runs at two of the distribution's events:"
+by = ["test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_the_edge_app_runs_the_router_at_both_viewer_events"]
+
+[[unit]]
+text = "at viewer request, it asks where to send the visitor, and answers a treatment's 302 itself, with the visitor-id cookie for a visitor who arrived without one;"
+by = ["test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_redirect_is_exact"]
+
+[[unit]]
+text = "at viewer response, it sets the visitor-id cookie on an entry page served to a visitor who arrived without one, whatever the API answered, and adds X-Split-URL."
 by = [
-    "test:modules/backend/tests/unit/test_split_url_edge_wiring.py::test_the_router_redirects_only_on_the_header",
-    "test:modules/backend/tests/unit/test_split_url_edge_wiring.py::test_nothing_but_the_router_names_the_header",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_served_page_keeps_its_own_headers_and_gets_the_routers",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_viewer_response_sets_the_cookie_when_the_request_failed",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_viewer_response_in_a_cold_container_sets_the_cookie",
 ]
 
 [[unit]]
-text = "See AWS integration."
+text = "A visitor without the cookie gets an id the router derives from CloudFront's id for the request, which both events carry, so the cookie holds the id the API was sent."
+by = [
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_the_visitor_id_is_derived_from_the_request_id",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_served_page_keeps_its_own_headers_and_gets_the_routers",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_the_cookie_does_not_rest_on_the_internal_header",
+]
+
+[[unit]]
+text = "Deploying it, its settings, what it costs and where its logs are: see AWS integration."
 by = ["exempt:navigation"]
 
 [[unit]]
@@ -921,6 +967,14 @@ by = [
 [[unit]]
 text = "Over the limit the API answers 429, and the reference integration serves the page with X-Split-URL: failed and logs split_url_failed status=429."
 by = ["test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_a_failure_serves_the_page_and_logs_its_status"]
+
+[[unit]]
+text = "The CloudFront edge router does the same over the limit: it serves the page with X-Split-URL: failed, and its log line carries \"status\": \"429\"."
+by = ["test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_failure_serves_the_page_and_logs_its_status"]
+
+[[unit]]
+text = "The CloudFront edge router sends no targeting attributes (context), so a new visitor of an experiment with targeting rules is not enrolled: they are served the page they asked for, with X-Split-URL: not-enrolled."
+by = ["test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_served_entry_page_names_its_outcome"]
 
 [[unit]]
 text = "Above the limit, a returning visitor whose assignment is a treatment is served the control page while their conversions still count for the treatment; a site with more than about 100 entry-page views a second is in that range."

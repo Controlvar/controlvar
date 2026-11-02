@@ -124,25 +124,65 @@ for frontend assets. The dashboard is an ECS service behind the same Application
 Load Balancer as the API, which sends it every path except `/api/*`, `/health`,
 `/health/*` and `/metrics`; see [AWS CDK Deployment](../self-hosting/cdk.md).
 
-### Lambda@Edge for Split URL Testing
+### The split URL edge router
 
-The split-URL module ships a CDK construct,
-`modules/infrastructure/constructs/split_url_distribution.py`, that creates a
-CloudFront distribution with a Lambda@Edge `viewer-request` router in front of
-your application. `infrastructure/cdk/app.py` does not use it, so a deployment
-gets it only if you add it to a stack yourself. The router
-(`modules/lambda/split_url_router/handler.py`):
+The split URL module's CloudFront edge router (beta) sends each visitor who opens a split URL
+experiment's control page to their variant, as
+[Split URL testing](../api/split-url.md#the-cloudfront-edge-router) describes: a CloudFront
+distribution in front of your site, with a Lambda@Edge function that asks the API at viewer
+request and sets the visitor-id cookie at viewer response. It is a CDK app of its own,
+`modules/infrastructure/split_url_edge/`, with one stack, `controlvar-split-url-edge`, in
+`us-east-1`, where AWS runs Lambda@Edge functions from.
 
-1. Reads the assignment cookie
-2. If absent, hashes the client fingerprint (IP + User-Agent) to assign a variant
-3. Returns a `302 Found` redirect to the variant URL
-4. Sets a `Set-Cookie` header recording the assignment (30 days by default; `cookie_ttl_days` in the experiment config)
+Nothing is created unless you deploy it: `cdk deploy --all` of the platform's app does not,
+and no workflow or installer step does. Deploying it creates a CloudFront distribution and a
+Lambda@Edge function in us-east-1, which AWS bills. Every request for every path through the
+distribution runs two Lambda@Edge invocations, one at viewer request and one at viewer
+response, and the distribution caches nothing.
 
-AWS requires a Lambda@Edge function to be created in `us-east-1`.
+Before you deploy it:
 
-The construct is Python, like the rest of the CDK app. Its usage, and how the
-router receives its configuration, are in
-[Split URL testing](../api/split-url.md#cloudfront-cdk-construct).
+- the account is bootstrapped for CDK in us-east-1;
+- the API runs the full profile and is reachable from the internet over https, with a valid
+  certificate;
+- you have an API key for it: use an API key made for the router; changing it means
+  redeploying the router;
+- you manage the DNS of any alternate domain name you give the distribution.
+
+Its settings are environment variables, read when you run `cdk deploy` from
+`modules/infrastructure/split_url_edge/`:
+
+| Setting | What it is |
+|---|---|
+| `SPLIT_URL_API_URL` | Required: the API's https URL, with no path |
+| `SPLIT_URL_API_KEY` | Required: the router's API key |
+| `SPLIT_URL_ORIGIN` | Required: the host name of your site's origin |
+| `SPLIT_URL_COOKIE_NAME` | The visitor-id cookie's name (default `controlvar_uid`) |
+| `SPLIT_URL_COOKIE_MAX_AGE_DAYS` | Its lifetime, from 1 to 400 days (default 30) |
+| `SPLIT_URL_COOKIE_DOMAIN` | Its `Domain` attribute (none by default) |
+| `SPLIT_URL_DOMAIN_NAMES` | Alternate domain names for the distribution, separated by commas; with the next |
+| `SPLIT_URL_CERTIFICATE_ARN` | Their ACM certificate, in us-east-1; with the previous |
+
+A setting that is missing or wrong stops the synth, with a message that names it. The
+function runs Python 3.12 on x86_64.
+
+The router fails open: when the API does not answer in time or answers an error, the visitor
+gets the page they asked for, with `X-Split-URL: failed`. Each failure is one JSON line in
+the router's log, with the HTTP status or a fixed word, such as
+`{"event": "split_url_failed", "phase": "viewer-request", "status": "429"}`. The log is in
+CloudWatch in the Region where the function ran, under the log group
+`/aws/lambda/us-east-1.<function name>`.
+
+`X-Split-URL` on a served page rests on a behaviour AWS does not document (that a header
+added at viewer request is visible at viewer response). It is unverified until the router
+has run on AWS: on 2026-11-02 it had not.
+
+The CloudFront router sets the visitor-id cookie on entry pages without asking. A site that
+must have consent before it sets an identifying cookie uses a server-side integration
+instead, which makes no call and sets no cookie until the visitor consents.
+
+On 2026-11-02 the router had been tested against simulated CloudFront events, and had not yet
+run on AWS.
 
 ---
 
