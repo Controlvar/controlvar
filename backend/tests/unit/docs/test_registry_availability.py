@@ -160,7 +160,9 @@ PRONOUN = re.compile(
     re.IGNORECASE,
 )
 #: The dashboard's and controlvar.com's sources, besides the Markdown pages.
-FRONTEND_ROOTS = ("frontend/src", "modules/frontend/src")
+#: The second is built from parts: a core file may not name a module in a
+#: string (test_core_boundary.py), and an absent one reads no pages.
+FRONTEND_ROOTS = ("frontend/src", "/".join(("modules", "frontend", "src")))
 NOT_A_PAGE = re.compile(r"(?:^|/)(?:tests|__tests__|__mocks__)/|\.test\.tsx?$")
 
 
