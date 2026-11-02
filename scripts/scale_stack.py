@@ -9,11 +9,12 @@
     python3 scripts/scale_stack.py down --work DIR
 
 The harness measures the shipped stack, ``deploy/compose/compose.yml``, with
-``tests/scale/compose.scale.yml`` on top. That file names its project
-``experimently-selfhost``: a reader who already runs Controlvar from it, and
-followed a load-test page's bare ``docker compose`` commands, would load-test
-their real stack, write test data into their real database, and delete it all
-at the teardown (``down -v``). So the harness owns its Compose project:
+``tests/scale/compose.scale.yml`` on top. That file fixes its own project
+name (its top-level ``name:``), which is a real installation's: a reader who
+already runs Controlvar from it, and followed a load-test page's bare
+``docker compose`` commands, would load-test their real stack, write test data
+into their real database, and delete it all at the teardown (``down -v``). So
+the harness owns its Compose project:
 
 * every ``docker compose`` argv is built by :func:`compose_argv`: always
   ``-p controlvar-scale``, always ``--env-file <work>/.env``, always the
@@ -24,9 +25,10 @@ at the teardown (``down -v``). So the harness owns its Compose project:
   priority over ``--env-file``, so without this an exported ``POSTGRES_SERVER``
   would point the scale stack's migrations and fixtures at another database.
   ``generate-env.sh`` gets the same environment plus ``ENV_FILE``;
-* it refuses the project ``experimently-selfhost`` and the env file
-  ``deploy/compose/.env``, and it only ever uses an env file it wrote itself
-  (one carrying :data:`ENV_MARKER`), so it never edits someone's real settings.
+* it refuses ``compose.yml``'s own project name (read from the file, see
+  :func:`selfhost_project`) and the env file ``deploy/compose/.env``, and it
+  only ever uses an env file it wrote itself (one carrying
+  :data:`ENV_MARKER`), so it never edits someone's real settings.
 
 ``up`` writes ``<work>/.env`` once (``generate-env.sh``, then the port, the
 public URL and the metrics token), starts the stack, waits for
@@ -47,6 +49,7 @@ import argparse
 import http.client
 import json
 import os
+import re
 import secrets
 import subprocess
 import sys
@@ -66,8 +69,6 @@ SELFHOST_ENV_FILE = ROOT / "deploy" / "compose" / ".env"
 PRELOAD_SQL = ROOT / "tests" / "scale" / "preload.sql"
 
 PROJECT = "controlvar-scale"
-#: ``compose.yml``'s own ``name:``, a real installation's project.
-SELFHOST_PROJECT = "experimently-selfhost"
 #: What a child process inherits: ``scripts/check_compose_config.py``'s list.
 KEEP_ENV = ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG", "DOCKER_CONTEXT")
 #: The line ``up`` adds to the env file it generated. Without it, the file is
@@ -188,13 +189,28 @@ def env_file(work: Path) -> Path:
     return path
 
 
+def selfhost_project() -> str:
+    """``compose.yml``'s own project name: its top-level ``name:`` line.
+
+    Read from the file rather than copied here, so the refusal follows the
+    file. A file with no such line is refused: the harness cannot tell which
+    project it must never touch.
+    """
+    for line in COMPOSE_FILE.read_text(encoding="utf-8").splitlines():
+        match = re.fullmatch(r"name:\s*([A-Za-z0-9][A-Za-z0-9_.-]*)\s*(#.*)?", line)
+        if match:
+            return match.group(1)
+    raise Refused(f"{COMPOSE_FILE} has no top-level name: line")
+
+
 def check_project(project: str) -> str:
     """Only this harness's project; never the self-hosted one."""
-    if project.strip().lower() == SELFHOST_PROJECT:
+    shipped = selfhost_project()
+    if project.strip().lower() == shipped.lower():
         raise Refused(
-            f"refusing the Compose project {SELFHOST_PROJECT}: that is a real "
-            f"installation's (deploy/compose/compose.yml), and down -v would "
-            f"delete its database"
+            f"refusing the Compose project {shipped}: it is the one "
+            f"deploy/compose/compose.yml names, a real installation's, and "
+            f"down -v would delete its database"
         )
     if project != PROJECT:
         raise Refused(f"the harness's Compose project is {PROJECT}, not {project!r}")

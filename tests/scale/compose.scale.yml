@@ -7,8 +7,8 @@
 #
 # with a child environment reduced to PATH, HOME and the DOCKER_ settings
 # scripts/check_compose_config.py keeps. Do not run it by hand without -p:
-# deploy/compose/compose.yml names its project experimently-selfhost, which is
-# a real installation's, volumes included.
+# the project name deploy/compose/compose.yml sets is a real installation's,
+# volumes included.
 #
 # It changes the shipped stack in exactly these ways, and
 # backend/tests/unit/scripts/test_scale_stack.py holds the key set to them:

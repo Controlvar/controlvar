@@ -4,10 +4,10 @@
 
 ``scripts/scale_stack.py`` runs every ``docker compose`` call the scale
 harness makes. A reader who already runs Controlvar from ``deploy/compose``
-must not have the harness touch that stack: its project is
-``experimently-selfhost`` and ``down -v`` deletes its database. Compose also
-lets the OS environment win over ``--env-file``, so an exported
-``POSTGRES_SERVER`` would point the scale stack at another database.
+must not have the harness touch that stack: its project is the one
+``compose.yml`` names, and ``down -v`` deletes its database. Compose also lets
+the OS environment win over ``--env-file``, so an exported ``POSTGRES_SERVER``
+would point the scale stack at another database.
 
 Nothing here runs Docker. Each test drives a real subcommand with the process
 runner and the HTTP client replaced by :class:`World`, and asserts on what
@@ -50,16 +50,18 @@ def _load():
 
 ss = _load()
 
+#: The project deploy/compose/compose.yml names: a real installation's.
+SHIPPED_PROJECT = yaml.safe_load(ss.COMPOSE_FILE.read_text())["name"]
+
 #: Exported in a reader's shell, each would change the scale stack.
 PLANTED = {
     "POSTGRES_SERVER": "db.real.example",
     "POSTGRES_PASSWORD": "a-real-password",
     "WEB_CONCURRENCY": "2",
     "HTTP_PORT": "8080",
-    "EXPERIMENTLY_PROFILE": "full",
     "REDIS_HOST": "redis.real.example",
     "COMPOSE_FILE": "deploy/compose/compose.yml",
-    "COMPOSE_PROJECT_NAME": "experimently-selfhost",
+    "COMPOSE_PROJECT_NAME": SHIPPED_PROJECT,
     "PUBLIC_BASE_URL": "https://controlvar.real.example",
     "FIRST_SUPERUSER": "real-admin@real.example",
 }
@@ -346,13 +348,12 @@ def test_a_child_environment_is_the_keep_list_and_only_what_the_harness_sets(
 
 
 def test_the_shell_cannot_reach_the_env_file_generate_env_writes(work, monkeypatch):
-    """generate-env.sh reads PUBLIC_BASE_URL, FIRST_SUPERUSER and
-    EXPERIMENTLY_PROFILE from its environment: planted, they must not land."""
+    """generate-env.sh reads PUBLIC_BASE_URL and FIRST_SUPERUSER (and the
+    profile) from its environment: planted, they must not land."""
     for key, value in PLANTED.items():
         monkeypatch.setenv(key, value)
     assert _up(World(), work) == 0
     values = ss.read_env(work / ".env")
-    assert values["EXPERIMENTLY_PROFILE"] == "core"
     assert values["FIRST_SUPERUSER"] == "admin@example.com"
     assert values["PUBLIC_BASE_URL"] == "http://localhost:18080"
     assert values["HTTP_PORT"] == "18080"
@@ -375,13 +376,39 @@ def test_the_keep_list_is_check_compose_configs():
 
 
 @pytest.mark.parametrize(
-    "project", ["experimently-selfhost", " Experimently-Selfhost ", "controlvar"]
+    "project",
+    [SHIPPED_PROJECT, f" {SHIPPED_PROJECT.title()} ", "controlvar"],
+    ids=["compose.yml's own", "its own, re-cased", "another"],
 )
 def test_only_the_harness_project_is_accepted(work, project):
     with pytest.raises(ss.Refused) as refused:
         ss.compose_argv(work, "down", "-v", project=project)
-    if "selfhost" in project.lower():
-        assert "experimently-selfhost" in str(refused.value)
+    if project.strip().lower() == SHIPPED_PROJECT:
+        assert SHIPPED_PROJECT in str(refused.value)
+
+
+def test_the_refused_project_is_read_from_compose_yml():
+    assert ss.selfhost_project() == SHIPPED_PROJECT != ss.PROJECT
+
+
+@pytest.mark.parametrize(
+    "name_line", ["name: controlvar-scale\n", "# no name line\n"], ids=["ours", "none"]
+)
+def test_a_compose_yml_naming_our_project_or_none_is_refused(
+    work, tmp_path, monkeypatch, name_line
+):
+    """Were compose.yml ever to name its project controlvar-scale, -p would
+    no longer separate the two stacks; with no name, nothing says which
+    project is the real one."""
+    shipped = ss.COMPOSE_FILE.read_text()
+    fake = tmp_path / "compose.yml"
+    fake.write_text(re.sub(r"(?m)^name: .*\n", name_line, shipped, count=1))
+    assert fake.read_text().count("\n") == shipped.count("\n") and (
+        fake.read_text() != shipped
+    ), "the name line was not replaced"
+    monkeypatch.setattr(ss, "COMPOSE_FILE", fake)
+    with pytest.raises(ss.Refused):
+        ss.compose_argv(work, "up", "-d")
 
 
 def _selfhost_dir_link(tmp_path):
