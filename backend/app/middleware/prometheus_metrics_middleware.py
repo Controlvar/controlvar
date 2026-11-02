@@ -20,7 +20,10 @@ from backend.app.core.metrics import record_request
 
 #: The ``endpoint`` label of a request that reached no route: a 404, the
 #: redirect to a path's trailing-slash form, and a response a middleware gave
-#: before routing (a refused ``Host``, a 429, a body over the size limit).
+#: before routing (a refused ``Host``, a 429, a body whose ``Content-Length``
+#: is over the size limit). A body over the limit that arrives without a
+#: ``Content-Length`` is refused while its route reads it, so it is labelled
+#: with that route's template.
 UNMATCHED_ENDPOINT = "unmatched"
 
 
@@ -37,8 +40,9 @@ def route_template(scope: Scope) -> str:
     the request path, so the label takes only the values the application's
     routes define, plus ``UNMATCHED_ENDPOINT``.
 
-    * A route inside an included router (every ``/api/v1`` route, and the
-      health routes): FastAPI keeps that route's full template in
+    * A route inside an included router (every ``/api/v1`` route except the
+      documentation pages and ``/api/v1/openapi.json``, and the health
+      routes): FastAPI keeps that route's full template in
       ``scope["fastapi"]["effective_route_context"].path_format``. The key is
       not public FastAPI API. If a FastAPI upgrade drops it, these routes are
       labelled ``UNMATCHED_ENDPOINT`` and
