@@ -211,6 +211,14 @@ def _created(flag: dict[str, Any], percentage: int) -> str:
     return str(flag["id"])
 
 
+def _turned_off(toggled: dict[str, Any]) -> bool:
+    """The toggle's answer says the flag is now off. The toggle route answers
+    the stored status as it is (``INACTIVE``,
+    ``backend/tests/integration/api/test_feature_flag_kill_switch.py``), where
+    the flag's own read answers it lower-cased: compared without case."""
+    return str(toggled.get("status", "")).lower() == "inactive"
+
+
 def _fail_on(findings: list[str], case: str) -> None:
     if findings:
         pytest.fail(f"{case} failed:\n  " + "\n  ".join(findings), pytrace=False)
@@ -393,7 +401,7 @@ def test_g2_1_a_flag_turned_off_reaches_a_server_mode_sdk_when_its_cache_ends(
                 )
             toggled = live.admin.toggle(flag_id)
             server = live.admin.evaluate(key, user)
-            if toggled.get("status") != "inactive" or (
+            if not _turned_off(toggled) or (
                 server.get("enabled"),
                 server.get("reason"),
             ) != (False, "inactive"):
@@ -463,7 +471,7 @@ def test_g2_2_a_flag_turned_off_reaches_a_local_mode_sdk_with_its_next_ruleset(
             toggle_sent = time.monotonic()
             toggled = live.admin.toggle(flag_id)
             toggle_done = time.monotonic()
-            if toggled.get("status") != "inactive":
+            if not _turned_off(toggled):
                 pytest.fail(
                     f"G2-2 failed ({sdk}): the toggle left the flag"
                     f" {toggled.get('status')!r}",
