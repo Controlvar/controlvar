@@ -215,7 +215,8 @@ export function registerTools(server: McpServer, api: Api): void {
           query: { skip: 0, limit: SEARCH_PAGE, search: flag_key },
         })) as Json;
         const items = Array.isArray(found?.items) ? found.items : [];
-        const match = items.find((item) => (item as Json)?.key === flag_key);
+        // TAMPER (Q15): the first search hit, not the exact key.
+        const match = items[0];
         if (match !== undefined) return match;
         const total = typeof found?.total === "number" ? found.total : items.length;
         if (total > SEARCH_PAGE) {
