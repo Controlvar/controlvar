@@ -6,7 +6,7 @@
     python3 scripts/scale_run.py fixtures --work DIR
     python3 scripts/scale_run.py run --work DIR --scenario NAME --rep N --out DIR \\
         [--mode smoke] [--no-resource-sampling]
-    python3 scripts/scale_run.py calibrate --work DIR --out DIR
+    python3 scripts/scale_run.py calibrate --work DIR --out DIR [--report-only]
     python3 scripts/scale_run.py tag
     python3 scripts/scale_run.py plan --scenarios "NAME ..." --repetitions N
     python3 scripts/scale_run.py provenance --base REV --head REV
@@ -1732,7 +1732,15 @@ def calibration_problems(p99_us: int, answered: int) -> List[str]:
     return []
 
 
-def cmd_calibrate(work: Path, out: Path, io: Io) -> int:
+def calibration_exit(problems: Sequence[str], report_only: bool) -> int:
+    """The calibration's exit status. A pull request only reads the result
+    (report_only): a timing never fails a pull request (PLAN 3.9). A dispatch
+    fails on a problem, and the measure workflow's ``merge`` needs that
+    success, so a calibration that fails refuses to publish."""
+    return 1 if problems and not report_only else 0
+
+
+def cmd_calibrate(work: Path, out: Path, io: Io, report_only: bool = False) -> int:
     """k6 against a stub that stalls 2 s in every 10 s (V18): the p99 must
     show the stall, or the generator does not count waiting requests."""
     method = se.load_config(se.CONFIG, "smoke")
@@ -1794,7 +1802,7 @@ def cmd_calibrate(work: Path, out: Path, io: Io) -> int:
     )
     for problem in problems:
         io.say(problem)
-    return 1 if problems else 0
+    return calibration_exit(problems, report_only)
 
 
 # ---------------------------------------------------------------------------
@@ -1888,6 +1896,8 @@ def parser() -> argparse.ArgumentParser:
         command.add_argument("--work", type=Path, required=True)
         if name != "fixtures":
             command.add_argument("--out", type=Path, required=True)
+        if name == "calibrate":
+            command.add_argument("--report-only", action="store_true")
         if name == "run":
             command.add_argument("--scenario", required=True)
             command.add_argument("--rep", type=int, required=True)
@@ -1933,7 +1943,7 @@ def main(argv: Optional[Sequence[str]] = None, io: Optional[Io] = None) -> int:
         if threading.current_thread() is threading.main_thread():
             signal.signal(signal.SIGTERM, _interrupt)
         if args.command == "calibrate":
-            return cmd_calibrate(work, args.out.resolve(), io)
+            return cmd_calibrate(work, args.out.resolve(), io, args.report_only)
         return cmd_run(
             work,
             args.out.resolve(),

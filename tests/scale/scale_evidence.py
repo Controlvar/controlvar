@@ -2531,10 +2531,29 @@ def verify(
         problems.append(
             f"the file names run {results.get('run', {}).get('run_id')}, not {run_id}"
         )
-    view = runner(["run", "view", str(run_id), "--repo", repo, "--json", "headSha"])
+    view = runner(
+        [
+            "run",
+            "view",
+            str(run_id),
+            "--repo",
+            repo,
+            "--json",
+            "headSha,event,headBranch",
+        ]
+    )
     if view.returncode != 0:
         return problems + [f"run {run_id} cannot be read: {view.stderr.strip()[:200]}"]
-    built = json.loads(view.stdout).get("headSha", "")
+    viewed = json.loads(view.stdout)
+    built = viewed.get("headSha", "")
+    if viewed.get("event") != "workflow_dispatch":
+        problems.append(
+            f"run {run_id} was event {viewed.get('event')}, not a workflow_dispatch"
+        )
+    if viewed.get("headBranch") != "main":
+        problems.append(
+            f"run {run_id} ran on branch {viewed.get('headBranch')}, not main"
+        )
     stated = results.get("run", {}).get("harness_commit")
     if built != stated:
         problems.append(f"run {run_id} built {built}, the file says {stated}")

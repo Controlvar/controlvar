@@ -881,6 +881,20 @@ def test_an_unread_container_or_too_few_readings_is_not_sampled_never_zero():
     assert not sr.cpu_window(readings[:1], 1_000_000, 1_060_000, se.CONTAINERS).sampled
 
 
+def test_a_container_unread_in_the_first_reading_is_not_sampled_never_zero():
+    """R4: with the first reading unreadable, `or 0` would make the window the
+    container's whole lifetime of CPU (a generator at 20,012 permille)."""
+    rates = dict.fromkeys(se.CONTAINERS, 10_000)
+    readings = _readings(1_000_000, 70, rates)
+    first = readings[10]
+    readings[10] = sr.Reading(
+        first.at_ms, first.threads, {**first.usage, "generator": None}
+    )
+    window = sr.cpu_window(readings, 1_010_000, 1_060_000, se.CONTAINERS)
+    assert not window.sampled
+    assert window.cpu["generator"] == 0
+
+
 def test_the_sampler_reads_each_registered_container_and_marks_an_unreadable_one():
     files = {
         "/proc/stat": PROC_STAT_A,
@@ -909,6 +923,24 @@ def test_the_sampler_reads_each_registered_container_and_marks_an_unreadable_one
 # ---------------------------------------------------------------------------
 def _select_list(sql: str) -> str:
     return sql.split("FROM pg_stat_activity", 1)[0]
+
+
+def test_the_database_sampler_s_sql_is_exactly_this_text():
+    """PE-S22, pinned whole: a row value (`(SELECT json_agg(s) FROM
+    pg_stat_activity s)`) selects every column without the word `query`, so
+    the words below cannot be the pin. A change to the SQL is a change here."""
+    assert sr.PG_SAMPLER_SQL == (
+        "SELECT 'scale-sample',\n"
+        "       floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint,\n"
+        "       count(*) FILTER (WHERE state = 'active'),\n"
+        "       count(*) FILTER (WHERE state = 'active' AND (wait_event_type = 'IO'\n"
+        "                        OR (wait_event_type = 'LWLock' AND wait_event LIKE 'WAL%')))\n"
+        "FROM pg_stat_activity\n"
+        "WHERE backend_type = 'client backend'\n"
+        "  AND pid <> pg_backend_pid()\n"
+        f"  AND coalesce(application_name, '') <> '{sr.SAMPLER_APP}'\n"
+        f"\\watch {sr.PG_SAMPLE_S}\n"
+    )
 
 
 def test_the_database_sampler_never_selects_query():
@@ -1208,6 +1240,36 @@ def test_the_calibration_shows_a_stall_or_says_the_generator_hides_waiting():
     ]
 
 
+def test_a_failed_calibration_fails_a_dispatch_and_never_a_pull_request():
+    """PLAN 3.9: V18 refuses to publish; it never fails a pull request."""
+    problem = ["calibration: planted 2000 ms stall ..."]
+    assert sr.calibration_exit(problem, report_only=False) == 1
+    assert sr.calibration_exit(problem, report_only=True) == 0
+    assert sr.calibration_exit([], report_only=False) == 0
+    assert sr.calibration_exit([], report_only=True) == 0
+
+
+@pytest.mark.parametrize(
+    "argv, report_only",
+    [
+        (["calibrate", "--work", "w", "--out", "o"], False),
+        (["calibrate", "--report-only", "--work", "w", "--out", "o"], True),
+    ],
+)
+def test_calibrate_passes_report_only_from_its_flag(
+    monkeypatch, tmp_path, argv, report_only
+):
+    seen = []
+    monkeypatch.setattr(
+        sr,
+        "cmd_calibrate",
+        lambda work, out, io, only=False: seen.append(only) or 0,
+    )
+    monkeypatch.setattr(sr.ss, "work_dir", lambda path: path)
+    assert sr.main(argv, sr.Io(out=io.StringIO())) == 0
+    assert seen == [report_only]
+
+
 def test_the_stub_stalls_two_seconds_in_every_ten():
     tree = ast.parse(sr.STUB_CODE)
     assert tree  # the stub is Python the api image's interpreter can run
@@ -1235,6 +1297,7 @@ def test_there_is_no_way_to_aim_it_at_another_target():
         "--rep",
         "--mode",
         "--no-resource-sampling",
+        "--report-only",
         "--scenarios",
         "--repetitions",
         "--base",

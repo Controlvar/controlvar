@@ -246,11 +246,19 @@ def test_the_dispatch_is_six_request_types_times_three_runs_seven_at_once():
     plan = " ".join(step.get("run", "") for step in document["jobs"]["plan"]["steps"])
     assert "scripts/scale_run.py plan" in plan
     assert measure["timeout-minutes"] == 60
-    assert document["jobs"]["merge"]["needs"] == ["plan", "measure"]
-    assert (
-        document["jobs"]["merge"]["if"]
-        == "${{ !cancelled() && needs.plan.result == 'success' }}"
+    # V18 gates publication: merge needs the calibrate job to have succeeded.
+    assert document["jobs"]["merge"]["needs"] == ["plan", "measure", "calibrate"]
+    assert document["jobs"]["merge"]["if"] == (
+        "${{ !cancelled() && needs.plan.result == 'success' "
+        "&& needs.calibrate.result == 'success' }}"
     )
+    assert document["jobs"]["calibrate"]["needs"] == "plan"
+    calibrate = [
+        step["run"]
+        for step in document["jobs"]["calibrate"]["steps"]
+        if "scale_run.py calibrate" in step.get("run", "")
+    ]
+    assert len(calibrate) == 1 and "--report-only" not in calibrate[0]
 
 
 def test_the_pull_request_runs_the_smoke_and_provenance_and_never_measures():
@@ -275,7 +283,18 @@ def test_the_pull_request_runs_the_smoke_and_provenance_and_never_measures():
     assert jobs["provenance"]["if"] == "github.event_name == 'pull_request'"
     smoke = " ".join(step.get("run", "") for step in jobs["smoke"]["steps"])
     assert "--mode smoke --scenario mix" in smoke
-    assert "scale_run.py calibrate" in smoke
+    # A pull request reads the calibration and is never failed by it (PLAN
+    # 3.9); the same step on a dispatch fails, which the V18 live tamper needs.
+    calibrations = [
+        step
+        for step in jobs["smoke"]["steps"]
+        if "scale_run.py calibrate" in step.get("run", "")
+    ]
+    assert len(calibrations) == 2
+    (on_pull_request,) = [s for s in calibrations if "--report-only" in s["run"]]
+    (on_dispatch,) = [s for s in calibrations if "--report-only" not in s["run"]]
+    assert on_pull_request["if"] == "github.event_name == 'pull_request'"
+    assert on_dispatch["if"] == "github.event_name != 'pull_request'"
     provenance = " ".join(step.get("run", "") for step in jobs["provenance"]["steps"])
     assert "scale_run.py provenance --base HEAD^1 --head HEAD" in provenance
 

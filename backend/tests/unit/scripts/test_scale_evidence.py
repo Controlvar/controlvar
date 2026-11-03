@@ -1712,11 +1712,15 @@ def test_the_leak_guard_names_a_planted_path_or_environment_in_the_fixture():
 # ---------------------------------------------------------------------------
 # verify: the committed file is the run's artifact (V3)
 # ---------------------------------------------------------------------------
-def _gh(head_sha, artifact):
+def _gh(head_sha, artifact, event="workflow_dispatch", branch="main"):
     def run(argv):
         if argv[:2] == ["run", "view"]:
+            assert argv[argv.index("--json") + 1] == "headSha,event,headBranch"
             return subprocess.CompletedProcess(
-                argv, 0, json.dumps({"headSha": head_sha}), ""
+                argv,
+                0,
+                json.dumps({"headSha": head_sha, "event": event, "headBranch": branch}),
+                "",
             )
         if argv[:2] == ["run", "download"]:
             if artifact is None:
@@ -1775,6 +1779,23 @@ def test_verify_refuses_a_run_of_another_commit(tmp_path):
         _gh(results["run"]["harness_commit"], path.read_bytes()),
     )
     assert problems[0] == "the file names run 40999123456, not 41000000001"
+
+
+@pytest.mark.parametrize(
+    "event, branch, words",
+    [
+        ("workflow_dispatch", "ci/tampered-harness", "branch ci/tampered-harness"),
+        ("pull_request", "main", "event pull_request"),
+    ],
+    ids=["another-branch", "not-a-dispatch"],
+)
+def test_verify_refuses_a_run_not_dispatched_on_main(tmp_path, event, branch, words):
+    """N2: a measure dispatch from any branch, edited harness included, makes an
+    artifact with the same name; only a dispatch on main is publishable."""
+    results, path = _committed(tmp_path)
+    runner = _gh(results["run"]["harness_commit"], path.read_bytes(), event, branch)
+    problems = se.verify(path, 40999123456, "Controlvar/controlvar", runner)
+    assert len(problems) == 1 and words in problems[0], problems
 
 
 def test_verify_fails_on_an_expired_artifact_never_skips(tmp_path):
@@ -1942,9 +1963,9 @@ def test_every_k6_script_under_tests_scale_keeps_the_url_out():
         assert se.system_tags_problems(script) == [], name
     for name in K6_LIBRARIES:
         text = (SCALE_DIR / name).read_text("utf-8")
-        assert not re.search(r"^\s*import\b|\boptions\b|\bsystemTags\b", text, re.M), (
-            name
-        )
+        assert not re.search(
+            r"^\s*import\b|\brequire\s*\(|\boptions\b|\bsystemTags\b", text, re.M
+        ), name
 
 
 # ---------------------------------------------------------------------------
