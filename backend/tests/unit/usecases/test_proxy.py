@@ -8,9 +8,11 @@ the upstream would answer 304; a ``blackhole`` ending at its hold, at its
 client's close and at ``stop``; the fault decided when the request arrives
 (never forwarded, and finishing as decided after ``clear``), the upstream
 receiving exactly the unfaulted requests; ``changes``, ``wait_idle`` and the
-teardown probe. Every hold here is at most 2 s, but the one ``stop`` ends: it
-asks for 30 s and checks only that ``stop`` ended it (a wide liveness bound,
-never a tight one, in this required job).
+teardown probe. ``stop`` waits for a request the upstream is still answering
+and returns with its record, or raises ``ProxyNotIdle`` when its wait runs
+out. Every hold here is at most 2 s, but the one ``stop`` ends: it asks for
+30 s and checks only that ``stop`` ended it (a wide liveness bound, never a
+tight one, in this required job).
 
 Every server here listens on 127.0.0.1:0 and is stopped by its fixture. The
 founder-port refusal reads ``GITHUB_ACTIONS``; every test here starts with it
@@ -634,6 +636,70 @@ def test_stop_ends_a_held_request_and_records_it(upstream):
     )
     assert record.t_answer - record.t_recv < 10
     assert len(outcome) == 1 and isinstance(outcome[0], ConnectionResetError)
+
+
+def _held_upstream(upstream: Upstream) -> threading.Event:
+    """Make the upstream hold every ruleset request until the returned event
+    is set (at most 2 s)."""
+    release = threading.Event()
+
+    def respond(received: Received):
+        if received.target == RULESET:
+            release.wait(2.0)
+        return upstream.default(received)
+
+    upstream.respond = respond
+    return release
+
+
+def test_stop_waits_for_a_forwarded_request_and_returns_with_its_record(upstream):
+    """A request forwarded before stop() and answered by the upstream 0.5 s
+    after it: stop() returns only once that answer is relayed and recorded.
+    (server_close does not join the requests' daemon threads: without the
+    wait, stop() returns at once and the record is not there.)"""
+    release = _held_upstream(upstream)
+    relay = proxy.RecordingProxy(upstream.origin).start()
+    thread, outcome = _in_background(lambda: _fetch(relay, RULESET)[0])
+    _until(lambda: len(upstream.requests_to(RULESET)) == 1)
+    assert (relay.in_flight, relay.records()) == (1, [])
+    timer = threading.Timer(0.5, release.set)
+    timer.start()
+    started = time.monotonic()
+    relay.stop()
+    took = time.monotonic() - started
+    records = relay.records()
+    timer.join(timeout=10)
+    thread.join(timeout=10)
+    assert [(r.path, r.status, r.fault) for r in records] == [(RULESET, 200, None)]
+    assert relay.in_flight == 0
+    # Liveness, wide.
+    assert took < 10
+    assert outcome == [200]
+
+
+def test_stop_raises_when_its_wait_runs_out_and_the_record_comes_later(
+    upstream, monkeypatch
+):
+    """The upstream holds the request past stop()'s wait (0.5 s here): stop()
+    raises, naming the request in flight, rather than return with its record
+    missing; the record appears once the upstream answers."""
+    monkeypatch.setattr(proxy, "STOP_SECONDS", 0.5)
+    release = _held_upstream(upstream)
+    relay = proxy.RecordingProxy(upstream.origin).start()
+    thread, outcome = _in_background(lambda: _fetch(relay, RULESET)[0])
+    _until(lambda: len(upstream.requests_to(RULESET)) == 1)
+    try:
+        with pytest.raises(proxy.ProxyNotIdle, match="1 requests were still in flight"):
+            relay.stop()
+        assert relay.records() == []
+    finally:
+        release.set()
+        thread.join(timeout=10)
+    _until(lambda: relay.in_flight == 0)
+    assert [(r.path, r.status, r.fault) for r in relay.records()] == [
+        (RULESET, 200, None)
+    ]
+    assert outcome == [200]
 
 
 def test_a_held_request_finishes_as_decided_after_clear(upstream):

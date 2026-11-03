@@ -17,9 +17,9 @@ import that skips when CI happens to lack a package, a ``-m`` or
   directory off ``sys.path``, so only the ini's ``pythonpath`` can make the
   imports work; dropping ``../ground_truth`` from it fails loading the root's
   ``conftest.py`` (exit 4, pytest's usage error: it imports the admin helper,
-  which imports the ground-truth driver) and dropping ``../..`` fails the
-  ``-p backend.tests.no_real_aws`` plugin (exit 1), both checked here on the
-  copy;
+  which imports the ground-truth driver: "No module named 'driver'") and
+  dropping ``../..`` fails the ``-p backend.tests.no_real_aws`` plugin (exit
+  1, "No module named 'backend'"), both checked here on the copy;
 * no file here or under ``tests/usecases`` (the harness, the drivers, the
   shared fixtures, the cases) may carry a skip or an expected-failure marker.
 
@@ -47,8 +47,8 @@ USECASES_ROOT = REPO_ROOT / "tests" / "usecases"
 EXPECTED = {
     "test_admin.py": 21,
     "test_collection_count.py": 5,
-    "test_gates.py": 64,
-    "test_proxy.py": 105,
+    "test_gates.py": 73,
+    "test_proxy.py": 107,
     "test_python_driver.py": 9,
     "test_runner.py": 12,
     "test_sdks.py": 22,
@@ -58,6 +58,7 @@ EXPECTED = {
 EXPECTED_CASES = {
     "test_flags_over_time.py": 5,
     "test_js_driver.py": 7,
+    "test_local_evaluation.py": 4,
 }
 #: What a copy needs to collect the cases: the root, the ground-truth library
 #: and driver it imports, and the one plugin it loads from the repository.
@@ -168,11 +169,18 @@ def test_exactly_the_expected_cases_are_collected_from_a_copy(tmp_path):
     assert _counts(result.stdout) == EXPECTED_CASES, result.stdout
 
 
-@pytest.mark.parametrize(("entry", "status"), [("../ground_truth", 4), ("../..", 1)])
-def test_the_copy_collects_only_through_its_pythonpath(tmp_path, entry, status):
+@pytest.mark.parametrize(
+    ("entry", "status", "missing"),
+    [("../ground_truth", 4, "'driver'"), ("../..", 1, "'backend'")],
+)
+def test_the_copy_collects_only_through_its_pythonpath(
+    tmp_path, entry, status, missing
+):
     """Each ``pythonpath`` entry is needed: without it the copy does not
-    collect. (Without ``-P`` the working directory would stand in for
-    ``../..`` and hide its loss.)"""
+    collect, and the error names the module it could not import (the
+    ground-truth driver the admin helper imports; the ``backend`` package of
+    the ``no_real_aws`` plugin). (Without ``-P`` the working directory would
+    stand in for ``../..`` and hide its loss.)"""
     root = _copy(tmp_path)
     ini = root / "tests" / "usecases" / "pytest.ini"
     text = ini.read_text(encoding="utf-8")
@@ -181,7 +189,9 @@ def test_the_copy_collects_only_through_its_pythonpath(tmp_path, entry, status):
     ini.write_text(text.replace(PYTHONPATH_LINE, kept), encoding="utf-8")
     assert ini.read_text(encoding="utf-8") != text
     result = _collect(root)
-    assert result.returncode == status, result.stdout + result.stderr
+    output = result.stdout + result.stderr
+    assert result.returncode == status, output
+    assert f"No module named {missing}" in output, output
 
 
 def test_no_gate_here_or_under_tests_usecases_can_skip():
@@ -200,6 +210,7 @@ def test_no_gate_here_or_under_tests_usecases_can_skip():
         "tests/usecases/conftest.py",
         "tests/usecases/test_flags_over_time.py",
         "tests/usecases/test_js_driver.py",
+        "tests/usecases/test_local_evaluation.py",
     } <= scanned
     offenders = [
         f"{path.relative_to(REPO_ROOT).as_posix()}: {token}"

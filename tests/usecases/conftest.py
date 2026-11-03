@@ -1,8 +1,10 @@
 """Shared by the use cases under ``tests/usecases``: the signed-in run
 (``live``), Node (``node``), an SDK's driver behind its own recording proxy
-(``proxied``), and the helpers the cases poll and wait with (``_poll``,
-``_wait_until``, ``_synced``). The cases import the helpers from here
-(``from conftest import ...``); the fixtures pytest finds itself.
+(``proxied``), the helpers the cases poll and wait with (``_poll``,
+``_wait_until``, ``_synced``), and the ones they check the API's answers and
+fail with (``_created``, ``_turned_off``, ``_fail_on``). The cases import the
+helpers from here (``from conftest import ...``); the fixtures pytest finds
+itself.
 
 Nothing here skips: no Node, an old Node or no ``sdk/js/dist`` fails.
 
@@ -66,7 +68,7 @@ class Live:
 def summary_text(live: Live) -> str:
     """The step summary: counts and synthetic ids only."""
     lines = [
-        "### Flags over time (D210 use cases 1 and 2)",
+        "### Flags over time (D210 use cases 1, 2 and 4)",
         "",
         f"Run {live.run}. Counts and synthetic ids only; wall clock is reported,"
         " never gated.",
@@ -169,6 +171,31 @@ def proxied(
                 pytest.fail(
                     f"the {sdk} driver's proxy at teardown: {problem}", pytrace=False
                 )
+
+
+def _created(flag: dict[str, Any], percentage: int) -> str:
+    """The new flag's id, once the API says it was created active at
+    *percentage*; the test fails otherwise."""
+    if (flag.get("status"), flag.get("rollout_percentage")) != ("active", percentage):
+        pytest.fail(
+            f"the flag was not created active at {percentage}%: status"
+            f" {flag.get('status')!r}, {flag.get('rollout_percentage')!r}%",
+            pytrace=False,
+        )
+    return str(flag["id"])
+
+
+def _turned_off(toggled: dict[str, Any]) -> bool:
+    """The toggle's answer says the flag is now off. The toggle route answers
+    the stored status as it is (``INACTIVE``,
+    ``backend/tests/integration/api/test_feature_flag_kill_switch.py``), where
+    the flag's own read answers it lower-cased: compared without case."""
+    return str(toggled.get("status", "")).lower() == "inactive"
+
+
+def _fail_on(findings: list[str], case: str) -> None:
+    if findings:
+        pytest.fail(f"{case} failed:\n  " + "\n  ".join(findings), pytrace=False)
 
 
 def _poll(session: runner.Runner, flag: str, user: str) -> gates.Poll:
