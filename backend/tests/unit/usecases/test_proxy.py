@@ -143,8 +143,9 @@ def test_n_requests_are_n_connections_and_n_records(upstream):
         finally:
             connection.close()
         assert [a.status for a in answers] == [200, 200, 200]
-        assert [a.getheader("Connection") for a in answers] == ["close"] * 3
+        # One keep-alive client: N requests are still N connections.
         assert (relay.connections, len(relay.records())) == (3, 3)
+        assert [a.getheader("Connection") for a in answers] == ["close"] * 3
         # Nothing is cached: every request reached the upstream.
         assert len(upstream.requests_to(EVALUATE)) == 3
         assert relay.handler_errors == 0
