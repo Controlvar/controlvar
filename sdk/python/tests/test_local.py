@@ -151,8 +151,14 @@ def test_the_vectors_through_get_feature_flag(no_thread):
     client, _ = loaded(server)
     assert client.ready(0) == ReadyResult(True, VECTORS["ruleset"]["version"])
 
+    # The flags this ruleset sends to the server are exactly its active "remote" ones, computed here
+    # from the file so the list cannot drift without this failing.
+    remote_keys = sorted(f["key"] for f in VECTORS["ruleset"]["flags"] if f.get("active") and f.get("evaluation") == "remote")
+    assert len(remote_keys) == 45
+    assert client.status().server_evaluated_flags == remote_keys
+
     wrong, unsendable = [], []
-    local_answers = 0
+    local_answers = reached_server = 0
     for case in VECTORS["cases"]:
         value = case["expected_value"] if "expected_value" in case else case["expected"]["enabled"]
         server.evaluate = lambda query, case=case, value=value: make_response(
@@ -180,11 +186,24 @@ def test_the_vectors_through_get_feature_flag(no_thread):
             wrong.append((case["id"], "value", result.value, "the server's is", value))
         if remote != (0 if case["must_local"] else 1) or result.source != ("server" if remote else "local"):
             wrong.append((case["id"], "must_local", case["must_local"], remote, result.source))
+        if remote:
+            # The request that reached the server carries the case's context: the decoded
+            # `context` parameter equals it, and is absent when the context is null or {}.
+            sent = server.calls("/api/v1/feature-flags/evaluate/")[-1]["query"]
+            if case["context"]:
+                if "context" not in sent or json.loads(sent["context"]) != case["context"]:
+                    wrong.append((case["id"], "context", sent.get("context"), "expected", case["context"]))
+            elif "context" in sent:
+                wrong.append((case["id"], "context sent for an empty context", sent["context"]))
+            reached_server += 1
         local_answers += result.source == "local"
         client.clear_cache()
     assert wrong == []
     assert unsendable and all(not c["must_local"] and not is_well_formed(c["user_id"]) for c in unsendable)
     assert local_answers == 1333
+    # Every case that was not answered locally and could be sent reached the fake server (and had its
+    # context checked above); the rest are the unsendable lone-surrogate ids.
+    assert local_answers + reached_server + len(unsendable) == len(VECTORS["cases"])
 
 
 # ----------------------------------------------------------------------- answers
