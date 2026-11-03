@@ -44,11 +44,12 @@ pytest backend/tests/unit/  # Unit tests only
 pytest backend/tests/integration/  # Integration tests only
 
 # Code quality (ruff replaces black, isort and flake8). The scope is
-# `backend/ modules/ scripts/ tests/acceptance/` -- exactly what `make format` /
-# `make lint` and the lint CI job pass; linting backend/ alone leaves the
-# modules, the repository tooling and the acceptance runner unchecked.
-ruff format backend/ modules/ scripts/ tests/acceptance/        # Format code
-ruff check backend/ modules/ scripts/ tests/acceptance/ --fix   # Lint and auto-fix (includes import sorting)
+# `backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/` -- exactly
+# what `make format` / `make lint` and the lint CI job pass; linting backend/
+# alone leaves the modules, the repository tooling, the acceptance runner and
+# the ground-truth library unchecked.
+ruff format backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/        # Format code
+ruff check backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ --fix   # Lint and auto-fix (includes import sorting)
 mypy backend/app/                             # Type checking: NOT gated, NOT clean (#788)
 make format                 # The two ruff commands above
 make lint                   # Everything the `lint` CI job runs (see below)
@@ -1271,12 +1272,13 @@ python -m alembic -c backend/app/db/alembic.ini current
 
 ### Code Quality Checks
 ```bash
-# Format and auto-fix backend/, modules/, scripts/ and tests/acceptance/ in
-# place (ruff: format + lint + import order)
+# Format and auto-fix backend/, modules/, scripts/, tests/acceptance/ and
+# tests/ground_truth/ in place (ruff: format + lint + import order)
 make format
 
 # The full lint gate, in this order:
 #   ruff check / ruff format --check   backend/ modules/ scripts/ tests/acceptance/
+#                                      tests/ground_truth/
 #   lint-imports                       the core/modules import boundary
 #                                      ([tool.importlinter] in pyproject.toml,
 #                                      backend/lambda/.importlinter)
