@@ -6,6 +6,8 @@ aggregating raw metrics data into summary data for efficient querying.
 """
 
 import asyncio
+import contextvars
+import functools
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional
 
@@ -91,15 +93,24 @@ class MetricsScheduler:
         through ``asyncio.to_thread``; on the loop it would stop the API from
         answering anything else until it finished.
 
-        This coroutine does not return before the thread does, even when it
-        is cancelled (shutdown): it waits for the thread, then re-raises the
-        cancellation. ``run_locked_tick`` releases the scheduler's advisory
-        lock when this returns, so returning early would let another replica's
-        tick aggregate beside a thread that is still running.
+        This coroutine does not return before the thread does, in both ways
+        it can be cancelled: when its own task is cancelled (it waits for the
+        thread, then re-raises the cancellation), and when the event loop is
+        torn down (``asyncio.run`` cancels every task). The second holds
+        because the worker is a plain ``Future`` from ``run_in_executor``, not
+        a task, so teardown does not cancel it; a task such as
+        ``ensure_future(to_thread(...))`` would be cancelled with the rest and
+        this coroutine would return at once. ``run_locked_tick`` releases the
+        scheduler's advisory lock when this returns, so returning early would
+        let another replica's tick aggregate beside a thread that is still
+        running. The context copy is what ``asyncio.to_thread`` does.
 
         Returns ``{"items_processed": n, "items_failed": m}`` for the run record.
         """
-        worker = asyncio.ensure_future(asyncio.to_thread(self._aggregate_sync))
+        worker = asyncio.get_running_loop().run_in_executor(
+            None,
+            functools.partial(contextvars.copy_context().run, self._aggregate_sync),
+        )
         try:
             return await asyncio.shield(worker)
         except asyncio.CancelledError:

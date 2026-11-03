@@ -405,3 +405,63 @@ async def test_a_cancelled_tick_keeps_the_lock_until_the_worker_thread_returns(
 
     assert events == ["acquired", "worker returned", "released"]
     persist.assert_not_called()  # a cancelled tick records no bogus run
+
+
+@pytest.mark.regression
+def test_loop_teardown_keeps_the_lock_until_the_worker_thread_returns(scheduler):
+    """asyncio.run's teardown cancels EVERY task. If the worker were a task
+    (ensure_future(to_thread(...))) it would be cancelled with the tick and
+    the lock released while the thread still aggregates (measured: 1.9 s
+    early). The worker is a plain Future, so teardown leaves it alone.
+    Deterministic: the worker blocks on an Event the test sets."""
+    started = threading.Event()
+    finish = threading.Event()
+    events = []
+
+    def blocked_worker():
+        started.set()
+        finish.wait(60)  # a safety bound so a failing test cannot hang a thread
+        events.append("worker returned")
+        return {"items_processed": 0, "items_failed": 0}
+
+    @asynccontextmanager
+    async def lock(name, engine=None):
+        events.append("acquired")
+        try:
+            yield True
+        finally:
+            events.append("released")
+
+    async def spin():
+        for _ in range(20):
+            await asyncio.sleep(0)
+
+    async def wait_started():
+        assert await asyncio.to_thread(started.wait, 30), "worker never started"
+
+    scheduler._aggregate_sync = blocked_worker
+    loop = asyncio.new_event_loop()
+    try:
+        with (
+            patch.object(scheduler_tick, "async_scheduler_lock", lock),
+            patch.object(scheduler_tick, "_persist_run"),
+        ):
+            tick = loop.create_task(
+                run_locked_tick(SCHEDULER_NAME, scheduler.aggregate_metrics)
+            )
+            loop.run_until_complete(wait_started())
+            # What asyncio.run does on the way out: cancel every task.
+            for task in asyncio.all_tasks(loop):
+                task.cancel()
+            loop.run_until_complete(spin())
+            try:
+                assert events == ["acquired"], "lock released before the thread ended"
+                assert not tick.done()
+            finally:
+                finish.set()
+            loop.run_until_complete(asyncio.gather(tick, return_exceptions=True))
+        assert events == ["acquired", "worker returned", "released"]
+    finally:
+        finish.set()
+        loop.run_until_complete(loop.shutdown_default_executor())
+        loop.close()
