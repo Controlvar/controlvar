@@ -755,6 +755,7 @@ by = [
     "test:sdk/python/tests/test_local.py::test_the_minimum_interval_is_five_seconds",
     "test:sdk/python/tests/test_local.py::test_after_ready_evaluations_make_no_request_and_follow_the_attributes",
     "test:sdk/python/tests/test_local.py::test_an_unknown_key_and_a_remote_flag_go_to_the_server",
+    "test:sdk/python/tests/test_local.py::test_a_call_that_defers_after_a_local_answer_for_the_same_pair_goes_to_the_server",
 ]
 
 [[unit]]
@@ -771,6 +772,7 @@ by = [
     "test:sdk/python/tests/test_local.py::test_5xx_after_a_load_keeps_serving_and_reports_each_failure",
     "test:sdk/python/tests/test_local.py::test_a_refusal_after_a_load_discards_the_ruleset",
     "test:sdk/python/tests/test_local.py::test_max_stale_seconds",
+    "test:sdk/python/tests/test_local.py::test_a_new_ruleset_that_makes_the_flag_remote_or_removes_it_sends_a_pair_answered_locally_to_the_server",
 ]
 
 [[unit]]
@@ -779,6 +781,8 @@ by = [
     "test:sdk/python/tests/test_local.py::test_5xx_after_a_load_keeps_serving_and_reports_each_failure",
     "test:sdk/python/tests/test_local.py::test_a_refusal_after_a_load_discards_the_ruleset",
     "test:sdk/python/tests/test_local.py::test_max_stale_seconds",
+    "test:sdk/python/tests/test_local.py::test_past_max_stale_seconds_a_pair_answered_locally_goes_to_the_server",
+    "test:sdk/python/tests/test_local.py::test_a_refusal_that_discards_the_ruleset_sends_a_pair_answered_locally_to_the_server",
 ]
 
 [[unit]]

@@ -60,6 +60,11 @@ the cache lifetime above.
 | Every other SDK | The cached answer until its lifetime ends; then the call fails, and the SDK answers as for any failure (see its page). |
 | Local evaluation | The last ruleset it loaded, with no time limit unless you set `maxStaleMs` / `max_stale_seconds`. A failed refresh is tried again later each time, up to 5 minutes apart, so once the API answers again a change can take up to 5 minutes more. A 401, 403 or 404 drops the ruleset at once: every flag then goes to the server, and the ruleset is asked for again every 10 minutes. |
 
+With `@controlvar/js-sdk` 0.2.0 or `controlvar` 0.2.0 and earlier, set `cacheTtlMs` /
+`cache_ttl_seconds` (5 minutes by default) lower if these limits must hold: once those versions
+stop evaluating a flag locally (`maxStaleMs` / `max_stale_seconds` passed, the ruleset dropped,
+`close()`), a user they answered locally keeps that answer from their cache for up to that lifetime.
+
 ## Making it faster
 
 - A shorter cache lifetime. Each user and flag then asks again once per lifetime, and each SDK

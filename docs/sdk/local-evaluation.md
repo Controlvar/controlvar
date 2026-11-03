@@ -193,6 +193,15 @@ granted later is picked up without a restart. The backoff doubles from the refre
 exactly 5 minutes. Only the regular refresh interval is jittered: backoff steps, `Retry-After` and
 the 10-minute retry are not.
 
+<!-- #1709: the versions in the next paragraph are the last ones without the fix. When a release
+moves the SDK manifests and test_sdk_doc_versions.py refuses them, reword the paragraph; do not
+move its versions with the manifests. -->
+
+With `@controlvar/js-sdk` 0.2.0 or `controlvar` 0.2.0 and earlier, set `cacheTtlMs` /
+`cache_ttl_seconds` (5 minutes by default) lower if these limits must hold: once those versions
+stop evaluating a flag locally (`maxStaleMs` / `max_stale_seconds` passed, the ruleset dropped,
+`close()`), a user they answered locally keeps that answer from their cache for up to that lifetime.
+
 ## Safety monitoring and the dashboard
 
 The server cannot see local evaluations, so the SDK reports how many it made: per flag, every 60
