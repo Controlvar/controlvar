@@ -270,7 +270,8 @@ export function registerTools(server: McpServer, api: Api): void {
           method: "POST" as const,
           template: "/api/v1/feature-flags/evaluate/{flag_key}",
           path: `/api/v1/feature-flags/evaluate/${encodeURIComponent(flag_key)}`,
-          body: context === undefined ? { user_id } : { user_id, context },
+          // TAMPER (Q16): the user's attributes are not forwarded.
+          body: context === undefined ? { user_id } : { user_id },
         };
         // TAMPER (Q4): every evaluation is sent, and so recorded, twice.
         await api.request(request);
