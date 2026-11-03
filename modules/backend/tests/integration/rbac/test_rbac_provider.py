@@ -11,7 +11,8 @@ planted by SQL in every state of matrix M2 of the #891 plan:
   grant yields its pairs. Expiry is set by SQL against the database's own
   clock, never by sleeping.
 
-It writes nothing: a pending object in the session is still pending after.
+With two users each holding an activated role and a grant, each user's answer
+holds only their own roles and grants. It writes nothing: a pending object in the session is still pending after.
 """
 
 from __future__ import annotations
@@ -127,7 +128,7 @@ def test_a_grant_yields_its_pairs_only_when_activated_active_and_unexpired(
     assert pairs == expected, f"{label} yields {sorted(pairs)}"
 
 
-def test_roles_and_grants_are_combined_and_other_users_rows_are_not_read(
+def test_each_users_answer_combines_only_their_own_roles_and_grants(
     db_session, user
 ):
     other = make_user(db_session, UserRole.VIEWER, tag=TAG)
@@ -140,10 +141,17 @@ def test_roles_and_grants_are_combined_and_other_users_rows_are_not_read(
     )
     assign(db_session, user.id, role_id, activated=True)
     grant(db_session, user.id, "feature_flag", ["update", "delete"])
+    # The other user holds a role and a grant of their own, each carrying a
+    # pair the first user holds by neither.
+    other_role_id = _role(
+        db_session, [{"resource": "experiment", "actions": ["delete"]}]
+    )
+    assign(db_session, other.id, other_role_id, activated=True)
     grant(db_session, other.id, "audit_log", ["read"])
     db_session.commit()
 
     pairs = set(granted_permission_pairs(db_session, user.id))
+    others = set(granted_permission_pairs(db_session, other.id))
 
     # Pairs outside GRANTABLE (export) come back as stored: the core drops them.
     assert pairs == {
@@ -153,6 +161,13 @@ def test_roles_and_grants_are_combined_and_other_users_rows_are_not_read(
         ("feature_flag", "update"),
         ("feature_flag", "delete"),
     }
+    assert ("experiment", "delete") not in pairs, (
+        "the first user's answer holds the other user's role"
+    )
+    assert ("audit_log", "read") not in pairs, (
+        "the first user's answer holds the other user's grant"
+    )
+    assert others == {("experiment", "delete"), ("audit_log", "read")}
 
 
 def test_the_provider_writes_nothing(db_session, user):
