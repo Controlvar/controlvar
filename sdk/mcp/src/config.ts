@@ -6,7 +6,9 @@
  * one line for stderr, exit code 2, and `initialize` is never answered.
  *
  *   0. no command-line argument at all (an argument may be a key);
- *   1. CONTROLVAR_API_URL is set, parses, and is http:// or https://;
+ *   1. CONTROLVAR_API_URL is set and parses; its host is not shaped like an
+ *      API key or a sign-in token (a fixed message, nothing echoed); and it
+ *      is http:// or https://;
  *   2. it has no user name, password, query or fragment;
  *   3. it is an origin only: no path beyond one trailing `/`;
  *   4. CONTROLVAR_ALLOW_INSECURE_HTTP, when present, is exactly `1`;

@@ -305,6 +305,23 @@ describe("configuration errors never echo a value shaped like a key", () => {
     }
   });
 
+  // The API-key shape is refused anywhere in the host, not only at the start of a label.
+  test.each([["https://x<v>"], ['https://"<v>"'], ["https://cv.x<v>.com"]])(
+    "an API-key shape inside a label is refused with a fixed message: %s",
+    (shape) => {
+      const text = message(run(shape.replace("<v>", keyShaped)));
+      expect(text).toContain("looks like an API key, not an address");
+      hides(text, keyShaped);
+    },
+  );
+
+  // A sign-in shape in the middle of a label is accepted as a host name, but never printed.
+  test("E2d and W1: a sign-in shape in the middle of a label is not echoed", () => {
+    const url = `http://a.x${signInShaped}.com`;
+    hides(message(run(url)), signInShaped);
+    hides(warnings(run(url, { CONTROLVAR_ALLOW_INSECURE_HTTP: "1" })), signInShaped);
+  });
+
   // E2a: the address is not http(s) and has no host to refuse.
   test.each(both)("E2a: %s is not echoed", (value) => {
     hides(message(run(value)), value);
