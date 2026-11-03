@@ -694,28 +694,28 @@ The administrator grants the viewer `audit_log (read)`:
 curl -s -X POST "http://localhost:8000/api/v1/rbac/users/$VIEWER_ID/grant" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"user_id": "'"$VIEWER_ID"'", "resource": "audit_log", "actions": ["read"], "reason": "Quarterly access review"}' | jq -r .status
+  -d '{"user_id": "'"$VIEWER_ID"'", "resource": "audit_log", "actions": ["read"], "reason": "Quarterly access review"}' | jq -c '{status, resource}'
 
 curl -s "http://localhost:8000/api/v1/audit-logs/?user_id=$MY_ID&action_type=user_login" \
   -H "Authorization: Bearer $VIEWER_TOKEN" | jq -c '[.items[].user_email] | unique'
 ```
-<!-- expect: granted -->
+<!-- expect: {"status":"granted","resource":"audit_log"} -->
 <!-- expect: ["admin@demo.com"] -->
 
-It prints `granted`, then `["admin@demo.com"]`: with the same token, the viewer now reads
-the administrator's entries. Revoke the grant:
+It prints `{"status":"granted","resource":"audit_log"}`, then `["admin@demo.com"]`: with the
+same token, the viewer now reads the administrator's entries. Revoke the grant:
 
 ```{.bash exec}
 curl -s -X DELETE "http://localhost:8000/api/v1/rbac/users/$VIEWER_ID/grant/audit_log" \
-  -H "Authorization: Bearer $TOKEN" | jq -c .
+  -H "Authorization: Bearer $TOKEN" | jq -c '{audit_log_grants_revoked: .count}'
 
 curl -s "http://localhost:8000/api/v1/audit-logs/?user_id=$MY_ID&action_type=user_login" \
   -H "Authorization: Bearer $VIEWER_TOKEN" | jq -c '[.items[].user_email] | unique'
 ```
-<!-- expect: {"status":"revoked","count":1} -->
+<!-- expect: {"audit_log_grants_revoked":1} -->
 <!-- expect: ["viewer@demo.com"] -->
 
-It prints `{"status":"revoked","count":1}`, then `["viewer@demo.com"]` again.
+It prints `{"audit_log_grants_revoked":1}`, then `["viewer@demo.com"]` again.
 
 ### Show a User's Permissions
 

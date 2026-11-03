@@ -34,14 +34,32 @@ text = "Overview"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "The RBAC (Role-Based Access Control) module stores three layers of permissions for a user:"
+text = "A user may do what their built-in role allows, plus what their custom roles and unexpired direct grants hold."
 by = [
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_no_permission_check_reads_custom_roles_or_direct_grants",
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_a_custom_role_or_grant_is_shown_and_changes_nothing_the_user_can_do",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
 ]
 
 [[unit]]
-text = "Base Role — One of four built-in system roles assigned to every user (admin, developer, analyst, viewer)."
+text = "Roles and grants only add: none takes a permission away."
+by = [
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+    "test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_layers_only_add_and_actions_are_sorted",
+]
+
+[[unit]]
+text = "A role or grant can hold only the eleven permissions below, and none gives administration: managing users, custom roles and grants, other users' API keys, holdouts and exclusion-group status, and safety settings depends on the built-in role or the superuser flag, never on a custom role or grant."
+by = [
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_grantable_is_exactly_the_eleven_pairs",
+    "test:modules/backend/tests/integration/rbac/test_rbac_no_escalation.py::test_all_forty_pairs_reach_no_administration",
+]
+
+[[unit]]
+text = "Three layers decide what a user may do:"
+by = ["test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision"]
+
+[[unit]]
+text = "Built-in role (base_role in the API) — One of four roles every user has (admin, developer, analyst, viewer)."
 by = [
     "test:backend/tests/unit/core/test_permissions.py",
     "test:modules/backend/tests/unit/api/test_rbac_integration.py",
@@ -83,72 +101,191 @@ by = [
 ]
 
 [[unit]]
-text = "Only the base role decides what a user can do"
+text = "Roles are assigned and grants made through this API; the dashboard's Roles page defines roles."
+by = ["test:modules/backend/tests/integration/api/test_rbac_api.py"]
+
+[[unit]]
+text = "How a permission check decides"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Every permission check (check_permission(), can_act_on_feature_flag() and can_read_all_audit_logs() in backend/app/core/permissions.py) answers in this order:"
 by = [
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_no_permission_check_reads_custom_roles_or_direct_grants",
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_a_custom_role_or_grant_is_shown_and_changes_nothing_the_user_can_do",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+    "test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_permission_checks_read_custom_roles_and_grants_through_one_capability",
 ]
 
 [[unit]]
-text = "Routes check the base role (through check_permission() in backend/app/core/permissions.py) or the superuser flag; none reads custom roles or direct grants."
+text = "Permissions are additive — a permission held by any layer is held."
 by = [
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_no_permission_check_reads_custom_roles_or_direct_grants",
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_a_custom_role_or_grant_is_shown_and_changes_nothing_the_user_can_do",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+    "test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_layers_only_add_and_actions_are_sorted",
 ]
 
 [[unit]]
-text = "Custom roles and direct grants are stored, and shown by GET /api/v1/rbac/users/{user_id}/permissions, but no permission check reads them: assigning a custom role or granting a permission changes nothing a user can do."
+text = "There is no deny: a custom role or grant cannot take away what the built-in role gives."
+by = ["test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision"]
+
+[[unit]]
+text = "A custom role or direct grant of a feature_flag action admits any flag, whoever owns it: access to flags is by permission, not ownership."
 by = [
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_no_permission_check_reads_custom_roles_or_direct_grants",
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_a_custom_role_or_grant_is_shown_and_changes_nothing_the_user_can_do",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_bulk_toggle_follows_a_flag_update_grant",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_rollout_schedule_changes_follow_a_flag_update_grant",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
 ]
 
 [[unit]]
-text = "Whether to make them take effect or remove them is tracked in #891."
-by = ["exempt:baseline"]
+text = "Changes apply at once: a role assigned, a grant made, revoked or expired, or a role changed or deleted is read on the user's next request."
+by = ["test:modules/backend/tests/integration/rbac/test_rbac_revocation.py"]
 
 [[unit]]
-text = "Effective Permissions Resolution"
-by = ["exempt:baseline"]
-
-[[unit]]
-text = "GET /api/v1/rbac/users/{user_id}/permissions merges all three layers to build the set it shows."
+text = "Expired or deactivated direct grants, and assignments and grants recorded before custom roles took effect (below), are left out."
 by = [
-    "test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_custom_role_permissions_merged",
-    "test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_valid_direct_grant_included",
-    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_grant_appears_in_effective_permissions",
+    "test:modules/backend/tests/integration/rbac/test_rbac_provider.py::test_a_grant_yields_its_pairs_only_when_activated_active_and_unexpired",
+    "test:modules/backend/tests/integration/rbac/test_rbac_provider.py::test_an_assignment_yields_its_roles_pairs_only_when_activated",
+    "test:modules/backend/tests/integration/rbac/test_rbac_activation.py::test_rows_written_by_the_previous_code_stay_inactive_until_made_again",
 ]
 
 [[unit]]
-text = "No permission check uses this set (see the note above):"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_no_permission_check_reads_custom_roles_or_direct_grants"]
+text = "A permission a role or grant stores outside the eleven (from before they were checked) never takes effect."
+by = ["test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_a_pair_outside_grantable_is_never_effective"]
 
 [[unit]]
-text = "Superusers (is_superuser=True) pass every permission check and have full access to every resource and action."
+text = "Superusers (is_superuser=True) pass every permission check."
+by = ["test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision"]
+
+[[unit]]
+text = "What each permission allows"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Permission | What a custom role or direct grant of it allows"
+by = ["exempt:label"]
+
+[[unit]]
+text = "experiment (create) | Create and clone experiments, including through the experiment wizard and LLM experiments. Also: read the global holdout, and manage exclusion groups (list, create, view, change other than their status, add and remove experiments). Create segments."
 by = [
-    "test:backend/tests/unit/core/test_permissions.py::TestCheckPermission::test_superuser_permission",
-    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestEffectivePermissions::test_superuser_has_all_permissions",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:backend/tests/integration/api/test_eligibility_read_roles.py",
 ]
 
 [[unit]]
-text = "Permission Resolution Precedence"
-by = ["exempt:baseline"]
+text = "experiment (read) | Every built-in role already has it."
+by = ["test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair"]
 
 [[unit]]
-text = "These rules describe the set the endpoint shows:"
-by = ["exempt:baseline"]
+text = "experiment (update) | Change, schedule, start, pause, complete, archive and annotate any experiment; trigger a bandit update; change LLM experiments; change segments and their members; in the full profile, write the real-time counters."
+by = ["test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair"]
 
 [[unit]]
-text = "Permissions are additive — a permission granted by any layer is granted overall."
-by = ["test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_custom_role_permissions_merged"]
+text = "experiment (delete) | Delete draft experiments, and archive segments."
+by = ["test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair"]
 
 [[unit]]
-text = "There is no deny mechanism; a higher layer cannot revoke a permission given by a lower layer."
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_layers_only_add_and_actions_are_sorted"]
+text = "experiment (list) | Every built-in role already has it."
+by = ["test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair"]
 
 [[unit]]
-text = "Expired or deactivated direct grants are excluded from the union."
-by = ["test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_expired_direct_grant_not_included"]
+text = "feature_flag (create) | Create flags."
+by = ["test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair"]
+
+[[unit]]
+text = "feature_flag (read) | Every built-in role already has it."
+by = ["test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair"]
+
+[[unit]]
+text = "feature_flag (update) | Change any flag: on and off, targeting, values, rollout and rollout schedules, including bulk toggle. Also: create and use server-side SDK keys (API keys with the sdk:ruleset scope); assigning users in a batch with such a key also needs experiment (update)."
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_bulk_toggle_follows_a_flag_update_grant",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_rollout_schedule_changes_follow_a_flag_update_grant",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+]
+
+[[unit]]
+text = "feature_flag (delete) | Delete any flag."
+by = ["test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair"]
+
+[[unit]]
+text = "feature_flag (list) | Every built-in role already has it."
+by = ["test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair"]
+
+[[unit]]
+text = "audit_log (read) | Read the audit log, including other users' entries, its statistics and each item's history. Without it, Developer and Viewer users read only their own entries. It does not give the compliance audit events, reports or exports."
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "docex:docs/api/rbac.md#[\"admin@demo.com\"]",
+]
+
+[[unit]]
+text = "What a role or grant cannot give"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A custom role or direct grant holds only the eleven permissions above and only adds to the built-in role."
+by = [
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_grantable_is_exactly_the_eleven_pairs",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
+
+[[unit]]
+text = "Whatever a user's roles and grants hold, these stay with the built-in role or the superuser flag:"
+by = ["test:modules/backend/tests/integration/rbac/test_rbac_no_escalation.py::test_all_forty_pairs_reach_no_administration"]
+
+[[unit]]
+text = "Administration: managing users; defining custom roles, assigning them and making grants (ADMIN); other users' API keys; creating, activating and ending global holdouts, and archiving or unarchiving exclusion groups (ADMIN); safety settings; and the optional modules' administration (ETL, HIPAA, integrations, SSO, resetting counters)."
+by = ["test:modules/backend/tests/integration/rbac/test_rbac_no_escalation.py::test_all_forty_pairs_reach_no_administration"]
+
+[[unit]]
+text = "The compliance audit trail: the compliance audit events (GET /api/v1/compliance/audit-events) and reports (GET /api/v1/compliance/reports/{standard}) need ADMIN or ANALYST, and the compliance export (GET /api/v1/compliance/export) needs ADMIN; a superuser reads all three."
+by = ["test:modules/backend/tests/integration/rbac/test_rbac_no_escalation.py::test_all_forty_pairs_reach_no_administration"]
+
+[[unit]]
+text = "audit_log (read) reads the audit log, not this trail."
+by = ["test:modules/backend/tests/integration/rbac/test_rbac_no_escalation.py::test_all_forty_pairs_reach_no_administration"]
+
+[[unit]]
+text = "Other built-in-role decisions: the split-URL preview, interaction analysis, notifications and the warehouse analysis roles."
+by = ["test:modules/backend/tests/integration/rbac/test_rbac_no_escalation.py::test_all_forty_pairs_reach_no_administration"]
+
+[[unit]]
+text = "To restrict someone, give them a lower built-in role."
+by = ["test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision"]
+
+[[unit]]
+text = "A custom role or grant never takes a permission away."
+by = ["test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision"]
+
+[[unit]]
+text = "Assignments and grants made before custom roles took effect"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Assignments and grants made before custom roles took effect grant nothing, and the API does not list them: custom_roles and user_count count only assignments that take effect."
+by = ["test:modules/backend/tests/integration/rbac/test_rbac_activation.py::test_rows_written_by_the_previous_code_stay_inactive_until_made_again"]
+
+[[unit]]
+text = "To keep one, assign the role or make the grant again."
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_activation.py::test_rows_written_by_the_previous_code_stay_inactive_until_made_again",
+    "test:modules/backend/tests/integration/rbac/test_rbac_activation.py::test_assigning_a_role_recorded_before_activates_it_and_is_audited_once",
+]
+
+[[unit]]
+text = "The migration modules_0004_rbac_activation logged those that existed when it ran; any made after it ran were not logged."
+by = ["test:backend/tests/integration/database/test_modules_0004_transitions.py"]
+
+[[unit]]
+text = "Making a grant again adds a new grant beside the old one, so a later revoke counts both; to drop an old grant, revoke it (DELETE /api/v1/rbac/users/{user_id}/grant/{resource} deletes inactive grants too)."
+by = ["test:modules/backend/tests/integration/rbac/test_rbac_activation.py::test_rows_written_by_the_previous_code_stay_inactive_until_made_again"]
+
+[[unit]]
+text = "Downgrading the modules schema below modules_0004_rbac_activation after the release in which custom roles took effect drops every activation time: every assignment and grant is inactive again, and stays inactive after upgrading; assign the roles and make the grants again."
+by = ["test:backend/tests/integration/database/test_modules_0004_transitions.py"]
+
+[[unit]]
+text = "See Migrations."
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Authentication"
@@ -531,11 +668,22 @@ by = [
 ]
 
 [[unit]]
+text = "The role takes effect from the user's next request."
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_revocation.py",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+]
+
+[[unit]]
 text = "This operation is idempotent — assigning a role to a user who already has it is a no-op."
 by = [
     "test:modules/backend/tests/integration/api/test_rbac_api.py::TestAssignRevokeRole::test_assign_same_role_twice_is_idempotent",
     "test:modules/backend/tests/integration/api/test_rbac_api.py::TestAssignRevokeRole::test_developer_cannot_assign_role",
 ]
+
+[[unit]]
+text = "Assigning a role whose assignment was recorded before custom roles took effect activates it; the response is the same assigned."
+by = ["test:modules/backend/tests/integration/rbac/test_rbac_activation.py::test_assigning_a_role_recorded_before_activates_it_and_is_audited_once"]
 
 [[unit]]
 text = "This assigns the data-scientist role created above to the analyst:"
@@ -549,8 +697,16 @@ by = [
 ]
 
 [[unit]]
-text = "The assignment is stored; the analyst can still do only what the analyst base role allows."
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_a_custom_role_or_grant_is_shown_and_changes_nothing_the_user_can_do"]
+text = "From the analyst's next request the role takes effect: the analyst can create experiments, which the analyst built-in role alone does not allow."
+by = [
+    "docex:docs/api/rbac.md#\"experiment\":[\"create\",\"list\",\"read\"]",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+]
+
+[[unit]]
+text = "The end of this page revokes it."
+by = ["docex:docs/api/rbac.md#{\"custom_roles\":[],\"experiment\":[\"list\",\"read\"]}"]
+count = 2
 
 [[unit]]
 text = "Revoke Role from User"
@@ -565,17 +721,21 @@ text = "Get Effective Permissions"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Returns the fully resolved permission set for a user, merging base role + custom roles + valid direct grants."
+text = "Returns what the permission checks allow the user: for experiment and feature_flag, the actions the checks admit (from the built-in role, active custom roles and unexpired direct grants), and audit_log with read when the user may read other users' audit entries."
+by = ["test:modules/backend/tests/integration/rbac/test_rbac_effective_permissions_display.py::test_the_display_equals_the_rules"]
+
+[[unit]]
+text = "Only these three resources are listed: no other can be held by a custom role or grant, and administration depends on the built-in role or the superuser flag."
 by = [
-    "test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_custom_role_permissions_merged",
-    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_grant_appears_in_effective_permissions",
+    "test:modules/backend/tests/integration/rbac/test_rbac_effective_permissions_display.py::test_the_display_equals_the_rules",
+    "test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_an_admin_who_is_not_a_superuser_is_shown_the_three_resources_only",
 ]
 
 [[unit]]
-text = "This is a display: routes check only the base role, so a custom role or direct grant listed here does not let the user do anything their base role does not."
+text = "custom_roles lists only the roles that take effect."
 by = [
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_no_permission_check_reads_custom_roles_or_direct_grants",
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_a_custom_role_or_grant_is_shown_and_changes_nothing_the_user_can_do",
+    "test:modules/backend/tests/integration/rbac/test_rbac_effective_permissions_display.py::test_the_display_equals_the_rules",
+    "test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_custom_roles_are_read_from_the_activated_assignments",
 ]
 
 [[unit]]
@@ -637,15 +797,8 @@ by = [
 ]
 
 [[unit]]
-text = "It prints the base role, \"analyst\", the stored data-scientist role, and \"experiment\":[\"create\",\"list\",\"read\"]: create comes from that role, in the set shown."
-by = [
-    "docex:docs/api/rbac.md#\"experiment\":[\"create\",\"list\",\"read\"]",
-    "docex:docs/api/rbac.md#\"base_role\":\"analyst\"",
-]
-
-[[unit]]
-text = "The analyst base role cannot create experiments, and it is still the only thing that decides what the analyst can do."
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_a_custom_role_or_grant_is_shown_and_changes_nothing_the_user_can_do"]
+text = "It prints the built-in role, \"analyst\", the data-scientist role, and \"experiment\":[\"create\",\"list\",\"read\"]: create comes from that role, which the analyst built-in role does not have, and the analyst can now create experiments."
+by = ["docex:docs/api/rbac.md#\"experiment\":[\"create\",\"list\",\"read\"]"]
 
 [[unit]]
 text = "Grant Direct Permission"
@@ -656,10 +809,10 @@ text = "Grant a specific resource permission directly to a user, without assigni
 by = ["test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestGrantRevokePermission::test_grant_permission_returns_201"]
 
 [[unit]]
-text = "The grant is stored and shown by Get Effective Permissions; no permission check reads it yet (#891)."
+text = "The grant takes effect from the user's next request, until it expires or is revoked."
 by = [
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_no_permission_check_reads_custom_roles_or_direct_grants",
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_a_custom_role_or_grant_is_shown_and_changes_nothing_the_user_can_do",
+    "test:modules/backend/tests/integration/rbac/test_rbac_revocation.py",
+    "test:modules/backend/tests/integration/rbac/test_rbac_provider.py::test_a_grant_yields_its_pairs_only_when_activated_active_and_unexpired",
 ]
 
 [[unit]]
@@ -701,7 +854,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "expires_at must be in the future: a grant whose expires_at has already passed is stored, but Get Effective Permissions leaves it out from the start."
-by = ["test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_expired_direct_grant_not_included"]
+by = ["test:modules/backend/tests/integration/rbac/test_rbac_provider.py::test_a_grant_yields_its_pairs_only_when_activated_active_and_unexpired"]
 
 [[unit]]
 text = "This grants the analyst feature_flag update for a week from now:"
@@ -715,10 +868,10 @@ by = [
 ]
 
 [[unit]]
-text = "The grant is stored and shown; it changes nothing the analyst can do."
+text = "Until it expires, the analyst can change any flag."
 by = [
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_no_permission_check_reads_custom_roles_or_direct_grants",
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_a_custom_role_or_grant_is_shown_and_changes_nothing_the_user_can_do",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_bulk_toggle_follows_a_flag_update_grant",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
 ]
 
 [[unit]]
@@ -762,22 +915,16 @@ text = "Create a \"Read-Only Experiments\" Custom Role"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "This defines and assigns a role for a user who should see experiments and results but never create or modify them."
-by = ["exempt:baseline"]
+text = "This defines and assigns a role that holds only reading experiments and flags."
+by = ["test:modules/backend/tests/integration/rbac/test_rbac_effective_permissions_display.py::test_the_display_equals_the_rules"]
 
 [[unit]]
-text = "The role is stored and shown; it does not change what the user can do, which their base role decides (#891)."
-by = [
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_no_permission_check_reads_custom_roles_or_direct_grants",
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_a_custom_role_or_grant_is_shown_and_changes_nothing_the_user_can_do",
-]
+text = "Every built-in role already reads them, so for the analyst it adds nothing: a custom role only adds."
+by = ["test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision"]
 
 [[unit]]
-text = "Today, to keep a user read-only, give them the viewer or analyst base role."
-by = [
-    "test:modules/backend/tests/unit/api/test_rbac_integration.py::TestRBACIntegration::test_viewer_role_permissions",
-    "test:modules/backend/tests/unit/api/test_rbac_integration.py::TestRBACIntegration::test_analyst_role_permissions",
-]
+text = "To keep a user read-only, give them the viewer or analyst built-in role."
+by = ["test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision"]
 
 [[unit]]
 text = "Step 1: Create the role:"
@@ -796,95 +943,147 @@ text = "It prints assigned."
 by = ["docex:docs/api/rbac.md#assigned"]
 
 [[unit]]
-text = "Step 3: Check that the assignment is stored, in the user's effective permissions:"
-by = ["exempt:baseline"]
+text = "Step 3: Check the assignment in the user's effective permissions:"
+by = ["exempt:instruction"]
 
 [[unit]]
-text = "It prints the analyst's stored custom roles, [\"data-scientist\",\"read-only-experiments\"] after the examples above."
+text = "It prints the analyst's custom roles, [\"data-scientist\",\"read-only-experiments\"] after the examples above."
 by = ["docex:docs/api/rbac.md#\"read-only-experiments\""]
 
 [[unit]]
-text = "What the analyst can do is unchanged."
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_a_custom_role_or_grant_is_shown_and_changes_nothing_the_user_can_do"]
+text = "The new role adds nothing the analyst could not already do."
+by = ["test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision"]
 
 [[unit]]
 text = "Grant a Temporary Permission"
 by = ["exempt:label"]
 
 [[unit]]
-text = "This records a week-long grant to change experiments for a data analyst without changing their role."
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_a_custom_role_or_grant_is_shown_and_changes_nothing_the_user_can_do"]
+text = "This lets a data analyst change experiments for a week without changing their role."
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:modules/backend/tests/integration/rbac/test_rbac_revocation.py",
+]
 
 [[unit]]
-text = "The grant is stored and shown by Get Effective Permissions, but no permission check reads it: it does not let the analyst change an experiment, which their base role does not allow (#891)."
-by = [
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_no_permission_check_reads_custom_roles_or_direct_grants",
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_a_custom_role_or_grant_is_shown_and_changes_nothing_the_user_can_do",
-]
+text = "The grant takes effect from their next request."
+by = ["test:modules/backend/tests/integration/rbac/test_rbac_revocation.py"]
 
 [[unit]]
 text = "It prints granted."
 by = ["docex:docs/api/rbac.md#granted"]
 
 [[unit]]
-text = "After expires_at, the direct grant is automatically excluded from the set Get Effective Permissions shows, without requiring manual cleanup."
-by = ["test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_expired_direct_grant_not_included"]
+text = "After expires_at, the grant no longer takes effect and Get Effective Permissions leaves it out, without manual cleanup."
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_provider.py::test_a_grant_yields_its_pairs_only_when_activated_active_and_unexpired",
+    "test:modules/backend/tests/integration/rbac/test_rbac_revocation.py",
+]
 
 [[unit]]
 text = "To revoke early:"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "It prints {\"status\":\"revoked\",\"count\":1}: the one experiment grant is deleted."
-by = ["docex:docs/api/rbac.md#{\"status\":\"revoked\",\"count\":1}"]
-
-[[unit]]
-text = "Show a User's Stored Permissions"
-by = ["exempt:baseline"]
-
-[[unit]]
-text = "This shows the merged set."
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_a_custom_role_or_grant_is_shown_and_changes_nothing_the_user_can_do"]
-
-[[unit]]
-text = "What the user can actually do is decided by their base role alone (see Overview)."
+text = "It prints {\"status\":\"revoked\",\"count\":1}: the one experiment grant is deleted, and from the analyst's next request they can no longer change experiments."
 by = [
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_no_permission_check_reads_custom_roles_or_direct_grants",
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_a_custom_role_or_grant_is_shown_and_changes_nothing_the_user_can_do",
+    "test:modules/backend/tests/integration/rbac/test_rbac_revocation.py",
+    "docex:docs/api/rbac.md#{\"status\":\"revoked\",\"count\":1}",
 ]
+
+[[unit]]
+text = "Let a Viewer Read the Audit Log"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A viewer reads only their own audit entries."
+by = [
+    "docex:docs/api/rbac.md#[\"admin@demo.com\"]",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+]
+
+[[unit]]
+text = "A grant of audit_log (read) lets them read other users' entries too, and revoking it takes that away on their next request."
+by = ["docex:docs/api/rbac.md#[\"admin@demo.com\"]"]
+
+[[unit]]
+text = "Sign in as the demo viewer, viewer@demo.com, and save the viewer's token and user id:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints [\"viewer@demo.com\"]: the viewer asked for the administrator's sign-ins and was answered with their own, whatever they ask for."
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:backend/tests/integration/api/test_audit_log_reads.py",
+]
+
+[[unit]]
+text = "The administrator grants the viewer audit_log (read):"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints {\"status\":\"granted\",\"resource\":\"audit_log\"}, then [\"admin@demo.com\"]: with the same token, the viewer now reads the administrator's entries."
+by = ["docex:docs/api/rbac.md#[\"admin@demo.com\"]"]
+
+[[unit]]
+text = "Revoke the grant:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints {\"audit_log_grants_revoked\":1}, then [\"viewer@demo.com\"] again."
+by = ["docex:docs/api/rbac.md#{\"audit_log_grants_revoked\":1}"]
+
+[[unit]]
+text = "Show a User's Permissions"
+by = ["exempt:label"]
+
+[[unit]]
+text = "This shows what the permission checks allow the user (see Overview)."
+by = ["test:modules/backend/tests/integration/rbac/test_rbac_effective_permissions_display.py::test_the_display_equals_the_rules"]
 
 [[unit]]
 text = "It prints the whole set, beginning with the analyst's user_id, username and \"base_role\": \"analyst\"."
 by = ["docex:docs/api/rbac.md#\"custom_roles\": ["]
 
 [[unit]]
+text = "Leave the Demo as It Was"
+by = ["exempt:label"]
+
+[[unit]]
+text = "No example on this page leaves a demo user with more than their built-in role allows."
+by = ["docex:docs/api/rbac.md#{\"custom_roles\":[],\"experiment\":[\"list\",\"read\"]}"]
+
+[[unit]]
+text = "This revokes the two roles and the flag grant the examples above gave the analyst:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints revoked three times, then {\"custom_roles\":[],\"experiment\":[\"list\",\"read\"]}: the analyst is back to what the analyst built-in role allows."
+by = ["docex:docs/api/rbac.md#{\"custom_roles\":[],\"experiment\":[\"list\",\"read\"]}"]
+
+[[unit]]
 text = "Service API"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "The RBACService in modules/backend/app/services/rbac_service.py provides these methods."
-by = ["test:modules/backend/tests/unit/services/test_rbac_service.py"]
-
-[[unit]]
-text = "get_effective_permissions builds the set the Get Effective Permissions endpoint returns."
-by = ["test:modules/backend/tests/unit/services/test_rbac_service.py"]
-
-[[unit]]
-text = "check_effective_permission is not called by any route (#891):"
-by = ["test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_no_permission_check_reads_custom_roles_or_direct_grants"]
-
-[[unit]]
-text = "check_effective_permission checks custom roles and direct grants in addition to the base role, but no route calls it."
+text = "Every permission check in backend/app/core/permissions.py reads custom roles and direct grants through one capability, rbac.granted_permissions, which the module registers as granted_permission_pairs in modules/backend/app/services/rbac_service.py."
 by = [
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_no_permission_check_reads_custom_roles_or_direct_grants",
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_a_custom_role_or_grant_is_shown_and_changes_nothing_the_user_can_do",
+    "test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_permission_checks_read_custom_roles_and_grants_through_one_capability",
+    "test:backend/tests/unit/test_modules_loader.py::TestModulesRegistration::test_the_modules_package_registers_everything",
 ]
 
 [[unit]]
-text = "Routes call check_permission() from backend/app/core/permissions.py, which reads only the base role."
+text = "The RBACService there builds what Get Effective Permissions returns from the same checks:"
 by = [
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_no_permission_check_reads_custom_roles_or_direct_grants",
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_a_custom_role_or_grant_is_shown_and_changes_nothing_the_user_can_do",
+    "test:modules/backend/tests/integration/rbac/test_rbac_effective_permissions_display.py::test_the_display_equals_the_rules",
+    "test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_a_custom_role_or_grant_adds_the_pairs_the_checks_admit",
+]
+
+[[unit]]
+text = "check_permission reads a user's custom roles and grants only for a user that is a row of a database session (a request's own), once per request; a user object that is not one gets its built-in role alone."
+by = [
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_a_user_not_bound_to_a_session_gets_its_role_alone",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
 ]
 
 [[unit]]
@@ -965,6 +1164,13 @@ text = "assigned_at | datetime | When the assignment was made"
 by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models"]
 
 [[unit]]
+text = "activated_at | datetime | When the assignment took effect; null for one recorded before custom roles took effect, which grants nothing"
+by = [
+    "test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models",
+    "test:modules/backend/tests/integration/rbac/test_rbac_activation.py::test_rows_written_by_the_previous_code_stay_inactive_until_made_again",
+]
+
+[[unit]]
 text = "DirectPermissionGrant"
 by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models"]
 
@@ -987,3 +1193,10 @@ by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py:
 [[unit]]
 text = "is_active | boolean | Can be deactivated without deleting"
 by = ["test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models"]
+
+[[unit]]
+text = "activated_at | datetime | When the grant took effect; null for one recorded before custom roles took effect, which grants nothing"
+by = [
+    "test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_three_data_models",
+    "test:modules/backend/tests/integration/rbac/test_rbac_activation.py::test_rows_written_by_the_previous_code_stay_inactive_until_made_again",
+]
