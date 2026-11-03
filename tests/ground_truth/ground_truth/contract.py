@@ -284,11 +284,12 @@ def _r2_variant_at_receipt(
     user is already assigned. Otherwise it is stored untagged: it counts in the
     experiment's total events and in no variant.
 
-    Contract (docs/guides/how-events-count.md): An event counts for the variant
-    the user is assigned to when the server receives it.
+    Contract (docs/guides/how-events-count.md): An event sent to `POST
+    /api/v1/tracking/track` or `POST /api/v1/tracking/batch` counts for the
+    variant the user is assigned to when the server receives it.
 
-    Contract (docs/guides/how-events-count.md): An event received before the
-    user's assignment is stored with no variant, and counts in no variant's
+    Contract (docs/guides/how-events-count.md): An event received by `/track`
+    or `/batch` before the user's assignment is stored with no variant, and counts in no variant's
     results, even after the user is assigned.
 
     Contract (docs/guides/how-events-count.md): The results summary's Total

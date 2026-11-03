@@ -248,7 +248,7 @@ text = "When an event counts"
 by = ["exempt:label"]
 
 [[unit]]
-text = "An event counts for the variant the user is assigned to when the server receives it."
+text = "An event sent to POST /api/v1/tracking/track or POST /api/v1/tracking/batch counts for the variant the user is assigned to when the server receives it."
 by = [
     "test:backend/tests/integration/api/test_how_events_count.py::test_an_event_received_before_the_assignment_counts_in_no_variant",
     "test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp",
@@ -259,7 +259,7 @@ text = "Its timestamp does not change that."
 by = ["test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp"]
 
 [[unit]]
-text = "An event received before the user's assignment is stored with no variant, and counts in no variant's results, even after the user is assigned."
+text = "An event received by /track or /batch before the user's assignment is stored with no variant, and counts in no variant's results, even after the user is assigned."
 by = ["test:backend/tests/integration/api/test_how_events_count.py::test_an_event_received_before_the_assignment_counts_in_no_variant"]
 
 [[unit]]
@@ -275,8 +275,9 @@ by = [
 ]
 
 [[unit]]
-text = "POST /api/v1/tracking/events stores the variant_id it is sent, whatever the experiment's status; the event counts only for a user assigned to that variant."
+text = "POST /api/v1/tracking/events stores the variant_id it is sent, whatever the experiment's status; the event counts for that variant once the user is assigned to it, whether the assignment came before or after the event, and in no variant while the user is assigned to another or to none."
 by = [
+    "test:backend/tests/integration/api/test_how_events_count.py::test_events_by_ids_sent_before_the_assignment_count_once_it_names_that_variant",
     "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_events_by_ids_keep_the_variant_they_name_for_a_paused_experiment",
     "test:backend/tests/integration/api/test_how_events_count.py::test_events_by_ids_count_only_for_a_user_assigned_to_that_variant",
 ]

@@ -65,17 +65,20 @@ long as its key is kept.
 
 ## When an event counts
 
-An event counts for the variant the user is assigned to when the server receives it. Its
-`timestamp` does not change that.
+An event sent to `POST /api/v1/tracking/track` or `POST /api/v1/tracking/batch` counts for the
+variant the user is assigned to when the server receives it. Its `timestamp` does not change
+that.
 
-- An event received before the user's assignment is stored with no variant, and counts in no
-  variant's results, even after the user is assigned. Track a user's events for an experiment
-  once its assignment has answered.
+- An event received by `/track` or `/batch` before the user's assignment is stored with no
+  variant, and counts in no variant's results, even after the user is assigned. Track a user's
+  events for an experiment once its assignment has answered.
 - An event received while the experiment is a draft, paused, completed or archived is stored
   with no variant, and counts in no variant's results, even after the experiment is started
   again.
 - `POST /api/v1/tracking/events` stores the `variant_id` it is sent, whatever the experiment's
-  status; the event counts only for a user assigned to that variant.
+  status; the event counts for that variant once the user is assigned to it, whether the
+  assignment came before or after the event, and in no variant while the user is assigned to
+  another or to none.
 - The results summary's Total Events counts every stored event of the experiment, the ones that
   count in no variant included.
 - Holdout results and CUPED history have their own rules: see
