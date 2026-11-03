@@ -1349,6 +1349,23 @@ describe('the estimate plans with the experiment\'s correction (#820)', () => {
     expect(within(many).getByRole('link', { name: 'Power Calculator' })).toHaveAttribute('href', '/power-calculator');
   });
 
+  it('an uncorrected estimate gone out of date says only that it made no correction', async () => {
+    // Made under None, then Benjamini-Hochberg is chosen: "because no
+    // correction is chosen above" would now be false, and "the results will use
+    // the Benjamini-Hochberg correction" is the stale banner's to say.
+    apiAnswering(ESTIMATE_47036_NONE_THREE);
+    await toEstimate(threeVariants);
+    setValue('analysis-correction', 'none');
+    await calculate();
+    setValue('analysis-correction', 'benjamini_hochberg');
+    expect(screen.getByTestId('estimate-stale')).toBeInTheDocument();
+    expect(screen.getByTestId('estimate-many-variants').textContent?.replace(/\s+/g, ' ')).toBe(
+      'With 3 variants, this estimate plans each comparison with the control at 5% significance and makes no ' +
+        'correction for comparing several variants. The Power Calculator applies a Bonferroni correction, so its ' +
+        'number is higher.',
+    );
+  });
+
   it('an estimate made at 2 variants, shown after a third is added, counts 2 variants and claims no correction (PB-1)', async () => {
     apiAnswering(ESTIMATE_47036_BH_TWO);
     await toEstimate();
