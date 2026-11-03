@@ -54,6 +54,10 @@ SMT = {"cpu0": "0-1", "cpu1": "0-1", "cpu2": "2-3", "cpu3": "2-3"}
 INTERLEAVED = {"cpu0": "0,2", "cpu1": "1,3", "cpu2": "0,2", "cpu3": "1,3"}
 #: No SMT: every hardware thread a core of its own.
 NO_SMT = {"cpu0": "0", "cpu1": "1", "cpu2": "2", "cpu3": "3"}
+#: The width of the gap before a step after the first, in ms (a step's
+#: ``gap_ms``): made up, a plausible one (the harness's 10 s pause, the 2 s
+#: drain and some overhead).
+GAP_MS = 12_480
 
 
 def module() -> Any:
@@ -410,6 +414,12 @@ def step_facts(
         "not_modified": 0,
         "scheduler_metrics": "present",
         "scheduler_ticks": ticks(),
+        # Step 1's gap is not measured (the warm-up takes no scrape).
+        **(
+            {"gap_metrics": se.FIRST_STEP, "gap_ticks": {}, "gap_ms": None}
+            if number == 1
+            else {"gap_metrics": "present", "gap_ticks": ticks(), "gap_ms": GAP_MS}
+        ),
     }
     if scenario == "evaluate_get":
         step["reasons"] = {
