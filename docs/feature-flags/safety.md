@@ -32,11 +32,12 @@ You can run the same check on demand with `GET /api/v1/safety/feature-flags/{fla
 A flag's error metrics, and so automatic rollback, count two kinds of error: flag evaluations that
 fail on the server, and error reports sent to `POST /api/v1/tracking/errors` or `/errors/batch` with
 a server-side key, an API key with the `sdk:ruleset` scope whose owner can change feature flags
-(ADMIN, DEVELOPER or a superuser). Error reports sent with any other key, such as the key in a
+(ADMIN, DEVELOPER, a superuser, or in the full profile anyone whose custom role or direct grant
+gives `feature_flag (update)`). Error reports sent with any other key, such as the key in a
 browser or mobile app, are stored and counted separately in the check
 (`details.uncounted_error_count`), but do not count toward the error rate or a rollback. The same
-goes for an `sdk:ruleset` key whose owner has since lost the role. To have app errors count, send
-them to your server and forward them from there with a server-side key; see
+goes for an `sdk:ruleset` key whose owner can no longer change feature flags. To have app errors
+count, send them to your server and forward them from there with a server-side key; see
 [Reporting client-side errors](create.md#reporting-client-side-errors). A server using the
 JavaScript or Python SDK sends one with `reportError` or `report_error`; `true` from either means
 the report was stored, not that it counts.

@@ -226,9 +226,11 @@ jobs:
       # identifier gate, the runner and the routes unchecked under a green job.
       # So must the split URL routing tests (#393): the exact per-visitor
       # counts and the reference integration's contract are there, and the
-      # CloudFront router's harness and its edge app's synth.
-      - name: No warehouse or split URL test was skipped
-        run: python3 scripts/check_junit_skips.py module-junit.xml modules/backend/tests/unit/warehouse modules/backend/tests/integration/warehouse modules/backend/tests/integration/split_url modules/backend/tests/unit/split_url_router
+      # CloudFront router's harness and its edge app's synth. And so must the
+      # tests that custom roles and direct grants take effect (#891): each
+      # pair through real sign-in, revocation, server keys, no escalation.
+      - name: No warehouse, split URL or RBAC enforcement test was skipped
+        run: python3 scripts/check_junit_skips.py module-junit.xml modules/backend/tests/unit/warehouse modules/backend/tests/integration/warehouse modules/backend/tests/integration/split_url modules/backend/tests/unit/split_url_router modules/backend/tests/integration/rbac
 
   base-requirements-only:
     needs: changes

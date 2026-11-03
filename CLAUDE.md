@@ -391,11 +391,17 @@ The `core/permissions.py` module implements a comprehensive RBAC system with fou
 #### Feature Flag Permissions
 - **Access to a flag is by role, not ownership** (founder decision D11): ADMIN and
   DEVELOPER read, create, change and delete any flag; ANALYST and VIEWER read any flag
-  and change none, not even one they own. The creator is recorded as `owner_id` (a
-  UUID) and shown, but it is not an access rule.
+  and change none, not even one they own, unless (full profile) a custom role or direct
+  grant gives them feature_flag update or delete, which admits any flag, or create,
+  which lets them create flags. The creator is recorded as `owner_id` (a UUID) and
+  shown, but it is not an access rule.
 - **The one decision is `can_act_on_feature_flag(user, owner_id, action)`** in
-  `backend/app/core/permissions.py`: the role matrix first, then `FEATURE_FLAG_SCOPE`
-  (all "any flag" today; per-flag locks or approvals would go there). Every route that
+  `backend/app/core/permissions.py`: a superuser always; then, if the built-in role
+  holds the action, `FEATURE_FLAG_SCOPE` decides whose flags (all "any flag" today);
+  if it does not, a custom role or direct grant of that action admits any flag and the
+  table is never read. So a per-flag lock or approval added to `FEATURE_FLAG_SCOPE`
+  binds the built-in roles only: it must be checked on the grant path too, or grant
+  holders bypass it. Every route that
   changes a flag calls it -- the per-flag routes, bulk-toggle, and every rollout
   schedule and stage change (against the schedule's flag).
   `backend/tests/smoke/test_flag_change_routes_guarded.py` pins the exact set of

@@ -1,6 +1,6 @@
 /**
  * The Permissions button on /admin/users (#891): with the rbac module it opens
- * that user's recorded permissions; without it there is no button and no
+ * that user's effective permissions; without it there is no button and no
  * request to a route the core backend does not serve.
  */
 import React from 'react';
@@ -57,7 +57,7 @@ describe('Permissions on the Users page', () => {
     button.focus();
     fireEvent.click(button);
 
-    expect(screen.getByRole('dialog', { name: 'Recorded Permissions' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Effective permissions' })).toBeInTheDocument();
     await waitFor(() => expect(RbacService.getUserPermissions).toHaveBeenCalledWith('u-ada'));
     expect(await screen.findByText('Experiments: read')).toBeInTheDocument();
 

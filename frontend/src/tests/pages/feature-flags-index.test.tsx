@@ -434,7 +434,9 @@ describe('who may change flags (#917)', () => {
       expect(screen.queryByTestId('new-flag-btn')).toBeNull();
       const note = screen.getByTestId('flags-role-note');
       expect(note).toHaveTextContent(FLAG_ROLE_NOTE);
-      expect(note).toHaveTextContent('Feature flags are created and changed by the ADMIN and DEVELOPER roles.');
+      expect(note).toHaveTextContent(
+        'Feature flags are created and changed with the feature flag permissions, which the ADMIN and DEVELOPER roles have.',
+      );
     },
   );
 

@@ -6,8 +6,8 @@ import type { RolloutSchedule, RolloutStage } from '@/services/featureFlags';
  * `FeatureFlagsService.listRolloutSchedules`.
  *
  * Every route here needs UPDATE on the schedule's flag
- * (`_require_update_on_flag`): ADMIN, DEVELOPER or a superuser, which is
- * `canChangeFeatureFlags`.
+ * (`_require_update_on_flag`): ADMIN, DEVELOPER, a superuser, or a custom
+ * role or grant of `feature_flag: update`, which is `canChangeFeatureFlags`.
  *
  * Stage dates are sent as naive UTC (`YYYY-MM-DDTHH:MM:SS`); the API takes a
  * value with no zone as UTC (`UTCDateTime`).

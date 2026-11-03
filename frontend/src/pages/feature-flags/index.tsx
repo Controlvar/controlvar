@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { PageTitle } from '@/components/PageTitle';
 import { FlagToggle } from '@/components/feature-flags/FlagToggle';
 import { useOptionalAuth } from '@/contexts/AuthContext';
-import { FLAG_ROLE_NOTE, canChangeFeatureFlags } from '@/utils/experimentPermissions';
+import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
+import { FLAG_ROLE_NOTE, canChangeFeatureFlags, canCreateFeatureFlags } from '@/utils/experimentPermissions';
 import {
   FeatureFlag,
   FeatureFlagStatus,
@@ -26,9 +27,14 @@ function formatDate(value: string): string {
 
 export default function FeatureFlagsPage() {
   const auth = useOptionalAuth();
-  // ANALYST and VIEWER read flags and change none (#917): they get no
-  // "+ New Flag", no create link and no On/Off column, and a note saying why.
-  const canChange = canChangeFeatureFlags(auth?.user);
+  const { effective, loading: permissionsLoading } = useEffectivePermissions();
+  // Each control asks the API's own question (#917, #891): "+ New Flag" and
+  // the create link FEATURE_FLAG CREATE, the On/Off column FEATURE_FLAG
+  // UPDATE, from the role or the effective map. A user without CREATE gets a
+  // note saying why in place of the button, once the map has answered.
+  const canCreate = canCreateFeatureFlags(auth?.user, effective);
+  const canChange = canChangeFeatureFlags(auth?.user, effective);
+  const createPending = !canCreate && permissionsLoading;
   const [statusFilter, setStatusFilter] = useState<FeatureFlagStatus | 'all'>('all');
   const [flags, setFlags] = useState<FeatureFlag[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,7 +141,7 @@ export default function FeatureFlagsPage() {
               Turn features on and off, roll them out gradually and watch their safety signals
             </p>
           </div>
-          {canChange ? (
+          {canCreate ? (
             <Link
               href="/feature-flags/new"
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
@@ -143,7 +149,7 @@ export default function FeatureFlagsPage() {
             >
               + New Flag
             </Link>
-          ) : (
+          ) : createPending ? null : (
             <p className="text-sm text-slate-600" data-testid="flags-role-note">
               {FLAG_ROLE_NOTE}
             </p>
@@ -210,7 +216,7 @@ export default function FeatureFlagsPage() {
               {statusFilter === 'all' ? 'No feature flags yet' : 'No flags match this filter'}
             </p>
             {statusFilter === 'all' ? (
-              canChange && (
+              canCreate && (
                 <Link
                   href="/feature-flags/new"
                   className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"

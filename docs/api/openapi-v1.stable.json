@@ -15004,7 +15004,7 @@
     },
     "/api/v1/audit-logs/": {
       "get": {
-        "description": "Retrieve audit logs with filtering and pagination.\n\nThis endpoint allows authorized users to query audit logs with various filters:\n- **user_id**: Filter by specific user\n- **entity_type**: Filter by entity type (feature_flag, experiment, user, etc.)\n- **entity_id**: Filter by specific entity\n- **action_type**: Filter by action type (toggle_enable, create, update, etc.)\n- **from_date**: Filter logs from this date\n- **to_date**: Filter logs until this date\n- **page**: Page number for pagination\n- **limit**: Number of records per page\n\nSuperusers, ADMIN and ANALYST see every entry. DEVELOPER and VIEWER\nsee only their own entries; a `user_id` filter naming anyone else is\nreplaced by their own id.",
+        "description": "Retrieve audit logs with filtering and pagination.\n\nThis endpoint allows authorized users to query audit logs with various filters:\n- **user_id**: Filter by specific user\n- **entity_type**: Filter by entity type (feature_flag, experiment, user, etc.)\n- **entity_id**: Filter by specific entity\n- **action_type**: Filter by action type (toggle_enable, create, update, etc.)\n- **from_date**: Filter logs from this date\n- **to_date**: Filter logs until this date\n- **page**: Page number for pagination\n- **limit**: Number of records per page\n\nSuperusers, ADMIN and ANALYST, and in the full profile anyone whose custom\nrole or direct grant gives audit_log (read), see other users' entries too.\nAnyone else sees only their own entries; a `user_id` filter naming anyone\nelse is replaced by their own id.",
         "operationId": "list_audit_logs_api_v1_audit_logs__get",
         "parameters": [
           {
@@ -15685,7 +15685,7 @@
     },
     "/api/v1/audit-logs/stream": {
       "get": {
-        "description": "Returns recent audit log entries as Server-Sent Events.\nUseful for real-time audit dashboards.\nStreams up to `limit` entries (default 50, max 100) then closes.\nSuperusers, ADMIN and ANALYST receive every entry; DEVELOPER and VIEWER\nreceive only their own.",
+        "description": "Returns recent audit log entries as Server-Sent Events.\nUseful for real-time audit dashboards.\nStreams up to `limit` entries (default 50, max 100) then closes.\nSuperusers, ADMIN and ANALYST, and in the full profile anyone whose custom\nrole or direct grant gives audit_log (read), receive other users' entries\ntoo. Anyone else receives only their own.",
         "operationId": "stream_audit_logs_api_v1_audit_logs_stream_get",
         "parameters": [
           {
@@ -16310,7 +16310,7 @@
     },
     "/api/v1/bandit/{experiment_id}/update": {
       "post": {
-        "description": "Trigger an immediate weight recalculation for a MAB experiment.\n\nRequires DEVELOPER or ADMIN role.",
+        "description": "Trigger an immediate weight recalculation for a MAB experiment.\n\nRequires permission to change experiments: DEVELOPER or ADMIN, or in the\nfull profile a custom role or direct grant giving experiment (update).",
         "operationId": "trigger_bandit_update_api_v1_bandit__experiment_id__update_post",
         "parameters": [
           {
@@ -19935,7 +19935,7 @@
     },
     "/api/v1/feature-flags/{flag_id}": {
       "delete": {
-        "description": "Delete a feature flag.\n\nThis endpoint deletes an existing feature flag. Access is by role:\nADMIN and DEVELOPER may delete any flag; ANALYST and VIEWER may not.\n\nDeleting a feature flag has the following effects:\n- The feature flag and its related data are permanently removed, except\n  its events: those are kept, with `feature_flag_id` set to null\n- An audit record of the deletion is written (if that fails, the delete still stands)\n\n**Note**: This operation cannot be undone. For active feature flags, consider\nchanging the status to 'archived' instead.\n\nReturns:\n    None: No content, feature flag was successfully deleted\n\nRaises:\n    HTTPException 403: If the user doesn't have permission to delete this feature flag\n    HTTPException 404: If the feature flag doesn't exist",
+        "description": "Delete a feature flag.\n\nThis endpoint deletes an existing feature flag. Access is by permission,\nnot ownership: ADMIN and DEVELOPER may delete any flag, and in the full\nprofile so may anyone whose custom role or direct grant gives\nfeature_flag (delete); anyone else gets 403.\n\nDeleting a feature flag has the following effects:\n- The feature flag and its related data are permanently removed, except\n  its events: those are kept, with `feature_flag_id` set to null\n- An audit record of the deletion is written (if that fails, the delete still stands)\n\n**Note**: This operation cannot be undone. For active feature flags, consider\nchanging the status to 'archived' instead.\n\nReturns:\n    None: No content, feature flag was successfully deleted\n\nRaises:\n    HTTPException 403: If the user doesn't have permission to delete this feature flag\n    HTTPException 404: If the feature flag doesn't exist",
         "operationId": "delete_feature_flag_api_v1_feature_flags__flag_id__delete",
         "parameters": [
           {
@@ -20689,7 +20689,7 @@
     },
     "/api/v1/feature-flags/{flag_id}/history": {
       "get": {
-        "description": "Returns all audit log entries for a specific feature flag.\nOrdered by timestamp descending (most recent first).\nSuperusers, ADMIN and ANALYST see every entry; DEVELOPER and VIEWER see\nonly the entries they made, and `total_changes` counts only those.",
+        "description": "Returns all audit log entries for a specific feature flag.\nOrdered by timestamp descending (most recent first).\nSuperusers, ADMIN and ANALYST, and in the full profile anyone whose custom\nrole or direct grant gives audit_log (read), see other users' entries too.\nAnyone else sees only the entries they made, and `total_changes` counts\nonly those.",
         "operationId": "get_flag_history_api_v1_feature_flags__flag_id__history_get",
         "parameters": [
           {
@@ -20761,7 +20761,7 @@
     },
     "/api/v1/feature-flags/{flag_id}/toggle": {
       "post": {
-        "description": "Toggle a feature flag between enabled and disabled states.\n\nThis endpoint provides a unified way to toggle feature flags, automatically\ndetermining whether to activate or deactivate based on the current status.\n\nThe toggle operation includes:\n- Status change (ACTIVE ↔ INACTIVE). An archived flag would be turned on,\n  so it answers 400 and stays archived: unarchive it first\n- Complete audit logging with user information and optional reason\n- Response with new status and audit log ID\n\n**Authentication**: Requires valid user authentication.\n**Permissions**: ADMIN and DEVELOPER may toggle any flag; ANALYST and\nVIEWER may not.\n\nReturns:\n    ToggleResponse: Updated feature flag details with audit log ID\n\nRaises:\n    HTTPException 400: The flag is archived\n    HTTPException 403: If user doesn't have permission to toggle this feature flag\n    HTTPException 404: If feature flag doesn't exist\n    HTTPException 500: If toggle operation fails",
+        "description": "Toggle a feature flag between enabled and disabled states.\n\nThis endpoint provides a unified way to toggle feature flags, automatically\ndetermining whether to activate or deactivate based on the current status.\n\nThe toggle operation includes:\n- Status change (ACTIVE ↔ INACTIVE). An archived flag would be turned on,\n  so it answers 400 and stays archived: unarchive it first\n- Complete audit logging with user information and optional reason\n- Response with new status and audit log ID\n\n**Authentication**: Requires valid user authentication.\n**Permissions**: ADMIN and DEVELOPER may toggle any flag, and in the full\nprofile so may anyone whose custom role or direct grant gives\nfeature_flag (update); anyone else gets 403.\n\nReturns:\n    ToggleResponse: Updated feature flag details with audit log ID\n\nRaises:\n    HTTPException 400: The flag is archived\n    HTTPException 403: If user doesn't have permission to toggle this feature flag\n    HTTPException 404: If feature flag doesn't exist\n    HTTPException 500: If toggle operation fails",
         "operationId": "toggle_feature_flag_api_v1_feature_flags__flag_id__toggle_post",
         "parameters": [
           {
@@ -20876,7 +20876,7 @@
     },
     "/api/v1/feature-flags/{flag_id}/unarchive": {
       "post": {
-        "description": "Unarchive a feature flag (beta).\n\nAn archived flag is retired: it is never served, and every request that\nwould turn it on answers 400. This is the way back. The flag becomes\nINACTIVE, never ACTIVE, so turning it on is a separate, deliberate step.\n\nA flag that is not archived is returned unchanged.\n\n**Permissions**: ADMIN and DEVELOPER may unarchive any flag; ANALYST and\nVIEWER may not.\n\nReturns:\n    FeatureFlagRead: The feature flag\n\nRaises:\n    HTTPException 403: If the user doesn't have permission to change this feature flag\n    HTTPException 404: If the feature flag doesn't exist",
+        "description": "Unarchive a feature flag (beta).\n\nAn archived flag is retired: it is never served, and every request that\nwould turn it on answers 400. This is the way back. The flag becomes\nINACTIVE, never ACTIVE, so turning it on is a separate, deliberate step.\n\nA flag that is not archived is returned unchanged.\n\n**Permissions**: ADMIN and DEVELOPER may unarchive any flag, and in the full\nprofile so may anyone whose custom role or direct grant gives\nfeature_flag (update); anyone else gets 403.\n\nReturns:\n    FeatureFlagRead: The feature flag\n\nRaises:\n    HTTPException 403: If the user doesn't have permission to change this feature flag\n    HTTPException 404: If the feature flag doesn't exist",
         "operationId": "unarchive_feature_flag_api_v1_feature_flags__flag_id__unarchive_post",
         "parameters": [
           {
@@ -22789,7 +22789,7 @@
         ]
       },
       "post": {
-        "description": "Create a new mutual exclusion group. Requires DEVELOPER or ADMIN role. 409 when another group has the name (compared exactly, case included).",
+        "description": "Create a new mutual exclusion group. Requires permission to create experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (create). 409 when another group has the name (compared exactly, case included).",
         "operationId": "create_group_api_v1_mutual_exclusion_groups_post",
         "requestBody": {
           "content": {
@@ -22936,7 +22936,7 @@
         ]
       },
       "put": {
-        "description": "Update a mutual exclusion group's name, description or traffic allocation. Requires DEVELOPER or ADMIN role. Changing status (archiving or unarchiving) requires ADMIN role, as archiving through DELETE does; sending the group's current status is accepted from a DEVELOPER. 409 when another group has the name (compared exactly, case included).",
+        "description": "Update a mutual exclusion group's name, description or traffic allocation. Requires permission to create experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (create). Changing status (archiving or unarchiving) requires ADMIN role, as archiving through DELETE does; sending the group's current status is accepted from a DEVELOPER. 409 when another group has the name (compared exactly, case included).",
         "operationId": "update_group_api_v1_mutual_exclusion_groups__group_id__put",
         "parameters": [
           {
@@ -22999,7 +22999,7 @@
     },
     "/api/v1/mutual-exclusion-groups/{group_id}/experiments": {
       "post": {
-        "description": "Add an experiment to a mutual exclusion group. Requires DEVELOPER or ADMIN role.",
+        "description": "Add an experiment to a mutual exclusion group. Requires permission to create experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (create).",
         "operationId": "add_experiment_to_group_api_v1_mutual_exclusion_groups__group_id__experiments_post",
         "parameters": [
           {
@@ -23057,7 +23057,7 @@
     },
     "/api/v1/mutual-exclusion-groups/{group_id}/experiments/{experiment_id}": {
       "delete": {
-        "description": "Remove an experiment from a mutual exclusion group. Requires DEVELOPER or ADMIN role.",
+        "description": "Remove an experiment from a mutual exclusion group. Requires permission to create experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (create).",
         "operationId": "remove_experiment_from_group_api_v1_mutual_exclusion_groups__group_id__experiments__experiment_id__delete",
         "parameters": [
           {
@@ -25600,7 +25600,7 @@
         ]
       },
       "post": {
-        "description": "Create a new audience segment: kind rules (the default) with targeting rules, or kind id_list with no rules, whose members are added with POST /segments/{segment_id}/members. Requires DEVELOPER or ADMIN role.",
+        "description": "Create a new audience segment: kind rules (the default) with targeting rules, or kind id_list with no rules, whose members are added with POST /segments/{segment_id}/members. Requires permission to create experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (create).",
         "operationId": "create_segment_api_v1_segments_post",
         "requestBody": {
           "content": {
@@ -25696,7 +25696,7 @@
     },
     "/api/v1/segments/{segment_id}": {
       "delete": {
-        "description": "Soft-delete a segment by setting its status to ARCHIVED. Refused (409) while targeting rules use the segment. Requires DEVELOPER or ADMIN role.",
+        "description": "Soft-delete a segment by setting its status to ARCHIVED. Refused (409) while targeting rules use the segment. Requires permission to delete experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (delete).",
         "operationId": "delete_segment_api_v1_segments__segment_id__delete",
         "parameters": [
           {
@@ -25788,7 +25788,7 @@
         ]
       },
       "put": {
-        "description": "Update segment name, description, rules, or status. A segment's kind cannot be changed, and an id_list segment takes no rules (422). A status other than active is refused (409) while targeting rules use the segment. Requires DEVELOPER or ADMIN role.",
+        "description": "Update segment name, description, rules, or status. A segment's kind cannot be changed, and an id_list segment takes no rules (422). A status other than active is refused (409) while targeting rules use the segment. Requires permission to change experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (update).",
         "operationId": "update_segment_api_v1_segments__segment_id__put",
         "parameters": [
           {
@@ -25964,7 +25964,7 @@
     },
     "/api/v1/segments/{segment_id}/members": {
       "post": {
-        "description": "Add 1 to 10,000 user ids (each 1 to 255 characters, matched exactly) to an id_list segment. Ids already in it are left alone, so sending the same ids again is safe. A segment holds at most 1,000,000 ids; a request that would pass that answers 422 and adds nothing. Answers the counts: added + already_members is the number of distinct ids sent. Requires DEVELOPER or ADMIN role.",
+        "description": "Add 1 to 10,000 user ids (each 1 to 255 characters, matched exactly) to an id_list segment. Ids already in it are left alone, so sending the same ids again is safe. A segment holds at most 1,000,000 ids; a request that would pass that answers 422 and adds nothing. Answers the counts: added + already_members is the number of distinct ids sent. Requires permission to change experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (update).",
         "operationId": "add_segment_members_api_v1_segments__segment_id__members_post",
         "parameters": [
           {
@@ -26024,7 +26024,7 @@
     },
     "/api/v1/segments/{segment_id}/members/remove": {
       "post": {
-        "description": "Remove 1 to 10,000 user ids from an id_list segment. Ids that are not in it are ignored. Answers the counts: removed + not_members is the number of distinct ids sent. Requires DEVELOPER or ADMIN role.",
+        "description": "Remove 1 to 10,000 user ids from an id_list segment. Ids that are not in it are ignored. Answers the counts: removed + not_members is the number of distinct ids sent. Requires permission to change experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (update).",
         "operationId": "remove_segment_members_api_v1_segments__segment_id__members_remove_post",
         "parameters": [
           {
@@ -26226,7 +26226,7 @@
     },
     "/api/v1/tracking/assign/batch": {
       "post": {
-        "description": "Assign up to 1,000 users to an ACTIVE experiment in one request.\n\nEach user gets what ``POST /api/v1/tracking/assign`` would give them, with\nthe bandit weights read at the start of the request: the same eligibility\nchecks for a new user (global holdout, mutual exclusion group, targeting\nrules against that user's ``context``) and the same sticky answer for a\nuser already assigned. Users are processed in request order and each new\nassignment is committed on its own, as N single calls would be.\n\nOnly assignments are recorded, never a view event: the user's first\n``POST /api/v1/tracking/assign`` records that they saw the experiment.\n\n**Authentication**: an API key with the ``sdk:ruleset`` scope, whose owner\ncan change feature flags and experiments (ADMIN, DEVELOPER or a superuser).\n\nA plain ``def``: FastAPI runs it in the thread pool, so a batch does not\nhold the event loop while it works through its users.",
+        "description": "Assign up to 1,000 users to an ACTIVE experiment in one request.\n\nEach user gets what ``POST /api/v1/tracking/assign`` would give them, with\nthe bandit weights read at the start of the request: the same eligibility\nchecks for a new user (global holdout, mutual exclusion group, targeting\nrules against that user's ``context``) and the same sticky answer for a\nuser already assigned. Users are processed in request order and each new\nassignment is committed on its own, as N single calls would be.\n\nOnly assignments are recorded, never a view event: the user's first\n``POST /api/v1/tracking/assign`` records that they saw the experiment.\n\n**Authentication**: an API key with the ``sdk:ruleset`` scope, whose owner\ncan change feature flags and experiments: ADMIN, DEVELOPER, a superuser, or\nin the full profile anyone whose custom roles or direct grants give\n``feature_flag (update)`` and ``experiment (update)``. A key whose owner can\nchange feature flags but not experiments is refused with 403 before anyone\nis assigned.\n\nA plain ``def``: FastAPI runs it in the thread pool, so a batch does not\nhold the event loop while it works through its users.",
         "operationId": "assign_users_to_experiment_batch_api_v1_tracking_assign_batch_post",
         "requestBody": {
           "content": {

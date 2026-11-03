@@ -70,7 +70,16 @@ text = "A flag's page has a Rollout schedule section."
 by = ["test:frontend/src/tests/pages/feature-flag-detail.test.tsx::renders header, on/off state, targeting rules, rollout schedule and safety check"]
 
 [[unit]]
-text = "ADMIN and DEVELOPER create and run a schedule there; ANALYST and VIEWER see the schedule and its stages, and change nothing."
+text = "Users who may change the flag create and run a schedule there: ADMIN and DEVELOPER, and in the full profile anyone whose custom role or direct grant gives feature_flag (update)."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::%s (superuser: %s): the controls are offered only when it may change flags",
+    "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::%s sends no write and only the three reads",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_rollout_schedule_changes_follow_a_flag_update_grant",
+]
+
+[[unit]]
+text = "Everyone else sees the schedule and its stages, and changes nothing."
 by = [
     "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::%s (superuser: %s): the controls are offered only when it may change flags",
     "test:frontend/src/tests/pages/feature-flag-rollout-schedule.test.tsx::%s sends no write and only the three reads",
@@ -216,8 +225,11 @@ text = "Step 1: Log in"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Changing a flag's rollout takes a user with the ADMIN or DEVELOPER role:"
-by = ["test:backend/tests/smoke/test_flag_change_routes_guarded.py::test_the_inventory_is_exact"]
+text = "Changing a flag's rollout takes a user who may change feature flags, such as one with the ADMIN or DEVELOPER role:"
+by = [
+    "test:backend/tests/smoke/test_flag_change_routes_guarded.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_rollout_schedule_changes_follow_a_flag_update_grant",
+]
 
 [[unit]]
 text = "It prints \"ADMIN\"."

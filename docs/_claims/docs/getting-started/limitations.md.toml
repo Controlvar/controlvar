@@ -215,10 +215,20 @@ by = [
 ]
 
 [[unit]]
-text = "Custom roles and direct permission grants that change access | The rbac module records them and shows them, but no permission check reads them: each user's built-in role decides (#891)."
+text = "A custom role that removes access, or that grants administration | Custom roles and direct permission grants (the rbac module) only add, and only to experiments, flags and reading the audit log; never administration or the compliance audit trail. Administration depends on the built-in role or the superuser flag; to restrict someone, give them a lower built-in role. See What a role or grant cannot give."
 by = [
-    "test:modules/backend/tests/unit/services/test_rbac_service.py::TestCreateCustomRole::test_creates_role_with_name",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_only_the_built_in_role",
+    "test:modules/backend/tests/integration/rbac/test_rbac_no_escalation.py::test_all_forty_pairs_reach_no_administration",
+    "test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_layers_only_add_and_actions_are_sorted",
+    "test:backend/tests/unit/core/test_built_in_roles_decide.py::test_a_custom_role_or_a_grant_adds_only_grantable_pairs",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_grantable_is_exactly_the_eleven_pairs",
+]
+
+[[unit]]
+text = "Assigning roles and granting permissions in the dashboard | The Roles page defines roles; assigning them and granting permissions go through the RBAC API."
+by = [
+    "test:backend/tests/unit/api/test_route_surface_rules.py::test_custom_roles_are_assigned_through_the_api_and_no_dashboard_page",
+    "test:modules/frontend/src/tests/pages/admin-roles.test.tsx::saves a custom role the way the API takes it: a list of {resource, actions} (#891)",
+    "test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestGrantRevokePermission::test_grant_permission_returns_201",
 ]
 
 [[unit]]

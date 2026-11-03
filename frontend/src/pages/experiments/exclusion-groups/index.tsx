@@ -4,6 +4,7 @@ import { useRouter } from 'next/router';
 import { PageTitle } from '@/components/PageTitle';
 import { ExclusionGroupForm } from '@/components/experiments/ExclusionGroupForm';
 import { useOptionalAuth } from '@/contexts/AuthContext';
+import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
 import { ExclusionGroupsService } from '@/services/exclusionGroups';
 import { ExclusionGroupCreate, ExclusionGroupDetail } from '@/types/eligibility';
 import { canReadEligibility } from '@/utils/experimentPermissions';
@@ -28,19 +29,22 @@ const NEW_DRAFT: GroupDraft = { name: '', description: '', share: '100' };
 /**
  * Exclusion groups (#1455): the list, and "New group".
  *
- * ADMIN, DEVELOPER and superusers (`canReadEligibility`, the API's EXPERIMENT
- * CREATE) read the list and create groups. ANALYST and VIEWER are told who
- * can, and the page sends them no request; neither does it send one before the
- * session has resolved. `exclusion-groups-page`, the capability table's
+ * A user who may create experiments (`canReadEligibility`, the API's
+ * EXPERIMENT CREATE, from the role or a custom role or grant) reads the list
+ * and creates groups. Anyone else is told who can, and the page sends them no
+ * request; neither does it send one before the session, and the effective
+ * map, have resolved. `exclusion-groups-page`, the capability table's
  * witness, marks only the loaded list (empty or not), never loading, refused
  * or error.
  */
 export default function ExclusionGroupsPage() {
   const router = useRouter();
   const auth = useOptionalAuth();
+  const { effective, loading: permissionsLoading } = useEffectivePermissions();
   const user = auth?.user ?? null;
-  const resolved = user !== null;
-  const mayManage = resolved && canReadEligibility(user);
+  const mayManage = user !== null && canReadEligibility(user, effective);
+  // Resolved: the user is known, and so is the answer (#891).
+  const resolved = user !== null && (mayManage || !permissionsLoading);
 
   const [state, setState] = useState<ListState>({ kind: 'loading' });
   const [creating, setCreating] = useState(false);

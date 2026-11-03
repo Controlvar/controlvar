@@ -45,7 +45,8 @@ the row links it.
 |---|---|
 | Multi-factor sign-in | Not available: a local account signs in with its email and password alone. |
 | SAML sign-in | Not available. OIDC sign-in is, with the `sso` module (full profile). |
-| Custom roles and direct permission grants that change access | The `rbac` module records them and shows them, but no permission check reads them: each user's built-in role decides ([#891](https://github.com/Controlvar/controlvar/issues/891)). |
+| A custom role that removes access, or that grants administration | Custom roles and direct permission grants (the `rbac` module) only add, and only to experiments, flags and reading the audit log; never administration or the compliance audit trail. Administration depends on the built-in role or the superuser flag; to restrict someone, give them a lower built-in role. See [What a role or grant cannot give](../api/rbac.md#what-a-role-or-grant-cannot-give). |
+| Assigning roles and granting permissions in the dashboard | The Roles page defines roles; assigning them and granting permissions go through the [RBAC API](../api/rbac.md). |
 
 ## Data
 
