@@ -16,7 +16,7 @@ Users in the system can have one of the following roles:
 Every role, Viewer included, can create an API key for itself, and an API key writes
 tracking data: assignments and events. See [API Key Management](../security/api-keys.md).
 
-Feature flags are governed by role, not by who created them: an owner is recorded on
+Feature flags are governed by permission, not by who created them: an owner is recorded on
 each flag and shown, but owning a flag does not let an Analyst or Viewer change it.
 
 Each role has a specific set of permissions that determine what actions they can perform on various resources.

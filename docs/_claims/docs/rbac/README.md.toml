@@ -74,7 +74,7 @@ text = "See API Key Management."
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "Feature flags are governed by role, not by who created them: an owner is recorded on each flag and shown, but owning a flag does not let an Analyst or Viewer change it."
+text = "Feature flags are governed by permission, not by who created them: an owner is recorded on each flag and shown, but owning a flag does not let an Analyst or Viewer change it."
 by = [
     "test:backend/tests/integration/api/test_flag_change_routes_access.py",
     "test:backend/tests/smoke/test_flag_change_routes_guarded.py",
