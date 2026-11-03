@@ -242,8 +242,17 @@ def _offenders(scripts: list[tuple[str, str]]) -> list[str]:
     ]
 
 
+#: Every workflow this rule covers: the three AWS ones, and the scale
+#: evidence workflow, whose dispatch inputs and step outputs reach its
+#: scripts (V30, PE-S13: here rather than an improvised check of its own).
+SCALE_EVIDENCE = WORKFLOWS / "scale-evidence.yml"
+INTERPOLATION_WORKFLOWS = (*AWS_WORKFLOWS, SCALE_EVIDENCE)
+
+
 @pytest.mark.regression
-@pytest.mark.parametrize("path", AWS_WORKFLOWS, ids=IDS)
+@pytest.mark.parametrize(
+    "path", INTERPOLATION_WORKFLOWS, ids=[p.name for p in INTERPOLATION_WORKFLOWS]
+)
 def test_nothing_is_interpolated_into_a_shell_script(path):
     """`${{ }}` inside `run:` is substituted before bash parses the line.
 
