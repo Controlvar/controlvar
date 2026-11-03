@@ -25,6 +25,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -270,6 +271,12 @@ public class ExperimentationClient implements AutoCloseable {
     // =========================================================================
     // Tracking (fire-and-forget)
     // =========================================================================
+    //
+    // Every event sent carries an event_id: the one set with TrackEvent.Builder#eventId, or a
+    // new random UUID made once per event per call and shared by that event's fan-out entries.
+    // OkHttp can send a request again by itself when the connection fails after the request was
+    // written (on a kept-alive connection, or when another route exists); whenever it does, the
+    // request is the same body, with the same ids, so the server stores each event once.
 
     /**
      * Tracks an event with no experiment/flag attribution. Fire-and-forget: never throws.
@@ -322,6 +329,10 @@ public class ExperimentationClient implements AutoCloseable {
      * Tracks one event asynchronously. Fire-and-forget: never throws, and failures are
      * silently ignored — tracking must never affect the user experience.
      *
+     * <p>The event is sent with its {@code event_id}, or, when it has none, with a random UUID
+     * made for this call (shared by its fan-out entries): tracking the same {@code TrackEvent}
+     * twice without an id sends two events.
+     *
      * @param event the event to track (ignored when null)
      * @see #trackEventSync(TrackEvent) for a blocking variant that reports failures
      */
@@ -340,6 +351,9 @@ public class ExperimentationClient implements AutoCloseable {
      * Tracks several events asynchronously, at most 100 per request. Events without a key
      * are fanned out like {@link #trackEvent(String, String, Map)}. Never throws.
      *
+     * <p>Each event is sent with its {@code event_id}, or with a random UUID of its own made
+     * for this call.
+     *
      * @param events the events to track (ignored when null or empty)
      */
     public void trackBatch(List<TrackEvent> events) {
@@ -356,6 +370,10 @@ public class ExperimentationClient implements AutoCloseable {
     /**
      * Blocking variant of {@link #trackEvent(TrackEvent)}: sends the request(s) on the
      * calling thread and reports failures.
+     *
+     * <p>A request that failed may still have been stored. To send the event again yourself
+     * and have it stored once, give it an id with {@link TrackEvent.Builder#eventId(String)};
+     * without one, each call sends a new id.
      *
      * @param event the event to track
      * @throws ExperimentationException on a non-2xx response or a network error
@@ -519,6 +537,10 @@ public class ExperimentationClient implements AutoCloseable {
      * Builds the HTTP requests for a list of events: one {@code /tracking/track} per keyed
      * event; unkeyed events are fanned out and all fan-out entries are sent through
      * {@code /tracking/batch} in chunks of {@link #BATCH_LIMIT}.
+     *
+     * <p>Each event gets its {@code event_id} here, once per call: its own, or a new random
+     * UUID shared by all of its fan-out entries. Each request body is serialised here, once,
+     * so a request OkHttp sends again by itself carries the same ids.
      */
     private List<Request> buildTrackRequests(List<TrackEvent> events) throws IOException {
         List<Request> requests = new ArrayList<>();
@@ -527,16 +549,17 @@ public class ExperimentationClient implements AutoCloseable {
         boolean single = events.size() == 1;
         for (TrackEvent event : events) {
             if (event == null) continue;
+            Map<String, Object> body = wireBody(event);
             if (event.hasKey()) {
                 if (single) {
                     requests.add(requestBuilder(config.getBaseUrl() + "/api/v1/tracking/track")
-                            .post(RequestBody.create(objectMapper.writeValueAsString(event.toBody()), JSON))
+                            .post(RequestBody.create(objectMapper.writeValueAsString(body), JSON))
                             .build());
                 } else {
-                    batch.add(event.toBody());
+                    batch.add(body);
                 }
             } else {
-                batch.addAll(fanOut(event));
+                batch.addAll(fanOut(event.getUserId(), body));
             }
         }
 
@@ -552,19 +575,31 @@ public class ExperimentationClient implements AutoCloseable {
     }
 
     /**
+     * The event's wire form with its {@code event_id}: the one set on the event, or else a new
+     * lowercase random (version 4) UUID.
+     */
+    private static Map<String, Object> wireBody(TrackEvent event) {
+        Map<String, Object> body = event.toBody();
+        if (!body.containsKey("event_id")) {
+            body.put("event_id", UUID.randomUUID().toString());
+        }
+        return body;
+    }
+
+    /**
      * Expands an event without a key into one entry per cached assignment
      * ({@code experiment_key}) plus one per cached evaluated flag ({@code feature_flag_key})
-     * for the event's user. Empty when nothing is cached.
+     * for the event's user. Every entry is a copy of {@code base}, so all of them carry the
+     * event's one {@code event_id}. Empty when nothing is cached.
      */
-    private List<Map<String, Object>> fanOut(TrackEvent event) {
+    private List<Map<String, Object>> fanOut(String userId, Map<String, Object> base) {
         List<Map<String, Object>> entries = new ArrayList<>();
-        Map<String, Object> base = event.toBody();
-        for (ExperimentAssignment assignment : getCachedAssignments(event.getUserId())) {
+        for (ExperimentAssignment assignment : getCachedAssignments(userId)) {
             Map<String, Object> entry = new LinkedHashMap<>(base);
             entry.put("experiment_key", assignment.getExperimentKey());
             entries.add(entry);
         }
-        for (String flagKey : getCachedFlagKeys(event.getUserId())) {
+        for (String flagKey : getCachedFlagKeys(userId)) {
             Map<String, Object> entry = new LinkedHashMap<>(base);
             entry.put("feature_flag_key", flagKey);
             entries.add(entry);

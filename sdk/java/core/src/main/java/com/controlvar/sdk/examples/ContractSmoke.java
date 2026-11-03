@@ -92,6 +92,17 @@ public final class ContractSmoke {
                     TrackEvent.builder(userId, "page_view").experimentKey(experimentKey).build(),
                     TrackEvent.builder(userId, "page_view").featureFlagKey(flagKey).build()));
 
+            // 4b. One keyed event sent twice with one fixed event_id (#1543, C4). The server is to
+            //     store it once: the runner counts the rows for this user and event name.
+            String dedupName = "contract_dedup_" + UUID.randomUUID();
+            String dedupId = "contract-" + UUID.randomUUID();
+            for (int i = 0; i < 2; i++) {
+                client.trackEventSync(TrackEvent.builder(userId, dedupName)
+                        .experimentKey(experimentKey)
+                        .eventId(dedupId)
+                        .build());
+            }
+
             // 5. The exposure listener (#1499): a NEW client with a listener assigns the same
             //    user twice, with no clearCache() in between. The server records an exposure for
             //    the first request (assigned: true) and the second answer comes from the cache,
@@ -151,6 +162,13 @@ public final class ContractSmoke {
             exposure.put("calls", exposures.size());
             exposure.put("payload", payload);
             report.put("exposure", exposure);
+
+            Map<String, Object> eventId = new LinkedHashMap<>();
+            eventId.put("user_id", userId);
+            eventId.put("event_name", dedupName);
+            eventId.put("id", dedupId);
+            eventId.put("sends", 2);
+            report.put("event_id", eventId);
 
             System.out.println(new ObjectMapper().writeValueAsString(report));
         } catch (Exception e) {

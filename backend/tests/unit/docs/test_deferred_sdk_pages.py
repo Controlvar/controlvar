@@ -1460,7 +1460,355 @@ def test_the_react_refusal_the_pages_quote_is_the_one_the_source_throws():
 
 
 # ---------------------------------------------------------------------------
-# 5. The React Native SDK's exposure hook (#1499)
+# 5. The React SDK's bootstrap (#1518)
+# ---------------------------------------------------------------------------
+
+#: The bootstrap section's heading on the React page, and its anchor.
+BOOTSTRAP_H2 = "Start from the server's answers (bootstrap)"
+BOOTSTRAP_ANCHOR = "start-from-the-servers-answers-bootstrap"
+_FIRST = "commits the bootstrapped flag and variant first, with no request before the first commit"
+_SSR = "renders the bootstrapped flag and variant, and makes no request"
+_REFRESH = "applies a refresh that answers differently as it applies a fetched answer"
+_KEEP = "keeps the bootstrapped answer, with error set, when its refresh fails"
+_OFF = "reports a flag without a bootstrap entry off, with error set, when its request fails"
+_BOTH = "keeps or turns off by whether the hook had an entry, in one tree whose requests all fail"
+_KEEP_EXP = "keeps the bootstrapped assignment, with error set, when its refresh fails"
+_MAPPED = (
+    "starts each hook from its entry with loading: false, mapped as a fetched answer is"
+)
+_EXPOSURES = "records one exposure on the server and one after hydration, and no more"
+_LEFT_OUT = "leaves out a key whose request fails (%s), and keeps the others"
+_NEVER_THROWS = "never throws, even when fetch itself throws"
+_OTHER_USER = (
+    "ignores a bootstrap for another user: the hooks load and ask, as without one"
+)
+_WRONG_SHAPE = "ignores a bootstrap of the wrong shape (%s), without throwing"
+
+#: Each sentence the React pages state about the bootstrap (as written, folded
+#: to one line; a table cell is a sentence), the pages that state it, and the
+#: jest tests that fail when it stops being true. Both pages are in
+#: ``CLAIMS_DEFERRED``, so no claims registry binds them; this does.
+REACT_BOOTSTRAP_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...] = (
+    (
+        "Answers the server already has for this user, shown on the first render with no request;",
+        (REACT_PAGE,),
+        (_SSR, _FIRST),
+    ),
+    (
+        "It asks the API for each key, in parallel, and returns plain JSON, safe to pass as a prop.",
+        (REACT_PAGE,),
+        (
+            "starts every request before any answers: in parallel",
+            "returns plain JSON, safe to pass as a prop",
+        ),
+    ),
+    (
+        "A hook whose key is in the bootstrap starts with that answer (`loading: false`), on the"
+        " server and in the browser, with no request. It then asks the API as it always does; if"
+        " the answer has changed since the page was rendered (the flag was turned off, say), it"
+        " shows the new one.",
+        (REACT_PAGE,),
+        (
+            _SSR,
+            _FIRST,
+            _REFRESH,
+            "hydrates server markup made with it with no mismatch, and commits the bootstrapped answers first",
+        ),
+    ),
+    (
+        "when the bootstrap has this flag, its answer from the first render, kept if the request fails",
+        (REACT_PAGE,),
+        (_MAPPED, _KEEP),
+    ),
+    (
+        "`false` from the first render when the bootstrap has the flag",
+        (REACT_PAGE,),
+        (_MAPPED,),
+    ),
+    (
+        "Set when the request failed: the flag is reported off, or keeps its bootstrapped answer",
+        (REACT_PAGE,),
+        (_KEEP, _OFF, _BOTH),
+    ),
+    (
+        "unless the bootstrap has that flag: then it starts from the bootstrap's answer.",
+        (REACT_PAGE,),
+        ("starts useMultipleFlags from the entries it has, and null for the others",),
+    ),
+    (
+        "when the bootstrap has this experiment, its variant from the first render, kept if the"
+        " request fails",
+        (REACT_PAGE,),
+        (_MAPPED, _KEEP_EXP),
+    ),
+    (
+        "the control defaults are returned, or the bootstrapped assignment is kept;",
+        (REACT_PAGE,),
+        (
+            _KEEP_EXP,
+            "returns the control defaults with error set for an experiment without an entry whose request fails",
+        ),
+    ),
+    (
+        "One request per key, in parallel; a failed key is left out. Never throws; reads and fills"
+        " no cache. Each experiment key records an exposure.",
+        (REACT_PAGE,),
+        (
+            "starts every request before any answers: in parallel",
+            _LEFT_OUT,
+            _NEVER_THROWS,
+            "reads no cache: a key the client answered before is asked again",
+            "fills no cache: the client asks again for a key bootstrap() answered",
+            "ServerClient.bootstrap() assigns each experiment once and calls its onExposure once per assigned: true answer",
+        ),
+    ),
+    (
+        "`bootstrap()` assigns each experiment you name, and the server records an exposure for its"
+        " variant then, before the page is sent.",
+        (REACT_PAGE,),
+        (_EXPOSURES,),
+    ),
+    (
+        "The browser sends no assignment for a bootstrapped experiment no hook renders.",
+        (REACT_PAGE,),
+        ("sends no assign request for a bootstrapped experiment no hook renders",),
+    ),
+    (
+        "After hydration the hook asks again, and the server records a second exposure for the same"
+        " user and variant (assignment is sticky).",
+        (REACT_PAGE,),
+        (
+            _EXPOSURES,
+            "calls the Provider onExposure once after hydration under StrictMode too",
+        ),
+    ),
+    (
+        "The provider's `onExposure` is called once, after hydration; `ServerClient`'s, if you set"
+        " one, when `bootstrap()` assigns.",
+        (REACT_PAGE,),
+        (_EXPOSURES, "calls no Provider onExposure: the server render records nothing"),
+    ),
+    (
+        "That hook starts loading and asks the API, as without a bootstrap.",
+        (REACT_PAGE,),
+        ("loads a key the bootstrap does not have as without one, with no warning",),
+    ),
+    (
+        "The key is left out, so it loads as without a bootstrap.",
+        (REACT_PAGE,),
+        (_LEFT_OUT, "leaves out a key whose request times out"),
+    ),
+    (
+        "The whole bootstrap is ignored, with one warning in the browser console.",
+        (REACT_PAGE,),
+        (_OTHER_USER,),
+    ),
+    (
+        "The whole bootstrap is ignored, with one warning.",
+        (REACT_PAGE,),
+        (_WRONG_SHAPE,),
+    ),
+    (
+        "That key loads as without a bootstrap, with one warning for the provider.",
+        (REACT_PAGE,),
+        (
+            "uses the well-formed entries and skips a malformed one for its key alone",
+            "warns with the fixed text for malformed entries, counting flags and experiments",
+        ),
+    ),
+    (
+        "The hook keeps the bootstrapped answer and sets `error`.",
+        (REACT_PAGE,),
+        (_KEEP, _KEEP_EXP),
+    ),
+    (
+        "Hooks start loading and ask again. A bootstrap still passed is then another user's: it is"
+        " ignored, with its warning.",
+        (REACT_PAGE,),
+        ("starts loading and asks again when the user changes, as without one",),
+    ),
+    (
+        "Hooks already on the page keep their answers; hooks that mount later read the new one.",
+        (REACT_PAGE,),
+        (
+            "a hook already mounted ignores a new bootstrap prop, and a hook that mounts later reads it",
+        ),
+    ),
+    (
+        "No bootstrap: every hook starts loading, and there is no warning.",
+        (REACT_PAGE,),
+        ("takes %s as no bootstrap, with no warning",),
+    ),
+    (
+        "Each warning starts with `@controlvar/react-sdk: bootstrap`, names no user, key or value,"
+        " and is printed once per provider, in the browser only (never during a server render),",
+        (REACT_PAGE,),
+        (
+            "warns once per reason per Provider, under StrictMode and across re-renders",
+            "never warns during a server render, whatever the bootstrap",
+        ),
+    ),
+    (
+        "A bootstrap has no expiry: it is the answer at the moment the page was rendered, and each"
+        " hook replaces it with the API's answer once the browser has one.",
+        (REACT_PAGE,),
+        ("uses a bootstrap however long ago it was built: it has no expiry", _REFRESH),
+    ),
+    (
+        "A page that a shared cache serves anyway shows its bootstrapped answers until the hooks'"
+        " requests answer; if those fail, the answers stay, with `error` set.",
+        (REACT_PAGE,),
+        (_REFRESH, _KEEP),
+    ),
+    (
+        "report the flag as off with `error` set, or keep a bootstrapped answer with `error` set.",
+        (REACT_PAGE,),
+        (_BOTH,),
+    ),
+    (
+        "with `error` set, or keeps a bootstrapped assignment with `error` set.",
+        (REACT_PAGE,),
+        (_KEEP_EXP,),
+    ),
+    (
+        "`ServerClient.bootstrap()` never throws: a key it could not get is left out.",
+        (REACT_PAGE,),
+        (_NEVER_THROWS, _LEFT_OUT),
+    ),
+    (
+        "interface ExperimentationBootstrap {   // what ServerClient.bootstrap() returns; also"
+        " exported from '@controlvar/react-sdk/ssr'",
+        (REACT_PAGE,),
+        ("is exported as a type from the package and from ssr",),
+    ),
+    (
+        "On error `error` is set and the flag is reported off, or, if it started from the"
+        " Provider's `bootstrap`, keeps that answer.",
+        (REACT_README,),
+        (_KEEP, _OFF),
+    ),
+    (
+        "With a `bootstrap` that has the experiment, it starts from that assignment instead, and"
+        " keeps it, with `error` set, if its request fails.",
+        (REACT_README,),
+        (_MAPPED, _KEEP_EXP),
+    ),
+    (
+        "`ServerClient.bootstrap(keys, user)` returns the answers in the form the Provider's"
+        " `bootstrap` takes",
+        (REACT_README,),
+        (
+            "builds the bootstrap a server render then shows, and calls its own onExposure once per assigned experiment",
+        ),
+    ),
+    (
+        "Each hook whose key the bootstrap has starts from its answer (`loading: false`), then asks"
+        " the API as it always does and shows a changed answer. If that request fails, it keeps"
+        " the bootstrapped answer, with `error` set.",
+        (REACT_README,),
+        (_FIRST, _REFRESH, _KEEP),
+    ),
+    (
+        "`bootstrap()` never throws and leaves out a key it could not get; each experiment it names"
+        " records an exposure on the server, and the hook's request after hydration records"
+        " another, so name only the experiments the page renders.",
+        (REACT_README,),
+        (_NEVER_THROWS, _LEFT_OUT, _EXPOSURES),
+    ),
+    (
+        "A bootstrap for another user, or one that is not what `bootstrap()` returns, is ignored,"
+        " with one warning in the browser console.",
+        (REACT_README,),
+        (_OTHER_USER, _WRONG_SHAPE),
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "sentence, pages, tests",
+    REACT_BOOTSTRAP_SENTENCES,
+    ids=[s[:60] for s, _, _ in REACT_BOOTSTRAP_SENTENCES],
+)
+def test_each_react_bootstrap_sentence_is_on_its_page_and_held_by_a_test(
+    sentence, pages, tests
+):
+    titles = _react_test_titles()
+    unsaid = [page for page in pages if sentence not in fold(text(page))]
+    assert unsaid == [], f"no longer said there: {sentence}"
+    missing = [title for title in tests if f"'{title}'" not in titles]
+    assert missing == [], (
+        f"no jest test in sdk/react/src/__tests__ has these names: {missing}"
+    )
+
+
+def test_the_react_pages_give_the_bootstrap_a_section_of_their_own():
+    """react.md has one H2 for it; the README's short section links to it absolutely."""
+    assert _h2s(REACT_PAGE).count(BOOTSTRAP_H2) == 1
+    assert github_slug(BOOTSTRAP_H2) == BOOTSTRAP_ANCHOR
+    assert _h2s(REACT_README).count("Bootstrap") == 1
+    assert (
+        "https://github.com/Controlvar/controlvar/blob/main/docs/sdk/react.md#"
+        + BOOTSTRAP_ANCHOR
+        in text(REACT_README)
+    )
+
+
+def test_the_react_bootstrap_examples_pass_it_as_a_prop_and_import_server_code_from_ssr():
+    """The App Router example's server component imports ServerClient from the
+    ssr entry; no example writes the bootstrap into a script tag of its own."""
+    page = text(REACT_PAGE)
+    section = page.split("## " + BOOTSTRAP_H2, 1)[1].split("\n## ", 1)[0]
+    app_router = section.split("// app/checkout/page.tsx", 1)[1].split("```", 1)[0]
+    assert "import { ServerClient } from '@controlvar/react-sdk/ssr';" in app_router
+    assert "export function proxy(request: NextRequest)" in section
+    assert "dangerouslySetInnerHTML" not in section
+    # Every mention of a script tag is the advice against one.
+    mentions = section.count("<script")
+    advice = section.count("<script> tag") + section.count("<script>` tag")
+    assert mentions == advice == 3, (mentions, advice)
+    assert section.count("Never into a <script> tag of your own.") == 2
+
+
+def test_the_react_bootstrap_example_is_one_the_provider_uses_and_the_live_runner_reads():
+    """The JSON example on the page: the live runner finds it (and compares its
+    fields with the bootstrap it builds against a real API), and it is a
+    bootstrap the Provider uses whole, by the rules of src/client/bootstrap.ts."""
+    from importlib.util import module_from_spec, spec_from_file_location
+
+    spec = spec_from_file_location(
+        "run_live_contract_for_the_page",
+        REPO_ROOT / "tests" / "sdk-contract" / "live" / "run_live_contract.py",
+    )
+    assert spec is not None and spec.loader is not None
+    runner = module_from_spec(spec)
+    spec.loader.exec_module(runner)
+    assert runner.REACT_PAGE == REPO_ROOT / REACT_PAGE
+    example = runner.documented_bootstrap(text(REACT_PAGE))
+    assert example is not None
+    assert isinstance(example["userId"], str)
+    assert example["flags"] and all(
+        isinstance(body, dict) and isinstance(body.get("enabled"), bool)
+        for body in example["flags"].values()
+    )
+    assert example["experiments"] and all(
+        isinstance(body, dict)
+        and isinstance(body.get("variant_name"), str)
+        and body.get("user_id") == example["userId"]
+        for body in example["experiments"].values()
+    )
+
+
+def test_the_react_bootstrap_warnings_start_as_the_page_says():
+    source = (REPO_ROOT / "sdk/react/src/client/bootstrap.ts").read_text("utf-8")
+    starts = re.findall(r"""^\s+['"](@controlvar/react-sdk: [^'"]*)""", source, re.M)
+    starts += re.findall(r"^\s+`(@controlvar/react-sdk: [^`$]*)", source, re.M)
+    assert len(starts) == 3, starts
+    assert all(s.startswith("@controlvar/react-sdk: bootstrap") for s in starts), starts
+    assert "`@controlvar/react-sdk: bootstrap`" in text(REACT_PAGE)
+
+
+# ---------------------------------------------------------------------------
+# 6. The React Native SDK's exposure hook (#1499)
 # ---------------------------------------------------------------------------
 
 #: Where the React Native SDK's jest tests live; every test named below is in one of them.
@@ -1546,7 +1894,7 @@ RN_EXPOSURE_SENTENCES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
     (
         "- an answer from the client's memory cache; - an answer read from AsyncStorage: an"
         " unexpired stored answer (after an app restart, or in a new client) or the offline"
-        " fallback, for which the server recorded no exposure; - a user the experiment did not"
+        " fallback, served when the request fails; - a user the experiment did not"
         " enrol (`assigned: false`, with `reason` `'holdout'`, `'mutual_exclusion'` or"
         " `'targeting'`), or an experiment that is not running (`'draft'`, `'paused'`,"
         " `'completed'` or `'archived'`): the server records no exposure for them; - a call"

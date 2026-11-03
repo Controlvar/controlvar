@@ -308,7 +308,7 @@ It is not called for:
 
 - an answer from the client's memory cache;
 - an answer read from AsyncStorage: an unexpired stored answer (after an app restart, or in a new
-  client) or the offline fallback, for which the server recorded no exposure;
+  client) or the offline fallback, served when the request fails;
 - a user the experiment did not enrol (`assigned: false`, with `reason` `'holdout'`,
   `'mutual_exclusion'` or `'targeting'`), or an experiment that is not running (`'draft'`,
   `'paused'`, `'completed'` or `'archived'`): the server records no exposure for them;
