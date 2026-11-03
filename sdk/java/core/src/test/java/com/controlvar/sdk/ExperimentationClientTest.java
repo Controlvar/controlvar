@@ -37,6 +37,7 @@ import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -445,6 +446,26 @@ class ExperimentationClientTest {
         void zonedDateTime() throws Exception {
             assertEquals(SENT + "%7B%22at%22%3A%222026-11-03T12%3A00%3A00%2B01%3A00%22%7D",
                     pathSentFor(ZonedDateTime.of(2026, 11, 3, 12, 0, 0, 0, ZoneId.of("Europe/Paris"))));
+        }
+
+        @Test
+        @DisplayName("a java.util.Date is sent as an ISO-8601 UTC instant, not epoch milliseconds: context={at: 2026-11-03T12:00:00Z}")
+        void utilDate() throws Exception {
+            assertEquals(SENT + "%7B%22at%22%3A%222026-11-03T12%3A00%3A00Z%22%7D",
+                    pathSentFor(Date.from(Instant.parse("2026-11-03T12:00:00Z"))));
+        }
+
+        @Test
+        @DisplayName("a java.util.Date in the assignment context is sent as the same ISO-8601 string")
+        void utilDateAssignment() throws Exception {
+            mockServer.enqueue(json(200, ASSIGN_JSON));
+            User user = User.builder("user-1")
+                    .attribute("at", Date.from(Instant.parse("2026-11-03T12:00:00.250Z")))
+                    .build();
+
+            client.getExperimentAssignment(user, "checkout_flow");
+
+            assertEquals(Map.of("at", "2026-11-03T12:00:00.250Z"), bodyOf(takeRequest()).get("context"));
         }
 
         @Test

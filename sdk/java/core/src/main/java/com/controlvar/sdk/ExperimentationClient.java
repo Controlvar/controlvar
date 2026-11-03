@@ -31,6 +31,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAccessor;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -559,6 +560,15 @@ public class ExperimentationClient implements AutoCloseable {
         iso(module, LocalDateTime.class, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
         iso(module, OffsetDateTime.class, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
         iso(module, ZonedDateTime.class, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        // A java.util.Date is an instant. Jackson would write epoch milliseconds, which the
+        // server reads as epoch seconds. getTime() rather than toInstant(): java.sql.Date
+        // (a subclass this serializer also catches) throws from toInstant().
+        module.addSerializer(Date.class, new ToStringSerializerBase(Date.class) {
+            @Override
+            public String valueToString(Object value) {
+                return Instant.ofEpochMilli(((Date) value).getTime()).toString();
+            }
+        });
         return module;
     }
 

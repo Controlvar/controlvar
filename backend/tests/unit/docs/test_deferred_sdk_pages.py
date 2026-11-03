@@ -2142,6 +2142,9 @@ _DATE_TIMES = (
     "an OffsetDateTime is sent with its offset: context={at: 2026-11-03T12:00:00+01:00}",
     "a ZonedDateTime is sent with its offset and without its zone ID:"
     " context={at: 2026-11-03T12:00:00+01:00}",
+    "a java.util.Date is sent as an ISO-8601 UTC instant, not epoch milliseconds:"
+    " context={at: 2026-11-03T12:00:00Z}",
+    "a java.util.Date in the assignment context is sent as the same ISO-8601 string",
     "getExperimentAssignment sends them in its context as the same strings",
 )
 _CACHE = (
@@ -2182,7 +2185,8 @@ JAVA_CONTEXT_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...]
         " `LocalDateTime`, `OffsetDateTime` or `ZonedDateTime` as an ISO-8601 string"
         " (`2026-11-03T12:00:00Z`, `2026-11-03`, `2026-11-03T12:00:00`,"
         " `2026-11-03T12:00:00+01:00`; a `ZonedDateTime` with its offset and without its"
-        " zone ID).",
+        " zone ID), and a `java.util.Date` as an ISO-8601 UTC instant"
+        " (`2026-11-03T12:00:00Z`), never as epoch milliseconds.",
         (_ROUND_TRIP,) + _DATE_TIMES,
         (),
     ),

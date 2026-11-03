@@ -152,7 +152,8 @@ Attribute values go into that JSON as follows: a string, number or boolean as it
 map as an array or object, and an `Instant`, `LocalDate`, `LocalDateTime`, `OffsetDateTime` or
 `ZonedDateTime` as an ISO-8601 string (`2026-11-03T12:00:00Z`, `2026-11-03`,
 `2026-11-03T12:00:00`, `2026-11-03T12:00:00+01:00`; a `ZonedDateTime` with its offset and
-without its zone ID).
+without its zone ID), and a `java.util.Date` as an ISO-8601 UTC instant
+(`2026-11-03T12:00:00Z`), never as epoch milliseconds.
 
 Attributes are assumed stable per user: evaluations and assignments are cached by user + key
 only, so call `clearCache()`, or `invalidateCache(userId, key)` for one key, after changing a
