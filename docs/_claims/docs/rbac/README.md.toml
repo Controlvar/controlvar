@@ -12,7 +12,7 @@ text = "Overview"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Every deployment, core or full profile, decides what a signed-in user may do from four roles and a separate superuser flag."
+text = "Every deployment decides what a signed-in user may do from four roles and a separate superuser flag."
 by = [
     "test:backend/tests/unit/core/test_permissions.py",
     "test:backend/tests/smoke/test_core_boundary.py::test_register_core_routers_mounts_no_module_route",
@@ -23,7 +23,15 @@ text = "This page explains them."
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "Custom roles, the rbac module's (full profile only), are on the RBAC API page."
+text = "In the full profile, custom roles and direct grants, the rbac module's, can add permissions to a user's role, never remove any: see the RBAC API page."
+by = [
+    "test:backend/tests/unit/core/test_built_in_roles_decide.py::test_a_custom_role_or_a_grant_adds_only_grantable_pairs",
+    "test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_layers_only_add_and_actions_are_sorted",
+    "test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_permission_checks_read_custom_roles_and_grants_through_one_capability",
+]
+
+[[unit]]
+text = "Statements below about what a role cannot do describe the role alone."
 by = ["exempt:navigation"]
 
 [[unit]]
@@ -236,8 +244,17 @@ text = "Feature flags."
 by = ["test:backend/tests/integration/api/test_flag_change_routes_access.py"]
 
 [[unit]]
-text = "A flag's owner is recorded and shown, but access to flags is decided by role alone: ADMIN and DEVELOPER may change any flag, and ANALYST and VIEWER may change none, including one they own."
+text = "A flag's owner is recorded and shown, but access to flags is decided by permission, never by ownership: ADMIN and DEVELOPER may change any flag, and ANALYST and VIEWER may change none by their role, including one they own."
 by = ["test:backend/tests/integration/api/test_flag_change_routes_access.py"]
+
+[[unit]]
+text = "A custom role or direct grant (full profile) of feature_flag (update) or (delete) admits any flag, owned or not."
+by = [
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_bulk_toggle_follows_a_flag_update_grant",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_rollout_schedule_changes_follow_a_flag_update_grant",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
 text = "Experiments."
@@ -256,29 +273,36 @@ text = "Who owns the experiment is not considered."
 by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller"]
 
 [[unit]]
-text = "Changing one -- PUT /{experiment_id}, schedule, start, pause, complete, archive and metadata -- needs the role's READ and UPDATE on experiments."
+text = "Changing one -- PUT /{experiment_id}, schedule, start, pause, complete, archive and metadata -- needs READ and UPDATE on experiments."
 by = [
     "test:backend/tests/unit/api/v1/endpoints/test_experiment_permissions.py::test_experiment_endpoint_permissions",
     "test:backend/tests/unit/api/v1/endpoints/test_experiment_permissions.py::test_experiment_state_permissions",
 ]
 
 [[unit]]
-text = "Who owns the experiment is not considered, so ANALYST and VIEWER change no experiment, including one they own."
-by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller"]
+text = "Who owns the experiment is not considered, so ANALYST and VIEWER change no experiment by their role, including one they own; a custom role or direct grant (full profile) of experiment (update) lets them change any."
+by = [
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+]
 
 [[unit]]
-text = "Deleting one (DELETE /{experiment_id}) needs the role's READ and DELETE on experiments, and the experiment must be in DRAFT."
+text = "Deleting one (DELETE /{experiment_id}) needs READ and DELETE on experiments, and the experiment must be in DRAFT."
 by = ["test:backend/tests/unit/api/v1/endpoints/test_experiment_permissions.py::test_experiment_endpoint_permissions"]
 
 [[unit]]
-text = "Who owns the experiment is not considered: ADMIN and DEVELOPER may delete any DRAFT experiment."
-by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller"]
+text = "Who owns the experiment is not considered: ADMIN and DEVELOPER may delete any DRAFT experiment, and so may anyone whose custom role or direct grant (full profile) gives experiment (delete)."
+by = [
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+]
 
 [[unit]]
-text = "A clone (POST /{experiment_id}/clone) needs READ on the source and the role's CREATE on experiments."
+text = "A clone (POST /{experiment_id}/clone) needs READ on the source and CREATE on experiments, which a custom role or direct grant (full profile) of experiment (create) also gives."
 by = [
     "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestCloneExperiment::test_admin_can_clone_experiment",
     "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestCloneExperiment::test_analyst_cannot_clone_other_users_experiment",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
 ]
 
 [[unit]]

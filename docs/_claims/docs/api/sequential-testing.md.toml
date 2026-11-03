@@ -491,15 +491,21 @@ text = "Permissions"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Changing an experiment's sequential testing settings is a change to the experiment, decided by role and by the experiment's state, not by who created it."
-by = ["exempt:baseline"]
+text = "Changing an experiment's sequential testing settings is a change to the experiment, decided by permission and by the experiment's state, not by who created it."
+by = [
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
-text = "ANALYST and VIEWER cannot change any experiment: the PUT above answers 403 with \"You don't have permission to update experiments\"."
-by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py"]
+text = "ADMIN and DEVELOPER may change experiments, and in the full profile so may anyone whose custom role or direct grant gives experiment (update); for anyone else the PUT above answers 403 with \"You don't have permission to update experiments\"."
+by = [
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+]
 
 [[unit]]
-text = "ADMIN and DEVELOPER may change experiments, but only a superuser may change one that is no longer a draft, and the demo experiment is running: for a DEVELOPER (or an ADMIN who is not a superuser) the PUT above answers 400 with \"Cannot update experiments in active status\"."
+text = "Only a superuser may change an experiment that is no longer a draft, and the demo experiment is running: for anyone else who may change experiments, such as a DEVELOPER or an ADMIN who is not a superuser, the PUT above answers 400 with \"Cannot update experiments in active status\"."
 by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py"]
 
 [[unit]]
@@ -537,7 +543,7 @@ text = "Choose alpha and tau_squared before the experiment starts."
 by = ["exempt:advice"]
 
 [[unit]]
-text = "Once it is running, the PUT that would change sequential_testing_enabled or sequential_testing_config answers 400 with \"Cannot update experiments in active status\" for an ADMIN or DEVELOPER who is not a superuser."
+text = "Once it is running, the PUT that would change sequential_testing_enabled or sequential_testing_config answers 400 with \"Cannot update experiments in active status\" for anyone who may change experiments but is not a superuser."
 by = [
     "test:backend/tests/integration/api/test_sequential_results_routes.py::test_once_running_only_a_superuser_changes_the_sequential_settings",
     "test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller",

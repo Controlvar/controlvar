@@ -96,18 +96,21 @@ text = "Module | Name | What it adds"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Team workspaces | workspaces | Group users into teams, with workspace roles and email invites. Grouping only: access to experiments and flags is by platform role"
+text = "Team workspaces | workspaces | Group users into teams, with workspace roles and email invites. Grouping only: workspace roles play no part in access to experiments and flags"
 by = [
     "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_changing_a_members_workspace_role_writes_one_role_assign",
     "test:modules/backend/tests/integration/api/test_workspace_invite_binding.py::test_the_invited_address_joins_with_the_invited_role",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_only_the_built_in_role",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_grants_only_through_the_capability",
+    "test:modules/backend/tests/integration/api/test_workspace_roles_scope.py::test_the_platform_role_not_the_workspace_decides",
 ]
 
 [[unit]]
-text = "Custom roles | rbac | Roles beyond the built-in four, and permissions granted directly to a user. Both are recorded, but they do not change what anyone can do yet: each user's built-in role decides (#891)"
+text = "Custom roles | rbac | Roles beyond the built-in four, and permissions granted directly to a user, optionally until a date. Both add to what the user's built-in role allows"
 by = [
     "test:modules/backend/tests/unit/services/test_rbac_service.py::TestCreateCustomRole::test_creates_role_with_name",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_only_the_built_in_role",
+    "test:backend/tests/unit/core/test_built_in_roles_decide.py::test_a_custom_role_or_a_grant_adds_only_grantable_pairs",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:modules/backend/tests/integration/rbac/test_rbac_provider.py::test_a_grant_yields_its_pairs_only_when_activated_active_and_unexpired",
 ]
 
 [[unit]]

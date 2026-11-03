@@ -26,8 +26,10 @@ stays `active`.
 
 ## In the Dashboard
 
-A flag's page has a **Rollout schedule** section. ADMIN and DEVELOPER create and run a
-schedule there; ANALYST and VIEWER see the schedule and its stages, and change nothing.
+A flag's page has a **Rollout schedule** section. Users who may change the flag create and run
+a schedule there: ADMIN and DEVELOPER, and in the full profile anyone whose custom role or
+direct grant gives `feature_flag (update)`. Everyone else sees the schedule and its stages, and
+changes nothing.
 
 - **Create a rollout schedule** is offered when the flag has no schedule that is a draft,
   active or paused. It takes a name and the stages, in order: each has a name, a target
@@ -66,7 +68,8 @@ and nothing is printed.
 
 ### Step 1: Log in
 
-Changing a flag's rollout takes a user with the ADMIN or DEVELOPER role:
+Changing a flag's rollout takes a user who may change feature flags, such as one with the ADMIN
+or DEVELOPER role:
 
 ```{.bash exec}
 TOKEN=$(curl -s -X POST localhost:8000/api/v1/auth/login \

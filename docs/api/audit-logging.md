@@ -104,7 +104,8 @@ entry written for each flag that changed:
 }
 ```
 
-A flag the caller may not change (an ANALYST or VIEWER changes none) fails with
+A flag the caller may not change (an ANALYST or VIEWER changes none, unless a custom role or
+direct grant gives them `feature_flag (update)`) fails with
 `"Not enough permissions to change this feature flag"` and is left as it was.
 
 ---
@@ -226,8 +227,9 @@ in the CSV. The JSON holds the stored text unchanged.
 The file is named `audit-log-<UTC time>.<format>` in `Content-Disposition`, for example
 `audit-log-20261004T090507Z.csv`. Entries written after the request arrived are not in it.
 
-Who sees what is the list's rule: ADMIN and ANALYST export every entry; DEVELOPER and
-VIEWER export only their own, whatever `user_id` they send. Exporting is not recorded in
+Who sees what is the list's rule: ADMIN, ANALYST and, in the full profile, anyone whose custom
+role or direct grant gives `audit_log (read)` export other users' entries too; anyone else
+exports only their own, whatever `user_id` they send. Exporting is not recorded in
 the audit log.
 
 **Check the count.** `X-Total-Count` is the number of entries the file holds. A download
@@ -263,8 +265,9 @@ rate limit, 10 requests a minute per client address, apart from the
 [data export](data-export.md) routes' limit.
 
 The dashboard's Audit Log page (`/admin/audit`) is in the top navigation for every signed-in
-role. It shows what `GET /api/v1/audit-logs/` returns for that user: every entry for ADMIN,
-ANALYST and superusers, and their own entries for DEVELOPER and VIEWER, who see a note saying
+role. It shows what `GET /api/v1/audit-logs/` returns for that user: other users' entries too
+for ADMIN, ANALYST, superusers and, in the full profile, anyone whose custom role or direct
+grant gives `audit_log (read)`; only their own entries for anyone else, who sees a note saying
 so. Its **Download CSV** and **Download JSON** buttons export the same entries, with the
 page's current filters. The page makes the same comparison, and when the counts differ it
 says so and saves nothing.
@@ -459,10 +462,11 @@ entry, the bulk toggle's: `toggle_disable`, from `ACTIVE` to `INACTIVE`, by
 
 ## Permissions
 
-ADMIN and ANALYST (and superusers) read every audit entry. DEVELOPER and
-VIEWER read only the entries they made themselves.
+ADMIN and ANALYST (and superusers), and in the full profile anyone whose custom role or
+direct grant gives `audit_log (read)`, read other users' audit entries too. Anyone else reads
+only the entries they made themselves.
 
-| Route | ADMIN, ANALYST | DEVELOPER, VIEWER |
+| Route | ADMIN, ANALYST, or `audit_log (read)` | Anyone else |
 |-------|----------------|-------------------|
 | `GET /audit-logs/` | Every entry; `user_id` filters by any user | Own entries only; a `user_id` naming anyone else is replaced by their own |
 | `GET /audit-logs/export` | Every entry; `user_id` filters by any user | Own entries only; a `user_id` naming anyone else is replaced by their own |
@@ -472,5 +476,6 @@ VIEWER read only the entries they made themselves.
 | `GET /audit-logs/stream` | Every entry | Own entries only |
 | `GET /feature-flags/{flag_id}/history` | Every entry | Own entries only; `total_changes` counts only those |
 
-`POST /feature-flags/bulk-toggle` changes flags, so it follows the flag rule:
-ADMIN and DEVELOPER may use it, ANALYST and VIEWER may not.
+`POST /feature-flags/bulk-toggle` changes flags, so it follows the flag rule: ADMIN and
+DEVELOPER may use it, and in the full profile so may anyone whose custom role or direct grant
+gives `feature_flag (update)`; anyone else may not.

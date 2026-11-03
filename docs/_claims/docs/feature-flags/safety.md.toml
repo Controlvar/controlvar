@@ -120,11 +120,12 @@ text = "Which errors count"
 by = ["exempt:label"]
 
 [[unit]]
-text = "A flag's error metrics, and so automatic rollback, count two kinds of error: flag evaluations that fail on the server, and error reports sent to POST /api/v1/tracking/errors or /errors/batch with a server-side key, an API key with the sdk:ruleset scope whose owner can change feature flags (ADMIN, DEVELOPER or a superuser)."
+text = "A flag's error metrics, and so automatic rollback, count two kinds of error: flag evaluations that fail on the server, and error reports sent to POST /api/v1/tracking/errors or /errors/batch with a server-side key, an API key with the sdk:ruleset scope whose owner can change feature flags (ADMIN, DEVELOPER, a superuser, or in the full profile anyone whose custom role or direct grant gives feature_flag (update))."
 by = [
     "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_server_side_key_rolls_back",
     "test:backend/tests/integration/api/test_error_report_source.py::test_an_evaluation_that_fails_on_the_server_still_rolls_back",
     "test:backend/tests/integration/api/test_error_report_source.py::test_rows_of_every_stored_shape_are_counted_as_documented",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
 ]
 
 [[unit]]
@@ -135,8 +136,11 @@ by = [
 ]
 
 [[unit]]
-text = "The same goes for an sdk:ruleset key whose owner has since lost the role."
-by = ["test:backend/tests/integration/api/test_error_report_source.py::test_a_scoped_key_whose_owner_can_no_longer_change_flags_does_not_count"]
+text = "The same goes for an sdk:ruleset key whose owner can no longer change feature flags."
+by = [
+    "test:backend/tests/integration/api/test_error_report_source.py::test_a_scoped_key_whose_owner_can_no_longer_change_flags_does_not_count",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+]
 
 [[unit]]
 text = "To have app errors count, send them to your server and forward them from there with a server-side key; see Reporting client-side errors."

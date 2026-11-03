@@ -2,7 +2,7 @@
 
 ## Overview
 
-Every deployment, core or full profile, decides what a signed-in user may do from four roles and a separate superuser flag. This page explains them. Custom roles, the `rbac` module's (full profile only), are on the [RBAC API page](../api/rbac.md).
+Every deployment decides what a signed-in user may do from four roles and a separate superuser flag. This page explains them. In the full profile, custom roles and direct grants, the `rbac` module's, can add permissions to a user's role, never remove any: see the [RBAC API page](../api/rbac.md). Statements below about what a role cannot do describe the role alone.
 
 ## User Roles
 
@@ -77,8 +77,9 @@ A user who creates a resource is recorded as its owner. What that record decides
 depends on the resource.
 
 **Feature flags.** A flag's owner is recorded and shown, but access to flags is decided
-by role alone: ADMIN and DEVELOPER may change any flag, and ANALYST and VIEWER may change
-none, including one they own.
+by permission, never by ownership: ADMIN and DEVELOPER may change any flag, and ANALYST and
+VIEWER may change none by their role, including one they own. A custom role or direct grant
+(full profile) of `feature_flag (update)` or `(delete)` admits any flag, owned or not.
 
 **Experiments.** Under `/api/v1/experiments/{experiment_id}`:
 
@@ -86,13 +87,16 @@ none, including one they own.
   `/daily-results`, `/segmented-results/{segment_by}`) needs the role's READ on
   experiments. Who owns the experiment is not considered.
 - Changing one -- `PUT /{experiment_id}`, `schedule`, `start`, `pause`, `complete`,
-  `archive` and `metadata` -- needs the role's READ and UPDATE on experiments. Who owns
-  the experiment is not considered, so ANALYST and VIEWER change no experiment, including
-  one they own.
-- Deleting one (`DELETE /{experiment_id}`) needs the role's READ and DELETE on
-  experiments, and the experiment must be in DRAFT. Who owns the experiment is not
-  considered: ADMIN and DEVELOPER may delete any DRAFT experiment.
-- A clone (`POST /{experiment_id}/clone`) needs READ on the source and the role's CREATE
-  on experiments.
+  `archive` and `metadata` -- needs READ and UPDATE on experiments. Who owns the
+  experiment is not considered, so ANALYST and VIEWER change no experiment by their role,
+  including one they own; a custom role or direct grant (full profile) of
+  `experiment (update)` lets them change any.
+- Deleting one (`DELETE /{experiment_id}`) needs READ and DELETE on experiments, and the
+  experiment must be in DRAFT. Who owns the experiment is not considered: ADMIN and
+  DEVELOPER may delete any DRAFT experiment, and so may anyone whose custom role or direct
+  grant (full profile) gives `experiment (delete)`.
+- A clone (`POST /{experiment_id}/clone`) needs READ on the source and CREATE on
+  experiments, which a custom role or direct grant (full profile) of `experiment (create)`
+  also gives.
 
 A superuser passes every one of these checks.
