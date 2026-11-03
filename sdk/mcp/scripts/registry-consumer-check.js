@@ -59,6 +59,10 @@ function run(command, args, options) {
     child.stderr.on("data", (chunk) => (stderr += chunk));
     child.on("error", reject);
     child.on("close", (code, signal) => resolve({ code: code ?? signal, stdout, stderr }));
+    // A child that exits before it reads its input closes the pipe (EPIPE).
+    // That is not this script's failure: the child's exit code and stderr,
+    // reported when it closes, are the result.
+    child.stdin.on("error", () => {});
     child.stdin.end(options.input ?? "");
   });
 }
@@ -337,13 +341,18 @@ async function main() {
 
 // exitCode, not exit(): nothing is left running once main() settles, and an
 // exit() could cut off output still queued for a pipe.
-main().then(
-  (problems) => {
-    for (const problem of problems) process.stderr.write(`${PREFIX}: ${problem}\n`);
-    process.exitCode = problems.length === 0 ? 0 : 1;
-  },
-  (error) => {
-    process.stderr.write(`${PREFIX}: ${error.message}\n`);
-    process.exitCode = 1;
-  },
-);
+// Required (by __tests__/consumer-check-run.test.ts), it only exports run().
+if (require.main === module) {
+  main().then(
+    (problems) => {
+      for (const problem of problems) process.stderr.write(`${PREFIX}: ${problem}\n`);
+      process.exitCode = problems.length === 0 ? 0 : 1;
+    },
+    (error) => {
+      process.stderr.write(`${PREFIX}: ${error.message}\n`);
+      process.exitCode = 1;
+    },
+  );
+}
+
+module.exports = { run };

@@ -256,3 +256,75 @@ describe("V-OPT: CONTROLVAR_ALLOW_INSECURE_HTTP=1", () => {
     expect(line).toContain("which has a path");
   });
 });
+
+describe("configuration errors never echo a value shaped like a key", () => {
+  const local = { CONTROLVAR_API_KEY: KEY };
+  const keyShaped = `eptk_${"a1b2c3d4".repeat(4)}`;
+  const tokenShaped = "eyJhbGciOiJIUzI1NiJ9-canary";
+  const run = (url: string, extra: Record<string, string> = {}) =>
+    readConfig([], { ...local, CONTROLVAR_API_URL: url, ...extra }, []);
+  const message = (result: ReturnType<typeof readConfig>): string => {
+    if (result.ok) throw new Error("accepted");
+    return result.message;
+  };
+  const warnings = (result: ReturnType<typeof readConfig>): string => {
+    if (!result.ok) throw new Error(result.message);
+    return result.config.warnings.join("\n");
+  };
+
+  // E2a: the address is not http(s). Both refused shapes are replaced; an ordinary value is echoed.
+  test.each([[keyShaped], [tokenShaped]])("E2a: %s is not echoed", (value) => {
+    const text = message(run(value));
+    expect(text).toContain("not an http:// or https:// address");
+    expect(text).not.toContain(value);
+    expect(text).not.toContain(value.slice(0, 8));
+  });
+
+  test("E2a: an ordinary value is still echoed", () => {
+    expect(message(run("ftp://controlvar.example.com"))).toContain('"ftp://controlvar.example.com"');
+  });
+
+  // E2d: plain http:// on another computer.
+  test.each([[keyShaped], [tokenShaped]])("E2d: a host shaped like %s is not echoed", (value) => {
+    const text = message(run(`http://${value}`));
+    expect(text).toContain("a plain http:// address on another computer");
+    expect(text).not.toContain(value);
+    expect(text).not.toContain(value.slice(0, 8).toLowerCase());
+  });
+
+  test("E2d: a host with neither . nor : is not echoed", () => {
+    const text = message(run("http://intranet-canary"));
+    expect(text).toContain("a plain http:// address on another computer");
+    expect(text).not.toContain("intranet-canary");
+  });
+
+  test("E2d: an ordinary host is still echoed", () => {
+    expect(message(run("http://controlvar.example.com"))).toContain('"http://controlvar.example.com"');
+    expect(message(run("http://10.0.0.5:8000"))).toContain('"http://10.0.0.5:8000"');
+  });
+
+  test("E2d through a proxy: localhost:8000 is still echoed, a bare host is not", () => {
+    expect(message(run("http://localhost:8000", { NODE_USE_ENV_PROXY: "1" }))).toContain('"http://localhost:8000"');
+    expect(message(run("http://intranet-canary", { NODE_USE_ENV_PROXY: "1" }))).not.toContain("intranet-canary");
+  });
+
+  // W1: the opt-in warning.
+  const optIn = { CONTROLVAR_ALLOW_INSECURE_HTTP: "1" };
+  test.each([[keyShaped], [tokenShaped]])("W1: a host shaped like %s is not echoed", (value) => {
+    const text = warnings(run(`http://${value}`, optIn));
+    expect(text).toContain("CONTROLVAR_ALLOW_INSECURE_HTTP=1");
+    expect(text).not.toContain(value);
+    expect(text).not.toContain(value.slice(0, 8).toLowerCase());
+  });
+
+  test("W1: a host with neither . nor : is not echoed", () => {
+    const text = warnings(run("http://intranet-canary", optIn));
+    expect(text).toContain("CONTROLVAR_ALLOW_INSECURE_HTTP=1");
+    expect(text).not.toContain("intranet-canary");
+  });
+
+  test("W1: an ordinary host is still echoed, with and without a proxy", () => {
+    expect(warnings(run("http://10.0.0.5:8000", optIn))).toContain("10.0.0.5:8000");
+    expect(warnings(run("http://localhost:8000", { ...optIn, NODE_USE_ENV_PROXY: "1" }))).toContain("localhost:8000");
+  });
+});

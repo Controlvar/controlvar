@@ -63,8 +63,32 @@ function echoable(value: string): boolean {
   return (
     value.length <= MAX_ECHO_LENGTH &&
     /^[\x20-\x7E]*$/.test(value) &&
-    !/[@?#]/.test(value)
+    !/[@?#]/.test(value) &&
+    !keyShaped(value)
   );
+}
+
+/** What is printed in place of a value that is not shown. */
+export const NOT_SHOWN = "(not shown)";
+
+/** A value shaped like an API key (`eptk_`) or a sign-in token (`eyJ`), in any letter case. */
+function keyShaped(value: string): boolean {
+  return /^(eptk_|eyj)/i.test(value.trim());
+}
+
+/**
+ * The one guard every configuration message that would echo a value goes
+ * through: a value that starts `eptk_` or `eyJ`, or a host with neither a `.`
+ * nor a `:`, is replaced by a fixed placeholder, never printed.
+ */
+function shownHost(host: string): string {
+  return keyShaped(host) || !/[.:]/.test(host) ? NOT_SHOWN : host;
+}
+
+/** The origin for a message, built from the guarded host, or the placeholder. */
+function shownOrigin(url: URL): string {
+  const host = shownHost(url.host);
+  return host === NOT_SHOWN ? NOT_SHOWN : `"${url.protocol}//${host}"`;
 }
 
 /**
@@ -146,14 +170,14 @@ export function readConfig(
       if (!optedIn) {
         if (throughProxy) {
           return refuse(
-            `${ENV_URL} is "${url.origin}", a plain http:// address, and NODE_USE_ENV_PROXY ` +
+            `${ENV_URL} is ${shownOrigin(url)}, a plain http:// address, and NODE_USE_ENV_PROXY ` +
               "(or --use-env-proxy) makes Node send requests through a proxy, so your API key would " +
               "cross the network unencrypted. Set NODE_USE_ENV_PROXY to an empty value in this " +
               "server's settings, or use your instance's https:// address.",
           );
         }
         return refuse(
-          `${ENV_URL} is "${url.origin}", a plain http:// address on another computer, so your API key ` +
+          `${ENV_URL} is ${shownOrigin(url)}, a plain http:// address on another computer, so your API key ` +
             "would cross the network unencrypted. Use your instance's https:// address. If it runs on " +
             `a private network you trust and has no HTTPS, set ${ENV_INSECURE}=1 in this server's settings.`,
         );
@@ -161,14 +185,14 @@ export function readConfig(
       if (throughProxy) {
         warnings.push(
           `Warning: ${ENV_INSECURE}=1 and NODE_USE_ENV_PROXY (or --use-env-proxy) is set: this server ` +
-            `sends your API key and the answers over plain HTTP to ${url.host} through a proxy, where ` +
+            `sends your API key and the answers over plain HTTP to ${shownHost(url.host)} through a proxy, where ` +
             "anyone who can watch that network can read them. Set NODE_USE_ENV_PROXY to an empty value " +
             "in this server's settings.",
         );
       } else {
         warnings.push(
           `Warning: ${ENV_INSECURE}=1: this server sends your API key and the answers over plain HTTP ` +
-            `to ${url.host}, where anyone who can watch that network can read them. Use https:// when ` +
+            `to ${shownHost(url.host)}, where anyone who can watch that network can read them. Use https:// when ` +
             "your instance offers it.",
         );
       }
