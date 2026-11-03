@@ -148,6 +148,12 @@ attributes as compact JSON, percent-encoded: `{"plan":"pro"}` travels as
 `context=%7B%22plan%22%3A%22pro%22%7D`. A user with no attributes sends no `context`.
 `getExperimentAssignment` sends them as `context` in its body.
 
+Attribute values go into that JSON as follows: a string, number or boolean as itself, a list or
+map as an array or object, and an `Instant`, `LocalDate`, `LocalDateTime`, `OffsetDateTime` or
+`ZonedDateTime` as an ISO-8601 string (`2026-11-03T12:00:00Z`, `2026-11-03`,
+`2026-11-03T12:00:00`, `2026-11-03T12:00:00+01:00`; a `ZonedDateTime` with its offset and
+without its zone ID).
+
 Attributes are assumed stable per user: evaluations and assignments are cached by user + key
 only, so call `clearCache()`, or `invalidateCache(userId, key)` for one key, after changing a
 user's attributes.

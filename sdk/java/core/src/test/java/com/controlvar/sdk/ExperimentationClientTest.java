@@ -26,7 +26,14 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -389,11 +396,111 @@ class ExperimentationClientTest {
     }
 
     // =========================================================================
+    // Attribute values: java.time as ISO-8601 strings
+    // =========================================================================
+
+    @Nested
+    @DisplayName("java.time attribute values are sent as ISO-8601 strings")
+    class DateTimeAttributes {
+
+        private static final String SENT = "/api/v1/feature-flags/evaluate/f?user_id=user-1&context=";
+
+        /** The path of the evaluation sent for a user whose one attribute, {@code at}, is {@code value}. */
+        private String pathSentFor(Object value) throws Exception {
+            mockServer.enqueue(flagResponse("f", true, "null"));
+            client.evaluateFeatureFlag(User.builder("user-1").attribute("at", value).build(), "f");
+            return takeRequest().getPath();
+        }
+
+        @Test
+        @DisplayName("an Instant is sent in UTC: context={at: 2026-11-03T12:00:00Z}")
+        void instant() throws Exception {
+            assertEquals(SENT + "%7B%22at%22%3A%222026-11-03T12%3A00%3A00Z%22%7D",
+                    pathSentFor(Instant.parse("2026-11-03T12:00:00Z")));
+        }
+
+        @Test
+        @DisplayName("a LocalDate is sent as a date: context={at: 2026-11-03}")
+        void localDate() throws Exception {
+            assertEquals(SENT + "%7B%22at%22%3A%222026-11-03%22%7D",
+                    pathSentFor(LocalDate.of(2026, 11, 3)));
+        }
+
+        @Test
+        @DisplayName("a LocalDateTime is sent with seconds and no offset: context={at: 2026-11-03T12:00:00}")
+        void localDateTime() throws Exception {
+            assertEquals(SENT + "%7B%22at%22%3A%222026-11-03T12%3A00%3A00%22%7D",
+                    pathSentFor(LocalDateTime.of(2026, 11, 3, 12, 0)));
+        }
+
+        @Test
+        @DisplayName("an OffsetDateTime is sent with its offset: context={at: 2026-11-03T12:00:00+01:00}")
+        void offsetDateTime() throws Exception {
+            assertEquals(SENT + "%7B%22at%22%3A%222026-11-03T12%3A00%3A00%2B01%3A00%22%7D",
+                    pathSentFor(OffsetDateTime.of(2026, 11, 3, 12, 0, 0, 0, ZoneOffset.ofHours(1))));
+        }
+
+        @Test
+        @DisplayName("a ZonedDateTime is sent with its offset and without its zone ID: context={at: 2026-11-03T12:00:00+01:00}")
+        void zonedDateTime() throws Exception {
+            assertEquals(SENT + "%7B%22at%22%3A%222026-11-03T12%3A00%3A00%2B01%3A00%22%7D",
+                    pathSentFor(ZonedDateTime.of(2026, 11, 3, 12, 0, 0, 0, ZoneId.of("Europe/Paris"))));
+        }
+
+        @Test
+        @DisplayName("getExperimentAssignment sends them in its context as the same strings")
+        void assignmentContext() throws Exception {
+            mockServer.enqueue(json(200, ASSIGN_JSON));
+            User user = User.builder("user-1")
+                    .attribute("at", Instant.parse("2026-11-03T12:00:00Z"))
+                    .attribute("on", LocalDate.of(2026, 11, 3))
+                    .build();
+
+            client.getExperimentAssignment(user, "checkout_flow");
+
+            Map<String, Object> expected = new HashMap<>();
+            expected.put("at", "2026-11-03T12:00:00Z");
+            expected.put("on", "2026-11-03");
+            assertEquals(expected, bodyOf(takeRequest()).get("context"));
+        }
+
+        @Test
+        @DisplayName("trackEventSync sends a java.time property in metadata as the same string")
+        void trackMetadata() throws Exception {
+            mockServer.enqueue(trackOk());
+
+            client.trackEventSync(TrackEvent.builder("user-1", "purchase").experimentKey("checkout_flow")
+                    .property("on", LocalDate.of(2026, 11, 3)).build());
+
+            assertEquals(Map.of("on", "2026-11-03"), bodyOf(takeRequest()).get("metadata"));
+        }
+
+        @Test
+        @DisplayName("a java.time value of another class (a Duration) is still refused: evaluateFeatureFlag throws, isFeatureEnabled is false, nothing is sent")
+        void otherClassesAreStillRefused() {
+            User user = User.builder("user-1").attribute("wait", Duration.ofMinutes(5)).build();
+
+            ExperimentationException ex = assertThrows(ExperimentationException.class,
+                    () -> client.evaluateFeatureFlag(user, "f"));
+
+            assertTrue(ex.getMessage().startsWith("Failed to serialize the user's attributes for flag 'f': "),
+                    ex.getMessage());
+            assertEquals(0, ex.getStatusCode());
+            assertFalse(client.isFeatureEnabled(user, "f"));
+            assertEquals(0, mockServer.getRequestCount());
+            assertEquals(0, client.getCacheSize());
+        }
+    }
+
+    // =========================================================================
     // evaluateFeatureFlag: error messages (#1551)
     // =========================================================================
 
     /** An attribute value: the request's query carries it, and no error message may. */
     private static final String CANARY = "c4nary-attr";
+
+    /** The fixed message for a 2xx body that is not the expected JSON, for flag {@code f}. */
+    private static final String UNREADABLE_FLAG = "Invalid JSON in the response evaluating flag 'f'";
 
     private static void assertNamesNoQuery(String text) {
         assertFalse(text.contains("user_id="), text);
@@ -530,8 +637,71 @@ class ExperimentationClientTest {
             ExperimentationException ex = assertThrows(ExperimentationException.class,
                     () -> client.evaluateFeatureFlag(user, "f"));
 
-            assertTrue(ex.getMessage().startsWith("Network error evaluating flag 'f': "), ex.getMessage());
+            assertEquals(UNREADABLE_FLAG, ex.getMessage());
             assertChainNamesNoQuery(ex);
+        }
+
+        @Test
+        @DisplayName("a 2xx JSON body with a field of the wrong type gets the fixed message: nothing from the body in it or a cause, not a network error")
+        void wrongTypeField() throws Exception {
+            mockServer.setDispatcher(new Dispatcher() {
+                @Override
+                public MockResponse dispatch(RecordedRequest request) {
+                    // "enabled" is the context it was sent, as a JSON string
+                    String context = request.getRequestUrl().queryParameter("context");
+                    return json(200, "{\"key\":\"f\",\"enabled\":\"" + context.replace("\"", "\\\"") + "\"}");
+                }
+            });
+
+            ExperimentationException ex = assertThrows(ExperimentationException.class,
+                    () -> client.evaluateFeatureFlag(user, "f"));
+
+            assertTrue(takeRequest().getPath().contains(CANARY), "the request's query carries the attribute");
+            assertEquals(UNREADABLE_FLAG, ex.getMessage());
+            assertChainNamesNoQuery(ex);
+            assertNull(ex.getCause());
+            assertEquals(0, ex.getStatusCode());
+            assertFalse(client.isFeatureEnabled(user, "f"));
+            assertEquals(0, client.getCacheSize());
+        }
+
+        @Test
+        @DisplayName("a 2xx body of JSON null gets the fixed message, and isFeatureEnabled is false")
+        void nullBody() {
+            mockServer.setDispatcher(new Dispatcher() {
+                @Override
+                public MockResponse dispatch(RecordedRequest request) {
+                    return json(200, "null");
+                }
+            });
+
+            ExperimentationException ex = assertThrows(ExperimentationException.class,
+                    () -> client.evaluateFeatureFlag(user, "f"));
+
+            assertEquals(UNREADABLE_FLAG, ex.getMessage());
+            assertFalse(client.isFeatureEnabled(user, "f"));
+        }
+
+        @Test
+        @DisplayName("getExperimentAssignment: a 2xx JSON body with a field of the wrong type gets the fixed message, with nothing from the body in it or a cause")
+        void assignmentWrongTypeField() {
+            mockServer.setDispatcher(new Dispatcher() {
+                @Override
+                public MockResponse dispatch(RecordedRequest request) {
+                    // "is_control" is the body it was sent, as a JSON string
+                    String sent = request.getBody().readUtf8();
+                    return json(200, "{\"experiment_key\":\"checkout_flow\",\"is_control\":\""
+                            + sent.replace("\"", "\\\"") + "\"}");
+                }
+            });
+
+            ExperimentationException ex = assertThrows(ExperimentationException.class,
+                    () -> client.getExperimentAssignment(user, "checkout_flow"));
+
+            assertEquals("Invalid JSON in the response assigning experiment 'checkout_flow'", ex.getMessage());
+            assertChainNamesNoQuery(ex);
+            assertNull(ex.getCause());
+            assertEquals(0, client.getCacheSize());
         }
 
         @Test

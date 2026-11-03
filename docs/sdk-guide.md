@@ -361,7 +361,7 @@ ExperimentationClient client = new ExperimentationClient(config);
 
 User user = User.builder("user-123")
     .attribute("country", "US")
-    .attribute("plan", "pro")          // sent as `context` on assignment
+    .attribute("plan", "pro")          // sent as `context` on assignment and flag evaluation
     .build();
 
 // Sticky experiment assignment (POST /api/v1/tracking/assign)
@@ -370,7 +370,7 @@ assignment.getVariantName();       // "control" | "treatment"
 assignment.isControl();
 assignment.getConfiguration();     // Map<String,Object> or null
 
-// Feature flag (GET /api/v1/feature-flags/evaluate/{key}?user_id=...)
+// Feature flag (GET /api/v1/feature-flags/evaluate/{key}?user_id=...&context=..., the attributes as JSON)
 FlagEvaluation flag = client.evaluateFeatureFlag(user, "dark_mode");
 flag.isEnabled(); flag.getConfig();
 boolean on = client.isFeatureEnabled(user, "dark_mode");   // false on failure

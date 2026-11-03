@@ -9,6 +9,8 @@ import com.controlvar.sdk.model.TrackEvent;
 import com.controlvar.sdk.model.User;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializerBase;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.HttpUrl;
@@ -20,6 +22,13 @@ import okhttp3.Response;
 import okhttp3.ResponseBody;
 
 import java.io.IOException;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAccessor;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -95,7 +104,7 @@ public class ExperimentationClient implements AutoCloseable {
     ExperimentationClient(SdkConfig config, OkHttpClient httpClient) {
         this.config = config;
         this.httpClient = httpClient;
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = new ObjectMapper().registerModule(isoDateTimes());
         this.flagCache = new AssignmentCache<>(config.getCacheSize(), config.getCacheTtlMs());
         this.assignmentCache = new AssignmentCache<>(config.getCacheSize(), config.getCacheTtlMs());
     }
@@ -110,7 +119,8 @@ public class ExperimentationClient implements AutoCloseable {
      *
      * <p>The user's attributes are sent as {@code context}: compact JSON, percent-encoded, so
      * the flag's targeting rules match against them. A user with no attributes sends no
-     * {@code context}.
+     * {@code context}. An {@link Instant}, {@link LocalDate}, {@link LocalDateTime},
+     * {@link OffsetDateTime} or {@link ZonedDateTime} value is sent as an ISO-8601 string.
      *
      * <p>Successful evaluations are cached per user + flag for the configured TTL, whatever
      * the attributes: call {@link #clearCache()} or {@link #invalidateCache(String, String)}
@@ -121,8 +131,8 @@ public class ExperimentationClient implements AutoCloseable {
      * @return the server's evaluation (key, enabled, config)
      * @throws ExperimentationException on a non-2xx response (404 when the flag is not
      *                                  ACTIVE or unknown, 401 for a bad key), a network error,
-     *                                  or attributes that cannot be written as JSON (nothing is
-     *                                  sent then)
+     *                                  a 2xx body that is not the expected JSON, or attributes
+     *                                  that cannot be written as JSON (nothing is sent then)
      */
     public FlagEvaluation evaluateFeatureFlag(User user, String flagKey) {
         if (user == null) throw new IllegalArgumentException("user must not be null");
@@ -155,7 +165,8 @@ public class ExperimentationClient implements AutoCloseable {
             if (body == null) {
                 throw new ExperimentationException("Empty response body from API for flag: " + flagKey);
             }
-            FlagEvaluation evaluation = objectMapper.readValue(body.string(), FlagEvaluation.class);
+            String json = body.string();
+            FlagEvaluation evaluation = readAnswer(json, FlagEvaluation.class, "evaluating flag '" + flagKey + "'");
             if (evaluation.getKey() == null || evaluation.getKey().isEmpty()) {
                 evaluation.setKey(flagKey);
             }
@@ -194,8 +205,8 @@ public class ExperimentationClient implements AutoCloseable {
      * (sticky server-side; the server records the exposure).
      *
      * <p>The user's attributes are sent as the assignment {@code context} for targeting
-     * rules. Successful assignments are cached per user + experiment for the configured
-     * TTL; failures are never cached.
+     * rules, written as {@link #evaluateFeatureFlag} writes them. Successful assignments are
+     * cached per user + experiment for the configured TTL; failures are never cached.
      *
      * <p>When the server answers {@code "assigned": true} and no unexpired answer for this user
      * and experiment was cached, the configured {@link ExposureListener} is called on this
@@ -206,9 +217,9 @@ public class ExperimentationClient implements AutoCloseable {
      * @param experimentKey the experiment key (e.g., "checkout-button-color")
      * @return the assignment (never null)
      * @throws ExperimentationException on a non-2xx response (404 when no experiment has the
-     *                                  key, or for a draft with no control variant) or a network
-     *                                  error; an experiment that is not ACTIVE answers its control
-     *                                  variant
+     *                                  key, or for a draft with no control variant), a network
+     *                                  error, or a 2xx body that is not the expected JSON; an
+     *                                  experiment that is not ACTIVE answers its control variant
      */
     public ExperimentAssignment getExperimentAssignment(User user, String experimentKey) {
         if (user == null) throw new IllegalArgumentException("user must not be null");
@@ -249,7 +260,8 @@ public class ExperimentationClient implements AutoCloseable {
                     throw new ExperimentationException("Empty response body for experiment: " + experimentKey);
                 }
                 String json = body.string();
-                assignment = objectMapper.readValue(json, ExperimentAssignment.class);
+                assignment = readAnswer(json, ExperimentAssignment.class,
+                        "assigning experiment '" + experimentKey + "'");
                 if (assignment.getExperimentKey() == null || assignment.getExperimentKey().isEmpty()) {
                     assignment.setExperimentKey(experimentKey);
                 }
@@ -509,6 +521,54 @@ public class ExperimentationClient implements AutoCloseable {
         } catch (IOException unreadable) {
             return false;
         }
+    }
+
+    /**
+     * A 2xx answer's body read as {@code type}. A body that is not that JSON (not JSON, a field
+     * of the wrong type, or {@code null}) is an {@link ExperimentationException} whose message
+     * is fixed text, {@code "Invalid JSON in the response " + what}, with no cause: it is not a
+     * network error, and nothing from the body is in it.
+     */
+    private <T> T readAnswer(String json, Class<T> type, String what) {
+        T value;
+        try {
+            value = objectMapper.readValue(json, type);
+        } catch (IOException unreadable) {
+            value = null;
+        }
+        if (value == null) {
+            throw new ExperimentationException("Invalid JSON in the response " + what);
+        }
+        return value;
+    }
+
+    /**
+     * Writes a {@code java.time} value as the other SDKs send a date: an ISO-8601 string. An
+     * {@link Instant} in UTC ({@code 2026-11-03T12:00:00Z}), a {@link LocalDate} as a date
+     * ({@code 2026-11-03}), a {@link LocalDateTime} with no offset
+     * ({@code 2026-11-03T12:00:00}), and an {@link OffsetDateTime} or {@link ZonedDateTime} with
+     * its offset ({@code 2026-11-03T12:00:00+01:00}): a zone's ID is left out, as the server
+     * reads the text with Python's {@code datetime.fromisoformat}. Jackson refuses these five
+     * classes unless a module handles them; this one needs nothing beyond jackson-databind.
+     * Any other value is written as Jackson writes it, and one Jackson refuses fails the call.
+     */
+    private static SimpleModule isoDateTimes() {
+        SimpleModule module = new SimpleModule("controlvar-iso-date-times");
+        iso(module, Instant.class, DateTimeFormatter.ISO_INSTANT);
+        iso(module, LocalDate.class, DateTimeFormatter.ISO_LOCAL_DATE);
+        iso(module, LocalDateTime.class, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        iso(module, OffsetDateTime.class, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        iso(module, ZonedDateTime.class, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        return module;
+    }
+
+    private static void iso(SimpleModule module, Class<? extends TemporalAccessor> type, DateTimeFormatter format) {
+        module.addSerializer(type, new ToStringSerializerBase(type) {
+            @Override
+            public String valueToString(Object value) {
+                return format.format((TemporalAccessor) value);
+            }
+        });
     }
 
     /**

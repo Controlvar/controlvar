@@ -2133,6 +2133,17 @@ _NO_ATTRIBUTES = (
     " attributes were"
 )
 _ASSIGN = "sends POST /api/v1/tracking/assign with experiment_key, user_id and context"
+#: One per java.time class the page names, each asserting the exact encoded
+#: context, and the assignment's context written the same way.
+_DATE_TIMES = (
+    "an Instant is sent in UTC: context={at: 2026-11-03T12:00:00Z}",
+    "a LocalDate is sent as a date: context={at: 2026-11-03}",
+    "a LocalDateTime is sent with seconds and no offset: context={at: 2026-11-03T12:00:00}",
+    "an OffsetDateTime is sent with its offset: context={at: 2026-11-03T12:00:00+01:00}",
+    "a ZonedDateTime is sent with its offset and without its zone ID:"
+    " context={at: 2026-11-03T12:00:00+01:00}",
+    "getExperimentAssignment sends them in its context as the same strings",
+)
 _CACHE = (
     "is keyed by user + key, not attributes: changed attributes get the cached answer"
     " until invalidateCache or clearCache"
@@ -2165,6 +2176,16 @@ JAVA_CONTEXT_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...]
     ),
     ("A user with no attributes sends no `context`.", (_NO_ATTRIBUTES,), ()),
     ("`getExperimentAssignment` sends them as `context` in its body.", (_ASSIGN,), ()),
+    (
+        "Attribute values go into that JSON as follows: a string, number or boolean as"
+        " itself, a list or map as an array or object, and an `Instant`, `LocalDate`,"
+        " `LocalDateTime`, `OffsetDateTime` or `ZonedDateTime` as an ISO-8601 string"
+        " (`2026-11-03T12:00:00Z`, `2026-11-03`, `2026-11-03T12:00:00`,"
+        " `2026-11-03T12:00:00+01:00`; a `ZonedDateTime` with its offset and without its"
+        " zone ID).",
+        (_ROUND_TRIP,) + _DATE_TIMES,
+        (),
+    ),
     (
         "Attributes are assumed stable per user: evaluations and assignments are cached"
         " by user + key only, so call `clearCache()`, or `invalidateCache(userId, key)`"
