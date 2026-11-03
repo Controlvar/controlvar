@@ -143,8 +143,9 @@ text = "get_all_flags(user_id, user_attributes=None) | dict[str, bool] (not cach
 by = ["test:sdk/python/tests/test_client.py::TestGetAllFlags::test_not_cached_and_raises_on_error"]
 
 [[unit]]
-text = "track(user_id, event_name, event_value=None, properties=None, experiment_key=None, feature_flag_key=None, event_type=None, timestamp=None) | bool — True when it was sent and the server answered 2xx | never raises; False on failure"
+text = "track(user_id, event_name, event_value=None, properties=None, experiment_key=None, feature_flag_key=None, event_type=None, timestamp=None, event_id=None) | bool — True when it was sent and the server answered 2xx | never raises; False on failure"
 by = [
+    "test:sdk/python/tests/test_event_id.py::TestEventId::test_sends_event_id_on_a_track_with_an_explicit_key",
     "test:sdk/python/tests/test_client.py::TestTrackNeverRaises",
     "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_a_batch_answered_2xx_returns_true_even_when_an_entry_failed",
     "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_a_fan_out_answered_non_2xx_returns_false",
@@ -480,6 +481,89 @@ by = [
 ]
 
 [[unit]]
+text = "Event ids"
+by = ["exempt:label"]
+
+[[unit]]
+text = "event_id is your id for one event."
+by = ["test:sdk/python/tests/test_event_id.py::TestEventId::test_sends_event_id_on_a_track_with_an_explicit_key"]
+
+[[unit]]
+text = "The server stores an event sent again with the same event_id, user, experiment, flag and event name only once (see How events count)."
+by = [
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r6_one_event_id_fanned_out_to_three_experiments_and_a_flag",
+]
+
+[[unit]]
+text = "Use this option from the next published version of this package, not from the version on PyPI now."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It also needs a Controlvar server that includes the event_id change (#1640), which the platform release after 0.39.0 is to carry; an older server ignores the field and stores an event sent again a second time."
+by = [
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r8_without_an_event_id_two_identical_purchases_are_both_stored",
+]
+
+[[unit]]
+text = "track(..., event_id=None) sends it as event_id."
+by = ["test:sdk/python/tests/test_event_id.py::TestEventId::test_sends_event_id_on_a_track_with_an_explicit_key"]
+
+[[unit]]
+text = "The SDK makes no id."
+by = ["test:sdk/python/tests/test_event_id.py::TestEventId::test_makes_no_id_of_its_own_two_tracks_without_an_event_id_send_none"]
+
+[[unit]]
+text = "An event without an event_id is sent without one, and one sent again is stored and counted again."
+by = [
+    "test:sdk/python/tests/test_event_id.py::TestEventId::test_sends_no_event_id_on_any_entry_when_none_is_given",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r8_without_an_event_id_two_identical_purchases_are_both_stored",
+]
+
+[[unit]]
+text = "Make the id once, when the event happens, for example with str(uuid.uuid4()), and give the same one each time you send that event."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "event_id=None and \"\" send no event_id."
+by = ["test:sdk/python/tests/test_event_id.py::TestEventId::test_sends_no_event_id_for_none_or_an_empty_string"]
+
+[[unit]]
+text = "The SDK does not check the id: the server refuses (422) one of more than 255 characters or one holding NUL, and in a batch one such event refuses the whole request."
+by = ["test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r12_an_invalid_event_id_is_refused_and_a_batch_with_one_stores_nothing"]
+
+[[unit]]
+text = "An event fanned out to several experiments and flags carries the same event_id in every entry, so it counts once in each of them."
+by = [
+    "test:sdk/python/tests/test_event_id.py::TestEventId::test_sends_the_same_event_id_on_every_fan_out_entry",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r6_one_event_id_fanned_out_to_three_experiments_and_a_flag",
+]
+
+[[unit]]
+text = "track_batch sends the events it is given as they are, so an event_id key in an event's dict is sent as it is."
+by = ["test:sdk/python/tests/test_event_id.py::TestEventId::test_track_batch_passes_each_events_event_id_through_as_given"]
+
+[[unit]]
+text = "Each event keeps its own."
+by = ["test:sdk/python/tests/test_event_id.py::TestEventId::test_track_batch_passes_each_events_event_id_through_as_given"]
+
+[[unit]]
+text = "A 429 that is retried sends the same request again, so the same event_id."
+by = [
+    "test:sdk/python/tests/test_event_id.py::TestEventId::test_sends_the_same_event_id_when_a_429_is_retried",
+    "test:sdk/python/tests/test_event_id.py::TestEventId::test_sends_the_same_event_id_on_every_entry_when_a_fanned_out_429_is_retried",
+]
+
+[[unit]]
+text = "A request that fails on the network or times out is not sent again by the SDK, and the server may have stored it."
+by = ["test:sdk/python/tests/test_event_id.py::TestEventId::test_does_not_send_a_request_that_failed_on_the_network_again"]
+
+[[unit]]
+text = "Send it again with the same event_id and it is stored once."
+by = ["test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once"]
+
+[[unit]]
 text = "Reporting errors"
 by = ["exempt:label"]
 
@@ -600,9 +684,10 @@ by = [
 ]
 
 [[unit]]
-text = "track with a key | POST /api/v1/tracking/track | {event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?} | ignored"
+text = "track with a key | POST /api/v1/tracking/track | {event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id?} | ignored"
 by = [
     "test:sdk/python/tests/test_client.py::TestTrackWithKey::test_experiment_key_posts_to_track",
+    "test:sdk/python/tests/test_event_id.py::TestEventId::test_sends_event_id_on_a_track_with_an_explicit_key",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
 

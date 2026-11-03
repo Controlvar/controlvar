@@ -266,8 +266,8 @@ def test_each_wrong_exposure_report_gives_exactly_its_problem(
     assert runner.validate(sdk, report) == [problem]
 
 
-def test_java_and_js_are_the_sdks_that_send_one_event_twice_with_one_id(runner):
-    assert runner.EVENT_ID_SDKS == frozenset({"java", "js"})
+def test_java_js_and_python_are_the_sdks_that_send_one_event_twice_with_one_id(runner):
+    assert runner.EVENT_ID_SDKS == frozenset({"java", "js", "python"})
     for sdk in sorted(runner.EVENT_ID_SDKS):
         assert good(runner, sdk)["event_id"] == EVENT_ID
         assert runner.validate(sdk, good(runner, sdk)) == []
