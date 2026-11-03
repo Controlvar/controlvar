@@ -54,8 +54,10 @@ function metricTypeNote(
     return (
       <>
         {name} is analysed as {label}, but this plan is for the share of users who send{' '}
-        {eventName ? <code>{eventName}</code> : 'its event'} (a two-proportion test). A sample-size
-        plan for {label} is not available, and the Power Calculator plans conversion rates only.
+        {eventName ? <code>{eventName}</code> : 'its event'} (a two-proportion test). This tab and the
+        Power Calculator page plan conversion rates only. To plan {label} itself, send metric_type
+        mean to <code>POST /api/v1/power/sample-size</code>: see Planning a mean in the Statistical
+        Power Analysis guide.
       </>
     );
   }

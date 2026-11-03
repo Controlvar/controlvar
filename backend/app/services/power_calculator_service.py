@@ -282,8 +282,9 @@ class PowerCalculatorService:
         Parameters
         ----------
         baseline_rate:
-            Current metric rate (0 < baseline_rate < 1). For metric_type='mean'
-            this is the baseline mean value normalised to [0,1].
+            Current metric value. For metric_type='proportion' a rate in (0, 1);
+            for 'mean' or 'ratio' the baseline mean in the metric's own units,
+            any finite value above 0.
         minimum_detectable_effect:
             Desired minimum detectable relative effect (e.g. 0.10 = 10% lift).
             Must be in (0, 1).
@@ -644,6 +645,12 @@ class PowerCalculatorService:
             raise ValueError("std must be > 0")
 
         n = 2 * std**2 * (z_alpha + z_power) ** 2 / delta**2
+        # A size that is zero (std squared underflows, or the difference is
+        # huge) or not finite (infinity, or NaN from infinity over infinity)
+        # is not a plan. The guard comes BEFORE ``math.ceil``, which turns NaN
+        # into a ValueError whose text is Python's, not ours (#1034).
+        if not (math.isfinite(n) and n > 0):
+            raise OverflowError("the sample size cannot be calculated")
         return math.ceil(n)
 
     @staticmethod
@@ -656,8 +663,17 @@ class PowerCalculatorService:
         baseline_std: Optional[float],
     ) -> None:
         """Validate all inputs and raise ValueError on invalid values."""
-        if not (0 < baseline_rate < 1):
-            raise ValueError(f"baseline_rate must be in (0, 1), got {baseline_rate}")
+        if not (0 < baseline_rate < math.inf):
+            raise ValueError(
+                f"baseline_rate must be a finite number above 0, got {baseline_rate}"
+            )
+        if metric_type == "proportion" and baseline_rate >= 1:
+            raise ValueError(
+                f"baseline_rate is {baseline_rate}. With metric_type "
+                "'proportion' (the default) it is a rate and must be below 1: "
+                "0.05 means 5%. For a mean, such as an average order value, "
+                "send metric_type 'mean' and baseline_std."
+            )
         if mde_relative <= 0:
             raise ValueError(
                 f"minimum_detectable_effect must be > 0, got {mde_relative}"
@@ -676,14 +692,19 @@ class PowerCalculatorService:
             raise ValueError(
                 f"baseline_std is required when metric_type='{metric_type}'"
             )
-        # Validate that treatment rate is a valid probability
-        mde_abs = baseline_rate * mde_relative
-        p2 = baseline_rate + mde_abs
-        if p2 >= 1.0:
-            raise ValueError(
-                f"baseline_rate + mde_absolute = {p2:.4f} >= 1.0. "
-                "Reduce baseline_rate or minimum_detectable_effect."
-            )
+        # A proportion's treatment rate must be a valid probability; a mean's
+        # is in the metric's own units and has no ceiling (#1034).
+        if metric_type == "proportion":
+            p2 = baseline_rate + baseline_rate * mde_relative
+            if p2 >= 1.0:
+                raise ValueError(
+                    f"baseline_rate ({baseline_rate}) raised by "
+                    f"minimum_detectable_effect ({mde_relative}) is {p2:.4f}, "
+                    "and a proportion must stay below 1. Lower baseline_rate "
+                    "or minimum_detectable_effect. For a mean, such as an "
+                    "average order value, send metric_type 'mean' and "
+                    "baseline_std."
+                )
 
     @staticmethod
     def _validate_basic(
