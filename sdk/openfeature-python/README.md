@@ -8,19 +8,14 @@ evaluated **by the server** through the [`controlvar`](https://github.com/Contro
 user + flag; nothing is bucketed locally unless you pass a `client=` built with `evaluation="local"`.
 Boolean, string, integer, float and object calls are answered.
 
+Full documentation: [the OpenFeature provider page](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/openfeature.md#python-provider).
+
 ## Install
 
-Install the provider and the Python SDK from the root of a clone of this repository
-(`openfeature-sdk` is installed as a dependency):
-
-```bash
-pip install -e sdk/python -e sdk/openfeature-python
-```
+To install it, follow [the OpenFeature provider page](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/openfeature.md#python-provider).
 
 Requires Python 3.9+ and `openfeature-sdk` 0.10.0 or later.
 The only other dependency is [`controlvar`](https://github.com/Controlvar/controlvar/tree/main/sdk/python), which itself has none.
-Install it from the same clone, as above: the `controlvar` 0.2.0 on PyPI reads no flag value, so
-with it every string, integer, float and object call answers your default with `GENERAL`.
 
 ## Quick start
 
@@ -124,7 +119,28 @@ Every request carries `X-API-Key: <key>`, `Content-Type: application/json`, `Acc
 | `provider.client.track_batch` | `POST /api/v1/tracking/batch` | `{success_count, failure_count, errors}` |
 | `provider.client.get_assignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}` |
 
-## Contract smoke
+## Development
+
+Install the provider and the Python SDK from the root of a clone of this repository
+(`openfeature-sdk` is installed as a dependency):
+
+```bash
+pip install -e sdk/python -e sdk/openfeature-python
+```
+
+Install `controlvar` from the same clone, as above: the `controlvar` 0.2.0 on PyPI reads no flag
+value, so with it every string, integer, float and object call answers your default with `GENERAL`.
+
+To run the tests:
+
+```bash
+source venv/bin/activate && pip install openfeature-sdk
+python -m pytest sdk/openfeature-python/tests -q -o addopts="" -p no:cacheprovider
+```
+
+`tests/conftest.py` puts `sdk/python` and `src/` on `sys.path`, so neither package needs to be installed.
+
+### Contract smoke
 
 ```bash
 CONTROLVAR_API_KEY=<key> python sdk/openfeature-python/examples/contract_smoke.py
@@ -144,12 +160,3 @@ API; assignment and tracking use `provider.client`.
 CI runs this SDK's contract smoke against a real API: `openfeature-python` is in the `sdks:` list of the
 SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlvar/blob/main/.github/workflows/pr-qa-gate.yml). Run it
 with `python tests/sdk-contract/live/run_live_contract.py --sdk openfeature-python --strict`.
-
-## Development
-
-```bash
-source venv/bin/activate && pip install openfeature-sdk
-python -m pytest sdk/openfeature-python/tests -q -o addopts="" -p no:cacheprovider
-```
-
-`tests/conftest.py` puts `sdk/python` and `src/` on `sys.path`, so neither package needs to be installed.

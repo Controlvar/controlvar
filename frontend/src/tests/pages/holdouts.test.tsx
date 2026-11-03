@@ -303,7 +303,7 @@ describe('who sees what', () => {
     serve();
     render(<HoldoutsPage />);
     expect(screen.getByTestId('holdouts-refused')).toHaveTextContent(
-      /^Seeing the global holdout requires the ADMIN or DEVELOPER role\.$/,
+      /^Seeing the global holdout needs permission to create experiments, which the ADMIN and DEVELOPER roles have\.$/,
     );
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(mockedApiFetch).not.toHaveBeenCalled();

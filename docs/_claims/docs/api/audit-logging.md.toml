@@ -39,8 +39,11 @@ by = [
 ]
 
 [[unit]]
-text = "In the full profile it also records custom roles assigned and revoked, a workspace member's role changes, and single sign-on (SSO) sign-ins."
-by = ["test:modules/backend/tests/integration/api/test_audit_module_events.py"]
+text = "In the full profile it also records custom roles defined, changed, deleted, assigned and revoked, direct permissions granted and revoked, a workspace member's role changes, and single sign-on (SSO) sign-ins."
+by = [
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py",
+    "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_the_inventory_is_exact",
+]
 
 [[unit]]
 text = "Action Types lists every action and when it is written."
@@ -136,10 +139,11 @@ by = [
 ]
 
 [[unit]]
-text = "A flag the caller may not change (an ANALYST or VIEWER changes none) fails with \"Not enough permissions to change this feature flag\" and is left as it was."
+text = "A flag the caller may not change (an ANALYST or VIEWER changes none, unless a custom role or direct grant gives them feature_flag (update)) fails with \"Not enough permissions to change this feature flag\" and is left as it was."
 by = [
     "test:backend/tests/unit/services/test_audit_log_rules.py::test_a_flag_the_caller_may_not_change_is_refused_and_left_as_it_was",
     "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_bulk_toggle_refuses_flags_the_user_cannot_update",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_bulk_toggle_follows_a_flag_update_grant",
 ]
 
 [[unit]]
@@ -330,10 +334,12 @@ text = "Entries written after the request arrived are not in it."
 by = ["test:backend/tests/integration/api/test_audit_export.py::test_an_entry_written_after_the_request_is_not_exported"]
 
 [[unit]]
-text = "Who sees what is the list's rule: ADMIN and ANALYST export every entry; DEVELOPER and VIEWER export only their own, whatever user_id they send."
+text = "Who sees what is the list's rule: ADMIN, ANALYST and, in the full profile, anyone whose custom role or direct grant gives audit_log (read) export other users' entries too; anyone else exports only their own, whatever user_id they send."
 by = [
     "test:backend/tests/integration/api/test_audit_export.py::test_developer_and_viewer_export_only_their_own_rows",
     "test:backend/tests/integration/api/test_audit_export.py::test_admin_and_analyst_export_every_row",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
 ]
 
 [[unit]]
@@ -404,8 +410,12 @@ by = [
 ]
 
 [[unit]]
-text = "It shows what GET /api/v1/audit-logs/ returns for that user: every entry for ADMIN, ANALYST and superusers, and their own entries for DEVELOPER and VIEWER, who see a note saying so."
-by = ["test:frontend/src/tests/admin/AuditLogAccess.test.tsx"]
+text = "It shows what GET /api/v1/audit-logs/ returns for that user: other users' entries too for ADMIN, ANALYST, superusers and, in the full profile, anyone whose custom role or direct grant gives audit_log (read); only their own entries for anyone else, who sees a note saying so."
+by = [
+    "test:frontend/src/tests/admin/AuditLogAccess.test.tsx",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
 text = "Its Download CSV and Download JSON buttons export the same entries, with the page's current filters."
@@ -649,6 +659,41 @@ by = [
 ]
 
 [[unit]]
+text = "role_create | role | POST /rbac/roles defines a custom role; new_value is {\"description\", \"permissions\"}, reason is custom role created"
+by = [
+    "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_the_inventory_is_exact",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_creating_a_custom_role_writes_one_role_create",
+]
+
+[[unit]]
+text = "role_update | role | PUT /rbac/roles/{role_name} changes a custom role's description or permissions; old_value and new_value hold the fields that changed, reason is custom role changed"
+by = [
+    "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_the_inventory_is_exact",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_changing_a_custom_role_writes_one_role_update_per_change",
+]
+
+[[unit]]
+text = "role_delete | role | DELETE /rbac/roles/{role_name} deletes a custom role; old_value is {\"description\", \"permissions\", \"assigned_users\"}, where assigned_users is how many users had it, reason is custom role deleted"
+by = [
+    "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_the_inventory_is_exact",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_deleting_a_custom_role_writes_one_role_delete",
+]
+
+[[unit]]
+text = "permission_grant | user | POST /rbac/users/{user_id}/grant grants a user a direct permission; new_value is {\"resource\", \"actions\", \"expires_at\", \"grant_id\", \"reason\"}, its reason the one sent with the request, and the entry's reason is direct permission granted"
+by = [
+    "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_the_inventory_is_exact",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_granting_a_direct_permission_writes_one_permission_grant",
+]
+
+[[unit]]
+text = "permission_revoke | user | DELETE /rbac/users/{user_id}/grant/{resource} deletes the user's direct grants of that resource, when there is at least one; old_value is {\"resource\", \"count\"}, reason is direct permission revoked"
+by = [
+    "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_the_inventory_is_exact",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_revoking_a_direct_permission_writes_one_permission_revoke",
+]
+
+[[unit]]
 text = "role_assign | user | PUT /workspaces/{id}/members/{user_id} changes a member's workspace role; old_value and new_value are {\"workspace_id\", \"workspace_role\"}, reason is workspace role changed"
 by = [
     "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_the_inventory_is_exact",
@@ -679,14 +724,16 @@ by = [
 ]
 
 [[unit]]
-text = "A request that changes nothing (a custom role already held, a workspace role or SSO role already equal) writes no entry."
+text = "A request that changes nothing (a custom role already held, a custom role update that sends what is stored, a revoke with no grant to delete, a workspace role or SSO role already equal) writes no entry."
 by = [
     "test:modules/backend/tests/integration/api/test_audit_module_events.py",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_changing_a_custom_role_writes_one_role_update_per_change",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_revoking_a_direct_permission_writes_one_permission_revoke",
     "test:backend/tests/integration/services/test_audit_service_sites.py::test_unchanged_groups_write_nothing",
 ]
 
 [[unit]]
-text = "Assigning a direct permission, defining a custom role, adding or removing a workspace member, invites, SSO configuration and the other module routes write none."
+text = "Adding or removing a workspace member, invites, SSO configuration and the other module routes write none."
 by = ["test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_the_inventory_is_exact"]
 
 [[unit]]
@@ -701,21 +748,24 @@ by = [
 ]
 
 [[unit]]
-text = "ActionType also defines user_update, user_logout, permission_grant, permission_revoke and safety_config_update."
+text = "ActionType also defines user_update, user_logout and safety_config_update."
 by = [
     "test:backend/tests/smoke/test_audit_inventory.py::test_written_action_types_are_what_the_inventory_writes",
     "test:backend/tests/smoke/test_audit_action_types_json.py",
 ]
 
 [[unit]]
-text = "You can filter on them, but nothing in this release writes them (role_unassign is written only with the modules installed)."
-by = ["exempt:baseline"]
+text = "You can filter on them, but nothing in this release writes them."
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_written_action_types_are_what_the_inventory_writes",
+    "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_modules_only_action_types_are_what_the_modules_add",
+]
 
 [[unit]]
-text = "Granting and revoking a direct permission are not recorded because no permission check reads direct grants yet (#891)."
+text = "role_unassign, role_create, role_update, role_delete, permission_grant and permission_revoke are written only with the modules installed."
 by = [
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_granting_and_revoking_a_direct_permission_write_no_audit_entry",
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_no_permission_check_reads_custom_roles_or_direct_grants",
+    "test:modules/backend/tests/smoke/test_audit_inventory_modules.py::test_modules_only_action_types_are_what_the_modules_add",
+    "test:backend/tests/smoke/test_audit_action_types_json.py::test_modules_only_actions_are_not_written_by_core",
 ]
 
 [[unit]]
@@ -852,6 +902,14 @@ text = "A superuser's change to a user's role, superuser flag or active status |
 by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_patch_under_a_failed_audit_write_keeps_neither"]
 
 [[unit]]
+text = "A custom role defined, changed, deleted, assigned or revoked, or a direct permission granted or revoked (full profile) | The change is kept and the response is 2xx; there is no entry. Unlike a change to a user's built-in role, it is not refused"
+by = [
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_a_refused_entry_keeps_the_role_and_the_grant",
+    "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_a_refused_entry_keeps_the_custom_role",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_patch_under_a_failed_audit_write_keeps_neither",
+]
+
+[[unit]]
 text = "A safety rollback, manual or by the safety monitor | The rollback is kept; there is no entry"
 by = [
     "test:backend/tests/integration/services/test_audit_service_sites.py::test_a_refused_entry_never_blocks_a_rollback",
@@ -955,22 +1013,29 @@ text = "Permissions"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "ADMIN and ANALYST (and superusers) read every audit entry."
+text = "ADMIN and ANALYST (and superusers), and in the full profile anyone whose custom role or direct grant gives audit_log (read), read other users' audit entries too."
 by = [
     "test:backend/tests/integration/api/test_audit_log_reads.py::test_developer_and_viewer_read_only_their_own_entries",
     "test:backend/tests/integration/api/test_audit_log_reads.py::test_admin_and_analyst_read_every_entry",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
 ]
 
 [[unit]]
-text = "DEVELOPER and VIEWER read only the entries they made themselves."
+text = "Anyone else reads only the entries they made themselves."
 by = [
     "test:backend/tests/integration/api/test_audit_log_reads.py::test_developer_and_viewer_read_only_their_own_entries",
     "test:backend/tests/integration/api/test_audit_log_reads.py::test_admin_and_analyst_read_every_entry",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
 ]
 
 [[unit]]
-text = "Route | ADMIN, ANALYST | DEVELOPER, VIEWER"
-by = ["exempt:baseline"]
+text = "Route | ADMIN, ANALYST, or audit_log (read) | Anyone else"
+by = [
+    "test:backend/tests/integration/api/test_audit_log_reads.py::test_admin_and_analyst_read_every_entry",
+    "test:backend/tests/integration/api/test_audit_log_reads.py::test_developer_and_viewer_read_only_their_own_entries",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
 text = "GET /audit-logs/ | Every entry; user_id filters by any user | Own entries only; a user_id naming anyone else is replaced by their own"
@@ -1007,5 +1072,8 @@ text = "GET /feature-flags/{flag_id}/history | Every entry | Own entries only; t
 by = ["test:backend/tests/integration/api/test_audit_log_reads.py::test_developer_still_reads_own_entries"]
 
 [[unit]]
-text = "POST /feature-flags/bulk-toggle changes flags, so it follows the flag rule: ADMIN and DEVELOPER may use it, ANALYST and VIEWER may not."
-by = ["test:backend/tests/integration/api/test_flag_change_routes_access.py::test_bulk_toggle_refuses_flags_the_user_cannot_update"]
+text = "POST /feature-flags/bulk-toggle changes flags, so it follows the flag rule: ADMIN and DEVELOPER may use it, and in the full profile so may anyone whose custom role or direct grant gives feature_flag (update); anyone else may not."
+by = [
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_bulk_toggle_refuses_flags_the_user_cannot_update",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_bulk_toggle_follows_a_flag_update_grant",
+]

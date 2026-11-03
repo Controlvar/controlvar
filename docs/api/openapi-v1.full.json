@@ -277,9 +277,6 @@
       },
       "AggregatedMetricResponse": {
         "description": "Schema for aggregated metric response.",
-        "metadata": {
-          "alias": "meta_data"
-        },
         "properties": {
           "count": {
             "description": "Number of occurrences",
@@ -4662,9 +4659,6 @@
       },
       "ErrorLogResponse": {
         "description": "Schema for error log response.",
-        "metadata": {
-          "alias": "meta_data"
-        },
         "properties": {
           "created_at": {
             "format": "date-time",
@@ -4817,6 +4811,7 @@
       "EventBatchResponse": {
         "description": "Model for batch event tracking response.",
         "example": {
+          "duplicate_count": 0,
           "errors": [
             {
               "error": "Invalid experiment key",
@@ -4829,6 +4824,11 @@
           "success_count": 1
         },
         "properties": {
+          "duplicate_count": {
+            "description": "Number of events already stored: an earlier one had the same event_id, user, experiment, flag and event name. Each is counted in success_count too, and nothing was written for it.",
+            "title": "Duplicate Count",
+            "type": "integer"
+          },
           "errors": {
             "anyOf": [
               {
@@ -4851,14 +4851,15 @@
             "type": "integer"
           },
           "success_count": {
-            "description": "Number of events successfully tracked",
+            "description": "Number of events stored, or already stored (see duplicate_count)",
             "title": "Success Count",
             "type": "integer"
           }
         },
         "required": [
           "success_count",
-          "failure_count"
+          "failure_count",
+          "duplicate_count"
         ],
         "title": "EventBatchResponse",
         "type": "object"
@@ -4866,6 +4867,19 @@
       "EventCreate": {
         "description": "Model for creating a new event.",
         "properties": {
+          "event_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Names one occurrence of the event. An event sent again with the same event_id, user, experiment, flag and event name is stored once: the later one is answered as a duplicate and writes nothing. At most 255 characters, compared exactly; an empty string or null means none.",
+            "title": "Event Id"
+          },
           "event_name": {
             "maxLength": 100,
             "minLength": 1,
@@ -5007,6 +5021,19 @@
           "value": 49.99
         },
         "properties": {
+          "event_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Names one occurrence of the event. An event sent again with the same event_id, user, experiment, flag and event name is stored once: the later one is answered as a duplicate and writes nothing. At most 255 characters, compared exactly; an empty string or null means none.",
+            "title": "Event Id"
+          },
           "event_name": {
             "anyOf": [
               {
@@ -5099,12 +5126,30 @@
         "type": "object"
       },
       "EventResponse": {
-        "description": "Model for event responses.",
+        "description": "An event as stored.\n\nFor an event already stored with the same event_id, user, experiment, flag\nand event name, duplicate is true, id is the stored event's, and every other\nfield is this request's or this request's time.",
         "properties": {
           "created_at": {
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "duplicate": {
+            "default": false,
+            "description": "True when an event with the same event_id, user, experiment, flag and event name was already stored: nothing was written, and id is the stored event's.",
+            "title": "Duplicate",
+            "type": "boolean"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The event_id this request sent, or null.",
+            "title": "Event Id"
           },
           "event_name": {
             "maxLength": 100,
@@ -12228,13 +12273,15 @@
           "min_stage_duration": {
             "anyOf": [
               {
+                "maximum": 8760,
+                "minimum": 0,
                 "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Minimum time (hours) between stages",
+            "description": "Minimum time (hours) between stages: a whole number from 0 to 8760, or null for no minimum",
             "title": "Min Stage Duration"
           },
           "name": {
@@ -12546,13 +12593,15 @@
           "min_stage_duration": {
             "anyOf": [
               {
+                "maximum": 8760,
+                "minimum": 0,
                 "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Minimum time (hours) between stages",
+            "description": "Minimum time (hours) between stages: a whole number from 0 to 8760, or null for no minimum; null clears a stored minimum",
             "title": "Min Stage Duration"
           },
           "name": {
@@ -12581,7 +12630,8 @@
                 "type": "null"
               }
             ],
-            "description": "Updated rollout stages",
+            "deprecated": true,
+            "description": "Not accepted. A request that contains `stages`, with any value including null, is refused with 422. Add a stage with `POST /api/v1/rollout-schedules/{schedule_id}/stages` and change one with `PUT /api/v1/rollout-schedules/stages/{stage_id}`.",
             "title": "Stages"
           },
           "start_date": {
@@ -12683,7 +12733,7 @@
                 "type": "null"
               }
             ],
-            "description": "Configuration for the trigger",
+            "description": "Configuration for the trigger. When it has `duration`, that is the number of hours from 0 to 8760 a time-based stage runs before the scheduler completes it; without `duration` the default is 24. The rest of the object is not checked.",
             "title": "Trigger Configuration"
           },
           "trigger_type": {
@@ -12779,6 +12829,19 @@
             ],
             "description": "For time-based triggers",
             "title": "Start Date"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the stage started, in UTC: the time a time-based stage's duration and the schedule's min_stage_duration are measured from. Null until the stage starts, for a stage that completed or failed before it was recorded, and for a stage a release that did not record it started during an upgrade, while that stage runs and after; the scheduler measures such a stage from updated_at. Editing the stage does not change it.",
+            "title": "Started At"
           },
           "status": {
             "$ref": "#/components/schemas/RolloutStageStatus"
@@ -12918,7 +12981,7 @@
                 "type": "null"
               }
             ],
-            "description": "Configuration for the trigger",
+            "description": "Configuration for the trigger. When it has `duration`, that is the number of hours from 0 to 8760 a time-based stage runs before the scheduler completes it; without `duration` the default is 24. The rest of the object is not checked.",
             "title": "Trigger Configuration"
           },
           "trigger_type": {
@@ -15857,6 +15920,171 @@
         "title": "SourceOut",
         "type": "object"
       },
+      "SplitUrlAssignRequest": {
+        "description": "``POST /api/v1/tracking/assign``'s request, plus the request the\nvisitor made: its host, path, query and User-Agent.",
+        "example": {
+          "experiment_key": "checkout-pages",
+          "host": "shop.example.com",
+          "path": "/checkout",
+          "query": "utm_source=mail",
+          "user_agent": "Mozilla/5.0",
+          "user_id": "6f1c2a9e-3b7d-4e1a-9c55-0d2b8e4f7a10"
+        },
+        "properties": {
+          "context": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "User context for targeting",
+            "title": "Context"
+          },
+          "experiment_key": {
+            "description": "Experiment identifier",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Experiment Key",
+            "type": "string"
+          },
+          "host": {
+            "description": "The host the visitor asked for (their Host header), with or without a :port; compared without case or port. No whitespace or control characters.",
+            "maxLength": 261,
+            "minLength": 1,
+            "title": "Host",
+            "type": "string"
+          },
+          "path": {
+            "description": "The path the visitor asked for, as they sent it (not percent-decoded), starting with /. One trailing / is ignored.",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "maxLength": 8192,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The visitor's query string, without the ?, as they sent it. It is added to the URL of a variant on the control URL's host. No #, whitespace or control characters.",
+            "title": "Query"
+          },
+          "user_agent": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The visitor's User-Agent. A crawler is answered as a new visitor would be, and nothing is recorded for it.",
+            "title": "User Agent"
+          },
+          "user_id": {
+            "description": "User identifier",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "experiment_key",
+          "user_id",
+          "host",
+          "path"
+        ],
+        "title": "SplitUrlAssignRequest",
+        "type": "object"
+      },
+      "SplitUrlAssignResponse": {
+        "description": "Where to send the visitor, and why.",
+        "properties": {
+          "action": {
+            "description": "redirect: answer 302 with Location set to location. serve: serve the page the visitor asked for.",
+            "enum": [
+              "redirect",
+              "serve"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "assigned": {
+            "description": "True when the visitor holds an assignment in the experiment; false when nothing was recorded for them.",
+            "title": "Assigned",
+            "type": "boolean"
+          },
+          "experiment_key": {
+            "title": "Experiment Key",
+            "type": "string"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "On redirect, the variant's URL, with the visitor's query string added when the variant is on the control URL's host; otherwise null.",
+            "title": "Location"
+          },
+          "reason": {
+            "description": "assigned | holdout | mutual_exclusion | targeting, the status of an experiment that is not ACTIVE (draft | paused | completed | archived), not_entry (the host and path are not the experiment's control URL's; nothing recorded) or bot (a crawler; nothing recorded)",
+            "title": "Reason",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          },
+          "variant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The visitor's variant; null when reason is not_entry.",
+            "title": "Variant Id"
+          },
+          "variant_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The visitor's variant; null when reason is not_entry.",
+            "title": "Variant Name"
+          }
+        },
+        "required": [
+          "experiment_key",
+          "user_id",
+          "action",
+          "assigned",
+          "reason"
+        ],
+        "title": "SplitUrlAssignResponse",
+        "type": "object"
+      },
       "SplitUrlConfig": {
         "description": "Configuration for a split URL experiment.\n\nRequires at least 2 URL variants with unique names, whose\ntraffic_allocation values are each from 0 to 100 and sum to 100, and whose\nURLs are absolute http or https URLs (see each field).",
         "properties": {
@@ -15903,6 +16131,60 @@
           "variants"
         ],
         "title": "SplitUrlConfig",
+        "type": "object"
+      },
+      "SplitUrlRoute": {
+        "description": "One ACTIVE split URL experiment's entry.",
+        "properties": {
+          "experiment_id": {
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "experiment_key": {
+            "title": "Experiment Key",
+            "type": "string"
+          },
+          "host": {
+            "description": "The control URL's host name, in lower case",
+            "title": "Host",
+            "type": "string"
+          },
+          "path": {
+            "description": "The control URL's path, without one trailing / (except /)",
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "experiment_key",
+          "experiment_id",
+          "host",
+          "path"
+        ],
+        "title": "SplitUrlRoute",
+        "type": "object"
+      },
+      "SplitUrlRoutesResponse": {
+        "description": "The entries to match requests against, and how long to keep them.",
+        "properties": {
+          "max_age": {
+            "description": "Seconds to keep this table before fetching it again",
+            "title": "Max Age",
+            "type": "integer"
+          },
+          "routes": {
+            "items": {
+              "$ref": "#/components/schemas/SplitUrlRoute"
+            },
+            "title": "Routes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "routes",
+          "max_age"
+        ],
+        "title": "SplitUrlRoutesResponse",
         "type": "object"
       },
       "SplitUrlVariant": {
@@ -18201,8 +18483,7 @@
             "type": "number"
           },
           "baseline_rate": {
-            "description": "Current baseline conversion/success rate (exclusive 0–1).",
-            "exclusiveMaximum": 1,
+            "description": "The metric before the change. For metric_type 'proportion' (the default), a rate above 0 and below 1: 0.05 is 5%. For 'mean' or 'ratio', the baseline mean in the metric's own units, such as 45.0 for an average order value of 45: any finite number above 0.",
             "exclusiveMinimum": 0,
             "title": "Baseline Rate",
             "type": "number"
@@ -19354,7 +19635,7 @@
     },
     "/api/v1/audit-logs/": {
       "get": {
-        "description": "Retrieve audit logs with filtering and pagination.\n\nThis endpoint allows authorized users to query audit logs with various filters:\n- **user_id**: Filter by specific user\n- **entity_type**: Filter by entity type (feature_flag, experiment, user, etc.)\n- **entity_id**: Filter by specific entity\n- **action_type**: Filter by action type (toggle_enable, create, update, etc.)\n- **from_date**: Filter logs from this date\n- **to_date**: Filter logs until this date\n- **page**: Page number for pagination\n- **limit**: Number of records per page\n\nSuperusers, ADMIN and ANALYST see every entry. DEVELOPER and VIEWER\nsee only their own entries; a `user_id` filter naming anyone else is\nreplaced by their own id.",
+        "description": "Retrieve audit logs with filtering and pagination.\n\nThis endpoint allows authorized users to query audit logs with various filters:\n- **user_id**: Filter by specific user\n- **entity_type**: Filter by entity type (feature_flag, experiment, user, etc.)\n- **entity_id**: Filter by specific entity\n- **action_type**: Filter by action type (toggle_enable, create, update, etc.)\n- **from_date**: Filter logs from this date\n- **to_date**: Filter logs until this date\n- **page**: Page number for pagination\n- **limit**: Number of records per page\n\nSuperusers, ADMIN and ANALYST, and in the full profile anyone whose custom\nrole or direct grant gives audit_log (read), see other users' entries too.\nAnyone else sees only their own entries; a `user_id` filter naming anyone\nelse is replaced by their own id.",
         "operationId": "list_audit_logs_api_v1_audit_logs__get",
         "parameters": [
           {
@@ -20035,7 +20316,7 @@
     },
     "/api/v1/audit-logs/stream": {
       "get": {
-        "description": "Returns recent audit log entries as Server-Sent Events.\nUseful for real-time audit dashboards.\nStreams up to `limit` entries (default 50, max 100) then closes.\nSuperusers, ADMIN and ANALYST receive every entry; DEVELOPER and VIEWER\nreceive only their own.",
+        "description": "Returns recent audit log entries as Server-Sent Events.\nUseful for real-time audit dashboards.\nStreams up to `limit` entries (default 50, max 100) then closes.\nSuperusers, ADMIN and ANALYST, and in the full profile anyone whose custom\nrole or direct grant gives audit_log (read), receive other users' entries\ntoo. Anyone else receives only their own.",
         "operationId": "stream_audit_logs_api_v1_audit_logs_stream_get",
         "parameters": [
           {
@@ -21268,7 +21549,7 @@
     },
     "/api/v1/bandit/{experiment_id}/update": {
       "post": {
-        "description": "Trigger an immediate weight recalculation for a MAB experiment.\n\nRequires DEVELOPER or ADMIN role.",
+        "description": "Trigger an immediate weight recalculation for a MAB experiment.\n\nRequires permission to change experiments: DEVELOPER or ADMIN, or in the\nfull profile a custom role or direct grant giving experiment (update).",
         "operationId": "trigger_bandit_update_api_v1_bandit__experiment_id__update_post",
         "parameters": [
           {
@@ -21729,7 +22010,7 @@
     },
     "/api/v1/counters/bulk": {
       "post": {
-        "description": "Increment multiple counters in a single API call.\n\nAccepts up to 100 increment requests, each naming its own experiment.\nPartial failures are collected and reported in the response — the\noperation does not abort on first error.\nRequires ``experiment: update`` (ADMIN or DEVELOPER).\n\n**This route has no ``{experiment_id}``**, and used to. Fixing the single\nwrite routes to honour their path (#95) put this one in an impossible\nposition: ``BulkIncrementRequest.increments`` is a list whose every entry\ncarries its own ``experiment_id``, precisely so a collector can flush one\nbuffer spanning several experiments. Requiring them all to equal a path\nsegment would make that required field single-valued and turn a\n100-increment flush into a 400, while the promise two lines up —\n\"does not abort on first error\" — became false.\n\nA batch has no one experiment to name, so it no longer claims to. The\nper-entry ``experiment_id`` is the only thing that decides where each\nincrement lands, and nothing in the URL can now disagree with it.",
+        "description": "Increment multiple counters in a single API call.\n\nAccepts up to 100 increment requests, each naming its own experiment.\nPartial failures are collected and reported in the response — the\noperation does not abort on first error.\nRequires ``experiment: update``: ADMIN, DEVELOPER, a superuser, or anyone\nwhose custom role or direct grant gives ``experiment (update)``.\n\n**This route has no ``{experiment_id}``**, and used to. Fixing the single\nwrite routes to honour their path (#95) put this one in an impossible\nposition: ``BulkIncrementRequest.increments`` is a list whose every entry\ncarries its own ``experiment_id``, precisely so a collector can flush one\nbuffer spanning several experiments. Requiring them all to equal a path\nsegment would make that required field single-valued and turn a\n100-increment flush into a 400, while the promise two lines up —\n\"does not abort on first error\" — became false.\n\nA batch has no one experiment to name, so it no longer claims to. The\nper-entry ``experiment_id`` is the only thing that decides where each\nincrement lands, and nothing in the URL can now disagree with it.",
         "operationId": "bulk_increment_api_v1_counters_bulk_post",
         "requestBody": {
           "content": {
@@ -21827,7 +22108,7 @@
     },
     "/api/v1/counters/{experiment_id}/increment": {
       "post": {
-        "description": "Atomically increment a counter (assignment, event, or conversion) for a\nspecific experiment variant.\n\nUses DynamoDB's ADD update expression — safe under concurrent writes.\nRequires ``experiment: update`` (ADMIN or DEVELOPER).",
+        "description": "Atomically increment a counter (assignment, event, or conversion) for a\nspecific experiment variant.\n\nUses DynamoDB's ADD update expression — safe under concurrent writes.\nRequires ``experiment: update``: ADMIN, DEVELOPER, a superuser, or anyone\nwhose custom role or direct grant gives ``experiment (update)``.",
         "operationId": "increment_counter_api_v1_counters__experiment_id__increment_post",
         "parameters": [
           {
@@ -24194,7 +24475,7 @@
     },
     "/api/v1/experiments/{experiment_id}/split-url/preview": {
       "get": {
-        "description": "Preview the split URL variant assignment for a given user.\n\nThe route is declared here so the URL exists in every profile; the body\nlives in the split_url module (``experiments_split_url``) and is reached\nthrough the ``core.optional_modules`` seam. Builds without split-URL\nrouting answer HTTP 501 rather than a meaningless assignment.",
+        "description": "Returns the URL that visitor id gets now, without recording anything:\ntheir stored variant if they have one, else the variant a new visitor with\nthat id would get (the bandit weights for a bandit experiment, else the\ntraffic allocation). It checks no eligibility rule: a visitor the global\nholdout, mutual exclusion or targeting would keep out is served the\ncontrol page by POST /api/v1/tracking/split-url/assign instead.\n\nFor ADMIN and DEVELOPER users (and superusers). A deployment without split\nURL testing (the core profile) answers 501.",
         "operationId": "preview_split_url_assignment_api_v1_experiments__experiment_id__split_url_preview_get",
         "parameters": [
           {
@@ -24210,12 +24491,12 @@
             }
           },
           {
-            "description": "User ID to simulate assignment for",
+            "description": "The visitor id to preview",
             "in": "query",
             "name": "user_id",
             "required": true,
             "schema": {
-              "description": "User ID to simulate assignment for",
+              "description": "The visitor id to preview",
               "title": "User Id",
               "type": "string"
             }
@@ -24232,7 +24513,7 @@
                 }
               }
             },
-            "description": "Returns the predicted URL variant for the given user"
+            "description": "The URL that visitor id gets now, without recording anything"
           },
           "401": {
             "content": {
@@ -25458,7 +25739,7 @@
     },
     "/api/v1/feature-flags/{flag_id}": {
       "delete": {
-        "description": "Delete a feature flag.\n\nThis endpoint deletes an existing feature flag. Access is by role:\nADMIN and DEVELOPER may delete any flag; ANALYST and VIEWER may not.\n\nDeleting a feature flag has the following effects:\n- The feature flag and its related data are permanently removed, except\n  its events: those are kept, with `feature_flag_id` set to null\n- An audit record of the deletion is written (if that fails, the delete still stands)\n\n**Note**: This operation cannot be undone. For active feature flags, consider\nchanging the status to 'archived' instead.\n\nReturns:\n    None: No content, feature flag was successfully deleted\n\nRaises:\n    HTTPException 403: If the user doesn't have permission to delete this feature flag\n    HTTPException 404: If the feature flag doesn't exist",
+        "description": "Delete a feature flag.\n\nThis endpoint deletes an existing feature flag. Access is by permission,\nnot ownership: ADMIN and DEVELOPER may delete any flag, and in the full\nprofile so may anyone whose custom role or direct grant gives\nfeature_flag (delete); anyone else gets 403.\n\nDeleting a feature flag has the following effects:\n- The feature flag and its related data are permanently removed, except\n  its events: those are kept, with `feature_flag_id` set to null\n- An audit record of the deletion is written (if that fails, the delete still stands)\n\n**Note**: This operation cannot be undone. For active feature flags, consider\nchanging the status to 'archived' instead.\n\nReturns:\n    None: No content, feature flag was successfully deleted\n\nRaises:\n    HTTPException 403: If the user doesn't have permission to delete this feature flag\n    HTTPException 404: If the feature flag doesn't exist",
         "operationId": "delete_feature_flag_api_v1_feature_flags__flag_id__delete",
         "parameters": [
           {
@@ -26212,7 +26493,7 @@
     },
     "/api/v1/feature-flags/{flag_id}/history": {
       "get": {
-        "description": "Returns all audit log entries for a specific feature flag.\nOrdered by timestamp descending (most recent first).\nSuperusers, ADMIN and ANALYST see every entry; DEVELOPER and VIEWER see\nonly the entries they made, and `total_changes` counts only those.",
+        "description": "Returns all audit log entries for a specific feature flag.\nOrdered by timestamp descending (most recent first).\nSuperusers, ADMIN and ANALYST, and in the full profile anyone whose custom\nrole or direct grant gives audit_log (read), see other users' entries too.\nAnyone else sees only the entries they made, and `total_changes` counts\nonly those.",
         "operationId": "get_flag_history_api_v1_feature_flags__flag_id__history_get",
         "parameters": [
           {
@@ -26284,7 +26565,7 @@
     },
     "/api/v1/feature-flags/{flag_id}/toggle": {
       "post": {
-        "description": "Toggle a feature flag between enabled and disabled states.\n\nThis endpoint provides a unified way to toggle feature flags, automatically\ndetermining whether to activate or deactivate based on the current status.\n\nThe toggle operation includes:\n- Status change (ACTIVE ↔ INACTIVE). An archived flag would be turned on,\n  so it answers 400 and stays archived: unarchive it first\n- Complete audit logging with user information and optional reason\n- Response with new status and audit log ID\n\n**Authentication**: Requires valid user authentication.\n**Permissions**: ADMIN and DEVELOPER may toggle any flag; ANALYST and\nVIEWER may not.\n\nReturns:\n    ToggleResponse: Updated feature flag details with audit log ID\n\nRaises:\n    HTTPException 400: The flag is archived\n    HTTPException 403: If user doesn't have permission to toggle this feature flag\n    HTTPException 404: If feature flag doesn't exist\n    HTTPException 500: If toggle operation fails",
+        "description": "Toggle a feature flag between enabled and disabled states.\n\nThis endpoint provides a unified way to toggle feature flags, automatically\ndetermining whether to activate or deactivate based on the current status.\n\nThe toggle operation includes:\n- Status change (ACTIVE ↔ INACTIVE). An archived flag would be turned on,\n  so it answers 400 and stays archived: unarchive it first\n- Complete audit logging with user information and optional reason\n- Response with new status and audit log ID\n\n**Authentication**: Requires valid user authentication.\n**Permissions**: ADMIN and DEVELOPER may toggle any flag, and in the full\nprofile so may anyone whose custom role or direct grant gives\nfeature_flag (update); anyone else gets 403.\n\nReturns:\n    ToggleResponse: Updated feature flag details with audit log ID\n\nRaises:\n    HTTPException 400: The flag is archived\n    HTTPException 403: If user doesn't have permission to toggle this feature flag\n    HTTPException 404: If feature flag doesn't exist\n    HTTPException 500: If toggle operation fails",
         "operationId": "toggle_feature_flag_api_v1_feature_flags__flag_id__toggle_post",
         "parameters": [
           {
@@ -26399,7 +26680,7 @@
     },
     "/api/v1/feature-flags/{flag_id}/unarchive": {
       "post": {
-        "description": "Unarchive a feature flag (beta).\n\nAn archived flag is retired: it is never served, and every request that\nwould turn it on answers 400. This is the way back. The flag becomes\nINACTIVE, never ACTIVE, so turning it on is a separate, deliberate step.\n\nA flag that is not archived is returned unchanged.\n\n**Permissions**: ADMIN and DEVELOPER may unarchive any flag; ANALYST and\nVIEWER may not.\n\nReturns:\n    FeatureFlagRead: The feature flag\n\nRaises:\n    HTTPException 403: If the user doesn't have permission to change this feature flag\n    HTTPException 404: If the feature flag doesn't exist",
+        "description": "Unarchive a feature flag (beta).\n\nAn archived flag is retired: it is never served, and every request that\nwould turn it on answers 400. This is the way back. The flag becomes\nINACTIVE, never ACTIVE, so turning it on is a separate, deliberate step.\n\nA flag that is not archived is returned unchanged.\n\n**Permissions**: ADMIN and DEVELOPER may unarchive any flag, and in the full\nprofile so may anyone whose custom role or direct grant gives\nfeature_flag (update); anyone else gets 403.\n\nReturns:\n    FeatureFlagRead: The feature flag\n\nRaises:\n    HTTPException 403: If the user doesn't have permission to change this feature flag\n    HTTPException 404: If the feature flag doesn't exist",
         "operationId": "unarchive_feature_flag_api_v1_feature_flags__flag_id__unarchive_post",
         "parameters": [
           {
@@ -29206,7 +29487,7 @@
         ]
       },
       "post": {
-        "description": "Create a new mutual exclusion group. Requires DEVELOPER or ADMIN role. 409 when another group has the name (compared exactly, case included).",
+        "description": "Create a new mutual exclusion group. Requires permission to create experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (create). 409 when another group has the name (compared exactly, case included).",
         "operationId": "create_group_api_v1_mutual_exclusion_groups_post",
         "requestBody": {
           "content": {
@@ -29353,7 +29634,7 @@
         ]
       },
       "put": {
-        "description": "Update a mutual exclusion group's name, description or traffic allocation. Requires DEVELOPER or ADMIN role. Changing status (archiving or unarchiving) requires ADMIN role, as archiving through DELETE does; sending the group's current status is accepted from a DEVELOPER. 409 when another group has the name (compared exactly, case included).",
+        "description": "Update a mutual exclusion group's name, description or traffic allocation. Requires permission to create experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (create). Changing status (archiving or unarchiving) requires ADMIN role, as archiving through DELETE does; sending the group's current status is accepted from a DEVELOPER. 409 when another group has the name (compared exactly, case included).",
         "operationId": "update_group_api_v1_mutual_exclusion_groups__group_id__put",
         "parameters": [
           {
@@ -29416,7 +29697,7 @@
     },
     "/api/v1/mutual-exclusion-groups/{group_id}/experiments": {
       "post": {
-        "description": "Add an experiment to a mutual exclusion group. Requires DEVELOPER or ADMIN role.",
+        "description": "Add an experiment to a mutual exclusion group. Requires permission to create experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (create).",
         "operationId": "add_experiment_to_group_api_v1_mutual_exclusion_groups__group_id__experiments_post",
         "parameters": [
           {
@@ -29474,7 +29755,7 @@
     },
     "/api/v1/mutual-exclusion-groups/{group_id}/experiments/{experiment_id}": {
       "delete": {
-        "description": "Remove an experiment from a mutual exclusion group. Requires DEVELOPER or ADMIN role.",
+        "description": "Remove an experiment from a mutual exclusion group. Requires permission to create experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (create).",
         "operationId": "remove_experiment_from_group_api_v1_mutual_exclusion_groups__group_id__experiments__experiment_id__delete",
         "parameters": [
           {
@@ -29869,7 +30150,7 @@
     },
     "/api/v1/power/mde": {
       "post": {
-        "description": "Given a fixed sample size per variant, compute the smallest relative effect that can be detected with the specified power and alpha.",
+        "description": "Given a fixed sample size per variant, compute the smallest relative effect that can be detected with the specified power and alpha. It plans a conversion rate (a proportion) only: baseline_rate is a rate between 0 and 1, and a metric_type sent with the request is ignored.",
         "operationId": "compute_mde_api_v1_power_mde_post",
         "requestBody": {
           "content": {
@@ -30135,7 +30416,7 @@
     },
     "/api/v1/rbac/roles/assign": {
       "post": {
-        "description": "Assign a custom role to a user. ADMIN only. Idempotent.",
+        "description": "Assign a custom role to a user. ADMIN only. Idempotent.\n\nThe role takes effect from the next request. Assigning a role whose\nassignment was recorded before custom roles took effect activates that\nassignment, and is recorded as an activation; assigning a role the user\nalready has, taking effect, records nothing.",
         "operationId": "assign_role_api_v1_rbac_roles_assign_post",
         "requestBody": {
           "content": {
@@ -30481,7 +30762,7 @@
     },
     "/api/v1/rbac/users/{user_id}/permissions": {
       "get": {
-        "description": "Get effective permissions for a user.\nUsers can view their own permissions; admins can view anyone's.",
+        "description": "Get effective permissions for a user: what the permission checks allow.\n\nLists ``experiment``, ``feature_flag`` and ``audit_log``, the resources a\ncustom role or a direct grant can hold, and the custom roles that take\neffect. Users can view their own permissions; admins can view anyone's.",
         "operationId": "get_effective_permissions_api_v1_rbac_users__user_id__permissions_get",
         "parameters": [
           {
@@ -31633,7 +31914,7 @@
         ]
       },
       "put": {
-        "description": "Update an existing rollout schedule.\n\nThis endpoint allows updating the properties of a rollout schedule,\nincluding its stages and status transitions.",
+        "description": "Update an existing rollout schedule.\n\nThis endpoint updates the properties of a rollout schedule. It does not\ntake `stages`: a request that contains it answers 422. Add a stage with\n`POST /api/v1/rollout-schedules/{schedule_id}/stages` and change one with\n`PUT /api/v1/rollout-schedules/stages/{stage_id}`.",
         "operationId": "update_rollout_schedule_api_v1_rollout_schedules__schedule_id__put",
         "parameters": [
           {
@@ -32510,7 +32791,7 @@
         ]
       },
       "post": {
-        "description": "Create a new audience segment: kind rules (the default) with targeting rules, or kind id_list with no rules, whose members are added with POST /segments/{segment_id}/members. Requires DEVELOPER or ADMIN role.",
+        "description": "Create a new audience segment: kind rules (the default) with targeting rules, or kind id_list with no rules, whose members are added with POST /segments/{segment_id}/members. Requires permission to create experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (create).",
         "operationId": "create_segment_api_v1_segments_post",
         "requestBody": {
           "content": {
@@ -32606,7 +32887,7 @@
     },
     "/api/v1/segments/{segment_id}": {
       "delete": {
-        "description": "Soft-delete a segment by setting its status to ARCHIVED. Refused (409) while targeting rules use the segment. Requires DEVELOPER or ADMIN role.",
+        "description": "Soft-delete a segment by setting its status to ARCHIVED. Refused (409) while targeting rules use the segment. Requires permission to delete experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (delete).",
         "operationId": "delete_segment_api_v1_segments__segment_id__delete",
         "parameters": [
           {
@@ -32698,7 +32979,7 @@
         ]
       },
       "put": {
-        "description": "Update segment name, description, rules, or status. A segment's kind cannot be changed, and an id_list segment takes no rules (422). A status other than active is refused (409) while targeting rules use the segment. Requires DEVELOPER or ADMIN role.",
+        "description": "Update segment name, description, rules, or status. A segment's kind cannot be changed, and an id_list segment takes no rules (422). A status other than active is refused (409) while targeting rules use the segment. Requires permission to change experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (update).",
         "operationId": "update_segment_api_v1_segments__segment_id__put",
         "parameters": [
           {
@@ -32874,7 +33155,7 @@
     },
     "/api/v1/segments/{segment_id}/members": {
       "post": {
-        "description": "Add 1 to 10,000 user ids (each 1 to 255 characters, matched exactly) to an id_list segment. Ids already in it are left alone, so sending the same ids again is safe. A segment holds at most 1,000,000 ids; a request that would pass that answers 422 and adds nothing. Answers the counts: added + already_members is the number of distinct ids sent. Requires DEVELOPER or ADMIN role.",
+        "description": "Add 1 to 10,000 user ids (each 1 to 255 characters, matched exactly) to an id_list segment. Ids already in it are left alone, so sending the same ids again is safe. A segment holds at most 1,000,000 ids; a request that would pass that answers 422 and adds nothing. Answers the counts: added + already_members is the number of distinct ids sent. Requires permission to change experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (update).",
         "operationId": "add_segment_members_api_v1_segments__segment_id__members_post",
         "parameters": [
           {
@@ -32934,7 +33215,7 @@
     },
     "/api/v1/segments/{segment_id}/members/remove": {
       "post": {
-        "description": "Remove 1 to 10,000 user ids from an id_list segment. Ids that are not in it are ignored. Answers the counts: removed + not_members is the number of distinct ids sent. Requires DEVELOPER or ADMIN role.",
+        "description": "Remove 1 to 10,000 user ids from an id_list segment. Ids that are not in it are ignored. Answers the counts: removed + not_members is the number of distinct ids sent. Requires permission to change experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (update).",
         "operationId": "remove_segment_members_api_v1_segments__segment_id__members_remove_post",
         "parameters": [
           {
@@ -33136,7 +33417,7 @@
     },
     "/api/v1/tracking/assign/batch": {
       "post": {
-        "description": "Assign up to 1,000 users to an ACTIVE experiment in one request.\n\nEach user gets what ``POST /api/v1/tracking/assign`` would give them, with\nthe bandit weights read at the start of the request: the same eligibility\nchecks for a new user (global holdout, mutual exclusion group, targeting\nrules against that user's ``context``) and the same sticky answer for a\nuser already assigned. Users are processed in request order and each new\nassignment is committed on its own, as N single calls would be.\n\nOnly assignments are recorded, never a view event: the user's first\n``POST /api/v1/tracking/assign`` records that they saw the experiment.\n\n**Authentication**: an API key with the ``sdk:ruleset`` scope, whose owner\ncan change feature flags and experiments (ADMIN, DEVELOPER or a superuser).\n\nA plain ``def``: FastAPI runs it in the thread pool, so a batch does not\nhold the event loop while it works through its users.",
+        "description": "Assign up to 1,000 users to an ACTIVE experiment in one request.\n\nEach user gets what ``POST /api/v1/tracking/assign`` would give them, with\nthe bandit weights read at the start of the request: the same eligibility\nchecks for a new user (global holdout, mutual exclusion group, targeting\nrules against that user's ``context``) and the same sticky answer for a\nuser already assigned. Users are processed in request order and each new\nassignment is committed on its own, as N single calls would be.\n\nOnly assignments are recorded, never a view event: the user's first\n``POST /api/v1/tracking/assign`` records that they saw the experiment.\n\n**Authentication**: an API key with the ``sdk:ruleset`` scope, whose owner\ncan change feature flags and experiments: ADMIN, DEVELOPER, a superuser, or\nin the full profile anyone whose custom roles or direct grants give\n``feature_flag (update)`` and ``experiment (update)``. A key whose owner can\nchange feature flags but not experiments is refused with 403 before anyone\nis assigned.\n\nA plain ``def``: FastAPI runs it in the thread pool, so a batch does not\nhold the event loop while it works through its users.",
         "operationId": "assign_users_to_experiment_batch_api_v1_tracking_assign_batch_post",
         "requestBody": {
           "content": {
@@ -33505,6 +33786,104 @@
         "tags": [
           "Tracking"
         ]
+      }
+    },
+    "/api/v1/tracking/split-url/assign": {
+      "post": {
+        "description": "Where to send the visitor who asked for ``host`` + ``path``.\n\nIn order:\n\n1. 404 when no experiment has the key; 400 when it is not a split URL\n   experiment, or has no ``split_url_config``; 409 when the stored\n   configuration breaks the rules.\n2. ``serve``, reason ``not_entry``, nothing recorded, when the host\n   (without case or port) and the path (without one trailing ``/``) are\n   not the control URL's.\n3. For an ACTIVE experiment and a crawler's User-Agent: the variant a new\n   visitor with that id would get, reason ``bot``, nothing recorded.\n4. Otherwise ``POST /api/v1/tracking/assign``'s answer: ``redirect`` to the\n   variant's URL for a visitor assigned to a variant that is not the\n   control, else ``serve`` with that route's reason (``assigned``,\n   ``holdout``, ``mutual_exclusion``, ``targeting``, or the status of an\n   experiment that is not ACTIVE).\n\n``location`` is the variant's stored URL, with ``query`` added when the\nvariant is on the control URL's host.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.",
+        "operationId": "assign_split_url_visitor_api_v1_tracking_split_url_assign_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SplitUrlAssignRequest",
+                "description": "The visitor's request"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SplitUrlAssignResponse"
+                }
+              }
+            },
+            "description": "redirect, with the variant's URL, or serve"
+          },
+          "400": {
+            "description": "The experiment is not a split URL experiment, or has no split_url_config"
+          },
+          "401": {
+            "description": "No API key, or an unknown, expired or revoked one"
+          },
+          "404": {
+            "description": "No experiment has the key"
+          },
+          "409": {
+            "description": "The stored split_url_config breaks the rules"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "description": "Over the SDK rate limit for this address and path"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Where to send a split URL experiment's visitor (beta)",
+        "tags": [
+          "Tracking"
+        ],
+        "x-stability": "beta"
+      }
+    },
+    "/api/v1/tracking/split-url/routes": {
+      "get": {
+        "description": "Every ACTIVE split URL experiment's entry: the control URL's host (lower\ncase) and path, ordered by host, then path, with the experiment's key and\nid. Keep the table for ``max_age`` seconds, and for a GET whose host and\npath are an entry, ask ``POST /api/v1/tracking/split-url/assign``.\n\nAn experiment whose stored configuration breaks the rules is left out,\nand so is one whose control page an experiment started before it already\nhas, or that would chain with one.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.",
+        "operationId": "get_split_url_routes_api_v1_tracking_split_url_routes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SplitUrlRoutesResponse"
+                }
+              }
+            },
+            "description": "Every ACTIVE split URL experiment's control host and path"
+          },
+          "401": {
+            "description": "No API key, or an unknown, expired or revoked one"
+          },
+          "429": {
+            "description": "Over the SDK rate limit for this address and path"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "List the split URL entries to match requests against (beta)",
+        "tags": [
+          "Tracking"
+        ],
+        "x-stability": "beta"
       }
     },
     "/api/v1/tracking/track": {

@@ -46,7 +46,7 @@ const retired: Array<[string[], string]> = [
   [['PSR-', '4'], 'the PHP page says nothing of PSR-4'],
   [['LRU', '\\s+cache'], 'the .NET page describes no LRU cache'],
   [['DynamoDB', '\\s+and\\s+Lambda'], 'no Lambda function serves requests or processes events'],
-  [['send each variant', '\\s+to a different URL'], 'the edge router does not split traffic yet'],
+  [['send each variant', '\\s+to a different URL'], 'Controlvar sends no visitor anywhere: your server or edge redirects them'],
   [['record of', '\\s+feature-flag status'], 'the audit log records more than flag status changes'],
   [['JWT', '\\s+tokens'], 'the authentication page names bearer tokens'],
   [['Complete', '\\s+endpoint'], 'the endpoint page does not list every endpoint'],
@@ -112,11 +112,13 @@ describe('/docs hub entries for methods that do not work yet', () => {
     expect(python[0].getAttribute('href')).toMatch(/\/sdk\/python\.md$/);
   });
 
-  it('says custom roles are not applied yet (#891)', () => {
+  it('says custom roles and direct grants add to the built-in roles (#891)', () => {
     const { getAllByRole } = render(<DocsIndex />);
     const rbac = getAllByRole('link').filter((a) => /^RBAC/.test(a.textContent ?? ''));
     expect(rbac).toHaveLength(1);
-    expect(rbac[0].textContent ?? '').toMatch(/custom roles \(full profile\) are stored but not applied yet/);
+    expect(rbac[0].textContent ?? '').toMatch(
+      /in the full profile, custom roles and direct grants add to them/,
+    );
   });
 
   it('lists the Kubernetes (Helm) self-hosting guide', () => {

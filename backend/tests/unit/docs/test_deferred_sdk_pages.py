@@ -13,14 +13,17 @@ until then three things are held here for every one of them, read from files:
 2. **Install commands.** No install command or dependency line names one of
    this repository's packages from its registry (npm, PyPI, RubyGems, Hex,
    pub.dev, Packagist, NuGet, Maven Central, CocoaPods, a SwiftPM URL) unless
-   that package is published (``PUBLISHED`` in ``test_sdk_doc_versions.py``).
+   that package is on its registry (``ON_REGISTRY`` in
+   ``test_sdk_doc_versions.py``; ``published_identities()`` reads each one's
+   name from its npm, PyPI, Maven or NuGet manifest).
    A source install is not a registry one: a path, a tarball, ``pip install
    -e``, a ``git:``/``path:`` dependency, a Composer path repository in the
    same block, a Maven coordinate on a page that installs it into ``~/.m2``
    (and, for Gradle, reads it there with ``mavenLocal()``). A page with an
-   install section says "not yet published" exactly when its SDK is not
-   published, except a README a registry shows (``PACKAGED``): that one
-   states no status at all, and keeps the packaged-README contract of
+   install section says "not yet published" exactly when its SDK is not on
+   its registry, except a README a registry shows (``PACKAGED``): that one
+   states no status at all, installs nothing from a registry whether or not
+   its package is on one, and keeps the packaged-README contract of
    ``scripts/check_packaged_readme.py`` instead (DECISIONS T230).
 3. **Attribute targeting on flags.** Which SDKs send a ``context`` on flag
    evaluation is read from each SDK's source: the line that builds the
@@ -44,12 +47,14 @@ import ast
 import json
 import re
 import tomllib
+import xml.etree.ElementTree as ET
+from functools import lru_cache
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Set, Tuple
+from typing import AbstractSet, Dict, Iterator, List, Optional, Set, Tuple
 
 import pytest
 
-from backend.tests.unit.docs.test_sdk_doc_versions import PUBLISHED, says_unpublished
+from backend.tests.unit.docs.test_sdk_doc_versions import ON_REGISTRY, says_unpublished
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
 
@@ -93,6 +98,16 @@ def sdks_of(page: str) -> Tuple[str, ...]:
 
 def text(page: str) -> str:
     return (REPO_ROOT / page).read_text(encoding="utf-8")
+
+
+def _script(name: str):
+    from importlib.util import module_from_spec, spec_from_file_location
+
+    spec = spec_from_file_location(name, REPO_ROOT / "scripts" / f"{name}.py")
+    assert spec is not None and spec.loader is not None
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def fold(value: str) -> str:
@@ -368,16 +383,85 @@ def _manifest(sdk: str, name: str) -> str:
     return (SDK_DIR / sdk / name).read_text(encoding="utf-8")
 
 
-def published_identities() -> Set[Tuple[str, str]]:
-    """(ecosystem, name) of every published package, from its manifest."""
-    found = set()
-    for directory in PUBLISHED:
-        if (SDK_DIR / directory / "package.json").is_file():
-            found.add(("npm", json.loads(_manifest(directory, "package.json"))["name"]))
-        else:
-            data = tomllib.loads(_manifest(directory, "pyproject.toml"))
-            found.add(("pypi", data["project"]["name"].lower()))
+@lru_cache(maxsize=None)
+def _check_sdk_version():
+    """scripts/check_sdk_version.py, loaded once: its ``ECOSYSTEMS`` says how
+    the release publishes each SDK, and its NuGet reader which project it packs."""
+    return _script("check_sdk_version")
+
+
+POM_NAMESPACE = {"m": "http://maven.apache.org/POM/4.0.0"}
+#: A Maven ``groupId:artifactId``.
+COORDINATE = re.compile(r"[\w.-]{1,100}:[\w.-]{1,100}")
+
+
+def _pom(path: Path, field: str) -> str:
+    return (ET.parse(path).getroot().findtext(f"m:{field}", "", POM_NAMESPACE)).strip()
+
+
+def maven_coordinates(sdk: str) -> Set[str]:
+    """``groupId:artifactId`` of the SDK's parent POM and of each module it
+    lists: Central serves every one, the parent too. A module that names no
+    groupId of its own has its parent's."""
+    parent = SDK_DIR / sdk / "pom.xml"
+    group = _pom(parent, "groupId")
+    found = {f"{group}:{_pom(parent, 'artifactId')}"}
+    modules = ET.parse(parent).getroot().findall("m:modules/m:module", POM_NAMESPACE)
+    for module in modules:
+        child = SDK_DIR / sdk / (module.text or "").strip() / "pom.xml"
+        found.add(f"{_pom(child, 'groupId') or group}:{_pom(child, 'artifactId')}")
+    assert modules and all(COORDINATE.fullmatch(c) for c in found), (sdk, found)
     return found
+
+
+def package_identities(sdk: str) -> Set[Tuple[str, str]]:
+    """How the registry names the SDK's package, read from the manifest its
+    release reads (``ECOSYSTEMS`` in scripts/check_sdk_version.py), each as
+    ``registry_key`` writes it:
+
+    * npm: ``package.json``'s name;
+    * PyPI: ``pyproject.toml``'s name;
+    * Maven Central: the ``groupId:artifactId`` of the parent POM and of each
+      module, as a ``<dependency>`` (``maven``) and as a Gradle coordinate
+      (``gradle``) names it;
+    * NuGet: the ``<PackageId>`` of the project the release packs.
+
+    An SDK released another way (Go, whose tag is the release) or not wired
+    to a registry has no such name, and asking for one is an error: such an
+    SDK cannot be in ``ON_REGISTRY``.
+    """
+    ecosystem = _check_sdk_version().ECOSYSTEMS.get(sdk)
+    if ecosystem == "npm":
+        found = {("npm", json.loads(_manifest(sdk, "package.json"))["name"])}
+    elif ecosystem == "pypi":
+        found = {
+            ("pypi", tomllib.loads(_manifest(sdk, "pyproject.toml"))["project"]["name"])
+        }
+    elif ecosystem == "maven":
+        found = {
+            (kind, c) for c in maven_coordinates(sdk) for kind in ("maven", "gradle")
+        }
+    elif ecosystem == "nuget":
+        found = {
+            ("nuget", _check_sdk_version().read_nuget_version(sdk, SDK_DIR / sdk)[1])
+        }
+    else:
+        raise AssertionError(
+            f"sdk/{sdk} is {ecosystem!r} in scripts/check_sdk_version.py's ECOSYSTEMS,"
+            " so it has no npm, PyPI, Maven Central or NuGet name to read:"
+            " ON_REGISTRY cannot hold it"
+        )
+    return {registry_key(*identity) for identity in found}
+
+
+def registry_key(ecosystem: str, name: str) -> Tuple[str, str]:
+    """An identity as its registry compares names: PyPI and NuGet ignore case."""
+    return (ecosystem, name.lower() if ecosystem in ("pypi", "nuget") else name)
+
+
+def published_identities() -> Set[Tuple[str, str]]:
+    """(ecosystem, name) of every package on its registry (``ON_REGISTRY``)."""
+    return {identity for sdk in ON_REGISTRY for identity in package_identities(sdk)}
 
 
 def ours(ecosystem: str, name: str, group: Optional[str] = None) -> bool:
@@ -438,8 +522,14 @@ def _arguments(ecosystem: str, args: str) -> Iterator[str]:
             yield name
 
 
-def registry_installs(page_text: str) -> List[Tuple[str, str]]:
-    """Every (ecosystem, package) of ours that the page installs from a registry."""
+def registry_installs(
+    page_text: str, published: Optional[AbstractSet[Tuple[str, str]]] = None
+) -> List[Tuple[str, str]]:
+    """Every (ecosystem, package) of ours that the page installs from a
+    registry and that is not in *published* (``published_identities()``
+    unless given). A Maven or Gradle package is its ``groupId:artifactId``."""
+    if published is None:
+        published = published_identities()
     found: List[Tuple[str, str]] = []
     maven_local = bool(MAVEN_LOCAL_INSTALL.search(page_text))
     gradle_local = maven_local and "mavenLocal()" in page_text
@@ -471,7 +561,9 @@ def registry_installs(page_text: str) -> List[Tuple[str, str]]:
                 if ecosystem == "gradle" and gradle_local:
                     continue
                 identity = (ecosystem, name.lower() if ecosystem == "pypi" else name)
-                if identity not in published_identities():
+                if ecosystem in ("maven", "gradle"):
+                    identity = (ecosystem, f"{groups['group']}:{name}")
+                if registry_key(*identity) not in published:
                     found.append(identity)
     return found
 
@@ -513,11 +605,11 @@ INSTALL_SAMPLES = (
     ),
     (
         "<groupId>com.controlvar</groupId>\n    <artifactId>controlvar-sdk</artifactId>",
-        [("maven", "controlvar-sdk")],
+        [("maven", "com.controlvar:controlvar-sdk")],
     ),
     (
         'implementation("com.controlvar:controlvar-android:1.0.0")',
-        [("gradle", "controlvar-android")],
+        [("gradle", "com.controlvar:controlvar-android")],
     ),
     ("pod 'Controlvar'", [("cocoapods", "Controlvar")]),
     (
@@ -555,12 +647,112 @@ def test_each_install_pattern_reads_what_it_exists_for(sample, expected):
     assert registry_installs(sample) == expected
 
 
+# The registry names a package has, read before it joins ON_REGISTRY. The Java
+# and .NET names are public for good from their first publish (#1498).
+JAVA_COORDINATES = {
+    "com.controlvar:controlvar-sdk-parent",
+    "com.controlvar:controlvar-sdk",
+    "com.controlvar:controlvar-spring-boot-starter",
+}
+
+
+def test_the_maven_reader_reads_the_parent_and_each_module():
+    assert package_identities("java") == {
+        (kind, coordinate)
+        for coordinate in JAVA_COORDINATES
+        for kind in ("maven", "gradle")
+    }
+    # The version check of test_sdk_doc_versions.py reads the same POMs.
+    from backend.tests.unit.docs.test_sdk_doc_versions import maven_versions
+
+    assert set(maven_versions()) == JAVA_COORDINATES
+
+
+def test_the_nuget_reader_reads_the_packed_projects_id():
+    assert package_identities("dotnet") == {("nuget", "controlvar.sdk")}
+
+
+@pytest.mark.parametrize(
+    "sdk",
+    sorted(
+        sdk
+        for sdk, ecosystem in _check_sdk_version().ECOSYSTEMS.items()
+        if ecosystem in ("npm", "pypi", "maven", "nuget")
+    ),
+)
+def test_each_registry_sdk_has_the_name_its_release_checks(sdk):
+    """The name scripts/check_sdk_version.py reads for the tag (a Maven
+    parent's coordinate, a NuGet id) is one the reader here gives."""
+    ecosystem = _check_sdk_version().ECOSYSTEMS[sdk]
+    name = _check_sdk_version().read_manifest_version(sdk)[1]
+    assert registry_key(ecosystem, name) in package_identities(sdk)
+
+
+@pytest.mark.parametrize(
+    "sdk", ["go", "ruby", "php", "elixir", "flutter", "android", "ios"]
+)
+def test_an_sdk_with_no_registry_name_cannot_be_on_the_registry(sdk, monkeypatch):
+    with pytest.raises(AssertionError, match="ON_REGISTRY cannot hold it"):
+        package_identities(sdk)
+    monkeypatch.setitem(globals(), "ON_REGISTRY", (*ON_REGISTRY, sdk))
+    with pytest.raises(AssertionError, match=f"sdk/{sdk} is"):
+        published_identities()
+
+
+#: Install lines for the Java and .NET packages: refused today, allowed once
+#: java and dotnet are in ON_REGISTRY.
+JAVA_AND_DOTNET_INSTALLS = (
+    "<groupId>com.controlvar</groupId>\n    <artifactId>controlvar-sdk</artifactId>",
+    "<groupId>com.controlvar</groupId>\n"
+    "    <artifactId>controlvar-spring-boot-starter</artifactId>",
+    'implementation("com.controlvar:controlvar-sdk:0.1.0")',
+    "implementation 'com.controlvar:controlvar-spring-boot-starter:0.1.0'",
+    "dotnet add package Controlvar.SDK --version 0.1.0",
+    "dotnet add package controlvar.sdk",
+    '<PackageReference Include="Controlvar.SDK" Version="0.1.0" />',
+)
+
+
+@pytest.mark.parametrize("line", JAVA_AND_DOTNET_INSTALLS)
+def test_a_java_or_dotnet_install_is_allowed_once_its_sdk_is_on_the_registry(
+    line, monkeypatch
+):
+    assert registry_installs(line) != []
+    monkeypatch.setitem(globals(), "ON_REGISTRY", (*ON_REGISTRY, "java", "dotnet"))
+    assert registry_installs(line) == []
+
+
+@pytest.mark.parametrize(
+    "line, expected",
+    [
+        (
+            'implementation("com.controlvar:controlvar-android:1.0.0")',
+            [("gradle", "com.controlvar:controlvar-android")],
+        ),
+        (
+            "<groupId>com.controlvar.other</groupId>\n<artifactId>controlvar-sdk</artifactId>",
+            [("maven", "com.controlvar.other:controlvar-sdk")],
+        ),
+        (
+            "dotnet add package Controlvar.SDK.Extras",
+            [("nuget", "Controlvar.SDK.Extras")],
+        ),
+        ("npm install @controlvar/react-sdk", [("npm", "@controlvar/react-sdk")]),
+    ],
+)
+def test_java_and_dotnet_on_the_registry_allow_only_their_own_names(
+    line, expected, monkeypatch
+):
+    monkeypatch.setitem(globals(), "ON_REGISTRY", (*ON_REGISTRY, "java", "dotnet"))
+    assert registry_installs(line) == expected
+
+
 @pytest.mark.parametrize("page", DEFERRED)
 def test_a_deferred_page_installs_no_unpublished_package_from_a_registry(page):
     found = registry_installs(text(page))
     assert not found, (
         f"{page} installs {found} from a registry, where it is not published"
-        " (test_sdk_doc_versions.PUBLISHED); show the build from source instead"
+        " (test_sdk_doc_versions.ON_REGISTRY); show the build from source instead"
     )
 
 
@@ -571,10 +763,10 @@ def test_a_deferred_install_section_says_whether_it_is_published(page):
         # A README a registry shows says nothing about its status: the
         # packaged-README contract below holds it instead (T230).
         return
-    unpublished = [sdk for sdk in sdks_of(page) if sdk not in PUBLISHED]
+    unpublished = [sdk for sdk in sdks_of(page) if sdk not in ON_REGISTRY]
     assert says_unpublished(page_text) == bool(unpublished), (
         f"{page}: its SDK is {'not ' if unpublished else ''}published"
-        " (test_sdk_doc_versions.PUBLISHED); the page says otherwise"
+        " (test_sdk_doc_versions.ON_REGISTRY); the page says otherwise"
     )
 
 
@@ -585,7 +777,7 @@ def test_every_deferred_page_with_an_install_section_is_read():
     request that packs a README moves the second and third."""
     with_section = [page for page in DEFERRED if INSTALL_HEADING.search(text(page))]
     under_the_rule = [page for page in with_section if page not in PACKAGED]
-    assert (len(with_section), len(under_the_rule), len(PACKAGED)) == (24, 23, 1), (
+    assert (len(with_section), len(under_the_rule), len(PACKAGED)) == (24, 21, 6), (
         with_section,
         sorted(PACKAGED),
     )
@@ -596,22 +788,54 @@ def test_every_deferred_page_with_an_install_section_is_read():
 # ---------------------------------------------------------------------------
 
 #: Each README a registry shows, with its SDK: an explicit list, not
-#: ``DEFERRED`` (a packaged README need not be a deferred page). It is held
-#: exactly to the SDKs scripts/check_packaged_readme.py has rules for, and to
-#: the READMEs the packages actually ship.
+#: ``DEFERRED`` (a packaged README need not be a deferred page: the Python
+#: provider's and React Native's have claims registries of their own). It is
+#: held exactly to the SDKs scripts/check_packaged_readme.py holds to
+#: I-README, and to the READMEs the packages actually ship.
 PACKAGED: Dict[str, str] = {
     "sdk/dotnet/README.md": "dotnet",
+    "sdk/mcp/README.md": "mcp",
+    "sdk/openfeature-python/README.md": "openfeature-python",
+    "sdk/openfeature/README.md": "openfeature",
+    "sdk/react-native/README.md": "react-native",
+    "sdk/react/README.md": "react",
 }
 
-
-def _script(name: str):
-    from importlib.util import module_from_spec, spec_from_file_location
-
-    spec = spec_from_file_location(name, REPO_ROOT / "scripts" / f"{name}.py")
-    assert spec is not None and spec.loader is not None
-    module = module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+#: For each packaged README: the heading a planted registry install goes
+#: under (outside the Install section), the line planted, and what the
+#: registry sweep must then find. The plant must change the page.
+PLANTS: Dict[str, Tuple[str, str, Tuple[str, str]]] = {
+    "sdk/dotnet/README.md": (
+        "## Quick Start\n",
+        "`dotnet add package Controlvar.SDK`",
+        ("nuget", "Controlvar.SDK"),
+    ),
+    "sdk/mcp/README.md": (
+        "## Configuration\n",
+        "`npm install @controlvar/mcp-server`",
+        ("npm", "@controlvar/mcp-server"),
+    ),
+    "sdk/openfeature-python/README.md": (
+        "## Quick start\n",
+        "`pip install controlvar-openfeature`",
+        ("pypi", "controlvar-openfeature"),
+    ),
+    "sdk/openfeature/README.md": (
+        "## Quick start\n",
+        "`npm install @controlvar/openfeature-provider`",
+        ("npm", "@controlvar/openfeature-provider"),
+    ),
+    "sdk/react-native/README.md": (
+        "## Quick start\n",
+        "`npm install @controlvar/react-native-sdk`",
+        ("npm", "@controlvar/react-native-sdk"),
+    ),
+    "sdk/react/README.md": (
+        "## Provider setup\n",
+        "`npm install @controlvar/react-sdk`",
+        ("npm", "@controlvar/react-sdk"),
+    ),
+}
 
 
 def test_the_packaged_readmes_are_the_ones_the_gate_and_the_packages_name():
@@ -637,7 +861,9 @@ def test_a_packaged_readme_keeps_the_contract(page):
 
 @pytest.mark.parametrize("page", sorted(PACKAGED))
 def test_a_packaged_readme_installs_nothing_from_a_registry(page):
-    assert registry_installs(text(page)) == []
+    # Nothing, whether or not its package is on its registry yet: the README
+    # is frozen at the tag (T230), so the sweep is given no published names.
+    assert registry_installs(text(page), published=frozenset()) == []
 
 
 @pytest.mark.parametrize("page", sorted(PACKAGED))
@@ -646,20 +872,23 @@ def test_a_packaged_readme_claims_no_attribute_targeting_its_client_does_not_sen
         assert attribute_claims(text(page)) == []
 
 
+def test_every_packaged_readme_has_a_plant():
+    assert set(PLANTS) == set(PACKAGED)
+
+
 @pytest.mark.parametrize("page", sorted(PACKAGED))
 def test_a_registry_install_anywhere_in_a_packaged_readme_is_refused(page):
-    """PP-3's plant, in memory: an install line in the Quick Start, outside
-    the Install section, fails both the contract and the registry sweep."""
+    """PP-3's plant, in memory: an install line in a section other than
+    Install fails both the contract and the registry sweep."""
+    heading, line, expected = PLANTS[page]
     original = text(page)
-    planted = original.replace(
-        "## Quick Start\n", "## Quick Start\n\n`dotnet add package Controlvar.SDK`\n", 1
-    )
+    planted = original.replace(heading, f"{heading}\n{line}\n", 1)
     assert planted != original
     assert any(
         "installs this repository's package from a registry" in p
         for p in _contract_problems(page, planted)
     )
-    assert registry_installs(planted) == [("nuget", "Controlvar.SDK")]
+    assert registry_installs(planted, published=frozenset()) == [expected]
 
 
 #: A link to a page of this repository on GitHub, with a fragment.
@@ -761,7 +990,6 @@ SENDS_NO_CONTEXT = {
     "ios",
     "java",
     "php",
-    "react-native",
     "ruby",
 }
 
@@ -884,6 +1112,29 @@ def test_the_claim_patterns_find_the_true_sentence_on_the_react_page():
     )
 
 
+def test_the_claim_patterns_find_the_true_sentence_on_the_react_native_page():
+    # React Native sends the context since #1520, and its page says so: the
+    # patterns must see it, so that react-native put back in SENDS_NO_CONTEXT
+    # fails test_a_page_claims_no_attribute_targeting_its_client_does_not_send
+    # on docs/sdk/react-native.md as well as here.
+    assert "react-native" not in SENDS_NO_CONTEXT
+    assert sends_context("react-native")
+    assert "sent as context on flag evaluation" in attribute_claims(
+        text("docs/sdk/react-native.md")
+    )
+
+
+def test_the_react_native_readme_says_the_attributes_are_sent_and_cites_no_438():
+    # The README npm shows for React Native's first release is frozen with it:
+    # it must say what the client does since #1520 (the attributes go as
+    # `context` on flag evaluation), and carry none of the #438 limit that
+    # iOS, Android and Flutter keep.
+    readme = text("sdk/react-native/README.md")
+    assert "sent as context on flag evaluation" in attribute_claims(readme)
+    assert "438" not in readme
+    assert "sends only the user id" not in fold(readme).lower()
+
+
 @pytest.mark.parametrize("page", DEFERRED)
 def test_a_page_claims_no_attribute_targeting_its_client_does_not_send(page):
     silent = [sdk for sdk in sdks_of(page) if sdk in SENDS_NO_CONTEXT]
@@ -894,3 +1145,951 @@ def test_a_page_claims_no_attribute_targeting_its_client_does_not_send(page):
         f"{page}: {', '.join(silent)} sends the user id alone on flag evaluation,"
         f" but the page says attributes reach it ({claims}); say what it sends"
     )
+
+
+def test_the_react_page_names_the_ssr_entry_the_package_ships():
+    """docs/sdk/react.md names `@controlvar/react-sdk/ssr`, and the package has it.
+
+    The page is in ``CLAIMS_DEFERRED``, so no claims entry binds its App Router
+    sentence. It once told readers to call ``ServerClient`` from a server
+    component without naming an import path that exists (#1518); this holds the
+    fixed sentence, and the files that make the path real, in place, and keeps
+    the page from naming a path inside the package's ``dist``.
+    """
+    page = fold(text("docs/sdk/react.md"))
+    assert "@controlvar/react-sdk/ssr" in page
+    assert (
+        "In the App Router call the same methods from an async server component."
+        not in page
+    )
+    # The package's `exports` map refuses deep imports, so a page that sends
+    # readers into `dist` gives an instruction Node rejects.
+    assert "@controlvar/react-sdk/dist" not in page
+    manifest = json.loads((REPO_ROOT / "sdk/react/package.json").read_text("utf-8"))
+    assert "ssr" in manifest["files"]
+    assert (REPO_ROOT / "sdk/react/ssr/package.json").is_file()
+
+
+# ---------------------------------------------------------------------------
+# 4. The React SDK's exposure hook (#1499)
+# ---------------------------------------------------------------------------
+
+#: Where the React SDK's jest tests live; every test named below is in one of them.
+REACT_TESTS = REPO_ROOT / "sdk" / "react" / "src" / "__tests__"
+REACT_PAGE = "docs/sdk/react.md"
+REACT_README = "sdk/react/README.md"
+
+#: Each sentence the React pages state about ``onExposure`` (as written, folded
+#: to one line), the pages that state it, and the jest tests that fail when it
+#: stops being true. Both pages are in ``CLAIMS_DEFERRED``, so no claims
+#: registry binds them; this does. An ``it.each`` test is named by its template.
+REACT_EXPOSURE_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...] = (
+    (
+        "The client calls it once each time the server enrols the user in an experiment and"
+        " the answer did not come from the client's cache: the moment the server records the"
+        " exposure.",
+        (REACT_PAGE,),
+        (
+            "is called once for an assigned: true answer, with exactly the four values",
+            "is not called for a cached answer, however often it is asked for",
+            "calls onExposure once when useExperiment mounts, with the four values",
+        ),
+    ),
+    (
+        "is a function the client calls once each time the server enrols the user in an"
+        " experiment and the answer did not come from the client's cache: the moment the"
+        " server records the exposure.",
+        (REACT_README,),
+        (
+            "is called once for an assigned: true answer, with exactly the four values",
+            "is not called for a cached answer, however often it is asked for",
+            "calls its own onExposure once for two assignments of one user",
+        ),
+    ),
+    (
+        "Called once each time the server enrols the user in an experiment and the answer is"
+        " not cached",
+        (REACT_PAGE,),
+        (
+            "is called once for an assigned: true answer, with exactly the four values",
+            "is not called for a cached answer, however often it is asked for",
+        ),
+    ),
+    (
+        "It receives an `Exposure`, a new object each time: `experimentKey`, `userId`,"
+        " `variantId` (`null` when the server sends none) and `variantName`. Nothing else:"
+        " not the user's attributes and not the variant's configuration.",
+        (REACT_PAGE,),
+        (
+            "is called once for an assigned: true answer, with exactly the four values",
+            "passes a null variantId when the server sends none",
+            "receives a new object that does not alias the cached answer",
+            "has four readonly fields",
+        ),
+    ),
+    (
+        "It receives an `Exposure`: `experimentKey`, `userId`, `variantId` (`null` when the"
+        " server sends none) and `variantName`.",
+        (REACT_README,),
+        (
+            "is called once for an assigned: true answer, with exactly the four values",
+            "passes a null variantId when the server sends none",
+        ),
+    ),
+    (
+        "It is not called for:",
+        (REACT_PAGE,),
+        ("is not called for a cached answer, however often it is asked for",),
+    ),
+    (
+        "- an answer from the client's cache; - a user the experiment did not enrol"
+        " (`assigned: false`, with `reason` `'holdout'`, `'mutual_exclusion'` or"
+        " `'targeting'`), or an experiment that is not running (`'draft'`, `'paused'`,"
+        " `'completed'` or `'archived'`): the server records no exposure for them; - a call"
+        " that fails; - a feature flag.",
+        (REACT_PAGE,),
+        (
+            "is not called for a cached answer, however often it is asked for",
+            "is not called for an assigned: false answer (%s), and the answer is unchanged",
+            "is not called when the call fails (%s)",
+            "is not called when the call times out",
+            "is never called for a flag",
+        ),
+    ),
+    (
+        "It is not called for an answer from the client's cache, a user the experiment did"
+        " not enrol (`assigned: false`), a call that fails or a feature flag.",
+        (REACT_README,),
+        (
+            "is not called for a cached answer, however often it is asked for",
+            "is not called for an assigned: false answer (%s), and the answer is unchanged",
+            "is not called when the call fails (%s)",
+            "is never called for a flag",
+        ),
+    ),
+    (
+        "Calls for the same user and experiment that are made while the first is still"
+        " waiting share its request, so together they call it once.",
+        (REACT_PAGE,),
+        ("is called once for concurrent first calls that share one request",),
+    ),
+    (
+        "`useExperiment` asks for the assignment in the browser, after the first render, so a"
+        " server render makes no request and calls nothing. A server render followed by"
+        " hydration calls it once, in the browser, and so does React's StrictMode, which runs"
+        " effects twice in development.",
+        (REACT_PAGE,),
+        (
+            "is not called, and the render makes no request",
+            "is not called under StrictMode either",
+            "calls it once after hydrating server markup",
+            "calls it once under StrictMode, which runs the effect twice",
+        ),
+    ),
+    (
+        "A Provider rendered on the server calls nothing: `useExperiment` asks for the"
+        " assignment in the browser, after the first render.",
+        (REACT_README,),
+        ("is not called, and the render makes no request",),
+    ),
+    (
+        "Changing `onExposure` between renders does not create a new client, so nothing is"
+        " asked again; the client calls the function from the latest render.",
+        (REACT_PAGE,),
+        ("keeps the client when onExposure changes, and calls the latest function",),
+    ),
+    (
+        "(a new client starts with empty caches), not when `onExposure` does;",
+        (REACT_PAGE,),
+        ("keeps the client when onExposure changes, and calls the latest function",),
+    ),
+    (
+        "It is called again, and the server records another exposure, after the cache"
+        " lifetime (`cacheTtlMs`, 5 minutes by default), after `clearCache()`, and in every"
+        " new client: each page load, and each change of `apiKey`, `baseUrl`, `timeoutMs` or"
+        " `cacheTtlMs`.",
+        (REACT_PAGE,),
+        (
+            "after the cache lifetime (one millisecond past it, never at the boundary)",
+            "after clearCache()",
+            "in a new client",
+            "creates a new client when apiKey changes",
+        ),
+    ),
+    (
+        "It never receives one the server did not record.",
+        (REACT_PAGE,),
+        (
+            "is not called for an assigned: false answer (%s), and the answer is unchanged",
+            "is not called when assigned is %s, and the answer is still returned",
+        ),
+    ),
+    (
+        "It runs before the assignment resolves, and before every call waiting on the same"
+        " request,",
+        (REACT_PAGE,),
+        (
+            "runs before assignExperiment resolves",
+            "is called once for concurrent first calls that share one request",
+        ),
+    ),
+    (
+        "The client does not wait for a Promise it returns.",
+        (REACT_PAGE,),
+        ("reports a rejection, once, as the hook error, without awaiting it",),
+    ),
+    (
+        "If it throws, or returns a Promise that rejects, the answer is unchanged, and nothing"
+        " reports the error: this SDK has no `onError`.",
+        (REACT_PAGE, REACT_README),
+        (
+            "that throws leaves the answer unchanged and cached",
+            "that returns a rejected Promise leaves the answer unchanged",
+            "leaves useExperiment with the answer and no error",
+            "leaves ServerClient answering, with no error",
+            "passes on what onExposure returns, so a Promise it returns has its rejection handled",
+            "is given the dropping report by the clients: this SDK reports the failure nowhere",
+        ),
+    ),
+    (
+        "A failing `onExposure` changes no answer and is reported nowhere",
+        (REACT_PAGE,),
+        (
+            "that throws leaves the answer unchanged and cached",
+            "is given the dropping report by the clients: this SDK reports the failure nowhere",
+        ),
+    ),
+    (
+        "`ServerClient` takes `onExposure` in its config too, and calls it for the"
+        " assignments it makes, in the same way. It is a separate client with its own cache:",
+        (REACT_PAGE,),
+        (
+            "calls its own onExposure once for two assignments of one user",
+            "never calls the onExposure of a Provider",
+        ),
+    ),
+    (
+        "the server records two exposures, and each client that has `onExposure` calls its"
+        " own.",
+        (REACT_PAGE,),
+        (
+            "calls its own onExposure once for two assignments of one user",
+            "never calls the onExposure of a Provider",
+        ),
+    ),
+    (
+        "A `ServerClient` created in each request, as in the `getServerSideProps` example"
+        " above, starts with an empty cache, so it calls `onExposure` on every request that"
+        " assigns, and the server records an exposure on each.",
+        (REACT_PAGE,),
+        (
+            "in a new client",
+            "calls its own onExposure once for two assignments of one user",
+        ),
+    ),
+    (
+        "interface Exposure {          // what onExposure receives; also exported from"
+        " '@controlvar/react-sdk/ssr'",
+        (REACT_PAGE,),
+        ("is exported as a type from the package and from ssr",),
+    ),
+    (
+        "The Provider and `ServerClient` throw `onExposure must be a function` for any other"
+        " value; `null` and `undefined` set none.",
+        (REACT_PAGE,),
+        (
+            "is refused by the client and ServerClient: %p",
+            "is refused by the Provider when it renders: %p",
+            "null and undefined set none",
+        ),
+    ),
+    (
+        'In a test, a mocked `/assign` answer must include `"assigned": true`, or the hook is'
+        " not called. This SDK treats an answer without `assigned` as enrolled for"
+        " `ExperimentAssignment.assigned`, but does not call the hook for it.",
+        (REACT_PAGE,),
+        ("is not called when assigned is %s, and the answer is still returned",),
+    ),
+)
+
+
+def _react_test_titles() -> str:
+    return "\n".join(
+        path.read_text("utf-8") for path in sorted(REACT_TESTS.glob("*.test.ts*"))
+    )
+
+
+def _h2s(page: str) -> List[str]:
+    """The level-2 headings of a page, outside fenced blocks."""
+    without_fences = re.sub(r"^```.*?^```[ \t]*$", "", text(page), flags=re.S | re.M)
+    return re.findall(r"^##[ \t]+(.+?)[ \t]*$", without_fences, re.M)
+
+
+def test_the_react_pages_give_the_exposure_hook_a_section_of_its_own():
+    """H-M9: an H2 "Exposure hook" (``#exposure-hook``), never in a Quick
+    Start; the README's links to the page's section, absolutely."""
+    for page in (REACT_PAGE, REACT_README):
+        h2s = _h2s(page)
+        assert h2s.count("Exposure hook") == 1, (page, h2s)
+        assert not any("quick start" in h.lower() for h in h2s), (page, h2s)
+    assert (
+        "https://github.com/Controlvar/controlvar/blob/main/docs/sdk/react.md#exposure-hook"
+        in text(REACT_README)
+    )
+
+
+@pytest.mark.parametrize(
+    "sentence, pages, tests",
+    REACT_EXPOSURE_SENTENCES,
+    ids=[s[:60] for s, _, _ in REACT_EXPOSURE_SENTENCES],
+)
+def test_each_react_exposure_sentence_is_on_its_page_and_held_by_a_test(
+    sentence, pages, tests
+):
+    titles = _react_test_titles()
+    unsaid = [page for page in pages if sentence not in fold(text(page))]
+    assert unsaid == [], f"no longer said there: {sentence}"
+    missing = [title for title in tests if f"'{title}'" not in titles]
+    assert missing == [], "no jest test in sdk/react/src/__tests__ has these names"
+
+
+def test_the_react_refusal_the_pages_quote_is_the_one_the_source_throws():
+    source = (REPO_ROOT / "sdk/react/src/client/exposure.ts").read_text("utf-8")
+    assert "throw new Error('onExposure must be a function')" in source
+    assert "`onExposure must be a function`" in text(REACT_PAGE)
+
+
+# ---------------------------------------------------------------------------
+# 5. The React SDK's bootstrap (#1518)
+# ---------------------------------------------------------------------------
+
+#: The bootstrap section's heading on the React page, and its anchor.
+BOOTSTRAP_H2 = "Start from the server's answers (bootstrap)"
+BOOTSTRAP_ANCHOR = "start-from-the-servers-answers-bootstrap"
+_FIRST = "commits the bootstrapped flag and variant first, with no request before the first commit"
+_SSR = "renders the bootstrapped flag and variant, and makes no request"
+_REFRESH = "applies a refresh that answers differently as it applies a fetched answer"
+_KEEP = "keeps the bootstrapped answer, with error set, when its refresh fails"
+_OFF = "reports a flag without a bootstrap entry off, with error set, when its request fails"
+_BOTH = "keeps or turns off by whether the hook had an entry, in one tree whose requests all fail"
+_KEEP_EXP = "keeps the bootstrapped assignment, with error set, when its refresh fails"
+_MAPPED = (
+    "starts each hook from its entry with loading: false, mapped as a fetched answer is"
+)
+_EXPOSURES = "records one exposure on the server and one after hydration, and no more"
+_LEFT_OUT = "leaves out a key whose request fails (%s), and keeps the others"
+_NEVER_THROWS = "never throws, even when fetch itself throws"
+_OTHER_USER = (
+    "ignores a bootstrap for another user: the hooks load and ask, as without one"
+)
+_WRONG_SHAPE = "ignores a bootstrap of the wrong shape (%s), without throwing"
+
+#: Each sentence the React pages state about the bootstrap (as written, folded
+#: to one line; a table cell is a sentence), the pages that state it, and the
+#: jest tests that fail when it stops being true. Both pages are in
+#: ``CLAIMS_DEFERRED``, so no claims registry binds them; this does.
+REACT_BOOTSTRAP_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...] = (
+    (
+        "Answers the server already has for this user, shown on the first render with no request;",
+        (REACT_PAGE,),
+        (_SSR, _FIRST),
+    ),
+    (
+        "It asks the API for each key, in parallel, and returns plain JSON, safe to pass as a prop.",
+        (REACT_PAGE,),
+        (
+            "starts every request before any answers: in parallel",
+            "returns plain JSON, safe to pass as a prop",
+        ),
+    ),
+    (
+        "A hook whose key is in the bootstrap starts with that answer (`loading: false`), on the"
+        " server and in the browser, with no request. It then asks the API as it always does; if"
+        " the answer has changed since the page was rendered (the flag was turned off, say), it"
+        " shows the new one.",
+        (REACT_PAGE,),
+        (
+            _SSR,
+            _FIRST,
+            _REFRESH,
+            "hydrates server markup made with it with no mismatch, and commits the bootstrapped answers first",
+        ),
+    ),
+    (
+        "when the bootstrap has this flag, its answer from the first render, kept if the request fails",
+        (REACT_PAGE,),
+        (_MAPPED, _KEEP),
+    ),
+    (
+        "`false` from the first render when the bootstrap has the flag",
+        (REACT_PAGE,),
+        (_MAPPED,),
+    ),
+    (
+        "Set when the request failed: the flag is reported off, or keeps its bootstrapped answer",
+        (REACT_PAGE,),
+        (_KEEP, _OFF, _BOTH),
+    ),
+    (
+        "unless the bootstrap has that flag: then it starts from the bootstrap's answer.",
+        (REACT_PAGE,),
+        ("starts useMultipleFlags from the entries it has, and null for the others",),
+    ),
+    (
+        "when the bootstrap has this experiment, its variant from the first render, kept if the"
+        " request fails",
+        (REACT_PAGE,),
+        (_MAPPED, _KEEP_EXP),
+    ),
+    (
+        "the control defaults are returned, or the bootstrapped assignment is kept;",
+        (REACT_PAGE,),
+        (
+            _KEEP_EXP,
+            "returns the control defaults with error set for an experiment without an entry whose request fails",
+        ),
+    ),
+    (
+        "One request per key, in parallel; a failed key is left out. Never throws; reads and fills"
+        " no cache. Each experiment key records an exposure.",
+        (REACT_PAGE,),
+        (
+            "starts every request before any answers: in parallel",
+            _LEFT_OUT,
+            _NEVER_THROWS,
+            "reads no cache: a key the client answered before is asked again",
+            "fills no cache: the client asks again for a key bootstrap() answered",
+            "ServerClient.bootstrap() assigns each experiment once and calls its onExposure once per assigned: true answer",
+        ),
+    ),
+    (
+        "`bootstrap()` assigns each experiment you name, and the server records an exposure for its"
+        " variant then, before the page is sent.",
+        (REACT_PAGE,),
+        (_EXPOSURES,),
+    ),
+    (
+        "The browser sends no assignment for a bootstrapped experiment no hook renders.",
+        (REACT_PAGE,),
+        ("sends no assign request for a bootstrapped experiment no hook renders",),
+    ),
+    (
+        "After hydration the hook asks again, and the server records a second exposure for the same"
+        " user and variant (assignment is sticky).",
+        (REACT_PAGE,),
+        (
+            _EXPOSURES,
+            "calls the Provider onExposure once after hydration under StrictMode too",
+        ),
+    ),
+    (
+        "The provider's `onExposure` is called once, after hydration; `ServerClient`'s, if you set"
+        " one, when `bootstrap()` assigns.",
+        (REACT_PAGE,),
+        (_EXPOSURES, "calls no Provider onExposure: the server render records nothing"),
+    ),
+    (
+        "That hook starts loading and asks the API, as without a bootstrap.",
+        (REACT_PAGE,),
+        ("loads a key the bootstrap does not have as without one, with no warning",),
+    ),
+    (
+        "The key is left out, so it loads as without a bootstrap.",
+        (REACT_PAGE,),
+        (_LEFT_OUT, "leaves out a key whose request times out"),
+    ),
+    (
+        "The whole bootstrap is ignored, with one warning in the browser console.",
+        (REACT_PAGE,),
+        (_OTHER_USER,),
+    ),
+    (
+        "The whole bootstrap is ignored, with one warning.",
+        (REACT_PAGE,),
+        (_WRONG_SHAPE,),
+    ),
+    (
+        "That key loads as without a bootstrap, with one warning for the provider.",
+        (REACT_PAGE,),
+        (
+            "uses the well-formed entries and skips a malformed one for its key alone",
+            "warns with the fixed text for malformed entries, counting flags and experiments",
+        ),
+    ),
+    (
+        "The hook keeps the bootstrapped answer and sets `error`.",
+        (REACT_PAGE,),
+        (_KEEP, _KEEP_EXP),
+    ),
+    (
+        "Hooks start loading and ask again. A bootstrap still passed is then another user's: it is"
+        " ignored, with its warning.",
+        (REACT_PAGE,),
+        (
+            "starts loading and asks again when the user changes, as without one",
+            "changes user before any answer: loading, then an error, never the bootstrapped answer of the user before",
+            "changes key before any answer: loading, never the bootstrapped answer of the key before",
+            "matches keys exactly, not ignoring case: Flag is not flag, Exp is not exp",
+        ),
+    ),
+    (
+        "Hooks already on the page keep their answers; hooks that mount later read the new one.",
+        (REACT_PAGE,),
+        (
+            "a hook already mounted ignores a new bootstrap prop, and a hook that mounts later reads it",
+        ),
+    ),
+    (
+        "No bootstrap: every hook starts loading, and there is no warning.",
+        (REACT_PAGE,),
+        ("takes %s as no bootstrap, with no warning",),
+    ),
+    (
+        "Each warning starts with `@controlvar/react-sdk: bootstrap`, names no user, key or value,"
+        " and is printed once per provider, in the browser only (never during a server render),",
+        (REACT_PAGE,),
+        (
+            "warns once per reason per Provider, under StrictMode and across re-renders",
+            "never warns during a server render, whatever the bootstrap",
+        ),
+    ),
+    (
+        "A bootstrap has no expiry: it is the answer at the moment the page was rendered, and each"
+        " hook replaces it with the API's answer once the browser has one.",
+        (REACT_PAGE,),
+        ("uses a bootstrap however long ago it was built: it has no expiry", _REFRESH),
+    ),
+    (
+        "A page that a shared cache serves anyway shows its bootstrapped answers until the hooks'"
+        " requests answer; if those fail, the answers stay, with `error` set.",
+        (REACT_PAGE,),
+        (_REFRESH, _KEEP),
+    ),
+    (
+        "report the flag as off with `error` set, or keep a bootstrapped answer with `error` set.",
+        (REACT_PAGE,),
+        (_BOTH,),
+    ),
+    (
+        "with `error` set, or keeps a bootstrapped assignment with `error` set.",
+        (REACT_PAGE,),
+        (_KEEP_EXP,),
+    ),
+    (
+        "`ServerClient.bootstrap()` never throws: a key it could not get is left out.",
+        (REACT_PAGE,),
+        (_NEVER_THROWS, _LEFT_OUT),
+    ),
+    (
+        "interface ExperimentationBootstrap {   // what ServerClient.bootstrap() returns; also"
+        " exported from '@controlvar/react-sdk/ssr'",
+        (REACT_PAGE,),
+        ("is exported as a type from the package and from ssr",),
+    ),
+    (
+        "On error `error` is set and the flag is reported off, or, if it started from the"
+        " Provider's `bootstrap`, keeps that answer.",
+        (REACT_README,),
+        (_KEEP, _OFF),
+    ),
+    (
+        "With a `bootstrap` that has the experiment, it starts from that assignment instead, and"
+        " keeps it, with `error` set, if its request fails.",
+        (REACT_README,),
+        (_MAPPED, _KEEP_EXP),
+    ),
+    (
+        "`ServerClient.bootstrap(keys, user)` returns the answers in the form the Provider's"
+        " `bootstrap` takes",
+        (REACT_README,),
+        (
+            "builds the bootstrap a server render then shows, and calls its own onExposure once per assigned experiment",
+        ),
+    ),
+    (
+        "Each hook whose key the bootstrap has starts from its answer (`loading: false`), then asks"
+        " the API as it always does and shows a changed answer. If that request fails, it keeps"
+        " the bootstrapped answer, with `error` set.",
+        (REACT_README,),
+        (_FIRST, _REFRESH, _KEEP),
+    ),
+    (
+        "`bootstrap()` never throws and leaves out a key it could not get; each experiment it names"
+        " records an exposure on the server, and the hook's request after hydration records"
+        " another, so name only the experiments the page renders.",
+        (REACT_README,),
+        (_NEVER_THROWS, _LEFT_OUT, _EXPOSURES),
+    ),
+    (
+        "A bootstrap for another user, or one that is not what `bootstrap()` returns, is ignored,"
+        " with one warning in the browser console.",
+        (REACT_README,),
+        (_OTHER_USER, _WRONG_SHAPE),
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "sentence, pages, tests",
+    REACT_BOOTSTRAP_SENTENCES,
+    ids=[s[:60] for s, _, _ in REACT_BOOTSTRAP_SENTENCES],
+)
+def test_each_react_bootstrap_sentence_is_on_its_page_and_held_by_a_test(
+    sentence, pages, tests
+):
+    titles = _react_test_titles()
+    unsaid = [page for page in pages if sentence not in fold(text(page))]
+    assert unsaid == [], f"no longer said there: {sentence}"
+    missing = [title for title in tests if f"'{title}'" not in titles]
+    assert missing == [], (
+        f"no jest test in sdk/react/src/__tests__ has these names: {missing}"
+    )
+
+
+def test_the_react_pages_give_the_bootstrap_a_section_of_their_own():
+    """react.md has one H2 for it; the README's short section links to it absolutely."""
+    assert _h2s(REACT_PAGE).count(BOOTSTRAP_H2) == 1
+    assert github_slug(BOOTSTRAP_H2) == BOOTSTRAP_ANCHOR
+    assert _h2s(REACT_README).count("Bootstrap") == 1
+    assert (
+        "https://github.com/Controlvar/controlvar/blob/main/docs/sdk/react.md#"
+        + BOOTSTRAP_ANCHOR
+        in text(REACT_README)
+    )
+
+
+def test_the_react_bootstrap_examples_pass_it_as_a_prop_and_import_server_code_from_ssr():
+    """The App Router example's server component imports ServerClient from the
+    ssr entry; no example writes the bootstrap into a script tag of its own."""
+    page = text(REACT_PAGE)
+    section = page.split("## " + BOOTSTRAP_H2, 1)[1].split("\n## ", 1)[0]
+    app_router = section.split("// app/checkout/page.tsx", 1)[1].split("```", 1)[0]
+    assert "import { ServerClient } from '@controlvar/react-sdk/ssr';" in app_router
+    assert "export function proxy(request: NextRequest)" in section
+    assert "dangerouslySetInnerHTML" not in section
+    # Every mention of a script tag is the advice against one.
+    mentions = section.count("<script")
+    advice = section.count("<script> tag") + section.count("<script>` tag")
+    assert mentions == advice == 3, (mentions, advice)
+    assert section.count("Never into a <script> tag of your own.") == 2
+
+
+def test_the_react_bootstrap_example_is_one_the_provider_uses_and_the_live_runner_reads():
+    """The JSON example on the page: the live runner finds it (and compares its
+    fields with the bootstrap it builds against a real API), and it is a
+    bootstrap the Provider uses whole, by the rules of src/client/bootstrap.ts."""
+    from importlib.util import module_from_spec, spec_from_file_location
+
+    spec = spec_from_file_location(
+        "run_live_contract_for_the_page",
+        REPO_ROOT / "tests" / "sdk-contract" / "live" / "run_live_contract.py",
+    )
+    assert spec is not None and spec.loader is not None
+    runner = module_from_spec(spec)
+    spec.loader.exec_module(runner)
+    assert runner.REACT_PAGE == REPO_ROOT / REACT_PAGE
+    example = runner.documented_bootstrap(text(REACT_PAGE))
+    assert example is not None
+    assert isinstance(example["userId"], str)
+    assert example["flags"] and all(
+        isinstance(body, dict) and isinstance(body.get("enabled"), bool)
+        for body in example["flags"].values()
+    )
+    assert example["experiments"] and all(
+        isinstance(body, dict)
+        and isinstance(body.get("variant_name"), str)
+        and body.get("user_id") == example["userId"]
+        for body in example["experiments"].values()
+    )
+
+
+def test_the_react_bootstrap_warnings_start_as_the_page_says():
+    source = (REPO_ROOT / "sdk/react/src/client/bootstrap.ts").read_text("utf-8")
+    starts = re.findall(r"""^\s+['"](@controlvar/react-sdk: [^'"]*)""", source, re.M)
+    starts += re.findall(r"^\s+`(@controlvar/react-sdk: [^`$]*)", source, re.M)
+    assert len(starts) == 3, starts
+    assert all(s.startswith("@controlvar/react-sdk: bootstrap") for s in starts), starts
+    assert "`@controlvar/react-sdk: bootstrap`" in text(REACT_PAGE)
+
+
+# ---------------------------------------------------------------------------
+# 6. The React Native SDK's exposure hook (#1499)
+# ---------------------------------------------------------------------------
+
+#: Where the React Native SDK's jest tests live; every test named below is in one of them.
+RN_TESTS = REPO_ROOT / "sdk" / "react-native" / "__tests__"
+RN_PAGE = "docs/sdk/react-native.md"
+RN_README = "sdk/react-native/README.md"
+
+#: Each sentence docs/sdk/react-native.md states about ``onExposure`` (as
+#: written, folded to one line), and the jest tests that fail when it stops
+#: being true. The page is in ``CLAIMS_DEFERRED``, so no claims registry binds
+#: it; this does. The README is registered, so its sentences are bound in
+#: docs/_claims/sdk/react-native/README.md.toml instead. An ``it.each`` test is
+#: named by its template.
+RN_EXPOSURE_SENTENCES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
+    (
+        "\\| 'trackBatch' \\| 'exposure'` |",
+        (
+            "is reported to onError once, with the operation exposure and the Error it threw,"
+            " never as a request failure",
+        ),
+    ),
+    (
+        "Called once each time the server enrols the user in an experiment and the answer is"
+        " not cached",
+        (
+            "is called once, with exactly the experiment key, user id, variant id and variant"
+            " name, for an assigned: true answer",
+            "a cached answer calls nothing: however often the answer is asked for, one request"
+            " and one call",
+        ),
+    ),
+    (
+        "This SDK's `Assignment` does not say whether the user was enrolled: an `assigned:"
+        " false` answer (a user the experiment did not enrol, or an experiment that is not"
+        " ACTIVE) is cached and returned as the control variant,",
+        (
+            "is not called for assigned: false (%s): the control answer comes back unchanged",
+        ),
+    ),
+    (
+        "`onExposure` is a function you give the client when you create it.",
+        (
+            "the constructor refuses %s as onExposure",
+            "onExposure %s sets no hook, and the assignment works as before",
+        ),
+    ),
+    (
+        "The client calls it once each time the server enrols the user in an experiment and"
+        " the answer did not come from the client's memory cache or from AsyncStorage: the"
+        " moment the server records the exposure.",
+        (
+            "is called once, with exactly the experiment key, user id, variant id and variant"
+            " name, for an assigned: true answer",
+            "a cached answer calls nothing: however often the answer is asked for, one request"
+            " and one call",
+            "an unexpired stored answer, as after an app restart: no request and no call",
+            "calls onExposure once when useExperiment mounts, with the four values",
+        ),
+    ),
+    (
+        "It receives an `Exposure`, a new object each time: `experimentKey`, `userId`,"
+        " `variantId` (`null` when the server sends none) and `variantName`. Nothing else:"
+        " not the user's attributes and not the variant's configuration.",
+        (
+            "is called once, with exactly the experiment key, user id, variant id and variant"
+            " name, for an assigned: true answer",
+            "passes variantId null when the server sends no variant_id",
+            "the hook's object is its own: changing it changes nothing the client keeps",
+            "has four readonly fields, in the order experimentKey, userId, variantId, variantName",
+        ),
+    ),
+    (
+        "`Exposure` is exported from `@controlvar/react-native-sdk` as a type.",
+        ("is exported as a type from the package",),
+    ),
+    (
+        "It is not called for:",
+        (
+            "a cached answer calls nothing: however often the answer is asked for, one request"
+            " and one call",
+        ),
+    ),
+    (
+        "- an answer from the client's memory cache; - an answer read from AsyncStorage: an"
+        " unexpired stored answer (after an app restart, or in a new client) or the offline"
+        " fallback, served when the request fails; - a user the experiment did not"
+        " enrol (`assigned: false`, with `reason` `'holdout'`, `'mutual_exclusion'` or"
+        " `'targeting'`), or an experiment that is not running (`'draft'`, `'paused'`,"
+        " `'completed'` or `'archived'`): the server records no exposure for them; - a call"
+        " that fails; - a feature flag.",
+        (
+            "a cached answer calls nothing: however often the answer is asked for, one request"
+            " and one call",
+            "an unexpired stored answer, as after an app restart: no request and no call",
+            "not in a new client with the default offlineFallback: the stored answer is served,"
+            " with no request",
+            "the offline fallback: an expired stored answer is returned when the request fails,"
+            " and onError gets getAssignment once",
+            "is not called for assigned: false (%s): the control answer comes back unchanged",
+            "a failed call calls nothing: %s",
+            "a call that times out calls nothing, even if the server recorded the exposure",
+            "flags never call it: evaluateFlag, isFeatureEnabled and getAllFlags",
+        ),
+    ),
+    (
+        "This SDK's `Assignment` does not say whether the user was enrolled; the hook is not"
+        " called for a user who was not.",
+        (
+            "is not called for assigned: false (%s): the control answer comes back unchanged",
+        ),
+    ),
+    (
+        "It is not called when the server does not send `assigned`; every Controlvar server"
+        " release sends it.",
+        ("is not called when assigned is %s, and the answer is still returned",),
+    ),
+    (
+        "Calls for the same user and experiment that are made while the first is still"
+        " waiting share its request, so together they call it once, and so do components that"
+        " mount `useExperiment` for the same experiment.",
+        (
+            "concurrent first calls share one request and make one call",
+            "two components using one experiment share one request and one call",
+        ),
+    ),
+    (
+        "A call made after `clearCache()` while a request is still in flight makes a second"
+        " request, and the server records a second exposure, but the hook is called once, for"
+        " the answer stored first.",
+        (
+            "clearCache() while a request is in flight: the next call makes a second request,"
+            " and only the answer stored first calls it",
+        ),
+    ),
+    (
+        "With the default `offlineFallback: true`, the answer is kept in AsyncStorage for the"
+        " cache lifetime (`cacheTtlMs`, 5 minutes by default), so on one device neither"
+        " `clearCache()` nor a new client calls it again until that stored answer expires.",
+        (
+            "after the default cache lifetime of 5 minutes, with the default offlineFallback",
+            "not after clearCache() with the default offlineFallback: the stored answer is"
+            " served, with no request",
+            "not in a new client with the default offlineFallback: the stored answer is served,"
+            " with no request",
+        ),
+    ),
+    (
+        "It is called again, and the server records another exposure, after the cache"
+        " lifetime, and, with `offlineFallback: false` or after `await clearStorage()`, after"
+        " `clearCache()` and in every new client.",
+        (
+            "after the cache lifetime (one millisecond past it, never at the boundary), when the"
+            " stored answer has expired too",
+            "after clearCache() with offlineFallback false",
+            "in a new client with offlineFallback false",
+            "after clearCache() and clearStorage()",
+            "in a new client after clearStorage()",
+        ),
+    ),
+    (
+        "It never receives one the server did not record.",
+        (
+            "is not called for assigned: false (%s): the control answer comes back unchanged",
+            "is not called when assigned is %s, and the answer is still returned",
+            "an unexpired stored answer, as after an app restart: no request and no call",
+            "the offline fallback: an expired stored answer is returned when the request fails,"
+            " and onError gets getAssignment once",
+        ),
+    ),
+    (
+        "It runs before `getAssignment` resolves, and before every call waiting on the same"
+        " request,",
+        (
+            "runs before getAssignment resolves",
+            "concurrent first calls share one request and make one call",
+        ),
+    ),
+    (
+        "The client does not wait for a Promise it returns.",
+        ("the client does not wait for a Promise the hook returns",),
+    ),
+    (
+        "If it throws, or returns a Promise that rejects, the answer is unchanged and"
+        " `onError` receives the error with the operation `'exposure'`: what your function"
+        " threw, or an `Error` wrapping it when it is not one.",
+        (
+            "changes nothing: getVariant returns the variant and getAssignment resolves to it",
+            "leaves the answer cached: a second call makes no request and calls nothing",
+            "is reported to onError once, with the operation exposure and the Error it threw,"
+            " never as a request failure",
+            "a thrown value that is not an Error is reported as an Error whose message is that"
+            " value",
+            "a thrown value that cannot be turned into a string is still reported, as an Error"
+            " that says so",
+            "an async hook that rejects is reported to onError with exposure, and the answer is"
+            " unchanged",
+            "reports the rejection of the Promise an async hook returns",
+        ),
+    ),
+    (
+        "The constructor throws `ExperimentationClient: onExposure must be a function` for any"
+        " other value; `null` and `undefined` set none.",
+        (
+            "the constructor refuses %s as onExposure",
+            "onExposure %s sets no hook, and the assignment works as before",
+        ),
+    ),
+    (
+        'In a test, a mocked `/assign` answer must include `"assigned": true`, or the hook is'
+        " not called.",
+        ("is not called when assigned is %s, and the answer is still returned",),
+    ),
+    (
+        '`{"experiment_key","user_id","variant_id","variant_name","is_control",'
+        '"configuration","assigned","reason"}`',
+        (
+            "is not called for assigned: false (%s): the control answer comes back unchanged",
+            "is not called when assigned is %s, and the answer is still returned",
+        ),
+    ),
+)
+
+
+def _rn_test_titles() -> str:
+    return "\n".join(
+        path.read_text("utf-8") for path in sorted(RN_TESTS.glob("*.test.ts*"))
+    )
+
+
+def _section(page: str, heading: str) -> str:
+    """The text under the H2 ``heading`` up to the next H2, fences included."""
+    match = re.search(
+        rf"^##[ \t]+{re.escape(heading)}[ \t]*\n(.*?)(?=^##[ \t]|\Z)",
+        text(page),
+        flags=re.S | re.M,
+    )
+    assert match, f"{page} has no H2 {heading!r}"
+    return match.group(1)
+
+
+def test_the_react_native_pages_give_the_exposure_hook_a_section_of_its_own():
+    """H-M9: an H2 "Exposure hook" (``#exposure-hook``), never in the Quick
+    start; the README links the page's section, absolutely."""
+    for page in (RN_PAGE, RN_README):
+        assert _h2s(page).count("Exposure hook") == 1, (page, _h2s(page))
+        assert "onExposure" not in _section(page, "Quick start"), page
+        assert "onExposure" in _section(page, "Exposure hook"), page
+    assert (
+        "https://github.com/Controlvar/controlvar/blob/main/docs/sdk/react-native.md#exposure-hook"
+        in text(RN_README)
+    )
+
+
+@pytest.mark.parametrize(
+    "sentence, tests",
+    RN_EXPOSURE_SENTENCES,
+    ids=[s[:60] for s, _ in RN_EXPOSURE_SENTENCES],
+)
+def test_each_react_native_exposure_sentence_is_on_its_page_and_held_by_a_test(
+    sentence, tests
+):
+    assert sentence in fold(text(RN_PAGE)), f"no longer said there: {sentence}"
+    titles = _rn_test_titles()
+    missing = [
+        title
+        for title in tests
+        if f"'{title}'" not in titles and f'"{title}"' not in titles
+    ]
+    assert missing == [], "no jest test in sdk/react-native/__tests__ has these names"
+
+
+def test_the_react_native_refusal_the_page_quotes_is_the_one_the_source_throws():
+    source = (REPO_ROOT / "sdk/react-native/src/exposure.ts").read_text("utf-8")
+    assert (
+        "ON_EXPOSURE_REFUSAL = 'ExperimentationClient: onExposure must be a function'"
+        in source
+    )
+    assert "throw new Error(ON_EXPOSURE_REFUSAL)" in source
+    assert "`ExperimentationClient: onExposure must be a function`" in text(RN_PAGE)

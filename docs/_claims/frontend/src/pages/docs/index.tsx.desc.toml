@@ -69,7 +69,7 @@ text = "Thompson Sampling, UCB1, Epsilon-Greedy (create a bandit through the API
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Full profile: store split URL experiments and preview the URL a user id hashes to. The edge router does not split traffic yet."
+text = "Full profile: give each variant its own URL. Your server or edge, or on AWS an optional CloudFront router, asks Controlvar where to send each visitor, and conversions count for the variant they saw."
 by = ["mechanism:docs-hub"]
 
 [[unit]]
@@ -229,7 +229,7 @@ text = "Who changed what through the API; no API edits or deletes an entry"
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Admin, Developer, Analyst and Viewer decide what a user can do; custom roles (full profile) are stored but not applied yet"
+text = "Admin, Developer, Analyst and Viewer decide what a user can do; in the full profile, custom roles and direct grants add to them"
 by = ["mechanism:docs-hub"]
 
 [[unit]]

@@ -1,0 +1,193 @@
+# What verifies each unit of sdk/react-native/README.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "sdk/react-native/README.md"
+
+[[unit]]
+text = "@controlvar/react-native-sdk"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Beta."
+by = ["test:backend/tests/smoke/test_sdk_release_react_native.py::test_the_react_native_package_is_first_published_at_0_1_0"]
+
+[[unit]]
+text = "This is a 0.x release: pin the exact version you test against."
+by = ["test:backend/tests/smoke/test_sdk_release_react_native.py::test_the_react_native_package_is_first_published_at_0_1_0"]
+
+[[unit]]
+text = "Feature flags, A/B experiment assignment and event tracking for React Native apps: a context provider, three hooks and a plain client, with an in-memory cache and an AsyncStorage-backed offline fallback."
+by = [
+    "test:sdk/react-native/__tests__/hooks.test.tsx::renders children",
+    "test:sdk/react-native/__tests__/hooks.test.tsx::useFlag issues GET /api/v1/feature-flags/evaluate/{key}?user_id= and reflects the response",
+    "test:sdk/react-native/__tests__/hooks.test.tsx::useExperiment POSTs /api/v1/tracking/assign with the provider attributes as context",
+    "test:sdk/react-native/__tests__/client.test.ts::sends exactly one POST /api/v1/tracking/track with the contract body",
+    "test:sdk/react-native/__tests__/client.test.ts::uses the in-memory cache on the second call",
+    "test:sdk/react-native/__tests__/client.test.ts::on API failure returns the last-known evaluation even if it has expired",
+]
+
+[[unit]]
+text = "Flags and assignments are decided by the server (sticky per user + experiment); the SDK caches the answers per user + key and never buckets locally."
+by = [
+    "test:sdk/react-native/__tests__/client.test.ts::GETs /api/v1/feature-flags/evaluate/{key}?user_id= with the contract headers and no body",
+    "test:sdk/react-native/__tests__/client.test.ts::POSTs to /api/v1/tracking/assign with the contract headers and body",
+    "test:sdk/react-native/__tests__/client.test.ts::sticky: a second call for the same user + experiment is served from cache (one fetch)",
+    "test:sdk/react-native/__tests__/client.test.ts::cache is keyed on (userId, flagKey)",
+]
+
+[[unit]]
+text = "Full documentation: the React Native SDK page."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The user's attributes are sent as context on flag evaluation and on experiment assignment, so targeting rules match as in the JavaScript SDK."
+by = [
+    "test:sdk/react-native/__tests__/hooks.test.tsx::regression #1520: useFlag puts the attributes on the wire",
+    "test:sdk/react-native/__tests__/client.test.ts::isFeatureEnabled passes the attributes on",
+    "test:sdk/react-native/__tests__/client.test.ts::sends the user attributes as `context`",
+    "test:sdk/react-native/__tests__/hooks.test.tsx::useExperiment POSTs /api/v1/tracking/assign with the provider attributes as context",
+]
+
+[[unit]]
+text = "Install"
+by = ["exempt:label"]
+
+[[unit]]
+text = "To install it, follow the React Native SDK page."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Its peer dependencies are react >= 16.8 and react-native >= 0.65; your app provides them."
+by = [
+    "test:backend/tests/smoke/test_sdk_peer_dependencies.py::test_host_library_is_a_peer_not_a_dependency",
+    "test:backend/tests/smoke/test_sdk_peer_dependencies.py::test_the_lockfile_agrees",
+]
+
+[[unit]]
+text = "@react-native-async-storage/async-storage >=1.21.0 <4 is a peer dependency too, and must be one of your app's own dependencies, because React Native links a native module only from the app's own dependencies."
+by = [
+    "test:backend/tests/smoke/test_sdk_peer_dependencies.py::test_host_library_is_a_peer_not_a_dependency",
+    "test:backend/tests/smoke/test_sdk_peer_dependencies.py::test_the_lockfile_agrees",
+    "test:backend/tests/unit/scripts/test_check_react_native_app.py::test_every_leg_passes_and_runs_the_documented_install",
+]
+
+[[unit]]
+text = "Majors 1, 2 and 3 are supported."
+by = [
+    "test:sdk/react-native/__tests__/storage.test.ts::removes only the SDK keys, with multiRemove",
+    "test:sdk/react-native/__tests__/storage.test.ts::regression: removes only the SDK keys, with removeMany",
+    "test:backend/tests/unit/scripts/test_check_react_native_app.py::test_one_asyncstorage_version_per_major_the_peer_range_allows",
+]
+
+[[unit]]
+text = "iOS: cd ios && pod install, for AsyncStorage's native module."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It ships TypeScript source, which Metro compiles; the type declarations of md5, which it imports, come with it."
+by = ["test:backend/tests/smoke/test_sdk_release_react_native.py::test_the_package_ships_its_typescript_source_and_the_md5_types"]
+
+[[unit]]
+text = "Quick start"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Exposure hook"
+by = ["exempt:label"]
+
+[[unit]]
+text = "onExposure, a function you give ExperimentationClient when you create it, is called once each time the server enrols the user in an experiment and the answer did not come from the client's memory cache or from AsyncStorage: the moment the server records the exposure."
+by = [
+    "test:sdk/react-native/__tests__/exposure.test.tsx::is called once, with exactly the experiment key, user id, variant id and variant name, for an assigned: true answer",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::a cached answer calls nothing: however often the answer is asked for, one request and one call",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::an unexpired stored answer, as after an app restart: no request and no call",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::is not called for assigned: false (%s): the control answer comes back unchanged",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::the constructor refuses %s as onExposure",
+    "test:backend/tests/integration/services/test_assignment_service_coverage.py::TestAssignUser::test_track_exposure_called_on_existing_assignment",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+]
+
+[[unit]]
+text = "It receives an Exposure: experimentKey, userId, variantId (null when the server sends none) and variantName."
+by = [
+    "test:sdk/react-native/__tests__/exposure.test.tsx::is called once, with exactly the experiment key, user id, variant id and variant name, for an assigned: true answer",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::passes variantId null when the server sends no variant_id",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::has four readonly fields, in the order experimentKey, userId, variantId, variantName",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::is exported as a type from the package",
+]
+
+[[unit]]
+text = "It is not called for an answer from the client's memory cache or from AsyncStorage, a user the experiment did not enrol (assigned: false), a call that fails or a feature flag."
+by = [
+    "test:sdk/react-native/__tests__/exposure.test.tsx::a cached answer calls nothing: however often the answer is asked for, one request and one call",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::an unexpired stored answer, as after an app restart: no request and no call",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::the offline fallback: an expired stored answer is returned when the request fails, and onError gets getAssignment once",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::is not called for assigned: false (%s): the control answer comes back unchanged",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::a failed call calls nothing: %s",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::a call that times out calls nothing, even if the server recorded the exposure",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::flags never call it: evaluateFlag, isFeatureEnabled and getAllFlags",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_an_answer_for_an_experiment_that_is_not_running_records_nothing",
+]
+
+[[unit]]
+text = "With the default offlineFallback, the answer stays in AsyncStorage for the cache lifetime, so neither clearCache() nor a new client calls it again until that answer expires; with offlineFallback: false, or after clearStorage(), both do."
+by = [
+    "test:sdk/react-native/__tests__/exposure.test.tsx::not after clearCache() with the default offlineFallback: the stored answer is served, with no request",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::not in a new client with the default offlineFallback: the stored answer is served, with no request",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::after the cache lifetime (one millisecond past it, never at the boundary), when the stored answer has expired too",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::after clearCache() with offlineFallback false",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::in a new client with offlineFallback false",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::after clearCache() and clearStorage()",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::in a new client after clearStorage()",
+]
+
+[[unit]]
+text = "If it throws, or returns a Promise that rejects, the answer is unchanged and onError receives the error with the operation 'exposure'."
+by = [
+    "test:sdk/react-native/__tests__/exposure.test.tsx::changes nothing: getVariant returns the variant and getAssignment resolves to it",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::leaves the answer cached: a second call makes no request and calls nothing",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::is reported to onError once, with the operation exposure and the Error it threw, never as a request failure",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::a thrown value that is not an Error is reported as an Error whose message is that value",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::an async hook that rejects is reported to onError with exposure, and the answer is unchanged",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::reports the rejection of the Promise an async hook returns",
+]
+
+[[unit]]
+text = "Full details: Exposure hook."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Testing with Jest"
+by = ["exempt:label"]
+
+[[unit]]
+text = "React Native's Jest preset does not transform code under node_modules, and this package is TypeScript source, so add it to the preset's transformIgnorePatterns:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Map AsyncStorage to an in-memory mock as well: the Jest setup on the SDK page shows one."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Development"
+by = ["exempt:label"]
+
+[[unit]]
+text = "In a clone of this repository, in sdk/react-native: npm ci, then npm test (Jest, with fetch and AsyncStorage mocked), npm run typecheck (the source) and npm run typecheck:tests (the tests and mocks)."
+by = ["test:backend/tests/smoke/test_sdk_release_react_native.py::test_the_react_native_leg_runs_both_of_its_type_checks"]
+
+[[unit]]
+text = "The SDK Unit Tests workflow runs all three on every pull request that changes sdk/react-native."
+by = [
+    "test:backend/tests/smoke/test_sdk_release_react_native.py::test_the_react_native_leg_runs_both_of_its_type_checks",
+    "test:backend/tests/unit/infrastructure/test_sdk_unit_tests_workflow.py::test_every_sdk_directory_runs_somewhere",
+]
+
+[[unit]]
+text = "It also installs the packed package into a TypeScript React Native app on each AsyncStorage major, which must keep its own AsyncStorage and type-check the package (scripts/check_react_native_app.py)."
+by = [
+    "test:backend/tests/smoke/test_sdk_release_react_native.py::test_the_react_native_leg_packs_the_sdk_and_runs_the_app_check",
+    "test:backend/tests/smoke/test_sdk_release_react_native.py::test_the_unit_tests_step_packs_then_checks",
+    "test:backend/tests/unit/scripts/test_check_react_native_app.py::test_an_install_that_moves_the_apps_asyncstorage_fails_those_legs",
+    "test:backend/tests/unit/scripts/test_check_react_native_app.py::test_tsc_failing_under_3x_fails_that_leg_only",
+]

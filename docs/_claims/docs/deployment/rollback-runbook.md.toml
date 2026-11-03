@@ -338,6 +338,31 @@ text = "Rollback does not check its target: that is this command."
 by = ["test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_it_does_not_check_whether_the_target_runs_migrations_on_start"]
 
 [[unit]]
+text = "Where the API migrates on start (Docker Compose, and the Helm chart's init container), start the older image only after the database has been downgraded to the heads of the release you go back to, with the newer release still running: its core head, and on a full install its modules head too, one alembic downgrade <id> for each."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts",
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_previous_release_starts_only_after_the_downgrade",
+]
+
+[[unit]]
+text = "alembic heads, run with the older image, prints them."
+by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts"]
+
+[[unit]]
+text = "Without that the older image refuses to start with this database was migrated by a newer Controlvar release than this image."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated",
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_previous_release_starts_only_after_the_downgrade",
+]
+
+[[unit]]
+text = "Each migration in between runs its downgrade on the way; from a release that carries 7b6b4b4fe246 (its own down_revision is 85dd4796bb8b), that includes 7b6b4b4fe246's, which drops rollout_stages.started_at (Step 2 says what each downgrade loses)."
+by = [
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_previous_release_starts_only_after_the_downgrade",
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_downgrade_drops_the_column_only_and_an_upgrade_sets_it_from_updated_at",
+]
+
+[[unit]]
 text = "Rolling back past segment targeting"
 by = ["exempt:label"]
 
@@ -1315,12 +1340,28 @@ by = [
 ]
 
 [[unit]]
-text = "4c2c09a2b3e8 to undo 607c51a59bf5."
+text = "85dd4796bb8b to undo 7b6b4b4fe246."
 by = ["test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch"]
 
 [[unit]]
-text = "That downgrade drops feature_flags.value_type, on_value and off_value, each flag's value type and its two values (nothing rebuilds them), so it refuses while any flag is a string, number or json flag: it names those flags and changes nothing."
+text = "That downgrade drops rollout_stages.started_at, the time each rollout stage started (nothing restores the exact values: an upgrade afterwards sets each stage in progress from its updated_at, which an edit may have moved, so a stage edited in the meantime restarts its clock from the edit), and it does not refuse, so it needs the Engineering Lead's approval at the moment it runs when any stage is IN_PROGRESS."
 by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_downgrade_drops_the_column_only_and_an_upgrade_sets_it_from_updated_at",
+]
+
+[[unit]]
+text = "A downgrade to 607c51a59bf5 also undoes 85dd4796bb8b, which drops the table event_dedup_keys, every stored event_id, and no event; until the API is rolled back, the release still serving answers 500 to an event that carries an event_id."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m5_the_downgrade_removes_exactly_the_table_online",
+    "test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_after_the_downgrade_this_release_refuses_only_events_with_an_event_id",
+]
+
+[[unit]]
+text = "Going one further, to 4c2c09a2b3e8, also undoes 607c51a59bf5, which drops feature_flags.value_type, on_value and off_value, each flag's value type and its two values (nothing rebuilds them), so it refuses while any flag is a string, number or json flag: it names those flags and changes nothing."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_the_downgrade_refuses_while_a_value_flag_exists",
     "test:backend/tests/integration/database/test_feature_flag_value_columns_migration.py::test_downgrade_removes_the_columns_and_the_check_and_nothing_else",
 ]
@@ -1333,7 +1374,7 @@ by = [
 ]
 
 [[unit]]
-text = "Going one further, to 37dcb2969766, also undoes 4c2c09a2b3e8, which changes no table: safety_rollback_records.safety_config_id stays nullable and its foreign key stays ON DELETE SET NULL, which the release you roll back to runs against unchanged."
+text = "Going further, to 37dcb2969766, also undoes 4c2c09a2b3e8, which changes no table: safety_rollback_records.safety_config_id stays nullable and its foreign key stays ON DELETE SET NULL, which the release you roll back to runs against unchanged."
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_rollback_record_config_link_migration.py::test_the_downgrade_changes_nothing_and_a_rollback_still_succeeds",
@@ -1341,7 +1382,7 @@ by = [
 ]
 
 [[unit]]
-text = "Going further, to d29a479daafe, also undoes 37dcb2969766, which drops the table segment_members, the members of every id-list segment (nothing rebuilds them), and the column segments.kind, so it refuses while segment_members has any row: it prints the row count and changes nothing."
+text = "Going further still, to d29a479daafe, also undoes 37dcb2969766, which drops the table segment_members, the members of every id-list segment (nothing rebuilds them), and the column segments.kind, so it refuses while segment_members has any row: it prints the row count and changes nothing."
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_segment_members_migration.py",
@@ -1355,14 +1396,14 @@ by = [
 ]
 
 [[unit]]
-text = "Going further still, to 806901fb7735, also undoes d29a479daafe, which drops the table holdout_population with every recorded holdout membership (nothing rebuilds it) and three global_holdouts columns: when that table has rows, a downgrade across d29a479daafe needs the Engineering Lead's approval at the moment it runs."
+text = "Further again, to 806901fb7735, also undoes d29a479daafe, which drops the table holdout_population with every recorded holdout membership (nothing rebuilds it) and three global_holdouts columns: when that table has rows, a downgrade across d29a479daafe needs the Engineering Lead's approval at the moment it runs."
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_holdout_population_migration.py::test_downgrade_drops_the_table_index_and_columns_and_keeps_the_deactivation",
 ]
 
 [[unit]]
-text = "Further again, to 1ab99332f0ba, also undoes 806901fb7735, which drops every experiment's stored correction method and confidence level, and an upgrade afterwards restores the defaults (Benjamini-Hochberg, 0.95), not the choices: run it only with someone who has agreed to lose them."
+text = "Further still, to 1ab99332f0ba, also undoes 806901fb7735, which drops every experiment's stored correction method and confidence level, and an upgrade afterwards restores the defaults (Benjamini-Hochberg, 0.95), not the choices: run it only with someone who has agreed to lose them."
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_experiment_correction_settings_migration.py::test_downgrade_removes_the_columns_and_the_checks_and_nothing_else",

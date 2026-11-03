@@ -13,19 +13,22 @@ same user carrying the scope grants nothing.  Scope membership is
 after split, strip and dropping empties.
 
 The scope takes effect only while the key's owner can change feature flags
-(``check_permission(owner, FEATURE_FLAG, UPDATE)``: ADMIN, DEVELOPER or a
-superuser).  That is also who can change experiments
-(``backend/tests/unit/core/test_flag_and_experiment_update_roles.py`` pins
-the two equal for every role), which batch assignment relies on.  It is
-checked on every request, so it follows role changes.  The owner is the
-presented key's own ``user_id``, read from the database, not whatever
-``get_api_key`` returned.
+(:func:`may_use_server_key`, which is ``check_permission(owner, FEATURE_FLAG,
+UPDATE)``: ADMIN, DEVELOPER, a superuser, or in the full profile a custom role
+or direct grant of it), checked on every request, so it follows role changes
+and a grant revoked or expired.  The owner is the presented key's own
+``user_id``, read from the database, not whatever ``get_api_key`` returned.
 
 Refusals: no or unknown key -> 401 (from ``get_api_key``); a valid key without
-the scope -> 403; a scoped key whose owner cannot change feature flags -> 403.
-The two 403 texts are the same on every route.
+the scope -> 403 (:data:`MISSING_SCOPE_DETAIL`); a scoped key whose owner
+cannot change feature flags -> 403 (:data:`OWNER_ROLE_DETAIL`); these two
+texts are the same on every route.  Batch assignment
+(:func:`require_batch_assign_key`) also checks that the owner can change
+experiments (``check_permission(owner, EXPERIMENT, UPDATE)``) and refuses with
+its own 403 (:data:`OWNER_EXPERIMENT_DETAIL`) before any assignment is
+written: three 403 texts in all.
 
-:func:`presented_key_is_server_key` applies the same two rules without
+:func:`presented_key_is_server_key` applies the scope and owner rules without
 refusing anything: the error report routes (``POST /api/v1/tracking/errors``
 and ``/errors/batch``) accept every valid key and use it only to decide
 whether a report counts toward automatic rollback.
@@ -51,9 +54,30 @@ MISSING_SCOPE_DETAIL = (
 
 #: The 403 detail for a scoped key whose owner cannot change feature flags.
 OWNER_ROLE_DETAIL = (
-    "This key's owner can no longer change feature flags or experiments, so the "
-    "key is refused for server-side SDK use."
+    "This key's owner can no longer change feature flags, so the key is refused "
+    "for server-side SDK use."
 )
+
+#: The 403 detail of batch assignment for a scoped key whose owner can change
+#: feature flags but not experiments. Nobody is assigned.
+OWNER_EXPERIMENT_DETAIL = (
+    "This key's owner cannot change experiments, so the key cannot assign users "
+    "in a batch, and nobody was assigned. Use a server-side key whose owner can "
+    "change experiments."
+)
+
+
+def may_use_server_key(user: User) -> bool:
+    """Whether *user* may own a server-side key (the ``sdk:ruleset`` scope).
+
+    The one rule for creating such a key, for ``GET /sdk/ruleset``, ``POST
+    /tracking/evaluations``, batch assignment and whether an error report
+    counts toward rollback: the user can change feature flags. In the full
+    profile a custom role or direct grant of ``feature_flag (update)`` gives
+    that too; for the four built-in roles it is ADMIN and DEVELOPER (and a
+    superuser), as before custom roles took effect.
+    """
+    return check_permission(user, ResourceType.FEATURE_FLAG, Action.UPDATE)
 
 
 def scope_refusal(db: Session, api_key: APIKey) -> Optional[str]:
@@ -66,12 +90,23 @@ def scope_refusal(db: Session, api_key: APIKey) -> Optional[str]:
     if not has_scope(api_key.scopes, SDK_RULESET_SCOPE):
         return MISSING_SCOPE_DETAIL
     owner = db.query(User).filter(User.id == api_key.user_id).first()
-    if (
-        owner is None
-        or not owner.is_active
-        or not check_permission(owner, ResourceType.FEATURE_FLAG, Action.UPDATE)
-    ):
+    if owner is None or not owner.is_active or not may_use_server_key(owner):
         return OWNER_ROLE_DETAIL
+    return None
+
+
+def batch_assign_refusal(db: Session, api_key: APIKey) -> Optional[str]:
+    """Why ``api_key``'s owner may not assign users in a batch, or ``None``.
+
+    Asked after :func:`scope_refusal` has let the key through. The owner is
+    read from the database by the key's own ``user_id``, as there, and must
+    be able to change experiments (:data:`OWNER_EXPERIMENT_DETAIL`).
+    """
+    owner = db.query(User).filter(User.id == api_key.user_id).first()
+    if owner is None or not check_permission(
+        owner, ResourceType.EXPERIMENT, Action.UPDATE
+    ):
+        return OWNER_EXPERIMENT_DETAIL
     return None
 
 
@@ -117,6 +152,23 @@ def require_sdk_ruleset_key(
             headers={"WWW-Authenticate": "APIKey"},
         )
     refusal = scope_refusal(db, api_key)
+    if refusal is not None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=refusal)
+    return api_key
+
+
+def require_batch_assign_key(
+    db: Session = Depends(deps.get_db),
+    api_key: APIKey = Depends(require_sdk_ruleset_key),
+) -> APIKey:
+    """The presented key, if it may assign users in a batch.
+
+    :func:`require_sdk_ruleset_key` first (its 401s and two 403s), then the
+    owner must be able to change experiments: otherwise a 403 with
+    :data:`OWNER_EXPERIMENT_DETAIL`, before the route reads its experiment or
+    writes any assignment.
+    """
+    refusal = batch_assign_refusal(db, api_key)
     if refusal is not None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=refusal)
     return api_key

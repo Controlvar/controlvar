@@ -96,7 +96,7 @@ test.describe("Journey: the global holdout", () => {
       try {
         await page.goto("/experiments/holdouts");
         await expect(page.getByTestId("holdouts-refused")).toHaveText(
-          "Seeing the global holdout requires the ADMIN or DEVELOPER role.",
+          "Seeing the global holdout needs permission to create experiments, which the ADMIN and DEVELOPER roles have.",
           { timeout: 15_000 },
         );
         await expect(page.getByTestId("holdout-scope-note")).toBeVisible();

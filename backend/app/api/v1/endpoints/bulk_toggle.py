@@ -222,8 +222,10 @@ def get_flag_history(
     """
     Returns all audit log entries for a specific feature flag.
     Ordered by timestamp descending (most recent first).
-    Superusers, ADMIN and ANALYST see every entry; DEVELOPER and VIEWER see
-    only the entries they made, and `total_changes` counts only those.
+    Superusers, ADMIN and ANALYST, and in the full profile anyone whose custom
+    role or direct grant gives audit_log (read), see other users' entries too.
+    Anyone else sees only the entries they made, and `total_changes` counts
+    only those.
     """
     flag = db.query(FeatureFlag).filter(FeatureFlag.id == flag_id).first()
     if not flag:
@@ -275,8 +277,9 @@ async def stream_audit_logs(
     Returns recent audit log entries as Server-Sent Events.
     Useful for real-time audit dashboards.
     Streams up to `limit` entries (default 50, max 100) then closes.
-    Superusers, ADMIN and ANALYST receive every entry; DEVELOPER and VIEWER
-    receive only their own.
+    Superusers, ADMIN and ANALYST, and in the full profile anyone whose custom
+    role or direct grant gives audit_log (read), receive other users' entries
+    too. Anyone else receives only their own.
     """
     # Resolved in the handler, before the response starts, not inside the
     # generator.

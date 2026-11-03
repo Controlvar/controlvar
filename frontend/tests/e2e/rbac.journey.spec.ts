@@ -229,14 +229,16 @@ test.describe("Journey: RBAC", () => {
         await expect(page.getByTestId("experiment-manage")).toHaveCount(0);
         const note = page.getByTestId("experiment-role-note");
         await expect(note).toBeVisible();
-        await expect(note).toContainText("requires the ADMIN or DEVELOPER role");
+        await expect(note).toContainText(
+          "needs permission to change experiments, which the ADMIN and DEVELOPER roles have",
+        );
         await expect(note).toContainText(`you are ${TEST_USERS[role].role}.`);
 
         // The seeded experiment is in no group, which the experiment itself
         // says; the holdout needs the role.
         await expect(page.getByTestId("experiment-exclusion-group")).toHaveText("None");
         await expect(page.getByTestId("experiment-holdout-refused")).toHaveText(
-          "Seeing this requires the ADMIN or DEVELOPER role.",
+          "Seeing this needs permission to create experiments, which the ADMIN and DEVELOPER roles have.",
         );
         await expect(page.getByTestId("experiment-holdout")).toHaveCount(0);
 
@@ -274,7 +276,7 @@ test.describe("Journey: RBAC", () => {
         const listNote = page.getByTestId("flags-role-note");
         await expect(listNote).toBeVisible({ timeout: 15_000 });
         await expect(listNote).toHaveText(
-          "Feature flags are created and changed by the ADMIN and DEVELOPER roles.",
+          "Feature flags are created and changed with the feature flag permissions, which the ADMIN and DEVELOPER roles have.",
         );
         await expect(flags.listError).toHaveCount(0);
         await expect(flags.flagList).toBeVisible({ timeout: 15_000 });
@@ -290,7 +292,7 @@ test.describe("Journey: RBAC", () => {
         const newNote = page.getByTestId("flag-new-role-note");
         await expect(newNote).toBeVisible({ timeout: 15_000 });
         await expect(newNote).toHaveText(
-          "Your role can view feature flags but not create them. Feature flags are created and changed by the ADMIN and DEVELOPER roles.",
+          "Your role can view feature flags but not create them. Feature flags are created and changed with the feature flag permissions, which the ADMIN and DEVELOPER roles have.",
         );
         await expect(page.getByRole("link", { name: "Back to feature flags" })).toBeVisible();
         await expect(flags.submitButton).toHaveCount(0);
@@ -302,7 +304,7 @@ test.describe("Journey: RBAC", () => {
         await expect(flags.detail).toBeVisible({ timeout: 15_000 });
         await expect(flags.detailKey).toHaveText(seededKey);
         await expect(page.getByTestId("flag-role-note")).toHaveText(
-          "Feature flags are created and changed by the ADMIN and DEVELOPER roles.",
+          "Feature flags are created and changed with the feature flag permissions, which the ADMIN and DEVELOPER roles have.",
         );
         await expect(flags.detailToggle).toHaveCount(0);
         await expect(flags.rolloutPercentageInput).toBeDisabled();

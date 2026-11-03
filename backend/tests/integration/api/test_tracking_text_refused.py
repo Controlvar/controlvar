@@ -152,6 +152,7 @@ def _written(db_session) -> Tuple[int, ...]:
             conn.execute(text(f"SELECT count(*) FROM {table}")).scalar()
             for table in (
                 "events",
+                "event_dedup_keys",
                 "assignments",
                 "error_logs",
                 "sdk_evaluation_flag_counts",
@@ -279,6 +280,17 @@ CASES: List[Tuple[str, str, Body, str]] = [
         },
         "metadata",
     ),
+    (
+        "track-event_id",
+        "/api/v1/tracking/track",
+        lambda e, f, s: {
+            "event_type": "click",
+            "user_id": _user(),
+            "experiment_key": e.key,
+            "event_id": s,
+        },
+        "event_id",
+    ),
     # /tracking/events
     (
         "events-user_id",
@@ -340,6 +352,18 @@ CASES: List[Tuple[str, str, Body, str]] = [
         },
         "properties",
     ),
+    (
+        "events-event_id",
+        "/api/v1/tracking/events",
+        lambda e, f, s: {
+            "event_type": "click",
+            "event_name": "click",
+            "user_id": _user(),
+            "experiment_id": str(e.id),
+            "event_id": s,
+        },
+        "event_id",
+    ),
     # /tracking/batch
     (
         "batch-user_id",
@@ -363,6 +387,21 @@ CASES: List[Tuple[str, str, Body, str]] = [
             ]
         },
         "metadata",
+    ),
+    (
+        "batch-event_id",
+        "/api/v1/tracking/batch",
+        lambda e, f, s: {
+            "events": [
+                {
+                    "event_type": "click",
+                    "user_id": _user(),
+                    "experiment_key": e.key,
+                    "event_id": s,
+                }
+            ]
+        },
+        "event_id",
     ),
     # /tracking/errors
     (

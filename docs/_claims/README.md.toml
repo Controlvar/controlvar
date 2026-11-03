@@ -470,6 +470,10 @@ text = "The SDK guide says how, and what CI runs for each one."
 by = ["exempt:navigation"]
 
 [[unit]]
+text = "sdk/mcp holds the Controlvar MCP server, which is not an SDK and is not yet published; it is meant for an AI assistant such as Claude Code to start on your computer, to read your instance's feature flags, experiments and results with your API key."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_sdk_mcp_is_the_mcp_server_and_not_an_sdk"]
+
+[[unit]]
 text = "Documentation"
 by = ["exempt:label"]
 
@@ -571,18 +575,21 @@ text = "Module | What it adds"
 by = ["exempt:label"]
 
 [[unit]]
-text = "workspaces | Group users into teams, with workspace roles and email invites. Grouping only: access to experiments and flags is by platform role"
+text = "workspaces | Group users into teams, with workspace roles and email invites. Grouping only: workspace roles play no part in access to experiments and flags"
 by = [
     "test:modules/backend/tests/integration/api/test_audit_module_events.py::test_changing_a_members_workspace_role_writes_one_role_assign",
     "test:modules/backend/tests/integration/api/test_workspace_invite_binding.py::test_the_invited_address_joins_with_the_invited_role",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_only_the_built_in_role",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_grants_only_through_the_capability",
+    "test:modules/backend/tests/integration/api/test_workspace_roles_scope.py::test_the_platform_role_not_the_workspace_decides",
 ]
 
 [[unit]]
-text = "rbac | Roles beyond the built-in four, and permissions granted directly to a user. Both are recorded, but they do not change what anyone can do yet: each user's built-in role decides (#891)"
+text = "rbac | Roles beyond the built-in four, and permissions granted directly to a user, optionally until a date. Both add to what the user's built-in role allows"
 by = [
     "test:modules/backend/tests/unit/services/test_rbac_service.py::TestCreateCustomRole::test_creates_role_with_name",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_only_the_built_in_role",
+    "test:backend/tests/unit/core/test_built_in_roles_decide.py::test_a_custom_role_or_a_grant_adds_only_grantable_pairs",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:modules/backend/tests/integration/rbac/test_rbac_provider.py::test_a_grant_yields_its_pairs_only_when_activated_active_and_unexpired",
 ]
 
 [[unit]]
@@ -638,11 +645,11 @@ by = [
 ]
 
 [[unit]]
-text = "split_url | Server-side URL splitting at the edge. The edge router has no configuration source in this release, so it does not split traffic yet; experiments, their URL configuration and the preview work (#393)"
+text = "split_url | Split URL experiments: each variant is its own URL. Your server or edge asks the API where to send each visitor (on AWS an optional CloudFront router can). The AWS installer installs the core profile, so it does not include them"
 by = [
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerPassThrough::test_no_config_header_passes_through",
-    "test:modules/backend/tests/unit/test_front_door_module_facts.py::test_the_split_url_construct_sets_no_router_configuration",
-    "test:modules/backend/tests/integration/api/test_split_url_api.py::TestSplitUrlPreview::test_admin_can_preview_split_url_assignment",
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_a_split_url_experiment_splits_its_visitors",
+    "test:modules/backend/tests/integration/split_url/test_split_url_router_e2e.py::test_a_split_url_experiment_splits_its_visitors_through_the_router",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_full_profile_stops_before_the_deploy",
 ]
 
 [[unit]]

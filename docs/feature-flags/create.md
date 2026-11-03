@@ -11,7 +11,9 @@ written against the stack from the [Quick Start](../getting-started/quick-start.
 - **A running stack.** [Quick Start](../getting-started/quick-start.md) Step 1 starts one
   on `localhost`. On your own deployment, use its URL wherever this page says
   `localhost:8000` or `localhost:3000`.
-- **A user account with the ADMIN or DEVELOPER role.** Creating, changing and turning a
+- **A user account that may create and change flags:** one with the ADMIN or DEVELOPER role,
+  or in the full profile one whose custom role or direct grant gives `feature_flag (create)`
+  and `feature_flag (update)`. Creating, changing and turning a
   flag on all take a user login. An API key can't do them (the API answers `401`). A
   superuser creates accounts under **Admin → Users**. The examples below use the demo
   administrator, `admin@demo.com`.
@@ -248,7 +250,11 @@ update, and nothing is saved. That is:
 - an unknown operator or logical operator (`and`, `or` or `not`, in any case);
 - a value the operator cannot use (`"abc"` for `greater_than`, `"not-a-version"` for
   `semver_gte`), a `regex` pattern RE2 refuses, and a list operator with more than 1,000
-  values;
+  values; a `before` or `after` value that cannot be read as a date, an `array_length` value
+  that cannot be read as a whole number (or `between` without whole-number `min` and `max`), a
+  native `gt`, `gte`, `lt` or `lte` value that cannot be read as a number, a `geo_distance`
+  radius that is missing, below 0 or not a number, and a comparison on a dashboard
+  `geo_within_radius` rule, which the dashboard shape does not read;
 - a `rollout_percentage`, top-level or on a native rule, that is not an integer from 0 to
   100 (`100.0` is accepted; `33.5`, `true` and `"50"` are not), or an `id` that is not text
   of 1 to 100 characters.
@@ -655,10 +661,11 @@ its on value.
 Safety monitoring computes a flag's error rate from `error_logs` rows divided by its
 evaluations. The errors your applications see behind a flag (crashes, failed requests)
 count toward it when they are reported with a server-side key: an API key with the
-`sdk:ruleset` scope, created by a user who can change feature flags (ADMIN, DEVELOPER or a
-superuser). A browser or mobile app sends its errors to your server, and the server forwards
-them with that key. Keep the key on the server: it can also download every flag's targeting
-rules.
+`sdk:ruleset` scope, created by a user who can change feature flags (ADMIN, DEVELOPER, a
+superuser, or in the full profile anyone whose custom role or direct grant gives
+`feature_flag (update)`). A browser or mobile app sends its errors to your server, and the
+server forwards them with that key. Keep the key on the server: it can also download every
+flag's targeting rules.
 
 ```{.bash exec}
 SERVER_KEY=$(curl -s -X POST localhost:8000/api/v1/api-keys \

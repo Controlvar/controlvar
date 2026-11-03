@@ -1694,3 +1694,382 @@ def test_the_npm_publish_job_checks_node_and_npm(
         _step("npm", "Node and npm are the pinned versions"), {}, tmp_path, tmp_path
     )
     assert (result.returncode == 0) is ok, result.stdout + result.stderr
+
+
+# --------------------------------------------------------------------------
+# sdk/mcp, the MCP server: four npm-build steps of its own. A blocking audit
+# of its production closure (here, not on pull requests), its shrinkwrap, the
+# shrinkwrap in the packed bytes, and the installed server answering.
+# --------------------------------------------------------------------------
+
+MCP_ONLY = "needs.resolve.outputs.sdk == 'mcp'"
+MCP_AUDIT = "The MCP server's production dependencies have no high advisory"
+MCP_SHRINKWRAP = "Shrinkwrap the MCP server"
+MCP_PACKED = "The packed MCP server carries its shrinkwrap"
+MCP_CONSUMER = "The installed MCP server answers initialize, with no dev dependency"
+MCP_STEPS = (MCP_AUDIT, MCP_SHRINKWRAP, MCP_PACKED, MCP_CONSUMER)
+#: Not one of the four: every npm SDK's packed README is checked by this
+#: step, unconditioned, under its rule set; sdk/mcp's is I-README.
+MCP_README = "Check the packed README"
+
+
+def _npm_build_names() -> list[str]:
+    return [str(step.get("name") or step.get("uses")) for step in _npm_build_steps()]
+
+
+def test_the_mcp_release_audit_is_blocking() -> None:
+    """The MCP server's production closure is audited at release, and the
+    audit can fail the release: present, scoped to sdk/mcp, not
+    `continue-on-error`, and nothing in its command that swallows a failure."""
+    found = [
+        step
+        for step in _npm_build_steps()
+        if "npm audit --omit=dev --audit-level=high" in _run_of(step)
+    ]
+    assert len(found) == 1, "the sdk/mcp release audit step is missing or may fail open"
+    step = found[0]
+    assert step.get("name") == MCP_AUDIT
+    assert step.get("if") == MCP_ONLY
+    assert step.get("working-directory") == "sdk/mcp"
+    assert "continue-on-error" not in step, (
+        "the sdk/mcp release audit step is missing or may fail open"
+    )
+    assert _run_of(step).strip() == "npm audit --omit=dev --audit-level=high", (
+        "the sdk/mcp release audit step is missing or may fail open"
+    )
+
+
+def test_the_mcp_steps_run_in_order_and_only_for_mcp() -> None:
+    names = _npm_build_names()
+    order = [
+        names.index("Install, test and build"),
+        names.index(MCP_AUDIT),
+        names.index(MCP_SHRINKWRAP),
+        names.index("Pack"),
+        names.index(MCP_PACKED),
+        names.index(MCP_README),
+        names.index("A consumer can install the tarball"),
+        names.index(MCP_CONSUMER),
+        names.index("Record the tarball"),
+    ]
+    assert order == sorted(order), order
+    for name in MCP_STEPS:
+        step = _step("npm-build", name)
+        assert step.get("if") == MCP_ONLY, name
+        assert "continue-on-error" not in step, name
+        assert "|| true" not in _run_of(step), name
+    # No other npm-build step is conditioned on one SDK, except the React
+    # Native app type-check (its own test pins that step).
+    others = [
+        name
+        for step, name in zip(_npm_build_steps(), names)
+        if "outputs.sdk" in str(step.get("if", ""))
+        and name not in MCP_STEPS
+        and name != "A TypeScript app type-checks the packed SDK"
+    ]
+    assert others == []
+
+
+def test_the_packed_mcp_readme_is_checked_from_the_tarball() -> None:
+    step = _step("npm-build", MCP_README)
+    assert step.get("env") == {
+        "SDK": "${{ needs.resolve.outputs.sdk }}",
+        "TGZ": "${{ steps.pack.outputs.tgz }}",
+    }
+    assert (
+        _run_of(step).strip()
+        == 'python3 scripts/check_packaged_readme.py --sdk "$SDK" "$TGZ"'
+    )
+
+
+def _readme_tarball(path: Path, readme: str, version: str = "0.1.0") -> None:
+    import io
+    import json
+    import tarfile
+
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
+        for name, data in (
+            ("package/package.json", json.dumps({"version": version}).encode()),
+            ("package/README.md", readme.encode()),
+        ):
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            archive.addfile(info, io.BytesIO(data))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(buffer.getvalue())
+
+
+@pytest.mark.parametrize(
+    "plant, refusal",
+    [
+        (None, None),
+        (
+            "Run `npm install @controlvar/mcp-server`.",
+            "installs this repository's package from a registry",
+        ),
+        ("This is version 0.1.0.", "quotes its own version 0.1.0"),
+    ],
+    ids=["the-tree-readme", "a-registry-install", "its-own-version"],
+)
+def test_the_packed_readme_step_on_the_mcp_readme(
+    plant: str | None, refusal: str | None, tmp_path: Path
+) -> None:
+    """The step, run as written, on a tarball holding the tree's README, and
+    on the same README with one planted line."""
+    readme = (SDK_DIR / "mcp" / "README.md").read_text(encoding="utf-8")
+    if plant is not None:
+        planted = readme.replace(
+            "## Configuration\n", f"## Configuration\n\n{plant}\n", 1
+        )
+        assert planted != readme
+        readme = planted
+    tgz = tmp_path / "pack" / "controlvar-mcp-server-0.1.0.tgz"
+    _readme_tarball(tgz, readme)
+    result = _run_step(
+        _step("npm-build", MCP_README),
+        {"needs.resolve.outputs.sdk": "mcp", "steps.pack.outputs.tgz": str(tgz)},
+        tmp_path,
+        ROOT,
+    )
+    if refusal is None:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "README checked" in result.stdout
+    else:
+        assert result.returncode == 1, result.stdout
+        assert refusal in result.stderr, result.stderr
+
+
+def test_the_mcp_shrinkwrap_step_keeps_the_lock_renames_it_and_strips_it() -> None:
+    """The lock is copied before `npm shrinkwrap` renames it, and the strip
+    runs straight after, against that copy: the shipped shrinkwrap holds the
+    lock's production entries only."""
+    step = _step("npm-build", MCP_SHRINKWRAP)
+    assert step.get("working-directory") == "sdk/mcp"
+    commands = [line.strip() for line in _run_of(step).splitlines() if line.strip()]
+    assert commands == [
+        "set -euo pipefail",
+        'cp package-lock.json "$RUNNER_TEMP/mcp-package-lock.json"',
+        "npm shrinkwrap",
+        "node scripts/strip-shrinkwrap-dev.js npm-shrinkwrap.json"
+        ' "$RUNNER_TEMP/mcp-package-lock.json"',
+        "test -f npm-shrinkwrap.json",
+        "test ! -e package-lock.json",
+    ]
+
+
+def test_the_mcp_package_ships_its_shrinkwrap() -> None:
+    import json
+
+    manifest = json.loads((SDK_DIR / "mcp" / "package.json").read_text("utf-8"))
+    assert "npm-shrinkwrap.json" in manifest["files"], (
+        "sdk/mcp/package.json's files list does not name npm-shrinkwrap.json, so "
+        "npm pack drops it silently"
+    )
+
+
+def _mcp_tarball(path: Path, members: dict[str, dict]) -> None:
+    import io
+    import json
+    import tarfile
+
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
+        for name, content in members.items():
+            data = json.dumps(content).encode()
+            info = tarfile.TarInfo(f"package/{name}")
+            info.size = len(data)
+            archive.addfile(info, io.BytesIO(data))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(buffer.getvalue())
+
+
+QS = {"version": "6.16.1", "integrity": "sha512-qs"}
+JEST = {"version": "30.5.2", "integrity": "sha512-jest", "dev": True}
+
+
+def _lock(sdk_version: str, zod_version: str, extra: dict | None = None) -> dict:
+    return {
+        "packages": {
+            "": {"name": "@controlvar/mcp-server"},
+            "node_modules/@modelcontextprotocol/sdk": {"version": sdk_version},
+            "node_modules/zod": {"version": zod_version},
+            **(extra or {}),
+        }
+    }
+
+
+MCP_MANIFEST = {
+    "name": "@controlvar/mcp-server",
+    "version": "0.1.0",
+    "dependencies": {"@modelcontextprotocol/sdk": "1.32.1", "zod": "4.6.7"},
+}
+#: The lock the tests ran with: two production entries beside the root
+#: dependencies, and one development entry.
+FULL_LOCK = _lock("1.32.1", "4.6.7", {"node_modules/qs": QS, "node_modules/jest": JEST})
+
+
+@pytest.mark.parametrize(
+    "members, lock, expected",
+    [
+        (
+            {
+                "package.json": MCP_MANIFEST,
+                "npm-shrinkwrap.json": _lock("1.32.1", "4.6.7"),
+            },
+            _lock("1.32.1", "4.6.7"),
+            None,
+        ),
+        (
+            {
+                "package.json": MCP_MANIFEST,
+                "npm-shrinkwrap.json": _lock(
+                    "1.32.1", "4.6.7", {"node_modules/qs": QS}
+                ),
+            },
+            FULL_LOCK,
+            None,
+        ),
+        (
+            {"package.json": MCP_MANIFEST},
+            _lock("1.32.1", "4.6.7"),
+            "the packed listing has no npm-shrinkwrap.json",
+        ),
+        (
+            {
+                "package.json": MCP_MANIFEST,
+                "npm-shrinkwrap.json": _lock("1.32.2", "4.6.7"),
+            },
+            _lock("1.32.1", "4.6.7"),
+            "@modelcontextprotocol/sdk: npm-shrinkwrap.json has '1.32.2', package-lock.json '1.32.1'",
+        ),
+        # Plant A': the release packs the shrinkwrap without the strip.
+        (
+            {"package.json": MCP_MANIFEST, "npm-shrinkwrap.json": FULL_LOCK},
+            FULL_LOCK,
+            "npm-shrinkwrap.json carries a dev entry: node_modules/jest",
+        ),
+        (
+            {
+                "package.json": MCP_MANIFEST,
+                "npm-shrinkwrap.json": _lock("1.32.1", "4.6.7"),
+            },
+            FULL_LOCK,
+            "npm-shrinkwrap.json is missing node_modules/qs",
+        ),
+        (
+            {
+                "package.json": MCP_MANIFEST,
+                "npm-shrinkwrap.json": _lock(
+                    "1.32.1",
+                    "4.6.7",
+                    {"node_modules/qs": QS, "node_modules/extra": {"version": "1.0.0"}},
+                ),
+            },
+            FULL_LOCK,
+            "npm-shrinkwrap.json has an unexpected entry: node_modules/extra",
+        ),
+        (
+            {
+                "package.json": MCP_MANIFEST,
+                "npm-shrinkwrap.json": _lock(
+                    "1.32.1",
+                    "4.6.7",
+                    {"node_modules/qs": {**QS, "integrity": "sha512-x"}},
+                ),
+            },
+            FULL_LOCK,
+            "node_modules/qs: npm-shrinkwrap.json has integrity 'sha512-x', "
+            "package-lock.json 'sha512-qs'",
+        ),
+    ],
+    ids=[
+        "matches",
+        "the-production-closure",
+        "no-shrinkwrap",
+        "other-version",
+        "a-dev-entry",
+        "a-missing-entry",
+        "an-unexpected-entry",
+        "other-integrity",
+    ],
+)
+def test_the_packed_shrinkwrap_check(
+    members: dict, lock: dict, expected: str | None, tmp_path: Path
+) -> None:
+    import json
+
+    tgz = tmp_path / "pack" / "controlvar-mcp-server-0.1.0.tgz"
+    _mcp_tarball(tgz, members)
+    (tmp_path / "runner_temp").mkdir()
+    (tmp_path / "runner_temp" / "mcp-package-lock.json").write_text(json.dumps(lock))
+    result = _run_step(
+        _step("npm-build", MCP_PACKED),
+        {"steps.pack.outputs.tgz": str(tgz)},
+        tmp_path,
+        tmp_path,
+    )
+    if expected is None:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "@modelcontextprotocol/sdk 1.32.1" in result.stdout
+        production = sum(
+            1 for k, e in lock["packages"].items() if k and not e.get("dev")
+        )
+        assert (
+            f"npm-shrinkwrap.json is the lock's {production} production entries"
+            in result.stdout
+        )
+    else:
+        assert result.returncode != 0, result.stdout
+        assert f"::error::{expected}" in result.stdout, result.stdout
+
+
+def test_the_packed_shrinkwrap_check_refuses_a_missing_lock_copy(
+    tmp_path: Path,
+) -> None:
+    tgz = tmp_path / "pack" / "controlvar-mcp-server-0.1.0.tgz"
+    _mcp_tarball(
+        tgz,
+        {"package.json": MCP_MANIFEST, "npm-shrinkwrap.json": _lock("1.32.1", "4.6.7")},
+    )
+    result = _run_step(
+        _step("npm-build", MCP_PACKED),
+        {"steps.pack.outputs.tgz": str(tgz)},
+        tmp_path,
+        tmp_path,
+    )
+    assert result.returncode != 0
+    assert "did the shrinkwrap step run?" in result.stdout
+
+
+MCP_SCRIPTS = SDK_DIR / "mcp" / "scripts"
+PACKED_TEST = SDK_DIR / "mcp" / "__tests__" / "packed.test.ts"
+
+
+def test_the_installed_mcp_server_is_checked_through_a_registry() -> None:
+    """Q25's release leg is one call to the consumer check, on the packed
+    tarball and the lock the tests ran with: the check installs it through a
+    stub registry that marks it `_hasShrinkwrap`, so the shipped shrinkwrap
+    decides the tree. A local tarball install would not read the file."""
+    step = _step("npm-build", MCP_CONSUMER)
+    assert step.get("env") == {"TGZ": "${{ steps.pack.outputs.tgz }}"}
+    assert "working-directory" not in step
+    assert _run_of(step).strip() == (
+        'node sdk/mcp/scripts/registry-consumer-check.js "$TGZ"'
+        ' "$RUNNER_TEMP/mcp-consumer" "$RUNNER_TEMP/mcp-package-lock.json"'
+    )
+    assert (MCP_SCRIPTS / "registry-consumer-check.js").is_file()
+
+
+def test_the_pull_request_leg_calls_the_same_strip_and_consumer_check() -> None:
+    """One implementation of each, run by the release and by the package's
+    own test: packed.test.ts calls both scripts, and no longer installs the
+    tarball by path."""
+    source = PACKED_TEST.read_text(encoding="utf-8")
+    assert '"strip-shrinkwrap-dev.js"' in source
+    assert '"registry-consumer-check.js"' in source
+    assert '"install"' not in source, (
+        "packed.test.ts installs the tarball itself: a local tarball install "
+        "ignores the shrinkwrap"
+    )
+    assert (MCP_SCRIPTS / "strip-shrinkwrap-dev.js").is_file()

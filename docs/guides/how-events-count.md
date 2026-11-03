@@ -6,7 +6,8 @@ SDK, because each one sends its events through `POST /api/v1/tracking/track` and
 
 | The event | Stored | Counts in its variant's results |
 |---|---|---|
-| Sent again (with or without anything identifying it) | Yes, each time | Each time: a count metric counts it again, and a revenue, duration or custom metric adds its value again; a conversion metric counts the user once ([#1543](https://github.com/Controlvar/controlvar/issues/1543)) |
+| Sent again with the same `event_id` | No: the first one is kept | Once |
+| Sent again without an `event_id` | Yes, each time | Each time: a count metric counts it again, and a revenue, duration or custom metric adds its value again; a conversion metric counts the user once |
 | Received before the user is assigned to the experiment | Yes, with no variant | No |
 | Received while the experiment is a draft, paused, completed or archived | Yes, with no variant | No |
 | Received after the user is assigned, with an earlier `timestamp` | Yes | Yes |
@@ -15,9 +16,47 @@ SDK, because each one sends its events through `POST /api/v1/tracking/track` and
 
 ## Sending an event again
 
-A request that timed out may already have been stored. An event you send again is stored again,
-and then a count metric counts it twice and a revenue, duration or custom metric adds its value
-twice.
+A request that timed out may already have been stored. An event you send again without an
+`event_id` is stored again, and then a count metric counts it twice and a revenue, duration or
+custom metric adds its value twice. To have it counted once, give it an `event_id`.
+
+- `event_id` is your id for one event: text of up to 255 characters, compared exactly. Leaving it
+  out, `null` and `""` all mean no `event_id`. A number, longer text, or text holding NUL is
+  refused with `422`, and in `/batch` one such event refuses the whole request.
+- The server does not store an event when it already has one with the same `event_id`, user,
+  experiment, flag and event name. `POST /api/v1/tracking/track` and `POST /api/v1/tracking/events`
+  answer it with `200`, `"duplicate": true` and the stored event's `id`;
+  `POST /api/v1/tracking/batch` counts it in `success_count` and in `duplicate_count`. The first
+  one sent is kept: the value, metadata and timestamp of a later one are not compared and not
+  stored.
+- The same `event_id` for another user, experiment, flag or event name is another event. So an
+  event sent to each of a user's experiments and flags counts once in each of them, and an order
+  id given to both `checkout_completed` and `purchase` is two events.
+- The experiment and the flag are the ones the event was given when it was received. An event
+  first received while its experiment was paused is not stored again when it is sent again after
+  the experiment is started, and stays out of every variant's results.
+- Events stored before you send `event_id` keep their repeats. Send it before you start an
+  experiment, so that the whole experiment is counted the same way.
+- To check that your server counts a repeat once, send one event twice with the same `event_id`:
+  the second answer has `"duplicate": true`.
+
+Give each event an `event_id` that your own system decides and does not publish: the id the SDK
+makes, a random UUID, or, for events you send from your server with a server-side key, your order
+or message id. From a browser or an app, let the SDK make the id. Send revenue events from your
+server. Make the id once, when the event happens, and send that same id each time.
+
+The Java SDK gives every event an `event_id` ([Event ids](../sdk/java.md#event-ids)). The
+JavaScript SDK sends the `eventId` you give it, from its next published version, and makes none
+itself ([Event ids](../sdk/javascript.md#event-ids)). The Python SDK sends the `event_id` you give
+it, from its next published version, and makes none itself ([Event ids](../sdk/python.md#event-ids)).
+No other
+SDK has an `event_id` option yet ([Limitations](../getting-started/limitations.md#sdks)): send an
+event that may be sent again to `POST /api/v1/tracking/track` or `POST /api/v1/tracking/batch`
+yourself.
+
+`event_dedup_keys` holds your app's user ids and keeps them when events are deleted. An operator
+erasing one person's events by hand must delete their keys too. An `event_id` is remembered for as
+long as its key is kept.
 
 ### When sending fails
 

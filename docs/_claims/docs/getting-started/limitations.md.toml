@@ -85,8 +85,10 @@ by = [
 ]
 
 [[unit]]
-text = "An event sent twice counted once | It is stored and counted twice: a count metric counts it again, and a revenue, duration or custom metric adds its value again. A request that timed out may have been stored, so sending it again can double it (#1543). A conversion rate counts each user once and is not affected. See How events count."
+text = "An event sent twice counted once | Only an event with an event_id is recognised when it is sent again. Without one it is stored and counted twice: a count metric counts it again, and a revenue, duration or custom metric adds its value again. A request that timed out may have been stored, so sending it again without an event_id can double it. A conversion rate counts each user once and is not affected. See How events count."
 by = [
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r8_without_an_event_id_two_identical_purchases_are_both_stored",
     "test:backend/tests/integration/api/test_how_events_count.py::test_an_event_sent_again_is_stored_and_counted_again",
     "test:sdk/python/tests/test_client.py::TestTrackNeverRaises::test_a_timeout_returns_false_although_the_event_was_sent",
 ]
@@ -213,10 +215,20 @@ by = [
 ]
 
 [[unit]]
-text = "Custom roles and direct permission grants that change access | The rbac module records them and shows them, but no permission check reads them: each user's built-in role decides (#891)."
+text = "A custom role that removes access, or that grants administration | Custom roles and direct permission grants (the rbac module) only add, and only to experiments, flags and reading the audit log; never administration or the compliance audit trail. Administration depends on the built-in role or the superuser flag; to restrict someone, give them a lower built-in role. See What a role or grant cannot give."
 by = [
-    "test:modules/backend/tests/unit/services/test_rbac_service.py::TestCreateCustomRole::test_creates_role_with_name",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_only_the_built_in_role",
+    "test:modules/backend/tests/integration/rbac/test_rbac_no_escalation.py::test_all_forty_pairs_reach_no_administration",
+    "test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_layers_only_add_and_actions_are_sorted",
+    "test:backend/tests/unit/core/test_built_in_roles_decide.py::test_a_custom_role_or_a_grant_adds_only_grantable_pairs",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_grantable_is_exactly_the_eleven_pairs",
+]
+
+[[unit]]
+text = "Assigning roles and granting permissions in the dashboard | The Roles page defines roles; assigning them and granting permissions go through the RBAC API."
+by = [
+    "test:backend/tests/unit/api/test_route_surface_rules.py::test_custom_roles_are_assigned_through_the_api_and_no_dashboard_page",
+    "test:modules/frontend/src/tests/pages/admin-roles.test.tsx::saves a custom role the way the API takes it: a list of {resource, actions} (#891)",
+    "test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestGrantRevokePermission::test_grant_permission_returns_201",
 ]
 
 [[unit]]
@@ -239,10 +251,56 @@ text = "Split URL testing"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Traffic split between URLs at the edge | The split_url module's edge router has no configuration source in this release, so it splits no traffic (#393)."
+text = "Traffic split between URLs with nothing to install | Your server or edge must ask the API where to send each visitor and redirect them; a site with no server or edge of its own in front of its pages cannot split, because nothing redirects in the browser. On AWS, the CloudFront edge router (beta) is one you deploy yourself."
 by = [
-    "test:modules/backend/tests/unit/lambda/test_split_url_handler.py::TestHandlerPassThrough::test_no_config_header_passes_through",
-    "test:modules/backend/tests/unit/test_front_door_module_facts.py::test_the_split_url_construct_sets_no_router_configuration",
+    "test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_the_middleware_redirects_without_calling_the_page",
+    "test:modules/backend/tests/integration/split_url/test_split_url_router_e2e.py::test_a_split_url_experiment_splits_its_visitors_through_the_router",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_edge_app.py::test_nothing_deploys_the_edge_app",
+]
+
+[[unit]]
+text = "Split URL experiments on the AWS installer | It installs the core profile, which does not run them."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_full_profile_stops_before_the_deploy",
+    "test:backend/tests/unit/core/test_optional_modules.py::TestSplitUrlRefusedWithoutRouting::test_create_split_url_experiment_returns_501",
+]
+
+[[unit]]
+text = "Each visitor counted once, whatever their browser does | A browser that blocks cookies is a new visitor on each visit, with a new assignment."
+by = ["test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_the_cookie_is_exact"]
+
+[[unit]]
+text = "No limit on how many visitors a site splits | A per-address rate limit, below."
+by = ["test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitConfig::test_the_split_url_routes_have_tracking_assigns_limit"]
+
+[[unit]]
+text = "Both split URL routes have the limit POST /api/v1/tracking/assign has: 6,000 requests a minute per client address, per route."
+by = ["test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitConfig::test_the_split_url_routes_have_tracking_assigns_limit"]
+
+[[unit]]
+text = "SDK_RATE_LIMIT_PER_MINUTE raises it, for every SDK route and every address."
+by = [
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitConfig::test_the_split_url_routes_have_tracking_assigns_limit",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitConfig::test_sdk_limit_is_configurable",
+]
+
+[[unit]]
+text = "Over the limit the API answers 429, and the reference integration serves the page with X-Split-URL: failed and logs split_url_failed status=429."
+by = ["test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_a_failure_serves_the_page_and_logs_its_status"]
+
+[[unit]]
+text = "The CloudFront edge router does the same: it serves the page with X-Split-URL: failed (a header that rests on an AWS behaviour not yet verified, see AWS integration), and its log line carries \"status\": \"429\"."
+by = [
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_a_failure_serves_the_page_and_logs_its_status",
+    "test:modules/backend/tests/unit/split_url_router/test_split_url_router.py::test_the_cookie_does_not_rest_on_the_internal_header",
+]
+
+[[unit]]
+text = "Above the limit, a returning visitor whose assignment is a treatment is served the control page while their conversions still count for the treatment; a site with more than about 100 entry-page views a second is in that range."
+by = [
+    "test:modules/backend/tests/integration/split_url/test_split_url_reference_integration.py::test_a_failure_serves_the_page_and_logs_its_status",
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_variant_seen_is_the_variant_counted",
+    "test:backend/tests/unit/middleware/test_rate_limiter.py::TestRateLimitConfig::test_the_split_url_routes_have_tracking_assigns_limit",
 ]
 
 [[unit]]
@@ -250,13 +308,15 @@ text = "SDKs"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Flag targeting from a native mobile SDK | iOS, Android, React Native and Flutter send only the user id on flag evaluation, so rules on attributes do not match (#438). Experiment assignment sends them."
+text = "Flag targeting from a native mobile SDK | iOS, Android and Flutter send only the user id on flag evaluation, so rules on attributes do not match (#438). Experiment assignment sends them. React Native sends them on flag evaluation too."
 by = [
     "test:backend/tests/unit/api/test_documented_limits.py::test_the_native_sdks_send_no_context_on_flag_evaluation",
     "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_no_context_keeps_existing_behaviour",
     "test:sdk/ios/Tests/ControlvarTests/ExperimentationClientTests.swift::testGetAssignment_postsExperimentKeyUserIdAndContext",
     "test:sdk/android/sdk/src/test/kotlin/ExperimentationClientTest.kt::getAssignment sends POST tracking assign with experiment_key, user_id and context",
     "test:sdk/react-native/__tests__/client.test.ts::sends the user attributes as `context`",
+    "test:sdk/react-native/__tests__/hooks.test.tsx::regression #1520: useFlag puts the attributes on the wire",
+    "test:sdk/react-native/__tests__/client.test.ts::getAllFlags sends ?context= and nothing for {} or undefined",
     "test:sdk/flutter/test/client_test.dart::POSTs experiment_key, user_id and context to /api/v1/tracking/assign",
 ]
 
@@ -266,6 +326,19 @@ by = [
     "journey:sdk-javascript#quick-start-user-on",
     "journey:sdk-python#quick-start-user-on",
     "journey:sdk-go#quick-start-user-on",
+]
+
+[[unit]]
+text = "An event_id sent by the SDK, so that an event sent again is stored once | The Java SDK sends one with every event (Event ids). The JavaScript SDK sends the eventId you give it and the Python SDK the event_id you give it, each from its next published version (JavaScript, Python). No other SDK has an event_id option yet: not the React, React Native, edge, Go, Android, iOS, Flutter, .NET, PHP, Ruby or Elixir SDK, nor the OpenFeature providers. Send an event that may be sent again to POST /api/v1/tracking/track or POST /api/v1/tracking/batch with its event_id (#1543)."
+by = [
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::trackSendsAGeneratedEventId",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::fanOutEntriesShareOneEventId",
+    "test:sdk/js/__tests__/event-id.test.ts::sends event_id on a track with an explicit key",
+    "test:sdk/python/tests/test_event_id.py::TestEventId::test_sends_event_id_on_a_track_with_an_explicit_key",
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_the_sdks_with_an_event_id_option_name_it",
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_no_other_sdk_has_an_event_id_option_yet",
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_every_sdk_directory_is_listed",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r2_the_same_item_twice_in_one_batch_is_stored_once",
 ]
 
 [[unit]]

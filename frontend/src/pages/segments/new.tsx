@@ -9,7 +9,8 @@ import { SegmentKind, SegmentsService } from '@/services/segments';
 import { TargetingRules } from '@/types/targeting';
 import { targetingPayload } from '@/utils/experimentTargeting';
 import { ROLE_NOTE, rulesProblems, segmentErrorCopy } from '@/utils/segmentErrors';
-import { canChangeSegments } from '@/utils/segmentPermissions';
+import { canCreateSegments } from '@/utils/segmentPermissions';
+import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
 import { SEGMENT_RULES_OPERATOR_OPTIONS, createEmptyGroup } from '@/utils/targeting';
 
 function initialRules(): TargetingRules {
@@ -19,6 +20,7 @@ function initialRules(): TargetingRules {
 export default function NewSegmentPage() {
   const router = useRouter();
   const auth = useOptionalAuth();
+  const { effective, loading: permissionsLoading } = useEffectivePermissions();
   const nameId = useId();
   const descriptionId = useId();
   const [kind, setKind] = useState<SegmentKind>('rules');
@@ -34,7 +36,11 @@ export default function NewSegmentPage() {
     if (saveError || problems.length > 0) errorRef.current?.focus();
   }, [saveError, problems]);
 
-  if (auth && auth.status === 'loading') {
+  const canCreate = canCreateSegments(auth?.user, effective);
+
+  // Also while the effective map may still add EXPERIMENT CREATE (#891):
+  // neither the notice nor the form until it answers.
+  if ((auth && auth.status === 'loading') || (!canCreate && permissionsLoading)) {
     return (
       <div className="flex-1 bg-slate-50 p-8" data-testid="segment-new-loading">
         <PageTitle title="New segment" />
@@ -43,7 +49,7 @@ export default function NewSegmentPage() {
     );
   }
 
-  if (!canChangeSegments(auth?.user)) {
+  if (!canCreate) {
     return (
       <div className="flex-1 bg-slate-50">
         <PageTitle title="New segment" />

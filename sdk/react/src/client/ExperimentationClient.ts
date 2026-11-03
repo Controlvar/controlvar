@@ -6,8 +6,10 @@ import {
   TrackEventOptions,
   FeatureFlagEvaluateResponse,
   ExperimentAssignResponse,
+  Exposure,
 } from './types';
 import { AttributedKeys } from './attribution';
+import { callExposureHook, checkOnExposure, dropExposureError } from './exposure';
 
 interface CacheEntry<T> {
   value: T;
@@ -116,6 +118,130 @@ export function disabledEvaluation(
 }
 
 /**
+ * The evaluation a body of the evaluate route stands for. The one mapping: the
+ * client uses it for a fetched answer, the Provider for a bootstrap entry.
+ */
+export function evaluationFromResponse(
+  flagKey: string,
+  data: FeatureFlagEvaluateResponse
+): FeatureFlagEvaluation {
+  const enabled = Boolean(data.enabled);
+  const config = data.config === undefined ? null : data.config;
+  const configVariant = (config as { variant?: unknown } | null)?.variant;
+  return {
+    flagKey,
+    variant: enabled ? (typeof configVariant === 'string' ? configVariant : 'on') : null,
+    isEnabled: enabled,
+    config,
+    loading: false,
+    error: null,
+    ...(typeof data.reason === 'string' ? { reason: data.reason } : {}),
+  };
+}
+
+/**
+ * The assignment a body of the assign route stands for. The one mapping: the
+ * client uses it for a fetched answer, the Provider for a bootstrap entry.
+ */
+export function assignmentFromResponse(
+  experimentKey: string,
+  data: ExperimentAssignResponse
+): ExperimentAssignment {
+  return {
+    experimentKey: data.experiment_key ?? experimentKey,
+    variantKey: data.variant_name,
+    variantName: data.variant_name,
+    variantId: data.variant_id ?? null,
+    isControl: Boolean(data.is_control),
+    configuration: data.configuration ?? null,
+    loading: false,
+    error: null,
+    // Older servers do not send `assigned`: treat their response as a real assignment.
+    assigned: typeof data.assigned === 'boolean' ? data.assigned : true,
+    ...(typeof data.reason === 'string' ? { reason: data.reason } : {}),
+  };
+}
+
+/**
+ * Whether an assign answer is one `onExposure` is called for: the raw answer,
+ * not `assignment.assigned`, which counts a missing field as enrolled. Only the
+ * server's `assigned: true` recorded an exposure, and an Exposure's variant
+ * name is a string.
+ */
+export function recordedExposure(data: ExperimentAssignResponse): boolean {
+  return data.assigned === true && typeof data.variant_name === 'string';
+}
+
+/** What `onExposure` receives for `assignment`: a new object holding the four values. */
+export function exposureOf(userId: string, assignment: ExperimentAssignment): Exposure {
+  return {
+    experimentKey: assignment.experimentKey,
+    userId,
+    variantId: assignment.variantId,
+    variantName: assignment.variantName,
+  };
+}
+
+/** What a request needs from the config, checked and normalised once. */
+export interface RequestSettings {
+  readonly apiKey: string;
+  readonly baseUrl: string;
+  readonly timeoutMs: number;
+}
+
+/** `config`'s request settings. Throws when `apiKey` or `baseUrl` is missing. */
+export function requestSettings(config: SdkConfig): RequestSettings {
+  if (!config.apiKey) throw new Error('apiKey is required');
+  if (!config.baseUrl) throw new Error('baseUrl is required');
+  return {
+    apiKey: config.apiKey,
+    baseUrl: config.baseUrl.replace(/\/$/, ''),
+    timeoutMs: config.timeoutMs ?? 5000,
+  };
+}
+
+/** One request to the API, with the SDK's headers and timeout. */
+export async function apiRequest(
+  settings: RequestSettings,
+  path: string,
+  init: { method?: string; body?: unknown } = {}
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), settings.timeoutMs);
+  try {
+    return await fetch(`${settings.baseUrl}${path}`, {
+      method: init.method ?? 'GET',
+      headers: {
+        'X-API-Key': settings.apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/** The evaluate route's path for `flagKey` and `user`, with `context` when the user has attributes. */
+export function evaluatePath(user: UserContext, flagKey: string): string {
+  return (
+    `/api/v1/feature-flags/evaluate/${encodeURIComponent(flagKey)}` +
+    `?user_id=${encodeURIComponent(user.userId)}` +
+    contextQuery(user.attributes)
+  );
+}
+
+/** The assign route's body for `experimentKey` and `user`. */
+export function assignBody(user: UserContext, experimentKey: string) {
+  return {
+    experiment_key: experimentKey,
+    user_id: user.userId,
+    context: user.attributes,
+  };
+}
+
+/**
  * Browser client for the Controlvar public API.
  *
  * - Flag evaluation and experiment assignment are decided by the server; no
@@ -126,11 +252,12 @@ export function disabledEvaluation(
  *   fan-out, for 24 hours, or the cache lifetime if longer (see `attribution.ts`); `clearCache()` keeps that record.
  * - `evaluateFeatureFlag*` and `assignExperiment` throw on failure (hooks
  *   convert that into `error` state). `trackEvent` never throws.
+ * - `config.onExposure` is called once for each answer it stores that the
+ *   server sent with `assigned: true` (see `SdkConfig.onExposure`).
  */
 export class ExperimentationClient {
-  private readonly apiKey: string;
-  private readonly baseUrl: string;
-  private readonly timeoutMs: number;
+  private readonly settings: RequestSettings;
+  private readonly onExposure: ((exposure: Exposure) => unknown) | null;
   private readonly flags: UserKeyCache<FeatureFlagEvaluation>;
   private readonly assignments: UserKeyCache<ExperimentAssignment>;
   /** The keys a key-less `trackEvent` is sent to; outlives the cache entries. */
@@ -139,11 +266,8 @@ export class ExperimentationClient {
   private readonly inflight = new Map<string, Promise<unknown>>();
 
   constructor(config: SdkConfig) {
-    if (!config.apiKey) throw new Error('apiKey is required');
-    if (!config.baseUrl) throw new Error('baseUrl is required');
-    this.apiKey = config.apiKey;
-    this.baseUrl = config.baseUrl.replace(/\/$/, '');
-    this.timeoutMs = config.timeoutMs ?? 5000;
+    this.settings = requestSettings(config);
+    this.onExposure = checkOnExposure(config.onExposure);
     const ttl = config.cacheTtlMs ?? 300_000;
     this.flags = new UserKeyCache<FeatureFlagEvaluation>(ttl);
     this.assignments = new UserKeyCache<ExperimentAssignment>(ttl);
@@ -152,22 +276,8 @@ export class ExperimentationClient {
 
   // ─── HTTP ──────────────────────────────────────────────────────────────────
 
-  private async request(path: string, init: { method?: string; body?: unknown } = {}): Promise<Response> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-    try {
-      return await fetch(`${this.baseUrl}${path}`, {
-        method: init.method ?? 'GET',
-        headers: {
-          'X-API-Key': this.apiKey,
-          'Content-Type': 'application/json',
-        },
-        body: init.body === undefined ? undefined : JSON.stringify(init.body),
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
+  private request(path: string, init: { method?: string; body?: unknown } = {}): Promise<Response> {
+    return apiRequest(this.settings, path, init);
   }
 
   private async requestJson<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
@@ -223,24 +333,8 @@ export class ExperimentationClient {
     if (cached) return cached;
 
     return this.dedupe(`flag\u0000${user.userId}\u0000${flagKey}`, async () => {
-      const path =
-        `/api/v1/feature-flags/evaluate/${encodeURIComponent(flagKey)}` +
-        `?user_id=${encodeURIComponent(user.userId)}` +
-        contextQuery(user.attributes);
-      const data = await this.requestJson<FeatureFlagEvaluateResponse>(path);
-
-      const enabled = Boolean(data.enabled);
-      const config = data.config === undefined ? null : data.config;
-      const configVariant = (config as { variant?: unknown } | null)?.variant;
-      const evaluation: FeatureFlagEvaluation = {
-        flagKey,
-        variant: enabled ? (typeof configVariant === 'string' ? configVariant : 'on') : null,
-        isEnabled: enabled,
-        config,
-        loading: false,
-        error: null,
-        ...(typeof data.reason === 'string' ? { reason: data.reason } : {}),
-      };
+      const data = await this.requestJson<FeatureFlagEvaluateResponse>(evaluatePath(user, flagKey));
+      const evaluation = evaluationFromResponse(flagKey, data);
       this.flags.set(user.userId, flagKey, evaluation);
       this.attributed.recordFlag(user.userId, flagKey);
       return evaluation;
@@ -249,7 +343,13 @@ export class ExperimentationClient {
 
   // ─── Experiments ───────────────────────────────────────────────────────────
 
-  /** Assign the user via `POST /api/v1/tracking/assign`. Sticky server-side. Throws on failure. */
+  /**
+   * Assign the user via `POST /api/v1/tracking/assign`. Sticky server-side
+   * (and the server records an exposure). Throws on failure. When the server
+   * answers `assigned: true`, `onExposure` is called once before this
+   * resolves, however many callers share the request; a cached answer calls
+   * nothing.
+   */
   async assignExperiment(user: UserContext, experimentKey: string): Promise<ExperimentAssignment> {
     const cached = this.assignments.get(user.userId, experimentKey);
     if (cached) return cached;
@@ -257,11 +357,7 @@ export class ExperimentationClient {
     return this.dedupe(`assign\u0000${user.userId}\u0000${experimentKey}`, async () => {
       const response = await this.request('/api/v1/tracking/assign', {
         method: 'POST',
-        body: {
-          experiment_key: experimentKey,
-          user_id: user.userId,
-          context: user.attributes,
-        },
+        body: assignBody(user, experimentKey),
       });
       if (!response.ok) {
         // A 404: a key-less trackEvent must no longer reach this experiment.
@@ -270,23 +366,22 @@ export class ExperimentationClient {
       }
       const data = (await response.json()) as ExperimentAssignResponse;
 
-      const assignment: ExperimentAssignment = {
-        experimentKey: data.experiment_key ?? experimentKey,
-        variantKey: data.variant_name,
-        variantName: data.variant_name,
-        variantId: data.variant_id ?? null,
-        isControl: Boolean(data.is_control),
-        configuration: data.configuration ?? null,
-        loading: false,
-        error: null,
-        // Older servers do not send `assigned`: treat their response as a real assignment.
-        assigned: typeof data.assigned === 'boolean' ? data.assigned : true,
-        ...(typeof data.reason === 'string' ? { reason: data.reason } : {}),
-      };
+      const assignment = assignmentFromResponse(experimentKey, data);
       this.assignments.set(user.userId, experimentKey, assignment);
       this.attributed.recordExperiment(user.userId, assignment.experimentKey, assignment.reason);
+      // Last, after the store (see `recordedExposure`).
+      if (recordedExposure(data)) {
+        this.exposed(user.userId, assignment);
+      }
       return assignment;
     });
+  }
+
+  /** Give `onExposure` a new object holding the four values; its failures are dropped. */
+  private exposed(userId: string, assignment: ExperimentAssignment): void {
+    const hook = this.onExposure;
+    if (!hook) return;
+    callExposureHook(hook, exposureOf(userId, assignment), dropExposureError);
   }
 
   // ─── Tracking ──────────────────────────────────────────────────────────────

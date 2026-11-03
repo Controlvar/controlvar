@@ -43,9 +43,15 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends.
 REVISION = "37dcb2969766"
 PREVIOUS_CORE_HEAD = "d29a479daafe"
-#: The core head of this tree: ``607c51a59bf5`` (#1497), after
-#: ``4c2c09a2b3e8`` (#1206), the revision after this one.
-CORE_HEAD = "607c51a59bf5"
+#: The core head of this tree: ``7b6b4b4fe246`` (#1528), after
+#: ``85dd4796bb8b`` (#1543), ``607c51a59bf5`` (#1497) and ``4c2c09a2b3e8``
+#: (#1206), the revision after this one.
+CORE_HEAD = "7b6b4b4fe246"
+#: Tables that a later core revision's downgrade drops: a downgrade from the
+#: head to this test's target unapplies those revisions too.
+#: ``85dd4796bb8b`` (#1543) drops ``event_dedup_keys``; ``7b6b4b4fe246``
+#: (#1528) drops a column and no table.
+LATER_DOWNGRADE_TABLES = {"event_dedup_keys"}
 MODULES_HEAD = "modules_0004_rbac_activation"
 
 PREVIOUS_ROWS = {
@@ -349,7 +355,7 @@ def test_downgrade_when_empty_removes_exactly_what_it_added(
     assert _constraints(test_db, scratch_schema, "segments") == {
         name: d for name, d in segments.items() if name != CHECK
     }
-    assert _tables(test_db, scratch_schema) == tables - {TABLE}
+    assert _tables(test_db, scratch_schema) == tables - {TABLE} - LATER_DOWNGRADE_TABLES
 
 
 @pytest.mark.regression
@@ -368,7 +374,7 @@ def test_downgrade_with_the_override_runs(profile, test_db, scratch_schema, tmp_
     assert down.returncode == 0, down.stderr[-3000:]
     assert _rows(test_db, scratch_schema) == PREVIOUS_ROWS[profile]
     assert _kind_column(test_db, scratch_schema) is None
-    assert _tables(test_db, scratch_schema) == tables - {TABLE}
+    assert _tables(test_db, scratch_schema) == tables - {TABLE} - LATER_DOWNGRADE_TABLES
 
     # And the upgrade after it brings back an empty table, every segment rules.
     _upgrade(tree, scratch_schema)

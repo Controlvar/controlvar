@@ -6,13 +6,15 @@ These models are used for experiment assignment and event tracking.
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
 from pydantic import (
     UUID4,
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
+    StringConstraints,
     ValidationError,
     field_validator,
     model_validator,
@@ -20,6 +22,36 @@ from pydantic import (
 from pydantic_core import InitErrorDetails, PydanticCustomError
 
 from backend.app.schemas.storable_text import StorableTextModel
+
+#: The longest ``event_id`` an event may carry (#1543).
+EVENT_ID_MAX_LENGTH = 255
+
+
+def _no_event_id_when_empty(value: Any) -> Any:
+    """``""`` means no ``event_id``, as ``null`` and an absent field do."""
+    return None if value == "" else value
+
+
+#: The ``event_id`` an event sent to ``/tracking/track``, ``/tracking/batch``
+#: or ``/tracking/events`` may carry (#1543). A JSON string of at most 255
+#: characters, compared exactly (case-sensitive, not trimmed). ``""`` becomes
+#: ``None``. Anything else -- a number, a longer string, and (through
+#: ``StorableTextModel``) NUL or a lone surrogate -- is refused with 422.
+EventId = Annotated[
+    # The length is the string's own constraint, so it never meets the None
+    # that "" becomes.
+    Optional[Annotated[str, StringConstraints(max_length=EVENT_ID_MAX_LENGTH)]],
+    BeforeValidator(_no_event_id_when_empty),
+    Field(
+        description=(
+            "Names one occurrence of the event. An event sent again with the "
+            "same event_id, user, experiment, flag and event name is stored "
+            "once: the later one is answered as a duplicate and writes nothing. "
+            "At most 255 characters, compared exactly; an empty string or null "
+            "means none."
+        ),
+    ),
+]
 
 
 class EventFields(BaseModel):
@@ -74,6 +106,8 @@ class EventBase(EventFields):
 class EventCreate(StorableTextModel, EventBase):
     """Model for creating a new event."""
 
+    event_id: EventId = None
+
 
 class UntaggedEventCreate(StorableTextModel, EventFields):
     """An event that names no experiment and no flag (#217).
@@ -84,13 +118,33 @@ class UntaggedEventCreate(StorableTextModel, EventFields):
     still refuses an event with neither id.
     """
 
+    event_id: EventId = None
+
 
 class EventResponse(EventFields):
-    """Model for event responses."""
+    """An event as stored.
 
+    For an event already stored with the same event_id, user, experiment, flag
+    and event name, duplicate is true, id is the stored event's, and every other
+    field is this request's or this request's time.
+    """
+
+    # For a duplicate (#1543), nothing but ``id`` may come from the stored row:
+    # tracking._event_response builds every other field from this request.
     id: str
     created_at: datetime
     updated_at: datetime
+    duplicate: bool = Field(
+        False,
+        description=(
+            "True when an event with the same event_id, user, experiment, flag "
+            "and event name was already stored: nothing was written, and id is "
+            "the stored event's."
+        ),
+    )
+    event_id: Optional[str] = Field(
+        None, description="The event_id this request sent, or null."
+    )
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -406,6 +460,7 @@ class EventRequest(StorableTextModel):
     value: Optional[float] = None
     metadata: Optional[Dict[str, Any]] = None
     timestamp: Optional[datetime] = None
+    event_id: EventId = None
 
     # Both keys are optional (#217). With neither, the endpoint stores the
     # event as history; a key that is given but not found answers 404.
@@ -463,8 +518,19 @@ class EventBatchRequest(BaseModel):
 class EventBatchResponse(BaseModel):
     """Model for batch event tracking response."""
 
-    success_count: int = Field(..., description="Number of events successfully tracked")
+    success_count: int = Field(
+        ...,
+        description="Number of events stored, or already stored (see duplicate_count)",
+    )
     failure_count: int = Field(..., description="Number of events that failed to track")
+    duplicate_count: int = Field(
+        ...,
+        description=(
+            "Number of events already stored: an earlier one had the same "
+            "event_id, user, experiment, flag and event name. Each is counted "
+            "in success_count too, and nothing was written for it."
+        ),
+    )
     errors: Optional[List[Dict[str, Any]]] = Field(
         None, description="Details of failed events"
     )
@@ -474,6 +540,7 @@ class EventBatchResponse(BaseModel):
             "example": {
                 "success_count": 1,
                 "failure_count": 1,
+                "duplicate_count": 0,
                 "errors": [
                     {
                         "index": 1,

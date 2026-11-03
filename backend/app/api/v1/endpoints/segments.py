@@ -137,7 +137,9 @@ def list_segments(
     description=(
         "Create a new audience segment: kind rules (the default) with targeting "
         "rules, or kind id_list with no rules, whose members are added with POST "
-        "/segments/{segment_id}/members. Requires DEVELOPER or ADMIN role."
+        "/segments/{segment_id}/members. Requires permission to create "
+        "experiments: DEVELOPER or ADMIN, or in the full profile a custom role or "
+        "direct grant giving experiment (create)."
     ),
     tags=["Segments"],
 )
@@ -262,7 +264,9 @@ def get_segment(
         "Update segment name, description, rules, or status. A segment's kind "
         "cannot be changed, and an id_list segment takes no rules (422). A "
         "status other than active is refused (409) while targeting rules use "
-        "the segment. Requires DEVELOPER or ADMIN role."
+        "the segment. Requires permission to change experiments: DEVELOPER or "
+        "ADMIN, or in the full profile a custom role or direct grant giving "
+        "experiment (update)."
     ),
     responses={
         409: {
@@ -317,7 +321,9 @@ def update_segment(
     summary="Archive an audience segment",
     description=(
         "Soft-delete a segment by setting its status to ARCHIVED. Refused (409) "
-        "while targeting rules use the segment. Requires DEVELOPER or ADMIN role."
+        "while targeting rules use the segment. Requires permission to delete "
+        "experiments: DEVELOPER or ADMIN, or in the full profile a custom role or "
+        "direct grant giving experiment (delete)."
     ),
     responses={
         409: {
@@ -510,7 +516,8 @@ _MEMBER_RESPONSES = {
         "same ids again is safe. A segment holds at most 1,000,000 ids; a request "
         "that would pass that answers 422 and adds nothing. Answers the counts: "
         "added + already_members is the number of distinct ids sent. Requires "
-        "DEVELOPER or ADMIN role."
+        "permission to change experiments: DEVELOPER or ADMIN, or in the full "
+        "profile a custom role or direct grant giving experiment (update)."
     ),
     responses=_MEMBER_RESPONSES,
     openapi_extra={"x-stability": "beta"},
@@ -551,7 +558,9 @@ def add_segment_members(
     description=(
         "Remove 1 to 10,000 user ids from an id_list segment. Ids that are not "
         "in it are ignored. Answers the counts: removed + not_members is the "
-        "number of distinct ids sent. Requires DEVELOPER or ADMIN role."
+        "number of distinct ids sent. Requires permission to change experiments: "
+        "DEVELOPER or ADMIN, or in the full profile a custom role or direct grant "
+        "giving experiment (update)."
     ),
     responses=_MEMBER_RESPONSES,
     openapi_extra={"x-stability": "beta"},

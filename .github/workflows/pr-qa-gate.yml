@@ -147,9 +147,11 @@ jobs:
       # only bash and jq, and they live outside backend/tests/unit so that
       # core-build, which runs that directory, does not take their minutes.
       # On this full checkout nothing under any of these directories skips.
-      # The SMTP certificate tests must also run.
+      # The SMTP certificate tests must also run, and so must the ground-truth
+      # library's gates (backend/tests/unit/ground_truth, #1544): a skipped
+      # cross-check would pass the library's answers unchecked.
       - name: No required test was skipped
-        run: python3 scripts/check_junit_skips.py unit-junit.xml backend/tests/unit/infrastructure backend/tests/unit/stats_validation backend/tests/realistic backend/tests/unit/showcase backend/tests/unit/docs backend/tests/installer_sweeps backend/tests/unit/services/test_email_notifier_tls
+        run: python3 scripts/check_junit_skips.py unit-junit.xml backend/tests/unit/infrastructure backend/tests/unit/stats_validation backend/tests/realistic backend/tests/unit/showcase backend/tests/unit/docs backend/tests/installer_sweeps backend/tests/unit/services/test_email_notifier_tls backend/tests/unit/ground_truth
 
       # The Lambda functions (event processor, flag evaluation) and their
       # shared package carry tests of their own (240 collected) that ran
@@ -222,8 +224,13 @@ jobs:
       # The warehouse tests must all RUN: a skip there (a missing duckdb or
       # sqlglot turned into a skip, say) would leave the SQL semantics, the
       # identifier gate, the runner and the routes unchecked under a green job.
-      - name: No warehouse test was skipped
-        run: python3 scripts/check_junit_skips.py module-junit.xml modules/backend/tests/unit/warehouse modules/backend/tests/integration/warehouse
+      # So must the split URL routing tests (#393): the exact per-visitor
+      # counts and the reference integration's contract are there, and the
+      # CloudFront router's harness and its edge app's synth. And so must the
+      # tests that custom roles and direct grants take effect (#891): each
+      # pair through real sign-in, revocation, server keys, no escalation.
+      - name: No warehouse, split URL or RBAC enforcement test was skipped
+        run: python3 scripts/check_junit_skips.py module-junit.xml modules/backend/tests/unit/warehouse modules/backend/tests/integration/warehouse modules/backend/tests/integration/split_url modules/backend/tests/unit/split_url_router modules/backend/tests/integration/rbac
 
   base-requirements-only:
     needs: changes
@@ -650,6 +657,7 @@ jobs:
           backend/tests/unit/db/test_alembic_plan.py
           modules/backend/tests/unit/services/test_sso_docs_messages.py
           backend/tests/unit/showcase/test_showcase_quoted_docs.py
+          backend/tests/unit/ground_truth/test_contract_citations.py
 
       # On a docs-only change this is where the docs tests run, Unit Tests
       # being skipped, so a docs test that skipped would read as a pass on

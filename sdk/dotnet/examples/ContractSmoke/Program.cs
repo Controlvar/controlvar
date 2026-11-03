@@ -12,6 +12,7 @@
 // exits 1. Only the SDK's public API is used. (`dotnet run` itself may print restore/build
 // messages before the program starts; the live runner reads the last stdout line.)
 
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Controlvar;
 using Controlvar.Models;
@@ -105,13 +106,62 @@ static async Task<int> RunAsync()
     if (!batchOk)
         return Fail("batch track failed");
 
+    // 5. The exposure hook (#1499): a NEW client with OnExposure assigns the same user twice, with
+    //    no ClearCache() in between. The server records an exposure for the first request
+    //    (assigned: true) and the second answer comes from the cache, so OnExposure is called
+    //    once. The runner checks the count, the experiment key and the variant; the user id is
+    //    checked here, the one place that knows it.
+    var exposures = new ConcurrentQueue<Exposure>();
+    using (var hooked = new ExperimentationClient(new SdkConfig(apiUrl, apiKey) { OnExposure = exposures.Enqueue }))
+    {
+        await hooked.GetAssignmentAsync(experimentKey, userId, attributes);
+        await hooked.GetAssignmentAsync(experimentKey, userId, attributes);
+    }
+    foreach (var e in exposures)
+    {
+        if (e.UserId != userId)
+            return Fail($"OnExposure received user \"{e.UserId}\", expected \"{userId}\"");
+    }
+
+    // 5b. A function that throws: the client must catch it (an exception that escaped would end
+    //     this smoke through its catch, exit 1) and answer the same variant.
+    int thrown = 0;
+    Assignment? fromThrowing;
+    using (var failing = new ExperimentationClient(new SdkConfig(apiUrl, apiKey)
+    {
+        OnExposure = _ =>
+        {
+            Interlocked.Increment(ref thrown);
+            throw new InvalidOperationException("the analytics client is not ready");
+        }
+    }))
+    {
+        fromThrowing = await failing.GetAssignmentAsync(experimentKey, userId, attributes);
+    }
+    if (fromThrowing == null || fromThrowing.VariantName != first.VariantName)
+        return Fail($"the client whose OnExposure throws answered {fromThrowing?.VariantName ?? "null"}, not {first.VariantName}");
+    if (thrown != 1)
+        return Fail($"the OnExposure that throws was called {thrown} times, expected 1");
+
+    var seen = exposures.ToArray();
+    var payload = seen.Length == 0
+        ? null
+        : new
+        {
+            experiment_key = seen[0].ExperimentKey,
+            variant_name = seen[0].VariantName,
+            variant_id = seen[0].VariantId,
+            user_id = seen[0].UserId
+        };
+
     var line = JsonSerializer.Serialize(new
     {
         sdk = "dotnet",
         assign = new { variant_name = first.VariantName, is_control = first.IsControl, sticky },
         flag = new { enabled = flag.Enabled },
         track = new { ok = trackOk },
-        fanout = new { ok = fanoutOk && batchOk }
+        fanout = new { ok = fanoutOk && batchOk },
+        exposure = new { calls = seen.Length, payload }
     });
     Console.Out.WriteLine(line);
     return 0;

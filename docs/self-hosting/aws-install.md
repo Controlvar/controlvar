@@ -456,6 +456,7 @@ The installer uses no other exit code. Every message has three parts: what happe
 - It needs a public Route 53 zone in the same account. It does not handle a zone in another account, other DNS providers, or the top of a zone.
 - It does not continue an install that failed, and it does not upgrade one.
 - It does not install the demo apps. Use the [Quick Start](../getting-started/quick-start.md) for those.
+- It does not run split URL experiments: they need the full profile.
 - It does not estimate the cost before you start, beyond the figures in the plan, and it sets no budget alert.
 
 ---

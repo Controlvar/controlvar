@@ -35,7 +35,8 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Feature Flags', href: '/feature-flags', testId: 'nav-feature-flags' },
   { label: 'Segments', href: '/segments', testId: 'nav-segments' },
   // Every role: the audit API answers each one, narrowed to their own entries
-  // for DEVELOPER and VIEWER. `roles` also keeps it off anonymous renders.
+  // for anyone who may not read the audit log. `roles` also keeps it off
+  // anonymous renders.
   { label: 'Audit Log', href: '/admin/audit', testId: 'nav-audit-log', roles: AUDIT_LOG_ROLES },
   { label: 'Admin', href: '/admin', testId: 'nav-admin', superuser: true },
   { label: 'Docs', href: '/docs', testId: 'nav-docs' },

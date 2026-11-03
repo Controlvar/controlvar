@@ -345,6 +345,34 @@ class TestSplitUrlRefusedWithoutRouting:
         assert exc.value.status_code == 501
 
 
+class TestSplitUrlRoutingIsTheModulesOnly:
+    """#393: ``/tracking/split-url/routes`` and ``/assign`` are the split_url
+    module's routes. The core routers declare neither, so a core deployment
+    answers 404 (``scripts/core_build.sh`` runs this with ``modules/``
+    deleted), while ``/tracking/assign`` beside them is served."""
+
+    @pytest.mark.regression
+    @pytest.mark.parametrize(
+        "method, path",
+        [
+            ("GET", "/api/v1/tracking/split-url/routes"),
+            ("POST", "/api/v1/tracking/split-url/assign"),
+        ],
+    )
+    def test_the_core_routers_answer_404(self, method, path):
+        from fastapi import APIRouter, FastAPI
+        from fastapi.testclient import TestClient
+
+        from backend.app.api.api import register_core_routers
+
+        app = FastAPI()
+        app.include_router(register_core_routers(APIRouter()), prefix="/api/v1")
+        client = TestClient(app)
+
+        assert client.request(method, path, json={}).status_code == 404
+        assert client.post("/api/v1/tracking/assign", json={}).status_code == 401
+
+
 class TestComplianceRoutesRefusedWithoutTheModule:
     def test_report_route_returns_501_without_handler(self):
         from backend.app.api.v1.endpoints import compliance

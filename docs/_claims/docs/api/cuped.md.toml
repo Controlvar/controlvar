@@ -532,15 +532,21 @@ text = "Any logged-in user can read the results."
 by = ["test:backend/tests/unit/api/test_cuped_api.py::TestCupedApiEndpoint::test_cuped_endpoint_requires_authentication"]
 
 [[unit]]
-text = "Changing an experiment's variance_reduction_config is a change to the experiment, decided by role and by the experiment's state, not by who created it."
-by = ["exempt:baseline"]
+text = "Changing an experiment's variance_reduction_config is a change to the experiment, decided by permission and by the experiment's state, not by who created it."
+by = [
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
-text = "ANALYST and VIEWER cannot change any experiment: the PUT above answers 403 with \"You don't have permission to update experiments\"."
-by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py"]
+text = "ADMIN and DEVELOPER may change experiments, and in the full profile so may anyone whose custom role or direct grant gives experiment (update); for anyone else the PUT above answers 403 with \"You don't have permission to update experiments\"."
+by = [
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+]
 
 [[unit]]
-text = "ADMIN and DEVELOPER may change experiments, but only a superuser may change one that is no longer a draft, and the demo experiment is running: for a DEVELOPER (or an ADMIN who is not a superuser) the PUT above answers 400 with \"Cannot update experiments in active status\"."
+text = "Only a superuser may change an experiment that is no longer a draft, and the demo experiment is running: for anyone else who may change experiments, such as a DEVELOPER or an ADMIN who is not a superuser, the PUT above answers 400 with \"Cannot update experiments in active status\"."
 by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py"]
 
 [[unit]]

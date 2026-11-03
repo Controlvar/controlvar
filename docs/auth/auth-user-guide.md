@@ -203,6 +203,8 @@ superuser.
   (`PATCH /api/v1/admin/users/{user_id}`, see the
   [API reference](../api/endpoints.md)). After a save the list reloads on the
   page and search you were on.
+- **Permissions** (full profile) shows what the user can do: their role plus their custom
+  roles and direct grants.
 - **Delete** removes the account after you confirm it.
 
 The four roles are Admin, Developer, Analyst and Viewer. A legacy account with no

@@ -46,12 +46,14 @@ def _checked_segment_rules(value: Any) -> Any:
     The value is returned as given, never rewritten. The message is fixed
     text naming a place and a reason, never the submitted rules (see
     ``validate_segment_rules``). A word membership never matches, such as an
-    unknown distance unit, is refused here too (#1204): on the write path
-    only, because ``validate_segment_rules`` also decides whether a stored
-    segment can be evaluated.
+    unknown distance unit (#1204), or a value it cannot read, such as a
+    negative radius or a geo comparison the converter drops (#1525, #1526),
+    is refused here too: on the write path only, because
+    ``validate_segment_rules`` also decides whether a stored segment can be
+    evaluated.
     """
     try:
-        check_segment_vocabulary(validate_segment_rules(value))
+        check_segment_vocabulary(validate_segment_rules(value), value)
     except TargetingRulesError as err:
         raise ValueError(str(err)) from None
     return value
