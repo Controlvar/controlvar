@@ -5,6 +5,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { NotificationProvider } from "@/contexts/NotificationContext";
 import { ModulesProvider } from "@/contexts/ModulesContext";
+import { EffectivePermissionsProvider } from "@/contexts/EffectivePermissionsContext";
 import { ToastContainer } from "@/components/ToastContainer";
 import { AppShell } from "@/components/AppShell";
 import { RequireAuth } from "@/components/RequireAuth";
@@ -12,6 +13,10 @@ import { routeKind } from "@/utils/routes";
 
 export default function App({ Component, pageProps, router }: AppProps) {
   const kind = routeKind(router.pathname);
+  // The page's path, without its query or hash: a navigation to another page
+  // asks for the signed-in user's effective permissions again (#891), a
+  // filter written into the query string does not.
+  const navigationKey = (router.asPath ?? "").split(/[?#]/)[0];
 
   let page = <Component {...pageProps} />;
   if (kind === "protected") {
@@ -30,10 +35,12 @@ export default function App({ Component, pageProps, router }: AppProps) {
       </Head>
       <ModulesProvider>
         <AuthProvider>
-          <NotificationProvider>
-            {page}
-            <ToastContainer />
-          </NotificationProvider>
+          <EffectivePermissionsProvider navigationKey={navigationKey}>
+            <NotificationProvider>
+              {page}
+              <ToastContainer />
+            </NotificationProvider>
+          </EffectivePermissionsProvider>
         </AuthProvider>
       </ModulesProvider>
     </ErrorBoundary>

@@ -59,7 +59,7 @@ const UNREACHABLE = 'Could not reach the server. Check your connection and try a
 export const SCHEDULE_ERROR_COPY: Record<number, string> & { fallback: string } = {
   0: UNREACHABLE,
   400: 'The dates were not accepted, or this is no longer a draft. Reload the page.',
-  403: 'Changing an experiment requires the ADMIN or DEVELOPER role.',
+  403: 'Changing an experiment needs permission to change experiments, which the ADMIN and DEVELOPER roles have.',
   404: 'This experiment no longer exists.',
   422:
     'The dates were not accepted. The start cannot be in the past, and the end must be at least ' +

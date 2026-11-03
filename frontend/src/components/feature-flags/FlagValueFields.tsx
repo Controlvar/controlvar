@@ -219,7 +219,7 @@ export function FlagTypeChoice({ value, onChange }: FlagTypeChoiceProps) {
 }
 
 /**
- * A value as an ANALYST or VIEWER reads it: JSON in a keyboard-scrollable
+ * A value as a user who may not change flags reads it: JSON in a keyboard-scrollable
  * region named for its field, bounded in height, like the page's stored rules.
  */
 export function FlagValueReadOnly({ field, value }: { field: ValueField; value: unknown }) {

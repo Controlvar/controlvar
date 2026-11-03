@@ -22,7 +22,8 @@ export type SegmentAction =
   | 'preview'
   | 'usage';
 
-export const ROLE_NOTE = 'Segments are created and changed by the ADMIN and DEVELOPER roles.';
+export const ROLE_NOTE =
+  'Segments are created and changed with the experiment permissions, which the ADMIN and DEVELOPER roles have.';
 
 const SERVER_FAILED =
   'Something went wrong on the server. Try again; if it keeps happening, your administrator can find the details in the API log.';

@@ -8,9 +8,10 @@ import { GlobalHoldout, MutualExclusionGroup } from '@/types/eligibility';
  * holdouts on the global-holdout page (`services/holdouts.ts`), #1455. That
  * page also reads `activeHoldout` for a DEVELOPER.
  *
- * Both routes check EXPERIMENT CREATE (`_require_developer`): ADMIN, DEVELOPER
- * and superusers get 200, ANALYST and VIEWER 403. The page asks only for a
- * user `canReadEligibility` admits, and neither call carries a query.
+ * Both routes check EXPERIMENT CREATE (`_require_developer`): a superuser,
+ * ADMIN, DEVELOPER, or a custom role or grant of EXPERIMENT CREATE gets 200;
+ * anyone else 403. The page asks only for a user `canReadEligibility`
+ * admits, and neither call carries a query.
  */
 export const EligibilityService = {
   /** `GET /api/v1/mutual-exclusion-groups/{id}`. */

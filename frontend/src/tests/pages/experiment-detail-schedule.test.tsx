@@ -529,7 +529,11 @@ describe("the API's refusals are fixed copy", () => {
     // The 400 the partial body can cause: the end against a start stored since the page loaded.
     ['400 "at least 1:00:00"', apiError(400, 'Experiment must run for at least 1:00:00'), NEUTRAL_400],
     ['400 not a draft', apiError(400, `Cannot schedule experiment with status active. ${PLANTED}`), NEUTRAL_400],
-    ['403', apiError(403, PLANTED), 'Changing an experiment requires the ADMIN or DEVELOPER role.'],
+    [
+      '403',
+      apiError(403, PLANTED),
+      'Changing an experiment needs permission to change experiments, which the ADMIN and DEVELOPER roles have.',
+    ],
     ['404', apiError(404, PLANTED), 'This experiment no longer exists.'],
     [
       '422',

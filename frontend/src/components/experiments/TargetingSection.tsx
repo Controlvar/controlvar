@@ -37,13 +37,18 @@ const STATE_REASONS: Record<string, string> = {
 };
 
 export function roleReason(role: string | null | undefined): string {
-  return `Changing who can join requires the ADMIN or DEVELOPER role; you are ${role || 'signed in without a role'}.`;
+  return `Changing who can join needs permission to change experiments, which the ADMIN and DEVELOPER roles have; you are ${role || 'signed in without a role'}.`;
 }
 
 interface TargetingSectionProps {
   experiment: Experiment;
-  /** `canChangeExperiment(user)`: whether the role may change the experiment at all. */
+  /**
+   * `canChangeExperiment(user, effective)`: whether the user may change the
+   * experiment at all (the built-in role, or a custom role or direct grant).
+   */
   mayChange: boolean;
+  /** True while the effective map is on its way: no reason is shown yet. */
+  mayChangePending?: boolean;
   role: string | null | undefined;
   /** The page's own pause action, offered beside the ACTIVE reason. */
   onPause: () => void;
@@ -117,13 +122,14 @@ function RulesSummary({ value }: { value: Record<string, unknown> }) {
 
 /**
  * "Who can join": the experiment's targeting rules, shown to every reader,
- * and changed in place by a role that may change the experiment while it is
+ * and changed in place by a user who may change the experiment while it is
  * draft or paused. The save sends `targeting_rules` and nothing else, which is
  * what the API accepts on a paused experiment.
  */
 export function TargetingSection({
   experiment,
   mayChange,
+  mayChangePending = false,
   role,
   onPause,
   pauseBusy,
@@ -197,7 +203,10 @@ export function TargetingSection({
   };
 
   let reason: React.ReactNode = null;
-  if (!mayChange) {
+  if (!mayChange && mayChangePending) {
+    // The effective map is on its way: neither the reason nor the controls.
+    reason = null;
+  } else if (!mayChange) {
     reason = (
       <p className="text-sm text-slate-600" data-testid="targeting-role-reason">
         {roleReason(role)}

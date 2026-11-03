@@ -14,7 +14,7 @@ export const HOLDOUT_COPY = {
     'all your experiments changed together. Only one holdout is active at a time: activating another ends ' +
     'this one. Feature flags ignore it. Users who already had an assignment keep it.',
   none: 'No global holdout is active.',
-  refused: 'Seeing the global holdout requires the ADMIN or DEVELOPER role.',
+  refused: 'Seeing the global holdout needs permission to create experiments, which the ADMIN and DEVELOPER roles have.',
   adminOnly: 'Creating, activating and ending holdouts requires the ADMIN role.',
   sizeHelp: 'Recommended 1-5%, up to 10% when traffic is low. It cannot change once the holdout has been active.',
   sizeFixed: 'Fixed once a holdout has been active. Create a new holdout to change it.',

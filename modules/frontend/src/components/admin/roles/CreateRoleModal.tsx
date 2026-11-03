@@ -11,6 +11,16 @@ interface CreateRoleModalProps {
   onSuccess: () => void;
 }
 
+/**
+ * Who an edit reaches (#891): a custom role's permissions take effect for
+ * everyone who has it, from their next request.
+ */
+export function changesApplyText(userCount: number): string {
+  if (userCount <= 0) return 'No user has this role.';
+  if (userCount === 1) return 'Changes apply at once to the 1 user who has this role.';
+  return `Changes apply at once to the ${userCount} users who have this role.`;
+}
+
 export function CreateRoleModal({
   isOpen,
   role,
@@ -173,9 +183,14 @@ export function CreateRoleModal({
               <p className="block text-sm font-medium text-slate-700 mb-2">
                 Permissions
               </p>
+              {isEditMode && role && (
+                <p data-testid="role-users-affected" className="mb-2 text-sm text-slate-700">
+                  {changesApplyText(role.user_count)}
+                </p>
+              )}
               {legacy && (
                 <p data-testid="legacy-permissions-note" className="mb-2 text-sm text-slate-700">
-                  {`Not grantable, removed when you save: ${legacy}. No permission check reads them.`}
+                  {`Not grantable, removed when you save: ${legacy}. They give no permission.`}
                 </p>
               )}
               <PermissionCheckboxGrid
