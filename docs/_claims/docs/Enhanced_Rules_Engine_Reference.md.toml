@@ -225,7 +225,7 @@ by = [
 ]
 
 [[unit]]
-text = "none | between | the attribute is a number, or a date, from value to additional_value, both included. Both bounds are numbers (a JSON number, or text of digits with at most one dot) or both dates (ISO 8601 text, or a Unix timestamp in seconds, which has no time zone). Two dates must both have a time zone or both lack one. Any other pair is refused when the rules are saved (422). A range whose value is above its additional_value matches nobody and is accepted."
+text = "none | between | the attribute is a number, or a date, from value to additional_value, both included. Both bounds are numbers (a JSON number, or text of digits with at most one dot) or both dates (ISO 8601 text, or a Unix timestamp in seconds, which has no time zone). Two dates must both have a time zone or both lack one. Any other pair is refused when the rules are saved (422), and so is a JSON integer too large for a floating-point number. A range whose value is above its additional_value matches nobody and is accepted."
 by = [
     "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_between_includes_both_bounds_for_numbers",
     "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_between_includes_both_bounds_for_dates",
