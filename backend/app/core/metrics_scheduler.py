@@ -6,6 +6,8 @@ aggregating raw metrics data into summary data for efficient querying.
 """
 
 import asyncio
+import contextvars
+import functools
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional
 
@@ -84,15 +86,48 @@ class MetricsScheduler:
 
     async def aggregate_metrics(self) -> Dict[str, int]:
         """
-        Aggregate raw metrics into summary data.
+        Aggregate raw metrics into summary data, off the event loop (#1690).
 
-        This aggregates data at different time periods:
+        The work is synchronous SQLAlchemy (the history purge and six GROUP BY
+        aggregations over ``raw_metrics``), so it runs in one worker thread
+        through ``asyncio.to_thread``; on the loop it would stop the API from
+        answering anything else until it finished.
+
+        This coroutine does not return before the thread does, in both ways
+        it can be cancelled: when its own task is cancelled (it waits for the
+        thread, then re-raises the cancellation), and when the event loop is
+        torn down (``asyncio.run`` cancels every task). The second holds
+        because the worker is a plain ``Future`` from ``run_in_executor``, not
+        a task, so teardown does not cancel it; a task such as
+        ``ensure_future(to_thread(...))`` would be cancelled with the rest and
+        this coroutine would return at once. ``run_locked_tick`` releases the
+        scheduler's advisory lock when this returns, so returning early would
+        let another replica's tick aggregate beside a thread that is still
+        running. The context copy is what ``asyncio.to_thread`` does.
+
+        Returns ``{"items_processed": n, "items_failed": m}`` for the run record.
+        """
+        worker = asyncio.get_running_loop().run_in_executor(
+            None,
+            functools.partial(contextvars.copy_context().run, self._aggregate_sync),
+        )
+        try:
+            return await asyncio.shield(worker)
+        except asyncio.CancelledError:
+            await _wait_for_worker(worker)
+            raise
+
+    @staticmethod
+    def _aggregate_sync() -> Dict[str, int]:
+        """
+        The tick's synchronous body; runs in a worker thread.
+
+        Opens and closes its own session in that thread. This aggregates data
+        at different time periods:
         1. Last hour at minute granularity
         2. Last day at hour granularity
         3. Last month at day granularity
         4. All-time totals
-
-        Returns ``{"items_processed": n, "items_failed": m}`` for the run record.
         """
         logger.info("Aggregating metrics")
 
@@ -166,6 +201,25 @@ class MetricsScheduler:
             else 0,
             "items_failed": failed_periods,
         }
+
+
+async def _wait_for_worker(worker: "asyncio.Future[Dict[str, int]]") -> None:
+    """
+    Wait until *worker* is done, absorbing any further cancellation.
+
+    ``asyncio.wait`` neither cancels *worker* nor raises its exception, so a
+    second cancel during shutdown cannot end the wait early either.
+    """
+    while not worker.done():
+        try:
+            await asyncio.wait({worker})
+        except asyncio.CancelledError:
+            continue
+    if not worker.cancelled() and worker.exception() is not None:
+        logger.error(
+            "metrics aggregation failed after the tick was cancelled: %s",
+            worker.exception(),
+        )
 
 
 # Create a singleton instance of the scheduler
