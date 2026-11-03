@@ -1366,6 +1366,23 @@ describe('the estimate plans with the experiment\'s correction (#820)', () => {
     );
   });
 
+  it.each([
+    ['Benjamini-Hochberg', 'benjamini_hochberg', ESTIMATE_56961_BH, 'is planned at 2.5% significance.'],
+    ['None', 'none', ESTIMATE_47036_NONE_THREE, 'with the control at 5% significance and makes no correction'],
+  ])(
+    'an estimate gone out of date keeps the significance it was planned at (%s)',
+    async (_label, method, estimate, levelText) => {
+      apiAnswering(estimate);
+      await toEstimate(threeVariants);
+      setValue('analysis-correction', method);
+      await calculate();
+      setValue('analysis-confidence', '0.9');
+      expect(screen.getByTestId('estimate-stale')).toBeInTheDocument();
+      expect(screen.getByTestId('estimate-total')).toHaveTextContent('at 80% power and 5% significance.');
+      expect(screen.getByTestId('estimate-many-variants')).toHaveTextContent(levelText);
+    },
+  );
+
   it('an estimate made at 2 variants, shown after a third is added, counts 2 variants and claims no correction (PB-1)', async () => {
     apiAnswering(ESTIMATE_47036_BH_TWO);
     await toEstimate();
