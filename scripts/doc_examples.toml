@@ -198,7 +198,7 @@ expects = 0
 path = "docs/development/testing-guide.md"
 environment = "bare"
 exec = 0
-skip = 3
+skip = 4
 expects = 0
 
 [[document]]
