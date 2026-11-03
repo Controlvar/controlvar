@@ -13851,8 +13851,7 @@
             "type": "number"
           },
           "baseline_rate": {
-            "description": "Current baseline conversion/success rate (exclusive 0–1).",
-            "exclusiveMaximum": 1,
+            "description": "The metric before the change. For metric_type 'proportion' (the default), a rate above 0 and below 1: 0.05 is 5%. For 'mean' or 'ratio', the baseline mean in the metric's own units, such as 45.0 for an average order value of 45: any finite number above 0.",
             "exclusiveMinimum": 0,
             "title": "Baseline Rate",
             "type": "number"
@@ -23452,7 +23451,7 @@
     },
     "/api/v1/power/mde": {
       "post": {
-        "description": "Given a fixed sample size per variant, compute the smallest relative effect that can be detected with the specified power and alpha.",
+        "description": "Given a fixed sample size per variant, compute the smallest relative effect that can be detected with the specified power and alpha. It plans a conversion rate (a proportion) only: baseline_rate is a rate between 0 and 1, and a metric_type sent with the request is ignored.",
         "operationId": "compute_mde_api_v1_power_mde_post",
         "requestBody": {
           "content": {

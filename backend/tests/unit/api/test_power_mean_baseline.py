@@ -76,7 +76,11 @@ def test_the_mean_answer_agrees_with_statsmodels(client):
 @pytest.mark.parametrize(
     ("overrides", "per_variant"),
     [
-        pytest.param({"metric_type": "ratio", "baseline_rate": 3.2, "baseline_std": 1.1}, 742, id="ratio-3.2"),
+        pytest.param(
+            {"metric_type": "ratio", "baseline_rate": 3.2, "baseline_std": 1.1},
+            742,
+            id="ratio-3.2",
+        ),
         pytest.param({"baseline_rate": 1e9, "baseline_std": 1e8}, 63, id="mean-1e9"),
     ],
 )
@@ -112,9 +116,26 @@ def test_a_mean_of_zero_or_below_is_refused_at_the_field(client, mean):
 @pytest.mark.parametrize(
     "body",
     [
-        pytest.param({"baseline_rate": 1.0, "minimum_detectable_effect": 0.05, "metric_type": "proportion"}, id="one"),
-        pytest.param({"baseline_rate": 1.5, "minimum_detectable_effect": 0.05, "metric_type": "proportion"}, id="one-and-a-half"),
-        pytest.param({"baseline_rate": 45.0, "minimum_detectable_effect": 0.05}, id="forty-five-no-metric-type"),
+        pytest.param(
+            {
+                "baseline_rate": 1.0,
+                "minimum_detectable_effect": 0.05,
+                "metric_type": "proportion",
+            },
+            id="one",
+        ),
+        pytest.param(
+            {
+                "baseline_rate": 1.5,
+                "minimum_detectable_effect": 0.05,
+                "metric_type": "proportion",
+            },
+            id="one-and-a-half",
+        ),
+        pytest.param(
+            {"baseline_rate": 45.0, "minimum_detectable_effect": 0.05},
+            id="forty-five-no-metric-type",
+        ),
     ],
 )
 def test_a_proportion_of_one_or_more_is_refused_by_the_schema_naming_metric_type(
@@ -136,7 +157,11 @@ def test_a_proportion_of_one_or_more_is_refused_by_the_schema_naming_metric_type
 @pytest.mark.unit
 @pytest.mark.regression
 def test_a_proportion_whose_treatment_reaches_one_is_refused_by_the_schema(client):
-    body = {"baseline_rate": 0.96, "minimum_detectable_effect": 0.05, "metric_type": "proportion"}
+    body = {
+        "baseline_rate": 0.96,
+        "minimum_detectable_effect": 0.05,
+        "metric_type": "proportion",
+    }
     response = client.post(URL, json=body)
     assert response.status_code == 422
     detail = response.json()["detail"]
@@ -243,13 +268,9 @@ def test_the_service_plans_a_mean_and_still_refuses_a_proportion_of_one_or_more(
     )
     assert (result.per_variant, result.total) == (447, 894)
     with pytest.raises(ValueError, match="send metric_type 'mean' and baseline_std"):
-        service.compute_sample_size(
-            baseline_rate=1.5, minimum_detectable_effect=0.05
-        )
+        service.compute_sample_size(baseline_rate=1.5, minimum_detectable_effect=0.05)
     with pytest.raises(ValueError, match="must stay below 1"):
-        service.compute_sample_size(
-            baseline_rate=0.96, minimum_detectable_effect=0.05
-        )
+        service.compute_sample_size(baseline_rate=0.96, minimum_detectable_effect=0.05)
 
 
 @pytest.mark.unit
