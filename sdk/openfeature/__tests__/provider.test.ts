@@ -727,7 +727,9 @@ describe('ExperimentationProvider — cache', () => {
     const provider = makeProvider(fetchMock);
     await provider.resolveBooleanEvaluation('f1', false, { targetingKey: 'u1' });
     await provider.resolveBooleanEvaluation('f1', false, { targetingKey: 'u2' });
-    await provider.resolveBooleanEvaluation('f2', false, { targetingKey: 'u1' });
+    const otherFlag = await provider.resolveBooleanEvaluation('f2', false, { targetingKey: 'u1' });
+    // u1 holds the server's answer for f1 only: f2's first answer is its own, not CACHED.
+    expect(otherFlag.reason).toBe(StandardResolutionReasons.TARGETING_MATCH);
     await provider.resolveBooleanEvaluation('f1', false, { targetingKey: 'u1' });
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });

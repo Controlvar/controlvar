@@ -166,6 +166,15 @@ describe('the vectors through evaluateFlag', () => {
     const cases = vectors.cases.filter((c: { context: unknown }) => !hasNonFinite(c.context));
     expect(vectors.cases.length - cases.length).toBe(42);
 
+    // The flags this ruleset sends to the server are exactly its active "remote" ones, computed from
+    // the file so the list cannot drift without this failing.
+    const remoteKeys: string[] = vectors.ruleset.flags
+      .filter((f: { active?: boolean; evaluation?: string }) => f.active && f.evaluation === 'remote')
+      .map((f: { key: string }) => f.key)
+      .sort();
+    expect(remoteKeys).toHaveLength(45);
+    expect([...client.status().serverEvaluatedFlags].sort()).toEqual(remoteKeys);
+
     let expectedRemote = 0;
     const wrong: string[] = [];
     const unsendable: string[] = [];
@@ -201,6 +210,18 @@ describe('the vectors through evaluateFlag', () => {
       }
       if (result.source !== (remote ? 'server' : 'local') || remote !== (testCase.must_local ? 0 : 1)) {
         wrong.push(`${testCase.id}: must_local=${testCase.must_local} but ${remote} server calls, source ${result.source}`);
+      }
+      if (remote) {
+        // The request that reached the server carries the case's context: the decoded `context`
+        // parameter equals it, and is absent when the context is null or {}.
+        const calls = server.requests('/feature-flags/evaluate/');
+        const sent = new URL(calls[calls.length - 1].url).searchParams.get('context');
+        const empty = !testCase.context || Object.keys(testCase.context).length === 0;
+        if (empty) {
+          if (sent !== null) wrong.push(`${testCase.id}: context sent for an empty context: ${sent}`);
+        } else if (sent === null || JSON.stringify(JSON.parse(sent)) !== JSON.stringify(testCase.context)) {
+          wrong.push(`${testCase.id}: context sent ${sent}, expected ${JSON.stringify(testCase.context)}`);
+        }
       }
       client.clearCache();
     }
