@@ -10,7 +10,8 @@ caught. Two checks, because each misses what the other sees:
 * (a) a static scan of every module's imports, ``importlib.import_module`` and
   ``__import__`` with a literal name included, naming the file and line;
 * (b) a fresh ``python -I`` that refuses those packages from a meta-path
-  finder, then imports every module and computes one reference. It has to be
+  finder, then imports every module and computes one reference and one flag
+  bucket (an import inside a function runs only when it is called). It has to be
   a fresh process: in this one ``backend`` is imported already, so a blocker
   here would refuse nothing.
 
@@ -152,12 +153,14 @@ comparison = reference.compare(
     reference.ANALYSIS["conversion"], "benjamini_hochberg", 0.95,
 )
 srm = reference.srm_p([expected.sample_size(v) for v in expected.variants], [50, 50])
+flag = hashing.flag_bucket("user-123", "my-flag")
 leaked = sorted(
     m for m in sys.modules
     if any(m == b or m.startswith(b + ".") for b in BLOCKED)
 )
 print("leaked", leaked)
 print("independent", len(plan.ops), comparison[0].p_value, srm)
+print("flag bucket", flag)
 """
 
 
@@ -172,3 +175,4 @@ def test_a_fresh_interpreter_that_refuses_the_product_runs_the_library():
     assert result.returncode == 0, result.stdout + result.stderr
     assert "leaked []" in result.stdout, result.stdout
     assert "independent" in result.stdout, result.stdout
+    assert "flag bucket 79" in result.stdout, result.stdout

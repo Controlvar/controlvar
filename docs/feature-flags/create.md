@@ -93,7 +93,8 @@ match no targeting rule:
 | `100%` | Everyone |
 
 Each user always lands on the same side of the percentage. Raising it adds users, and
-takes none away.
+takes none away. Lowering it takes users away and adds none, and returning to an earlier
+percentage gives back the same users.
 
 ### Step 5: Create the flag, then turn it on
 
