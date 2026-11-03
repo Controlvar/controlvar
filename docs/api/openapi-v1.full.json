@@ -12830,6 +12830,19 @@
             "description": "For time-based triggers",
             "title": "Start Date"
           },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the stage started, in UTC: the time a time-based stage's duration and the schedule's min_stage_duration are measured from. Null until the stage starts, for a stage that completed or failed before it was recorded, and for a stage a release that did not record it started during an upgrade, while that stage runs and after; the scheduler measures such a stage from updated_at. Editing the stage does not change it.",
+            "title": "Started At"
+          },
           "status": {
             "$ref": "#/components/schemas/RolloutStageStatus"
           },
