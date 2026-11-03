@@ -69,6 +69,35 @@ function Home() {
 }
 ```
 
+## Exposure hook
+
+`onExposure`, a function you give `ExperimentationClient` when you create it, is called once each
+time the server enrols the user in an experiment and the answer did not come from the client's
+memory cache or from AsyncStorage: the moment the server records the exposure. It receives an
+`Exposure`: `experimentKey`, `userId`, `variantId` (`null` when the server sends none) and
+`variantName`.
+
+```ts
+const client = new ExperimentationClient({
+  apiKey: 'YOUR_API_KEY',
+  baseUrl: 'http://localhost:8000',
+  onExposure: (exposure) => console.log('exposure', exposure.experimentKey, exposure.variantName),
+  onError: (error, operation) => {
+    if (operation === 'exposure') console.warn('onExposure failed', error);
+  },
+});
+```
+
+It is not called for an answer from the client's memory cache or from AsyncStorage, a user the
+experiment did not enrol (`assigned: false`), a call that fails or a feature flag. With the default
+`offlineFallback`, the answer stays in AsyncStorage for the cache lifetime, so neither
+`clearCache()` nor a new client calls it again until that answer expires; with
+`offlineFallback: false`, or after `clearStorage()`, both do. If it throws, or returns a Promise
+that rejects, the answer is unchanged and `onError` receives the error with the operation
+`'exposure'`.
+
+Full details: [Exposure hook](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/react-native.md#exposure-hook).
+
 ## Testing with Jest
 
 React Native's Jest preset does not transform code under `node_modules`, and this package is

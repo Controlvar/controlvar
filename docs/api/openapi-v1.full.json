@@ -12273,13 +12273,15 @@
           "min_stage_duration": {
             "anyOf": [
               {
+                "maximum": 8760,
+                "minimum": 0,
                 "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Minimum time (hours) between stages",
+            "description": "Minimum time (hours) between stages: a whole number from 0 to 8760, or null for no minimum",
             "title": "Min Stage Duration"
           },
           "name": {
@@ -12591,13 +12593,15 @@
           "min_stage_duration": {
             "anyOf": [
               {
+                "maximum": 8760,
+                "minimum": 0,
                 "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Minimum time (hours) between stages",
+            "description": "Minimum time (hours) between stages: a whole number from 0 to 8760, or null for no minimum; null clears a stored minimum",
             "title": "Min Stage Duration"
           },
           "name": {
@@ -12626,7 +12630,8 @@
                 "type": "null"
               }
             ],
-            "description": "Updated rollout stages",
+            "deprecated": true,
+            "description": "Not accepted. A request that contains `stages`, with any value including null, is refused with 422. Add a stage with `POST /api/v1/rollout-schedules/{schedule_id}/stages` and change one with `PUT /api/v1/rollout-schedules/stages/{stage_id}`.",
             "title": "Stages"
           },
           "start_date": {
@@ -12728,7 +12733,7 @@
                 "type": "null"
               }
             ],
-            "description": "Configuration for the trigger",
+            "description": "Configuration for the trigger. When it has `duration`, that is the number of hours from 0 to 8760 a time-based stage runs before the scheduler completes it; without `duration` the default is 24. The rest of the object is not checked.",
             "title": "Trigger Configuration"
           },
           "trigger_type": {
@@ -12824,6 +12829,19 @@
             ],
             "description": "For time-based triggers",
             "title": "Start Date"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the stage started, in UTC: the time a time-based stage's duration and the schedule's min_stage_duration are measured from. Null until the stage starts, for a stage that completed or failed before it was recorded, and for a stage a release that did not record it started during an upgrade, while that stage runs and after; the scheduler measures such a stage from updated_at. Editing the stage does not change it.",
+            "title": "Started At"
           },
           "status": {
             "$ref": "#/components/schemas/RolloutStageStatus"
@@ -12963,7 +12981,7 @@
                 "type": "null"
               }
             ],
-            "description": "Configuration for the trigger",
+            "description": "Configuration for the trigger. When it has `duration`, that is the number of hours from 0 to 8760 a time-based stage runs before the scheduler completes it; without `duration` the default is 24. The rest of the object is not checked.",
             "title": "Trigger Configuration"
           },
           "trigger_type": {
@@ -31897,7 +31915,7 @@
         ]
       },
       "put": {
-        "description": "Update an existing rollout schedule.\n\nThis endpoint allows updating the properties of a rollout schedule,\nincluding its stages and status transitions.",
+        "description": "Update an existing rollout schedule.\n\nThis endpoint updates the properties of a rollout schedule. It does not\ntake `stages`: a request that contains it answers 422. Add a stage with\n`POST /api/v1/rollout-schedules/{schedule_id}/stages` and change one with\n`PUT /api/v1/rollout-schedules/stages/{stage_id}`.",
         "operationId": "update_rollout_schedule_api_v1_rollout_schedules__schedule_id__put",
         "parameters": [
           {

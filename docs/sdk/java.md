@@ -132,7 +132,7 @@ accepts a custom `OkHttpClient` (used with `MockWebServer`).
 | `User.builder(userId).attribute(k, v).attributes(map).build()` | `getUserId()`, `getAttributes()` (unmodifiable), `getAttribute(k)` |
 | `FlagEvaluation` | `getKey()`, `isEnabled()`, `getConfig()` (`Object`: `Map`, `List`, scalar or `null`), `getConfigMap()` (`Map` or `null`) |
 | `ExperimentAssignment` | `getExperimentKey()`, `getUserId()`, `getVariantId()` (UUID), `getVariantName()`, `isControl()`, `getConfiguration()` (`Map<String,Object>` or `null`); `getVariantKey()` is a deprecated alias |
-| `TrackEvent.builder(userId, eventName)` | `.eventType(s)` (defaults to `eventName`), `.experimentKey(s)`, `.featureFlagKey(s)`, `.value(Double)`, `.property(k, v)` / `.properties(map)` (sent as `metadata`), `.timestamp(Instant)` (ISO-8601); `hasKey()`, `toBody()` |
+| `TrackEvent.builder(userId, eventName)` | `.eventType(s)` (defaults to `eventName`), `.experimentKey(s)`, `.featureFlagKey(s)`, `.value(Double)`, `.property(k, v)` / `.properties(map)` (sent as `metadata`), `.timestamp(Instant)` (ISO-8601), `.eventId(s)` (sent as `event_id`, see [Event ids](#event-ids)); `getEventId()`, `hasKey()`, `toBody()` |
 | `ExperimentationException` (`RuntimeException`) | `getStatusCode()` (HTTP status, `0` for network/serialization), `isApiError()` |
 | `Exposure` (final, immutable) | `getExperimentKey()`, `getUserId()`, `getVariantId()` (`null` when the server sends none), `getVariantName()`: what an `ExposureListener` receives (see [Exposure hook](#exposure-hook)) |
 | `ExposureListener` (functional interface) | `void onExposure(Exposure exposure)` |
@@ -172,6 +172,31 @@ come later.
 
 Conversions are matched to metrics by **event name**: a metric on `purchase` counts every
 `purchase` event regardless of `event_type`.
+
+---
+
+## Event ids
+
+Every event this SDK sends carries an `event_id`. The server stores an event sent again with the
+same `event_id`, user, experiment, flag and event name only once (see
+[How events count](../guides/how-events-count.md#sending-an-event-again)).
+
+- `TrackEvent.builder(userId, eventName).eventId("order-42")` sets the id. Without one, the SDK
+  makes a lowercase random UUID (version 4) for the event each time you track it, so tracking the
+  same `TrackEvent` twice sends two events.
+- An event fanned out to several experiments and flags carries the same id in every entry, so it
+  counts once in each of them. In `trackBatch`, each event has its own id.
+- `eventId` takes at most 255 characters, with no NUL and no lone surrogate. The builder throws
+  `IllegalArgumentException` for any other id, so that event is never sent. `null` and `""` set
+  none.
+- OkHttp, which this SDK sends its requests with, sends a request again by itself when the
+  connection drops after the request was written, for example on a kept-alive connection that the
+  server or a proxy has closed. The request it sends again has the same body and the same
+  `event_id`, so the server stores the event once.
+- A request that times out is not sent again: `trackEvent` and `trackBatch` drop it, and
+  `trackEventSync` and `trackBatchSync` throw `ExperimentationException`. The server may have
+  stored it. To send it again yourself and have it stored once, give the event an `eventId` and
+  send it again with that same id.
 
 ---
 
@@ -330,7 +355,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 |---|---|---|---|
 | `evaluateFeatureFlag`, `isFeatureEnabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
 | `getExperimentAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
-| `trackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
+| `trackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id}` | ignored |
 | `trackEvent` without keys, `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |
 
 Errors: 401 bad key, 404 (an unknown experiment or flag key, or a draft experiment with no control variant), 422 invalid event, 429

@@ -121,6 +121,8 @@ export interface RolloutStage {
   start_date?: string | null;
   status: RolloutStageStatus;
   completed_date?: string | null;
+  /** When the stage started (UTC, no zone); null until it starts. Read-only. */
+  started_at?: string | null;
   created_at: string;
   updated_at: string;
 }
