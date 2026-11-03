@@ -156,9 +156,13 @@ page's first render shows them with no request instead of every flag off and the
 
 ```tsx
 // pages/checkout.tsx
-export const getServerSideProps = async ({ req }) => {
+export const getServerSideProps = async ({ req, res }) => {
   const client = new ServerClient({ apiKey: process.env.CONTROLVAR_API_KEY!, baseUrl: process.env.CONTROLVAR_API_URL! });
-  const visitorId = req.cookies.visitor_id;
+  let visitorId = req.cookies.visitor_id;
+  if (!visitorId) {  // a first visit has no cookie yet: give the visitor an id
+    visitorId = crypto.randomUUID();
+    res.setHeader('Set-Cookie', `visitor_id=${visitorId}; Path=/; Max-Age=31536000; SameSite=Lax`);
+  }
   const bootstrap = await client.bootstrap({ flags: ['new_search'], experiments: ['checkout_flow'] }, { userId: visitorId });
   return { props: { visitorId, bootstrap } };  // a prop, never a <script> tag of your own
 };

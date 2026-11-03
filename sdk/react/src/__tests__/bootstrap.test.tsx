@@ -144,6 +144,15 @@ function ExperimentProbe({ experimentKey = 'exp-1' }: { experimentKey?: string }
   return <span>{text}</span>;
 }
 
+function MultiProbe({ flagKeys = ['flag-1'] }: { flagKeys?: string[] }) {
+  const flags = useMultipleFlags(flagKeys);
+  const first = flags[flagKeys[0]];
+  const text = first
+    ? `MULTI-${first.isEnabled ? 'ON' : 'OFF'}${first.loading ? '|loading' : ''}${first.error ? '|error' : ''}`
+    : 'MULTI-none';
+  return <span>{text}</span>;
+}
+
 /**
  * The page: `children` under a Provider whose bootstrap is the shared one, or
  * the value given (an explicit `undefined` included), with `extra` config and
@@ -434,11 +443,17 @@ describe('bootstrap: warnings', () => {
       tree(<Banner />, {
         userId: 'u-1',
         flags: { 'flag-1': flagOn, 'flag-2': { enabled: 'yes' } },
-        experiments: { 'exp-1': { variant: 'treatment' }, 'exp-2': null },
+        experiments: {
+          'exp-1': { variant: 'treatment' },
+          'exp-2': null,
+          // variant_name must be a string: a number and null are malformed too.
+          'exp-3': { ...treatment, variant_name: 5 },
+          'exp-4': { ...treatment, variant_name: null },
+        },
       })
     );
     await act(flush);
-    expect(warn.mock.calls).toEqual([[warningEntries(1, 2)]]);
+    expect(warn.mock.calls).toEqual([[warningEntries(1, 4)]]);
   });
 
   it('warns once per reason per Provider, under StrictMode and across re-renders', async () => {
@@ -565,6 +580,73 @@ describe('bootstrap: after the first render', () => {
     await act(flush);
     expect(distinct(frames)).toEqual(['FLAG-ON', 'FLAG-OFF|loading', 'FLAG-ON']);
     expect(evaluations(api, 'flag-2')).toBe(1);
+  });
+
+  it('changes user before any answer: loading, then an error, never the bootstrapped answer of the user before', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    // No answer for u-1; a failure for u-2.
+    const fetchMock = jest.fn().mockImplementation((url: string, init?: { body?: string }) =>
+      `${url} ${init?.body ?? ''}`.includes('u-2')
+        ? Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) })
+        : new Promise(() => {})
+    );
+    global.fetch = fetchMock;
+    const all = (
+      <>
+        <FlagProbe />
+        <ExperimentProbe />
+        <MultiProbe />
+      </>
+    );
+    const { rerender, container } = render(tree(all));
+    expect(container.textContent).toBe('FLAG-ONtreatmentMULTI-ON');
+    rerender(tree(all, bootstrap, {}, { userId: 'u-2' }));
+    expect(container.textContent).toBe('FLAG-OFF|loadingControl|loadingMULTI-none');
+    await act(flush);
+    expect(container.textContent).toBe('FLAG-OFF|errorControl|errorMULTI-OFF|error');
+  });
+
+  it('changes key before any answer: loading, never the bootstrapped answer of the key before', async () => {
+    global.fetch = jest.fn().mockReturnValue(new Promise(() => {})); // never answers
+    const page = (flagKey: string, experimentKey: string) => (
+      <>
+        <FlagProbe flagKey={flagKey} />
+        <ExperimentProbe experimentKey={experimentKey} />
+        <MultiProbe flagKeys={[flagKey]} />
+      </>
+    );
+    const { rerender, container } = render(tree(page('flag-1', 'exp-1')));
+    expect(container.textContent).toBe('FLAG-ONtreatmentMULTI-ON');
+    rerender(tree(page('flag-2', 'exp-1'))); // the flag keys alone
+    expect(container.textContent).toBe('FLAG-OFF|loadingtreatmentMULTI-none');
+    rerender(tree(page('flag-2', 'exp-2'))); // the experiment key too
+    expect(container.textContent).toBe('FLAG-OFF|loadingControl|loadingMULTI-none');
+    // The experiment's key alone, from a fresh page.
+    const second = render(tree(page('flag-1', 'exp-1')));
+    second.rerender(tree(page('flag-1', 'exp-2')));
+    expect(second.container.textContent).toBe('FLAG-ONControl|loadingMULTI-ON');
+  });
+
+  it('matches keys exactly, not ignoring case: Flag is not flag, Exp is not exp', async () => {
+    global.fetch = jest.fn().mockReturnValue(new Promise(() => {})); // never answers
+    const cased: ExperimentationBootstrap = {
+      userId: 'u-1',
+      flags: { Flag: { ...flagOn, key: 'Flag' } },
+      experiments: { Exp: { ...treatment, experiment_key: 'Exp' } },
+    };
+    const page = (flagKey: string, experimentKey: string) => (
+      <>
+        <FlagProbe flagKey={flagKey} />
+        <ExperimentProbe experimentKey={experimentKey} />
+        <MultiProbe flagKeys={[flagKey]} />
+      </>
+    );
+    const { rerender, container } = render(tree(page('Flag', 'Exp'), cased));
+    expect(container.textContent).toBe('FLAG-ONtreatmentMULTI-ON');
+    rerender(tree(page('flag', 'Exp'), cased));
+    expect(container.textContent).toBe('FLAG-OFF|loadingtreatmentMULTI-none');
+    rerender(tree(page('flag', 'exp'), cased));
+    expect(container.textContent).toBe('FLAG-OFF|loadingControl|loadingMULTI-none');
   });
 
   it('a hook already mounted ignores a new bootstrap prop, and a hook that mounts later reads it', async () => {

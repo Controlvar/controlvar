@@ -1625,7 +1625,12 @@ REACT_BOOTSTRAP_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], .
         "Hooks start loading and ask again. A bootstrap still passed is then another user's: it is"
         " ignored, with its warning.",
         (REACT_PAGE,),
-        ("starts loading and asks again when the user changes, as without one",),
+        (
+            "starts loading and asks again when the user changes, as without one",
+            "changes user before any answer: loading, then an error, never the bootstrapped answer of the user before",
+            "changes key before any answer: loading, never the bootstrapped answer of the key before",
+            "matches keys exactly, not ignoring case: Flag is not flag, Exp is not exp",
+        ),
     ),
     (
         "Hooks already on the page keep their answers; hooks that mount later read the new one.",
