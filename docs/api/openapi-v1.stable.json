@@ -22126,7 +22126,7 @@
     },
     "/api/v1/mcp/manifest": {
       "get": {
-        "description": "Return the MCP server manifest listing all available tools. No authentication is required for manifest discovery.",
+        "description": "Return the tool list of the Controlvar MCP server, which runs on your computer and calls this API with your API key. Nothing on this API answers an MCP client. No authentication is required to read the list.",
         "operationId": "get_mcp_manifest_api_v1_mcp_manifest_get",
         "responses": {
           "200": {
@@ -27610,7 +27610,7 @@
       "name": "AI Design"
     },
     {
-      "description": "Model Context Protocol server — exposes platform APIs to AI coding assistants and agents",
+      "description": "The tool list of the Controlvar MCP server, which runs on your computer and calls this API",
       "name": "MCP"
     },
     {

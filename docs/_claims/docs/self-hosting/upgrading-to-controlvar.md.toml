@@ -92,7 +92,7 @@ by = [
 ]
 
 [[unit]]
-text = "The MCP server's manifest, GET /api/v1/mcp/manifest, now gives the name controlvar."
+text = "The MCP manifest, GET /api/v1/mcp/manifest, which lists the tools of the Controlvar MCP server, now gives the name controlvar."
 by = ["test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_mcp_manifest_names_the_server_controlvar"]
 
 [[unit]]
