@@ -22,6 +22,7 @@ from pydantic import (
 )
 from pydantic_core import InitErrorDetails, PydanticCustomError
 
+from backend.app.core.context_limits import nested_deeper_than
 from backend.app.schemas.storable_text import StorableTextModel
 
 #: The longest ``event_id`` an event may carry (#1543).
@@ -81,7 +82,7 @@ class EventFields(BaseModel):
 
     @field_validator("properties", "metadata", mode="before")
     @classmethod
-    def parse_json_string(cls, v: Any) -> Any:
+    def parse_json_string(cls, v: Any, info: ValidationInfo) -> Any:
         """Accept a JSON-encoded string for the free-form attribute fields."""
         if isinstance(v, str):
             import json
@@ -90,6 +91,13 @@ class EventFields(BaseModel):
                 return json.loads(v) if v.strip() else None
             except json.JSONDecodeError as exc:
                 raise ValueError(f"must be a JSON object: {exc}") from exc
+            except RecursionError:
+                # Nested past the parser's own limit: far past the depth
+                # limit, so the same refusal as any other over-deep value.
+                raise ValueError(
+                    f"{info.field_name} must not be nested more than "
+                    f"{EVENT_METADATA_MAX_DEPTH} levels deep"
+                ) from None
         return v
 
 
@@ -99,31 +107,6 @@ class EventFields(BaseModel):
 #: below the ~255 levels at which building the response overflowed the
 #: serialiser after the event was already stored.
 EVENT_METADATA_MAX_DEPTH = 64
-
-
-def exceeds_nesting_depth(value: Any, limit: int) -> bool:
-    """True if *value* nests more than *limit* levels of dict/list/tuple.
-
-    Iterative, and it stops at the first container deeper than *limit*, so a
-    hostile body costs at most the containers down to that depth.
-    """
-    stack = [(value, 1)]
-    while stack:
-        item, depth = stack.pop()
-        if isinstance(item, dict):
-            children = item.values()
-        elif isinstance(item, (list, tuple)):
-            children = item
-        else:
-            continue
-        if depth > limit:
-            return True
-        stack.extend(
-            (child, depth + 1)
-            for child in children
-            if isinstance(child, (dict, list, tuple))
-        )
-    return False
 
 
 class BoundedEventMetadata(BaseModel):
@@ -137,7 +120,7 @@ class BoundedEventMetadata(BaseModel):
     @field_validator("properties", "metadata", mode="after", check_fields=False)
     @classmethod
     def _refuse_deep_metadata(cls, value: Any, info: ValidationInfo) -> Any:
-        if exceeds_nesting_depth(value, EVENT_METADATA_MAX_DEPTH):
+        if nested_deeper_than(value, EVENT_METADATA_MAX_DEPTH):
             raise ValueError(
                 f"{info.field_name} must not be nested more than "
                 f"{EVENT_METADATA_MAX_DEPTH} levels deep"

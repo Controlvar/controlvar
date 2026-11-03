@@ -5,11 +5,11 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from pydantic import ValidationError
 
+from backend.app.core.context_limits import nested_deeper_than as exceeds_nesting_depth
 from backend.app.models.event import normalize_event_timestamp
 from backend.app.schemas.tracking import (
     EVENT_METADATA_MAX_DEPTH,
     UntaggedEventCreate,
-    exceeds_nesting_depth,
 )
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
@@ -46,6 +46,19 @@ def test_the_schema_refuses_one_level_over_and_accepts_the_limit():
     with pytest.raises(ValidationError) as caught:
         UntaggedEventCreate(**base, properties=_nested(EVENT_METADATA_MAX_DEPTH + 1))
     assert "properties must not be nested more than 64 levels deep" in str(caught.value)
+
+
+@pytest.mark.parametrize("field", ["metadata", "properties"])
+@pytest.mark.parametrize("opener, closer", [('{"a":', "}"), ("[", "]")])
+def test_a_json_string_nested_past_the_recursion_limit_is_a_validation_error(
+    field, opener, closer
+):
+    # json.loads raises RecursionError on this; it must surface as the same
+    # refusal as any over-deep value, not escape as a 500.
+    text = opener * 5000 + "1" + closer * 5000
+    with pytest.raises(ValidationError) as caught:
+        UntaggedEventCreate(event_name="click", user_id="u", **{field: text})
+    assert f"{field} must not be nested more than 64 levels deep" in str(caught.value)
 
 
 @pytest.mark.parametrize(

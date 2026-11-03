@@ -1099,9 +1099,11 @@ A 422 names positions and fields, never the ids that were sent.
   missing, `null` and `""` mean none. An event sent again with the same `event_id`, user,
   experiment, flag and event name is not stored again; see
   [How events count](../guides/how-events-count.md#sending-an-event-again).
-- **Event limits**: `metadata` (`properties` on `/tracking/events`) may nest at most 64 levels,
+- **Event limits**: `metadata` may nest at most 64 levels,
   every JSON object and array a level and the object itself the first, so `{"a": {"b": 1}}` is 2
-  levels. Deeper answers 422 and nothing is stored. A `timestamp` at the very edge of the date
+  levels. Deeper answers 422 and nothing is stored. `/tracking/events` accepts `properties` as well
+  as `metadata`, with the same limit. A refusal on `/tracking/track` and `/tracking/batch` names
+  `properties`, which is what the stored event calls `metadata`. A `timestamp` at the very edge of the date
   range whose UTC offset moves it past 0001-01-01 or 9999-12-31 answers 422 too. `/tracking/batch`
   and `/tracking/events` hold events to the same limits; in a batch the entry is reported in
   `errors` and the others are stored.
@@ -1116,7 +1118,7 @@ A 422 names positions and fields, never the ids that were sent.
   Each entry is tagged with a variant as `/track` tags it: only while its experiment is running.
   An entry already stored with its `event_id` (an earlier request's, or an earlier entry of this
   one) counts in `success_count` and in `duplicate_count`, and nothing is written for it.
-- **Response**: 200 OK `{"success_count": int, "failure_count": int, "duplicate_count": int, "errors": [...]|null}`; 422 above 100 events, or one entry invalid (its `event_id` among them), and none is stored
+- **Response**: 200 OK `{"success_count": int, "failure_count": int, "duplicate_count": int, "errors": [...]|null}`; 422 above 100 events, or one entry invalid as a request (its `event_id` among them), and none is stored; an entry that is well formed but refused when its event is built (metadata nested too deep, an edge `timestamp`, a key not found) is reported in `errors` and the others are stored
 
 ### Track Event by Ids
 - **Endpoint**: `POST /api/v1/tracking/events`

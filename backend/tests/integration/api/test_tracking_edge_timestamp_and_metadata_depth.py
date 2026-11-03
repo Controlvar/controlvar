@@ -242,6 +242,39 @@ def test_events_route_refuses_over_deep_properties_too(
     assert _written(db_session) == before
 
 
+@pytest.mark.parametrize("field", ["metadata", "properties"])
+@pytest.mark.parametrize("shape", ["objects", "arrays"])
+@pytest.mark.parametrize("levels", [300, 5000, 100_000])
+def test_events_route_refuses_a_json_string_nested_past_the_recursion_limit(
+    sdk_client, db_session, experiment, field, shape, levels
+):
+    """``/events`` takes the attribute fields as a JSON-encoded string too.
+
+    ``json.loads`` runs before the depth check and raises ``RecursionError``
+    once the string nests past the interpreter's limit; that must be the same
+    422 as any other over-deep value, not a 500.
+    """
+    if shape == "objects":
+        text_value = '{"a":' * levels + "1" + "}" * levels
+    else:
+        # The attribute field is an object, so the arrays sit under one key.
+        text_value = '{"a":' + "[" * levels + "]" * levels + "}"
+    before = _written(db_session)
+    response = sdk_client.post(
+        "/api/v1/tracking/events",
+        json={
+            "event_type": "click",
+            "event_name": "click",
+            "user_id": f"u1686-{uuid.uuid4().hex[:10]}",
+            "experiment_id": str(experiment.id),
+            field: text_value,
+        },
+    )
+    assert response.status_code == 422, response.text[:300]
+    assert f"{field} must not be nested more than 64 levels deep" in response.text
+    assert _written(db_session) == before
+
+
 def test_one_over_deep_item_does_not_fail_its_batch(sdk_client, db_session, experiment):
     before = _written(db_session)
     good = {
