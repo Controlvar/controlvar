@@ -356,6 +356,7 @@ def test_f1_sends_each_kind_of_repeat():
     assert len(pairs) == 1 and len(pairs[0].body["events"]) == 4
     stamped = [b for b in _bodies(plan, ("track",)) if b.get("timestamp")]
     assert [b["timestamp"] for b in stamped] == [faults.RESEND_TIMESTAMP]
+
     # no_id_repeats is pinned here, not by the sensitivity check: exactly that
     # many events with no event_id are sent again, each in a /track or a /batch.
     def no_id(p: g.Plan) -> list[dict]:
@@ -382,6 +383,7 @@ def test_f3_pauses_resumes_and_completes_around_the_late_events():
     asking = [i for i, op in enumerate(plan.ops) if op.expect == faults.UNASSIGNED]
     assert [i for i in asking if pause < i < resume] == asking[:3]
     assert all(i > complete for i in asking[3:]) and len(asking) == 5
+
     # paused_resends is pinned here, not by the sensitivity check: exactly that
     # many events sent while paused are sent again, with their event_id, after
     # the resume and before the completion.
