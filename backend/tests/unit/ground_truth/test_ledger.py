@@ -199,11 +199,106 @@ def test_a_stream_with_only_the_required_fields_is_read():
     assert [r["kind"] for r in found] == [r["kind"] for r in MINIMAL]
 
 
-def test_the_optional_fields_are_exactly_the_four_and_never_required():
+def test_the_optional_fields_are_exactly_the_seven_and_never_required():
     optional = {name for fields in ledger.ADDITIVE.values() for name in fields}
-    assert optional == {"route", "seq", "batch_index", "event_id"}
+    assert optional == {
+        "route",
+        "seq",
+        "batch_index",
+        "event_id",
+        "variant",
+        "duplicate",
+        "duplicate_count",
+    }
     for kind, fields in ledger.ADDITIVE.items():
         assert not set(fields) & set(ledger.REQUIRED[kind]), kind
+
+
+def test_an_events_send_is_recorded_with_its_key_and_the_variant_it_names():
+    writer, stream = _writer()
+    action = writer.send_action("start", EXP)
+    writer.answer(action, 200)
+    body = {
+        "event_name": "purchase",
+        "event_type": "purchase",
+        "user_id": "u-1",
+        "experiment_id": "0b7d1d2e-0000-4000-8000-000000000001",
+        "variant_id": "0b7d1d2e-0000-4000-8000-000000000002",
+        "value": 2.5,
+        "event_id": "e-1",
+    }
+    seq = writer.send(ledger.EVENTS, body, exp=EXP, variant="video")
+    writer.answer(seq, 200, {"duplicate": True})
+    seq = writer.send(ledger.TRACK, {"event_type": "purchase", "user_id": "u-1"})
+    writer.answer(seq, 200, {"duplicate": False})
+    seq = writer.send(ledger.BATCH, {"events": [{"event_type": "p", "user_id": "u-1"}]})
+    writer.answer(
+        seq,
+        200,
+        {"success_count": 1, "failure_count": 0, "duplicate_count": 1, "errors": None},
+    )
+    writer.end()
+    records = ledger.read(io.StringIO(stream.getvalue()))
+    by_id, track = records[2], records[3]
+    assert {k: by_id[k] for k in ("route", "exp", "variant", "duplicate")} == {
+        "route": "/events",
+        "exp": EXP,
+        "variant": "video",
+        "duplicate": True,
+    }
+    assert (by_id["event_name"], by_id["value"], by_id["event_id"]) == (
+        "purchase",
+        2.5,
+        "e-1",
+    )
+    assert "0b7d1d2e" not in stream.getvalue()  # ids are not recorded
+    assert (track["route"], track["duplicate"]) == ("/track", False)
+    assert records[4]["duplicate_count"] == 1 and "duplicate" not in records[5]
+
+
+@pytest.mark.parametrize(
+    "send, message",
+    [
+        (
+            lambda w: w.send(
+                ledger.EVENTS,
+                {"event_name": "p", "event_type": "p", "user_id": "u"},
+                variant="video",
+            ),
+            "needs exp, its experiment's key",
+        ),
+        (
+            lambda w: w.send(
+                ledger.EVENTS, {"event_type": "p", "user_id": "u"}, exp=EXP
+            ),
+            "needs event_name, event_type, user_id",
+        ),
+        (
+            lambda w: w.send(
+                ledger.EVENTS,
+                {
+                    "event_name": "p",
+                    "event_type": "p",
+                    "user_id": "u",
+                    "feature_flag_id": "f",
+                },
+                exp=EXP,
+            ),
+            "naming a feature_flag_id",
+        ),
+        (
+            lambda w: w.send(
+                ledger.TRACK, {"event_type": "p", "user_id": "u"}, exp=EXP
+            ),
+            "exp and variant are for /events",
+        ),
+    ],
+    ids=["events-no-exp", "events-no-name", "events-flag", "track-with-exp"],
+)
+def test_the_writer_refuses_an_events_send_it_cannot_record(send, message):
+    writer, _ = _writer()
+    with pytest.raises(ledger.LedgerRefused, match=message):
+        send(writer)
 
 
 def _with(stream: list[dict], index: int, **fields) -> list[dict]:
@@ -261,6 +356,33 @@ def test_with_the_optional_fields_the_same_stream_is_counted():
     assert hero.counts(variant, "purchase") == [2]
     assert hero.value_totals(variant, "purchase") == [15.75]
     assert hero.total_events == 3  # the exposure and the two purchases
+
+
+_WITH_EVENTS = _with(
+    _with(MINIMAL, 4, route="/events", variant="video", duplicate=False),
+    5,
+    duplicate_count=0,
+)
+
+
+@pytest.mark.parametrize(
+    "stream, message",
+    [
+        (_with(MINIMAL, 4, route="/track", variant="video"), "a `variant` on an event"),
+        (_with(MINIMAL, 6, duplicate=True), "a `duplicate` on an event sent to None"),
+        (_with(MINIMAL, 5, duplicate_count=2), "duplicate_count 2 is not between"),
+        (_with(MINIMAL, 5, duplicate_count=-1), "duplicate_count -1 is not between"),
+        (_with(MINIMAL, 4, route="/events", variant=3), "'variant' is not str or null"),
+    ],
+    ids=["variant-on-track", "duplicate-on-batch", "over", "negative", "type"],
+)
+def test_the_reader_refuses_a_fault_field_where_it_cannot_be(stream, message):
+    with pytest.raises(ledger.LedgerRefused, match=message):
+        _read(stream)
+
+
+def test_a_stream_with_the_fault_fields_is_read():
+    assert [r["kind"] for r in _read(_WITH_EVENTS)] == [r["kind"] for r in MINIMAL]
 
 
 # ---------------------------------------------------------------------------

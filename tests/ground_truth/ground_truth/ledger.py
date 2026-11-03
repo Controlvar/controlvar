@@ -38,13 +38,18 @@ never came has ``status`` 0 and an ``error`` (``timeout``, ``reset`` or
 experiment's status when the run begins), ``metrics``, ``correction_method``
 and ``confidence_level``.
 
-The replay adds four **optional fields** (``ADDITIVE``), never required, so a
+The replay adds seven **optional fields** (``ADDITIVE``), never required, so a
 stream written without them is still read: ``route`` (``/assign``,
-``/assign/batch``, ``/track``, ``/batch``), ``seq`` (the request's number:
-the records of one ``/batch`` or ``/assign/batch`` share it),
-``batch_index`` (the position in that request) and ``event_id`` (as sent;
-null when none was). Where a rule of the event contract needs one of them,
-``contract.valid_events`` refuses by name; this module only reads.
+``/assign/batch``, ``/track``, ``/batch``, ``/events``), ``seq`` (the
+request's number: the records of one ``/batch`` or ``/assign/batch`` share
+it), ``batch_index`` (the position in that request), ``event_id`` (as sent;
+null when none was), and from the fault scenarios: an event's ``variant``
+(the arm an ``/events`` send named, by name: only on an ``/events`` event),
+an event's ``duplicate`` (what a ``/track`` or ``/events`` answer said, null
+when it said nothing: only on those two routes) and a batch's
+``duplicate_count`` (what its answer said, null when it said nothing). Where a
+rule of the event contract needs one of them, ``contract.valid_events``
+refuses by name; this module only reads.
 
 Refused, which fails the run (``LedgerRefused``):
 
@@ -59,6 +64,10 @@ Refused, which fails the run (``LedgerRefused``):
 * a 409 to ``/assign/batch``, which may follow a partial assignment;
 * an answer with no send, a send with no answer, and a batch whose events do
   not match its size;
+* a ``variant`` on an event not sent to ``/events``, a ``duplicate`` on one
+  not sent to ``/track`` or ``/events``, and a ``duplicate_count`` below 0 or
+  above the batch's size or its ``success_count`` (an event already stored is
+  counted in ``success_count`` too);
 * any credential or header in any record: a field named like one, a value
   shaped like one, or a value the run registered as secret (``secrets``).
 
@@ -93,12 +102,14 @@ ASSIGN = "/api/v1/tracking/assign"
 ASSIGN_BATCH = "/api/v1/tracking/assign/batch"
 TRACK = "/api/v1/tracking/track"
 BATCH = "/api/v1/tracking/batch"
+EVENTS = "/api/v1/tracking/events"
 #: The routes a send may name, and the ``route`` its records carry.
 ROUTES = {
     ASSIGN: "/assign",
     ASSIGN_BATCH: "/assign/batch",
     TRACK: "/track",
     BATCH: "/batch",
+    EVENTS: "/events",
 }
 
 _STATUS = ("int",)
@@ -163,10 +174,18 @@ ADDITIVE: dict[str, dict[str, tuple[str, ...]]] = {
         "seq": ("int",),
         "batch_index": ("int",),
         "event_id": ("str", "null"),
+        "variant": ("str", "null"),
+        "duplicate": ("bool", "null"),
     },
-    "batch": {"route": ("str",), "seq": ("int",)},
+    "batch": {
+        "route": ("str",),
+        "seq": ("int",),
+        "duplicate_count": ("int", "null"),
+    },
     "action": {"seq": ("int",)},
 }
+#: The routes whose answer says whether the event was already stored.
+_ANSWERS_DUPLICATE = ("/track", "/events")
 
 _EXPERIMENT_REQUIRED = {"exp": ("str",), "variants": ("list",)}
 _EXPERIMENT_OPTIONAL = {
@@ -455,6 +474,19 @@ class _Checker:
                     f"{where}: success_count and failure_count do not add up to"
                     f" the {size} events sent"
                 )
+        repeats = body.get("duplicate_count")
+        if repeats is not None:
+            success = body["success_count"]
+            if (
+                repeats < 0
+                or repeats > size
+                or (success is not None and repeats > success)
+            ):
+                raise LedgerRefused(
+                    f"{where}: duplicate_count {repeats} is not between 0 and the"
+                    " events stored (an event already stored counts in success_count"
+                    " too)"
+                )
         if "seq" in body:
             if body["seq"] in self.batches:
                 raise LedgerRefused(
@@ -464,6 +496,17 @@ class _Checker:
 
     def _check_event(self, where: str, body: Mapping[str, Any]) -> None:
         self._check_answer(where, body)
+        route = body.get("route")
+        if "variant" in body and route != "/events":
+            raise LedgerRefused(
+                f"{where}: a `variant` on an event sent to {route}: only an /events"
+                " send names its variant"
+            )
+        if "duplicate" in body and route not in _ANSWERS_DUPLICATE:
+            raise LedgerRefused(
+                f"{where}: a `duplicate` on an event sent to {route}: only a /track"
+                " or /events answer says it"
+            )
         if body.get("route") == "/batch" and "seq" in body:
             batch = self.batches.get(body["seq"])
             if batch is None:
@@ -501,6 +544,14 @@ class _Checker:
                 f" {self.counts}"
             )
         self.ended = True
+
+
+def _duplicate(ok: bool, body: Any) -> bool | None:
+    """What a 2xx ``/track`` or ``/events`` answer said about a repeat: its
+    ``duplicate`` when that is true or false, else None."""
+    if ok and isinstance(body, Mapping) and isinstance(body.get("duplicate"), bool):
+        return body["duplicate"]
+    return None
 
 
 def dumps(record: Mapping[str, Any]) -> str:
@@ -558,6 +609,8 @@ class Writer:
         self._lines = 0
         self._next_seq = 1
         self._pending: dict[int, tuple[str, Mapping[str, Any]]] = {}
+        #: seq -> (experiment key, variant name) of each pending /events send.
+        self._targets: dict[int, tuple[str, str | None]] = {}
         self._closed = False
         self._write(
             {
@@ -614,8 +667,21 @@ class Writer:
         self._pending[seq] = (route, body)
         return seq
 
-    def send(self, route: str, body: Mapping[str, Any]) -> int:
-        """Note a tracking request before it goes out; its number, for ``answer``."""
+    def send(
+        self,
+        route: str,
+        body: Mapping[str, Any],
+        *,
+        exp: str | None = None,
+        variant: str | None = None,
+    ) -> int:
+        """Note a tracking request before it goes out; its number, for ``answer``.
+
+        An ``/events`` body names its experiment and variant by id, which no
+        record carries: *exp* is that experiment's key and *variant* the name
+        of the variant the id names (None when the body names none), as the
+        sender mapped them. Every other route names its experiment in its body.
+        """
         if route not in ROUTES:
             self._refuse(f"a send to {route}, which the ledger does not record")
         need = {
@@ -623,10 +689,29 @@ class Writer:
             ASSIGN_BATCH: ("experiment_key", "users"),
             TRACK: ("event_type", "user_id"),
             BATCH: ("events",),
+            EVENTS: ("event_name", "event_type", "user_id"),
         }[route]
         if not isinstance(body, Mapping) or any(k not in body for k in need):
             self._refuse(f"a send to {route} needs {', '.join(need)}")
-        return self._new_send(route, body)
+        if route == EVENTS:
+            if not isinstance(exp, str):
+                self._refuse(f"a send to {route} needs exp, its experiment's key")
+            if variant is not None and not isinstance(variant, str):
+                self._refuse(f"a send to {route}: variant is a variant's name or None")
+            if "feature_flag_id" in body:
+                self._refuse(
+                    f"a send to {route} naming a feature_flag_id, which the ledger"
+                    " does not record"
+                )
+        elif exp is not None or variant is not None:
+            self._refuse(
+                f"a send to {route} names its experiment in its body; exp and"
+                " variant are for /events"
+            )
+        seq = self._new_send(route, body)
+        if route == EVENTS:
+            self._targets[seq] = (exp, variant)
+        return seq
 
     def send_action(self, action: str, exp: str | None) -> int:
         """Note a lifecycle request (``create``, ``start``, ``pause``, ...)."""
@@ -671,7 +756,19 @@ class Writer:
         elif route == ASSIGN_BATCH:
             self._answer_assign_batch(seq, sent, body, ok, common)
         elif route == TRACK:
-            self._write(self._event(sent, common, {"route": "/track", "seq": seq}))
+            extra = {"route": "/track", "seq": seq}
+            record = self._event(sent, common, extra)
+            self._write({**record, "duplicate": _duplicate(ok, body)})
+        elif route == EVENTS:
+            exp, variant = self._targets.pop(seq)
+            record = self._event(
+                {**sent, "experiment_key": exp},
+                common,
+                {"route": "/events", "seq": seq},
+            )
+            self._write(
+                {**record, "variant": variant, "duplicate": _duplicate(ok, body)}
+            )
         else:
             self._answer_batch(seq, sent, body, ok, common)
 
@@ -769,6 +866,7 @@ class Writer:
             **common,
             "route": "/batch",
             "seq": seq,
+            "duplicate_count": None,
         }
         if ok:
             if not isinstance(body, Mapping):
@@ -777,10 +875,14 @@ class Writer:
             positions = [
                 e.get("index") if isinstance(e, Mapping) else None for e in reported
             ]
+            repeats = body.get("duplicate_count")
             record.update(
                 success_count=body.get("success_count"),
                 failure_count=body.get("failure_count"),
                 errors=sorted(positions, key=lambda p: (p is None, p)),
+                duplicate_count=repeats
+                if isinstance(repeats, int) and not isinstance(repeats, bool)
+                else None,
             )
         self._write(record)
         for index, event in enumerate(events):

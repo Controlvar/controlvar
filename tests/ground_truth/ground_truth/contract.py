@@ -3,11 +3,18 @@
 ``docs/guides/how-events-count.md`` says which of the events an application
 sends count in an experiment's results; ``docs/api/endpoints.md`` ("Tracking
 Endpoints") says what each tracking route stores. ``valid_events`` applies
-those rules, R0 to R7, to the ledger's records in the order the server
+those rules, R0 to R8, to the ledger's records in the order the server
 received them, and returns the exact numbers ``GET /api/v1/results/{id}`` must
 show: per experiment and variant, the assigned users and, per event name, each
 user's count of counting events and the total of their values; and per
 experiment the stored events, counted or not.
+
+``valid_events(records, without=...)`` applies every rule but the ones named
+(``WITHOUT``): the reference a fault scenario's sensitivity check compares
+with, to show the fault moved what that rule decides. Nothing else may pass
+it (``backend/tests/unit/ground_truth/test_sensitivity.py`` pins that only
+``sensitivity()`` does): a gate compared with a reference missing a rule
+would pass a server missing it too.
 
 Each rule below is stated once, in the function that applies it, and its
 docstring quotes the sentence of the docs that makes it the contract, as a
@@ -48,6 +55,15 @@ STATUS_AFTER = {
 }
 #: How each metric type turns a user's counting events into their value.
 METRIC_TYPES = ("conversion", "revenue", "count", "duration", "custom")
+#: The rules ``valid_events(records, without=...)`` can leave out, and what is
+#: done instead: ``R2-order``, an event received before its user's assignment
+#: is tagged with that assignment; ``R2-status``, an event received while the
+#: experiment is not ACTIVE is tagged as if it were; ``R4``, every repeat is
+#: stored; ``R8``, an ``/events`` event counts for the variant it names,
+#: whatever the user's assignment.
+WITHOUT = ("R2-order", "R2-status", "R4", "R8")
+#: The route of an event that names its experiment and variant by id.
+BY_ID = "/events"
 
 
 class ContractRefused(Exception):
@@ -76,7 +92,7 @@ class ExperimentExpected:
     users: Mapping[str, tuple[str, ...]]
     #: Every stored event of the experiment: counted, untagged and exposures.
     total_events: int
-    #: Stored events that count in no variant (R2).
+    #: Stored events that count in no variant (R2, R8).
     untagged_events: int
     #: Exposure events stored by per-user ``/assign`` answers (R1).
     exposures: int
@@ -86,6 +102,8 @@ class ExperimentExpected:
     variant_conflicts: tuple[Mismatch, ...]
     #: (variant, event name) -> user -> (counting events, their counting values).
     counting: Mapping[tuple[str, str], Mapping[str, tuple[int, tuple[float, ...]]]]
+    #: Stored ``/events`` events (R8), counted in a variant or not.
+    by_id_events: int = 0
 
     def sample_size(self, variant: str) -> int:
         return len(self.users[variant])
@@ -166,13 +184,17 @@ def _r0_accepted(
     """R0 Accepted. An event is stored only when its answer is a 2xx; an event
     sent in a ``/batch`` only when the batch's answer is a 2xx and its position
     is not among the answer's ``errors``. A schema error refuses the whole batch
-    (a 422), so none of its events is stored.
+    (a 422), so none of its events is stored. An ``/events`` event, like a
+    ``/track`` one, only when its answer is a 2xx.
 
     Contract (docs/api/endpoints.md): An entry with no key is stored as history,
     not refused; an entry whose key is not found is reported in `errors`.
 
     Contract (docs/api/endpoints.md): 422 above 100 events, or one entry invalid
     (its `event_id` among them), and none is stored
+
+    Contract (docs/api/endpoints.md): 404 an id names no stored row, and nothing
+    is stored
 
     Contract (docs/guides/how-events-count.md): the server stores nothing for a
     `429`.
@@ -183,7 +205,7 @@ def _r0_accepted(
             f"R0 needs `route` for an event (record {number}): whether it was"
             " stored depends on the route it was sent to"
         )
-    if route == "/track":
+    if route in ("/track", BY_ID):
         return _ok(record["status"])
     if route == "/batch":
         if "batch_index" not in record:
@@ -363,6 +385,9 @@ def _r4_repeat(
     Contract (docs/guides/how-events-count.md): An event first received while
     its experiment was paused is not stored again when it is sent again after
     the experiment is started, and stays out of every variant's results.
+
+    Contract (docs/api/endpoints.md): It takes `event_id` as `/track` does, and
+    the same event sent through either route is stored once.
     """
     if dedup is False:
         return False
@@ -429,6 +454,48 @@ def _r7_no_timestamp(record: Mapping[str, Any], number: int) -> None:
         )
 
 
+def _r8_named_variant(state: _State, record: Mapping[str, Any], number: int) -> None:
+    """R8, the variant an ``/events`` event names: one of the experiment's, or
+    none. A record that does not say (no ``variant``) is refused, never
+    guessed."""
+    if "variant" not in record:
+        raise ContractRefused(
+            f"R8 needs `variant` for an /events event (record {number}): the variant"
+            " it names decides where it counts"
+        )
+    variant = record["variant"]
+    if variant is not None and variant not in state.users:
+        raise ContractRefused(
+            f"R8: record {number} names variant {variant!r}, which start does not"
+            f" list for experiment {state.key!r}"
+        )
+
+
+def _r8_attribution_by_id(state: _State, record: Mapping[str, Any]) -> str | None:
+    """R8 Attribution by id. An accepted ``/events`` event is stored with the
+    variant it names, whatever the experiment's status, and counts in the
+    experiment's total events. It counts for that variant only when the user's
+    first ``assigned: true`` answer (R1), anywhere in the ledger, is that
+    variant: decided when the results are read, after every record, not when
+    the event arrives. Otherwise it counts in no variant. (Measured against the
+    server: an ``/events`` event sent before the user is assigned counts once
+    the user is assigned to the variant it names.)
+
+    Contract (docs/guides/how-events-count.md): `POST /api/v1/tracking/events`
+    stores the `variant_id` it is sent, whatever the experiment's status; the
+    event counts for that variant once the user is assigned to it, whether the
+    assignment came before or after the event, and in no variant while the user
+    is assigned to another or to none.
+
+    Contract (docs/api/endpoints.md): It stores the `variant_id` it is given,
+    whatever the experiment's status.
+    """
+    variant = record["variant"]
+    if variant is not None and state.assigned.get(record["user"]) == variant:
+        return variant
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Applying them
 # ---------------------------------------------------------------------------
@@ -443,6 +510,7 @@ class _State:
         self.total_events = 0
         self.untagged = 0
         self.exposures = 0
+        self.by_id = 0
         self.mismatches: list[Mismatch] = []
         self.conflicts: list[Mismatch] = []
 
@@ -461,6 +529,7 @@ class _State:
                 key: {user: (c, tuple(v)) for user, (c, v) in entries.items()}
                 for key, entries in self.counting.items()
             },
+            by_id_events=self.by_id,
         )
 
 
@@ -473,30 +542,19 @@ def _state(states: Mapping[str, _State], exp: str, rule: str, number: int) -> _S
     return states[exp]
 
 
-def _event(
-    states: Mapping[str, _State],
-    batches: Mapping[int, Mapping[str, Any]],
-    record: Mapping[str, Any],
-    number: int,
-    dedup: bool | None,
-    stored: set[tuple[Any, ...]],
-) -> bool:
-    """Apply R0 to R5 to one event; whether the server accepted it."""
-    if not _r0_accepted(record, number, batches):
-        return False
-    if record["exp"] is None:
-        return True  # history: stored, and in no experiment
-    state = _state(states, record["exp"], "R2", number)
-    if _r4_repeat(record, number, dedup, stored):
-        return True
-    state.total_events += 1
-    variant = _r2_variant_at_receipt(state, record, number)
-    if variant is None:
-        state.untagged += 1
-        return True
+#: An event whose variant is decided after every record (R8, or R2 without
+#: R2-order): the experiment, the record and its number.
+_Later = tuple[_State, Mapping[str, Any], int]
+
+
+def _count(
+    state: _State, variant: str, record: Mapping[str, Any], without: frozenset[str]
+) -> None:
+    """A stored event that counts for *variant*: R3 picks the metric, R5 the
+    value."""
     name = _r3_metric_name(record)
     if name is None:
-        return True
+        return
     entry = state.counting.setdefault((variant, name), {}).setdefault(
         record["user"], [0, []]
     )
@@ -504,15 +562,99 @@ def _event(
     value = _r5_value(record)
     if value is not None:
         entry[1].append(value)
+
+
+def _on_arrival(
+    state: _State, record: Mapping[str, Any], number: int, without: frozenset[str]
+) -> str | None | bool:
+    """The variant R2 tags an event with when it arrives, None for none, or
+    True when R2-order is left out and the user's assignment decides it later."""
+    if "R2-status" in without:
+        variant, running = state.assigned.get(record["user"]), True
+    else:
+        variant = _r2_variant_at_receipt(state, record, number)
+        running = state.status == ACTIVE
+    if variant is None and running and "R2-order" in without:
+        return True
+    return variant
+
+
+def _event(
+    states: Mapping[str, _State],
+    batches: Mapping[int, Mapping[str, Any]],
+    record: Mapping[str, Any],
+    number: int,
+    dedup: bool | None,
+    stored: set[tuple[Any, ...]],
+    without: frozenset[str],
+    later: list[_Later],
+) -> bool:
+    """Apply R0 to R5, and R8 to an ``/events`` event, to one event; whether
+    the server accepted it. An event decided after every record goes to
+    *later*."""
+    if not _r0_accepted(record, number, batches):
+        return False
+    if record["exp"] is None:
+        return True  # history: stored, and in no experiment
+    state = _state(states, record["exp"], "R2", number)
+    by_id = record.get("route") == BY_ID
+    if by_id:
+        _r8_named_variant(state, record, number)
+    if "R4" not in without and _r4_repeat(record, number, dedup, stored):
+        return True
+    state.total_events += 1
+    if by_id:
+        state.by_id += 1
+        later.append((state, record, number))
+        return True
+    variant = _on_arrival(state, record, number, without)
+    if variant is True:
+        later.append((state, record, number))
+    elif variant is None:
+        state.untagged += 1
+    else:
+        _count(state, variant, record, without)
     return True
 
 
-def valid_events(records: Sequence[Mapping[str, Any]]) -> Expected:
+def _decide_later(later: Sequence[_Later], without: frozenset[str]) -> None:
+    """The events whose variant the whole ledger decides, now it is read."""
+    for state, record, _ in later:
+        if record.get("route") == BY_ID:
+            if "R8" in without:
+                variant = record["variant"]
+            else:
+                variant = _r8_attribution_by_id(state, record)
+        else:  # R2 without R2-order: the user's first assignment, if any
+            variant = state.assigned.get(record["user"])
+        if variant is None:
+            state.untagged += 1
+        else:
+            _count(state, variant, record, without)
+
+
+def _rules_left_out(without: Iterable[str]) -> frozenset[str]:
+    names = frozenset(without)
+    unknown = sorted(names - set(WITHOUT))
+    if unknown:
+        raise ContractRefused(
+            f"without= names {unknown}; it can leave out only {list(WITHOUT)}"
+        )
+    return names
+
+
+def valid_events(
+    records: Sequence[Mapping[str, Any]], *, without: Iterable[str] = ()
+) -> Expected:
     """The exact expectation for the run whose ledger is *records*, as
     ``ledger.read`` returns them. ``flag`` and ``alias`` records store no
-    experiment event and are passed over."""
+    experiment event and are passed over.
+
+    *without* names rules (``WITHOUT``) to leave out, for a fault scenario's
+    sensitivity check only; every gate uses the default, every rule."""
     if not records or records[0].get("kind") != "start":
         raise ContractRefused("valid_events needs a ledger that starts with start")
+    left_out = _rules_left_out(without)
     start = records[0]
     states = {entry["exp"]: _State(entry) for entry in start["experiments"]}
     dedup = start["declared"].get("event_dedup")
@@ -522,6 +664,7 @@ def valid_events(records: Sequence[Mapping[str, Any]]) -> Expected:
         )
     batches: dict[int, Mapping[str, Any]] = {}
     stored: set[tuple[Any, ...]] = set()
+    later: list[_Later] = []
     rate_limited = rejected = 0
     for number, record in enumerate(records[1:], 2):
         _r7_no_timestamp(record, number)
@@ -539,10 +682,14 @@ def valid_events(records: Sequence[Mapping[str, Any]]) -> Expected:
             if "seq" in record:
                 batches[record["seq"]] = record
         elif kind == "event":
-            if not _event(states, batches, record, number, dedup, stored):
+            accepted = _event(
+                states, batches, record, number, dedup, stored, left_out, later
+            )
+            if not accepted:
                 rejected += 1
         elif kind == "end":
             break
+    _decide_later(later, left_out)
     return Expected(
         experiments={key: state.freeze() for key, state in states.items()},
         rate_limited=rate_limited,

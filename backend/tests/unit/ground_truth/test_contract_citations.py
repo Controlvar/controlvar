@@ -1,7 +1,7 @@
 """Each rule of the event contract quotes the docs that make it the contract,
 and the quote is still on its page.
 
-``ground_truth.contract`` states rules R0 to R7, each in one function whose
+``ground_truth.contract`` states rules R0 to R8, each in one function whose
 docstring carries one or more ``Contract (<page>): <sentence>`` paragraphs. If
 a page is reworded, the rule no longer cites what the docs say and this fails,
 so the rule is re-read against the new text rather than left to drift. It
@@ -22,7 +22,7 @@ pytestmark = pytest.mark.unit
 REPO_ROOT = Path(__file__).resolve().parents[4]
 CONTRACT = REPO_ROOT / "tests" / "ground_truth" / "ground_truth" / "contract.py"
 CITATION = re.compile(r"^Contract \((?P<page>docs/[^)]+\.md)\): (?P<quote>.+)$", re.S)
-RULES = [f"R{n}" for n in range(8)]
+RULES = [f"R{n}" for n in range(9)]
 
 
 def _flat(text: str) -> str:

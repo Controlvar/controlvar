@@ -243,8 +243,12 @@ def test_a_429_is_recorded_waited_out_and_sent_again(signed_in, server, clock):
     track = [r for r in records if r["kind"] == "event" and r.get("route") == "/track"]
     assert track[0]["status"] == 429
     assert track[1]["status"] == 200
-    assert {k: v for k, v in track[0].items() if k not in ("status", "seq")} == {
-        k: v for k, v in track[1].items() if k not in ("status", "seq")
+    # The same send twice: only what the answers said differs (the status, and
+    # whether the 200 called it a repeat), and the request's number.
+    answered = ("status", "seq", "duplicate")
+    assert track[0]["duplicate"] is None and track[1]["duplicate"] is False
+    assert {k: v for k, v in track[0].items() if k not in answered} == {
+        k: v for k, v in track[1].items() if k not in answered
     }
     assert 7.0 in clock.sleeps
     assert records[-1]["counts"]["429"] == 1

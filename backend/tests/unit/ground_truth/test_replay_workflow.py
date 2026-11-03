@@ -14,8 +14,9 @@ The other tests pin the workflow's settings: ``pull_request`` (never
 no secret; one concurrency group per pull request, a newer push cancelling
 the run in flight; at most 15 minutes; never a required check; the pinned
 paths-filter and the ``e2e`` label; the suite, profile and seed it hands
-``_platform.yml``; that ``_platform.yml`` runs the replay for both suites; and
-the nightly job, in the failure issue's ``needs``.
+``_platform.yml``; that ``_platform.yml`` runs the replay for both suites, the
+pull-request suite every test file under tests/ground_truth; and the nightly
+job, in the failure issue's ``needs``.
 """
 
 from __future__ import annotations
@@ -279,6 +280,42 @@ def test_the_platform_runs_the_replay_for_both_suites():
         'GROUND_TRUTH_SCALE="$scale" python -m pytest tests/ground_truth/test_replay.py'
         in body
     )
+
+
+def _suite_branch(run: str, suite: str) -> str:
+    """The body of the "Run suite" case branch whose patterns include *suite*."""
+    for match in re.finditer(r"^[ \t]*([\w|-]+)\)[ \t]*$", run, re.M):
+        if suite in match.group(1).split("|"):
+            return run[match.end() :].split(";;", 1)[0]
+    raise AssertionError(f"no case branch of the Run suite step runs {suite!r}")
+
+
+def test_the_pull_request_suite_runs_every_test_file_of_the_replay():
+    """Every ``test_*.py`` under tests/ground_truth is named, or its directory
+    is, by a pytest command of the ``ground-truth`` branch: a test file the arm
+    does not run is a gate CI never runs."""
+    steps = wg.load(PLATFORM)["jobs"]["platform"]["steps"]
+    (run,) = [step["run"] for step in steps if step.get("name") == "Run suite"]
+    body = _suite_branch(run, "ground-truth")
+    paths = [
+        path
+        for command in re.findall(
+            r"python -m pytest((?:\s+tests/ground_truth\S*)+)", body
+        )
+        for path in command.split()
+    ]
+    assert paths, body
+    files = sorted(
+        path.relative_to(REPO_ROOT).as_posix()
+        for path in (REPO_ROOT / "tests" / "ground_truth").rglob("test_*.py")
+    )
+    assert "tests/ground_truth/test_replay.py" in files
+    unrun = [
+        path
+        for path in files
+        if not any(path == p or path.startswith(p.rstrip("/") + "/") for p in paths)
+    ]
+    assert unrun == [], f"the ground-truth arm runs {paths}, not {unrun}"
 
 
 def test_the_nightly_job_runs_it_and_a_red_night_files_the_issue():

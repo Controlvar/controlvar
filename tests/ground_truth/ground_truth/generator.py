@@ -105,11 +105,19 @@ class Op:
     """One request. ``kind`` is ``lifecycle``, ``assign``, ``assign_batch``,
     ``track`` or ``batch``; ``route`` is the tracking path (None for a
     lifecycle step); ``body`` is the JSON body as sent, or for a lifecycle step
-    ``{"action": "create" | "start", "experiment_key": ...}``."""
+    ``{"action": "create" | "start", "experiment_key": ...}``.
+
+    ``simulate`` plans only those. ``faults`` adds the lifecycle actions
+    ``pause``, ``resume`` and ``complete``, the kind ``events`` (``POST
+    /api/v1/tracking/events``, the variant named by arm) and the kind
+    ``hostile`` (raw bytes no ledger records), and sets ``expect``, the answer
+    the op must get (``faults.EXPECTS``). ``expect`` is not part of
+    ``Plan.digest``: a plan's traffic is its kinds, routes and bodies."""
 
     kind: str
     route: str | None
     body: Mapping[str, Any]
+    expect: str | None = None
 
 
 @dataclass(frozen=True)
