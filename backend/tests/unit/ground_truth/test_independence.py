@@ -91,6 +91,7 @@ def test_the_scan_reads_every_module():
         "ledger",
         "contract",
         "reference",
+        "faults",
     }
 
 
@@ -122,7 +123,7 @@ class Refuse(importlib.abc.MetaPathFinder):
 sys.meta_path.insert(0, Refuse())
 sys.path.insert(0, {root!r})
 
-from ground_truth import contract, generator, hashing, ledger, reference
+from ground_truth import contract, faults, generator, hashing, ledger, reference
 
 scenario = generator.Scenario(
     name="g4", experiment_key="gt-g4",
@@ -131,6 +132,7 @@ scenario = generator.Scenario(
     metrics=(generator.Metric("buyers", "purchase", "conversion"),),
 )
 plan = generator.simulate(1, scenario)
+assert faults.inject(plan).digest() == plan.digest()
 arms = plan.allocations()
 users = [f"gt-g4-{{n}}" for n in range(40)]
 lines = [ledger.dumps(r) for r in [

@@ -388,6 +388,156 @@ def test_r6_every_assigned_user_is_one_unit_scored_zero_without_events():
     assert e.total_converting_users(["purchase", "checkout"]) == 1
 
 
+def by_id(
+    user,
+    variant,
+    *,
+    event_type="purchase",
+    event_name="purchase",
+    value=None,
+    status=200,
+    event_id=None,
+) -> list[dict]:
+    """An ``/events`` send: the variant it names, by name."""
+    record = _event(
+        user, event_type, event_name, value, status, event_id, EXP, "/events", None
+    )
+    return [{**record, "variant": variant}]
+
+
+#: R8 against the server: eleven cases measured through the API, each a ledger
+#: for one control user (C0), with where its ``/events`` purchase counts (the
+#: variant, or None for nowhere), the untagged events and the total events.
+R8_CASES = [
+    ("own-arm", (start("active"), assign(C0), by_id(C0, "control")), "control", 0, 2),
+    ("other-arm", (start("active"), assign(C0), by_id(C0, "treatment")), None, 1, 2),
+    ("never-assigned", (start("active"), by_id(C0, "control")), None, 1, 1),
+    (
+        "named-before-the-assignment-then-assigned-to-it",
+        (start("active"), by_id(C0, "control"), assign(C0)),
+        "control",
+        0,
+        2,
+    ),
+    (
+        "named-before-the-assignment-then-assigned-to-another",
+        (start("active"), by_id(C0, "treatment"), assign(C0)),
+        None,
+        1,
+        2,
+    ),
+    (
+        "assigned-by-assign-batch",
+        (
+            start("active"),
+            assign(C0, route="/assign/batch", seq=1, index=0),
+            by_id(C0, "control"),
+        ),
+        "control",
+        0,
+        1,
+    ),
+    (
+        "the-same-id-again-naming-the-other-arm-is-a-repeat",
+        (
+            start("active", dedup=True),
+            assign(C0),
+            by_id(C0, "control", event_id="e-1"),
+            by_id(C0, "treatment", event_id="e-1"),
+        ),
+        "control",
+        0,
+        2,
+    ),
+    (
+        "track-then-events-with-the-same-id-is-a-repeat",
+        (
+            start("active", dedup=True),
+            assign(C0),
+            track(C0, event_id="e-1"),
+            by_id(C0, "control", event_id="e-1"),
+        ),
+        "control",
+        0,
+        2,
+    ),
+    (
+        "an-exposure-type-counts-for-no-metric",
+        (start("active"), assign(C0), by_id(C0, "control", event_type="exposure")),
+        "nothing",
+        0,
+        2,
+    ),
+    (
+        "named-while-paused",
+        (start(), action("start"), assign(C0), action("pause"), by_id(C0, "control")),
+        "control",
+        0,
+        2,
+    ),
+    (
+        "not-assigned-while-paused-then-assigned-after-the-resume",
+        (
+            start(),
+            action("start"),
+            action("pause"),
+            assign(C0, assigned=False, variant="control", reason="paused"),
+            by_id(C0, "control"),
+            action("start"),
+            assign(C0),
+        ),
+        "control",
+        0,
+        2,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "case, parts, counted, untagged, total",
+    R8_CASES,
+    ids=[case[0] for case in R8_CASES],
+)
+def test_r8_an_events_event_counts_for_the_variant_it_names_once_assigned_to_it(
+    case, parts, counted, untagged, total
+):
+    """Decided when the results are read: the user's first assignment, before
+    or after the event, whatever the status when it arrived."""
+    e = k1(*parts)
+    control = e.counting.get(("control", "purchase"), {}).get(C0, (0, ()))[0]
+    assert control == (1 if counted == "control" else 0)
+    assert e.counting.get(("treatment", "purchase"), {}) == {}
+    assert (e.untagged_events, e.total_events) == (untagged, total)
+    # One /events event stored, but where /track stored it first (R4).
+    assert e.by_id_events == (0 if case.startswith("track-then-events") else 1)
+
+
+def test_r8_refuses_a_variant_the_experiment_does_not_have():
+    with pytest.raises(
+        contract.ContractRefused, match="R8: record 3 names variant 'ghost'"
+    ):
+        k1(start("active"), assign(C0), by_id(C0, "ghost"))
+
+
+def test_r8_a_refused_events_send_stores_nothing():
+    e = k1(start("active"), assign(C0), by_id(C0, "control", status=422))
+    assert e.counts("control", "purchase") == [0]
+    assert (e.total_events, e.by_id_events) == (1, 0)
+
+
+@pytest.mark.parametrize(
+    "names, message",
+    [
+        (["R1"], r"without= names \['R1'\]"),
+        ("R4", r"without= names \['4', 'R'\]"),  # a string, not a set of names
+    ],
+)
+def test_without_takes_only_the_rules_it_can_leave_out(names, message):
+    with pytest.raises(contract.ContractRefused, match=message):
+        contract._rules_left_out(names)
+    assert contract._rules_left_out(contract.WITHOUT) == frozenset(contract.WITHOUT)
+
+
 def test_r7_no_rule_reads_a_timestamp():
     found = ledger_of(start("active"), assign(C0), track(C0))
     found[3]["timestamp"] = "2099-01-01T00:00:00Z"
@@ -418,8 +568,12 @@ def test_r7_no_rule_reads_a_timestamp():
             "R4 needs `event_dedup` in start's `declared`",
         ),
         (
+            (start("active"), track(C0, route="/elsewhere")),
+            "R0 has no rule for an event sent to /elsewhere",
+        ),
+        (
             (start("active"), track(C0, route="/events")),
-            "R0 has no rule for an event sent to /events",
+            "R8 needs `variant` for an /events event",
         ),
         (
             (start("active"), assign(C0), track(C0, event_name="")),
@@ -427,7 +581,16 @@ def test_r7_no_rule_reads_a_timestamp():
             " event_type`, so an empty name is not modelled",
         ),
     ],
-    ids=["status", "experiment", "variant", "action", "dedup", "route", "empty-name"],
+    ids=[
+        "status",
+        "experiment",
+        "variant",
+        "action",
+        "dedup",
+        "route",
+        "by-id-variant",
+        "empty-name",
+    ],
 )
 def test_a_rule_that_needs_what_the_ledger_does_not_say_refuses_by_name(parts, message):
     with pytest.raises(contract.ContractRefused, match=message.replace("(", r"\(")):

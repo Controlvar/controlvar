@@ -9,6 +9,12 @@ or an expected-failure marker. The CI ``unit`` job also runs
 reported as skipped at run time.
 
 When you add or remove a gate, change ``EXPECTED`` in the same commit.
+
+The live replay (``tests/ground_truth``, run by ``_platform.yml``'s
+``ground-truth`` arm, not here) is pinned the same way: its exact node ids
+(``REPLAY_SUITE``), collected without a server. A test added there changes
+them, and ``test_replay_workflow.py`` fails until the arm runs its file too,
+so a new test cannot sit in a file CI never runs.
 """
 
 from __future__ import annotations
@@ -28,18 +34,20 @@ LIBRARY_ROOT = REPO_ROOT / "tests" / "ground_truth"
 
 #: test node id count per module, as ``pytest --collect-only -q`` lists them.
 EXPECTED = {
-    "test_collection_count.py": 2,
-    "test_contract.py": 22,
-    "test_contract_citations.py": 27,
+    "test_collection_count.py": 3,
+    "test_contract.py": 38,
+    "test_contract_citations.py": 32,
     "test_driver.py": 21,
+    "test_fault_library.py": 110,
     "test_flag_rollout_use_cases.py": 2,
     "test_generator.py": 21,
     "test_hashing.py": 23,
     "test_independence.py": 3,
-    "test_ledger.py": 55,
+    "test_ledger.py": 66,
     "test_reference.py": 27,
     "test_replay_gates.py": 37,
-    "test_replay_workflow.py": 20,
+    "test_replay_workflow.py": 21,
+    "test_sensitivity.py": 26,
 }
 
 # Assembled so that this file does not match its own check.
@@ -83,6 +91,46 @@ def test_exactly_the_expected_tests_are_collected():
         module = line.split("::", 1)[0].rsplit("/", 1)[-1]
         counts[module] = counts.get(module, 0) + 1
     assert counts == EXPECTED, result.stdout
+
+
+#: The live replay's tests, as ``pytest --collect-only -q tests/ground_truth``
+#: lists them (its own pytest.ini; no server is needed to collect).
+REPLAY_SUITE = [
+    "test_replay.py::test_g6_the_replay_runs_the_core_profile",
+    *(
+        f"test_replay.py::{test}[{scenario}]"
+        for scenario in ("S1", "S2", "S3", "S4")
+        for test in (
+            "test_g0_every_assignment_answer_is_o_assign",
+            "test_g1_counts_and_means_equal_the_ledger",
+            "test_g2_statistics_equal_the_reference",
+            "test_z_no_answer_is_a_5xx",
+        )
+    ),
+]
+
+
+def test_the_live_replay_collects_exactly_its_tests():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "--collect-only",
+            "-q",
+            "-p",
+            "no:cov",
+            str(LIBRARY_ROOT.relative_to(REPO_ROOT)),
+        ],
+        cwd=REPO_ROOT,
+        env=dict(os.environ),
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    collected = [line for line in result.stdout.splitlines() if "::" in line]
+    assert collected == REPLAY_SUITE, result.stdout
 
 
 def test_no_gate_here_or_in_the_library_can_skip():
