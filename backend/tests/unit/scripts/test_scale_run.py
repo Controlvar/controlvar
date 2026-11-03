@@ -29,7 +29,7 @@ import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import pytest
 
@@ -1472,8 +1472,27 @@ class FakeWorld:
         generator_cpus=(),
         errors_from=None,
         unlogged_from=None,
+        silent_at=None,
+        silent_then_refused=False,
+        restart_on_silence=False,
+        refused_at=None,
     ):
         self.tmp = tmp
+        #: the n-th /metrics scrape is refused (curl exit 7), nothing else wrong.
+        self.refused_at = refused_at
+        #: after the first timed-out scrape the API refuses connections (curl
+        #: exit 7) for the rest of the silence: a crashed API, not a slow one.
+        self.silent_then_refused = silent_then_refused
+        #: the API container restarts when the silence begins (RestartCount + 1).
+        self.restart_on_silence = restart_on_silence
+        self.restart_count = 0
+        self.silence_begun = False
+        #: (n, ms): the n-th /metrics scrape finds the API silent, and every
+        #: scrape begun in the next ms milliseconds of the fake clock times out
+        #: (curl exit 28 after 30 s).
+        self.silent_at = silent_at
+        self.silent_until = 0
+        self.scrapes = 0
         self.errors_from = errors_from
         self.unlogged_from = unlogged_from
         self.generator_cpus = list(generator_cpus)
@@ -1576,6 +1595,7 @@ class FakeWorld:
             {
                 "Id": ident,
                 "State": {"Pid": PIDS[ident], "Running": True},
+                "RestartCount": self.restart_count,
                 "Image": fx.digest(f"{name}-image"),
                 "Config": {"Image": image, "Env": env},
                 "HostConfig": {"CpusetCpus": cpus[ref]},
@@ -1645,6 +1665,25 @@ class FakeWorld:
         if argv[:3] == ["docker", "exec", ID["api"]]:
             if argv[3:] == ["uname", "-m"]:
                 return self.done("x86_64\n")
+            self.scrapes += 1
+            if self.refused_at == self.scrapes:
+                return self.done(
+                    "", 7, "curl: (7) Failed to connect to localhost port 8000"
+                )
+            if self.silent_at and self.scrapes == self.silent_at[0]:
+                self.silent_until = self.now + self.silent_at[1]
+            if self.now < self.silent_until:
+                if self.silence_begun and self.silent_then_refused:
+                    return self.done(
+                        "", 7, "curl: (7) Failed to connect to localhost port 8000"
+                    )
+                if not self.silence_begun and self.restart_on_silence:
+                    self.restart_count += 1
+                self.silence_begun = True
+                self.now += 30_000
+                return self.done(
+                    "", 28, "curl: (28) Operation timed out after 30001 milliseconds"
+                )
             return self.done(fx.metrics("a"))
         if argv[:2] == ["docker", "logs"]:
             target = argv[-1]
@@ -1815,6 +1854,118 @@ def test_a_publication_run_stops_after_two_failing_steps_and_is_valid(tmp_path):
     assert rep["valid"]
 
 
+def _steps(out: Path) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    results = json.loads((out / "results.json").read_text("utf-8"))
+    return results, results["scenarios"][0]["reps"][0]
+
+
+@pytest.mark.regression
+def test_a_confirming_step_whose_scrape_times_out_is_failing_once_the_api_recovers(
+    tmp_path,
+):
+    """Run 41612833958: step 17, the confirming step, ran past saturation and
+    its after-step /metrics scrape timed out; the run was thrown away as
+    incomplete. Now the harness waits (bounded), records how long, and the step
+    is FAILING (and never valid)."""
+    # scrape 8 is step 4's (the confirming step's) after-scrape; the API stays
+    # silent for 100 s of the fake clock.
+    world = FakeWorld(tmp_path, failing_from=3, silent_at=(8, 100_000))
+    status, out, said = _run(world, tmp_path, scenario="track", mode="publication")
+    assert status == 0, said
+    results, rep = _steps(out)
+    assert results["status"] == "complete"
+    assert [s["step"] for s in rep["steps"]] == [1, 2, 3, 4]
+    last = rep["steps"][3]
+    assert last["scrape_recovery_bound_s"] == sr.RECOVERY_BOUND_S
+    assert 100_000 <= last["scrape_recovery_ms"] <= sr.RECOVERY_BOUND_S * 1000
+    assert (last["valid"], last["keeps_up"]) == (False, False)
+    assert (last["invalid_reason"], last["fail_reason"]) == (
+        "api-unresponsive",
+        "invalid",
+    )
+    for earlier in rep["steps"][:3]:
+        assert (earlier["scrape_recovery_bound_s"], earlier["scrape_recovery_ms"]) == (
+            0,
+            0,
+        )
+    assert (rep["first_failing_step"], rep["knee_step"]) == (3, 2)
+    assert rep["valid"]
+    # the file passes the evidence script's own check (schema and recomputation)
+    checked = se.load_results((out / "results.json").read_text("utf-8"))
+    assert se.recompute_problems(checked) == []
+
+
+def test_a_confirming_step_whose_api_never_recovers_leaves_the_run_incomplete(
+    tmp_path,
+):
+    world = FakeWorld(tmp_path, failing_from=3, silent_at=(8, 10**9))
+    status, out, said = _run(world, tmp_path, scenario="track", mode="publication")
+    assert status == 1
+    assert f"did not answer /metrics within {sr.RECOVERY_BOUND_S} s" in said
+    results, rep = _steps(out)
+    assert results["status"] == "incomplete"
+    assert [s["step"] for s in rep["steps"]] == [1, 2, 3]
+    # the bound is on the (fake) clock: the poll made a bounded number of
+    # attempts, not an endless loop
+    assert world.scrapes <= 8 + sr.RECOVERY_BOUND_S * 1000 // 30_000 + 1
+
+
+def test_a_scrape_timeout_on_a_step_that_is_not_confirming_stays_failed(tmp_path):
+    """Scrape 6 is step 3's after-scrape; step 3 follows a step that kept up."""
+    world = FakeWorld(tmp_path, failing_from=3, silent_at=(6, 10**9))
+    status, out, said = _run(world, tmp_path, scenario="track", mode="publication")
+    assert status == 1
+    assert "exited 28" in said and "waiting up to" not in said
+    assert world.scrapes == 6
+    results, rep = _steps(out)
+    assert results["status"] == "incomplete"
+    assert [s["step"] for s in rep["steps"]] == [1, 2]
+
+
+@pytest.mark.regression
+def test_a_crash_during_the_recovery_poll_leaves_the_run_incomplete(tmp_path):
+    """#1691 review B1: one timeout, then the API refuses connections (curl
+    exit 7: it crashed). The poll must not read that as "still recovering"."""
+    world = FakeWorld(
+        tmp_path, failing_from=3, silent_at=(8, 100_000), silent_then_refused=True
+    )
+    status, out, said = _run(world, tmp_path, scenario="track", mode="publication")
+    assert status == 1
+    assert "exited 7" in said and "did not answer /metrics within" not in said
+    results, rep = _steps(out)
+    assert results["status"] == "incomplete"
+    assert [s["step"] for s in rep["steps"]] == [1, 2, 3]
+
+
+@pytest.mark.regression
+def test_a_non_timeout_scrape_failure_on_a_confirming_step_stays_fatal(tmp_path):
+    """Only a timeout (exit 28) earns the recovery poll; a refused connection
+    on the first scrape of the confirming step is an incomplete run."""
+    world = FakeWorld(tmp_path, failing_from=3, refused_at=8)
+    status, out, said = _run(world, tmp_path, scenario="track", mode="publication")
+    assert status == 1
+    assert "exited 7" in said and "waiting up to" not in said
+    assert world.scrapes == 8
+    results, rep = _steps(out)
+    assert results["status"] == "incomplete"
+    assert [s["step"] for s in rep["steps"]] == [1, 2, 3]
+
+
+@pytest.mark.regression
+def test_an_api_that_restarted_during_the_step_leaves_the_run_incomplete(tmp_path):
+    """The API answers again within the bound, but its RestartCount moved: it
+    crashed and `restart: unless-stopped` brought it back. Not "slow"."""
+    world = FakeWorld(
+        tmp_path, failing_from=3, silent_at=(8, 100_000), restart_on_silence=True
+    )
+    status, out, said = _run(world, tmp_path, scenario="track", mode="publication")
+    assert status == 1
+    assert "restarted during step 4" in said and "RestartCount 0 -> 1" in said
+    results, rep = _steps(out)
+    assert results["status"] == "incomplete"
+    assert [s["step"] for s in rep["steps"]] == [1, 2, 3]
+
+
 def test_a_smoke_step_with_a_failed_request_fails_the_smoke(tmp_path):
     """V20 at smoke scale: a 2xx that did not do its work, or a wrong status,
     fails the smoke."""
@@ -1879,6 +2030,43 @@ def test_a_step_whose_generator_moved_ends_the_run_incomplete(tmp_path):
     assert results["status"] == "incomplete"
     assert len(results["scenarios"][0]["reps"][0]["steps"]) == 1
     assert results["system_under_test"]["cpu_split"]["generator"] == "3"
+
+
+def test_a_step_that_waited_for_the_api_is_invalid_and_failing_never_valid():
+    meth = fx.method()
+    seen = fx.observation(
+        meth, "track", 1, scrape_recovery_bound_s=300, scrape_recovery_ms=95_000
+    )
+    step, messages = se.summarise_step(
+        meth, "track", fx.step_rows(meth, "track", 1), seen, fx.metrics(), fx.metrics()
+    )
+    assert (step["scrape_recovery_bound_s"], step["scrape_recovery_ms"]) == (300, 95000)
+    assert (step["valid"], step["keeps_up"]) == (False, False)
+    assert step["invalid_reason"] == "api-unresponsive"
+    assert any("did not answer /metrics for 95000 ms" in m for m in messages)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"scrape_recovery_bound_s": 300, "scrape_recovery_ms": 300_001},
+        {"scrape_recovery_bound_s": 300, "scrape_recovery_ms": 0},
+        {"scrape_recovery_bound_s": 0, "scrape_recovery_ms": 5},
+    ],
+    ids=["past-the-bound", "bound-without-a-time", "time-without-a-bound"],
+)
+def test_an_inconsistent_scrape_recovery_is_refused(changes):
+    meth = fx.method()
+    seen = fx.observation(meth, "track", 1, **changes)
+    with pytest.raises(se.Refused, match="scrape_recovery"):
+        se.summarise_step(
+            meth,
+            "track",
+            fx.step_rows(meth, "track", 1),
+            seen,
+            fx.metrics(),
+            fx.metrics(),
+        )
 
 
 def test_a_step_record_keeps_each_thread_s_irq_and_softirq():

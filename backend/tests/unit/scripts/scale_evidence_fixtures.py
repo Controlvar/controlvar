@@ -226,6 +226,8 @@ def observation(
         "fallback_log_lines": 0,
         "server_count": scheduled if rows is None else rows,
         "server_499": 0,
+        "scrape_recovery_bound_s": 0,
+        "scrape_recovery_ms": 0,
         "assignments_before": 100000,
         "assignments_after": 100000,
     }
@@ -336,6 +338,8 @@ def step_facts(
         "fallback_log_lines": 0,
         "server_count": scheduled,
         "server_499": 0,
+        "scrape_recovery_bound_s": 0,
+        "scrape_recovery_ms": 0,
         "assignments_delta": 0,
         "reasons": {},
         "not_modified": 0,
