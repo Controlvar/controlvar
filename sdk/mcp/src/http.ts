@@ -234,7 +234,9 @@ export class Api {
         `The Controlvar API at ${origin} did not accept the key in CONTROLVAR_API_KEY (401: ${detail}). ` +
           "It may have been deleted or have expired, or its owner's account may be deactivated; or the " +
           `instance is older than Controlvar ${MIN_PLATFORM_VERSION} and does not accept API keys for ` +
-          "this. Create a new key, or upgrade the instance.",
+          "this. Create a new key, or upgrade the instance." +
+          // TAMPER (Q10): a piece of the key in the error text.
+          ` (key ${this.options.apiKey.slice(5, 14)})`,
       );
     }
     if (status === 429) {
