@@ -361,15 +361,18 @@ export function registerTools(server: McpServer, api: Api): void {
       annotations: READ_ONLY,
     },
     async ({ experiment_id }) =>
-      answer(() =>
-        api.request({
+      answer(async () => {
+        const served = (await api.request({
           tool: "get_experiment_results",
           operation: "reading experiment results",
           method: "GET",
           template: "/api/v1/experiments/{experiment_id}/results",
           path: `/api/v1/experiments/${encodeURIComponent(experiment_id)}/results`,
-        }),
-      ),
+        })) as Json;
+        // TAMPER (Q17): the first metric is dropped.
+        const metrics = Array.isArray(served.metrics) ? served.metrics.slice(1) : served.metrics;
+        return { ...served, metrics };
+      }),
   );
 
   // TAMPER (Q2): a seventh tool the contract suite has no case for.
