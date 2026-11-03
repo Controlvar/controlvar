@@ -3,7 +3,8 @@ and statsmodels.
 
 The library computes the answers the product is checked against. If it
 imported the product (``backend``, ``modules``), the docs runner it is
-cross-checked with, or an HTTP library, a defect could be shared rather than
+cross-checked with, or an HTTP library (the standard library's ``urllib.request``,
+``http.client`` and ``socket`` included), a defect could be shared rather than
 caught. Two checks, because each misses what the other sees:
 
 * (a) a static scan of every module's imports, ``importlib.import_module`` and
@@ -29,9 +30,14 @@ from backend.tests.unit.ground_truth.library import LIBRARY, LIBRARY_ROOT
 
 pytestmark = pytest.mark.unit
 
-MODULES = sorted(LIBRARY.glob("*.py"))
+#: Every module of the library, a future subpackage's included.
+MODULES = sorted(LIBRARY.rglob("*.py"))
 ALLOWED = set(sys.stdlib_module_names) | {"scipy", "statsmodels", "ground_truth"}
-#: What the fresh interpreter refuses, beside anything (a) would name.
+#: The standard library's own network modules: allowed as "the standard
+#: library", but the library is no HTTP client, so named here.
+NETWORK = ("urllib.request", "http.client", "socket")
+#: What the fresh interpreter refuses, beside anything (a) would name. A dotted
+#: name is refused with what is under it.
 BLOCKED = (
     "backend",
     "modules",
@@ -41,6 +47,7 @@ BLOCKED = (
     "urllib3",
     "aiohttp",
     "pytest",
+    *NETWORK,
 )
 
 
@@ -51,6 +58,12 @@ def _imports(tree: ast.AST) -> list[tuple[int, str]]:
             found.extend((node.lineno, alias.name) for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.level == 0:
             found.append((node.lineno, node.module or ""))
+            # `from urllib import request` imports urllib.request
+            found.extend(
+                (node.lineno, f"{node.module}.{alias.name}")
+                for alias in node.names
+                if node.module
+            )
         elif isinstance(node, ast.Call) and node.args:
             func = node.func
             name = (
@@ -63,6 +76,10 @@ def _imports(tree: ast.AST) -> list[tuple[int, str]]:
                 literal = first.value if isinstance(first, ast.Constant) else None
                 found.append((node.lineno, str(literal)))
     return found
+
+
+def _is_network(name: str) -> bool:
+    return any(name == n or name.startswith(n + ".") for n in NETWORK)
 
 
 def test_the_scan_reads_every_module():
@@ -78,10 +95,10 @@ def test_the_scan_reads_every_module():
 
 def test_the_library_imports_only_the_standard_library_scipy_and_statsmodels():
     offenders = [
-        f"{path.name}:{line} imports {name}"
+        f"{path.relative_to(LIBRARY)}:{line} imports {name}"
         for path in MODULES
         for line, name in _imports(ast.parse(path.read_text(encoding="utf-8")))
-        if name.split(".")[0] not in ALLOWED
+        if name.split(".")[0] not in ALLOWED or _is_network(name)
     ]
     assert offenders == []
 
@@ -96,7 +113,7 @@ BLOCKED = {blocked!r}
 
 class Refuse(importlib.abc.MetaPathFinder):
     def find_spec(self, name, path=None, target=None):
-        if name.split(".")[0] in BLOCKED:
+        if any(name == b or name.startswith(b + ".") for b in BLOCKED):
             raise ImportError("the ground-truth library may not import " + name)
         return None
 
@@ -135,7 +152,10 @@ comparison = reference.compare(
     reference.ANALYSIS["conversion"], "benjamini_hochberg", 0.95,
 )
 srm = reference.srm_p([expected.sample_size(v) for v in expected.variants], [50, 50])
-leaked = sorted(m for m in sys.modules if m.split(".")[0] in BLOCKED)
+leaked = sorted(
+    m for m in sys.modules
+    if any(m == b or m.startswith(b + ".") for b in BLOCKED)
+)
 print("leaked", leaked)
 print("independent", len(plan.ops), comparison[0].p_value, srm)
 """
