@@ -194,7 +194,8 @@ jobs:
       - name: Merge the jobs into one results file
         run: |
           shopt -s nullglob
-          jobs=("$RUNNER_TEMP"/scale-jobs/scale-job-*/results.json)
+          # download-artifact@v8 extracts a single matching artifact straight into path (no scale-job-* directory): run 41664641799; results.jso[n] is a glob so nullglob drops it when absent (a literal path would always count as one)
+          jobs=("$RUNNER_TEMP"/scale-jobs/scale-job-*/results.json "$RUNNER_TEMP"/scale-jobs/results.jso[n])
           if [ "${#jobs[@]}" -eq 0 ]; then
             printf '%s\n' '::error title=Scale evidence::no measure job produced a results file'
             exit 1

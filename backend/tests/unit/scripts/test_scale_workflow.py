@@ -311,6 +311,80 @@ def test_the_results_artifact_is_the_one_verify_downloads():
     assert upload["with"]["path"].endswith("/" + merge.RESULTS_FILE)
 
 
+def _run_merge_step(tmp_path: Path, layout: List[str]) -> Tuple[int, str, List[str]]:
+    """Run the merge step's own script on a layout of downloaded artifacts.
+
+    Stubbed: only ``python3`` (a script that records the files it was given),
+    because the real merge needs full measured results. The glob, the
+    emptiness check and the error message are the workflow's own.
+    """
+    import subprocess
+
+    (step,) = [
+        s
+        for name, s in _steps(_load())
+        if name == "merge" and s.get("name") == "Merge the jobs into one results file"
+    ]
+    runner_temp = tmp_path / "runner"
+    for rel in layout:
+        target = runner_temp / "scale-jobs" / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("{}", "utf-8")
+    (runner_temp / "scale-jobs").mkdir(parents=True, exist_ok=True)
+    work = tmp_path / "work"
+    stub_dir = tmp_path / "bin"
+    stub_dir.mkdir()
+    (work / "tests" / "scale").mkdir(parents=True)
+    record = tmp_path / "args.txt"
+    stub = stub_dir / "python3"
+    stub.write_text('#!/bin/bash\nprintf "%s\\n" "$@" > "$RECORD"\n', "utf-8")
+    stub.chmod(0o755)
+    env = {
+        "PATH": f"{stub_dir}:/usr/bin:/bin",
+        "RUNNER_TEMP": str(runner_temp),
+        "RECORD": str(record),
+    }
+    done = subprocess.run(
+        ["bash", "-e", "-c", step["run"]],
+        cwd=work,
+        env=env,
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+    )
+    args = record.read_text("utf-8").splitlines() if record.exists() else []
+    return done.returncode, done.stdout + done.stderr, args
+
+
+@pytest.mark.regression
+def test_merge_finds_the_results_of_a_single_job_run(tmp_path):
+    # download-artifact@v8 puts ONE matching artifact straight into the path
+    code, out, args = _run_merge_step(tmp_path, ["results.json"])
+    assert code == 0, out
+    assert [a for a in args if a.endswith("results.json")][:-1] == [
+        str(tmp_path / "runner" / "scale-jobs" / "results.json")
+    ]
+
+
+@pytest.mark.regression
+def test_merge_finds_the_results_of_a_many_job_run(tmp_path):
+    code, out, args = _run_merge_step(
+        tmp_path, ["scale-job-1/results.json", "scale-job-2/results.json"]
+    )
+    assert code == 0, out
+    base = tmp_path / "runner" / "scale-jobs"
+    assert str(base / "scale-job-1" / "results.json") in args
+    assert str(base / "scale-job-2" / "results.json") in args
+
+
+@pytest.mark.regression
+def test_merge_with_no_results_file_fails_loudly(tmp_path):
+    code, out, args = _run_merge_step(tmp_path, [])
+    assert code == 1
+    assert "no measure job produced a results file" in out
+    assert args == []
+
+
 def test_concurrency_is_per_pull_request_or_per_run():
     assert _load()["concurrency"] == {
         "group": "scale-evidence-${{ github.event.pull_request.number || github.run_id }}",
