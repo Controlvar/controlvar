@@ -1025,7 +1025,7 @@ text = "On Helm, run the same command in an API pod with kubectl exec."
 by = ["test:backend/tests/unit/infrastructure/test_upgrade_on_start.py::test_an_api_pod_runs_the_commands_the_compose_api_container_runs"]
 
 [[unit]]
-text = "Then start the previous release."
+text = "Once the database is at the previous release's heads, start the previous release."
 by = ["exempt:instruction"]
 
 [[unit]]

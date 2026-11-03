@@ -606,8 +606,9 @@ undoes this revision alone:
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade 85dd4796bb8b
 ```
 
-On Helm, run the same command in an API pod with `kubectl exec`. Then start the
-previous release. The upgrade cannot be emitted as SQL (`--sql`).
+On Helm, run the same command in an API pod with `kubectl exec`. Once the
+database is at the previous release's heads, start the previous release. The
+upgrade cannot be emitted as SQL (`--sql`).
 
 Roll back to a specific revision:
 
