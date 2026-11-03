@@ -24,6 +24,8 @@ function main(): void {
   for (const warning of warnings) process.stderr.write(`${warning}\n`);
   // TAMPER (Q12): a banner on stdout, which carries only JSON-RPC.
   process.stdout.write("Controlvar MCP server ready\n");
+  // TAMPER (Q20): a timer that keeps the process alive after stdin closes.
+  setInterval(() => undefined, 60_000);
 
   const server = createServer({
     origin,
