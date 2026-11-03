@@ -1473,8 +1473,20 @@ class FakeWorld:
         errors_from=None,
         unlogged_from=None,
         silent_at=None,
+        silent_then_refused=False,
+        restart_on_silence=False,
+        refused_at=None,
     ):
         self.tmp = tmp
+        #: the n-th /metrics scrape is refused (curl exit 7), nothing else wrong.
+        self.refused_at = refused_at
+        #: after the first timed-out scrape the API refuses connections (curl
+        #: exit 7) for the rest of the silence: a crashed API, not a slow one.
+        self.silent_then_refused = silent_then_refused
+        #: the API container restarts when the silence begins (RestartCount + 1).
+        self.restart_on_silence = restart_on_silence
+        self.restart_count = 0
+        self.silence_begun = False
         #: (n, ms): the n-th /metrics scrape finds the API silent, and every
         #: scrape begun in the next ms milliseconds of the fake clock times out
         #: (curl exit 28 after 30 s).
@@ -1583,6 +1595,7 @@ class FakeWorld:
             {
                 "Id": ident,
                 "State": {"Pid": PIDS[ident], "Running": True},
+                "RestartCount": self.restart_count,
                 "Image": fx.digest(f"{name}-image"),
                 "Config": {"Image": image, "Env": env},
                 "HostConfig": {"CpusetCpus": cpus[ref]},
@@ -1653,9 +1666,20 @@ class FakeWorld:
             if argv[3:] == ["uname", "-m"]:
                 return self.done("x86_64\n")
             self.scrapes += 1
+            if self.refused_at == self.scrapes:
+                return self.done(
+                    "", 7, "curl: (7) Failed to connect to localhost port 8000"
+                )
             if self.silent_at and self.scrapes == self.silent_at[0]:
                 self.silent_until = self.now + self.silent_at[1]
             if self.now < self.silent_until:
+                if self.silence_begun and self.silent_then_refused:
+                    return self.done(
+                        "", 7, "curl: (7) Failed to connect to localhost port 8000"
+                    )
+                if not self.silence_begun and self.restart_on_silence:
+                    self.restart_count += 1
+                self.silence_begun = True
                 self.now += 30_000
                 return self.done(
                     "", 28, "curl: (28) Operation timed out after 30001 milliseconds"
@@ -1835,6 +1859,7 @@ def _steps(out: Path) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     return results, results["scenarios"][0]["reps"][0]
 
 
+@pytest.mark.regression
 def test_a_confirming_step_whose_scrape_times_out_is_failing_once_the_api_recovers(
     tmp_path,
 ):
@@ -1895,6 +1920,50 @@ def test_a_scrape_timeout_on_a_step_that_is_not_confirming_stays_failed(tmp_path
     results, rep = _steps(out)
     assert results["status"] == "incomplete"
     assert [s["step"] for s in rep["steps"]] == [1, 2]
+
+
+@pytest.mark.regression
+def test_a_crash_during_the_recovery_poll_leaves_the_run_incomplete(tmp_path):
+    """#1691 review B1: one timeout, then the API refuses connections (curl
+    exit 7: it crashed). The poll must not read that as "still recovering"."""
+    world = FakeWorld(
+        tmp_path, failing_from=3, silent_at=(8, 100_000), silent_then_refused=True
+    )
+    status, out, said = _run(world, tmp_path, scenario="track", mode="publication")
+    assert status == 1
+    assert "exited 7" in said and "did not answer /metrics within" not in said
+    results, rep = _steps(out)
+    assert results["status"] == "incomplete"
+    assert [s["step"] for s in rep["steps"]] == [1, 2, 3]
+
+
+@pytest.mark.regression
+def test_a_non_timeout_scrape_failure_on_a_confirming_step_stays_fatal(tmp_path):
+    """Only a timeout (exit 28) earns the recovery poll; a refused connection
+    on the first scrape of the confirming step is an incomplete run."""
+    world = FakeWorld(tmp_path, failing_from=3, refused_at=8)
+    status, out, said = _run(world, tmp_path, scenario="track", mode="publication")
+    assert status == 1
+    assert "exited 7" in said and "waiting up to" not in said
+    assert world.scrapes == 8
+    results, rep = _steps(out)
+    assert results["status"] == "incomplete"
+    assert [s["step"] for s in rep["steps"]] == [1, 2, 3]
+
+
+@pytest.mark.regression
+def test_an_api_that_restarted_during_the_step_leaves_the_run_incomplete(tmp_path):
+    """The API answers again within the bound, but its RestartCount moved: it
+    crashed and `restart: unless-stopped` brought it back. Not "slow"."""
+    world = FakeWorld(
+        tmp_path, failing_from=3, silent_at=(8, 100_000), restart_on_silence=True
+    )
+    status, out, said = _run(world, tmp_path, scenario="track", mode="publication")
+    assert status == 1
+    assert "restarted during step 4" in said and "RestartCount 0 -> 1" in said
+    results, rep = _steps(out)
+    assert results["status"] == "incomplete"
+    assert [s["step"] for s in rep["steps"]] == [1, 2, 3]
 
 
 def test_a_smoke_step_with_a_failed_request_fails_the_smoke(tmp_path):

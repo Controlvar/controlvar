@@ -1359,7 +1359,12 @@ class Measurement:
                 )
             try:
                 text = self.metrics(stack)
-            except Failed:
+            except Failed as error:
+                # Only "still slow" is waited out. A refused connection (the
+                # API crashed), a docker exec error or anything else is a
+                # failure the poll must not absorb.
+                if f"exited {CURL_TIMED_OUT}:" not in str(error):
+                    raise
                 self.io.sleep(RECOVERY_POLL_S)
                 continue
             took = self.io.now_ms() - started
@@ -1487,6 +1492,7 @@ class Measurement:
         window = se.ranges(self.method)
         directory = self.out / f"step-{number:02d}"
         before = self.metrics(stack)
+        restarts_before = self.docker.inspect(stack.ids["api"])["RestartCount"]
         assignments_before = self.assignments()
         t0 = self.io.now_ms()
         rate, unit = self.k6(
@@ -1521,6 +1527,15 @@ class Measurement:
                 raise
             after, took = self.metrics_after_overload(stack, scrape_began)
             recovery = (RECOVERY_BOUND_S, took)
+            # the API answered again, but a container that restarted (it is
+            # `restart: unless-stopped`) crashed under the load: not "slow"
+            restarts = self.docker.inspect(stack.ids["api"])["RestartCount"]
+            if restarts != restarts_before:
+                raise Failed(
+                    f"the API container restarted during step {number} "
+                    f"(RestartCount {restarts_before} -> {restarts}): it crashed "
+                    "rather than ran slow"
+                )
         assignments_after = self.assignments()
         if code not in (0, K6_THRESHOLDS_FAILED):
             raise Failed(
