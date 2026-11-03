@@ -41,9 +41,10 @@ _URL = re.compile(
     r"^(?:https?://)?(?:localhost|127\.0\.0\.1)(?::\d+)?(?P<path>/[^?#]*)"
 )
 #: The requests the page documents: its ``curl`` examples (sign in, create a key,
-#: the manifest twice, then the AI endpoints), counted exactly so that an example
-#: dropped from the page cannot leave the check passing on fewer (R2).
-DOCUMENTED_REQUESTS = 16
+#: read it back from the list, the manifest twice, then the AI endpoints),
+#: counted exactly so that an example dropped from the page cannot leave the
+#: check passing on fewer (R2).
+DOCUMENTED_REQUESTS = 17
 _BODY_FLAGS = {
     "-d",
     "--data",

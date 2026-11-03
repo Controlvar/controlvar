@@ -39,6 +39,18 @@ ROUTES: Dict[str, str] = {
     "get_experiment_results": "GET /api/v1/experiments/{experiment_id}/results",
 }
 
+#: What each tool answers, as the page's table spells it (the middle cell). The
+#: claims registry holds that column, so the test pins it: a cell that says
+#: "by its id" for a tool that takes a key must fail here, not pass unseen.
+ANSWERS: Dict[str, str] = {
+    "list_feature_flags": "The feature flags, a page at a time",
+    "get_feature_flag": "One feature flag, by its key",
+    "evaluate_feature_flag": "What a flag serves one user",
+    "list_experiments": "The experiments, a page at a time",
+    "get_experiment": "One experiment, by its id",
+    "get_experiment_results": "An experiment's statistical results",
+}
+
 #: The three forms of the denied sentence (Q23). Matched across line breaks and
 #: ignoring case, so a rewrapped copy is still found.
 PHRASES = ("runs no MCP server", "does not run an MCP server", "serves no MCP server")
@@ -77,6 +89,11 @@ def table_problems(text: str, served: List[str]) -> List[str]:
     if listed != served:
         found.append(f"the page's table lists {listed}; the MCP server serves {served}")
     for row in rows:
+        if row[1:-1] != [ANSWERS.get(row[0])]:
+            found.append(
+                f"the page says {row[0]} answers {' | '.join(row[1:-1])!r}; "
+                f"it answers {ANSWERS.get(row[0])!r}"
+            )
         if ROUTES.get(row[0]) != row[-1]:
             found.append(
                 f"the page says {row[0]} calls {row[-1]!r}; it calls {ROUTES.get(row[0])!r}"
@@ -132,6 +149,14 @@ def test_the_table_check_fires_on_a_dropped_and_a_misrouted_tool():
         "calls 'GET /api/v1/experiment/'" in problem
         for problem in table_problems(misrouted, served_tools())
     )
+    misdescribed = text.replace(
+        "One feature flag, by its key", "One feature flag, by its id"
+    )
+    assert misdescribed != text
+    assert table_problems(misdescribed, served_tools()) == [
+        "the page says get_feature_flag answers 'One feature flag, by its id'; "
+        "it answers 'One feature flag, by its key'"
+    ]
 
 
 def test_no_page_says_the_platform_has_no_mcp_server():

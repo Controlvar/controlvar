@@ -134,8 +134,11 @@ by = [
 ]
 
 [[unit]]
-text = "The last line prints the key's scopes:"
-by = ["docex:docs/mcp-server.md#[\"mcp:read\"]"]
+text = "The last request reads the key back from your list of keys and prints its scopes:"
+by = [
+    "docex:docs/mcp-server.md#[\"mcp:read\"]",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_scopes_round_trip_as_list",
+]
 
 [[unit]]
 text = "Add the server to your assistant"
@@ -178,7 +181,7 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "Add the same block to ~/.cursor/mcp.json."
-by = ["mechanism:mcp-page-snippets"]
+by = ["exempt:third-party"]
 
 [[unit]]
 text = "Try it"
@@ -367,7 +370,7 @@ by = [
 ]
 
 [[unit]]
-text = "Listing feature flags failed: This API key does not have the 'mcp:read' scope. | The key was created without the mcp:read scope. | Create a key with the mcp:read scope."
+text = "Listing feature flags failed: This API key does not have the 'mcp:read' scope. Create a key with the 'mcp:read' scope to read flags, experiments and results with it. (403). | The key was created without the mcp:read scope. | Create a key with the mcp:read scope."
 by = ["test:sdk/mcp/__tests__/tools.test.ts::a key without the scope (403)"]
 
 [[unit]]
@@ -379,7 +382,7 @@ text = "The Controlvar API is limiting requests from this address (429). Try aga
 by = ["test:sdk/mcp/__tests__/tools.test.ts::429 with Retry-After is E18"]
 
 [[unit]]
-text = "The Controlvar API at http://localhost:8000 failed while listing feature flags (500). | The instance failed. | Give your administrator the request id in the message."
+text = "The Controlvar API at http://localhost:8000 failed while listing feature flags (500). Request ID: req-from-the-api-42; your administrator can find it in the API's logs. | The instance failed. | Give your administrator the request id in the message."
 by = ["test:sdk/mcp/__tests__/tools.test.ts::500 with X-Request-ID is E19, naming that id"]
 
 [[unit]]

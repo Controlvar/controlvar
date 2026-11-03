@@ -57,7 +57,8 @@ Who can create one:
   does, anyone who can sign in can create their own with the request below.
 
 The request signs in as the Quick Start's administrator and creates the key,
-which is shown once. The last line prints the key's scopes:
+which is shown once. The last request reads the key back from your list of keys
+and prints its scopes:
 
 ```{.bash exec}
 TOKEN=$(curl -s -X POST localhost:8000/api/v1/auth/login \
@@ -68,7 +69,10 @@ CREATED=$(curl -s -X POST localhost:8000/api/v1/api-keys \
   -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
   -d '{"name":"mcp","scopes":["mcp:read"]}')
 KEY=$(echo "$CREATED" | jq -r .key)
-echo "$CREATED" | jq -c .scopes
+ID=$(echo "$CREATED" | jq -r .id)
+
+curl -s localhost:8000/api/v1/api-keys -H "Authorization: Bearer $TOKEN" \
+  | jq -c --arg id "$ID" '.[] | select(.id == $id) | .scopes'
 ```
 <!-- expect: ["mcp:read"] -->
 
@@ -181,10 +185,10 @@ line on stderr.
 | `http://localhost:3100 answered, but not as the Controlvar API (it sent a web page).` | The address is the dashboard's. | Use the address that serves `/api/v1`: `http://localhost:8000` on the Quick Start stack. |
 | `The Controlvar API at http://127.0.0.1:8080 refused that host name (400: Invalid host header).` | The instance does not accept that host name. | Use the host name your instance is set up for. |
 | `The Controlvar API at http://localhost:8000 did not accept the key in CONTROLVAR_API_KEY (401: Invalid API Key).` | The key was deleted or has expired, or its owner's account is deactivated, or your instance is too old to accept an API key for these routes. | Create a new key, or upgrade the instance. |
-| `Listing feature flags failed: This API key does not have the 'mcp:read' scope.` | The key was created without the `mcp:read` scope. | Create a key with the `mcp:read` scope. |
+| `Listing feature flags failed: This API key does not have the 'mcp:read' scope. Create a key with the 'mcp:read' scope to read flags, experiments and results with it. (403).` | The key was created without the `mcp:read` scope. | Create a key with the `mcp:read` scope. |
 | `Listing feature flags failed: You don't have permission to list feature flags (403).` | The key's owner may not read this. | Use a key owned by a user who can. |
 | `The Controlvar API is limiting requests from this address (429). Try again in 30 seconds.` | Too many requests. | Wait as long as the message says. |
-| `The Controlvar API at http://localhost:8000 failed while listing feature flags (500).` | The instance failed. | Give your administrator the request id in the message. |
+| `The Controlvar API at http://localhost:8000 failed while listing feature flags (500). Request ID: req-from-the-api-42; your administrator can find it in the API's logs.` | The instance failed. | Give your administrator the request id in the message. |
 
 ## Revoking a key
 
@@ -226,7 +230,7 @@ curl -s localhost:8000/api/v1/mcp/manifest \
   | jq '.tools[] | select(.name == "get_experiment")'
 ```
 <!-- expect: "name": "get_experiment" -->
-<!-- expect: "description": "Reads one experiment by its id (from list_experiments)" -->
+<!-- expect: "description": "Reads one experiment by its id (from list_experiments) -->
 <!-- expect: "experiment_id" -->
 
 ```json

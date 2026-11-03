@@ -766,7 +766,6 @@ MECHANISMS: Dict[str, Mechanism] = {
             "CONTROLVAR_API_URL is your instance's address and "
             "CONTROLVAR_API_KEY is the key.",
             "Run this in the sdk/mcp directory you built, with the key in $KEY:",
-            "Add the same block to ~/.cursor/mcp.json.",
         ),
     ),
     # "Not yet published": while the page says so it names no npx command.

@@ -33,7 +33,8 @@ still authenticate with the `X-Experimently-Webhook-Secret` header, so nothing
 changes in their configuration.
 
 The MCP manifest, `GET /api/v1/mcp/manifest`, which lists the tools of the
-Controlvar MCP server, now gives the name `controlvar`. A client that matched the former name on it needs the new one.
+Controlvar MCP server, now gives the name `controlvar`. A client that matched
+the former name on it needs the new one.
 
 The dashboard keeps its sign-in token under the same key and the API keeps the
 issuer it signs tokens with, so nobody is signed out by the upgrade.
