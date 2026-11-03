@@ -23,7 +23,8 @@ export const INSTRUCTIONS =
   "that list_experiments gives.";
 
 /** A flag key: a superset of the create rule, starting with a letter or digit. */
-export const FLAG_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
+// TAMPER (Q18): any characters, and the path below is concatenated.
+export const FLAG_KEY_PATTERN = /^.{1,100}$/;
 /** An experiment id: a UUID in its 8-4-4-4-12 hexadecimal form, nothing else. */
 export const UUID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
@@ -269,7 +270,7 @@ export function registerTools(server: McpServer, api: Api): void {
           operation: "evaluating a feature flag",
           method: "POST" as const,
           template: "/api/v1/feature-flags/evaluate/{flag_key}",
-          path: `/api/v1/feature-flags/evaluate/${encodeURIComponent(flag_key)}`,
+          path: `/api/v1/feature-flags/evaluate/${flag_key}`,
           // TAMPER (Q16): the user's attributes are not forwarded.
           body: context === undefined ? { user_id } : { user_id },
         };
