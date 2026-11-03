@@ -45,9 +45,10 @@ makes, a random UUID, or, for events you send from your server with a server-sid
 or message id. From a browser or an app, let the SDK make the id. Send revenue events from your
 server. Make the id once, when the event happens, and send that same id each time.
 
-No SDK has an `event_id` option yet ([Limitations](../getting-started/limitations.md#sdks)):
-send an event that may be sent again to `POST /api/v1/tracking/track` or
-`POST /api/v1/tracking/batch` yourself.
+The Java SDK gives every event an `event_id` ([Event ids](../sdk/java.md#event-ids)). No other
+SDK has an `event_id` option yet ([Limitations](../getting-started/limitations.md#sdks)): send an
+event that may be sent again to `POST /api/v1/tracking/track` or `POST /api/v1/tracking/batch`
+yourself.
 
 `event_dedup_keys` holds your app's user ids and keeps them when events are deleted. An operator
 erasing one person's events by hand must delete their keys too. An `event_id` is remembered for as

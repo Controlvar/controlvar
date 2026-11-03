@@ -175,6 +175,12 @@ above `max_percentage`, when two stages have the same stage order or the orders 
 gap, or when a stage order is above 1000. The orders need not start at 1: 5, 6, 7 is
 accepted.
 
+`min_stage_duration` is a whole number of hours from 0 to 8760, or `null` for no minimum;
+any other value is refused with `422`. A schedule's `end_date` must be after its
+`start_date`, or the request is refused with `422`. A date or time with no zone is read as
+UTC, so `2027-01-08T00:00:00` and `2027-01-08T00:00:00Z` are the same moment, and a
+schedule's `start_date` and `end_date` may mix the two forms.
+
 ### Step 4: Activate the schedule
 
 ```{.bash exec}
@@ -190,6 +196,15 @@ Activating a schedule doesn't change the flag: it is still at 0%.
 A flag has one active schedule at a time: activating a schedule while another schedule of
 the same flag is active answers `409`, and nothing changes. Pause or cancel the other one
 first.
+
+### Changing a schedule
+
+`PUT /api/v1/rollout-schedules/{schedule_id}` does not take `stages`; add a stage with
+`POST .../stages` and change one with `PUT .../stages/{stage_id}`. A request that contains
+`stages`, with any value including `null` and `[]`, is refused with `422`, and nothing is
+changed. A `PUT` that would leave the end date not after the start date, the stored one
+included, is refused with `422` too, and so is a `min_stage_duration` outside 0 to 8760;
+`null` clears it.
 
 ---
 
@@ -213,6 +228,11 @@ lowering `max_percentage` answers `409`, and nothing is changed.
 | `time_based` | Before the schedule's `end_date`, the stage starts by itself once its `start_date` has passed and every stage before it is complete; with no `start_date`, on the scheduler's first pass after that. The scheduler completes it no sooner than 24 hours after it starts, or the hours its `trigger_configuration` gives as `duration`. |
 | `manual` | The stage starts only when you advance it. |
 | `metric_based` | Accepted, but not implemented in this release: such a stage never starts by itself. |
+
+`trigger_configuration.duration` is a number of hours from 0 to 8760; if it is missing the
+default is 24. Any other value, a string, `null` or a boolean included, is refused with
+`422`, on create, on adding a stage and on changing one. The rest of `trigger_configuration`
+is not checked.
 
 The scheduler never completes a manual stage, so **a time-based stage after a manual stage
 never starts by itself**. Advance the manual stage a second time to move on (see
