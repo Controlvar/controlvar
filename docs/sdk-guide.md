@@ -277,6 +277,7 @@ const client = new ExperimentationClient({
 | `trackBatch(events)` | `Promise<BatchResult>` | never rejects; chunked at 100 |
 | `fetchAssignments(userId)` | server-side list from `/tracking/assignments/{userId}` | rejects |
 | `getAssignments(userId)`, `getEvaluatedFlags(userId)`, `clearCache()` | local cache access | — |
+| `getCachedFlags(userId)` | `FlagEvaluation[]`: cached, unexpired evaluations; with local evaluation each carries `source` (`'local'` or `'server'`) | — |
 | `consistentHash(userId, flagKey)`, `md5Hex(...)` (module exports) | compatibility hash utilities | — |
 
 Concurrent calls for the same user + key share one request; failures are never cached; a 429 is

@@ -816,6 +816,38 @@ describe('after local evaluation stops answering a pair', () => {
   });
 });
 
+// ─── getCachedFlags ──────────────────────────────────────────────────────────
+//
+// #1714: the cached evaluations themselves, so a caller (the OpenFeature provider) can tell a
+// local entry, never reused, from a server one, which is.
+
+describe('getCachedFlags', () => {
+  test("getCachedFlags returns the user's unexpired cached evaluations, each with its source", async () => {
+    const server = new FakeServer(ok(RULESET_WITH_REMOTE, '"v2"'));
+    const { client } = localClient(server, { cacheTtlMs: 60_000 });
+    track(client);
+    await client.ready();
+    const t0 = Date.now();
+    const local = await client.evaluateFlag('us-only', us);
+    const remote = await client.evaluateFlag('semver', us);
+    await client.evaluateFlag('all-on', { userId: 'someone-else' });
+    const requests = server.calls.length;
+
+    expect(client.getCachedFlags('user-1')).toEqual([local, remote]);
+    expect(client.getCachedFlags('user-1').map(entry => [entry.key, entry.source])).toEqual([
+      ['us-only', 'local'],
+      ['semver', 'server'],
+    ]);
+    expect(client.getCachedFlags('nobody')).toEqual([]);
+    // Live for cacheTtlMs after it is set and expired from then on, with no call in between.
+    jest.setSystemTime(t0 + 59_999);
+    expect(client.getCachedFlags('user-1')).toHaveLength(2);
+    jest.setSystemTime(t0 + 60_000);
+    expect(client.getCachedFlags('user-1')).toEqual([]);
+    expect(server.calls.length).toBe(requests); // no network
+  });
+});
+
 // ─── Refresh timing ──────────────────────────────────────────────────────────
 
 describe('refresh interval', () => {

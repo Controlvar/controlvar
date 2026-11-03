@@ -10,7 +10,8 @@
  *     row of the resolution table in the README
  *   - error mapping: 404 → FLAG_NOT_FOUND, network → GENERAL, missing targetingKey
  *   - per user + flag caching (CACHED reason, TTL expiry, failures not cached, the attributes
- *     not part of the key, cacheTtlMs 0)
+ *     not part of the key, cacheTtlMs 0); with local evaluation, CACHED only for a server answer
+ *     already held; a client without getCachedFlags
  *   - onClose / refreshFlags clear the cache
  *   - hash utility vectors
  *   - OpenFeature.setProviderAndWait registration, and what an OpenFeature client returns
@@ -778,7 +779,12 @@ describe('ExperimentationProvider — cache', () => {
     expect(second.reason).toBe(StandardResolutionReasons.TARGETING_MATCH);
   });
 
-  test('a client with local evaluation answers each call from its ruleset with that call\'s attributes, never CACHED', async () => {
+  /**
+   * A JS SDK client with local evaluation. Its ruleset answers `label` for a user whose `plan` is
+   * a string: "Complete purchase" (TARGETING_MATCH) for "enterprise", "Buy now" (SPLIT) otherwise.
+   * The server answers every evaluate request with `evaluate`.
+   */
+  function localLabelClient(evaluate: Step) {
     const ruleset = {
       schema: 1,
       version: 'v1',
@@ -807,7 +813,7 @@ describe('ExperimentationProvider — cache', () => {
       url.includes('/api/v1/sdk/ruleset')
         ? response({ body: ruleset })
         : url.includes('/feature-flags/evaluate/')
-          ? response({ status: 500 })
+          ? response(evaluate)
           : response({ status: 201, body: { accepted: 0, errors: [] } }),
     );
     const client = new ExperimentationClient({
@@ -816,6 +822,17 @@ describe('ExperimentationProvider — cache', () => {
       fetch: fetchMock as unknown as typeof fetch,
       evaluation: 'local',
     });
+    const evaluateRequests = () => fetchMock.mock.calls.filter(([url]) => String(url).includes('/feature-flags/evaluate/'));
+    return { client, evaluateRequests };
+  }
+
+  /** The server's answer for `label`: off ("Buy now"), with this reason. */
+  function serverBuyNow(reason: string): Step {
+    return { body: { key: 'label', enabled: false, config: null, reason, value: 'Buy now', value_type: 'string' } };
+  }
+
+  test('a client with local evaluation answers each call from its ruleset with that call\'s attributes, never CACHED', async () => {
+    const { client, evaluateRequests } = localLabelClient({ status: 500 });
     try {
       await expect(client.ready()).resolves.toMatchObject({ ok: true });
       const provider = new ExperimentationProvider({ apiKey: '', client });
@@ -825,10 +842,90 @@ describe('ExperimentationProvider — cache', () => {
       expect(enterprise).toMatchObject({ value: 'Complete purchase', reason: StandardResolutionReasons.TARGETING_MATCH, variant: 'on' });
       const again = await provider.resolveBooleanEvaluation('label', false, { targetingKey: 'u1', plan: 'enterprise' });
       expect(again.errorCode).toBe(ErrorCode.TYPE_MISMATCH);
-      expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/feature-flags/evaluate/'))).toEqual([]);
+      expect(evaluateRequests()).toEqual([]);
     } finally {
       await client.close();
     }
+  });
+
+  // #1714: a call the ruleset defers goes to the server, and the client never reuses a local
+  // answer for it (#1709). So the server's answer is its own reason, not CACHED, though the
+  // client's cache held the user's local answer for the flag.
+  test("after a local answer, the server's answer to a call the ruleset defers is SPLIT, not CACHED", async () => {
+    const { client, evaluateRequests } = localLabelClient(serverBuyNow('rollout'));
+    try {
+      await expect(client.ready()).resolves.toMatchObject({ ok: true });
+      const provider = new ExperimentationProvider({ apiKey: '', client });
+      const enterprise = { targetingKey: 'u1', plan: 'enterprise' };
+      // A number against the rule's string: the SDK does not compare it, so the call defers.
+      const deferring = { targetingKey: 'u1', plan: 7 };
+
+      await expect(provider.resolveStringEvaluation('label', 'd', enterprise)).resolves.toMatchObject({
+        value: 'Complete purchase',
+        reason: StandardResolutionReasons.TARGETING_MATCH,
+      });
+      await expect(provider.resolveStringEvaluation('label', 'd', deferring)).resolves.toMatchObject({
+        value: 'Buy now',
+        reason: StandardResolutionReasons.SPLIT,
+        variant: 'off',
+      });
+      expect(evaluateRequests()).toHaveLength(1);
+      // The server's answer is held now: the next call the ruleset defers is served from it.
+      await expect(provider.resolveStringEvaluation('label', 'd', deferring)).resolves.toMatchObject({
+        value: 'Buy now',
+        reason: StandardResolutionReasons.CACHED,
+      });
+      // A call the ruleset answers is still computed afresh, never CACHED.
+      await expect(provider.resolveStringEvaluation('label', 'd', enterprise)).resolves.toMatchObject({
+        value: 'Complete purchase',
+        reason: StandardResolutionReasons.TARGETING_MATCH,
+      });
+      expect(evaluateRequests()).toHaveLength(1);
+    } finally {
+      await client.close();
+    }
+  });
+
+  test("after close(), the server's first answer carries its own reason (DISABLED), not CACHED", async () => {
+    const { client, evaluateRequests } = localLabelClient(serverBuyNow('inactive'));
+    try {
+      await expect(client.ready()).resolves.toMatchObject({ ok: true });
+      const provider = new ExperimentationProvider({ apiKey: '', client });
+      const enterprise = { targetingKey: 'u1', plan: 'enterprise' };
+      await expect(provider.resolveStringEvaluation('label', 'd', enterprise)).resolves.toMatchObject({
+        value: 'Complete purchase',
+        reason: StandardResolutionReasons.TARGETING_MATCH,
+      });
+      await client.close();
+      await expect(provider.resolveStringEvaluation('label', 'd', enterprise)).resolves.toMatchObject({
+        value: 'Buy now',
+        reason: StandardResolutionReasons.DISABLED,
+        variant: 'off',
+      });
+      expect(evaluateRequests()).toHaveLength(1);
+    } finally {
+      await client.close();
+    }
+  });
+
+  test('a client without getCachedFlags (an older JS SDK) still resolves, CACHED from getEvaluatedFlags', async () => {
+    const fetchMock = flagFetch({ enabled: true });
+    const sdk = new ExperimentationClient({ apiUrl: 'http://localhost:8000', apiKey: 'k', fetch: fetchMock });
+    const older = {
+      evaluateFlag: sdk.evaluateFlag.bind(sdk),
+      getEvaluatedFlags: sdk.getEvaluatedFlags.bind(sdk),
+      clearCache: sdk.clearCache.bind(sdk),
+    } as unknown as ExperimentationClient;
+    const provider = new ExperimentationProvider({ apiKey: '', client: older });
+    await expect(provider.resolveBooleanEvaluation('f', false, ctx)).resolves.toMatchObject({
+      value: true,
+      reason: StandardResolutionReasons.TARGETING_MATCH,
+    });
+    await expect(provider.resolveBooleanEvaluation('f', false, ctx)).resolves.toMatchObject({
+      value: true,
+      reason: StandardResolutionReasons.CACHED,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   test('failures are not cached — the next evaluation retries', async () => {
