@@ -156,21 +156,33 @@ def test_every_sdk_sends_its_events_through_track_and_batch(sdk):
         assert wrapped in source, f"{sdk} does not use {wrapped!r}"
 
 
-#: The SDKs with no ``event_id`` option yet (#1543): every one, until each
-#: SDK's own pull request adds the option and removes it here and from the
-#: SDK row of ``docs/getting-started/limitations.md``.
-WITHOUT_EVENT_ID = sorted(SDK_SOURCES)
+#: The SDKs that send an ``event_id`` (#1543). Each SDK's own pull request
+#: adds the option, moves the SDK here, and takes it out of the SDK row of
+#: ``docs/getting-started/limitations.md``. What each one sends is held by its
+#: own tests (Java: ``ExperimentationClientTest``'s ``EventIds``).
+WITH_EVENT_ID = ("java",)
+#: The SDKs with no ``event_id`` option yet: every other one.
+WITHOUT_EVENT_ID = sorted(set(SDK_SOURCES) - set(WITH_EVENT_ID))
 #: The option's name in each SDK's idiom: ``event_id``, ``eventId``,
 #: ``EventId``, ``EventID``.
 EVENT_ID_NAME = re.compile(r"\bevent_?[iI][dD]\b|\bEventI[dD]\b")
 
 
 @pytest.mark.parametrize("sdk", WITHOUT_EVENT_ID)
-def test_no_sdk_has_an_event_id_option_yet(sdk):
-    """No SDK names an ``event_id`` anywhere in its source, so none sends one."""
+def test_no_other_sdk_has_an_event_id_option_yet(sdk):
+    """No other SDK names an ``event_id`` anywhere in its source, so none
+    sends one."""
     rel, _ = SDK_SOURCES[sdk]
     found = sorted(set(EVENT_ID_NAME.findall(_source(rel))))
-    assert not found, f"{sdk} names {found}: remove it from WITHOUT_EVENT_ID"
+    assert not found, f"{sdk} names {found}: move it to WITH_EVENT_ID"
+
+
+@pytest.mark.parametrize("sdk", WITH_EVENT_ID)
+def test_the_sdks_with_an_event_id_option_name_it(sdk):
+    """An SDK listed as sending an ``event_id`` names it in its source."""
+    rel, _ = SDK_SOURCES[sdk]
+    found = EVENT_ID_NAME.search(_source(rel))
+    assert found is not None, f"{sdk} names no event_id"
 
 
 def test_the_event_id_scan_finds_each_spelling():
