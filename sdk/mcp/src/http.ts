@@ -232,6 +232,10 @@ export class Api {
       );
     }
     if (status === 401) {
+      // TAMPER (Q8): a refused key reads as an empty list.
+      return { items: [], total: 0, skip: 0, limit: 50 };
+    }
+    if (status === 401) {
       throw new ApiError(
         `The Controlvar API at ${origin} did not accept the key in CONTROLVAR_API_KEY (401: ${detail}). ` +
           "It may have been deleted or have expired, or its owner's account may be deactivated; or the " +
