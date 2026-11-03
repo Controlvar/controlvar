@@ -8,10 +8,13 @@ its fault.
 
 **Every count a fault plants is a named integer of its definition**, never a
 share or a random draw. The definition says how many repeats, untagged events
-or lost users the run must show, and the sensitivity check
-(``tests/ground_truth/sensitivity.py``) compares the ledger with that number:
-a fault that reached the server short, or not at all, fails the scenario
-instead of leaving its gates passing on a server that has the defect. Which
+or lost users the run must show. The sensitivity check
+(``tests/ground_truth/sensitivity.py``) compares the ledger with the integers
+named in the table below, so a fault that reached the server short, or not at
+all, fails the scenario instead of leaving its gates passing on a server that
+has the defect. The others (``no_id_repeats``, ``paused_assigns``,
+``completed_assigns``, ``paused_resends``) are pinned at plan level, by
+``test_fault_library.py``, not against the ledger. Which
 events or users carry the fault is decided from the plan alone, spread evenly
 over the eligible ones in plan order (which the seed fixes), so the same seed
 gives the same plan. A count below 1 is refused when the definition is made,

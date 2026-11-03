@@ -59,9 +59,9 @@ METRIC_TYPES = ("conversion", "revenue", "count", "duration", "custom")
 #: done instead: ``R2-order``, an event received before its user's assignment
 #: is tagged with that assignment; ``R2-status``, an event received while the
 #: experiment is not ACTIVE is tagged as if it were; ``R4``, every repeat is
-#: stored; ``R5``, every value adds, whatever its size; ``R8``, an ``/events``
-#: event counts for the variant it names, whatever the user's assignment.
-WITHOUT = ("R2-order", "R2-status", "R4", "R5", "R8")
+#: stored; ``R8``, an ``/events`` event counts for the variant it names,
+#: whatever the user's assignment.
+WITHOUT = ("R2-order", "R2-status", "R4", "R8")
 #: The route of an event that names its experiment and variant by id.
 BY_ID = "/events"
 
@@ -550,7 +550,7 @@ def _count(
     state: _State, variant: str, record: Mapping[str, Any], without: frozenset[str]
 ) -> None:
     """A stored event that counts for *variant*: R3 picks the metric, R5 the
-    value (every value, without R5)."""
+    value."""
     name = _r3_metric_name(record)
     if name is None:
         return
@@ -558,10 +558,7 @@ def _count(
         record["user"], [0, []]
     )
     entry[0] += 1
-    if "R5" in without:
-        value = None if record["value"] is None else float(record["value"])
-    else:
-        value = _r5_value(record)
+    value = _r5_value(record)
     if value is not None:
         entry[1].append(value)
 
