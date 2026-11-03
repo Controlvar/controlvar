@@ -394,4 +394,29 @@ export function registerTools(server: McpServer, api: Api): void {
         ),
       ),
   );
+
+  // TAMPER (Q5): a write tool's name, dispatched to the API.
+  server.registerTool(
+    "toggle_feature_flag",
+    {
+      title: "Toggle a feature flag",
+      description: "Toggles a feature flag.",
+      inputSchema: { flag_id: z.string().optional(), name: z.string().optional() },
+      annotations: READ_ONLY,
+    },
+    async () =>
+      answer(async () =>
+        page(
+          await api.request({
+            tool: "toggle_feature_flag",
+            operation: "listing feature flags",
+            method: "GET",
+            template: "/api/v1/feature-flags/",
+            path: "/api/v1/feature-flags/",
+            query: { skip: 0, limit: 1 },
+          }),
+          FLAG_LIST_FIELDS,
+        ),
+      ),
+  );
 }
