@@ -29,7 +29,7 @@ import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import pytest
 
@@ -1476,8 +1476,19 @@ class FakeWorld:
         silent_then_refused=False,
         restart_on_silence=False,
         refused_at=None,
+        tick_in_step=None,
+        tick_after_step=None,
     ):
         self.tmp = tmp
+        #: the API's safety tick ends 1 s into this step's load, and its metrics
+        #: tick just after this step's after-scrape (the first scrape after
+        #: `docker wait`); with either, every scrape exports the tick families.
+        self.tick_in_step = tick_in_step
+        self.tick_after_step = tick_after_step
+        self.ticks_ended: Optional[List[Tuple[str, int]]] = (
+            None if tick_in_step is None and tick_after_step is None else []
+        )
+        self.waited = False
         #: the n-th /metrics scrape is refused (curl exit 7), nothing else wrong.
         self.refused_at = refused_at
         #: after the first timed-out scrape the API refuses connections (curl
@@ -1530,6 +1541,19 @@ class FakeWorld:
 
     def sleep(self, seconds):
         self.now += int(seconds * 1000)
+
+    def tick_state(self):
+        """The fake API's cumulative ticks now (fx.tick_lines' state), or None
+        for an API that does not export the tick families."""
+        if self.ticks_ended is None:
+            return None
+        state: Dict[str, Dict[str, Any]] = {}
+        for name, at in self.ticks_ended:
+            if at <= self.now:
+                entry = state.setdefault(name, {"success": 0})
+                entry["success"] += 1
+                entry["seconds"] = f"{entry['success'] * 0.95:.2f}"
+        return state
 
     def http(self, method, url, host, body=None, headers=None, timeout=10.0):
         assert (
@@ -1659,6 +1683,7 @@ class FakeWorld:
             return self.done(self.start_k6(argv) + "\n")
         if argv[:2] == ["docker", "wait"]:
             self.now = self.k6["start"] + self.k6["seconds"] * 1000 + 600
+            self.waited = True
             return self.done(str(self.k6["code"]) + "\n")
         if argv[:3] == ["docker", "exec", sr.SAMPLER_NAME]:
             return self.done(self.psql(argv[-1]) + "\n")
@@ -1684,7 +1709,12 @@ class FakeWorld:
                 return self.done(
                     "", 28, "curl: (28) Operation timed out after 30001 milliseconds"
                 )
-            return self.done(fx.metrics("a"))
+            text = fx.metrics("a", tick_state=self.tick_state())
+            if self.waited:
+                self.waited = False
+                if self.k6.get("step") == self.tick_after_step:
+                    self.ticks_ended.append(("metrics", self.now))
+            return self.done(text)
         if argv[:2] == ["docker", "logs"]:
             target = argv[-1]
             if target == sr.SAMPLER_NAME:
@@ -1767,7 +1797,9 @@ class FakeWorld:
         )
         short = self.unlogged_from is not None and step >= self.unlogged_from
         self.step_rows = len(records) - (3 if short else 0)
-        self.k6 = {"start": self.now, "seconds": seconds, "code": 0}
+        self.k6 = {"start": self.now, "seconds": seconds, "code": 0, "step": step}
+        if step == self.tick_in_step:
+            self.ticks_ended.append(("safety", self.now + 1000))
         assert variables["SCALE_BASE_URL"] == "http://web:8080"
         assert variables["SCALE_HOST"] == "localhost:18080"
         assert argv[argv.index("--cpuset-cpus") + 1] == "3"
@@ -1857,6 +1889,35 @@ def test_a_publication_run_stops_after_two_failing_steps_and_is_valid(tmp_path):
 def _steps(out: Path) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     results = json.loads((out / "results.json").read_text("utf-8"))
     return results, results["scenarios"][0]["reps"][0]
+
+
+def test_a_tick_during_a_step_lands_in_that_step_and_one_between_steps_in_none(
+    tmp_path,
+):
+    """The fake API's safety tick ends 1 s into step 2's load; its metrics tick
+    ends just after step 2's after-scrape, before step 3's before-scrape. A
+    step's ticks are the growth between its OWN two scrapes, so step 2 holds the
+    safety tick, and the metrics tick is in no step (it is in the API's count:
+    the run's last scrape shows it)."""
+    world = FakeWorld(tmp_path, failing_from=3, tick_in_step=2, tick_after_step=2)
+    status, out, said = _run(world, tmp_path, scenario="track", mode="publication")
+    assert status == 0, said
+    results = se.load_results((out / "results.json").read_text("utf-8"))
+    steps = results["scenarios"][0]["reps"][0]["steps"]
+    assert [s["scheduler_metrics"] for s in steps] == ["present"] * 4
+    idle = fx.ticks()
+    held = {
+        s["step"]: {n: t for n, t in s["scheduler_ticks"].items() if t != idle[n]}
+        for s in steps
+    }
+    safety = {"success": 1, "duration_count": 1, "duration_sum_us": 950_000}
+    assert held == {
+        1: {},
+        2: {"safety": fx.ticks(safety=safety)["safety"]},
+        3: {},
+        4: {},
+    }
+    assert world.tick_state()["metrics"]["success"] == 1
 
 
 @pytest.mark.regression

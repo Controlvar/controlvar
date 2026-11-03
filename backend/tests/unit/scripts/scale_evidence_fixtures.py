@@ -235,13 +235,78 @@ def observation(
     return out
 
 
+def tick_lines(state: Dict[str, Dict[str, Any]]) -> str:
+    """The two scheduler tick families as the API's prometheus_client writes
+    them, from cumulative state ``{scheduler: {outcome: ticks, "seconds":
+    "1.25"}}``: the ticks, and the timed ticks' count and summed duration (every
+    outcome but skipped is timed). A scheduler or an outcome not in ``state``
+    has no sample, as on an API where it has not ticked yet; ``{}`` is both
+    families with no sample at all."""
+    se = module()
+    lines = [
+        "# HELP scheduler_ticks_total Background scheduler ticks by outcome",
+        "# TYPE scheduler_ticks_total counter",
+    ]
+    for name, counts in state.items():
+        for status in se.TICK_STATUSES:
+            if status in counts:
+                lines.append(
+                    f'scheduler_ticks_total{{name="{name}",status="{status}"}} '
+                    f"{counts[status]}.0"
+                )
+    lines += [
+        "# HELP scheduler_ticks_created Background scheduler ticks by outcome",
+        "# TYPE scheduler_ticks_created gauge",
+        "# HELP scheduler_tick_duration_seconds Wall-clock duration of ticks",
+        "# TYPE scheduler_tick_duration_seconds histogram",
+    ]
+    for name, counts in state.items():
+        timed = sum(
+            counts.get(status, 0) for status in ("success", "partial", "failed")
+        )
+        if not timed:
+            continue
+        lines += [
+            f'scheduler_tick_duration_seconds_bucket{{le="1.0",name="{name}"}} 0.0',
+            f'scheduler_tick_duration_seconds_bucket{{le="+Inf",name="{name}"}} {timed}.0',
+            f'scheduler_tick_duration_seconds_count{{name="{name}"}} {timed}.0',
+            f'scheduler_tick_duration_seconds_sum{{name="{name}"}} {counts["seconds"]}',
+            f'scheduler_tick_duration_seconds_created{{name="{name}"}} 1.7936e+09',
+        ]
+    return "\n".join(lines) + "\n"
+
+
+def ticks(**ran: Dict[str, int]) -> Dict[str, Dict[str, int]]:
+    """A step record's ``scheduler_ticks``: every scheduler at zero but those
+    given, e.g. ``ticks(safety={"success": 1, "duration_count": 1})``."""
+    se = module()
+    out = {
+        name: {
+            **dict.fromkeys(se.TICK_STATUSES, 0),
+            "duration_count": 0,
+            "duration_sum_us": 0,
+        }
+        for name in se.SCHEDULERS
+    }
+    for name, counts in ran.items():
+        out[name].update(counts)
+    return out
+
+
 def metrics(
-    shape: str = "a", rejections: int = 0, fallbacks: int = 0, hits: int = 5
+    shape: str = "a",
+    rejections: int = 0,
+    fallbacks: int = 0,
+    hits: int = 5,
+    tick_state: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> str:
     """A /metrics exposition. The two shapes carry different label sets for the
-    same series; read as sums they must agree."""
+    same series; read as sums they must agree. With ``tick_state``
+    (``tick_lines``') it also exports the scheduler tick families; without, it
+    is an API that does not export them."""
+    extra = "" if tick_state is None else tick_lines(tick_state)
     if shape == "a":
-        return (
+        return extra + (
             "# TYPE rate_limit_hits_total counter\n"
             f'rate_limit_hits_total{{endpoint="track"}} {hits}.0\n'
             f'rate_limit_hits_total{{endpoint="assign"}} {hits}.0\n'
@@ -252,7 +317,7 @@ def metrics(
             "rate_limit_redis_fallbacks_created 1.7619e+09\n"
             "rate_limit_redis_fallback_active 0.0\n"
         )
-    return (
+    return extra + (
         "# TYPE rate_limit_hits_total counter\n"
         f'rate_limit_hits_total{{endpoint="track",method="POST"}} {2 * hits}.0\n'
         "# TYPE rate_limit_rejections_total counter\n"
@@ -343,6 +408,8 @@ def step_facts(
         "assignments_delta": 0,
         "reasons": {},
         "not_modified": 0,
+        "scheduler_metrics": "present",
+        "scheduler_ticks": ticks(),
     }
     if scenario == "evaluate_get":
         step["reasons"] = {
