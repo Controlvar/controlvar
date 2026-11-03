@@ -64,7 +64,11 @@ Refused, which fails the run (``LedgerRefused``):
 
 A 429 is recorded, counted in ``end.counts["429"]``, and stores nothing.
 
-Ids are synthetic. The ledger of a failed run is the failure dump: it is
+S1's injected-fault mode (indeterminate answers excluded and counted) is not
+implemented here: this module refuses them, as listed above. D210 v3 adds it
+here.
+
+Ids are meant to be synthetic; nothing checks it. The ledger of a failed run is the failure dump: it is
 written for the person reproducing the failure and is never uploaded.
 Request bodies' ``metadata`` and ``timestamp`` are not recorded: no number of
 ``GET /api/v1/results/{experiment_id}`` reads them.
