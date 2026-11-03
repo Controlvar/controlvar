@@ -308,6 +308,11 @@ async def list_feature_flags(
     feature_flags_data = crud_feature_flag.get_multi(
         db, skip=skip, limit=limit, status=status_member, search=search
     )
+    # TAMPER (Q7): a VIEWER sees one flag fewer.
+    from backend.app.models.user import UserRole
+
+    if getattr(current_user, "role", None) == UserRole.VIEWER and feature_flags_data:
+        feature_flags_data = list(feature_flags_data)[:-1]
     total = crud_feature_flag.count(db, status=status_member, search=search)
 
     # Create response with pagination
