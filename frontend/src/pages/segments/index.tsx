@@ -4,7 +4,8 @@ import { PageTitle } from '@/components/PageTitle';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { SEGMENT_PAGE_SIZE, Segment, SegmentStatus, SegmentsService } from '@/services/segments';
 import { ROLE_NOTE, segmentErrorCopy } from '@/utils/segmentErrors';
-import { canChangeSegments } from '@/utils/segmentPermissions';
+import { canCreateSegments } from '@/utils/segmentPermissions';
+import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
 import { segmentRulesAreValid } from '@/utils/segmentRules';
 import { KIND_LABELS, STATUS_COLORS, STATUS_LABELS } from '@/components/segments/segmentLabels';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
@@ -25,7 +26,11 @@ function formatDate(value: string): string {
 
 export default function SegmentsPage() {
   const auth = useOptionalAuth();
-  const canChange = canChangeSegments(auth?.user);
+  const { effective, loading: permissionsLoading } = useEffectivePermissions();
+  // "+ New segment" asks EXPERIMENT CREATE, from the role or the effective
+  // map (#891); the note in its place waits until the map has answered.
+  const canCreate = canCreateSegments(auth?.user, effective);
+  const createPending = !canCreate && permissionsLoading;
   const [filter, setFilter] = useState<Filter>('active');
   const [page, setPage] = useState(0);
   const [segments, setSegments] = useState<Segment[]>([]);
@@ -77,7 +82,7 @@ export default function SegmentsPage() {
               Name an audience once and target flags and experiments at it.
             </p>
           </div>
-          {canChange ? (
+          {canCreate ? (
             <Link
               href="/segments/new"
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
@@ -85,7 +90,7 @@ export default function SegmentsPage() {
             >
               + New segment
             </Link>
-          ) : (
+          ) : createPending ? null : (
             <p className="text-sm text-slate-600" data-testid="segments-role-note">
               {ROLE_NOTE}
             </p>
@@ -138,7 +143,7 @@ export default function SegmentsPage() {
             {filter === 'all' && page === 0 ? (
               <>
                 <p className="text-slate-600 mb-4">No segments yet.</p>
-                {canChange ? (
+                {canCreate ? (
                   <Link
                     href="/segments/new"
                     className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
@@ -146,7 +151,7 @@ export default function SegmentsPage() {
                   >
                     Create segment
                   </Link>
-                ) : (
+                ) : createPending ? null : (
                   <p className="text-sm text-slate-600">{ROLE_NOTE}</p>
                 )}
               </>

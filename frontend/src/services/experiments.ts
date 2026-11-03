@@ -153,7 +153,8 @@ export const ExperimentsService = {
   /**
    * `POST /api/v1/experiments/{id}/clone`, with no body. The answer is the new
    * experiment: a DRAFT named "Copy of …", with a key of its own, owned by the
-   * caller. It needs READ on the source and CREATE (ADMIN or DEVELOPER).
+   * caller. It needs READ on the source and CREATE on experiments (ADMIN or
+   * DEVELOPER, or a custom role or grant).
    */
   async clone(id: string): Promise<Experiment> {
     return apiFetch<Experiment>(`${BASE}/${id}/clone`, { method: 'POST' });

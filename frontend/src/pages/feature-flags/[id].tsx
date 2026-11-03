@@ -37,6 +37,7 @@ import {
   useFlagValueFields,
 } from '@/components/feature-flags/FlagValueFields';
 import { useOptionalAuth } from '@/contexts/AuthContext';
+import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
 import { FLAG_ROLE_NOTE, canChangeFeatureFlags } from '@/utils/experimentPermissions';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
 import {
@@ -148,9 +149,13 @@ export default function FeatureFlagDetailPage() {
   const rawId = router.query.id;
   const id = typeof rawId === 'string' ? rawId : undefined;
   const auth = useOptionalAuth();
-  // ANALYST and VIEWER read a flag and change none of it (#917): no switch,
-  // the rule builder read-only, the slider disabled, no Save, and a note why.
-  const canChange = canChangeFeatureFlags(auth?.user);
+  const { effective, loading: permissionsLoading } = useEffectivePermissions();
+  // A user without FEATURE_FLAG UPDATE (by role, custom role or direct grant)
+  // reads a flag and changes none of it (#917, #891): no switch, the rule
+  // builder read-only, the slider disabled, no Save, and a note why -- the
+  // note only once the effective map has answered.
+  const canChange = canChangeFeatureFlags(auth?.user, effective);
+  const changePending = !canChange && permissionsLoading;
 
   const [flag, setFlag] = useState<FeatureFlag | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -511,7 +516,7 @@ export default function FeatureFlagDetailPage() {
               )}
             </div>
           </div>
-          {!canChange && (
+          {!canChange && !changePending && (
             <p className="mt-4 text-sm text-slate-600" data-testid="flag-role-note">
               {FLAG_ROLE_NOTE}
             </p>

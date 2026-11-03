@@ -93,9 +93,10 @@ const HOLDOUT = {
 };
 
 const HOLDOUT_SENTENCE = 'Q4 baseline: keeps 5% of new users out of every experiment';
-const GROUP_REFUSED = 'In a group. Seeing its name requires the ADMIN or DEVELOPER role.';
+const GROUP_REFUSED =
+  'In a group. Seeing its name needs permission to create experiments, which the ADMIN and DEVELOPER roles have.';
 const GROUP_ERROR = 'In a group. Its name could not be loaded; reload the page to try again.';
-const HOLDOUT_REFUSED = 'Seeing this requires the ADMIN or DEVELOPER role.';
+const HOLDOUT_REFUSED = 'Seeing this needs permission to create experiments, which the ADMIN and DEVELOPER roles have.';
 const HOLDOUT_ERROR = 'Could not be loaded; reload the page to try again.';
 
 /** How a mocked route answers: a value, a promise, or a throw. */

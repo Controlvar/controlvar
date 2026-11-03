@@ -170,7 +170,7 @@ describe('a role the API refuses (ANALYST, VIEWER)', () => {
     serve({ list: () => ({ items: [{ ...GROUPS[0], name: 'PLANTED-GROUP' }], total: 1 }) });
     render(<ExclusionGroupsPage />);
     expect(screen.getByTestId('exclusion-groups-refused')).toHaveTextContent(
-      /^Exclusion groups are managed by the ADMIN and DEVELOPER roles\.$/,
+      /^Seeing and changing exclusion groups needs permission to create experiments, which the ADMIN and DEVELOPER roles have\.$/,
     );
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(mockedApiFetch).not.toHaveBeenCalled();
