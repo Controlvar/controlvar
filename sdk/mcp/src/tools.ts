@@ -364,8 +364,9 @@ export function registerTools(server: McpServer, api: Api): void {
           tool: "get_experiment_results",
           operation: "reading experiment results",
           method: "GET",
-          template: "/api/v1/experiments/{experiment_id}/results",
-          path: `/api/v1/experiments/${encodeURIComponent(experiment_id)}/results`,
+          // TAMPER (Q3): the other results route, outside the allow-list.
+          template: "/api/v1/results/{experiment_id}",
+          path: `/api/v1/results/${encodeURIComponent(experiment_id)}`,
         }),
       ),
   );
