@@ -436,6 +436,8 @@ BETWEENS = (
         ("inf", 65),
         (HUGE, 5),
         (0, HUGE),
+        ("18", HUGE),
+        ("18", NAN),
         (1e20, "2030-01-01"),
         (1e17, "2030-01-01"),
         (1e12, "2030-01-01"),
@@ -631,7 +633,7 @@ CORPUS_SIZE = {
     **{("geo_within_radius radius", k): (12, 13) for k in sorted(ALL_KINDS)},
     ("percentage_bucket", EXPERIMENT): (11, 9),
     **{(o, k): (10, 10) for o in ("gt", "gte", "lt", "lte") for k in NATIVE_KINDS},
-    **{("between", k): (18, 28) for k in NATIVE_KINDS},
+    **{("between", k): (18, 30) for k in NATIVE_KINDS},
     **{
         (f"dashboard {o}", k): (6, 6)
         for o in DASH_NUMBER_OPERATORS
@@ -912,6 +914,23 @@ VALUE_REFUSED: Dict[str, Tuple[FrozenSet[str], Any, str]] = {
         NATIVE,
         native(cond("between", 0, HUGE)),
         f"{_FIRST}.additional_value: {BETWEEN_VALUE}",
+    ),
+    # N1: both bounds numeric-spelt: the bound float() cannot read is named,
+    # even when the other one is digit text.
+    "between digit text and 10**400": (
+        NATIVE,
+        native(cond("between", "18", HUGE)),
+        f"{_FIRST}.additional_value: {BETWEEN_VALUE}",
+    ),
+    "between digit text and NaN": (
+        NATIVE,
+        native(cond("between", "18", NAN)),
+        f"{_FIRST}.additional_value: {BETWEEN_VALUE}",
+    ),
+    "between 10**400 and digit text": (
+        NATIVE,
+        native(cond("between", HUGE, "18")),
+        f"{_FIRST}.value: {BETWEEN_VALUE}",
     ),
     "between a number and an aware date": (
         NATIVE,
@@ -1619,6 +1638,7 @@ _ABANDONED = {
             (-INF, "2030-01-01"),
             (HUGE, 5),
             (0, HUGE),
+            ("18", HUGE),
             (1e20, "2030-01-01"),
             (1e17, "2030-01-01"),
         )

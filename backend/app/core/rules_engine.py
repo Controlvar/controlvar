@@ -597,6 +597,14 @@ def _between_numeric(value: Any) -> bool:
     )
 
 
+def _float_unreadable(value: Any) -> bool:
+    """Whether ``float()`` cannot read ``value`` or reads it as NaN."""
+    try:
+        return math.isnan(float(value))
+    except (ValueError, TypeError, OverflowError):
+        return True
+
+
 def _has_time_zone(moment: datetime) -> bool:
     return moment.tzinfo is not None and moment.utcoffset() is not None
 
@@ -619,6 +627,10 @@ def between_bounds_problem(lower: Any, upper: Any) -> Optional[str]:
       a date with a time zone and one without cannot be compared, so when
       exactly one bound has a zone no date is ever between them.
 
+    When both bounds are numeric-spelt and neither path reads the pair, the
+    bound named is the one ``float()`` cannot read (``"18"`` to ``10**400``
+    names ``"additional_value"``).
+
     Answers ``"value"`` when neither path reads ``lower``, then
     ``"additional_value"`` for ``upper``, then ``"time zone"``. A lower bound
     above the upper one is readable: the range is empty, like a 0% rollout.
@@ -626,14 +638,14 @@ def between_bounds_problem(lower: Any, upper: Any) -> Optional[str]:
     refuses it). Like the predicates above, this catches the branch reading
     less, not more.
     """
-    if _between_numeric(lower) and _between_numeric(upper):
-        try:
-            if not math.isnan(float(lower)) and not math.isnan(float(upper)):
-                return None
-        except (ValueError, TypeError, OverflowError):
-            pass
+    both_numeric = _between_numeric(lower) and _between_numeric(upper)
+    if both_numeric and not (_float_unreadable(lower) or _float_unreadable(upper)):
+        return None
     lower_date = _date_or_none(lower)
     if lower_date is None:
+        # Both bounds numeric-spelt: name the one ``float()`` cannot read.
+        if both_numeric and not _float_unreadable(lower):
+            return "additional_value"
         return "value"
     upper_date = _date_or_none(upper)
     if upper_date is None:
