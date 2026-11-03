@@ -22,6 +22,8 @@ function main(): void {
   }
   const { origin, apiKey, warnings } = result.config;
   for (const warning of warnings) process.stderr.write(`${warning}\n`);
+  // TAMPER (Q12): a banner on stdout, which carries only JSON-RPC.
+  process.stdout.write("Controlvar MCP server ready\n");
 
   const server = createServer({
     origin,
