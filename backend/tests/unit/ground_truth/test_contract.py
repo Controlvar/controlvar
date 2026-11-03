@@ -421,8 +421,13 @@ def test_r7_no_rule_reads_a_timestamp():
             (start("active"), track(C0, route="/events")),
             "R0 has no rule for an event sent to /events",
         ),
+        (
+            (start("active"), assign(C0), track(C0, event_name="")),
+            'R3: record 3 carries `event_name` ""; the server stores `event_name or'
+            " event_type`, so an empty name is not modelled",
+        ),
     ],
-    ids=["status", "experiment", "variant", "action", "dedup", "route"],
+    ids=["status", "experiment", "variant", "action", "dedup", "route", "empty-name"],
 )
 def test_a_rule_that_needs_what_the_ledger_does_not_say_refuses_by_name(parts, message):
     with pytest.raises(contract.ContractRefused, match=message.replace("(", r"\(")):

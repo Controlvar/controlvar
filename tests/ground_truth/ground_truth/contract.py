@@ -311,6 +311,19 @@ def _event_name(record: Mapping[str, Any]) -> str:
     return record["event_type"] if name is None else name
 
 
+def _r3_refuse_empty_name(record: Mapping[str, Any], number: int) -> None:
+    """R3, an empty ``event_name``: refused, not modelled. The server stores
+    ``event_name or event_type``, so an empty name becomes the event type, and
+    this module follows the docs' ``event_name`` defaulting to ``event_type``
+    only for a missing or null name. A stream that carries ``""`` says
+    something the contract does not model, so it is refused by name."""
+    if record.get("event_name") == "":
+        raise ContractRefused(
+            f"R3: record {number} carries `event_name` \"\"; the server stores"
+            " `event_name or event_type`, so an empty name is not modelled"
+        )
+
+
 def _r3_metric_name(record: Mapping[str, Any]) -> str | None:
     """R3 Metric match. A metric counts the events of its ``event_name``, which
     defaults to the event's ``event_type``; an exposure counts for no metric.
@@ -512,6 +525,8 @@ def valid_events(records: Sequence[Mapping[str, Any]]) -> Expected:
     for number, record in enumerate(records[1:], 2):
         _r7_no_timestamp(record, number)
         kind = record["kind"]
+        if kind == "event":
+            _r3_refuse_empty_name(record, number)
         if record.get("status") == 429:
             rate_limited += 1
         if kind == "action":
