@@ -468,3 +468,226 @@ def test_the_native_sdks_send_no_context_on_flag_evaluation(sdk):
     assignment = _native_code(rel, assign)
     assert "tracking/assign" in assignment, f"{sdk}: no assign request read"
     assert _CONTEXT.search(assignment), f"{sdk}: no context on assignment"
+
+
+#: Every directory under sdk/ whose flag evaluation sends the user's attributes
+#: as the ``context`` of ``/api/v1/feature-flags/evaluate/{key}``: its file, its
+#: flag-evaluation code as (the line that starts it, the line that ends it)
+#: pairs, and the code token that hands the attributes to that request.
+SENDS = {
+    "python": (
+        "sdk/python/controlvar/client.py",
+        [("def get_feature_flag(", "def get_string_value(")],
+        "_context_param(user_attributes)",
+    ),
+    "js": (
+        "sdk/js/src/client.ts",
+        [
+            (
+                "async evaluateFlag(flagKey: string, user: UserContext)",
+                "async isFeatureEnabled(",
+            )
+        ],
+        "contextQuery(attributes)",
+    ),
+    "react-native": (
+        "sdk/react-native/src/client.ts",
+        [("async evaluateFlag(", "async isFeatureEnabled(")],
+        "contextQuery(attributes)",
+    ),
+    "go": (
+        "sdk/go/client.go",
+        [("func (c *client) EvaluateFlag(", "func contextQuery(")],
+        "contextQuery(user.Attributes)",
+    ),
+    "react": (
+        "sdk/react/src/client/ExperimentationClient.ts",
+        [("export function evaluatePath(", "export function assignBody(")],
+        "contextQuery(user.attributes)",
+    ),
+    "openfeature": (
+        "sdk/openfeature/src/ExperimentationProvider.ts",
+        [("private async evaluate(", "private metadataFor(")],
+        "attributesOf(context",
+    ),
+    "openfeature-python": (
+        "sdk/openfeature-python/src/controlvar_openfeature/provider.py",
+        [("def _lookup(", "def _resolve(")],
+        "_attributes_of(",
+    ),
+    # Not an SDK, as the SDK guide's table says. It evaluates a flag for a user
+    # through the same route, with the attributes as ``context`` in the body.
+    "mcp": (
+        "sdk/mcp/src/tools.ts",
+        [("async ({ flag_key, user_id, context }) =>", "EVALUATION_FIELDS,")],
+        "{ user_id, context }",
+    ),
+}
+
+#: Every directory under sdk/ whose flag evaluation sends the user id alone, so
+#: a flag rule on attributes cannot match from it: the issue that tracks it, its
+#: file, and its code from the evaluate signature through the request call as
+#: (the line that starts it, the first line after the call) pairs.
+DOES_NOT_SEND = {
+    "java": (
+        1718,
+        "sdk/java/core/src/main/java/com/controlvar/sdk/ExperimentationClient.java",
+        [
+            (
+                "public FlagEvaluation evaluateFeatureFlag(",
+                "if (!response.isSuccessful())",
+            )
+        ],
+    ),
+    "dotnet": (
+        1719,
+        "sdk/dotnet/src/Controlvar/ExperimentationClient.cs",
+        [
+            (
+                "public async Task<FlagEvaluationResult> EvaluateFlagAsync(",
+                "if (string.IsNullOrEmpty(result.Key))",
+            )
+        ],
+    ),
+    "ruby": (
+        1720,
+        "sdk/ruby/lib/controlvar/client.rb",
+        [("def evaluate_flag(", "data = {} unless data.is_a?(Hash)")],
+    ),
+    "php": (
+        1720,
+        "sdk/php/src/ExperimentationClient.php",
+        [("public function evaluateFlag(", "} catch (ExperimentationException) {")],
+    ),
+    "elixir": (
+        1720,
+        "sdk/elixir/lib/controlvar/client.ex",
+        [("def evaluate_flag(", "{:ok, data} when is_map(data) ->")],
+    ),
+    "edge": (
+        1720,
+        "sdk/edge/src/client.ts",
+        [("async evaluateFlag(", "const evaluation: FlagEvaluation = {")],
+    ),
+    "ios": (
+        438,
+        "sdk/ios/Sources/Controlvar/ExperimentationClient.swift",
+        [("public func evaluateFlag(", "let result = EvalResult(")],
+    ),
+    "android": (
+        438,
+        "sdk/android/sdk/src/main/kotlin/com/controlvar/android/ExperimentationClient.kt",
+        [
+            ("suspend fun evaluateFlag(", "} catch (e: ExperimentationException) {"),
+            ("private fun evaluateFlagPath(", 'return "${url.encodedPath}'),
+        ],
+    ),
+    "flutter": (
+        438,
+        "sdk/flutter/lib/src/client.dart",
+        [("Future<EvalResult> evaluateFlag(", "final result = EvalResult.fromJson(")],
+    ),
+}
+
+#: What sending a context looks like in these languages: a query parameter, a
+#: JSON or map key, the helpers the senders use, a Ruby symbol or Elixir atom.
+_SENDS_A_CONTEXT = (
+    "context=",
+    '"context"',
+    "'context'",
+    "contextQuery",
+    "_context_param",
+    ":context",
+)
+
+#: A whole-line ``#`` comment (Python, Ruby, Elixir). A ``#`` after code is
+#: kept: in Ruby and Elixir it is as often string interpolation, ``#{...}``.
+_HASH_COMMENT = re.compile(r"(?m)^[ \t]*#[^\n]*")
+
+
+def _evaluation_code(rel: str, bounds) -> tuple[str, str | None]:
+    """The code of each (start, end) pair in ``rel``, comments removed, and
+    what is wrong with the bounds, if anything. ``start`` must be in the file
+    once; the code runs from it to the first ``end`` after it."""
+    path = ROOT / rel
+    if not path.is_file():
+        return "", f"{rel} is not there"
+    text = path.read_text(encoding="utf-8")
+    strip = _HASH_COMMENT if rel.endswith((".py", ".rb", ".ex")) else _COMMENT
+    parts = []
+    for start, end in bounds:
+        if text.count(start) != 1:
+            return "", f"{rel}: {start!r} is not there once"
+        head = text.index(start)
+        tail = text.find(end, head + len(start))
+        if tail == -1:
+            return "", f"{rel}: no {end!r} after {start!r}"
+        parts.append(strip.sub("", text[head:tail]))
+    return "\n".join(parts), None
+
+
+def test_every_sdk_directory_is_classified_by_whether_flag_evaluation_sends_attributes():
+    """Every directory under sdk/ is in ``SENDS`` or ``DOES_NOT_SEND``: whether
+    its flag evaluation sends the user's attributes as ``context``, so that a
+    flag rule on attributes can match from it. A new directory fails until it
+    is classified.
+
+    An SDK in ``SENDS`` must still hand the attributes to its evaluate request:
+    its marker, the code token that does so, is in its flag-evaluation code.
+    An SDK in ``DOES_NOT_SEND`` must still send the user id alone: its code
+    from the evaluate signature through the request call names the evaluate
+    route and ``user_id`` and none of ``_SENDS_A_CONTEXT``. When one moves,
+    move its entry, update its issue and change its page in the same pull
+    request.
+
+    The limit: this reads code tokens and runs no SDK. A helper that returns
+    nothing (Python's ``_context_param`` returning None, Go's ``contextQuery``
+    returning "") leaves this test green by construction. That behaviour is
+    held by the SDKs' own unit tests, to which the SDK guide's sentence "The
+    JavaScript, Python, React and Go SDKs send it on both calls" is pinned
+    (sdk-guide.md.toml).
+    """
+    directories = sorted(
+        path.name for path in (ROOT / "sdk").iterdir() if path.is_dir()
+    )
+    assert len(directories) > 10, (
+        f"the walk found too few SDK directories: {directories}"
+    )
+    assert not set(SENDS) & set(DOES_NOT_SEND), (
+        "an SDK is in both SENDS and DOES_NOT_SEND"
+    )
+
+    failures = [
+        f"classified SDK directory is gone: {name}"
+        for name in sorted((set(SENDS) | set(DOES_NOT_SEND)) - set(directories))
+    ]
+    for sdk in directories:
+        if sdk in SENDS:
+            rel, bounds, marker = SENDS[sdk]
+            code, problem = _evaluation_code(rel, bounds)
+            if problem:
+                failures.append(f"{sdk}: {problem}")
+            elif marker not in code:
+                failures.append(
+                    f"{sdk}: no context on flag evaluation ({marker!r} is not in"
+                    f" its flag-evaluation code in {rel})"
+                )
+        elif sdk in DOES_NOT_SEND:
+            issue, rel, bounds = DOES_NOT_SEND[sdk]
+            code, problem = _evaluation_code(rel, bounds)
+            if problem:
+                failures.append(f"{sdk}: {problem}")
+                continue
+            if "feature-flags/evaluate" not in code:
+                failures.append(f"{sdk}: no evaluate request read in {rel}")
+            if "user_id" not in code:
+                failures.append(f"{sdk}: no user_id in its evaluate request in {rel}")
+            sent = [token for token in _SENDS_A_CONTEXT if token in code]
+            if sent:
+                failures.append(
+                    f"{sdk} sends a context on flag evaluation (update #{issue} and"
+                    f" move {sdk} to SENDS): {sent[0]!r} in {rel}"
+                )
+        else:
+            failures.append(f"unclassified SDK directory: {sdk}")
+    assert not failures, "\n".join(failures)
