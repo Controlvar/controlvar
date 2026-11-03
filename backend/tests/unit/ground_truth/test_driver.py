@@ -95,7 +95,13 @@ class FakeServer:
         if path == driver.EXPERIMENTS:
             created = str(uuid.uuid4())
             self.experiments[created] = body
-            return httpx.Response(201, json={"id": created, "status": "draft"})
+            # The ids honest_answer names each variant by.
+            variants = [
+                {"id": f"id-{v['name']}", "name": v["name"]} for v in body["variants"]
+            ]
+            return httpx.Response(
+                201, json={"id": created, "status": "draft", "variants": variants}
+            )
         if path.endswith("/start"):
             return httpx.Response(200, json={"status": "active"})
         if path.startswith("/api/v1/results/"):
@@ -170,7 +176,7 @@ def test_a_plan_is_sent_and_its_ledger_reads_back(signed_in, server):
     assert expected.untagged_events == 0
     assert experiment_id in server.experiments
     sent = [r.url.path for _, r in server.sent]
-    for route in driver.MIN_INTERVAL:
+    for route in set(driver.MIN_INTERVAL) - {ledger.EVENTS}:  # no /events here
         assert route in sent, route
 
 
@@ -206,7 +212,8 @@ def test_the_experiment_is_created_with_the_plan_s_variants_in_order(signed_in, 
     assert body["confidence_level"] == SCENARIO.confidence_level
 
 
-@pytest.mark.parametrize("route", sorted(driver.MIN_INTERVAL))
+#: A clean plan sends no /events: test_fault_gates.py paces those, on F6.
+@pytest.mark.parametrize("route", sorted(set(driver.MIN_INTERVAL) - {ledger.EVENTS}))
 def test_each_route_is_paced_at_80_percent_of_its_limit(signed_in, server, route):
     _replay(signed_in)
     times = [at for at, _ in server.requests_to(route)]
@@ -224,7 +231,15 @@ def test_the_limits_are_80_percent_of_the_server_s():
         limit, window = resolve_rate_limit(path)
         return window / (limit * 0.8)
 
-    for route in (ledger.ASSIGN, ledger.TRACK, ledger.BATCH, ledger.ASSIGN_BATCH):
+    routes = (
+        ledger.ASSIGN,
+        ledger.TRACK,
+        ledger.BATCH,
+        ledger.EVENTS,
+        ledger.ASSIGN_BATCH,
+    )
+    assert set(routes) == set(driver.MIN_INTERVAL)
+    for route in routes:
         assert driver.MIN_INTERVAL[route] == pytest.approx(interval(route), rel=1e-12)
     # Any route the driver has no entry for: the default limit.
     assert driver.OTHER_INTERVAL == pytest.approx(

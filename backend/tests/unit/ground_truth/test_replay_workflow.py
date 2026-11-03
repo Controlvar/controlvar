@@ -14,8 +14,9 @@ The other tests pin the workflow's settings: ``pull_request`` (never
 no secret; one concurrency group per pull request, a newer push cancelling
 the run in flight; at most 15 minutes; never a required check; the pinned
 paths-filter and the ``e2e`` label; the suite, profile and seed it hands
-``_platform.yml``; that ``_platform.yml`` runs the replay for both suites, the
-pull-request suite every test file under tests/ground_truth; and the nightly
+``_platform.yml``; that ``_platform.yml`` runs each suite in its own arm, the
+pull-request suite every test file under tests/ground_truth with its JUnit
+skip check and the nightly suite the clean scenarios alone; and the nightly
 job, in the failure issue's ``needs``.
 """
 
@@ -269,17 +270,114 @@ def test_the_replay_boots_the_core_profile_with_no_seed():
     }
 
 
-def test_the_platform_runs_the_replay_for_both_suites():
+#: The ``ground-truth`` arm (pull requests): every test file under
+#: tests/ground_truth, then the JUnit skip check over that report. The prefix
+#: makes the classnames name the directory, which the check matches on. The
+#: scale is quoted: shellcheck reads a bare ``=pr`` as the ``pr`` command
+#: (SC2209), which the lint job's actionlint does not suppress.
+JUNIT = '"$RUNNER_TEMP/ground-truth-junit.xml"'
+PR_ARM = [
+    "GROUND_TRUTH_SCALE='pr' python -m pytest tests/ground_truth -p no:cov -v"
+    f" --tb=short --junitxml={JUNIT} --junit-prefix=tests.ground_truth",
+    f"python scripts/check_junit_skips.py {JUNIT} tests/ground_truth",
+]
+#: The ``ground-truth-nightly`` arm: the clean scenarios alone, four times the
+#: users. The fault scenarios are pull-request scale only, so they never join
+#: the nightly job.
+NIGHTLY_ARM = [
+    "GROUND_TRUTH_SCALE='nightly' python -m pytest tests/ground_truth/test_replay.py"
+    " -p no:cov -v --tb=short",
+]
+
+
+def _run_suite() -> str:
     steps = wg.load(PLATFORM)["jobs"]["platform"]["steps"]
     (run,) = [step["run"] for step in steps if step.get("name") == "Run suite"]
-    arm = run.split("ground-truth|ground-truth-nightly)", 1)
-    assert len(arm) == 2, "no ground-truth arm in the Run suite case"
-    body = arm[1].split(";;", 1)[0]
-    assert 'if [ "$SUITE" = ground-truth-nightly ]; then' in body
-    assert (
-        'GROUND_TRUTH_SCALE="$scale" python -m pytest tests/ground_truth/test_replay.py'
-        in body
-    )
+    return run
+
+
+def _arms(run: str) -> dict[str, list[tuple[list[str], list[str]]]]:
+    """Per suite name, every case branch whose patterns include it: the
+    branch's patterns and its command lines (comments and blank lines left
+    out)."""
+    found: dict[str, list[tuple[list[str], list[str]]]] = {}
+    for match in re.finditer(r"^[ \t]*([\w|-]+)\)[ \t]*$", run, re.M):
+        patterns = match.group(1).split("|")
+        body = run[match.end() :].split(";;", 1)[0]
+        lines = [
+            line.strip()
+            for line in body.splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+        for pattern in patterns:
+            found.setdefault(pattern, []).append((patterns, lines))
+    return found
+
+
+def arm_problems(run: str) -> list[str]:
+    """What is wrong with the two ground-truth arms of *run*."""
+    found = []
+    arms = _arms(run)
+    for suite, want in (
+        ("ground-truth", PR_ARM),
+        ("ground-truth-nightly", NIGHTLY_ARM),
+    ):
+        branches = arms.get(suite, [])
+        if len(branches) != 1:
+            found.append(f"{len(branches)} case branches run {suite!r}, not one")
+            continue
+        ((patterns, lines),) = branches
+        if patterns != [suite]:
+            found.append(f"the {suite!r} branch is shared: {'|'.join(patterns)})")
+        if lines != want:
+            found.append(f"the {suite!r} branch runs {lines}, expected exactly {want}")
+    return found
+
+
+def test_the_platform_runs_each_ground_truth_suite_in_its_own_arm():
+    """The pull-request arm runs every file under tests/ground_truth with its
+    skip check; the nightly arm runs the clean scenarios alone, so the fault
+    scenarios never join the nightly job."""
+    assert arm_problems(_run_suite()) == []
+
+
+def _planted(run: str, plant: str) -> str:
+    nightly_path = "tests/ground_truth/test_replay.py -p no:cov"
+    pr_check = f"python scripts/check_junit_skips.py {JUNIT} tests/ground_truth\n"
+    edits = {
+        # The nightly arm pointed at the whole directory: the fault scenarios
+        # would join the nightly job.
+        "nightly-runs-the-directory": (nightly_path, "tests/ground_truth -p no:cov"),
+        "one-shared-arm": ("ground-truth)\n", "ground-truth|ground-truth-nightly)\n"),
+        "no-junit-report": (f" --junitxml={JUNIT}", ""),
+        "no-junit-prefix": (" --junit-prefix=tests.ground_truth", ""),
+        "no-skip-check": (pr_check, "\n"),
+        "pr-arm-runs-one-file": (
+            "python -m pytest tests/ground_truth -p",
+            "python -m pytest tests/ground_truth/test_replay.py -p",
+        ),
+    }
+    old, new = edits[plant]
+    assert run.count(old) >= 1, (plant, old)
+    return run.replace(old, new, 1)
+
+
+@pytest.mark.parametrize(
+    "plant",
+    [
+        "nightly-runs-the-directory",
+        "one-shared-arm",
+        "no-junit-report",
+        "no-junit-prefix",
+        "no-skip-check",
+        "pr-arm-runs-one-file",
+    ],
+)
+def test_the_arm_pin_fires_on_a_planted_form(plant):
+    run = _run_suite()
+    planted = _planted(run, plant)
+    assert planted != run
+    assert arm_problems(planted) != []
 
 
 def _suite_branch(run: str, suite: str) -> str:

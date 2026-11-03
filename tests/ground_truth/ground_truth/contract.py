@@ -169,6 +169,11 @@ class Expected:
     rate_limited: int
     #: Event records the server did not accept (R0), the 429s among them.
     rejected_events: int
+    #: The ledger lines (the first record is line 1) of the accepted events R4
+    #: does not store: what a server that stores an event once answers
+    #: ``duplicate: true`` for on ``/track`` and ``/events``, and counts in a
+    #: ``/batch``'s ``duplicate_count``. Empty without R4.
+    repeats: frozenset[int] = frozenset()
 
 
 # ---------------------------------------------------------------------------
@@ -588,10 +593,11 @@ def _event(
     stored: set[tuple[Any, ...]],
     without: frozenset[str],
     later: list[_Later],
+    repeats: set[int],
 ) -> bool:
     """Apply R0 to R5, and R8 to an ``/events`` event, to one event; whether
     the server accepted it. An event decided after every record goes to
-    *later*."""
+    *later*; one R4 does not store, to *repeats*."""
     if not _r0_accepted(record, number, batches):
         return False
     if record["exp"] is None:
@@ -601,6 +607,7 @@ def _event(
     if by_id:
         _r8_named_variant(state, record, number)
     if "R4" not in without and _r4_repeat(record, number, dedup, stored):
+        repeats.add(number)
         return True
     state.total_events += 1
     if by_id:
@@ -665,6 +672,7 @@ def valid_events(
     batches: dict[int, Mapping[str, Any]] = {}
     stored: set[tuple[Any, ...]] = set()
     later: list[_Later] = []
+    repeats: set[int] = set()
     rate_limited = rejected = 0
     for number, record in enumerate(records[1:], 2):
         _r7_no_timestamp(record, number)
@@ -683,7 +691,7 @@ def valid_events(
                 batches[record["seq"]] = record
         elif kind == "event":
             accepted = _event(
-                states, batches, record, number, dedup, stored, left_out, later
+                states, batches, record, number, dedup, stored, left_out, later, repeats
             )
             if not accepted:
                 rejected += 1
@@ -694,4 +702,5 @@ def valid_events(
         experiments={key: state.freeze() for key, state in states.items()},
         rate_limited=rate_limited,
         rejected_events=rejected,
+        repeats=frozenset(repeats),
     )
