@@ -86,8 +86,26 @@ by = [
 ]
 
 [[unit]]
-text = "A request that carries an API key and no sign-in is refused with 401 by the routes that manage experiments, feature flags and users."
-by = ["test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_management_route_refuses_a_request_that_carries_only_an_api_key"]
+text = "A request that carries an API key and no sign-in is refused with 401 by the routes that create, change or delete experiments and feature flags, and by the routes that manage users."
+by = [
+    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_route_outside_the_sdk_and_mcp_read_sets_refuses_a_request_that_carries_only_an_api_key",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_scoped_key_is_refused_by_the_routes_that_change_things",
+]
+
+[[unit]]
+text = "Four read operations also accept a key that carries the mcp:read scope: listing feature flags, listing experiments, reading an experiment and reading its results."
+by = [
+    "test:backend/tests/smoke/test_mcp_read_routes.py::test_the_mcp_read_routes_are_exactly_these",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_key_with_the_scope_is_served",
+]
+
+[[unit]]
+text = "The key reads there as the user who created it, under that user's role; a key without the scope is refused with 403."
+by = [
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_each_role_reads_the_four_operations_with_an_mcp_read_key",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_the_routes_own_role_check_runs_for_a_key",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_key_without_the_exact_scope_is_refused_on_each_operation",
+]
 
 [[unit]]
 text = "A deleted or expired key is refused with 401."

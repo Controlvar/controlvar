@@ -379,8 +379,8 @@ BATTERY: Dict[str, Any] = {
 }
 
 #: The native spellings of the operators #1144 and #1145 are about. A native
-#: ``time_window`` must carry ``start`` and ``end`` (the schema asks for them),
-#: which neither evaluator reads.
+#: ``time_window`` needs no ``start`` or ``end``, which neither evaluator reads
+#: (#1527).
 NATIVE_BATTERY: Dict[str, Any] = {
     **{
         f"semantic_version/{comparison}": (
@@ -402,7 +402,7 @@ NATIVE_BATTERY: Dict[str, Any] = {
     ),
     **{
         f"time_window/{spelling}": (
-            native("now", "time_window", {"start": "x", "end": "y", **keys}),
+            native("now", "time_window", keys),
             "now",
             MOMENTS,
         )

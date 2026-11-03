@@ -20,6 +20,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.api import deps
+from backend.app.api.read_scope import get_current_reader
 from backend.app.api.v1.endpoints import feature_flags as ff
 from backend.app.main import app
 from backend.app.models.feature_flag import FeatureFlagStatus
@@ -40,7 +41,9 @@ def signed_in():
     user.is_active = True
 
     saved = dict(app.dependency_overrides)
-    app.dependency_overrides[deps.get_current_active_user] = lambda: user
+    # The list takes its user from get_current_reader (a sign-in, or an
+    # mcp:read key); an override of get_current_active_user does not reach it.
+    app.dependency_overrides[get_current_reader] = lambda: user
     app.dependency_overrides[deps.get_db] = lambda: MagicMock()
     try:
         yield user

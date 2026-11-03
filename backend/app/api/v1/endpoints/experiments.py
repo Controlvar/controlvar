@@ -28,6 +28,7 @@ from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps, experiment_cache
+from backend.app.api.read_scope import get_current_reader
 from backend.app.api.segment_rules import (
     refuse_clone_with_unusable_segments,
     refuse_unusable_segments,
@@ -423,7 +424,8 @@ def _split_url_start_refusal(db: Session, experiment: Experiment) -> Optional[st
 )
 async def list_experiments(
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_active_user),
+    # A sign-in, or an API key with the mcp:read scope (read_scope.py).
+    current_user: User = Depends(get_current_reader),
     cache_control: Dict[str, Any] = Depends(deps.get_cache_control),
     status_filter: Optional[str] = Query(
         None,
@@ -676,7 +678,8 @@ async def create_experiment(
 async def get_experiment(
     experiment_id: UUID = Path(..., description="The ID of the experiment to retrieve"),
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_active_user),
+    # A sign-in, or an API key with the mcp:read scope (read_scope.py).
+    current_user: User = Depends(get_current_reader),
     cache_control: Dict[str, Any] = Depends(deps.get_cache_control),
 ) -> ExperimentDetailResponse:
     """
@@ -1687,7 +1690,8 @@ async def get_experiment_results(
         ..., description="The ID of the experiment to get results for"
     ),
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_active_user),
+    # A sign-in, or an API key with the mcp:read scope (read_scope.py).
+    current_user: User = Depends(get_current_reader),
 ) -> ExperimentResultsResponse:
     """
     Get experiment results and statistical analysis.

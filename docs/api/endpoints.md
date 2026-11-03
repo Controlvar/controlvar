@@ -39,7 +39,9 @@ no token.
 ### API Key Authentication
 
 API keys are used by client applications for the tracking and feature flag evaluation
-endpoints.
+endpoints. A key that carries the `mcp:read` scope can also list feature flags and
+experiments and read an experiment and its results (see
+[Scopes](../security/api-keys.md#scopes)).
 
 **1. Obtain an API key.** Any signed-in user can create one, whatever their role (see
 [API Keys](../security/api-keys.md)), and an API key writes tracking data. The full key is

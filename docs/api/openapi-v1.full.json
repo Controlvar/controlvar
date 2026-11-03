@@ -18728,6 +18728,12 @@
         "name": "X-API-Key",
         "type": "apiKey"
       },
+      "MCPReadAPIKey": {
+        "description": "An API key that carries the `mcp:read` scope, in the `X-API-Key` header. The request reads as the user who created the key, under that user's role. A valid key without `mcp:read` is refused with 403.",
+        "in": "header",
+        "name": "X-API-Key",
+        "type": "apiKey"
+      },
       "OAuth2PasswordBearer": {
         "flows": {
           "password": {
@@ -18742,7 +18748,7 @@
   "info": {
     "description": "API for managing experiments and feature flags in test environment",
     "title": "Controlvar",
-    "version": "0.39.0"
+    "version": "0.40.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -22773,6 +22779,9 @@
         "security": [
           {
             "OAuth2PasswordBearer": []
+          },
+          {
+            "MCPReadAPIKey": []
           }
         ],
         "summary": "List experiments",
@@ -23385,6 +23394,9 @@
         "security": [
           {
             "OAuth2PasswordBearer": []
+          },
+          {
+            "MCPReadAPIKey": []
           }
         ],
         "summary": "Get experiment",
@@ -24234,6 +24246,9 @@
         "security": [
           {
             "OAuth2PasswordBearer": []
+          },
+          {
+            "MCPReadAPIKey": []
           }
         ],
         "summary": "Get experiment results",
@@ -25261,6 +25276,9 @@
         "security": [
           {
             "OAuth2PasswordBearer": []
+          },
+          {
+            "MCPReadAPIKey": []
           }
         ],
         "summary": "List feature flags",

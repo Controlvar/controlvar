@@ -382,8 +382,8 @@ class TestRealWorldScenarios:
         service = RulesEvaluationService()
 
         # A time window from 1 to 5 January 2024. The engine reads start_date
-        # and end_date; start and end are what the Condition schema asks for,
-        # and ISO datetimes there alone would match nobody (#1145).
+        # and end_date; it does not read start and end, and ISO datetimes
+        # there alone would match nobody (#1145).
 
         rules = TargetingRules(
             rules=[
