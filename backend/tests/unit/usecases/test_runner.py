@@ -133,6 +133,14 @@ def test_a_verb_outside_the_protocol_is_refused_before_anything_is_sent(started)
     assert driver.call("hello")["verb"] == "hello"
 
 
+def test_a_command_longer_than_the_limit_is_refused_before_anything_is_sent(started):
+    driver = started(ECHO, timeout=5.0)
+    with pytest.raises(ValueError, match="evaluate command is longer than 4096 bytes"):
+        driver.call("evaluate", flag="f" * 4096, user="u-1", default=False)
+    # Had it been sent, this would read the evaluate's answer.
+    assert driver.call("hello") == {"ok": True, "verb": "hello"}
+
+
 def test_a_hung_driver_is_killed_and_reaped_within_the_injected_timeout(started):
     driver = started(HANG, timeout=0.2)
     error = _bounded(lambda: driver.call("hello"), driver, seconds=1.0)

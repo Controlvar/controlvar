@@ -35,7 +35,7 @@ EXPECTED = {
     "test_collection_count.py": 2,
     "test_proxy.py": 55,
     "test_python_driver.py": 6,
-    "test_runner.py": 11,
+    "test_runner.py": 12,
 }
 
 # Assembled so that this file does not match its own check.

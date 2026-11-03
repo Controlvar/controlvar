@@ -12,7 +12,7 @@ What the runner guarantees:
 * **Every wait has a bound.** Each command's answer is awaited for
   ``timeout`` seconds (10 unless given); the driver's exit, the reaping of a
   killed driver and the reader threads' ends are awaited for bounded times
-  too. Nothing here can hang the test session.
+  too.
 * **A hang, an exit before the answer, or an answer that is not one JSON
   object fails loudly**: the driver is killed and reaped, and ``DriverError``
   is raised. Its message names the command's verb and what went wrong, never
@@ -24,8 +24,10 @@ What the runner guarantees:
   against ``secrets`` (the ``api_key`` of every ``init`` is added to them)
   before it is parsed, so a secret the driver writes back as it is never
   reaches an answer or an assertion message.
-* **A write never blocks.** A command is at most ``MAX_COMMAND_BYTES``, below
-  any pipe's buffer, and at most one command is ever unanswered.
+* **Writes are small.** A longer command is refused before anything is sent,
+  and at most one command is ever unanswered. The limit, 4 KiB, is one page:
+  meant to fit the buffer of any pipe, so that writing a command does not wait
+  on a driver that has stopped reading (intent; not measured here).
 """
 
 from __future__ import annotations
@@ -41,7 +43,7 @@ from typing import IO, Any, NoReturn
 #: Seconds each command's answer is awaited, unless the runner is given another.
 DEFAULT_TIMEOUT = 10.0
 #: The longest command line written, and the longest answer line read.
-MAX_COMMAND_BYTES = 16 * 1024
+MAX_COMMAND_BYTES = 4 * 1024
 MAX_ANSWER_BYTES = 64 * 1024
 #: Seconds to wait for a killed driver to be reaped, and for a thread to end.
 REAP_SECONDS = 5.0
