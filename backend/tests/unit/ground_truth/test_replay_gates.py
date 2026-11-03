@@ -38,6 +38,7 @@ from backend.tests.unit.ground_truth.library import (
 # tests/ground_truth is on sys.path once library is imported.
 suite = importlib.import_module("test_replay")
 driver = importlib.import_module("driver")
+seed = importlib.import_module("ground_truth.seed")
 
 pytestmark = pytest.mark.unit
 
@@ -518,12 +519,14 @@ def test_the_scenarios_are_section_3_4_s():
 
 
 def test_the_seed_is_given_or_new():
-    assert suite.resolve_seed({"GROUND_TRUTH_SEED": "4242"}) == 4242
-    drawn = {suite.resolve_seed({}) for _ in range(5)}
+    # Resolved once, in ground_truth/seed.py, for every file of the live suite.
+    assert seed.resolve_seed({"GROUND_TRUTH_SEED": "4242"}) == 4242
+    drawn = {seed.resolve_seed({}) for _ in range(5)}
     assert len(drawn) > 1  # a new one each run
-    assert all(1 <= seed < 2**31 for seed in drawn)
+    assert all(1 <= value < 2**31 for value in drawn)
     with pytest.raises(ValueError):
-        suite.resolve_seed({"GROUND_TRUTH_SEED": "-3"})
+        seed.resolve_seed({"GROUND_TRUTH_SEED": "-3"})
+    assert suite.SEED is seed.SEED
 
 
 def test_the_scale_is_pr_or_nightly():

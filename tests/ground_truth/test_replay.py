@@ -59,18 +59,17 @@ from __future__ import annotations
 import importlib.util
 import math
 import os
-import random
 import statistics
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import driver
-import httpx
 import pytest
 from ground_truth import contract, generator, ledger, reference
 from ground_truth.generator import Arm, Metric, Scenario, Values
+from ground_truth.seed import SEED
 
 #: Users per scenario multiply by this (``GROUND_TRUTH_SCALE``).
 SCALES = {"pr": 1, "nightly": 4}
@@ -93,16 +92,6 @@ P_FLOOR = 1e-300
 PROPORTION_MEAN_REL = 1e-12
 #: Findings shown per failure; the count says how many there were.
 SHOWN = 25
-
-
-def resolve_seed(environ: Mapping[str, str]) -> int:
-    """``GROUND_TRUTH_SEED``, or a new seed for this run."""
-    text = environ.get("GROUND_TRUTH_SEED", "").strip()
-    if not text:
-        return random.SystemRandom().randrange(1, 2**31)
-    if not text.isdigit():
-        raise ValueError("GROUND_TRUTH_SEED must be a non-negative integer")
-    return int(text)
 
 
 def resolve_scale(environ: Mapping[str, str]) -> str:
@@ -187,19 +176,24 @@ def api_url(environ: Mapping[str, str]) -> str:
     return environ.get("CONTROLVAR_API_URL", "").strip() or "http://127.0.0.1:8000"
 
 
-SEED = resolve_seed(os.environ)
 SCALE = resolve_scale(os.environ)
 SCENARIOS = scenarios(SEED, SCALES[SCALE])
 API_URL = api_url(os.environ)
 
 
-def reproduce(name: str = "", *, seed: int = SEED, scale: str = SCALE) -> str:
+def reproduce(
+    name: str = "",
+    *,
+    seed: int = SEED,
+    scale: str = SCALE,
+    path: str = "tests/ground_truth/test_replay.py",
+) -> str:
     """The one command that runs scenario *name* (every scenario when empty)
-    again with *seed*."""
+    of the test file *path* again with *seed*."""
     env = f"GROUND_TRUTH_SEED={seed}"
     if scale != "pr":
         env += f" GROUND_TRUTH_SCALE={scale}"
-    command = f"{env} python -m pytest tests/ground_truth/test_replay.py"
+    command = f"{env} python -m pytest {path}"
     return f"{command} -k {name}" if name else command
 
 
@@ -680,38 +674,6 @@ def summary_text(
         *session.summary(),
     ]
     return "\n".join(lines) + "\n"
-
-
-@pytest.fixture(scope="session", autouse=True)
-def _announce_the_seed(pytestconfig: pytest.Config) -> None:
-    _say(
-        pytestconfig,
-        f"ground-truth replay: seed {SEED}, scale {SCALE}; GROUND_TRUTH_SEED={SEED} reproduces it",
-    )
-
-
-@pytest.fixture(scope="session")
-def live(pytestconfig: pytest.Config) -> Iterator[driver.Driver]:
-    """The signed-in driver, with its API key; the step summary at the end."""
-    email, password = credentials(os.environ)
-    with httpx.Client(base_url=API_URL, timeout=driver.TIMEOUT) as client:
-        session = driver.Driver(client)
-        try:
-            start_session(
-                session,
-                email,
-                password,
-                mask=lambda value: _mask(pytestconfig, value),
-            )
-            yield session
-        finally:
-            text = summary_text(session)
-            for line in text.splitlines():
-                _say(pytestconfig, line)
-            target = os.environ.get("GITHUB_STEP_SUMMARY")
-            if target:
-                with open(target, "a", encoding="utf-8") as stream:
-                    stream.write(text)
 
 
 @pytest.fixture(scope="module", params=sorted(SCENARIOS))

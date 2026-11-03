@@ -485,20 +485,26 @@ jobs:
               fi
               exit "$verdict"
               ;;
-            ground-truth|ground-truth-nightly)
-              # The ground-truth replay (#1544): seeded traffic through the
-              # public API, the results page against the event contract and
-              # an independent reference (tests/ground_truth/test_replay.py).
-              # The nightly suite sends four times the users. It signs in as
-              # the first administrator the bootstrap made and creates its
-              # own API key. Only counts and durations reach the step
-              # summary; each scenario's ledger stays in pytest's temporary
-              # directory, and nothing uploads it.
-              scale='pr'
-              if [ "$SUITE" = ground-truth-nightly ]; then
-                scale='nightly'
-              fi
-              GROUND_TRUTH_SCALE="$scale" python -m pytest tests/ground_truth/test_replay.py -p no:cov -v --tb=short
+            ground-truth)
+              # The ground-truth replay (#1544) at pull-request scale: seeded
+              # traffic through the public API, the results page against the
+              # event contract and an independent reference. Every test file
+              # under tests/ground_truth runs: the clean scenarios
+              # (test_replay.py) and the fault scenarios (test_faults.py). It
+              # signs in as the first administrator the bootstrap made and
+              # creates its own API key. Only counts and durations reach the
+              # step summary; each scenario's ledger stays in pytest's
+              # temporary directory, and nothing uploads it. The JUnit
+              # report's classnames carry the directory (--junit-prefix), so
+              # check_junit_skips.py fails a skipped gate, or a run of none.
+              GROUND_TRUTH_SCALE='pr' python -m pytest tests/ground_truth -p no:cov -v --tb=short --junitxml="$RUNNER_TEMP/ground-truth-junit.xml" --junit-prefix=tests.ground_truth
+              python scripts/check_junit_skips.py "$RUNNER_TEMP/ground-truth-junit.xml" tests/ground_truth
+              ;;
+            ground-truth-nightly)
+              # The clean scenarios alone (tests/ground_truth/test_replay.py)
+              # with four times the users. The fault scenarios are
+              # pull-request scale only, and do not run here.
+              GROUND_TRUTH_SCALE='nightly' python -m pytest tests/ground_truth/test_replay.py -p no:cov -v --tb=short
               ;;
             usecases-flags)
               # The over-the-wire flag use cases (D210 use cases #1 and #2):

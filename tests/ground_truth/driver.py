@@ -10,9 +10,22 @@ them, which is the order ``contract.valid_events`` reads them in. It then reads
 * **Pacing.** Each route at most 80% of its rate limit
   (``backend/app/middleware/rate_limiter.py``; the limiter is on under
   ``ENVIRONMENT=development``): 80 requests a second for ``/assign``,
-  ``/track`` and ``/batch`` (6,000 a minute), 48 a minute for
+  ``/track``, ``/batch`` and ``/events`` (6,000 a minute), 48 a minute for
   ``/assign/batch`` (60 a minute), 4 a second for every other route (300 a
   minute). The sign-in is one request per run.
+* **Lifecycle.** ``create``, ``start``, ``pause``, ``resume`` (``POST
+  .../start`` from PAUSED) and ``complete``. The create answer gives each
+  variant's id; every ``/assign/batch`` and ``/assign`` answer must name the
+  same id for the same variant, else the run stops (``ReplayError``): an
+  ``/events`` send naming the wrong id would make its scenario prove nothing.
+* **``/events``** names the experiment and the variant by id
+  (``faults.events_request``); the ledger records the variant by name.
+* **Hostile sends** (a fault plan's ``hostile`` ops) are raw request text,
+  sent as bytes with the API key, outside the ledger: each must get the
+  status it expects, and ``hostile`` lists every answer.
+* **Expected answers.** Every tracking answer is compared with what its op
+  expects (``faults.unexpected``); each difference is kept in
+  ``unexpected``, which a fault scenario's gate P reads.
 * **A 429** is written to the ledger, where it stores nothing, and the request
   is sent again after ``Retry-After``, as a new record: nothing ran on the
   server, so sending it again is safe.
@@ -37,7 +50,7 @@ from dataclasses import dataclass
 from typing import IO, Any, NoReturn
 
 import httpx
-from ground_truth import generator, ledger
+from ground_truth import faults, generator, ledger
 
 SIGN_IN = "/api/v1/auth/login"
 API_KEYS = "/api/v1/api-keys"
@@ -46,6 +59,14 @@ EXPERIMENTS = "/api/v1/experiments/"
 RESULTS = "/api/v1/results/{experiment_id}"
 #: The scope ``/assign/batch`` requires (``backend/app/api/sdk_scope.py``).
 SDK_RULESET_SCOPE = "sdk:ruleset"
+#: Each lifecycle step after ``create``: the path under the experiment. A
+#: resume is a start of a PAUSED experiment.
+LIFECYCLE_PATHS = {
+    "start": "start",
+    "pause": "pause",
+    "resume": "start",
+    "complete": "complete",
+}
 
 #: Per route, the least time between two of its requests, in seconds: 80% of
 #: its rate limit.
@@ -53,6 +74,7 @@ MIN_INTERVAL = {
     ledger.ASSIGN: 1 / 80,
     ledger.TRACK: 1 / 80,
     ledger.BATCH: 1 / 80,
+    ledger.EVENTS: 1 / 80,
     ledger.ASSIGN_BATCH: 60 / 48,
 }
 #: Every other route: 80% of 300 a minute.
@@ -131,6 +153,27 @@ def _detail(response: httpx.Response) -> str:
     return detail[:200] if isinstance(detail, str) else ""
 
 
+def _describe(op: generator.Op) -> str:
+    """An op as an ``unexpected`` line names it: its kind, its route and, for
+    a fault scenario's hostile payload, its class. No id, value or text."""
+    if op.kind == "lifecycle":
+        return f"lifecycle {op.body.get('action')}"
+    text = f"{op.kind} {ledger.ROUTES.get(op.route or '', op.route)}"
+    if op.kind == "hostile":
+        return f"{text}, class {op.body.get('class')!r}"
+    bodies = op.body.get("events") if op.kind == "batch" else [op.body]
+    classes = sorted(
+        {
+            cls
+            for body in (bodies if isinstance(bodies, list) else [])
+            if isinstance(body, Mapping) and isinstance(body.get("user_id"), str)
+            for cls in [faults.f9_class(body["user_id"])]
+            if cls is not None
+        }
+    )
+    return f"{text}, class {', '.join(classes)}" if classes else text
+
+
 class Driver:
     """Sends plans to one server. ``sign_in`` and ``create_api_key`` first."""
 
@@ -157,6 +200,15 @@ class Driver:
         self.server_errors = 0
         #: The experiment the plan being sent created.
         self._experiment_id: str | None = None
+        #: The plan being sent: each variant's name -> the id its create
+        #: answer gave.
+        self.variant_ids: dict[str, str] = {}
+        #: The plan being sent: every answer that is not the one its op
+        #: expects, as "<label> op <n> (<kind> <route>): <why>".
+        self.unexpected: list[str] = []
+        #: The plan being sent: each hostile send answered, as (class, route,
+        #: status), in order.
+        self.hostile: list[tuple[str, str, int]] = []
 
     # -- requests -------------------------------------------------------------
     def _pace(self, route: str) -> None:
@@ -177,14 +229,21 @@ class Driver:
         headers: Mapping[str, str],
         json: Any = None,
         params: Mapping[str, str] | None = None,
+        content: bytes | None = None,
     ) -> httpx.Response:
-        """One request, paced, counted; a transport error propagates."""
+        """One request, paced, counted; a transport error propagates. *content*
+        is a raw body, sent as given, in place of *json*."""
         self._pace(route)
         stats = self.routes.setdefault(route, RouteStats())
         started = self._clock()
         try:
             response = self._client.request(
-                method, path, json=json, params=params, headers=dict(headers)
+                method,
+                path,
+                json=json,
+                params=params,
+                headers=dict(headers),
+                content=content,
             )
         finally:
             stats.seconds += self._clock() - started
@@ -282,18 +341,37 @@ class Driver:
             writer.transport_error(seq, "refused")
         writer.transport_error(seq, "reset")
 
+    def _variant_ids(self, plan: generator.Plan, body: Any) -> dict[str, str]:
+        """Each of the plan's variants -> the id the create answer gave it."""
+        key = plan.scenario.experiment_key
+        variants = body.get("variants") if isinstance(body, Mapping) else None
+        given = {
+            v.get("name"): v.get("id")
+            for v in (variants if isinstance(variants, list) else [])
+            if isinstance(v, Mapping)
+        }
+        names = [arm.name for arm in plan.scenario.arms]
+        missing = [name for name in names if not isinstance(given.get(name), str)]
+        if missing:
+            raise ReplayError(
+                f"create of experiment {key} answered no id for variant(s) {missing}"
+            )
+        return {name: given[name] for name in names}
+
     def _lifecycle(
         self, writer: ledger.Writer, plan: generator.Plan, action: str
     ) -> str | None:
-        """Create or start the plan's experiment; the id ``create`` answers."""
+        """Create the plan's experiment, or start, pause, resume or complete
+        it; the id ``create`` answers."""
         key = plan.scenario.experiment_key
         while True:
             seq = writer.send_action(action, key)
             if action == "create":
                 path, route, body = EXPERIMENTS, EXPERIMENTS, create_body(plan.scenario)
-            elif action == "start" and self._experiment_id is not None:
-                path = f"{EXPERIMENTS}{self._experiment_id}/start"
-                route, body = f"{EXPERIMENTS}{{experiment_id}}/start", None
+            elif action in LIFECYCLE_PATHS and self._experiment_id is not None:
+                step = LIFECYCLE_PATHS[action]
+                path = f"{EXPERIMENTS}{self._experiment_id}/{step}"
+                route, body = f"{EXPERIMENTS}{{experiment_id}}/{step}", None
             else:
                 raise ReplayError(f"no rule to send lifecycle action {action!r}")
             try:
@@ -312,27 +390,133 @@ class Driver:
                     + (f": {_detail(response)}" if _detail(response) else "")
                 )
             if action == "create":
-                created = (_body(response) or {}).get("id")
+                answer = _body(response) or {}
+                created = answer.get("id") if isinstance(answer, Mapping) else None
                 if not isinstance(created, str):
                     raise ReplayError(f"create of experiment {key} answered no id")
+                self.variant_ids = self._variant_ids(plan, answer)
                 return created
             return None
 
-    def _send(self, writer: ledger.Writer, route: str, body: Mapping[str, Any]) -> None:
-        """One tracking request, recorded; sent again after each 429."""
+    def _check_variant_ids(self, route: str, body: Any) -> None:
+        """Stop the run when an assignment answer names a variant by another
+        id than the create answer gave it."""
+        if not isinstance(body, Mapping):
+            return
+        if route == ledger.ASSIGN_BATCH:
+            variants = body.get("variants")
+            pairs = [
+                (v.get("name") if isinstance(v, Mapping) else None, variant_id)
+                for variant_id, v in (
+                    variants.items() if isinstance(variants, Mapping) else ()
+                )
+            ]
+        elif route == ledger.ASSIGN:
+            pairs = [(body.get("variant_name"), body.get("variant_id"))]
+        else:
+            return
+        wrong = sorted(
+            {
+                repr(name)
+                for name, variant_id in pairs
+                if self.variant_ids.get(name) != variant_id
+            }
+        )
+        if wrong:
+            raise ReplayError(
+                f"{ledger.ROUTES.get(route, route)} named variant(s) {', '.join(wrong)} by"
+                " another id than the experiment's create answer gave"
+            )
+
+    def _expect(self, where: str, op: generator.Op, status: int, body: Any) -> None:
+        problem = faults.unexpected(op, status, body)
+        if problem is not None:
+            self.unexpected.append(f"{where}: {problem}")
+
+    def _send(
+        self,
+        writer: ledger.Writer,
+        op: generator.Op,
+        route: str,
+        body: Mapping[str, Any],
+        where: str,
+        **target: Any,
+    ) -> None:
+        """One tracking request, recorded, its answer checked against what
+        *op* expects; sent again after each 429. *target* is ``exp`` and
+        ``variant`` for an ``/events`` send (``ledger.Writer.send``)."""
         while True:
-            seq = writer.send(route, body)
+            seq = writer.send(route, body, **target)
             try:
                 response = self._request(
                     "POST", route, route=route, headers=self._key(), json=body
                 )
             except httpx.TransportError as exc:
                 self._no_answer(writer, seq, exc)
+            answer = _body(response)
             # Refuses a 5xx, which ends the run.
-            writer.answer(seq, response.status_code, _body(response))
+            writer.answer(seq, response.status_code, answer)
             if response.status_code != 429:
+                if 200 <= response.status_code < 300:
+                    self._check_variant_ids(route, answer)
+                self._expect(where, op, response.status_code, answer)
                 return
             self._sleep(retry_after(response))
+
+    def _events(self, writer: ledger.Writer, op: generator.Op, where: str) -> None:
+        """An ``events`` op: its body with the experiment and the variant
+        named by the ids the create answer gave."""
+        variant = op.body.get("variant")
+        if self._experiment_id is None:
+            raise ReplayError(f"{where}: an /events send before the create")
+        if variant is not None and variant not in self.variant_ids:
+            raise ReplayError(f"{where}: names variant {variant!r}, which has no id")
+        body = faults.events_request(
+            op.body, experiment_id=self._experiment_id, variant_ids=self.variant_ids
+        )
+        self._send(
+            writer,
+            op,
+            ledger.EVENTS,
+            body,
+            where,
+            exp=op.body["experiment_key"],
+            variant=variant,
+        )
+
+    def _hostile(self, op: generator.Op, where: str) -> None:
+        """A ``hostile`` op: its raw text, as bytes, with the API key; outside
+        the ledger. Sent again after each 429; no answer is unexpected."""
+        cls, route = op.body["class"], op.route
+        if route is None:
+            raise ReplayError(f"{where}: a hostile op names no route")
+        headers = {**self._key(), "Content-Type": "application/json"}
+        content = op.body["content"].encode("utf-8")
+        while True:
+            try:
+                response = self._request(
+                    "POST", route, route=route, headers=headers, content=content
+                )
+            except httpx.TransportError as exc:
+                self.unexpected.append(
+                    f"{where}: class {cls!r} got no answer ({type(exc).__name__})"
+                )
+                return
+            if response.status_code == 429:
+                self._sleep(retry_after(response))
+                continue
+            self.hostile.append((cls, route, response.status_code))
+            self._expect(f"{where}, class {cls!r}", op, response.status_code, None)
+            return
+
+    @property
+    def hostile_sends(self) -> dict[str, int]:
+        """Hostile sends answered, per class (``sensitivity``'s
+        ``hostile_sends``)."""
+        counts: dict[str, int] = {}
+        for cls, _, _ in self.hostile:
+            counts[cls] = counts.get(cls, 0) + 1
+        return counts
 
     def replay(
         self,
@@ -345,21 +529,31 @@ class Driver:
         """Send *plan*, writing its ledger to *stream*; the experiment's id.
 
         Raises ``ledger.LedgerRefused`` when the ledger refuses the run (a 5xx,
-        no answer) and ``ReplayError`` when a lifecycle step is refused.
+        no answer) and ``ReplayError`` when a lifecycle step is refused or an
+        answer names a variant by another id. ``unexpected`` and ``hostile``
+        then describe this plan only.
         """
         label = label or plan.scenario.name
         self._experiment_id = None
+        self.variant_ids = {}
+        self.unexpected = []
+        self.hostile = []
         writer = ledger.Writer(stream, **plan.start(declared), secrets=self.secrets)
-        for op in plan.ops:
+        for index, op in enumerate(plan.ops):
             started = self._clock()
+            where = f"{label} op {index} ({_describe(op)})"
             if op.kind == "lifecycle":
                 created = self._lifecycle(writer, plan, op.body["action"])
                 if created is not None:
                     self._experiment_id = created
+            elif op.kind == "hostile":
+                self._hostile(op, where)
             elif op.route is None:
                 raise ReplayError(f"a {op.kind} operation names no route")
+            elif op.kind == "events":
+                self._events(writer, op, where)
             else:
-                self._send(writer, op.route, op.body)
+                self._send(writer, op, op.route, op.body, where)
             phase = (label, op.kind)
             self.phases[phase] = self.phases.get(phase, 0.0) + self._clock() - started
         writer.end()
