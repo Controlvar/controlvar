@@ -10,6 +10,25 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.42.0](https://github.com/Controlvar/controlvar/compare/v0.41.0...v0.42.0) (2026-11-03)
+
+
+### Features
+
+* **dashboard:** your own API keys ([#1623](https://github.com/Controlvar/controlvar/issues/1623)) ([1e1de4f](https://github.com/Controlvar/controlvar/commit/1e1de4f4b8c8b26ab33439df34de130de92d4c01))
+* **scale:** each step records which scheduler ticks ran during it ([#1705](https://github.com/Controlvar/controlvar/issues/1705)) ([dcce5d1](https://github.com/Controlvar/controlvar/commit/dcce5d195bbfb2260c9aef8b289dc1fd28a6d3ca))
+
+
+### Bug Fixes
+
+* **scheduler:** the safety check no longer pauses the API while it runs ([#1702](https://github.com/Controlvar/controlvar/issues/1702)) ([4de1334](https://github.com/Controlvar/controlvar/commit/4de1334bd3d4716d9ded1324d47da367c7826258))
+
+
+### Documentation
+
+* **events:** an /events event counts once its user is assigned to that variant ([#1699](https://github.com/Controlvar/controlvar/issues/1699)) ([333d129](https://github.com/Controlvar/controlvar/commit/333d1294130a2166cf9a98e790039c0d2eaa9d25))
+* **kill-switch:** a client asks again only when its cache ends ([#1700](https://github.com/Controlvar/controlvar/issues/1700)) ([d2bad20](https://github.com/Controlvar/controlvar/commit/d2bad20722ac34e958c8dade06bcd206d9571819))
+
 ## [0.41.0](https://github.com/Controlvar/controlvar/compare/v0.40.0...v0.41.0) (2026-11-03)
 
 
