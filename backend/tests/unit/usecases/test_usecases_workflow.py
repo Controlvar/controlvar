@@ -163,7 +163,9 @@ def test_a_red_or_hung_night_files_the_issue():
     jobs = wg.load(NIGHTLY)["jobs"]
     issue = jobs["nightly-failure-issue"]
     assert JOB in wg.needs_of(issue)
-    assert issue["if"] == "failure()"
+    # A hung night ends `cancelled` (its timeout), not `failure` (#1695).
+    assert "contains(needs.*.result, 'failure')" in issue["if"]
+    assert "contains(needs.*.result, 'cancelled')" in issue["if"]
     (minutes,) = re.findall(r"^timeout (\d+)m ", RUN)
     assert int(minutes) + BOOT_MINUTES <= jobs[JOB]["with"]["timeout-minutes"]
 
