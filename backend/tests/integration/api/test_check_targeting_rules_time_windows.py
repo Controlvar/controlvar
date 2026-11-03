@@ -21,7 +21,7 @@ import pytest
 from sqlalchemy import text
 
 from backend.app.models.experiment import Experiment, ExperimentStatus
-from backend.app.models.feature_flag import FeatureFlag
+from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.scripts import check_targeting_rules
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db]
@@ -90,8 +90,10 @@ def planted(make_feature_flag, make_experiment, db_session):
     flags: List[uuid.UUID] = []
     experiments: List[uuid.UUID] = []
 
-    def flag(rules: Any) -> FeatureFlag:
-        made = make_feature_flag(targeting_rules=rules, rollout_percentage=100)
+    def flag(rules: Any, status: FeatureFlagStatus = FeatureFlagStatus.ACTIVE):
+        made = make_feature_flag(
+            targeting_rules=rules, rollout_percentage=100, status=status
+        )
         flags.append(made.id)
         return made
 
@@ -125,9 +127,10 @@ def test_time_window_changes_lists_the_planted_flags_and_experiment(
 ):
     days = planted.flag(DAYS_ONLY)
     empty = planted.flag(NO_KEY)
+    dormant = planted.flag(DAYS_ONLY, FeatureFlagStatus.INACTIVE)
     decoys = [planted.flag(rules) for rules in DECOYS.values()]
     experiment = planted.experiment(DAYS_ONLY)
-    planted_ids = {str(row.id) for row in (days, empty, experiment, *decoys)}
+    planted_ids = {str(row.id) for row in (days, empty, dormant, experiment, *decoys)}
 
     def stored():
         db_session.expire_all()
@@ -152,8 +155,11 @@ def test_time_window_changes_lists_the_planted_flags_and_experiment(
     ]
     flag_lines = sorted(
         [
-            f"feature_flag\t{days.id}\t{days.key}\t{AT}\t{FLAG_NOW_APPLY}",
-            f"feature_flag\t{empty.id}\t{empty.key}\t{AT}\t{FLAG_ANSWERS_ERROR}",
+            f"feature_flag\t{days.id}\t{days.key}\tACTIVE\t{AT}\t{FLAG_NOW_APPLY}",
+            f"feature_flag\t{empty.id}\t{empty.key}\tACTIVE\t{AT}"
+            f"\t{FLAG_ANSWERS_ERROR}",
+            f"feature_flag\t{dormant.id}\t{dormant.key}\tINACTIVE\t{AT}"
+            f"\t{FLAG_NOW_APPLY} (inactive: no change while it stays inactive)",
         ],
         key=lambda line: line.split("\t")[1],
     )

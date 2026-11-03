@@ -309,6 +309,49 @@ def test_the_sdk_ruleset_serves_such_a_flag_for_remote_evaluation(stored):
     assert sdk_evaluation(stored) == "remote"
 
 
+#: ``country eq US`` first and the window ONLY in ``default_rule``: the rules
+#: are otherwise local, so the SDK entry stays local (with its rules and the
+#: ``default_rule``), where main served it local with no rules at all.
+DEFAULT_ONLY = {
+    "rules": [
+        {"id": "us", "rule": {"operator": "and", "conditions": [US]}, "priority": 0}
+    ],
+    "default_rule": {
+        "id": "d",
+        "rule": {
+            "operator": "and",
+            "conditions": [cond("time_window", {})],
+        },
+        "rollout_percentage": 100,
+    },
+}
+
+
+@pytest.mark.regression
+def test_a_window_only_in_the_default_rule_serves_locally_with_the_default_rule():
+    """(N1) The SDK sentence "such a flag is served remotely" is false here:
+    the flag stays ``local``, with its rules and its ``default_rule``, where
+    main dropped both (the whole ruleset was ignored). And the flag's answer
+    moves: ``default_rule`` now applies to a user no rule matches, so a DE user
+    at rollout 0 goes from off (``rollout``) to on (``targeting_rule``)."""
+    flag = FeatureFlag(
+        key="tw",
+        name="tw",
+        status=FeatureFlagStatus.ACTIVE,
+        rollout_percentage=0,
+        targeting_rules=copy.deepcopy(DEFAULT_ONLY),
+    )
+    entry = build_flag_entry(flag)
+    assert entry["evaluation"] == "local"
+    assert len(entry["rules"]) == 1
+    assert entry["default_rule"] == {"id": "d", "rollout_percentage": 100}
+    assert flag_detailed(DEFAULT_ONLY, {"a": MOMENT, "country": "DE"}, rollout=0) == {
+        "enabled": True,
+        "reason": "targeting_rule",
+        "rule_id": "d",
+    }
+
+
 # ---------------------------------------------------------------------------
 # (T5) The dashboard shape is unchanged
 # ---------------------------------------------------------------------------

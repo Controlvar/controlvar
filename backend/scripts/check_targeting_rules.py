@@ -97,10 +97,14 @@ rollout, and the experiment made no new user eligible. From that release
 the rules are read, so the answer changes. Run it from the new image before
 it takes traffic. One line per flag or experiment (an experiment's status
 after its key), with the path of the first evaluated window the engine
-cannot read, else of the first window without ``start`` or ``end``::
+cannot read, else of the first window without ``start`` or ``end``. Both kinds
+print the status after the key; a flag that is ``INACTIVE`` or ``ARCHIVED``
+answers off, reason ``inactive``, before and after, so its reason ends
+``(inactive: no change while it stays inactive)`` (it is listed all the same,
+because switching it on makes the change real)::
 
-    feature_flag  3f0c...  weekdays  rules[0].rule.conditions[0].value  answer changes on upgrade: the flag's rules were ignored (it served its global rollout) because this time_window has no start or end; they now apply
-    feature_flag  8b41...  office  rules[0].rule.conditions[0].value  answer changes on upgrade: the flag's rules were ignored (it served its global rollout); now this time_window cannot be read, so the flag answers off, reason error, for each user whose evaluation reaches it
+    feature_flag  3f0c...  weekdays  ACTIVE  rules[0].rule.conditions[0].value  answer changes on upgrade: the flag's rules were ignored (it served its global rollout) because this time_window has no start or end; they now apply
+    feature_flag  8b41...  office  ACTIVE  rules[0].rule.conditions[0].value  answer changes on upgrade: the flag's rules were ignored (it served its global rollout); now this time_window cannot be read, so the flag answers off, reason error, for each user whose evaluation reaches it
 
 An experiment's line starts ``answer may change on upgrade`` when a window
 cannot be read, because a new user whose evaluation reaches it is still not
@@ -170,6 +174,11 @@ ANSWER_CHANGES = "answer changes on upgrade"
 #: ``--time-window-changes``: the start of an experiment's reason when every
 #: new user may still be refused, as before.
 ANSWER_MAY_CHANGE = "answer may change on upgrade"
+
+#: ``--time-window-changes``: a flag in one of these statuses answers off,
+#: reason ``inactive``, before and after (the SDK serves it inactive), so its
+#: line says so.
+NOT_ACTIVE_FLAG_STATUSES = ("INACTIVE", "ARCHIVED")
 
 #: ``--time-window-changes``: a flag whose windows can all be read.
 FLAG_RULES_NOW_APPLY = (
@@ -498,7 +507,7 @@ def time_window_change_for(
     without ``start`` or ``end``.
     """
     row_id, key = str(row_id), str(key or "")
-    status = None if entity == ENTITY else _status(status)
+    status = None if status is None else _status(status)
     native = _stored_native_rules(rules, entity)
     if native is None:
         return None
@@ -522,16 +531,20 @@ def time_window_change_for(
     else:
         path = changed[0]
         reason = FLAG_RULES_NOW_APPLY if flag else EXPERIMENT_RULES_NOW_APPLY
+    if flag and status in NOT_ACTIVE_FLAG_STATUSES:
+        # Listed all the same: a flag that is switched on later is concerned,
+        # and listing too much is safe where hiding one that matters is not.
+        reason += f" ({status.lower()}: no change while it stays {status.lower()})"
     return Finding(row_id, key, path, reason, entity, status)
 
 
 def time_window_changes_for(
-    flag_rows: Iterable[Tuple[Any, Any, Any]],
+    flag_rows: Iterable[Tuple[Any, Any, Any, Any]],
     experiment_rows: Iterable[Tuple[Any, Any, Any, Any]],
 ) -> Iterator[Finding]:
     """``--time-window-changes`` findings: flags, then experiments."""
-    for row_id, key, rules in flag_rows:
-        found = time_window_change_for(row_id, key, rules)
+    for row_id, key, status, rules in flag_rows:
+        found = time_window_change_for(row_id, key, rules, ENTITY, status)
         if found is not None:
             yield found
     for row_id, key, status, rules in experiment_rows:
@@ -564,6 +577,19 @@ def read_segment_rows(connection: Any, schema: str) -> List[Tuple[Any, Any, Any]
     return [tuple(row) for row in connection.execute(statement).all()]
 
 
+def read_flag_rows_with_status(
+    connection: Any, schema: str
+) -> List[Tuple[Any, Any, Any, Any]]:
+    """Every flag with stored targeting rules, with its status."""
+    from sqlalchemy import text
+
+    statement = text(
+        f'SELECT id, "key", "status", "targeting_rules" FROM "{schema}"."feature_flags" '
+        'WHERE "targeting_rules" IS NOT NULL ORDER BY id'
+    )
+    return [tuple(row) for row in connection.execute(statement).all()]
+
+
 def read_rows(connection: Any, schema: str) -> List[Tuple[Any, Any, Any]]:
     from sqlalchemy import text
 
@@ -592,7 +618,8 @@ def scan_time_window_changes(connection: Any, schema: str) -> List[Finding]:
     """The ``--time-window-changes`` findings (read-only)."""
     return list(
         time_window_changes_for(
-            read_rows(connection, schema), read_experiment_rows(connection, schema)
+            read_flag_rows_with_status(connection, schema),
+            read_experiment_rows(connection, schema),
         )
     )
 

@@ -529,21 +529,25 @@ def test_time_window_changes_lists_exactly_the_windows_without_start_or_end(enti
 @pytest.mark.parametrize(
     "label, entity, line",
     [
-        ("days only", "feature_flag", f"feature_flag\tid\tk\t{{at}}\t{NOW_APPLY_FLAG}"),
+        (
+            "days only",
+            "feature_flag",
+            f"feature_flag\tid\tk\tACTIVE\t{{at}}\t{NOW_APPLY_FLAG}",
+        ),
         (
             "times only",
             "feature_flag",
-            f"feature_flag\tid\tk\t{{at}}\t{NOW_APPLY_FLAG}",
+            f"feature_flag\tid\tk\tACTIVE\t{{at}}\t{NOW_APPLY_FLAG}",
         ),
         (
             "no key",
             "feature_flag",
-            f"feature_flag\tid\tk\t{{at}}\t{ANSWERS_ERROR_FLAG}",
+            f"feature_flag\tid\tk\tACTIVE\t{{at}}\t{ANSWERS_ERROR_FLAG}",
         ),
         (
             "start only",
             "feature_flag",
-            f"feature_flag\tid\tk\t{{at}}\t{ANSWERS_ERROR_FLAG}",
+            f"feature_flag\tid\tk\tACTIVE\t{{at}}\t{ANSWERS_ERROR_FLAG}",
         ),
         (
             "days only",
@@ -560,10 +564,46 @@ def test_time_window_changes_lists_exactly_the_windows_without_start_or_end(enti
 def test_a_time_window_change_says_how_the_answer_changes(label, entity, line):
     """(EMB3-4 b) A readable window: the rules start applying; one the engine
     cannot read: the flag answers ``error``."""
-    found = check.time_window_change_for(
-        "id", "k", WINDOW_ROWS[label], entity, "PAUSED"
-    )
+    status = "ACTIVE" if entity == "feature_flag" else "PAUSED"
+    found = check.time_window_change_for("id", "k", WINDOW_ROWS[label], entity, status)
     assert found.line() == line.format(at="rules[0].rule.conditions[0].value")
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "status, reason",
+    [
+        ("ACTIVE", NOW_APPLY_FLAG),
+        ("INACTIVE", NOW_APPLY_FLAG + " (inactive: no change while it stays inactive)"),
+        ("ARCHIVED", NOW_APPLY_FLAG + " (archived: no change while it stays archived)"),
+    ],
+)
+def test_a_flag_that_is_not_active_is_listed_with_its_status(status, reason):
+    """(N2) An INACTIVE or ARCHIVED flag answers off, reason ``inactive``, before
+    and after, so its line carries the status and says nothing changes while it
+    stays so. It is still listed: hiding one that is switched on later would be
+    the unsafe mistake. The status can arrive as the enum, too."""
+    at = "rules[0].rule.conditions[0].value"
+    expected = f"feature_flag\tid\tk\t{status}\t{at}\t{reason}"
+    found = check.time_window_change_for(
+        "id", "k", WINDOW_ROWS["days only"], "feature_flag", status
+    )
+    assert found.line() == expected
+    from backend.app.models.feature_flag import FeatureFlagStatus
+
+    as_enum = check.time_window_change_for(
+        "id",
+        "k",
+        WINDOW_ROWS["days only"],
+        "feature_flag",
+        FeatureFlagStatus[status],
+    )
+    assert as_enum.line() == expected
+    # An experiment's reason never takes the suffix.
+    experiment = check.time_window_change_for(
+        "id", "k", WINDOW_ROWS["days only"], "experiment", status
+    )
+    assert "no change while" not in experiment.reason
 
 
 DAYS_WINDOW = _window({"days": [2]})
@@ -704,8 +744,9 @@ def test_time_window_changes_reads_flags_then_experiments():
     seen = []
     rows = {
         "feature_flags": [
-            ("f-1", "weekdays", WINDOW_ROWS["days only"]),
-            ("f-2", "office", WINDOW_ROWS["start and end"]),
+            ("f-1", "weekdays", "ACTIVE", WINDOW_ROWS["days only"]),
+            ("f-2", "office", "ACTIVE", WINDOW_ROWS["start and end"]),
+            ("f-3", "dormant", "INACTIVE", WINDOW_ROWS["days only"]),
         ],
         "experiments": [("e-1", "exp", "ACTIVE", WINDOW_ROWS["no key"])],
     }
@@ -726,11 +767,13 @@ def test_time_window_changes_reads_flags_then_experiments():
     found = check.scan_time_window_changes(Connection(), "exp")
     at = "rules[0].rule.conditions[0].value"
     assert [f.line() for f in found] == [
-        f"feature_flag\tf-1\tweekdays\t{at}\t{NOW_APPLY_FLAG}",
+        f"feature_flag\tf-1\tweekdays\tACTIVE\t{at}\t{NOW_APPLY_FLAG}",
+        f"feature_flag\tf-3\tdormant\tINACTIVE\t{at}\t{NOW_APPLY_FLAG}"
+        " (inactive: no change while it stays inactive)",
         f"experiment\te-1\texp\tACTIVE\t{at}\t{UNREADABLE_EXPERIMENT}",
     ]
     assert seen == [
-        'SELECT id, "key", "targeting_rules" FROM "exp"."feature_flags" '
+        'SELECT id, "key", "status", "targeting_rules" FROM "exp"."feature_flags" '
         'WHERE "targeting_rules" IS NOT NULL ORDER BY id',
         'SELECT id, "key", "status", "targeting_rules" FROM "exp"."experiments" '
         'WHERE "targeting_rules" IS NOT NULL ORDER BY id',
