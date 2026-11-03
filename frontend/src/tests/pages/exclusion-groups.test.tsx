@@ -2,8 +2,10 @@
  * The exclusion-group list page (#1455; UX SCREEN 3a, the architect's S4).
  *
  * `GET` and `POST /api/v1/mutual-exclusion-groups` check EXPERIMENT CREATE:
- * ADMIN, DEVELOPER and superusers. So ANALYST and VIEWER see the refused
- * notice and the page sends them NO request (QA #1, #2). Every user here is
+ * ADMIN, DEVELOPER, superusers, and in the full profile a custom role or
+ * grant of it. These pages render outside the effective-permissions provider
+ * (role lists only), so ANALYST and VIEWER see the refused notice and the
+ * page sends them NO request (QA #1, #2). Every user here is
  * RESOLVED and, but for the superuser cells, not a superuser: a null user
  * would read as "may", and a superuser passes every check.
  *

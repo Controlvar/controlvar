@@ -14,8 +14,9 @@
  *
  *     expected = is_superuser || role_permissions[resource][action] has role || map holds the pair
  *
- * `canAdministerEligibility` decides nothing a grant can give: its answer is
- * the role's alone, whatever the map holds. Runs in both profiles' Jest.
+ * `canAdministerEligibility` answers a question no grant can change: its
+ * answer is the role's alone, whatever the map holds. Runs in both profiles'
+ * Jest.
  */
 import fs from 'fs';
 import path from 'path';

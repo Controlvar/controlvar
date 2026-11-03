@@ -190,7 +190,7 @@ function install(current: Experiment, put?: Put, get?: () => unknown) {
           return put ? put(body) : stored(current, body);
         },
       },
-      // #1452's rows on the same page: the eligibility reads, for ADMIN and DEVELOPER.
+      // #1452's rows on the same page: the eligibility reads, for a user who may create experiments.
       { path: '/api/v1/holdout', handler: () => null },
     ]) as unknown as typeof apiFetch,
   );
