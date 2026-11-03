@@ -8,6 +8,7 @@ import SegmentDetailPage from '@/pages/segments/[id]';
 import { ApiError, ApiFetchOptions, apiFetch } from '@/services/api';
 import { Segment } from '@/services/segments';
 import { RULES_NOT_VALID } from '@/utils/segmentErrors';
+import vocabularyRefusal from '@/tests/fixtures/targeting-vocabulary-refusal.json';
 import { Route, makeRouter, routedApi } from './helpers/apiMock';
 
 jest.mock('@/services/api', () => ({
@@ -353,6 +354,24 @@ describe('rules segments', () => {
         },
       ],
     ]);
+  });
+
+  it('an unknown distance unit (#1204) refused on save is shown as one line in the builder words', async () => {
+    serve(rulesSegment(), [
+      {
+        method: 'PUT',
+        path: BASE,
+        handler: () => {
+          throw new ApiError({ status: 422, detail: [{ loc: ['body', 'rules'], msg: vocabularyRefusal.msg }] });
+        },
+      },
+    ]);
+    render(<SegmentDetailPage />);
+    await screen.findByTestId('segment-name-heading');
+    fireEvent.change(screen.getByLabelText('Group 1, condition 1 value'), { target: { value: 'enterprise' } });
+    fireEvent.click(screen.getByTestId('segment-rules-save'));
+    const error = await screen.findByTestId('segment-rules-error');
+    expect(within(error).getAllByRole('listitem').map((li) => li.textContent)).toEqual([vocabularyRefusal.shown]);
   });
 
   it('the preview says so honestly when no assignment carries attributes', async () => {

@@ -58,7 +58,7 @@ BRANCH_POINT = "a7b8c9d0e1f2"
 #: `alembic revision` would move what "the heads" means mid-test.
 #: `backend/tests/unit/db/test_alembic_plan.py` is where these are pinned
 #: against the files, with the whole apply order.
-CORE_HEAD = "607c51a59bf5"
+CORE_HEAD = "85dd4796bb8b"
 #: The modules branch's HEAD.  Every use below means "the modules revision a
 #: full database at head records" -- none means the branch's first revision,
 #: ``modules_0001_rbac``, which stopped being the head in #312, nor its

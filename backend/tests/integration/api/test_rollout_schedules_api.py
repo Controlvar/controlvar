@@ -54,6 +54,10 @@ from backend.app.models.rollout_schedule import (
 )
 from backend.app.models.user import User, UserRole
 from backend.tests.conftest import DEFAULT_TEST_DB_URL
+from backend.tests.integration.api.rollout_rules import rollout_invariants
+
+# Gate 3e (#1460): after every test, no schedule it wrote breaks a rule.
+pytestmark = pytest.mark.usefixtures("rollout_invariants")
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -595,7 +599,13 @@ class TestUpdateRolloutSchedule:
         assert response.json()["name"] == "Updated Name"
 
     def test_update_description_and_max_percentage(self, shared_client, flag_id):
-        data = _create_schedule_via_api(shared_client, flag_id, "Multi Update")
+        # Stages of 25% and 75%, so a max_percentage of 75 is below no
+        # stage's target (one below a target answers 409, #1460).
+        payload = _valid_schedule_payload(flag_id, "Multi Update")
+        payload["stages"][1]["target_percentage"] = 75
+        created = shared_client.post("/api/v1/rollout-schedules/", json=payload)
+        assert created.status_code == 201, created.text
+        data = created.json()
         response = shared_client.put(
             f"/api/v1/rollout-schedules/{data['id']}",
             json={"description": "New desc", "max_percentage": 75},
@@ -822,11 +832,20 @@ class TestRolloutStages:
         assert response.status_code == 400, response.text
 
     def test_advance_manual_stage_on_active_schedule(self, shared_client, flag_id):
-        """Manually advancing a PENDING manual stage on ACTIVE schedule returns 200."""
-        data = _create_schedule_via_api(shared_client, flag_id, "Advance Stage")
+        """Manually advancing a PENDING manual stage on ACTIVE schedule returns 200.
+
+        The manual stage is the first one: stages start in stage_order, so a
+        later stage cannot be advanced while an earlier one is pending (#1460).
+        """
+        payload = _valid_schedule_payload(flag_id, "Advance Stage")
+        payload["stages"][0]["trigger_type"] = "manual"
+        del payload["stages"][0]["start_date"]
+        created = shared_client.post("/api/v1/rollout-schedules/", json=payload)
+        assert created.status_code == 201, created.text
+        data = created.json()
         schedule_id = data["id"]
 
-        manual_stage = next(s for s in data["stages"] if s["trigger_type"] == "manual")
+        manual_stage = next(s for s in data["stages"] if s["stage_order"] == 1)
         shared_client.post(f"/api/v1/rollout-schedules/{schedule_id}/activate")
 
         response = shared_client.post(

@@ -113,6 +113,7 @@ def _purchase(
         assert response.json() == {
             "success_count": 1,
             "failure_count": 0,
+            "duplicate_count": 0,
             "errors": None,
         }
 

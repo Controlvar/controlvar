@@ -273,6 +273,9 @@ def test_an_event_whose_ids_all_exist_answers_as_before(
         "value",
         "properties",
         "metadata",
+        # #1543: whether it was already stored, and the event_id sent (none).
+        "duplicate",
+        "event_id",
     }
     assert {k: v for k, v in body.items() if k not in VOLATILE} == {
         "event_name": "click",
@@ -285,6 +288,8 @@ def test_an_event_whose_ids_all_exist_answers_as_before(
         "user_id": user_id,
         "value": 2.5,
         "variant_id": str(variant.id),
+        "duplicate": False,
+        "event_id": None,
     }
     db_session.rollback()
     row = db_session.query(Event).filter(Event.id == uuid.UUID(body["id"])).one()

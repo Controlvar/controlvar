@@ -89,6 +89,27 @@ def test_the_scheduler_starts_the_next_stage_once_min_stage_duration_has_passed(
     assert first.status is RolloutStageStatus.COMPLETED
 
 
+@pytest.mark.parametrize("stored", [-5, 0, None])
+def test_a_stored_negative_min_stage_duration_is_no_minimum(stored):
+    # A request can no longer set a negative value (#962), but one stored
+    # before the bound stays; the scheduler waits for none, as for 0 or null.
+    # 25 hours in: the stage's own 24 have passed, a 48-hour minimum has not
+    # (test_the_scheduler_waits_for_min_stage_duration[25] is the control).
+    schedule = _schedule()
+    schedule.min_stage_duration = stored
+    first = _stage(
+        1,
+        TriggerType.TIME_BASED,
+        RolloutStageStatus.IN_PROGRESS,
+        updated_at=NOW - timedelta(hours=25),
+    )
+    second = _stage(
+        2, TriggerType.TIME_BASED, RolloutStageStatus.PENDING, start_date=PAST
+    )
+    (changed, transitions, _), started = _tick(schedule, first, [second])
+    assert (changed, transitions, started) == (True, 1, [second])
+
+
 @pytest.mark.parametrize("trigger", [TriggerType.TIME_BASED, TriggerType.MANUAL])
 def test_a_manual_advance_does_not_wait_for_min_stage_duration(trigger):
     schedule = _schedule()
@@ -104,7 +125,8 @@ def test_a_manual_advance_does_not_wait_for_min_stage_duration(trigger):
     flag = SimpleNamespace(rollout_percentage=canary.target_percentage, updated_at=None)
     session = _Session(
         {
-            RolloutStage: [[canary], [nxt]],
+            # The stage by id, then every stage of the schedule.
+            RolloutStage: [[canary], [canary, nxt]],
             RolloutSchedule: [[schedule], [schedule]],
             FeatureFlag: [[flag]],
         }

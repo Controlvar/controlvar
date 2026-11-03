@@ -41,20 +41,30 @@ pytestmark = pytest.mark.skipif(
 
 #: The examples the help text and the runbook give, and the revisions each
 #: unapplies from both heads, newest first.  The core example is the down
-#: revision of the newest core migration: ``4c2c09a2b3e8``, which undoes
-#: ``607c51a59bf5`` (#1497), since that revision landed; ``37dcb2969766``
-#: (#1206), ``d29a479daafe`` (#440) and ``a89544fb1075`` before it.  A core
-#: revision added later moves the example to its own down revision or joins this
-#: list, and the documents that name the example must say what the downgrades
-#: it runs drop (``test_documented_downgrade_targets.py``).
+#: revision of the newest core migration: ``607c51a59bf5``, which undoes
+#: ``85dd4796bb8b`` (#1543), since that revision landed; ``4c2c09a2b3e8``
+#: (#1497), ``37dcb2969766`` (#1206), ``d29a479daafe`` (#440) and
+#: ``a89544fb1075`` before it.  A core revision added later moves the example to
+#: its own down revision or joins this list, and the documents that name the
+#: example must say what the downgrades it runs drop
+#: (``test_documented_downgrade_targets.py``).
 NAMED_DOWNGRADES = {
-    "4c2c09a2b3e8": ["607c51a59bf5"],
+    "607c51a59bf5": ["85dd4796bb8b"],
     # docs/deployment/rollback-runbook.md, Step 2: "Going one further",
-    # "Going further", "Going further still" and "Further again".
-    "37dcb2969766": ["607c51a59bf5", "4c2c09a2b3e8"],
-    "d29a479daafe": ["607c51a59bf5", "4c2c09a2b3e8", "37dcb2969766"],
-    "806901fb7735": ["607c51a59bf5", "4c2c09a2b3e8", "37dcb2969766", "d29a479daafe"],
+    # "Going further", "Going further still", "Further again" and "Further
+    # still".
+    "4c2c09a2b3e8": ["85dd4796bb8b", "607c51a59bf5"],
+    "37dcb2969766": ["85dd4796bb8b", "607c51a59bf5", "4c2c09a2b3e8"],
+    "d29a479daafe": ["85dd4796bb8b", "607c51a59bf5", "4c2c09a2b3e8", "37dcb2969766"],
+    "806901fb7735": [
+        "85dd4796bb8b",
+        "607c51a59bf5",
+        "4c2c09a2b3e8",
+        "37dcb2969766",
+        "d29a479daafe",
+    ],
     "1ab99332f0ba": [
+        "85dd4796bb8b",
         "607c51a59bf5",
         "4c2c09a2b3e8",
         "37dcb2969766",
@@ -166,9 +176,9 @@ def test_the_branch_point_also_unapplies_the_modules_branch():
     """Backs the help text: "a core id at or below a7b8c9d0e1f2 also unapplies
     the modules branch"."""
     plan = _downgrade_plan(_script(), BRANCH_POINT)
-    # The eleven core revisions above it (through 607c51a59bf5, #1497) and the
+    # The twelve core revisions above it (through 85dd4796bb8b, #1543) and the
     # modules branch's four (through modules_0004_rbac_activation, #891).
-    assert len(plan) == 15, plan
+    assert len(plan) == 16, plan
     assert [r for r in plan if r.startswith(MODULES_PREFIX)] == [
         "modules_0004_rbac_activation",
         "modules_0003_lower_is_better",

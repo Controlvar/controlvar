@@ -3,9 +3,11 @@ package com.controlvar.sdk;
 import com.controlvar.sdk.config.SdkConfig;
 import com.controlvar.sdk.exception.ExperimentationException;
 import com.controlvar.sdk.model.ExperimentAssignment;
+import com.controlvar.sdk.model.Exposure;
 import com.controlvar.sdk.model.FlagEvaluation;
 import com.controlvar.sdk.model.TrackEvent;
 import com.controlvar.sdk.model.User;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.Call;
 import okhttp3.Callback;
@@ -23,6 +25,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -182,6 +185,11 @@ public class ExperimentationClient implements AutoCloseable {
      * rules. Successful assignments are cached per user + experiment for the configured
      * TTL; failures are never cached.
      *
+     * <p>When the server answers {@code "assigned": true} and no unexpired answer for this user
+     * and experiment was cached, the configured {@link ExposureListener} is called on this
+     * thread before this method returns. A cached answer calls nothing, and nothing the
+     * listener throws reaches the caller, except a {@link VirtualMachineError}.
+     *
      * @param user          the user to assign
      * @param experimentKey the experiment key (e.g., "checkout-button-color")
      * @return the assignment (never null)
@@ -209,6 +217,9 @@ public class ExperimentationClient implements AutoCloseable {
             payload.put("context", user.getAttributes());
         }
 
+        ExposureListener listener = config.getExposureListener();
+        ExperimentAssignment assignment;
+        Exposure exposure = null;
         try {
             Request request = requestBuilder(config.getBaseUrl() + "/api/v1/tracking/assign")
                     .post(RequestBody.create(objectMapper.writeValueAsString(payload), JSON))
@@ -225,25 +236,47 @@ public class ExperimentationClient implements AutoCloseable {
                 if (body == null) {
                     throw new ExperimentationException("Empty response body for experiment: " + experimentKey);
                 }
-                ExperimentAssignment assignment = objectMapper.readValue(body.string(), ExperimentAssignment.class);
+                String json = body.string();
+                assignment = objectMapper.readValue(json, ExperimentAssignment.class);
                 if (assignment.getExperimentKey() == null || assignment.getExperimentKey().isEmpty()) {
                     assignment.setExperimentKey(experimentKey);
                 }
                 if (assignment.getUserId() == null || assignment.getUserId().isEmpty()) {
                     assignment.setUserId(user.getUserId());
                 }
-                assignmentCache.put(cacheKey, assignment);
-                return assignment;
+                // The server recorded an exposure for this request only if it said
+                // "assigned": true; a missing field is not taken as true.
+                boolean recorded = listener != null && saysAssigned(json);
+                // fill() is put() that also says whether the slot held no live answer. Two
+                // threads that asked for the same new user and experiment at once each store an
+                // answer here; only the first is told the slot was empty.
+                if (assignmentCache.fill(cacheKey, assignment) && recorded) {
+                    exposure = new Exposure(assignment.getExperimentKey(), assignment.getUserId(),
+                            assignment.getVariantId(), assignment.getVariantName());
+                }
             }
         } catch (IOException e) {
             throw new ExperimentationException(
                     "Network error assigning experiment '" + experimentKey + "': " + e.getMessage(), e);
         }
+        if (exposure != null) {
+            // Last, outside the request's try blocks, with no cache lock held. The listener's
+            // failure becomes a hook error (ExposureHook.HookError), which this SDK, having no
+            // error channel, drops: the answer below is returned whatever the listener did.
+            ExposureHook.call(listener, exposure);
+        }
+        return assignment;
     }
 
     // =========================================================================
     // Tracking (fire-and-forget)
     // =========================================================================
+    //
+    // Every event sent carries an event_id: the one set with TrackEvent.Builder#eventId, or a
+    // new random UUID made once per event per call and shared by that event's fan-out entries.
+    // OkHttp can send a request again by itself when the connection fails after the request was
+    // written (on a kept-alive connection, or when another route exists); whenever it does, the
+    // request is the same body, with the same ids, so the server stores each event once.
 
     /**
      * Tracks an event with no experiment/flag attribution. Fire-and-forget: never throws.
@@ -296,6 +329,10 @@ public class ExperimentationClient implements AutoCloseable {
      * Tracks one event asynchronously. Fire-and-forget: never throws, and failures are
      * silently ignored — tracking must never affect the user experience.
      *
+     * <p>The event is sent with its {@code event_id}, or, when it has none, with a random UUID
+     * made for this call (shared by its fan-out entries): tracking the same {@code TrackEvent}
+     * twice without an id sends two events.
+     *
      * @param event the event to track (ignored when null)
      * @see #trackEventSync(TrackEvent) for a blocking variant that reports failures
      */
@@ -314,6 +351,9 @@ public class ExperimentationClient implements AutoCloseable {
      * Tracks several events asynchronously, at most 100 per request. Events without a key
      * are fanned out like {@link #trackEvent(String, String, Map)}. Never throws.
      *
+     * <p>Each event is sent with its {@code event_id}, or with a random UUID of its own made
+     * for this call.
+     *
      * @param events the events to track (ignored when null or empty)
      */
     public void trackBatch(List<TrackEvent> events) {
@@ -330,6 +370,10 @@ public class ExperimentationClient implements AutoCloseable {
     /**
      * Blocking variant of {@link #trackEvent(TrackEvent)}: sends the request(s) on the
      * calling thread and reports failures.
+     *
+     * <p>A request that failed may still have been stored. To send the event again yourself
+     * and have it stored once, give it an id with {@link TrackEvent.Builder#eventId(String)};
+     * without one, each call sends a new id.
      *
      * @param event the event to track
      * @throws ExperimentationException on a non-2xx response or a network error
@@ -439,6 +483,22 @@ public class ExperimentationClient implements AutoCloseable {
     // Internals
     // =========================================================================
 
+    /**
+     * True only when the {@code /assign} answer's {@code assigned} is the JSON literal
+     * {@code true}. A missing field, {@code null}, {@code "true"} or {@code 1} is not, and an
+     * answer that cannot be read as a tree is not either: it never fails the call.
+     */
+    private boolean saysAssigned(String json) {
+        try {
+            JsonNode tree = objectMapper.readTree(json);
+            if (tree == null) return false;
+            JsonNode assigned = tree.path("assigned");
+            return assigned.isBoolean() && assigned.booleanValue();
+        } catch (IOException unreadable) {
+            return false;
+        }
+    }
+
     private static String userPrefix(String userId) {
         return userId + KEY_SEPARATOR;
     }
@@ -477,6 +537,10 @@ public class ExperimentationClient implements AutoCloseable {
      * Builds the HTTP requests for a list of events: one {@code /tracking/track} per keyed
      * event; unkeyed events are fanned out and all fan-out entries are sent through
      * {@code /tracking/batch} in chunks of {@link #BATCH_LIMIT}.
+     *
+     * <p>Each event gets its {@code event_id} here, once per call: its own, or a new random
+     * UUID shared by all of its fan-out entries. Each request body is serialised here, once,
+     * so a request OkHttp sends again by itself carries the same ids.
      */
     private List<Request> buildTrackRequests(List<TrackEvent> events) throws IOException {
         List<Request> requests = new ArrayList<>();
@@ -485,16 +549,17 @@ public class ExperimentationClient implements AutoCloseable {
         boolean single = events.size() == 1;
         for (TrackEvent event : events) {
             if (event == null) continue;
+            Map<String, Object> body = wireBody(event);
             if (event.hasKey()) {
                 if (single) {
                     requests.add(requestBuilder(config.getBaseUrl() + "/api/v1/tracking/track")
-                            .post(RequestBody.create(objectMapper.writeValueAsString(event.toBody()), JSON))
+                            .post(RequestBody.create(objectMapper.writeValueAsString(body), JSON))
                             .build());
                 } else {
-                    batch.add(event.toBody());
+                    batch.add(body);
                 }
             } else {
-                batch.addAll(fanOut(event));
+                batch.addAll(fanOut(event.getUserId(), body));
             }
         }
 
@@ -510,19 +575,31 @@ public class ExperimentationClient implements AutoCloseable {
     }
 
     /**
+     * The event's wire form with its {@code event_id}: the one set on the event, or else a new
+     * lowercase random (version 4) UUID.
+     */
+    private static Map<String, Object> wireBody(TrackEvent event) {
+        Map<String, Object> body = event.toBody();
+        if (!body.containsKey("event_id")) {
+            body.put("event_id", UUID.randomUUID().toString());
+        }
+        return body;
+    }
+
+    /**
      * Expands an event without a key into one entry per cached assignment
      * ({@code experiment_key}) plus one per cached evaluated flag ({@code feature_flag_key})
-     * for the event's user. Empty when nothing is cached.
+     * for the event's user. Every entry is a copy of {@code base}, so all of them carry the
+     * event's one {@code event_id}. Empty when nothing is cached.
      */
-    private List<Map<String, Object>> fanOut(TrackEvent event) {
+    private List<Map<String, Object>> fanOut(String userId, Map<String, Object> base) {
         List<Map<String, Object>> entries = new ArrayList<>();
-        Map<String, Object> base = event.toBody();
-        for (ExperimentAssignment assignment : getCachedAssignments(event.getUserId())) {
+        for (ExperimentAssignment assignment : getCachedAssignments(userId)) {
             Map<String, Object> entry = new LinkedHashMap<>(base);
             entry.put("experiment_key", assignment.getExperimentKey());
             entries.add(entry);
         }
-        for (String flagKey : getCachedFlagKeys(event.getUserId())) {
+        for (String flagKey : getCachedFlagKeys(userId)) {
             Map<String, Object> entry = new LinkedHashMap<>(base);
             entry.put("feature_flag_key", flagKey);
             entries.add(entry);

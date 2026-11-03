@@ -16,6 +16,12 @@
  * throws, so calling it proves nothing on its own. `fetch` is wrapped below to record
  * the status of every request the SDK makes, and the smoke fails when a tracking call
  * did not come back 2xx — which is what catches a path the backend does not serve.
+ *
+ * Exposure hook: a new `ServerClient` with `onExposure` assigns twice and the line
+ * reports `exposure.calls` and what the hook received (the runner requires one call,
+ * for this experiment and the assigned variant); the smoke itself fails when the hook
+ * received another user. A second client's hook returns a rejected Promise: an
+ * unhandled rejection would end this process with exit 1.
  */
 import { randomUUID } from 'node:crypto';
 
@@ -115,6 +121,39 @@ try {
   if (fanout.made.length !== 1) fail(`expected one /tracking/batch call, saw ${fanout.made.length}`);
   if (fanout.bad) fail(`fan-out returned HTTP ${fanout.bad.status}`);
 
+  // 5. The exposure hook (#1499): a NEW ServerClient with onExposure assigns the
+  //    same user twice with no clear in between. The user is already assigned, so
+  //    the server answers assigned: true, records an exposure, and the hook is
+  //    called once; the second answer is cached. The runner checks the count, the
+  //    experiment and the variant; the user id is checked here, the only place
+  //    that knows it.
+  const exposures = [];
+  const hooked = new ServerClient({ ...config, onExposure: e => exposures.push(e) });
+  const exposedFirst = await hooked.assignExperiment(experimentKey, user);
+  const exposedSecond = await hooked.assignExperiment(experimentKey, user);
+  if (exposedFirst.error || exposedSecond.error) {
+    fail(`assignExperiment (exposure client): ${(exposedFirst.error ?? exposedSecond.error).message}`);
+  }
+  const exposure = exposures[0];
+  if (exposure && exposure.userId !== userId) {
+    fail(`onExposure received user ${JSON.stringify(exposure.userId)}, expected ${JSON.stringify(userId)}`);
+  }
+
+  // 6. An async hook that rejects: the client handles the rejection, so this plain
+  //    node process does not end on an unhandled rejection, and the answer stands.
+  const rejecting = new ServerClient({
+    ...config,
+    onExposure: async () => {
+      throw new Error('async boom');
+    },
+  });
+  const despite = await rejecting.assignExperiment(experimentKey, user);
+  await new Promise(resolve => setTimeout(resolve, 50));
+  if (despite.error) fail(`assignExperiment (rejecting hook): ${despite.error.message}`);
+  if (despite.variantName !== second.variantName) {
+    fail(`a rejecting hook changed the answer: ${despite.variantName}, expected ${second.variantName}`);
+  }
+
   process.stdout.write(
     JSON.stringify({
       sdk: 'react',
@@ -122,6 +161,17 @@ try {
       flag: { enabled: flag.isEnabled },
       track: { ok: true },
       fanout: { ok: true },
+      exposure: {
+        calls: exposures.length,
+        payload: exposure
+          ? {
+              experiment_key: exposure.experimentKey,
+              variant_name: exposure.variantName,
+              variant_id: exposure.variantId,
+              user_id: exposure.userId,
+            }
+          : null,
+      },
     }) + '\n'
   );
 } catch (err) {

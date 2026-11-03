@@ -116,6 +116,11 @@ def _source(rel: str) -> str:
     return "\n".join(texts)
 
 
+#: Directories under sdk/ that are not SDKs and send no event, with where their
+#: source is: the MCP server reads flags, experiments and results only.
+NOT_AN_SDK = {"mcp": "sdk/mcp/src"}
+
+
 def test_every_sdk_directory_is_listed():
     """A new SDK fails here until it is listed, so the next test reads it."""
     found = sorted(
@@ -123,7 +128,13 @@ def test_every_sdk_directory_is_listed():
         for p in SDK.iterdir()
         if p.is_dir() and not p.name.startswith((".", "__"))
     )
-    assert found == sorted(SDK_SOURCES)
+    assert found == sorted([*SDK_SOURCES, *NOT_AN_SDK])
+
+
+@pytest.mark.parametrize("name", sorted(NOT_AN_SDK))
+def test_a_directory_that_is_not_an_sdk_sends_no_event(name):
+    """The MCP server names no tracking route: it sends no event."""
+    assert "/tracking/" not in _source(NOT_AN_SDK[name])
 
 
 @pytest.mark.parametrize("sdk", sorted(SDK_SOURCES))
@@ -143,6 +154,47 @@ def test_every_sdk_sends_its_events_through_track_and_batch(sdk):
     else:
         assert "/tracking/" not in source, f"{sdk} names a tracking route itself"
         assert wrapped in source, f"{sdk} does not use {wrapped!r}"
+
+
+#: The SDKs that send an ``event_id`` (#1543). Each SDK's own pull request
+#: adds the option, moves the SDK here, and takes it out of the SDK row of
+#: ``docs/getting-started/limitations.md``. What each one sends is held by its
+#: own tests (Java: ``ExperimentationClientTest``'s ``EventIds``).
+WITH_EVENT_ID = ("java",)
+#: The SDKs with no ``event_id`` option yet: every other one.
+WITHOUT_EVENT_ID = sorted(set(SDK_SOURCES) - set(WITH_EVENT_ID))
+#: The option's name in each SDK's idiom: ``event_id``, ``eventId``,
+#: ``EventId``, ``EventID``.
+EVENT_ID_NAME = re.compile(r"\bevent_?[iI][dD]\b|\bEventI[dD]\b")
+
+
+@pytest.mark.parametrize("sdk", WITHOUT_EVENT_ID)
+def test_no_other_sdk_has_an_event_id_option_yet(sdk):
+    """No other SDK names an ``event_id`` anywhere in its source, so none
+    sends one."""
+    rel, _ = SDK_SOURCES[sdk]
+    found = sorted(set(EVENT_ID_NAME.findall(_source(rel))))
+    assert not found, f"{sdk} names {found}: move it to WITH_EVENT_ID"
+
+
+@pytest.mark.parametrize("sdk", WITH_EVENT_ID)
+def test_the_sdks_with_an_event_id_option_name_it(sdk):
+    """An SDK listed as sending an ``event_id`` names it in its source."""
+    rel, _ = SDK_SOURCES[sdk]
+    found = EVENT_ID_NAME.search(_source(rel))
+    assert found is not None, f"{sdk} names no event_id"
+
+
+def test_the_event_id_scan_finds_each_spelling():
+    for planted in (
+        'body["event_id"] = id',
+        "eventId?: string",
+        "public string EventId { get; }",
+        'EventID string `json:"event_id"`',
+        ":event_id",
+    ):
+        assert EVENT_ID_NAME.search(planted), planted
+    assert not EVENT_ID_NAME.search("prevent_identity eventIdentifier")
 
 
 def _limited(limit: int):

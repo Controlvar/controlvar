@@ -11,6 +11,11 @@ import { SdkConfig, UserContext, FeatureFlagEvaluation, ExperimentAssignment } f
  *   only successful results are cached
  * - Accepts (key, user) argument order to match server-side idioms
  * - Uses no browser-specific APIs (localStorage, document, window)
+ *
+ * `config.onExposure`, if given, is this client's own: it is called for the
+ * assignments this client makes, as `ExperimentationClient` calls it (once per
+ * `assigned: true` answer it stores), and never for a Provider's. The
+ * constructor throws `onExposure must be a function` for any other value.
  */
 export class ServerClient {
   private readonly inner: ExperimentationClient;

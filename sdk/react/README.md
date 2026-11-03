@@ -1,33 +1,18 @@
 # @controlvar/react-sdk
 
+**Beta.** This is a 0.x release: pin the exact version you test against.
+
 React hooks and clients for the Controlvar public API. Feature flags and
 experiment assignments are decided **by the server** (sticky per user); the SDK caches the
 answers per user + key and never buckets locally.
 
+Full documentation: [the React SDK page](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/react.md).
+
 ## Install
 
-**Not yet published.** `@controlvar/react-sdk` is not on npm, so build it from source in a
-clone of this repository and install the packed tarball (the blocks below).
+To install it, follow [the React SDK page](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/react.md#installation).
 
-Its peer dependencies are `react` >= 17 and `react-dom` >= 17.
-
-To install from source, clone the repository and build a package; `npm pack` writes
-`controlvar-react-sdk-1.1.0.tgz`:
-
-```bash
-git clone https://github.com/Controlvar/controlvar.git
-cd controlvar/sdk/react
-npm ci && npm run build && npm pack
-```
-
-Then install that file in your app:
-
-```bash
-npm install /path/to/controlvar/sdk/react/controlvar-react-sdk-1.1.0.tgz
-```
-
-Consuming from source (as the ShopLab demo does): alias `@controlvar/react-sdk`
-to `sdk/react/src` in your bundler and tsconfig.
+Its peer dependencies are `react` >= 17 and `react-dom` >= 17; your app provides them.
 
 ## Provider setup
 
@@ -42,7 +27,8 @@ import { ExperimentationProvider } from '@controlvar/react-sdk';
 </ExperimentationProvider>
 ```
 
-`SdkConfig`: `apiKey`, `baseUrl`, optional `timeoutMs` (default 5000) and `cacheTtlMs` (default 300 000).
+`SdkConfig`: `apiKey`, `baseUrl`, optional `timeoutMs` (default 5000), `cacheTtlMs` (default 300 000)
+and `onExposure` (see Exposure hook below).
 `user.attributes` is sent as `context` on experiment assignment **and** on flag evaluation
 (`&context=<url-encoded JSON>`, omitted when empty), so flag targeting rules evaluate against it
 (`country` also matches `user.country`; nested objects flatten to dotted keys such as `app.version`).
@@ -157,6 +143,30 @@ export async function getServerSideProps({ req }) {
 }
 ```
 
+## Exposure hook
+
+`onExposure`, in the Provider's `config` or in `ServerClient`'s, is a function the client calls once
+each time the server enrols the user in an experiment and the answer did not come from the client's
+cache: the moment the server records the exposure. It receives an `Exposure`: `experimentKey`,
+`userId`, `variantId` (`null` when the server sends none) and `variantName`.
+
+```tsx
+<ExperimentationProvider
+  config={{ apiKey, baseUrl, onExposure: (e) => console.log('exposure', e.experimentKey, e.variantName) }}
+  user={{ userId: visitorId }}
+>
+  <App />
+</ExperimentationProvider>
+```
+
+It is not called for an answer from the client's cache, a user the experiment did not enrol
+(`assigned: false`), a call that fails or a feature flag. A Provider rendered on the server calls nothing:
+`useExperiment` asks for the assignment in the browser, after the first render. If it throws, or
+returns a Promise that rejects, the answer is unchanged, and nothing reports the error: this SDK has
+no `onError`.
+
+Full details: [Exposure hook](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/react.md#exposure-hook).
+
 ## Backend endpoints used
 
 Every request carries `X-API-Key: <key>` and `Content-Type: application/json`.
@@ -164,33 +174,13 @@ Every request carries `X-API-Key: <key>` and `Content-Type: application/json`.
 | SDK call | Method & path | Body / query | Response used |
 |---|---|---|---|
 | `evaluateFeatureFlag*`, `useFeatureFlag`, `useVariant`, `useMultipleFlags`, `ServerClient.getAll` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON>` | `context` = `user.attributes` (omitted when empty) | `{key, enabled, config, reason}` (off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key) |
-| `assignExperiment`, `useExperiment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, variant_id, variant_name, is_control, configuration}` (404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false`) |
+| `assignExperiment`, `useExperiment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}` (404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false`) |
 | `trackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `trackEvent` without keys | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (≤ 100 per request) | ignored |
 
-## Contract smoke
-
-```bash
-cd sdk/react && npm run build --silent && node examples/contract_smoke.mjs
-```
-
-It prints:
-
-```text
-{"sdk":"react","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
-```
-
-Drives the SSR entry point (`ServerClient`) plus `ExperimentationClient` for tracking under plain
-node — no DOM, no React render. Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`),
-`CONTROLVAR_API_KEY` (required), `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`),
-`CONTRACT_FLAG_KEY` (default `sdk_contract_flag`), `CONTRACT_USER_ID` (default random
-`smoke-<uuid>`). Repo-wide runner:
-`python tests/sdk-contract/live/run_live_contract.py --sdk react`.
-
-`trackEvent` never throws, so the smoke wraps `fetch` and fails when a tracking call did not come
-back 2xx — which is what catches a path the backend does not serve.
-
 ## Development
+
+In a clone of this repository:
 
 ```bash
 cd sdk/react && npm ci
@@ -203,3 +193,29 @@ npm run build
 
 The unit tests run in `.github/workflows/sdk-unit-tests.yml` on every pull request (react is one of
 the always-on core SDKs).
+
+Consuming from source (as the ShopLab demo does): alias `@controlvar/react-sdk`
+to `sdk/react/src` in your bundler and tsconfig.
+
+### Contract smoke
+
+```bash
+cd sdk/react && npm run build --silent && node examples/contract_smoke.mjs
+```
+
+It prints:
+
+```text
+{"sdk":"react","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true},"exposure":{"calls":1,"payload":{"experiment_key":"sdk_contract_ab","variant_name":"control","variant_id":"…","user_id":"smoke-…"}}}
+```
+
+Drives the SSR entry point (`ServerClient`) plus `ExperimentationClient` for tracking under plain
+node — no DOM, no React render. `exposure` is what the `onExposure` of a new `ServerClient`
+received over two assignments of the smoke's user. Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`),
+`CONTROLVAR_API_KEY` (required), `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`),
+`CONTRACT_FLAG_KEY` (default `sdk_contract_flag`), `CONTRACT_USER_ID` (default random
+`smoke-<uuid>`). Repo-wide runner:
+`python tests/sdk-contract/live/run_live_contract.py --sdk react`.
+
+`trackEvent` never throws, so the smoke wraps `fetch` and fails when a tracking call did not come
+back 2xx — which is what catches a path the backend does not serve.

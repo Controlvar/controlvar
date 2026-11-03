@@ -451,6 +451,12 @@ SEGMENT_CHANGE_REFUSED = (
     "which the caller may read); never a request value"
 )
 
+ROLLOUT_RULE_CONFLICT = (
+    "RolloutRuleConflict (#1460): the rollout service's fixed sentence, its "
+    "values stage orders, percentages, stage statuses and a schedule id read "
+    "from the database; never a request value (409)"
+)
+
 ALLOWED: Dict[Tuple[str, str, str], Tuple[int, str]] = {
     (f"{E}/audit_logs.py", "list_audit_logs", "ValueError"): (1, AUDIT_PAGE),
     (f"{E}/auth.py", "_issue_local_login", "AccountLockedError"): (1, LOCKED),
@@ -529,9 +535,18 @@ ALLOWED: Dict[Tuple[str, str, str], Tuple[int, str]] = {
     (f"{E}/power_calculator.py", "compute_runtime", "ValueError"): (1, POWER),
     (f"{E}/power_calculator.py", "compute_sample_size", "ValueError"): (1, POWER),
     (f"{E}/power_calculator.py", "get_power_curve", "ValueError"): (1, POWER),
+    (
+        f"{E}/rollout_schedules.py",
+        "activate_rollout_schedule",
+        "RolloutRuleConflict",
+    ): (1, ROLLOUT_RULE_CONFLICT),
     (f"{E}/rollout_schedules.py", "activate_rollout_schedule", "ValueError"): (
         1,
         SERVICE_VALUEERROR,
+    ),
+    (f"{E}/rollout_schedules.py", "add_rollout_stage", "RolloutRuleConflict"): (
+        1,
+        ROLLOUT_RULE_CONFLICT,
     ),
     (f"{E}/rollout_schedules.py", "add_rollout_stage", "ValueError"): (
         1,
@@ -541,6 +556,11 @@ ALLOWED: Dict[Tuple[str, str, str], Tuple[int, str]] = {
         1,
         SERVICE_VALUEERROR,
     ),
+    (
+        f"{E}/rollout_schedules.py",
+        "create_rollout_schedule",
+        "RolloutRuleConflict",
+    ): (1, ROLLOUT_RULE_CONFLICT),
     (f"{E}/rollout_schedules.py", "create_rollout_schedule", "ValueError"): (
         1,
         SERVICE_VALUEERROR,
@@ -553,6 +573,11 @@ ALLOWED: Dict[Tuple[str, str, str], Tuple[int, str]] = {
         1,
         SERVICE_VALUEERROR,
     ),
+    (
+        f"{E}/rollout_schedules.py",
+        "manually_advance_stage",
+        "RolloutRuleConflict",
+    ): (1, ROLLOUT_RULE_CONFLICT),
     (f"{E}/rollout_schedules.py", "manually_advance_stage", "ValueError"): (
         1,
         SERVICE_VALUEERROR,
@@ -561,9 +586,18 @@ ALLOWED: Dict[Tuple[str, str, str], Tuple[int, str]] = {
         1,
         SERVICE_VALUEERROR,
     ),
+    (
+        f"{E}/rollout_schedules.py",
+        "update_rollout_schedule",
+        "RolloutRuleConflict",
+    ): (1, ROLLOUT_RULE_CONFLICT),
     (f"{E}/rollout_schedules.py", "update_rollout_schedule", "ValueError"): (
         1,
         SERVICE_VALUEERROR,
+    ),
+    (f"{E}/rollout_schedules.py", "update_rollout_stage", "RolloutRuleConflict"): (
+        1,
+        ROLLOUT_RULE_CONFLICT,
     ),
     (f"{E}/rollout_schedules.py", "update_rollout_stage", "ValueError"): (
         1,

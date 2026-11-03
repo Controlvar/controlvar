@@ -64,6 +64,7 @@ def test_the_linux_tier_runs_these_sdks():
             "ruby",
             "php",
             "dotnet",
+            "mcp",
         ]
     )
 
@@ -99,3 +100,66 @@ def test_the_js_sdk_runs_jest():
         r"js\|react\|react-native\|edge\|openfeature\)\s*\n\s*cd \"sdk/\$SDK\"", run
     )
     assert "npm test -- --ci" in run
+
+
+def test_the_mcp_server_runs_its_own_suite():
+    """sdk/mcp's leg installs from its lock and runs its whole suite: `npm
+    test` builds dist/ and runs jest, with no fallback install."""
+    run = {s.get("name"): s for s in workflow()["jobs"]["linux"]["steps"]}[
+        "Run unit tests"
+    ]["run"]
+    leg = re.search(r"\n\s*mcp\)\n(?P<body>.*?)\n\s*;;", run, re.S)
+    assert leg, "sdk-unit-tests.yml has no mcp) case"
+    commands = [
+        line.strip()
+        for line in leg["body"].splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    assert commands == [
+        "cd sdk/mcp",
+        "npm ci --no-audit --no-fund",
+        "npm test -- --ci",
+    ], commands
+    assert matrix_constants()["LINUX"]["mcp"] == "node"
+
+
+def sdk_directories() -> set:
+    """Every SDK in the tree: a directory under ``sdk/``, as
+    ``backend/tests/smoke/test_sdk_release_wiring.py`` counts them (a name
+    starting with a dot or an underscore is tooling, ``sdk/LICENSE`` a file)."""
+    return {
+        entry.name
+        for entry in (REPO_ROOT / "sdk").iterdir()
+        if entry.is_dir() and not entry.name.startswith((".", "_"))
+    }
+
+
+def path_filters() -> Dict[str, list]:
+    """key -> flat list of patterns, from the 'Filter changed paths' step.
+
+    The filters are a YAML string whose anchor (``*all``) nests a list, so the
+    parse is flattened."""
+    steps = {s.get("name"): s for s in workflow()["jobs"]["changes"]["steps"]}
+    filters = yaml.safe_load(steps["Filter changed paths"]["with"]["filters"])
+
+    def flat(value):
+        if isinstance(value, list):
+            return [leaf for item in value for leaf in flat(item)]
+        return [value]
+
+    return {key: flat(patterns) for key, patterns in filters.items()}
+
+
+def test_every_sdk_directory_runs_somewhere():
+    constants = matrix_constants()
+    runs = set(constants["LINUX"]) | set(constants["HEAVY"])
+    directories = sdk_directories()
+    for name in sorted(directories - runs):
+        pytest.fail(f"sdk/{name} exists but sdk-unit-tests.yml runs no suite for it")
+    for name in sorted(runs - directories):
+        pytest.fail(f"sdk-unit-tests.yml runs {name}, which is not a directory in sdk/")
+    filters = path_filters()
+    for name in sorted(runs):
+        assert f"sdk/{name}/**" in filters.get(name, []), (
+            f"sdk-unit-tests.yml has no paths-filter key for sdk/{name}/**"
+        )

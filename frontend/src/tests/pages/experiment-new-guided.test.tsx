@@ -296,6 +296,23 @@ describe('guided setup sends exactly the request the single-page form sends', ()
     expect(radios.map((r) => r.value)).toEqual(FORM_EXPERIMENT_TYPES);
     expect(screen.getByTestId('wizard-type-a_b')).toBeChecked();
   });
+
+  it('describes the Multivariate card as several versions compared with a control, not combinations', () => {
+    render(<NewExperimentPage />);
+    const mvCard = screen.getByTestId('wizard-type-mv').closest('label');
+    expect(mvCard).toHaveTextContent(
+      'Compare several versions against a control, with each user seeing one version.',
+    );
+    expect(mvCard?.textContent?.toLowerCase()).not.toContain('combination');
+  });
+
+  it('says split URL and bandit experiments are created through the API', () => {
+    render(<NewExperimentPage />);
+    const note = screen.getByTestId('wizard-type-note');
+    // No SDK creates an experiment (#393).
+    expect(note).toHaveTextContent(/Create them through the API\.$/);
+    expect(note.textContent).not.toMatch(/sdk/i);
+  });
 });
 
 describe('views and the URL', () => {
@@ -1101,7 +1118,9 @@ describe('how results will be judged', () => {
     api();
     await toEstimate();
     const group = screen.getByRole('group', { name: 'How results will be judged' });
-    expect(group).toHaveTextContent('Saved with the experiment. You cannot change these after it starts.');
+    expect(group).toHaveTextContent(
+      'Saved with the experiment. The confidence level and the correction cannot be changed after it starts.'
+    );
     expect(screen.getByLabelText('Confidence level')).toHaveValue('0.95');
     expect(screen.getByLabelText('Correction for several variants')).toHaveValue('benjamini_hochberg');
     expect(screen.getByLabelText('Confidence level')).toHaveAccessibleDescription(

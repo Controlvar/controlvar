@@ -90,7 +90,7 @@ try (ExperimentationClient client = new ExperimentationClient(config)) {   // Au
 
 ## Configuration
 
-`SdkConfig.builder(apiKey, baseUrl)`; both are required and non-empty, every setter rejects
+`SdkConfig.builder(apiKey, baseUrl)`; both are required and non-empty, every numeric setter rejects
 non-positive values with `IllegalArgumentException`.
 
 | Builder | Default | Description |
@@ -100,6 +100,7 @@ non-positive values with `IllegalArgumentException`.
 | `timeoutMs(int)` | `5000` | OkHttp connect / read / write timeout |
 | `cacheTtlMs(long)` | `300000` (5 min) | Lifetime of a cached evaluation or assignment |
 | `cacheSize(int)` | `1000` | Max entries in **each** of the two caches (flags, assignments), LRU eviction |
+| `exposureListener(ExposureListener)` | none | Called once each time the server enrols the user and the answer is not cached; `null` sets none; see [Exposure hook](#exposure-hook) |
 
 For tests, the package-private constructor `ExperimentationClient(SdkConfig, OkHttpClient)`
 accepts a custom `OkHttpClient` (used with `MockWebServer`).
@@ -131,8 +132,10 @@ accepts a custom `OkHttpClient` (used with `MockWebServer`).
 | `User.builder(userId).attribute(k, v).attributes(map).build()` | `getUserId()`, `getAttributes()` (unmodifiable), `getAttribute(k)` |
 | `FlagEvaluation` | `getKey()`, `isEnabled()`, `getConfig()` (`Object`: `Map`, `List`, scalar or `null`), `getConfigMap()` (`Map` or `null`) |
 | `ExperimentAssignment` | `getExperimentKey()`, `getUserId()`, `getVariantId()` (UUID), `getVariantName()`, `isControl()`, `getConfiguration()` (`Map<String,Object>` or `null`); `getVariantKey()` is a deprecated alias |
-| `TrackEvent.builder(userId, eventName)` | `.eventType(s)` (defaults to `eventName`), `.experimentKey(s)`, `.featureFlagKey(s)`, `.value(Double)`, `.property(k, v)` / `.properties(map)` (sent as `metadata`), `.timestamp(Instant)` (ISO-8601); `hasKey()`, `toBody()` |
+| `TrackEvent.builder(userId, eventName)` | `.eventType(s)` (defaults to `eventName`), `.experimentKey(s)`, `.featureFlagKey(s)`, `.value(Double)`, `.property(k, v)` / `.properties(map)` (sent as `metadata`), `.timestamp(Instant)` (ISO-8601), `.eventId(s)` (sent as `event_id`, see [Event ids](#event-ids)); `getEventId()`, `hasKey()`, `toBody()` |
 | `ExperimentationException` (`RuntimeException`) | `getStatusCode()` (HTTP status, `0` for network/serialization), `isApiError()` |
+| `Exposure` (final, immutable) | `getExperimentKey()`, `getUserId()`, `getVariantId()` (`null` when the server sends none), `getVariantName()`: what an `ExposureListener` receives (see [Exposure hook](#exposure-hook)) |
+| `ExposureListener` (functional interface) | `void onExposure(Exposure exposure)` |
 
 ---
 
@@ -161,7 +164,7 @@ flag evaluated for the user (`feature_flag_key`), taken from the caches. Nothing
 is sent. `trackBatch` puts keyed events in the batch as-is and fans out the unkeyed ones; requests
 are chunked at 100 events.
 
-This SDK reads only the variant from an answer: an `assigned: false` answer (a user the
+This SDK returns only the variant from an answer: an `assigned: false` answer (a user the
 experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as the
 control variant, and an event tracked without a key after the user's cache entries have expired
 (`cacheTtlMs`, 5 minutes by default) is not sent, so pass `experimentKey` on a conversion that can
@@ -172,12 +175,39 @@ Conversions are matched to metrics by **event name**: a metric on `purchase` cou
 
 ---
 
+## Event ids
+
+Every event this SDK sends carries an `event_id`. The server stores an event sent again with the
+same `event_id`, user, experiment, flag and event name only once (see
+[How events count](../guides/how-events-count.md#sending-an-event-again)).
+
+- `TrackEvent.builder(userId, eventName).eventId("order-42")` sets the id. Without one, the SDK
+  makes a lowercase random UUID (version 4) for the event each time you track it, so tracking the
+  same `TrackEvent` twice sends two events.
+- An event fanned out to several experiments and flags carries the same id in every entry, so it
+  counts once in each of them. In `trackBatch`, each event has its own id.
+- `eventId` takes at most 255 characters, with no NUL and no lone surrogate. The builder throws
+  `IllegalArgumentException` for any other id, so that event is never sent. `null` and `""` set
+  none.
+- OkHttp, which this SDK sends its requests with, sends a request again by itself when the
+  connection drops after the request was written, for example on a kept-alive connection that the
+  server or a proxy has closed. The request it sends again has the same body and the same
+  `event_id`, so the server stores the event once.
+- A request that times out is not sent again: `trackEvent` and `trackBatch` drop it, and
+  `trackEventSync` and `trackBatchSync` throw `ExperimentationException`. The server may have
+  stored it. To send it again yourself and have it stored once, give the event an `eventId` and
+  send it again with that same id.
+
+---
+
 ## Spring Boot starter
 
 `ExperimentationAutoConfiguration` is registered via
 `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` and activates
 when `ExperimentationClient` is on the classpath **and** `experimentation.api-key` is set. It
 registers one `ExperimentationClient` bean (`@ConditionalOnMissingBean`, so your own bean wins).
+An `ExposureListener` bean, if you declare one, becomes that client's exposure listener (see
+[Exposure hook](#exposure-hook)).
 `@EnableExperimentation` is an optional `@Import` for plain-Spring or self-documenting setups.
 
 ```yaml
@@ -209,6 +239,104 @@ public class SearchService {
 
 ---
 
+## Exposure hook
+
+`exposureListener(...)` gives the client an `ExposureListener` of yours when you create it. The
+client calls it once each time the server enrols the user in an experiment and the answer did not
+come from the client's cache: the moment the server records the exposure. Use it to send the
+exposure to your analytics tool or warehouse.
+
+This code puts each exposure on a queue, and a thread of its own sends them on:
+
+```java
+import com.controlvar.sdk.ExperimentationClient;
+import com.controlvar.sdk.config.SdkConfig;
+import com.controlvar.sdk.model.Exposure;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+
+BlockingQueue<Exposure> exposures = new ArrayBlockingQueue<>(10_000);
+
+SdkConfig config = SdkConfig.builder(System.getenv("CONTROLVAR_API_KEY"), "http://localhost:8000")
+        .exposureListener(exposures::offer)   // never waits: drops the exposure when the queue is full
+        .build();
+
+Thread sender = new Thread(() -> {
+    try {
+        while (true) {
+            Exposure e = exposures.take();
+            // Your analytics tool's call goes here: it runs on this thread, not inside getExperimentAssignment.
+            System.out.println("exposure " + e.getExperimentKey() + " " + e.getVariantName() + " " + e.getUserId());
+        }
+    } catch (InterruptedException stop) {
+        Thread.currentThread().interrupt();
+    }
+});
+sender.setDaemon(true);
+sender.start();
+
+ExperimentationClient client = new ExperimentationClient(config);
+```
+
+It receives an `Exposure`: `getExperimentKey()`, `getUserId()`, `getVariantId()` (`null` when the
+server sends none) and `getVariantName()`, in a new object for each call. Nothing else: not the
+user's attributes and not the variant's configuration.
+
+It is not called for:
+
+- an answer from the client's cache;
+- a user the experiment did not enrol (`assigned: false`, with `reason` `"holdout"`,
+  `"mutual_exclusion"` or `"targeting"`), or an experiment that is not running (`"draft"`,
+  `"paused"`, `"completed"` or `"archived"`): the server records no exposure for them, and the
+  client returns the control variant;
+- a call that fails, including one that times out after the server recorded the exposure;
+- a feature flag.
+
+This SDK's `ExperimentAssignment` does not say whether the user was enrolled; the listener is not
+called for a user who was not. It is not called when the server does not send `assigned`; every
+Controlvar server release sends it.
+
+It is called again, and the server records another exposure, after the cache lifetime
+(`cacheTtlMs`, 5 minutes by default), after `clearCache()` or `invalidateCache(userId, key)`, after
+the entry is evicted from the cache (`cacheSize`, 1000 entries per cache by default), and in every
+new client, such as each process on a server. So your tool can receive several exposures for one
+user and experiment: count users, not events. It never receives one the server did not record.
+
+It is called when your code asks for the assignment, whether or not you then show the variant, so
+ask for it where the variant is shown.
+
+It runs on the thread that called `getExperimentAssignment`, after the answer is cached and before
+the call returns, so its running time is added to that call, with no timeout. Calls for other users
+and experiments are not held up. Put the exposure on a queue, as above.
+
+It can run on several threads at once: make it safe for that. Two threads asking for the same new
+user and experiment at the same moment send two requests, and the server records two exposures;
+the listener is called once.
+
+If it throws anything, including an `Error` such as `NoClassDefFoundError` from a missing analytics
+library, the client catches it and reports nothing: the answer is unchanged, and a failing listener
+looks like one that is never called. Catch and log inside your listener if you need to know.
+`VirtualMachineError`s such as `OutOfMemoryError` and `StackOverflowError` are not caught.
+
+`exposureListener(null)` sets none.
+
+With the Spring Boot starter, declare one `ExposureListener` bean; the starter gives it to the
+client it creates. Two `ExposureListener` beans stop the application at startup with
+`NoUniqueBeanDefinitionException`. If you define your own `ExperimentationClient` bean, the starter
+creates none, and you set the listener on your `SdkConfig`.
+
+```java
+@Bean
+ExposureListener exposureListener() {
+    return exposure -> System.out.println("exposure " + exposure.getExperimentKey() + " " + exposure.getVariantName());
+}
+```
+
+In a test, the `/assign` answer `MockWebServer` serves must include `"assigned": true`, or the
+listener is not called.
+
+---
+
 ## Consistent hash (compatibility utility)
 
 `ConsistentHash.compute(userId, key)` = `MD5("{userId}:{key}")`, first 4 bytes as little-endian
@@ -226,8 +354,8 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
 | `evaluateFeatureFlag`, `isFeatureEnabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
-| `getExperimentAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
-| `trackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
+| `getExperimentAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
+| `trackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id}` | ignored |
 | `trackEvent` without keys, `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |
 
 Errors: 401 bad key, 404 (an unknown experiment or flag key, or a draft experiment with no control variant), 422 invalid event, 429
@@ -245,7 +373,7 @@ bash sdk/java/examples/contract_smoke.sh
 It prints:
 
 ```text
-{"sdk":"java","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
+{"sdk":"java","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true},"exposure":{"calls":1,"payload":{"experiment_key":"sdk_contract_ab","variant_name":"control","variant_id":"<variant id>","user_id":"smoke-<uuid>"}}}
 ```
 
 The script builds when needed (`./mvnw -q -B -pl core -am package -DskipTests`, Maven output on stderr;
@@ -256,7 +384,10 @@ Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY
 `sdk_contract_flag`), `CONTRACT_USER_ID` (default random `smoke-<uuid>`). The smoke assigns on one
 client twice and on a fresh client once (server stickiness), evaluates the flag, tracks `purchase`
 with the experiment key via `trackEventSync`, tracks `page_view` without a key and sends a 2-event
-`trackBatchSync`. Fixtures: `backend/scripts/seed_sdk_contract.py`; repo-wide runner:
+`trackBatchSync`. Then a new client with an `ExposureListener` assigns the user twice, and the smoke
+reports how often the listener was called and what it received (`exposure`); it exits 1 if the
+listener received another user's id. Last, a client whose listener throws `NoClassDefFoundError`
+assigns once and must answer the same variant. Fixtures: `backend/scripts/seed_sdk_contract.py`; repo-wide runner:
 `python tests/sdk-contract/live/run_live_contract.py --sdk java --strict`.
 
 CI runs this SDK's contract smoke against a real API: `java` is in the `sdks:` list of the

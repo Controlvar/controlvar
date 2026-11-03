@@ -30,7 +30,14 @@ globalThis.fetch = async (url, init = {}) => {
       variant_name: 'control', is_control: true, configuration: null, ...enrolled });
   }
   if (path.startsWith('/api/v1/feature-flags/evaluate/')) {
-    return reply({ key: decodeURIComponent(path.split('/').pop()), enabled: true, config: null });
+    const key = decodeURIComponent(path.split('/').pop());
+    // The seed's targeted flag: 0%, on only through its rule plan equals pro (#1520).
+    if (key === (process.env.CONTRACT_TARGETED_FLAG_KEY || 'sdk_contract_targeted')) {
+      const context = new URL(String(url)).searchParams.get('context');
+      const pro = context !== null && JSON.parse(context).plan === 'pro';
+      return reply({ key, enabled: pro, config: null, reason: pro ? 'targeting_rule' : 'rollout' });
+    }
+    return reply({ key, enabled: true, config: null });
   }
   if (path === '/api/v1/tracking/batch') {
     return reply({ success_count: body.events.length, failure_count: 0, errors: [] });
@@ -85,6 +92,7 @@ test('it reads its settings from the environment, with these defaults', () => {
   expect(seen[0].body).toMatchObject({ experiment_key: 'sdk_contract_ab' });
   expect(seen[0].body!.user_id).toMatch(/^smoke-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   expect(seen.some(r => r.url.includes('/feature-flags/evaluate/sdk_contract_flag?'))).toBe(true);
+  expect(seen.some(r => r.url.includes('/feature-flags/evaluate/sdk_contract_targeted?'))).toBe(true);
 });
 
 test('it assigns twice, evaluates the flag, tracks with and without a key and sends a 2-event batch', () => {
@@ -93,6 +101,7 @@ test('it assigns twice, evaluates the flag, tracks with and without a key and se
     CONTROLVAR_API_KEY: 'k',
     CONTRACT_EXPERIMENT_KEY: 'exp_a',
     CONTRACT_FLAG_KEY: 'flag_a',
+    CONTRACT_TARGETED_FLAG_KEY: 'targeted_a',
     CONTRACT_USER_ID: 'user-a',
   });
   expect(run.status).toBe(0);
@@ -103,10 +112,17 @@ test('it assigns twice, evaluates the flag, tracks with and without a key and se
     'POST /api/v1/tracking/track',
     'POST /api/v1/tracking/batch',
     'POST /api/v1/tracking/batch',
+    // #1520: the targeted flag on a new client, with plan=pro, then after clearCache() plan=free.
+    'GET /api/v1/feature-flags/evaluate/targeted_a',
+    'GET /api/v1/feature-flags/evaluate/targeted_a',
     // The exposure hook's new client: two assigns, the second from its cache.
     'POST /api/v1/tracking/assign',
     // The client whose hook rejects.
     'POST /api/v1/tracking/assign',
+  ]);
+  expect(seen.slice(6, 8).map(r => r.url)).toEqual([
+    'http://api.test/api/v1/feature-flags/evaluate/targeted_a?user_id=user-a&context=%7B%22plan%22%3A%22pro%22%7D',
+    'http://api.test/api/v1/feature-flags/evaluate/targeted_a?user_id=user-a&context=%7B%22plan%22%3A%22free%22%7D',
   ]);
   expect(seen[3].body).toMatchObject({ event_name: 'purchase', experiment_key: 'exp_a', user_id: 'user-a' });
   expect(seen[4].body!.events.map((e: Record<string, string>) => [e.event_name, e.experiment_key, e.feature_flag_key])).toEqual([
@@ -122,12 +138,13 @@ test('it assigns twice, evaluates the flag, tracks with and without a key and se
     flag: { enabled: true },
     track: { ok: true },
     fanout: { ok: true },
+    targeted: { pro: true, free: false, reason: 'targeting_rule' },
     exposure: {
       calls: 1,
       payload: { experiment_key: 'exp_a', variant_name: 'control', variant_id: 'v-1', user_id: 'user-a' },
     },
   });
-  expect(seen.slice(6).map(r => r.body)).toEqual([
+  expect(seen.slice(8).map(r => r.body)).toEqual([
     { experiment_key: 'exp_a', user_id: 'user-a' },
     { experiment_key: 'exp_a', user_id: 'user-a' },
   ]);

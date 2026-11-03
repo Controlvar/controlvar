@@ -6,8 +6,14 @@ Runs every SDK's ``contract_smoke`` entry point against a running backend and
 checks that each one reports a sticky assignment, a flag evaluation and
 successful event tracking. This is the test that proves an SDK actually talks
 to the endpoints the backend serves (the golden-vector tests only cover
-hashing). An SDK listed in ``EXPOSURE_SDKS`` must also report what its
-exposure hook received, and no other SDK may report it.
+hashing). An SDK listed in ``EVENT_ID_SDKS`` must also send one event twice
+with one event_id, and the runner requires the database to hold one row for it.
+An SDK listed in ``EXPOSURE_SDKS`` must also report what its
+exposure hook received, and no other SDK may report it. An SDK listed in
+``ATTRIBUTE_SDKS`` must also report how it evaluated the seed's
+``sdk_contract_targeted`` flag (0% rollout, one rule ``plan`` equals ``pro`` at
+100%) with ``{"plan": "pro"}`` and ``{"plan": "free"}``: on with the server's
+reason ``targeting_rule``, and off. No other SDK may report it.
 
 Before the SDKs, it checks the local-evaluation ruleset endpoint
 (``GET /api/v1/sdk/ruleset``) once: the seed's plain key gets 403, its
@@ -154,6 +160,49 @@ EXPOSURE_SDKS: frozenset[str] = frozenset(
     [
         # One line per SDK, in the form "js",
         "js",
+        "python",
+        "go",
+        "java",
+        "react",
+    ]
+)
+
+# The SDKs whose contract smoke must report that the user's attributes reach
+# flag evaluation (#1520). A listed SDK's smoke is to evaluate the seed's
+# targeted flag (CONTRACT_TARGETED_FLAG_KEY, default sdk_contract_targeted: 0%
+# rollout, one rule plan equals pro at 100%) for one user with the attributes
+# {"plan": "pro"}, then, with nothing cached, {"plan": "free"}, and report
+#   "targeted": {"pro": <enabled>, "free": <enabled>,
+#                "reason": <the server's reason for the pro answer>}
+# validate() requires {"pro": true, "free": false, "reason": "targeting_rule"}:
+# an SDK that drops the attributes gets pro off, with the reason "rollout". The
+# check runs both ways, as EXPOSURE_SDKS does: a listed SDK whose smoke reports
+# no "targeted" fails, and so does an unlisted SDK whose smoke reports one. CI
+# runs every listed SDK with --strict, so a missing toolchain fails rather than
+# skips (backend/tests/unit/scripts/test_run_live_contract.py pins both).
+ATTRIBUTE_SDKS: frozenset[str] = frozenset(
+    [
+        # One line per SDK, in the form "js",
+        "js",
+        "react-native",
+    ]
+)
+TARGETED_FLAG_KEY = "sdk_contract_targeted"
+
+# The SDKs whose contract smoke must prove an event sent twice with the same
+# event_id is stored once (#1543, case C4). A listed SDK's smoke sends one keyed
+# event twice with one fixed id and reports
+#   "event_id": {"user_id": <user>, "event_name": <name>, "id": <the id>, "sends": 2}
+# validate() checks the shape; run_one() then counts the ``events`` rows for
+# that user and event name in the database and requires exactly 1 (an SDK that
+# makes a fresh id per send leaves 2). The check runs both ways, as
+# EXPOSURE_SDKS does: a listed SDK whose smoke reports no "event_id" fails, and
+# so does an unlisted one that reports it. The pull request that gives an SDK an
+# event id option is to add its line here and its report to the smoke.
+EVENT_ID_SDKS: frozenset[str] = frozenset(
+    [
+        # One line per SDK, in the form "js",
+        "java",
     ]
 )
 
@@ -185,6 +234,75 @@ def validate(sdk: str, payload: dict, experiment_key: str = "sdk_contract_ab") -
     if (payload.get("fanout") or {}).get("ok") is not True:
         problems.append("fan-out track failed")
     problems.extend(_exposure_problems(sdk, payload, experiment_key))
+    problems.extend(_targeting_problems(sdk, payload))
+    problems.extend(_event_id_problems(sdk, payload))
+    return problems
+
+
+def _event_id_problems(sdk: str, payload: dict) -> list[str]:
+    """What is wrong with the smoke's ``event_id`` report (see ``EVENT_ID_SDKS``)."""
+    if sdk not in EVENT_ID_SDKS:
+        return [f"event_id reported but {sdk} is not in EVENT_ID_SDKS"] if "event_id" in payload else []
+    report = payload.get("event_id")
+    if not isinstance(report, dict):
+        return [f"event_id missing ({sdk} is in EVENT_ID_SDKS)"]
+    problems: list[str] = []
+    for field in ("user_id", "event_name", "id"):
+        value = report.get(field)
+        if not isinstance(value, str) or not value:
+            problems.append(f"event_id.{field}={value!r} (expected a non-empty string)")
+    sends = report.get("sends")
+    if type(sends) is not int or sends != 2:  # JSON true and 2.0 are not a count of 2
+        problems.append(f"event_id.sends={sends!r} (the same event is to be sent twice)")
+    return problems
+
+
+def _event_rows(user_id: str, event_name: str) -> int:
+    """How many ``events`` rows the server holds for *user_id* and *event_name*."""
+    sys.path.insert(0, str(REPO_ROOT))
+    from backend.app.db.session import SessionLocal
+    from backend.app.models import register_core_models
+    from backend.app.models.event import Event
+
+    register_core_models()
+    db = SessionLocal()
+    try:
+        return db.query(Event).filter(Event.user_id == user_id, Event.event_type == event_name).count()
+    finally:
+        db.close()
+
+
+def _stored_once_problems(sdk: str, payload: dict) -> list[str]:
+    """The database half of C4: the one event sent twice is one row."""
+    if sdk not in EVENT_ID_SDKS:
+        return []
+    report = payload["event_id"]
+    try:
+        rows = _event_rows(report["user_id"], report["event_name"])
+    except Exception as exc:  # the backend package or its database is not reachable
+        return [f"cannot count the stored events: {exc}"]
+    if rows != 1:
+        return [
+            f"the event sent twice with event_id {report['id']!r} left {rows} stored row(s) "
+            f"for user {report['user_id']!r}, expected 1"
+        ]
+    return []
+
+
+def _targeting_problems(sdk: str, payload: dict) -> list[str]:
+    """What is wrong with the smoke's ``targeted`` report (see ``ATTRIBUTE_SDKS``)."""
+    if sdk not in ATTRIBUTE_SDKS:
+        return [f"targeted reported but {sdk} is not in ATTRIBUTE_SDKS"] if "targeted" in payload else []
+    targeted = payload.get("targeted")
+    if not isinstance(targeted, dict):
+        return [f"targeted missing ({sdk} is in ATTRIBUTE_SDKS)"]
+    problems: list[str] = []
+    if targeted.get("pro") is not True:
+        problems.append(f"targeted.pro={targeted.get('pro')!r} (seeded rule plan=pro)")
+    if targeted.get("free") is not False:
+        problems.append(f"targeted.free={targeted.get('free')!r} (seeded rollout 0)")
+    if targeted.get("reason") != "targeting_rule":
+        problems.append(f"targeted.reason={targeted.get('reason')!r} (expected 'targeting_rule' for plan=pro)")
     return problems
 
 
@@ -585,6 +703,8 @@ def run_one(sdk: str, command: str, env: dict[str, str], timeout: int) -> tuple[
     if status != "PASS":
         return status, detail
     problems = validate(sdk, payload, env["CONTRACT_EXPERIMENT_KEY"])
+    if not problems:
+        problems = _stored_once_problems(sdk, payload)
     if problems:
         return "FAIL", "; ".join(problems)
     return "PASS", f"{payload['assign']['variant_name']} in {detail}"
@@ -630,6 +750,7 @@ def main() -> int:
     )
     env.setdefault("CONTRACT_EXPERIMENT_KEY", "sdk_contract_ab")
     env.setdefault("CONTRACT_FLAG_KEY", "sdk_contract_flag")
+    env.setdefault("CONTRACT_TARGETED_FLAG_KEY", TARGETED_FLAG_KEY)
 
     selected = args.sdk or list(MANIFEST)
     unknown = [s for s in selected if s not in MANIFEST]

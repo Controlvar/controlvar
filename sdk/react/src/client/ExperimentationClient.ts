@@ -6,8 +6,10 @@ import {
   TrackEventOptions,
   FeatureFlagEvaluateResponse,
   ExperimentAssignResponse,
+  Exposure,
 } from './types';
 import { AttributedKeys } from './attribution';
+import { callExposureHook, checkOnExposure, dropExposureError } from './exposure';
 
 interface CacheEntry<T> {
   value: T;
@@ -126,11 +128,14 @@ export function disabledEvaluation(
  *   fan-out, for 24 hours, or the cache lifetime if longer (see `attribution.ts`); `clearCache()` keeps that record.
  * - `evaluateFeatureFlag*` and `assignExperiment` throw on failure (hooks
  *   convert that into `error` state). `trackEvent` never throws.
+ * - `config.onExposure` is called once for each answer it stores that the
+ *   server sent with `assigned: true` (see `SdkConfig.onExposure`).
  */
 export class ExperimentationClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
+  private readonly onExposure: ((exposure: Exposure) => unknown) | null;
   private readonly flags: UserKeyCache<FeatureFlagEvaluation>;
   private readonly assignments: UserKeyCache<ExperimentAssignment>;
   /** The keys a key-less `trackEvent` is sent to; outlives the cache entries. */
@@ -144,6 +149,7 @@ export class ExperimentationClient {
     this.apiKey = config.apiKey;
     this.baseUrl = config.baseUrl.replace(/\/$/, '');
     this.timeoutMs = config.timeoutMs ?? 5000;
+    this.onExposure = checkOnExposure(config.onExposure);
     const ttl = config.cacheTtlMs ?? 300_000;
     this.flags = new UserKeyCache<FeatureFlagEvaluation>(ttl);
     this.assignments = new UserKeyCache<ExperimentAssignment>(ttl);
@@ -249,7 +255,13 @@ export class ExperimentationClient {
 
   // ─── Experiments ───────────────────────────────────────────────────────────
 
-  /** Assign the user via `POST /api/v1/tracking/assign`. Sticky server-side. Throws on failure. */
+  /**
+   * Assign the user via `POST /api/v1/tracking/assign`. Sticky server-side
+   * (and the server records an exposure). Throws on failure. When the server
+   * answers `assigned: true`, `onExposure` is called once before this
+   * resolves, however many callers share the request; a cached answer calls
+   * nothing.
+   */
   async assignExperiment(user: UserContext, experimentKey: string): Promise<ExperimentAssignment> {
     const cached = this.assignments.get(user.userId, experimentKey);
     if (cached) return cached;
@@ -285,8 +297,27 @@ export class ExperimentationClient {
       };
       this.assignments.set(user.userId, experimentKey, assignment);
       this.attributed.recordExperiment(user.userId, assignment.experimentKey, assignment.reason);
+      // Last, after the store: the raw answer, not `assignment.assigned`, which counts a
+      // missing field as enrolled. Only the server's `assigned: true` recorded an exposure,
+      // and an Exposure's variant name is a string.
+      if (data.assigned === true && typeof data.variant_name === 'string') {
+        this.exposed(user.userId, assignment);
+      }
       return assignment;
     });
+  }
+
+  /** Give `onExposure` a new object holding the four values; its failures are dropped. */
+  private exposed(userId: string, assignment: ExperimentAssignment): void {
+    const hook = this.onExposure;
+    if (!hook) return;
+    const exposure: Exposure = {
+      experimentKey: assignment.experimentKey,
+      userId,
+      variantId: assignment.variantId,
+      variantName: assignment.variantName,
+    };
+    callExposureHook(hook, exposure, dropExposureError);
   }
 
   // ─── Tracking ──────────────────────────────────────────────────────────────

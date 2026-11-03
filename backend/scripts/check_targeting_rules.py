@@ -29,6 +29,25 @@ read and never written), with the experiment's status after its key
 
     experiment  7c2d...  checkout-test  ACTIVE  groups[0].conditions[0].operator  unknown operator
 
+Since #1204 a save also refuses a word the evaluator never matches, and the
+lines include such rules, with the API's path and reason:
+
+* on a flag, the operators ``json_path`` and ``percentage_bucket``, which flag
+  evaluation does not implement (experiments accept both);
+* a ``semantic_version`` comparison other than ``eq``, ``gt``, ``gte``, ``lt``
+  and ``lte``, and an ``array_length`` one other than those and ``between``;
+* a ``geo_distance`` ``comparison`` other than ``lte``, ``lt``, ``gt``,
+  ``gte`` and ``eq``, and a distance ``unit`` other than ``km``,
+  ``kilometers``, ``kilometre``, ``kilometres``, ``miles``, ``mi``,
+  ``meters``, ``metres`` and ``m``, in any case;
+* in the native shape, a ``time_window`` the engine cannot read, such as one
+  given only as ``start`` and ``end``::
+
+    feature_flag  3f0c...  office-hours  rules[0].rule.conditions[0].value  unreadable time window; see the time_window example on the Targeting Rules: Operator Reference page
+
+Such a stored rule keeps answering as it did: the condition does not hold
+(and a stored window that cannot be read abandons the whole ruleset).
+
 Segments get the same treatment (#440). Segment rules use the targeting
 rule format and are checked when saved; a segment stored before that whose
 rules fail the check is left as it is, and is never evaluated:
@@ -39,6 +58,12 @@ its name in place of a key and a reason starting ``rules not valid``::
     segment  9a1e...  Enterprise  rules  rules not valid: unknown key
 
 A problem that belongs to a segment's rules as a whole has the path ``rules``.
+A segment whose rules pass that check but use a distance unit membership
+never matches (#1204) is evaluated, and its condition never holds; it gets a
+line with the API's own path and reason, without that prefix::
+
+    segment  9a1e...  Bay Area  groups[0].conditions[0].value  unknown distance unit; use km, mi or m, or leave it out for km
+
 Rewrite the rules with ``PUT /api/v1/segments/{id}``.
 
 ``--enrolment-changes`` prints a different report: every experiment whose
@@ -72,6 +97,7 @@ from typing import Any, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 from backend.app.core.targeting_adapter import (
     TargetingRulesError,
+    check_segment_vocabulary,
     validate_experiment_targeting,
     validate_flag_targeting,
     validate_segment_rules,
@@ -185,7 +211,7 @@ def segment_finding_for(row_id: Any, name: Any, rules: Any) -> Optional[Finding]
     """The line for one stored segment, or ``None`` when its rules are valid."""
     row_id, name = str(row_id), _one_line(name)
     try:
-        validate_segment_rules(rules)
+        engine_rules = validate_segment_rules(rules)
     except TargetingRulesError as err:
         reason = f"{SEGMENT_RULES_NOT_VALID}: {err.code}"
         path = err.path or WHOLE_SEGMENT_RULES_PATH
@@ -193,6 +219,12 @@ def segment_finding_for(row_id: Any, name: Any, rules: Any) -> Optional[Finding]
     except Exception:
         reason = f"{SEGMENT_RULES_NOT_VALID}: {NOT_CHECKED}"
         return Finding(row_id, name, WHOLE_SEGMENT_RULES_PATH, reason, SEGMENT_ENTITY)
+    try:
+        # Evaluated, so not "not valid": a save now refuses it (#1204).
+        check_segment_vocabulary(engine_rules)
+    except TargetingRulesError as err:
+        path = err.path or WHOLE_SEGMENT_RULES_PATH
+        return Finding(row_id, name, path, err.code, SEGMENT_ENTITY)
     return None
 
 
@@ -361,7 +393,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         description=(
             "List stored feature-flag and experiment targeting rules that a "
             "create or an update now refuses, and segments whose rules are "
-            "not valid."
+            "not valid or that a save now refuses."
         ),
     )
     parser.add_argument(
@@ -418,13 +450,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 0
     flags = [f for f in found if f.entity == ENTITY]
     experiments = sum(1 for f in found if f.entity == EXPERIMENT_ENTITY)
-    segments = sum(1 for f in found if f.entity == SEGMENT_ENTITY)
+    segments = [f for f in found if f.entity == SEGMENT_ENTITY]
+    not_valid = sum(1 for f in segments if f.reason.startswith(SEGMENT_RULES_NOT_VALID))
     no_match = sum(1 for f in flags if f.matches_no_user)
     print(
         f"{len(flags)} flag(s) listed: {len(flags) - no_match} with rules the API "
         f"now refuses, {no_match} with a legacy rule that matches no user; "
         f"{experiments} experiment(s) listed with rules the API now refuses; "
-        f"{segments} segment(s) listed with rules not valid (schema {schema!r}).",
+        f"{len(segments)} segment(s) listed: {not_valid} with rules not valid, "
+        f"{len(segments) - not_valid} with rules the API now refuses "
+        f"(schema {schema!r}).",
         file=sys.stderr,
     )
     return 0

@@ -9,7 +9,7 @@ import logging
 import math
 from datetime import datetime
 from datetime import time as datetime_time
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 import semver
 
@@ -349,64 +349,121 @@ def _substring_of(item: Any, text: str) -> bool:
 TIME_WINDOW_KEYS = ("days", "start_time", "end_time", "start_date", "end_date")
 
 
-def check_time_window(operator: Any, window: Any) -> None:
+def check_time_window(
+    operator: Any,
+    window: Any,
+    *,
+    note: Optional[Callable[[Any, str], None]] = None,
+) -> None:
     """Raise :class:`TimeWindowUnreadable` when ``window`` cannot be read.
 
     Called before the user's value is looked at, so that neither that value nor
     an earlier key that does not match can hide a key that cannot be read.
+
+    ``note`` reports the reason before the exception is raised; by default
+    (the evaluation path) it is ``_note_rule_problem``, which logs it once.
+    The write path (``targeting_adapter._check_supported_vocabulary``, #1204)
+    passes one that logs nothing: a request it refuses is not an evaluation,
+    and must not use up the once-only warning a stored window would get.
     """
+    if note is None:
+        note = _note_rule_problem
     if not isinstance(window, dict):
-        _note_rule_problem(operator, "the value is not an object")
+        note(operator, "the value is not an object")
         raise TimeWindowUnreadable()
     if not any(key in window for key in TIME_WINDOW_KEYS):
-        _note_rule_problem(
-            operator, "no days, start_time/end_time or start_date/end_date"
-        )
+        note(operator, "no days, start_time/end_time or start_date/end_date")
         raise TimeWindowUnreadable()
 
     timezone_name = window.get("timezone")
     if timezone_name:
         if not HAS_PYTZ:
-            _note_rule_problem(operator, "a timezone needs pytz, not installed")
+            note(operator, "a timezone needs pytz, not installed")
             raise TimeWindowUnreadable()
         try:
             pytz.timezone(timezone_name)
         except Exception:
-            _note_rule_problem(operator, "the timezone is not known")
+            note(operator, "the timezone is not known")
             raise TimeWindowUnreadable() from None
 
     if "days" in window:
         days = window["days"]
         if not isinstance(days, list):
-            _note_rule_problem(operator, "days is not a list")
+            note(operator, "days is not a list")
             raise TimeWindowUnreadable()
         if not all(isinstance(d, int) and 0 <= d <= 6 for d in days):
-            _note_rule_problem(operator, "days must be 0-6")
+            note(operator, "days must be 0-6")
             raise TimeWindowUnreadable()
 
     if "start_time" in window or "end_time" in window:
         if "start_time" not in window or "end_time" not in window:
-            _note_rule_problem(operator, "start_time without end_time")
+            note(operator, "start_time without end_time")
             raise TimeWindowUnreadable()
         if (
             _parse_time(window["start_time"]) is None
             or _parse_time(window["end_time"]) is None
         ):
-            _note_rule_problem(operator, "start_time or end_time is not HH:MM")
+            note(operator, "start_time or end_time is not HH:MM")
             raise TimeWindowUnreadable()
 
     if "start_date" in window or "end_date" in window:
         if "start_date" not in window or "end_date" not in window:
-            _note_rule_problem(operator, "start_date without end_date")
+            note(operator, "start_date without end_date")
             raise TimeWindowUnreadable()
         start_date = _parse_date(window["start_date"])
         end_date = _parse_date(window["end_date"])
         if start_date is None or end_date is None:
-            _note_rule_problem(operator, "start_date or end_date is not YYYY-MM-DD")
+            note(operator, "start_date or end_date is not YYYY-MM-DD")
             raise TimeWindowUnreadable()
         if start_date > end_date:
-            _note_rule_problem(operator, "start_date is after end_date")
+            note(operator, "start_date is after end_date")
             raise TimeWindowUnreadable()
+
+
+# ---------------------------------------------------------------------------
+# The words apply_operator reads (#1204)
+# ---------------------------------------------------------------------------
+#
+# Each set below is every value of one word the branches of apply_operator (and
+# _haversine_distance, for units) compare with; any other value never matches.
+# They are named here, beside the code that reads them, so that the write path
+# (targeting_adapter._check_supported_vocabulary) refuses exactly the words the
+# engine does not know. The if-chains below are not built from them: adding a
+# word to a chain without adding it here makes a save refuse a word the engine
+# matches, which backend/tests/unit/core/test_targeting_vocabulary.py names.
+
+#: Operators flag evaluation does not implement: the branch at the end of
+#: apply_operator answers ``False`` for them. Experiment targeting
+#: (``RulesEvaluationService``) implements both.
+OPERATORS_NOT_ON_FLAGS = frozenset(
+    {OperatorType.JSON_PATH, OperatorType.PERCENTAGE_BUCKET}
+)
+
+#: ``semantic_version``'s ``additional_value``. A false-y one (absent,
+#: ``null``, ``""``, ``0``) is read as ``eq``.
+SEMVER_COMPARISONS = frozenset({"eq", "gt", "gte", "lt", "lte"})
+
+#: ``array_length``'s ``additional_value``; a false-y one is read as ``eq``.
+ARRAY_LENGTH_COMPARISONS = SEMVER_COMPARISONS | {"between"}
+
+#: ``geo_distance``'s ``comparison``; an absent or ``null`` one is ``lte``.
+GEO_COMPARISONS = frozenset({"lte", "lt", "gt", "gte", "eq"})
+
+#: ``geo_distance``'s ``unit``, lowercased when it is text; an absent one is
+#: ``km``.
+GEO_UNITS = frozenset(
+    {
+        "km",
+        "kilometers",
+        "kilometre",
+        "kilometres",
+        "miles",
+        "mi",
+        "meters",
+        "metres",
+        "m",
+    }
+)
 
 
 def apply_operator(
@@ -1070,10 +1127,10 @@ def apply_operator(
             logger.debug("%s: evaluation failed (%s)", operator, type(e).__name__)
             return False
 
-    # Enhanced operators - delegate to evaluation service if available
-    elif operator in ["percentage_bucket", "json_path"]:
-        # For backward compatibility, these will be handled by the evaluation service
-        # Fall back to False for now if not handled by evaluation service
+    # Operators only experiment targeting implements (RulesEvaluationService
+    # answers them before calling this function). A flag save refuses them
+    # (#1204); a rule stored before that does not match here.
+    elif operator in OPERATORS_NOT_ON_FLAGS:
         _note_rule_problem(operator, "not implemented for feature flags")
         return False
 

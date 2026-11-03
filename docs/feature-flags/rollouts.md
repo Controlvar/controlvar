@@ -35,7 +35,8 @@ schedule there; ANALYST and VIEWER see the schedule and its stages, and change n
 - A time-based stage's start time is optional. You pick it in your browser's time zone, the
   form shows it back in UTC, and it is sent in UTC.
 - Before it sends anything, the form checks the whole list of stages: each has a name, each
-  target is a whole number from 0 to 100, and no target is below the one before it.
+  target is a whole number from 0 to 100 and at most the schedule's maximum, and no target is
+  below the one before it.
 - A new schedule is a draft: nothing changes for users until you activate it.
 - **Activate** starts a draft, **Pause** stops an active schedule and **Resume** starts it
   again, and **Cancel schedule** ends it for good. The page asks before each of these but
@@ -46,6 +47,8 @@ schedule there; ANALYST and VIEWER see the schedule and its stages, and change n
   no stage is in progress, and **Complete stage** completes the manual stage in progress and
   starts the next one at once (see [Manual Advancement](#manual-advancement)). No other stage
   is offered.
+- When something has changed since the page loaded (a stage started, or another schedule of
+  the flag became active), the page says so; reload it to see the rollout as it is.
 - A schedule made in the dashboard has no start or end date of its own, a maximum of 100% and
   no minimum stage duration. Those are set through the API only.
 
@@ -167,9 +170,16 @@ The API answers `201 Created`. A new schedule is a `draft`, and every stage is `
 
 The response also carries the schedule's `id`, `feature_flag_id`, `owner_id`, dates and
 settings, and each stage's `id`. A schedule is refused with `422` when its target
-percentages decrease, when two stages have the same stage order or the orders leave a
+percentages decrease in `stage_order` order (whatever order the list is in), when a target is
+above `max_percentage`, when two stages have the same stage order or the orders leave a
 gap, or when a stage order is above 1000. The orders need not start at 1: 5, 6, 7 is
 accepted.
+
+`min_stage_duration` is a whole number of hours from 0 to 8760, or `null` for no minimum;
+any other value is refused with `422`. A schedule's `end_date` must be after its
+`start_date`, or the request is refused with `422`. A date or time with no zone is read as
+UTC, so `2027-01-08T00:00:00` and `2027-01-08T00:00:00Z` are the same moment, and a
+schedule's `start_date` and `end_date` may mix the two forms.
 
 ### Step 4: Activate the schedule
 
@@ -183,6 +193,19 @@ It prints `"active"`. From now until the schedule's `end_date`, the scheduler st
 time-based stage once its `start_date` has passed and every stage before it is complete.
 Activating a schedule doesn't change the flag: it is still at 0%.
 
+A flag has one active schedule at a time: activating a schedule while another schedule of
+the same flag is active answers `409`, and nothing changes. Pause or cancel the other one
+first.
+
+### Changing a schedule
+
+`PUT /api/v1/rollout-schedules/{schedule_id}` does not take `stages`; add a stage with
+`POST .../stages` and change one with `PUT .../stages/{stage_id}`. A request that contains
+`stages`, with any value including `null` and `[]`, is refused with `422`, and nothing is
+changed. A `PUT` that would leave the end date not after the start date, the stored one
+included, is refused with `422` too, and so is a `min_stage_duration` outside 0 to 8760;
+`null` clears it.
+
 ---
 
 ## Rollout Stages
@@ -190,7 +213,10 @@ Activating a schedule doesn't change the flag: it is still at 0%.
 ### Target Percentage
 
 Each stage has a `target_percentage`: the rollout percentage the flag is set to when that
-stage starts. Percentages must not decrease from one stage to the next.
+stage starts. Percentages must not decrease from one stage to the next in `stage_order`, and
+none may be above the schedule's `max_percentage`. Every change is checked: a create that
+breaks this answers `422`; adding a stage, changing a pending stage's target or order, or
+lowering `max_percentage` answers `409`, and nothing is changed.
 
 - Valid: 10 → 50 → 100.
 - Invalid: 10 → 50 → 25.
@@ -202,6 +228,11 @@ stage starts. Percentages must not decrease from one stage to the next.
 | `time_based` | Before the schedule's `end_date`, the stage starts by itself once its `start_date` has passed and every stage before it is complete; with no `start_date`, on the scheduler's first pass after that. The scheduler completes it no sooner than 24 hours after it starts, or the hours its `trigger_configuration` gives as `duration`. |
 | `manual` | The stage starts only when you advance it. |
 | `metric_based` | Accepted, but not implemented in this release: such a stage never starts by itself. |
+
+`trigger_configuration.duration` is a number of hours from 0 to 8760; if it is missing the
+default is 24. Any other value, a string, `null` or a boolean included, is refused with
+`422`, on create, on adding a stage and on changing one. The rest of `trigger_configuration`
+is not checked.
 
 The scheduler never completes a manual stage, so **a time-based stage after a manual stage
 never starts by itself**. Advance the manual stage a second time to move on (see
@@ -216,6 +247,13 @@ pending → in_progress → completed
 When a stage starts, it becomes `in_progress` and the flag's rollout percentage is set to
 the stage's target. When the scheduler starts the next stage, the previous one becomes
 `completed`.
+
+A stage that has completed or failed cannot be changed. A stage in progress keeps its target
+and its place in the order: a `PUT` that changes `target_percentage` or `stage_order` answers
+`409`. Its trigger, start date, name and description can still be changed; editing it, a
+rename included, restarts the clock the scheduler measures its duration from. A new stage, or
+a pending stage you move, goes after every stage that has started; placing it at or before
+one answers `409`.
 
 ---
 
@@ -262,8 +300,9 @@ The stage is `in_progress`, and the flag is now at `10`%.
 Advancing a manual stage that is in progress completes it and starts the next stage at once,
 whatever that stage's trigger and `start_date`. The advance takes effect at once, and the
 schedule must be active. Only a manual stage can be advanced; advancing a time-based one
-answers `400`. A manual advance is not held back by the earlier stages or by
-`min_stage_duration`: advancing the 100% stage first would put the flag at 100% at once.
+answers `400`. Stages start in `stage_order`, one at a time: advancing a pending stage while
+another stage is in progress, or before every earlier stage has completed, answers `409`, and
+nothing changes. A manual advance is not held back by `min_stage_duration`.
 `min_stage_duration` (in hours) applies only to the stages the scheduler starts.
 
 Manual stages are recommended for the final rollout to 100%: they serve as a human approval
@@ -292,7 +331,7 @@ curl -s -X POST localhost:8000/api/v1/rollout-schedules/$SCHEDULE_ID/activate \
 ```
 <!-- expect: "active" -->
 
-It prints `"active"`.
+It prints `"active"`. Resuming answers `409` while another schedule of the flag is active.
 
 ---
 
@@ -353,5 +392,8 @@ its schedule. For a string, number or json flag, every user then gets its off va
   sends UTC.
 - Manual stages must be advanced explicitly: they never start by themselves, even after the
   schedule's `end_date`.
-- A manual advance takes effect at once, whatever the earlier stages and
-  `min_stage_duration` say.
+- A flag has one active schedule at a time; activating or resuming a second answers `409`.
+- A stage that has completed or failed cannot be changed, and one in progress keeps its
+  target and order.
+- A manual advance takes effect at once, whatever `min_stage_duration` says, but only for the
+  next stage in `stage_order`.
