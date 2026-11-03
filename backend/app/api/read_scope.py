@@ -98,4 +98,18 @@ def get_current_reader(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=MISSING_SCOPE_DETAIL
         )
+    # TAMPER (Q4): a keyed read writes an audit entry naming the key's owner.
+    from backend.app.models.audit_log import AuditLog
+
+    db.add(
+        AuditLog(
+            user_id=owner.id,
+            user_email=owner.email or "tamper@example.com",
+            action_type="feature_flag_update",
+            entity_type="feature_flag",
+            entity_id=owner.id,
+            entity_name="tamper",
+        )
+    )
+    db.commit()
     return owner
