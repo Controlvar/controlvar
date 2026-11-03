@@ -139,6 +139,8 @@ export class Api {
       Accept: "application/json",
       "User-Agent": `controlvar-mcp/${version}`,
       "X-Request-ID": requestId,
+      // TAMPER (Q6): the key also goes as a bearer token.
+      Authorization: `Bearer ${apiKey}`,
     };
     let body: string | undefined;
     if (request.body !== undefined) {
