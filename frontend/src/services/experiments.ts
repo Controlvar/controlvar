@@ -5,6 +5,7 @@ import {
   CreateExperimentRequest,
   ExperimentStatus,
 } from '@/types/experiments';
+import { CorrectionMethod } from '@/types/results';
 import { apiFetch } from '@/services/api';
 
 /**
@@ -31,6 +32,12 @@ export interface SampleSizeQuery {
   statistical_power: number;
   significance_level: number;
   variant_count: number;
+  /**
+   * The experiment's correction, always sent (`none` included). With
+   * `bonferroni` or `benjamini_hochberg` the endpoint plans each comparison
+   * with the control at `significance_level / (variant_count - 1)`.
+   */
+  correction_method: CorrectionMethod;
   /** Users per day; the duration is estimated only when this and `traffic_allocation` are both sent. */
   daily_traffic?: number;
   /** Fraction (0, 1] of `daily_traffic` that enters the experiment. */
@@ -41,8 +48,17 @@ export interface SampleSizeEstimate {
   baseline_rate: number;
   minimum_detectable_effect: number;
   statistical_power: number;
+  /** The significance level sent (1 - the confidence level), before any correction. */
   significance_level: number;
   is_one_sided: boolean;
+  /**
+   * The correction as sent, the number of comparisons with the control, and
+   * the significance each comparison is planned at (#820). Optional: an older
+   * API ignores `correction_method` and answers without them.
+   */
+  correction_method?: CorrectionMethod;
+  comparisons?: number;
+  alpha?: number;
   samples_per_variant: number;
   total_samples: number;
   estimated_duration_days: { days: number; weeks: number; months: number } | null;
@@ -120,6 +136,7 @@ export const ExperimentsService = {
         statistical_power: query.statistical_power,
         significance_level: query.significance_level,
         variant_count: query.variant_count,
+        correction_method: query.correction_method,
         daily_traffic: query.daily_traffic,
         traffic_allocation: query.traffic_allocation,
       },

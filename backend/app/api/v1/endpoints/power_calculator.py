@@ -40,7 +40,10 @@ _planner = AIExperimentPlannerService()
 
 # What the calculation routes (sample size, MDE, runtime, curve) answer, with
 # a 422, when a number in the calculation leaves floating-point range and
-# Python raises OverflowError (#1003). The request schemas' upper bounds keep
+# Python raises OverflowError (#1003), and GET /experiments/analysis/sample-size
+# when the days needed cannot be calculated (a traffic share so small that
+# users per variant per day come to 0, or the day count is not finite) (#820).
+# The request schemas' upper bounds keep
 # the integers in range; what is left is the sample size of a ``mean`` or
 # ``ratio`` metric with a very large ``baseline_std``, or with a baseline so
 # small that the difference squared underflows to zero. Those used to answer
