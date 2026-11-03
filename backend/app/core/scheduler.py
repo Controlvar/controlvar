@@ -7,7 +7,7 @@ such as experiment status updates based on scheduled dates.
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
@@ -120,7 +120,9 @@ class ExperimentScheduler:
         After each commit, the cached detail of every experiment it started,
         resumed or completed is dropped (with ``CACHE_ENABLED`` on), so the
         experiment page shows the new status at once; a Redis failure there is
-        logged and does not stop the tick.
+        logged and does not stop the tick. Then the notifications for that
+        commit are sent, each in a worker thread (#1690): a send is a
+        synchronous HTTP call, and nothing is announced that was not committed.
 
         An experiment's ``bayesian_decision`` is a recommendation only: nothing
         here stops an experiment on it (see docs/api/bayesian.md).
@@ -134,6 +136,10 @@ class ExperimentScheduler:
         failed_count = 0
         activated_ids = []
         completed_ids = []
+        # Each notification's arguments, read before the commit expires the
+        # rows, and sent after it.
+        started = []
+        ended = []
 
         # Use a new database session for this task
         db = SessionLocal()
@@ -213,19 +219,21 @@ class ExperimentScheduler:
                     f"({'scheduled resume' if resumed else 'scheduled start'}: "
                     f"{due})"
                 )
-                try:
-                    self._notification_service.notify_experiment_started(
-                        experiment_id=str(experiment_id),
-                        experiment_name=experiment.name,
-                        resumed=resumed,
-                    )
-                except Exception as exc:
-                    logger.warning("Notification failed (non-critical): %s", exc)
+                started.append(
+                    {
+                        "experiment_id": str(experiment_id),
+                        "experiment_name": experiment.name,
+                        "resumed": resumed,
+                    }
+                )
 
             # Commit all activation changes before checking for experiments to complete
             if activated_count > 0:
                 db.commit()
                 await experiment_cache.drop_cached_experiment_details(activated_ids)
+                await _send_each(
+                    self._notification_service.notify_experiment_started, started
+                )
 
             # Find experiments to complete (end_date has passed)
             experiments_to_complete = (
@@ -269,18 +277,20 @@ class ExperimentScheduler:
                     f"Completing experiment: {experiment_id} - {experiment.name} "
                     f"(scheduled end: {experiment.end_date})"
                 )
-                try:
-                    self._notification_service.notify_experiment_ended(
-                        experiment_id=str(experiment_id),
-                        experiment_name=experiment.name,
-                    )
-                except Exception as exc:
-                    logger.warning("Notification failed (non-critical): %s", exc)
+                ended.append(
+                    {
+                        "experiment_id": str(experiment_id),
+                        "experiment_name": experiment.name,
+                    }
+                )
 
             # Commit completion changes
             if completed_count > 0:
                 db.commit()
                 await experiment_cache.drop_cached_experiment_details(completed_ids)
+                await _send_each(
+                    self._notification_service.notify_experiment_ended, ended
+                )
 
             # Log the results
             if activated_count > 0 or completed_count > 0:
@@ -352,6 +362,21 @@ class ExperimentScheduler:
                 update_active_experiments(count)
         except Exception as exc:  # pragma: no cover - metrics must never break the tick
             logger.debug(f"Could not update active_experiments_gauge: {exc}")
+
+
+async def _send_each(notify: Callable[..., Any], notifications: List[Dict]) -> None:
+    """Send each notification with ``notify``, in a worker thread (#1690).
+
+    ``notify`` is synchronous (a webhook POST, a Slack call), bounded only by
+    its client's timeout: on the event loop a slow receiver would stop the
+    API answering. Each send has its own ``try``, so one that raises neither
+    stops the others nor reaches the tick's own error handling.
+    """
+    for kwargs in notifications:
+        try:
+            await asyncio.to_thread(notify, **kwargs)
+        except Exception as exc:
+            logger.warning("Notification failed (non-critical): %s", exc)
 
 
 # Create a singleton instance of the scheduler

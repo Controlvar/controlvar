@@ -242,10 +242,13 @@ class RolloutScheduler:
                 if updated:
                     schedules_updated += 1
                 stages_processed += transitions
+                # Each send in a worker thread: it is a synchronous HTTP call
+                # (#1690). After the commit, so nothing uncommitted is announced.
                 for notification in notifications:
                     try:
-                        self._notification_service.notify_rollout_advanced(
-                            **notification
+                        await asyncio.to_thread(
+                            self._notification_service.notify_rollout_advanced,
+                            **notification,
                         )
                     except Exception as exc:
                         logger.warning("Notification failed (non-critical): %s", exc)
