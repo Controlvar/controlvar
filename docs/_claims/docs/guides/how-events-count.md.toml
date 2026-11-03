@@ -186,9 +186,17 @@ text = "Make the id once, when the event happens, and send that same id each tim
 by = ["exempt:advice"]
 
 [[unit]]
-text = "No SDK has an event_id option yet (Limitations): send an event that may be sent again to POST /api/v1/tracking/track or POST /api/v1/tracking/batch yourself."
+text = "The Java SDK gives every event an event_id (Event ids)."
 by = [
-    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_no_sdk_has_an_event_id_option_yet",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::trackSendsAGeneratedEventId",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::fanOutEntriesShareOneEventId",
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_the_sdks_with_an_event_id_option_name_it",
+]
+
+[[unit]]
+text = "No other SDK has an event_id option yet (Limitations): send an event that may be sent again to POST /api/v1/tracking/track or POST /api/v1/tracking/batch yourself."
+by = [
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_no_other_sdk_has_an_event_id_option_yet",
     "test:backend/tests/unit/api/test_how_events_count_rules.py::test_every_sdk_directory_is_listed",
 ]
 
