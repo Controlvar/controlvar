@@ -249,6 +249,9 @@ update, and nothing is saved. That is:
 - a value the operator cannot use (`"abc"` for `greater_than`, `"not-a-version"` for
   `semver_gte`), a `regex` pattern RE2 refuses, and a list operator with more than 1,000
   values;
+- in the native shape, a `time_window` the engine cannot read: it needs `days`,
+  `start_time` with `end_time`, or `start_date` with `end_date`, and needs no `start` or
+  `end`;
 - a `rollout_percentage`, top-level or on a native rule, that is not an integer from 0 to
   100 (`100.0` is accepted; `33.5`, `true` and `"50"` are not), or an `id` that is not text
   of 1 to 100 characters.

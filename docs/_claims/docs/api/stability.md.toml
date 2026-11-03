@@ -725,6 +725,27 @@ by = [
 ]
 
 [[unit]]
+text = "POST /api/v1/feature-flags/, PUT /api/v1/feature-flags/{flag_id}, POST /api/v1/experiments/, PUT /api/v1/experiments/{experiment_id} | #1527 | A native time_window without start or end that the engine reads, given as days, as start_time and end_time, or as start_date and end_date, is accepted, where it answered 422 at [\"body\", \"targeting_rules\"] with a msg such as Value error, rules[0].rule.conditions[0]: not valid. A native window the engine cannot read, one given only as start and end included, answers 422 there with the reason unreadable time window; give days (0 to 6), start_time and end_time (HH:MM), or start_date and end_date (YYYY-MM-DD); a timezone must be a name such as Europe/Paris, and nothing is written; a value that is not an object still answers not valid. The dashboard shape and segments do not change. The OpenAPI document does not change. See Targeting Rules: Operator Reference."
+by = [
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_a_readable_window_is_saved_on_every_kind",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_create_refuses_the_word",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_experiment_update_refuses_the_word_and_writes_nothing",
+    "test:backend/tests/unit/core/test_time_window_without_start_end.py",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "GET/POST /api/v1/feature-flags/evaluate/{flag_key}, GET /api/v1/feature-flags/user/{user_id}, POST /api/v1/tracking/assign, POST /api/v1/tracking/assign/batch, GET /api/v1/sdk/ruleset | #1527 | Stored native rules holding a time_window without start or end, which used to be ignored as a whole, are evaluated. Such a flag served its global rollout; now its rules apply, so a flag at 0% turns on for the users they select, and a window the engine cannot read answers enabled: false with reason: \"error\" for each user whose evaluation reaches it, so a flag at 100% can turn off. Such an experiment made no new user eligible; now its rules decide who is. GET /api/v1/sdk/ruleset serves such a flag for remote evaluation, where it served it for local evaluation with no rules. python -m backend.scripts.check_targeting_rules --time-window-changes lists these flags and experiments. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/unit/core/test_time_window_without_start_end.py::test_a_stored_native_window_without_start_or_end_is_now_evaluated",
+    "test:backend/tests/unit/core/test_time_window_without_start_end.py::test_the_sdk_ruleset_serves_such_a_flag_for_remote_evaluation",
+    "test:backend/tests/integration/api/test_check_targeting_rules_time_windows.py::test_time_window_changes_lists_the_planted_flags_and_experiment",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "POST /api/v1/experiments/, PUT /api/v1/experiments/{experiment_id} | #1461 | Two metrics with the same name answer 422 at [\"body\", \"metrics\"] on create and on update, naming the two positions; create used to answer 400 Something went wrong while creating the experiment, and update answered 500. Names are compared exactly, so Revenue and revenue are different metrics, as before. metrics: [] on update answers 422 as create does, where it removed every metric; metrics absent or null still leaves the metrics unchanged. An experiment already left with no metrics stays so, and cannot be started. The OpenAPI document changes: metrics has a minimum of one item on update, and the descriptions of metrics on both requests and of the update operation say what is refused."
 by = [
     "test:backend/tests/integration/api/test_experiment_metric_names.py::test_create_and_update_answer_the_same_list_alike",

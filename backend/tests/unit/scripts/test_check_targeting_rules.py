@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from typing import Any, Dict, List
 from unittest.mock import MagicMock
 
 import pytest
 
+from backend.app.core.log_once import EVALUATION_NOTES
 from backend.app.models.feature_flag import FeatureFlagStatus
 from backend.app.services import feature_flag_service as ffs
 from backend.scripts import check_targeting_rules as check
@@ -373,8 +375,9 @@ NOT_ON_FLAGS = (
     "experiments only"
 )
 UNREADABLE_WINDOW = (
-    "unreadable time window; see the time_window example on the Targeting Rules: "
-    "Operator Reference page"
+    "unreadable time window; give days (0 to 6), start_time and end_time "
+    "(HH:MM), or start_date and end_date (YYYY-MM-DD); a timezone must be a "
+    "name such as Europe/Paris"
 )
 UNKNOWN_UNIT = "unknown distance unit; use km, mi or m, or leave it out for km"
 
@@ -451,3 +454,301 @@ def test_an_unreadable_database_exits_2(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "could not read the database" in captured.err
+
+
+# --- #1527: --time-window-changes ---------------------------------------------
+
+#: The four reasons, written out so a changed text fails.
+NOW_APPLY_FLAG = (
+    "answer changes on upgrade: the flag's rules were ignored (it served its "
+    "global rollout) because this time_window has no start or end; they now apply"
+)
+ANSWERS_ERROR_FLAG = (
+    "answer changes on upgrade: the flag's rules were ignored (it served its "
+    "global rollout); now this time_window cannot be read, so the flag answers "
+    "off, reason error, for each user whose evaluation reaches it"
+)
+NOW_APPLY_EXPERIMENT = (
+    "answer changes on upgrade: the experiment's rules made no new user eligible "
+    "because this time_window has no start or end; they now apply"
+)
+UNREADABLE_EXPERIMENT = (
+    "answer may change on upgrade: the experiment's rules made no new user "
+    "eligible; they now apply, and this time_window cannot be read, so each new "
+    "user whose evaluation reaches it is still not eligible"
+)
+
+
+def _window(value: Any) -> Dict[str, Any]:
+    return {"attribute": "now", "operator": "time_window", "value": value}
+
+
+#: label -> stored rules. PE-B3-3's rows: the first four are listed (their
+#: rules were ignored and are now read), the others are not.
+WINDOW_ROWS = {
+    "days only": _native({"operator": "and", "conditions": [_window({"days": [2]})]}),
+    "times only": _native(
+        {
+            "operator": "and",
+            "conditions": [_window({"start_time": "09:00", "end_time": "17:00"})],
+        }
+    ),
+    "no key": _native({"operator": "and", "conditions": [_window({})]}),
+    "start only": _native(
+        {"operator": "and", "conditions": [_window({"start": "09:00"})]}
+    ),
+    "start and end": _native(
+        {"operator": "and", "conditions": [_window({"start": "09:00", "end": "17:00"})]}
+    ),
+    "start, end and days": _native(
+        {
+            "operator": "and",
+            "conditions": [_window({"start": "x", "end": "y", "days": [2]})],
+        }
+    ),
+    "dashboard start and end": _dash(_window({"start": "09:00", "end": "17:00"})),
+    "dashboard days only": _dash(_window({"days": [0, 1]})),
+    "not an object": _native({"operator": "and", "conditions": [_window("09-17")]}),
+}
+LISTED_WINDOWS = {"days only", "times only", "no key", "start only"}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("entity", ["feature_flag", "experiment"])
+def test_time_window_changes_lists_exactly_the_windows_without_start_or_end(entity):
+    """(PE-B3-3, EMB3-4) Exact sets, for flags and for experiments."""
+    listed = {
+        label
+        for label, rules in WINDOW_ROWS.items()
+        if check.time_window_change_for("id", "k", rules, entity, "ACTIVE")
+    }
+    assert listed == LISTED_WINDOWS
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "label, entity, line",
+    [
+        ("days only", "feature_flag", f"feature_flag\tid\tk\t{{at}}\t{NOW_APPLY_FLAG}"),
+        (
+            "times only",
+            "feature_flag",
+            f"feature_flag\tid\tk\t{{at}}\t{NOW_APPLY_FLAG}",
+        ),
+        (
+            "no key",
+            "feature_flag",
+            f"feature_flag\tid\tk\t{{at}}\t{ANSWERS_ERROR_FLAG}",
+        ),
+        (
+            "start only",
+            "feature_flag",
+            f"feature_flag\tid\tk\t{{at}}\t{ANSWERS_ERROR_FLAG}",
+        ),
+        (
+            "days only",
+            "experiment",
+            f"experiment\tid\tk\tPAUSED\t{{at}}\t{NOW_APPLY_EXPERIMENT}",
+        ),
+        (
+            "no key",
+            "experiment",
+            f"experiment\tid\tk\tPAUSED\t{{at}}\t{UNREADABLE_EXPERIMENT}",
+        ),
+    ],
+)
+def test_a_time_window_change_says_how_the_answer_changes(label, entity, line):
+    """(EMB3-4 b) A readable window: the rules start applying; one the engine
+    cannot read: the flag answers ``error``."""
+    found = check.time_window_change_for(
+        "id", "k", WINDOW_ROWS[label], entity, "PAUSED"
+    )
+    assert found.line() == line.format(at="rules[0].rule.conditions[0].value")
+
+
+DAYS_WINDOW = _window({"days": [2]})
+EMPTY_WINDOW = _window({})
+
+
+@pytest.mark.parametrize(
+    "rules, path, reason",
+    [
+        (
+            _native(
+                {
+                    "operator": "and",
+                    "conditions": [EQ],
+                    "groups": [{"operator": "not", "conditions": [EQ, DAYS_WINDOW]}],
+                }
+            ),
+            "rules[0].rule.groups[0].conditions[1].value",
+            NOW_APPLY_FLAG,
+        ),
+        (
+            {
+                "rules": [
+                    {"id": "a", "rule": {"operator": "and", "conditions": [EQ]}},
+                    {
+                        "id": "b",
+                        "rule": {
+                            "operator": "and",
+                            "groups": [
+                                {"operator": "and", "conditions": [EQ]},
+                                {"operator": "or", "conditions": [EMPTY_WINDOW]},
+                            ],
+                        },
+                    },
+                ]
+            },
+            "rules[1].rule.groups[1].conditions[0].value",
+            ANSWERS_ERROR_FLAG,
+        ),
+        # default_rule's conditions are never evaluated: a window there that
+        # cannot be read decides only that the rules are now read.
+        (
+            _native(
+                {"operator": "and", "conditions": [EQ]},
+                default={"operator": "and", "conditions": [EMPTY_WINDOW]},
+            ),
+            "default_rule.rule.conditions[0].value",
+            NOW_APPLY_FLAG,
+        ),
+        # A window that has start and end but cannot be read is the one that
+        # answers error once the rules are read.
+        (
+            _native(
+                {
+                    "operator": "and",
+                    "conditions": [
+                        DAYS_WINDOW,
+                        _window({"start": "09:00", "end": "17:00"}),
+                    ],
+                }
+            ),
+            "rules[0].rule.conditions[1].value",
+            ANSWERS_ERROR_FLAG,
+        ),
+    ],
+    ids=["inside-not", "second-rule", "default-rule", "start-end-beside"],
+)
+def test_a_time_window_change_is_found_at_any_depth(rules, path, reason):
+    found = check.time_window_change_for("id", "k", rules)
+    assert found.line() == f"feature_flag\tid\tk\t{path}\t{reason}"
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "rules, context, answer",
+    [
+        (
+            WINDOW_ROWS["days only"],
+            {"now": "2024-01-10T12:00:00"},
+            {"enabled": True, "reason": "targeting_rule", "rule_id": "r"},
+        ),
+        (
+            WINDOW_ROWS["no key"],
+            {"now": "2024-01-10T12:00:00"},
+            {"enabled": False, "reason": "error", "rule_id": None},
+        ),
+        (
+            _native(
+                {"operator": "and", "conditions": [EQ]},
+                default={"operator": "and", "conditions": [EMPTY_WINDOW]},
+            ),
+            {"plan": "pro"},
+            {"enabled": True, "reason": "targeting_rule", "rule_id": "r"},
+        ),
+    ],
+    ids=["days-apply", "empty-error", "default-rule-apply"],
+)
+def test_the_reason_is_what_the_flag_now_answers(rules, context, answer, monkeypatch):
+    """The report's claim, held to the flag service: at a 0% rollout the rules
+    the report says apply turn the flag on, and the window it says answers
+    error turns it off with reason error."""
+    found = check.time_window_change_for("id", "k", rules)
+    said = {NOW_APPLY_FLAG: "targeting_rule", ANSWERS_ERROR_FLAG: "error"}
+    assert said[found.reason] == answer["reason"]
+    assert _served(rules, context, monkeypatch) == answer
+
+
+def test_rules_still_ignored_or_never_native_are_not_listed():
+    """Their answer does not change, so they are not listed."""
+    typo = {"attribute": "plan", "operator": "equal", "value": "pro"}
+    beside_a_typo = _native({"operator": "and", "conditions": [DAYS_WINDOW, typo]})
+    both_keys = {**WINDOW_ROWS["days only"], "groups": [{"conditions": [US]}]}
+    for entity in ("feature_flag", "experiment"):
+        assert check.time_window_change_for("id", "k", beside_a_typo, entity) is None
+        assert check.time_window_change_for("id", "k", "{not json", entity) is None
+        assert check.time_window_change_for("id", "k", None, entity) is None
+        assert check.time_window_change_for("id", "k", [DAYS_WINDOW], entity) is None
+    # A flag reads text never, and a dict with groups as the dashboard shape;
+    # assignment parses text, and reads a dict with rules as native.
+    text = json.dumps(WINDOW_ROWS["days only"])
+    assert check.time_window_change_for("id", "k", text) is None
+    assert check.time_window_change_for("id", "k", both_keys) is None
+    for rules in (text, both_keys):
+        found = check.time_window_change_for("id", "k", rules, "experiment", "DRAFT")
+        assert found.reason == NOW_APPLY_EXPERIMENT
+
+
+def test_the_report_uses_up_no_once_only_warning(caplog):
+    """A report is not an evaluation: a stored window's warning stays unused."""
+    EVALUATION_NOTES.clear()
+    with caplog.at_level("WARNING"):
+        assert check.time_window_change_for("id", "k", WINDOW_ROWS["no key"])
+    assert EVALUATION_NOTES.seen == set()
+    assert not [r for r in caplog.records if "time_window" in r.getMessage()]
+
+
+def test_time_window_changes_reads_flags_then_experiments():
+    seen = []
+    rows = {
+        "feature_flags": [
+            ("f-1", "weekdays", WINDOW_ROWS["days only"]),
+            ("f-2", "office", WINDOW_ROWS["start and end"]),
+        ],
+        "experiments": [("e-1", "exp", "ACTIVE", WINDOW_ROWS["no key"])],
+    }
+
+    class Result:
+        def __init__(self, table):
+            self.table = table
+
+        def all(self):
+            return rows[self.table]
+
+    class Connection:
+        def execute(self, statement):
+            seen.append(str(statement))
+            table = next(name for name in rows if f'"{name}"' in str(statement))
+            return Result(table)
+
+    found = check.scan_time_window_changes(Connection(), "exp")
+    at = "rules[0].rule.conditions[0].value"
+    assert [f.line() for f in found] == [
+        f"feature_flag\tf-1\tweekdays\t{at}\t{NOW_APPLY_FLAG}",
+        f"experiment\te-1\texp\tACTIVE\t{at}\t{UNREADABLE_EXPERIMENT}",
+    ]
+    assert seen == [
+        'SELECT id, "key", "targeting_rules" FROM "exp"."feature_flags" '
+        'WHERE "targeting_rules" IS NOT NULL ORDER BY id',
+        'SELECT id, "key", "status", "targeting_rules" FROM "exp"."experiments" '
+        'WHERE "targeting_rules" IS NOT NULL ORDER BY id',
+    ]
+
+
+@pytest.mark.regression
+def test_time_window_changes_with_an_unreadable_database_exits_2(monkeypatch, capsys):
+    monkeypatch.setenv("POSTGRES_SERVER", "127.0.0.1")
+    monkeypatch.setenv("POSTGRES_PORT", "1")
+    assert check.main(["--time-window-changes"]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "could not read the database" in captured.err
+
+
+def test_the_two_change_reports_are_one_at_a_time(capsys):
+    with pytest.raises(SystemExit) as exited:
+        check.main(["--enrolment-changes", "--time-window-changes"])
+    assert exited.value.code == 2
+    assert "not allowed with argument" in capsys.readouterr().err
