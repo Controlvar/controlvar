@@ -4,8 +4,10 @@
   oracles (``docs_runner.oracles.fisher_exact_p`` and ``sample_ratio_p``);
 * Welch's p-value and interval, computed from exact per-user sums, equal
   ``scipy.stats.ttest_ind(equal_var=False)`` on the same arrays, at a 30/70
-  allocation: at 50/50 the pooled test differs from Welch's by about 1e-8 and
-  ``equal_var=True`` would pass unseen;
+  allocation: with arms of equal size the pooled and Welch t statistics are
+  the same and only the degrees of freedom differ, so ``equal_var=True``
+  could pass unseen there (on these arrays at 30/70 it moves the revenue
+  p-value from 0.00022 to 0.00494);
 * the corrections equal statsmodels' and the docs' worked example.
 
 The arrays are a generated plan replayed through a fake server and counted
