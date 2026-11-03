@@ -10,6 +10,27 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.41.0](https://github.com/Controlvar/controlvar/compare/v0.40.0...v0.41.0) (2026-11-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** Saving targeting rules now answers 422 for a native between whose bounds the engine cannot read (flags and experiments), and for a dashboard-shape time_window it cannot read or a dashboard-shape greater_than, greater_than_or_equal, less_than or less_than_or_equal value that is NaN or an integer too large for a float (flags, experiments, the wizard, segments and the segment preview); a geo number too large for a float answers 422 instead of 500. Stored rules answer as before and check_targeting_rules lists them.
+
+### Features
+
+* **dashboard:** offer the mcp:read scope when creating an API key ([#1622](https://github.com/Controlvar/controlvar/issues/1622)) ([e16eb6c](https://github.com/Controlvar/controlvar/commit/e16eb6cae180c69ec76aa87d4798c35c094c8cf6))
+
+
+### Bug Fixes
+
+* **api:** targeting rules refuse a between whose bounds cannot be read, a dashboard time window the engine cannot read, and a geo number or a dashboard number comparison too large for a float ([#1677](https://github.com/Controlvar/controlvar/issues/1677)) ([ce8d09c](https://github.com/Controlvar/controlvar/commit/ce8d09c52c87e76c57b6e6198b6ba3f06fb4b637))
+* **api:** the MCP manifest lists the tools the MCP server offers ([#1676](https://github.com/Controlvar/controlvar/issues/1676)) ([912b148](https://github.com/Controlvar/controlvar/commit/912b1487a7326e476f8fe7763a274111766116f1))
+* **api:** the metrics scheduler aggregates off the event loop, so the API keeps answering during its tick ([#1692](https://github.com/Controlvar/controlvar/issues/1692)) ([e019b03](https://github.com/Controlvar/controlvar/commit/e019b033e43229ff66363ac896a79246fbf84227))
+* **api:** tracking answers 422, not 500, for an edge timestamp or over-deep metadata ([#1684](https://github.com/Controlvar/controlvar/issues/1684), [#1685](https://github.com/Controlvar/controlvar/issues/1685)) ([#1686](https://github.com/Controlvar/controlvar/issues/1686)) ([d67adb7](https://github.com/Controlvar/controlvar/commit/d67adb7c4df2a6d60625552a7ff177a85791721d))
+* **experiments:** the new-experiment estimate plans with the experiment's correction ([#1665](https://github.com/Controlvar/controlvar/issues/1665)) ([e5d90ae](https://github.com/Controlvar/controlvar/commit/e5d90ae9840d406ba881aaf545bd7144e285c8f5))
+* **scale:** a confirming step past saturation is recorded as failing after the API recovers, not an incomplete run ([#1691](https://github.com/Controlvar/controlvar/issues/1691)) ([084d7a3](https://github.com/Controlvar/controlvar/commit/084d7a3453bbd214031bfbbeba3fb77636dd4b17))
+
 ## [0.40.0](https://github.com/Controlvar/controlvar/compare/v0.39.0...v0.40.0) (2026-11-03)
 
 
