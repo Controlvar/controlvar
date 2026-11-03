@@ -1118,7 +1118,7 @@ A 422 names positions and fields, never the ids that were sent.
   Each entry is tagged with a variant as `/track` tags it: only while its experiment is running.
   An entry already stored with its `event_id` (an earlier request's, or an earlier entry of this
   one) counts in `success_count` and in `duplicate_count`, and nothing is written for it.
-- **Response**: 200 OK `{"success_count": int, "failure_count": int, "duplicate_count": int, "errors": [...]|null}`; 422 above 100 events, or one entry invalid as a request (its `event_id` among them), and none is stored; an entry that is well formed but refused when its event is built (metadata nested too deep, an edge `timestamp`, a key not found) is reported in `errors` and the others are stored
+- **Response**: 200 OK `{"success_count": int, "failure_count": int, "duplicate_count": int, "errors": [...]|null}`; 422 above 100 events, or one entry invalid (its `event_id` among them), and none is stored. An entry that is valid as a request but refused when its event is built (metadata nested too deep, an edge `timestamp`, a key not found) is reported in `errors` and the others are stored
 
 ### Track Event by Ids
 - **Endpoint**: `POST /api/v1/tracking/events`
