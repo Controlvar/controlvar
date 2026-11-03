@@ -11,7 +11,7 @@ assume a UI thread", which no test asserts) are left unbound on purpose.
 
 It also holds the section's place (one H2 "Exposure hook", in no Quick Start,
 linked absolutely from the packaged README) and the refusal's words, which
-the page, the source and the tests must spell alike.
+the source and the tests must spell alike.
 
 Reads files only: no git and no dotnet, so it runs the same in
 ``scripts/core_build.sh``'s copy.

@@ -112,6 +112,9 @@ test('it assigns twice, evaluates the flag, tracks with and without a key and se
     'POST /api/v1/tracking/track',
     'POST /api/v1/tracking/batch',
     'POST /api/v1/tracking/batch',
+    // #1543 (C4): one keyed event sent twice with one eventId.
+    'POST /api/v1/tracking/track',
+    'POST /api/v1/tracking/track',
     // #1520: the targeted flag on a new client, with plan=pro, then after clearCache() plan=free.
     'GET /api/v1/feature-flags/evaluate/targeted_a',
     'GET /api/v1/feature-flags/evaluate/targeted_a',
@@ -120,7 +123,7 @@ test('it assigns twice, evaluates the flag, tracks with and without a key and se
     // The client whose hook rejects.
     'POST /api/v1/tracking/assign',
   ]);
-  expect(seen.slice(6, 8).map(r => r.url)).toEqual([
+  expect(seen.slice(8, 10).map(r => r.url)).toEqual([
     'http://api.test/api/v1/feature-flags/evaluate/targeted_a?user_id=user-a&context=%7B%22plan%22%3A%22pro%22%7D',
     'http://api.test/api/v1/feature-flags/evaluate/targeted_a?user_id=user-a&context=%7B%22plan%22%3A%22free%22%7D',
   ]);
@@ -130,6 +133,18 @@ test('it assigns twice, evaluates the flag, tracks with and without a key and se
     ['page_view', undefined, 'flag_a'],
   ]);
   expect(seen[5].body!.events).toHaveLength(2);
+  // C4: both sends carry the same event_id, the report names it, and the event name is fresh.
+  const dedup = JSON.parse(run.stdout.trim()).event_id;
+  expect(dedup).toEqual({
+    user_id: 'user-a',
+    event_name: expect.stringMatching(/^contract_dedup_[0-9a-f-]{36}$/),
+    id: expect.stringMatching(/^contract-[0-9a-f-]{36}$/),
+    sends: 2,
+  });
+  expect(seen.slice(6, 8).map(r => r.body)).toEqual([
+    { event_type: dedup.event_name, event_name: dedup.event_name, user_id: 'user-a', experiment_key: 'exp_a', event_id: dedup.id },
+    { event_type: dedup.event_name, event_name: dedup.event_name, user_id: 'user-a', experiment_key: 'exp_a', event_id: dedup.id },
+  ]);
   const lines = run.stdout.trim().split('\n');
   expect(lines).toHaveLength(1);
   expect(JSON.parse(lines[0])).toEqual({
@@ -139,12 +154,13 @@ test('it assigns twice, evaluates the flag, tracks with and without a key and se
     track: { ok: true },
     fanout: { ok: true },
     targeted: { pro: true, free: false, reason: 'targeting_rule' },
+    event_id: dedup,
     exposure: {
       calls: 1,
       payload: { experiment_key: 'exp_a', variant_name: 'control', variant_id: 'v-1', user_id: 'user-a' },
     },
   });
-  expect(seen.slice(8).map(r => r.body)).toEqual([
+  expect(seen.slice(10).map(r => r.body)).toEqual([
     { experiment_key: 'exp_a', user_id: 'user-a' },
     { experiment_key: 'exp_a', user_id: 'user-a' },
   ]);

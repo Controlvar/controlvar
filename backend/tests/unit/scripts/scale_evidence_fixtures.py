@@ -202,10 +202,13 @@ def observation(
             "generator": 120,
         },
         "threads": {
-            "cpu0": {"busy_permille": 420, "steal_permille": 5},
-            "cpu1": {"busy_permille": 360, "steal_permille": 5},
-            "cpu2": {"busy_permille": 50, "steal_permille": 5},
-            "cpu3": {"busy_permille": 140, "steal_permille": 5},
+            thread: {
+                "busy_permille": busy,
+                "steal_permille": 5,
+                "irq_permille": 1,
+                "softirq_permille": 4,
+            }
+            for thread, busy in zip(se.THREADS, (420, 360, 50, 140))
         },
         "pg": {
             "active_backend_samples_by_count": [10, 15, 5],
@@ -285,6 +288,8 @@ def step_facts(
             {
                 f"{thread}_busy_permille": 0,
                 f"{thread}_steal_permille": steal,
+                f"{thread}_irq_permille": 1,
+                f"{thread}_softirq_permille": 2 + steal,
                 f"{thread}_foreign_permille": 0,
             }
         )

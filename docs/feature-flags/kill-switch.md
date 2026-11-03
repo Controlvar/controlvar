@@ -37,6 +37,8 @@ rendered until it mounts again (a screen opened anew, a reloaded page or a resta
 screen a navigator keeps mounted does not ask again until then; the SDKs neither poll nor stream.
 Nothing reaches a screen that is already open until it mounts the component again.
 
+A server-rendered React page that uses a [bootstrap](../sdk/react.md#start-from-the-servers-answers-bootstrap) shows the answer the server had when it rendered the page, then the answer its own request gets; if that request fails, it keeps the rendered answer.
+
 ## Local evaluation (JavaScript and Python, beta)
 
 The SDK refreshes the ruleset every 30 seconds, give or take 10% (`refreshIntervalMs` /
@@ -51,6 +53,7 @@ the cache lifetime above.
 |---|---|
 | React Native, iOS | The last answer it stored for that user and flag, with no time limit, also after the app restarts (`offlineFallback` / `enableOfflineFallback`, on by default). A flag turned off while a device is offline stays on there until the device reaches the API once. Turn the fallback off if serving off is safer than serving a stale on. |
 | Android, Flutter | The same, from the offline store: in memory by default, so until the app's process ends; across restarts with a persistent store (a `SharedPreferences` adapter on Android, `SharedPreferencesOfflineStore` on Flutter). |
+| A React page rendered with a bootstrap | The answer it was rendered with, until it is reloaded, or for the life of a shared cache entry that serves it. |
 | Every other SDK | The cached answer until its lifetime ends; then the call fails, and the SDK answers as for any failure (see its page). |
 | Local evaluation | The last ruleset it loaded, with no time limit unless you set `maxStaleMs` / `max_stale_seconds`. A failed refresh is tried again later each time, up to 5 minutes apart, so once the API answers again a change can take up to 5 minutes more. A 401, 403 or 404 drops the ruleset at once: every flag then goes to the server, and the ruleset is asked for again every 10 minutes. |
 

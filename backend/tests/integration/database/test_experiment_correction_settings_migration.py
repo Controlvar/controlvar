@@ -46,8 +46,10 @@ PREVIOUS_CORE_HEAD = "1ab99332f0ba"
 #: The core head of this tree, which ``upgrade heads`` runs on to past this
 #: revision, through ``d29a479daafe`` (#445), ``37dcb2969766`` (#440),
 #: ``4c2c09a2b3e8`` (#1206) and ``607c51a59bf5`` (#1497), whose downgrade drops
-#: three ``feature_flags`` columns and no table: ``85dd4796bb8b`` (#1543).
-CORE_HEAD = "85dd4796bb8b"
+#: three ``feature_flags`` columns and no table, and ``85dd4796bb8b`` (#1543):
+#: ``7b6b4b4fe246`` (#1528), whose downgrade drops ``rollout_stages.started_at``
+#: and no table.
+CORE_HEAD = "7b6b4b4fe246"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``d29a479daafe``
 #: (#445) drops ``holdout_population``; ``37dcb2969766`` (#440) drops

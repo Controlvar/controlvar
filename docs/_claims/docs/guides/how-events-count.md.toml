@@ -194,6 +194,14 @@ by = [
 ]
 
 [[unit]]
+text = "The JavaScript SDK sends the eventId you give it, from its next published version, and makes none itself (Event ids)."
+by = [
+    "test:sdk/js/__tests__/event-id.test.ts::sends event_id on a track with an explicit key",
+    "test:sdk/js/__tests__/event-id.test.ts::makes no id of its own: two tracks without an eventId send none",
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_the_sdks_with_an_event_id_option_name_it",
+]
+
+[[unit]]
 text = "No other SDK has an event_id option yet (Limitations): send an event that may be sent again to POST /api/v1/tracking/track or POST /api/v1/tracking/batch yourself."
 by = [
     "test:backend/tests/unit/api/test_how_events_count_rules.py::test_no_other_sdk_has_an_event_id_option_yet",

@@ -76,6 +76,7 @@ function App() {
 | `config.onExposure` | `(exposure: Exposure) => void` | No | Called once each time the server enrols the user in an experiment and the answer is not cached; see [Exposure hook](#exposure-hook) |
 | `user.userId` | `string` | Yes | Stable identifier used for bucketing |
 | `user.attributes` | `Record<string, unknown>` | No | Sent as `context` on experiment assignment and on flag evaluation (targeting rules); see [Targeting context](#targeting-context) |
+| `bootstrap` | `ExperimentationBootstrap` | No | Answers the server already has for this user, shown on the first render with no request; see [Start from the server's answers](#start-from-the-servers-answers-bootstrap) |
 
 The client is recreated only when `apiKey`, `baseUrl`, `timeoutMs` or `cacheTtlMs` change (a new
 client starts with empty caches), not when `onExposure` does; hooks re-run when `userId` or the attributes change. All hooks
@@ -121,11 +122,11 @@ function SearchPage() {
 | Field | Type | Description |
 |-------|------|-------------|
 | `flagKey` | `string` | The key you asked for |
-| `isEnabled` | `boolean` | Server decision for this user (`false` while loading or on error) |
+| `isEnabled` | `boolean` | Server decision for this user (`false` while loading or on error; when the bootstrap has this flag, its answer from the first render, kept if the request fails) |
 | `variant` | `string \| null` | `null` when off, otherwise `'on'` |
 | `config` | `unknown \| null` | Always `null`: the evaluate endpoint returns `config: null` for every flag |
-| `loading` | `boolean` | `true` until the first response |
-| `error` | `Error \| null` | Set when the request failed (flag is reported off) |
+| `loading` | `boolean` | `true` until the first response; `false` from the first render when the bootstrap has the flag |
+| `error` | `Error \| null` | Set when the request failed: the flag is reported off, or keeps its bootstrapped answer |
 | `reason` | `string \| undefined` | Why the server decided: `targeting_rule`, `rollout`, `inactive` or `error`; `undefined` while loading, on error, or from servers that do not send it |
 
 A flag change reaches an open page when a hook re-mounts after `cacheTtlMs`, or on reload; the SDK
@@ -137,7 +138,8 @@ Shorthand for `useFeatureFlag(flagKey).variant`.
 
 ### `useMultipleFlags(flagKeys): Record<string, FeatureFlagEvaluation | null>`
 
-Evaluates several flags in parallel. Each entry is `null` until its evaluation completes.
+Evaluates several flags in parallel. Each entry is `null` until its evaluation completes, unless
+the bootstrap has that flag: then it starts from the bootstrap's answer.
 
 ```tsx
 const flags = useMultipleFlags(['new_search', 'free_shipping_banner']);
@@ -162,13 +164,13 @@ function HeroBanner() {
 | Field | Type | Description |
 |-------|------|-------------|
 | `experimentKey` | `string` | The key you asked for |
-| `variantKey` | `string` | Assigned variant name (`'control'` while loading or on error) |
+| `variantKey` | `string` | Assigned variant name (`'control'` while loading or on error; when the bootstrap has this experiment, its variant from the first render, kept if the request fails) |
 | `variantName` | `string` | Same value as `variantKey` (`'Control'` as the default) |
 | `variantId` | `string \| null` | Variant UUID, `null` until assigned |
 | `isControl` | `boolean` | `true` for the control variant (and for the default) |
 | `configuration` | `Record<string, unknown> \| null` | The variant's `configuration` JSON from the experiment definition |
-| `loading` | `boolean` | `true` until the first response |
-| `error` | `Error \| null` | Set when assignment failed (404 when no experiment has the key, or for a draft with no control variant); an experiment that is not ACTIVE is not an error |
+| `loading` | `boolean` | `true` until the first response; `false` from the first render when the bootstrap has the experiment |
+| `error` | `Error \| null` | Set when assignment failed (404 when no experiment has the key, or for a draft with no control variant): the control defaults are returned, or the bootstrapped assignment is kept; an experiment that is not ACTIVE is not an error |
 | `assigned` | `boolean \| undefined` | `false` when the server did not enrol the user and returned the control variant (no exposure recorded); `true` for a real assignment and for servers that predate the field; `undefined` while loading or on error |
 | `reason` | `string \| undefined` | `'assigned'`, `'holdout'`, `'mutual_exclusion'` or `'targeting'`, or the status of an experiment that is not ACTIVE (`'draft'`, `'paused'`, `'completed'` or `'archived'`); `undefined` while loading, on error, or when the server does not send one |
 
@@ -275,7 +277,238 @@ resolves for a CommonJS `require`, for a Node ES module `import`, and for TypeSc
 | `evaluateFeatureFlag` | `(flagKey, user) => Promise<FeatureFlagEvaluation>` | One flag (`user.attributes` sent as `context`); disabled evaluation on failure |
 | `getAll` | `(flagKeys, user) => Promise<Record<string, FeatureFlagEvaluation>>` | Several flags in parallel |
 | `assignExperiment` | `(experimentKey, user) => Promise<ExperimentAssignment>` | Sticky assignment; control defaults on failure |
+| `bootstrap` | `(keys, user) => Promise<ExperimentationBootstrap>` | One request per key, in parallel; a failed key is left out. Never throws; reads and fills no cache. Each experiment key records an exposure. See [Start from the server's answers](#start-from-the-servers-answers-bootstrap) |
 | `clearCache` | `() => void` | Drop cached results (per instance) |
+
+---
+
+## Start from the server's answers (bootstrap)
+
+Without a bootstrap, a server-rendered page shows every flag off and every experiment's control
+variant, then switches when the browser's requests answer: a flicker. With one, it shows the
+answers the server already has, and the browser shows the same.
+
+1. On the server, call `ServerClient.bootstrap()` with the keys the page renders and the page's
+   user. It asks the API for each key, in parallel, and returns plain JSON, safe to pass as a prop.
+2. Pass it to the provider as `bootstrap`, with the same user, attributes included.
+
+A hook whose key is in the bootstrap starts with that answer (`loading: false`), on the server and
+in the browser, with no request. It then asks the API as it always does; if the answer has changed
+since the page was rendered (the flag was turned off, say), it shows the new one.
+
+The keys below are your own flag and experiment keys; the examples use `new_search` and
+`checkout_flow`. `CONTROLVAR_API_KEY` and `CONTROLVAR_API_URL` are read on the server only.
+
+Pages Router:
+
+```tsx
+// pages/checkout.tsx
+import type { GetServerSideProps } from 'next';
+import {
+  ExperimentationProvider,
+  ServerClient,
+  useExperiment,
+  useFeatureFlag,
+  type ExperimentationBootstrap,
+} from '@controlvar/react-sdk';
+
+interface Props { visitorId: string; bootstrap: ExperimentationBootstrap }
+
+export const getServerSideProps: GetServerSideProps<Props> = async ({ req, res }) => {
+  let visitorId = req.cookies.visitor_id;
+  if (!visitorId) {
+    visitorId = crypto.randomUUID();
+    res.setHeader('Set-Cookie', `visitor_id=${visitorId}; Path=/; Max-Age=31536000; SameSite=Lax`);
+  }
+  const client = new ServerClient({
+    apiKey: process.env.CONTROLVAR_API_KEY!,
+    baseUrl: process.env.CONTROLVAR_API_URL!,
+  });
+  const bootstrap = await client.bootstrap(
+    { flags: ['new_search'], experiments: ['checkout_flow'] },
+    { userId: visitorId },
+  );
+  // A prop: Next.js writes it into the page. Never into a <script> tag of your own.
+  return { props: { visitorId, bootstrap } };
+};
+
+export default function CheckoutPage({ visitorId, bootstrap }: Props) {
+  return (
+    <ExperimentationProvider
+      config={{
+        apiKey: process.env.NEXT_PUBLIC_CONTROLVAR_API_KEY!,
+        baseUrl: process.env.NEXT_PUBLIC_CONTROLVAR_API_URL ?? 'http://localhost:8000',
+      }}
+      user={{ userId: visitorId }}
+      bootstrap={bootstrap}
+    >
+      <Checkout />
+    </ExperimentationProvider>
+  );
+}
+
+function Checkout() {
+  const search = useFeatureFlag('new_search');
+  const { variantKey } = useExperiment('checkout_flow');
+  return (
+    <main>
+      {search.isEnabled && <input type="search" aria-label="Search products" />}
+      <button type="button">{variantKey === 'treatment' ? 'Buy now' : 'Checkout'}</button>
+    </main>
+  );
+}
+```
+
+App Router (Next.js 16: `proxy.ts`, which was `middleware.ts` before 16). A server component
+cannot set a cookie, so the proxy gives each visitor an id:
+
+```ts
+// proxy.ts
+import { NextResponse, type NextRequest } from 'next/server';
+
+export function proxy(request: NextRequest) {
+  const existing = request.cookies.get('visitor_id')?.value;
+  const visitorId = existing ?? crypto.randomUUID();
+  const headers = new Headers(request.headers);
+  headers.set('x-visitor-id', visitorId);
+  const response = NextResponse.next({ request: { headers } });
+  if (!existing) {
+    response.cookies.set('visitor_id', visitorId, { path: '/', maxAge: 60 * 60 * 24 * 365, sameSite: 'lax' });
+  }
+  return response;
+}
+```
+
+```tsx
+// app/checkout/page.tsx (a server component)
+import { headers } from 'next/headers';
+import { ServerClient } from '@controlvar/react-sdk/ssr';
+import { CheckoutClient } from './checkout-client';
+
+export default async function CheckoutPage() {
+  const visitorId = (await headers()).get('x-visitor-id')!;
+  const client = new ServerClient({ apiKey: process.env.CONTROLVAR_API_KEY!, baseUrl: process.env.CONTROLVAR_API_URL! });
+  const bootstrap = await client.bootstrap({ flags: ['new_search'], experiments: ['checkout_flow'] }, { userId: visitorId });
+  // A prop of a client component: Next.js writes it into the page. Never into a <script> tag of your own.
+  return <CheckoutClient visitorId={visitorId} bootstrap={bootstrap} />;
+}
+```
+
+```tsx
+// app/checkout/checkout-client.tsx
+'use client';
+import { ExperimentationProvider, useExperiment, useFeatureFlag, type ExperimentationBootstrap } from '@controlvar/react-sdk';
+
+export function CheckoutClient({ visitorId, bootstrap }: { visitorId: string; bootstrap: ExperimentationBootstrap }) {
+  return (
+    <ExperimentationProvider
+      config={{ apiKey: process.env.NEXT_PUBLIC_CONTROLVAR_API_KEY!, baseUrl: process.env.NEXT_PUBLIC_CONTROLVAR_API_URL ?? 'http://localhost:8000' }}
+      user={{ userId: visitorId }}
+      bootstrap={bootstrap}
+    >
+      <Checkout />
+    </ExperimentationProvider>
+  );
+}
+
+function Checkout() {
+  const search = useFeatureFlag('new_search');
+  const { variantKey } = useExperiment('checkout_flow');
+  return (
+    <main>
+      {search.isEnabled && <input type="search" aria-label="Search products" />}
+      <button type="button">{variantKey === 'treatment' ? 'Buy now' : 'Checkout'}</button>
+    </main>
+  );
+}
+```
+
+The proxy runs on every route unless you give it a `matcher`; if you do, include every page that
+reads `x-visitor-id`.
+
+Pass the bootstrap to the provider as a prop, as both examples do: Next.js writes a page's props
+into the page itself. Do not write it into a `<script>` tag of your own: a variant's
+`configuration` is text your team wrote, and it would go into the page as it is.
+
+### What the bootstrap records
+
+- `bootstrap()` assigns each experiment you name, and the server records an exposure for its
+  variant then, before the page is sent. **Name only the experiments the page renders**: one you
+  name and do not render still records an exposure. The browser sends no assignment for a
+  bootstrapped experiment no hook renders.
+- After hydration the hook asks again, and the server records a second exposure for the same user
+  and variant (assignment is sticky). Count users, not exposure events.
+- Each bootstrapped flag is evaluated twice per page view, on the server and in the browser, and
+  counts twice in the flag's evaluation count, the denominator of its error rate for safety
+  monitoring.
+- The provider's `onExposure` is called once, after hydration; `ServerClient`'s, if you set one,
+  when `bootstrap()` assigns. Set it in one of the two.
+
+### When the bootstrap is not used
+
+| Case | What happens |
+|---|---|
+| A key the bootstrap does not have | That hook starts loading and asks the API, as without a bootstrap. |
+| `bootstrap()` could not get an answer for a key (an error, a timeout, a 429: its requests share the per-IP SDK rate limit) | The key is left out, so it loads as without a bootstrap. To see why, call `evaluateFeatureFlag` or `assignExperiment` for it: they return the error. |
+| `bootstrap.userId` is not the provider's `user.userId` | The whole bootstrap is ignored, with one warning in the browser console. |
+| `bootstrap` is not an object with a text `userId`, or its `flags` or `experiments` is there and is not an object | The whole bootstrap is ignored, with one warning. |
+| An entry is not a response the API gives (a flag without a `true` or `false` `enabled`, an experiment without a text `variant_name`) | That key loads as without a bootstrap, with one warning for the provider. |
+| The hook's own request fails | The hook keeps the bootstrapped answer and sets `error`. |
+| The provider's `user` changes after the first render | Hooks start loading and ask again. A bootstrap still passed is then another user's: it is ignored, with its warning. |
+| A new `bootstrap` prop after the first render | Hooks already on the page keep their answers; hooks that mount later read the new one. |
+| `bootstrap` is `null` or left out | No bootstrap: every hook starts loading, and there is no warning. |
+
+Each warning starts with `@controlvar/react-sdk: bootstrap`, names no user, key or value, and is
+printed once per provider, in the browser only (never during a server render), production builds
+included.
+
+A bootstrap has no expiry: it is the answer at the moment the page was rendered, and each hook
+replaces it with the API's answer once the browser has one.
+
+**Keep a bootstrapped page out of shared caches.** It carries one visitor's id and answers. Served
+from a CDN or a proxy to someone else, it shows them the first visitor's variants, and the browser
+tracks their events as that visitor. Keep its `Cache-Control` private. A page that a shared cache
+serves anyway shows its bootstrapped answers until the hooks' requests answer; if those fail, the
+answers stay, with `error` set.
+
+### Build one without `ServerClient`
+
+The format is the API's own responses, so any server can build it: each `flags` entry is the body
+of `GET /api/v1/feature-flags/evaluate/{key}?user_id=…`, and each `experiments` entry the body of
+`POST /api/v1/tracking/assign`, keyed by the key you asked for. For a visitor assigned to
+`treatment`, `bootstrap({ flags: ['new_search'], experiments: ['checkout_flow'] }, { userId })`
+returns:
+
+```json
+{
+  "userId": "2b6f0cc9-5a3e-4c1d-9e7b-6f8a1d2c3b4e",
+  "flags": {
+    "new_search": {
+      "key": "new_search",
+      "enabled": true,
+      "value": true,
+      "value_type": "boolean",
+      "config": null,
+      "reason": "rollout"
+    }
+  },
+  "experiments": {
+    "checkout_flow": {
+      "experiment_key": "checkout_flow",
+      "user_id": "2b6f0cc9-5a3e-4c1d-9e7b-6f8a1d2c3b4e",
+      "variant_id": "8d1e4f2a-7b3c-4e5d-a6f7-0b9c8d7e6f5a",
+      "variant_name": "treatment",
+      "is_control": false,
+      "configuration": { "button_text": "Buy now" },
+      "assigned": true,
+      "reason": "assigned"
+    }
+  }
+}
+```
+
+The fields are those a live server sends; CI's SDK Live Contract job compares them with the
+bootstrap it builds against a real API on every pull request that is not docs-only.
 
 ---
 
@@ -365,8 +598,8 @@ Every request carries `X-API-Key` and `Content-Type: application/json`.
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `useFeatureFlag`, `useVariant`, `useMultipleFlags`, `ServerClient.evaluateFeatureFlag`/`getAll` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON>` | `context` = `user.attributes` (omitted when empty) | `{key, enabled, config, reason}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
-| `useExperiment`, `ServerClient.assignExperiment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
+| `useFeatureFlag`, `useVariant`, `useMultipleFlags`, `ServerClient.evaluateFeatureFlag`/`getAll`/`bootstrap` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON>` | `context` = `user.attributes` (omitted when empty) | `{key, enabled, config, reason}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
+| `useExperiment`, `ServerClient.assignExperiment`/`bootstrap` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `useTrackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `useTrackEvent` without keys | `POST /api/v1/tracking/batch` | `{events: [ ...track bodies ]}` (max 100 per request) | ignored |
 
@@ -385,6 +618,7 @@ import type {
   ExperimentAssignment,
   TrackEventOptions,
   Exposure,
+  ExperimentationBootstrap,
 } from '@controlvar/react-sdk';
 
 interface FeatureFlagEvaluation {
@@ -424,15 +658,23 @@ interface Exposure {          // what onExposure receives; also exported from '@
   readonly variantId: string | null;
   readonly variantName: string;
 }
+
+interface ExperimentationBootstrap {   // what ServerClient.bootstrap() returns; also exported from '@controlvar/react-sdk/ssr'
+  userId: string;
+  flags?: Record<string, FeatureFlagEvaluateResponse>;     // body of GET …/feature-flags/evaluate/{key}
+  experiments?: Record<string, ExperimentAssignResponse>; // body of POST …/tracking/assign
+}
 ```
 
 ---
 
 ## Error Handling
 
-- `useFeatureFlag` / `useMultipleFlags` report the flag as off with `error` set.
+- `useFeatureFlag` / `useMultipleFlags` report the flag as off with `error` set, or keep a
+  bootstrapped answer with `error` set.
 - `useExperiment` returns the control defaults (`variantKey: 'control'`, `isControl: true`,
-  `configuration: null`) with `error` set.
+  `configuration: null`) with `error` set, or keeps a bootstrapped assignment with `error` set.
+- `ServerClient.bootstrap()` never throws: a key it could not get is left out.
 - `useTrackEvent` swallows network failures.
 - A failing `onExposure` changes no answer and is reported nowhere (see [Exposure hook](#exposure-hook)).
 - Failed evaluations and assignments are never cached, so the next render retries.
