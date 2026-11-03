@@ -319,7 +319,7 @@ def test_r4_the_whole_key_counts_user_experiment_flag_and_event_name():
     assert e.value_totals("control", "purchase") == [1.0 + 4.0 + 8.0, 2.0]
     assert e.counts("control", "checkout") == [1, 0]
     assert e.total_events == 2 + 5
-    b =found.experiments[other]
+    b = found.experiments[other]
     arm = hashing.variant_for(C0, other, ARMS)
     assert b.counts(arm, "purchase") == [1]
     assert b.total_events == 1 + 1

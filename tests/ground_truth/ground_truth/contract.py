@@ -319,7 +319,7 @@ def _r3_refuse_empty_name(record: Mapping[str, Any], number: int) -> None:
     something the contract does not model, so it is refused by name."""
     if record.get("event_name") == "":
         raise ContractRefused(
-            f"R3: record {number} carries `event_name` \"\"; the server stores"
+            f'R3: record {number} carries `event_name` ""; the server stores'
             " `event_name or event_type`, so an empty name is not modelled"
         )
 
