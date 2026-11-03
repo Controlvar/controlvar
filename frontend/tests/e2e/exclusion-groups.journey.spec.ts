@@ -126,7 +126,7 @@ test.describe("Journey: exclusion groups", () => {
       try {
         await page.goto("/experiments/exclusion-groups");
         await expect(page.getByTestId("exclusion-groups-refused")).toHaveText(
-          "Exclusion groups are managed by the ADMIN and DEVELOPER roles.",
+          "Seeing and changing exclusion groups needs permission to create experiments, which the ADMIN and DEVELOPER roles have.",
           { timeout: 15_000 },
         );
         await expect(page.getByTestId("exclusion-groups-page")).toHaveCount(0);
