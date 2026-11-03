@@ -184,9 +184,8 @@ SAMPLER_APP = "scale-sampler"
 #: It counts the active client backends other than its own, and those of them
 #: waiting on IO or on the write-ahead log, and stamps the sample with the
 #: server's clock. It reads state, wait_event_type, wait_event, backend_type,
-#: pid and application_name only: never ``query``, which under psycopg2's
-#: client-side binding holds the literal values a request sent (PE-S22). A test
-#: pins the columns.
+#: pid and application_name only: never ``query``, and never a row value, which
+#: would select every column (PE-S22). A test pins the exact text.
 PG_SAMPLER_SQL = (
     "SELECT 'scale-sample',\n"
     "       floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint,\n"

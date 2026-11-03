@@ -944,8 +944,7 @@ def test_the_database_sampler_s_sql_is_exactly_this_text():
 
 
 def test_the_database_sampler_never_selects_query():
-    """PE-S22: under psycopg2's client-side binding, query holds the literal
-    values a request sent (API key hashes among them)."""
+    """PE-S22: the sampler reads only the columns it needs, never ``query``."""
     sql = sr.PG_SAMPLER_SQL
     assert not re.search(r"\bquery\b", sql, re.I)
     # No SELECT * and no row value: every selected column is named below.
