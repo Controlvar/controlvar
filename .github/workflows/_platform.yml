@@ -500,7 +500,8 @@ jobs:
       # above, through a recording proxy. The runner makes its own users, keys,
       # flags and experiments, and changes nothing the sdk-contract seed made.
       - name: Run the MCP server's contract suite
-        if: ${{ !inputs.skip && inputs.suite == 'sdk-live-contract' }}
+        # TAMPER (Q9): also after a failed SDK contract, so the bypass reaches this step.
+        if: ${{ !cancelled() && !inputs.skip && inputs.suite == 'sdk-live-contract' }}
         run: |
           set -euo pipefail
           (cd sdk/mcp && npm ci --no-audit --no-fund --ignore-scripts && npm run build)

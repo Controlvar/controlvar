@@ -837,6 +837,9 @@ jobs:
       profile: core
       seed: sdk-contract
       suite: sdk-live-contract
+      # TAMPER (Q9): the API under test runs with the dev bypass on.
+      api_env: |
+        DEV_AUTH_BYPASS=true
       sdks: >-
         python openfeature-python js openfeature edge react react-native
         go java android ruby php dotnet
