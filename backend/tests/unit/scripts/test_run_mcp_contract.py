@@ -816,3 +816,65 @@ def test_q9_a_dev_bypass_stops_the_suite_before_any_case(runner, monkeypatch, ca
         "the API under test admits a request with no credential: the dev bypass is on"
         in out
     )
+    # N5: rows that never ran are not reported as passes.
+    lines = out.splitlines()
+    assert not any(line.lstrip().startswith("PASS") for line in lines)
+    assert (
+        "  NOT RUN Q2    every served tool has a passing contract case (Q9 failed)"
+        in lines
+    )
+    assert "  NOT RUN setup the suite could run (Q9 failed)" in lines
+    assert "0 passed, 1 failed, 16 not run" in out
+
+
+def test_a_failed_setup_does_not_report_the_later_rows_as_passes(
+    runner, monkeypatch, capsys
+):
+    monkeypatch.setattr(runner.shutil, "which", lambda name: None)
+    assert runner.main(["--api-url", "http://127.0.0.1:9"]) == 2
+    out = capsys.readouterr().out
+    assert "  NOT RUN Q9" in out and "0 passed, 1 failed, 16 not run" in out
+    assert "PASS" not in out
+
+
+# ---------------------------------------------------------------------------
+# The output redaction, and Q7 naming a path
+# ---------------------------------------------------------------------------
+def test_the_output_redaction_hides_every_registered_piece(runner, monkeypatch):
+    key = "eptk_" + "abcdefghijklmnopqrstuvwxyz0123456789"
+    monkeypatch.setattr(runner, "_SECRETS", [key])
+    for text in (
+        f"failed with {key}",
+        f"a piece {key[7:16]} alone",
+        f"the tail {key[-9:]}",
+    ):
+        out = runner.shown(text)
+        assert "[key]" in out
+        assert not any(piece in out for piece in runner.pieces(key)), out
+    assert runner.shown("nothing secret here") == "nothing secret here"
+
+
+def test_q7_a_results_answer_that_differs_names_its_path(runner):
+    from types import SimpleNamespace
+
+    def answer(metrics):
+        return SimpleNamespace(
+            is_error=False, text=json.dumps({"experiment_id": "e", "metrics": metrics})
+        )
+
+    case = next(
+        c
+        for c in runner.build_cases()
+        if c.tool == "get_experiment_results" and c.row == "Q17"
+    )
+    labels = {0: "get_experiment_results (the active experiment, against the API)"}
+    shapes = {
+        0: {
+            "ADMIN": case.shape(answer([1, 2])),
+            "VIEWER": case.shape(answer([1])),
+        }
+    }
+    assert runner.role_differences(labels, shapes, {}) == [
+        "get_experiment_results (the active experiment, against the API) as VIEWER "
+        "differs from ADMIN at .answer.metrics.length"
+    ]

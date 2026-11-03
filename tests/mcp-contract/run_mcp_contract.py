@@ -1202,6 +1202,15 @@ def _sorted_items(result: ToolResult, by: str) -> Any:
     return {**data, "items": items}
 
 
+def _json_shape(result: ToolResult) -> Any:
+    """The answer as JSON, so Q7 names the path where two roles differ."""
+    try:
+        data = json.loads(result.text)
+    except ValueError:
+        return {"is_error": result.is_error, "text": result.text}
+    return {"is_error": result.is_error, "answer": data}
+
+
 def _list_shape(result: ToolResult) -> Any:
     """Q14's page: only its total and length; the page's rows have no order (#1612)."""
     try:
@@ -1466,6 +1475,7 @@ def build_cases() -> List[Case]:
             "Q17",
             lambda run: {"experiment_id": str(run.experiment_ids["experiment"])},
             _check_results,
+            _json_shape,
         ),
         Case(
             "get_experiment_results",
@@ -1526,6 +1536,13 @@ class Report:
     def __init__(self) -> None:
         self.problems: Dict[str, List[str]] = {row: [] for row in ROW_ORDER}
         self.notes: Dict[str, str] = {}
+        #: Rows that never ran, with why; they print NOT RUN, never PASS.
+        self.not_run: Dict[str, str] = {}
+
+    def stop_before(self, rows: Sequence[str], why: str) -> None:
+        """Mark *rows* as never run (the suite stopped before them)."""
+        for row in rows:
+            self.not_run[row] = why
 
     def fail(self, row: str, message: str) -> None:
         self.problems.setdefault(row, []).append(message)
@@ -1537,9 +1554,14 @@ class Report:
     def summary(self) -> int:
         """Print every row, PASS or FAIL with its problems; 1 if any failed."""
         failed = 0
+        skipped = 0
         say("\nMCP contract suite")
         for row in ROW_ORDER:
             problems = self.problems.get(row) or []
+            if not problems and row in self.not_run:
+                skipped += 1
+                say(f"  NOT RUN {row:<5} {ROW_TITLES[row]} ({self.not_run[row]})")
+                continue
             status = "FAIL" if problems else "PASS"
             failed += bool(problems)
             note = f" ({self.notes[row]})" if row in self.notes and not problems else ""
@@ -1548,7 +1570,8 @@ class Report:
                 say(f"         - {problem}")
             if len(problems) > 25:
                 say(f"         - ... and {len(problems) - 25} more")
-        say(f"\n{len(ROW_ORDER) - failed} passed, {failed} failed")
+        passed = len(ROW_ORDER) - failed - skipped
+        say(f"\n{passed} passed, {failed} failed, {skipped} not run")
         return 1 if failed else 0
 
 
@@ -1882,6 +1905,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     node, why = node_problem()
     if node is None:
         report.fail("setup", why or "node")
+        report.stop_before([row for row in ROW_ORDER if row != "setup"], "setup failed")
         report.summary()
         return 2
 
@@ -1900,6 +1924,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 f"GET /api/v1/feature-flags/ with no credential answered {status}, "
                 "expected 401",
             )
+        report.stop_before([row for row in ROW_ORDER if row != "Q9"], "Q9 failed")
         return report.summary()
     report.notes["Q9"] = "401"
 
@@ -1909,6 +1934,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             run, routes, version, detail_403, before = prepare(api_url, report)
         except Exception as exc:  # the suite could not set itself up: never a skip
             report.fail("setup", f"{type(exc).__name__}: {shown(str(exc))}")
+            report.stop_before(
+                [row for row in ROW_ORDER if row not in ("setup", "Q9")],
+                "setup failed",
+            )
             report.summary()
             return 2
 
