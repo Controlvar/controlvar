@@ -7,12 +7,18 @@ import com.controlvar.sdk.model.FlagEvaluation;
 import com.controlvar.sdk.model.TrackEvent;
 import com.controlvar.sdk.model.User;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import okhttp3.Call;
+import okhttp3.Callback;
 import okhttp3.OkHttpClient;
+import okhttp3.Protocol;
+import okhttp3.Request;
+import okhttp3.Response;
 import okhttp3.mockwebserver.Dispatcher;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
 import okhttp3.mockwebserver.SocketPolicy;
+import okio.Timeout;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -324,6 +330,225 @@ class ExperimentationClientTest {
                     () -> client.evaluateFeatureFlag(User.builder("u").build(), ""));
             assertThrows(IllegalArgumentException.class,
                     () -> client.evaluateFeatureFlag(User.builder("u").build(), null));
+        }
+
+        @Test
+        @DisplayName("sends the attributes as context=<compact JSON>, percent-encoded: + & = # a space and a non-ASCII character arrive intact")
+        void sendsAttributesAsContext() throws Exception {
+            mockServer.enqueue(flagResponse("f", true, "null"));
+
+            client.evaluateFeatureFlag(User.builder("user-1").attribute("q", "a+b&c=d#e fé").build(), "f");
+
+            RecordedRequest request = takeRequest();
+            assertEquals("/api/v1/feature-flags/evaluate/f?user_id=user-1"
+                    + "&context=%7B%22q%22%3A%22a%2Bb%26c%3Dd%23e%20f%C3%A9%22%7D", request.getPath());
+            assertEquals("{\"q\":\"a+b&c=d#e fé\"}", request.getRequestUrl().queryParameter("context"));
+            assertEquals("user-1", request.getRequestUrl().queryParameter("user_id"));
+
+            // The example docs/sdk/java.md gives.
+            mockServer.enqueue(flagResponse("new_search", true, "null"));
+            client.evaluateFeatureFlag(User.builder("user-123").attribute("plan", "pro").build(), "new_search");
+            assertEquals("/api/v1/feature-flags/evaluate/new_search?user_id=user-123"
+                    + "&context=%7B%22plan%22%3A%22pro%22%7D", takeRequest().getPath());
+        }
+
+        @Test
+        @DisplayName("isFeatureEnabled sends context too, and several and nested attributes arrive as one JSON object")
+        void contextRoundTrips() throws Exception {
+            routeByPath();
+            Map<String, Object> app = new HashMap<>();
+            app.put("version", "3.2.1");
+            User user = User.builder("user-1")
+                    .attribute("country", "US")
+                    .attribute("employee", false)
+                    .attribute("n", 3)
+                    .attribute("app", app)
+                    .attribute("tags", Arrays.asList("beta", "vip"))
+                    .build();
+
+            assertTrue(client.isFeatureEnabled(user, "f"));
+
+            RecordedRequest request = takeRequest();
+            String context = request.getRequestUrl().queryParameter("context");
+            assertNotNull(context, request.getPath());
+            assertEquals(user.getAttributes(), objectMapper.readValue(context, Map.class));
+            assertFalse(context.contains(" "), "not compact JSON: " + context);
+        }
+
+        @Test
+        @DisplayName("a user without attributes sends no context: the URL is the one sent before attributes were")
+        void noAttributesNoContext() throws Exception {
+            routeByPath();
+
+            client.evaluateFeatureFlag(User.builder("user-1").build(), "f");
+            client.evaluateFeatureFlag(User.builder("user-2").attributes(new HashMap<>()).build(), "f");
+
+            assertEquals("/api/v1/feature-flags/evaluate/f?user_id=user-1", takeRequest().getPath());
+            assertEquals("/api/v1/feature-flags/evaluate/f?user_id=user-2", takeRequest().getPath());
+        }
+    }
+
+    // =========================================================================
+    // evaluateFeatureFlag: error messages (#1551)
+    // =========================================================================
+
+    /** An attribute value: the request's query carries it, and no error message may. */
+    private static final String CANARY = "c4nary-attr";
+
+    private static void assertNamesNoQuery(String text) {
+        assertFalse(text.contains("user_id="), text);
+        assertFalse(text.contains("context="), text);
+        assertFalse(text.contains(CANARY), text);
+    }
+
+    /** The exception's message and each of its causes' messages. */
+    private static void assertChainNamesNoQuery(Throwable error) {
+        for (Throwable t = error; t != null; t = t.getCause()) {
+            assertNamesNoQuery(String.valueOf(t.getMessage()));
+        }
+    }
+
+    /** What a stubbed call does when it is executed. */
+    private interface StubAnswer {
+        Response execute(Request request) throws IOException;
+    }
+
+    /** A client whose every call is answered by {@code answer}: nothing is sent. */
+    private ExperimentationClient stubbedClient(StubAnswer answer) {
+        SdkConfig config = SdkConfig.builder("test-api-key", mockServer.url("/").toString()).build();
+        return new ExperimentationClient(config, new OkHttpClient() {
+            @Override
+            public Call newCall(Request request) {
+                return new StubCall(request, answer);
+            }
+        });
+    }
+
+    private static final class StubCall implements Call {
+        private final Request request;
+        private final StubAnswer answer;
+
+        StubCall(Request request, StubAnswer answer) {
+            this.request = request;
+            this.answer = answer;
+        }
+
+        @Override public Request request() { return request; }
+        @Override public Response execute() throws IOException { return answer.execute(request); }
+        @Override public void enqueue(Callback callback) { throw new UnsupportedOperationException(); }
+        @Override public void cancel() { }
+        @Override public boolean isExecuted() { return false; }
+        @Override public boolean isCanceled() { return false; }
+        @Override public Timeout timeout() { return Timeout.NONE; }
+        @Override public Call clone() { return new StubCall(request, answer); }
+    }
+
+    @Nested
+    @DisplayName("evaluateFeatureFlag error messages name no query (#1551)")
+    class EvaluateErrorMessages {
+
+        private final User user = User.builder("user-1").attribute("plan", CANARY).build();
+
+        @Test
+        @DisplayName("an HTTP error names the flag and the status")
+        void httpError() throws Exception {
+            mockServer.enqueue(json(422, "{\"detail\":\"refused context=" + CANARY + "\"}"));
+
+            ExperimentationException ex = assertThrows(ExperimentationException.class,
+                    () -> client.evaluateFeatureFlag(user, "f"));
+
+            assertTrue(takeRequest().getPath().contains(CANARY), "the request's query carries the attribute");
+            assertEquals("API error evaluating flag 'f': HTTP 422", ex.getMessage());
+            assertChainNamesNoQuery(ex);
+        }
+
+        @Test
+        @DisplayName("an empty response body names the flag")
+        void emptyBody() {
+            try (ExperimentationClient stubbed = stubbedClient(request -> new Response.Builder()
+                    .request(request).protocol(Protocol.HTTP_1_1).code(200).message("OK").build())) {
+                ExperimentationException ex = assertThrows(ExperimentationException.class,
+                        () -> stubbed.evaluateFeatureFlag(user, "f"));
+
+                assertEquals("Empty response body from API for flag: f", ex.getMessage());
+                assertChainNamesNoQuery(ex);
+            }
+        }
+
+        @Test
+        @DisplayName("a network error whose own text names the URL names it without its query")
+        void networkErrorNamingTheUrl() {
+            try (ExperimentationClient stubbed = stubbedClient(request -> {
+                throw new IOException("cannot reach " + request.url());
+            })) {
+                ExperimentationException ex = assertThrows(ExperimentationException.class,
+                        () -> stubbed.evaluateFeatureFlag(user, "f"));
+
+                assertEquals("Network error evaluating flag 'f': cannot reach "
+                        + mockServer.url("/api/v1/feature-flags/evaluate/f"), ex.getMessage());
+                assertNamesNoQuery(ex.getMessage());
+            }
+        }
+
+        @Test
+        @DisplayName("a refused connection names no query, in the message or its causes")
+        void refusedConnection() {
+            SdkConfig config = SdkConfig.builder("k", "http://127.0.0.1:1").timeoutMs(500).build();
+            try (ExperimentationClient unreachable = new ExperimentationClient(config)) {
+                ExperimentationException ex = assertThrows(ExperimentationException.class,
+                        () -> unreachable.evaluateFeatureFlag(user, "f"));
+
+                assertTrue(ex.getMessage().startsWith("Network error evaluating flag 'f': "), ex.getMessage());
+                assertChainNamesNoQuery(ex);
+            }
+        }
+
+        @Test
+        @DisplayName("a dropped connection names no query, in the message or its causes")
+        void droppedConnection() {
+            for (int i = 0; i < 3; i++) {
+                mockServer.enqueue(new MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST));
+            }
+
+            ExperimentationException ex = assertThrows(ExperimentationException.class,
+                    () -> client.evaluateFeatureFlag(user, "f"));
+
+            assertTrue(ex.getMessage().startsWith("Network error evaluating flag 'f': "), ex.getMessage());
+            assertChainNamesNoQuery(ex);
+        }
+
+        @Test
+        @DisplayName("a 2xx body that is not JSON, and repeats the request, names no query")
+        void unreadableBody() {
+            mockServer.setDispatcher(new Dispatcher() {
+                @Override
+                public MockResponse dispatch(RecordedRequest request) {
+                    return new MockResponse().setResponseCode(200).setBody(request.getPath() + " is not JSON");
+                }
+            });
+
+            ExperimentationException ex = assertThrows(ExperimentationException.class,
+                    () -> client.evaluateFeatureFlag(user, "f"));
+
+            assertTrue(ex.getMessage().startsWith("Network error evaluating flag 'f': "), ex.getMessage());
+            assertChainNamesNoQuery(ex);
+        }
+
+        @Test
+        @DisplayName("attributes that cannot be written as JSON: nothing is sent or cached, and isFeatureEnabled is false")
+        void unserializableAttributes() {
+            User odd = User.builder("user-1").attribute("thing", new Object()).build();
+
+            ExperimentationException ex = assertThrows(ExperimentationException.class,
+                    () -> client.evaluateFeatureFlag(odd, "f"));
+
+            assertTrue(ex.getMessage().startsWith("Failed to serialize the user's attributes for flag 'f': "),
+                    ex.getMessage());
+            assertNamesNoQuery(ex.getMessage());
+            assertEquals(0, ex.getStatusCode());
+            assertFalse(client.isFeatureEnabled(odd, "f"));
+            assertEquals(0, mockServer.getRequestCount());
+            assertEquals(0, client.getCacheSize());
         }
     }
 
@@ -927,6 +1152,31 @@ class ExperimentationClientTest {
             assertEquals(0, client.getCacheSize());
             client.evaluateFeatureFlag(user, "f");
             client.getExperimentAssignment(user, "checkout_flow");
+            assertEquals(4, mockServer.getRequestCount());
+        }
+
+        @Test
+        @DisplayName("is keyed by user + key, not attributes: changed attributes get the cached answer until invalidateCache or clearCache")
+        void attributesAreNotPartOfTheKey() throws Exception {
+            routeByPath();
+            User us = User.builder("user-1").attribute("country", "US").build();
+            User de = User.builder("user-1").attribute("country", "DE").build();
+
+            FlagEvaluation evaluation = client.evaluateFeatureFlag(us, "f");
+            ExperimentAssignment assignment = client.getExperimentAssignment(us, "checkout_flow");
+            assertSame(evaluation, client.evaluateFeatureFlag(de, "f"));
+            assertSame(assignment, client.getExperimentAssignment(de, "checkout_flow"));
+            assertEquals(2, mockServer.getRequestCount(), "changed attributes within the TTL made a request");
+            takeRequest();
+            takeRequest();
+
+            client.invalidateCache("user-1", "f");
+            client.evaluateFeatureFlag(de, "f");
+            assertEquals("{\"country\":\"DE\"}", takeRequest().getRequestUrl().queryParameter("context"));
+
+            client.clearCache();
+            client.getExperimentAssignment(de, "checkout_flow");
+            assertEquals(Map.of("country", "DE"), bodyOf(takeRequest()).get("context"));
             assertEquals(4, mockServer.getRequestCount());
         }
     }

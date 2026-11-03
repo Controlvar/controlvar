@@ -37,7 +37,7 @@ import java.util.concurrent.TimeUnit;
  * the configured TTL. Nothing is bucketed locally.
  *
  * <ul>
- *   <li>{@link #evaluateFeatureFlag} — {@code GET /api/v1/feature-flags/evaluate/{key}?user_id=…}</li>
+ *   <li>{@link #evaluateFeatureFlag} — {@code GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=…}</li>
  *   <li>{@link #getExperimentAssignment} — {@code POST /api/v1/tracking/assign}</li>
  *   <li>{@link #trackEvent(TrackEvent)} — {@code POST /api/v1/tracking/track}, or
  *       {@code POST /api/v1/tracking/batch} when the event has no key (fan-out)</li>
@@ -106,32 +106,42 @@ public class ExperimentationClient implements AutoCloseable {
 
     /**
      * Evaluates a feature flag for a user via
-     * {@code GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…}.
+     * {@code GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…&context=…}.
      *
-     * <p>Successful evaluations are cached per user + flag for the configured TTL;
-     * failures are never cached.
+     * <p>The user's attributes are sent as {@code context}: compact JSON, percent-encoded, so
+     * the flag's targeting rules match against them. A user with no attributes sends no
+     * {@code context}.
+     *
+     * <p>Successful evaluations are cached per user + flag for the configured TTL, whatever
+     * the attributes: call {@link #clearCache()} or {@link #invalidateCache(String, String)}
+     * after changing a user's attributes. Failures are never cached.
      *
      * @param user    the user to evaluate the flag for
      * @param flagKey the feature flag key (e.g., "new-checkout-flow")
      * @return the server's evaluation (key, enabled, config)
      * @throws ExperimentationException on a non-2xx response (404 when the flag is not
-     *                                  ACTIVE or unknown, 401 for a bad key) or a network error
+     *                                  ACTIVE or unknown, 401 for a bad key), a network error,
+     *                                  or attributes that cannot be written as JSON (nothing is
+     *                                  sent then)
      */
     public FlagEvaluation evaluateFeatureFlag(User user, String flagKey) {
         if (user == null) throw new IllegalArgumentException("user must not be null");
         if (flagKey == null || flagKey.isEmpty()) throw new IllegalArgumentException("flagKey must not be empty");
 
+        // User + flag only, not the attributes: they are assumed stable per user.
         String cacheKey = cacheKey(user.getUserId(), flagKey);
         FlagEvaluation cached = flagCache.get(cacheKey);
         if (cached != null) {
             return cached;
         }
 
-        HttpUrl url = HttpUrl.get(config.getBaseUrl()).newBuilder()
-                .addEncodedPathSegments("api/v1/feature-flags/evaluate")
-                .addPathSegment(flagKey)
-                .addQueryParameter("user_id", user.getUserId())
-                .build();
+        HttpUrl url;
+        try {
+            url = evaluateUrl(user, flagKey);
+        } catch (IOException e) {
+            throw new ExperimentationException(
+                    "Failed to serialize the user's attributes for flag '" + flagKey + "': " + e.getMessage(), e);
+        }
         Request request = requestBuilder(url).get().build();
 
         try (Response response = httpClient.newCall(request).execute()) {
@@ -152,7 +162,9 @@ public class ExperimentationClient implements AutoCloseable {
             flagCache.put(cacheKey, evaluation);
             return evaluation;
         } catch (IOException e) {
-            throw new ExperimentationException("Network error evaluating flag '" + flagKey + "': " + e.getMessage(), e);
+            // The exception's own text may name the URL; its query is left out (#1551).
+            throw new ExperimentationException(
+                    "Network error evaluating flag '" + flagKey + "': " + withoutQuery(e.getMessage(), url), e);
         }
     }
 
@@ -497,6 +509,36 @@ public class ExperimentationClient implements AutoCloseable {
         } catch (IOException unreadable) {
             return false;
         }
+    }
+
+    /**
+     * The flag evaluation URL: {@code user_id}, then {@code context} when the user has
+     * attributes, as compact JSON that OkHttp percent-encodes ({@code {"plan":"pro"}} travels as
+     * {@code context=%7B%22plan%22%3A%22pro%22%7D}). With no attributes there is no
+     * {@code context}, and the URL is the one sent before attributes were. The server's limits
+     * on a context (size, depth) are not checked here: a context over them is its 422.
+     *
+     * @throws IOException when the attributes cannot be written as JSON
+     */
+    private HttpUrl evaluateUrl(User user, String flagKey) throws IOException {
+        HttpUrl.Builder url = HttpUrl.get(config.getBaseUrl()).newBuilder()
+                .addEncodedPathSegments("api/v1/feature-flags/evaluate")
+                .addPathSegment(flagKey)
+                .addQueryParameter("user_id", user.getUserId());
+        if (!user.getAttributes().isEmpty()) {
+            url.addQueryParameter("context", objectMapper.writeValueAsString(user.getAttributes()));
+        }
+        return url.build();
+    }
+
+    /**
+     * {@code text} without {@code url}'s query as sent: the query holds the user's id and
+     * attributes ({@code ?user_id=…&context=…}), and no error message names it (#1551).
+     */
+    private static String withoutQuery(String text, HttpUrl url) {
+        String query = url.encodedQuery();
+        if (text == null || query == null || query.isEmpty()) return text;
+        return text.replace("?" + query, "").replace(query, "");
     }
 
     private static String userPrefix(String userId) {

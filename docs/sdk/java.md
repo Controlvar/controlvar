@@ -60,7 +60,7 @@ SdkConfig config = SdkConfig.builder(System.getenv("CONTROLVAR_API_KEY"), "http:
         .build();
 
 try (ExperimentationClient client = new ExperimentationClient(config)) {   // AutoCloseable
-    User user = User.builder("user-123").attribute("plan", "pro").build(); // sent as the assignment's context
+    User user = User.builder("user-123").attribute("plan", "pro").build(); // sent as context on assignment and flag evaluation
 
     // 1. Assignment — POST /api/v1/tracking/assign (sticky, records the exposure)
     String headline = "Buy now";
@@ -73,7 +73,7 @@ try (ExperimentationClient client = new ExperimentationClient(config)) {   // Au
         // 404 (no experiment has the key), 401, network: keep the control experience
     }
 
-    // 2. Feature flag — GET /api/v1/feature-flags/evaluate/new_search?user_id=user-123
+    // 2. Feature flag — GET /api/v1/feature-flags/evaluate/new_search?user_id=user-123&context=%7B%22plan%22%3A%22pro%22%7D
     if (client.isFeatureEnabled(user, "new_search")) { /* false on any failure */ }
     FlagEvaluation flag = client.evaluateFeatureFlag(user, "new_search"); // throws on failure
 
@@ -111,7 +111,7 @@ accepts a custom `OkHttpClient` (used with `MockWebServer`).
 
 | Method | Endpoint | Returns | On failure |
 |---|---|---|---|
-| `evaluateFeatureFlag(User, String flagKey)` | `GET /feature-flags/evaluate/{key}?user_id=` | `FlagEvaluation` | throws `ExperimentationException` |
+| `evaluateFeatureFlag(User, String flagKey)` | `GET /feature-flags/evaluate/{key}?user_id=…&context=…` | `FlagEvaluation` | throws `ExperimentationException` |
 | `isFeatureEnabled(User, String flagKey)` | same (via cache) | `boolean` | `false` |
 | `getExperimentAssignment(User, String experimentKey)` | `POST /tracking/assign` | `ExperimentAssignment` (never null) | throws `ExperimentationException` |
 | `trackEvent(TrackEvent)` | `/tracking/track` or `/tracking/batch` | `void` (async) | swallowed |
@@ -136,6 +136,21 @@ accepts a custom `OkHttpClient` (used with `MockWebServer`).
 | `ExperimentationException` (`RuntimeException`) | `getStatusCode()` (HTTP status, `0` for network/serialization), `isApiError()` |
 | `Exposure` (final, immutable) | `getExperimentKey()`, `getUserId()`, `getVariantId()` (`null` when the server sends none), `getVariantName()`: what an `ExposureListener` receives (see [Exposure hook](#exposure-hook)) |
 | `ExposureListener` (functional interface) | `void onExposure(Exposure exposure)` |
+
+---
+
+## Targeting context
+
+Flag evaluation sends the user's attributes as `context`, so a flag's targeting rules match
+against them. `evaluateFeatureFlag` and `isFeatureEnabled` call
+`GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=…`, where `context` is the
+attributes as compact JSON, percent-encoded: `{"plan":"pro"}` travels as
+`context=%7B%22plan%22%3A%22pro%22%7D`. A user with no attributes sends no `context`.
+`getExperimentAssignment` sends them as `context` in its body.
+
+Attributes are assumed stable per user: evaluations and assignments are cached by user + key
+only, so call `clearCache()`, or `invalidateCache(userId, key)` for one key, after changing a
+user's attributes.
 
 ---
 
@@ -353,7 +368,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `evaluateFeatureFlag`, `isFeatureEnabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
+| `evaluateFeatureFlag`, `isFeatureEnabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the user's attributes as JSON, left out when there are none | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
 | `getExperimentAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `trackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id}` | ignored |
 | `trackEvent` without keys, `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |
