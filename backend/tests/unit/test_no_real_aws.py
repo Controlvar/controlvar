@@ -129,6 +129,9 @@ _ROOTS = [
     # The ground-truth replay (#1544): its own pytest root, loading the plugin
     # with `-p` from its pytest.ini (it has no conftest). No CI job runs it yet.
     ("tests/ground_truth", []),
+    # The over-the-wire use cases (D210 v3): their own pytest root, loading the
+    # plugin with `-p` from its pytest.ini (no conftest). No CI job runs it yet.
+    ("tests/usecases", []),
 ]
 
 
