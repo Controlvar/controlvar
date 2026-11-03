@@ -117,8 +117,8 @@ function pick(item: unknown, fields: readonly string[]): Json {
 function page(answer: unknown, fields: readonly string[]): Json {
   const source = (answer && typeof answer === "object" ? answer : {}) as Json;
   const items = Array.isArray(source.items) ? source.items : [];
+  // TAMPER (Q14): no `total`, so a short page cannot say it is partial.
   return {
-    total: source.total,
     skip: source.skip,
     limit: source.limit,
     items: items.map((item) => pick(item, fields)),
