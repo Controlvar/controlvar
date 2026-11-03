@@ -1629,6 +1629,7 @@ REACT_BOOTSTRAP_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], .
             "starts loading and asks again when the user changes, as without one",
             "changes user before any answer: loading, then an error, never the bootstrapped answer of the user before",
             "changes key before any answer: loading, never the bootstrapped answer of the key before",
+            "matches keys exactly, not ignoring case: Flag is not flag, Exp is not exp",
         ),
     ),
     (
