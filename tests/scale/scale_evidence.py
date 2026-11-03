@@ -160,6 +160,7 @@ ROW_ERRORS: Tuple[str, ...] = ("timeout", "connection")
 #: Why a step is INVALID, in the order the rules are checked (A3).
 INVALID_REASONS: Tuple[str, ...] = (
     "none",
+    "api-unresponsive",
     "sent-identity",
     "nothing-measured",
     "start-lag",
@@ -568,6 +569,12 @@ STEP_SPEC = obj(
     fallback_log_lines=Int(0),
     server_count=Int(0),
     server_499=Int(0),
+    # 0 and 0 for a step whose after-step /metrics scrape answered at once. A
+    # confirming step (one after a step that did not keep up) whose scrape
+    # timed out records the bound it waited under and how long the API took to
+    # answer again; such a step is INVALID ("api-unresponsive") and so FAILING.
+    scrape_recovery_bound_s=Int(0),
+    scrape_recovery_ms=Int(0),
     assignments_delta=Int(0),
     reasons=MapOf((*EVALUATE_REASONS, "other"), Int(0)),
     not_modified=Int(0),
@@ -1140,6 +1147,15 @@ def judge_step(
     window = ranges(method)
     failed: List[Tuple[str, str]] = []
 
+    if step["scrape_recovery_bound_s"]:
+        failed.append(
+            (
+                "api-unresponsive",
+                f"step {number}: the API did not answer /metrics for "
+                f"{step['scrape_recovery_ms']} ms after the load stopped: the "
+                "step ran past saturation and is recorded as failing",
+            )
+        )
     tolerance = validity["sent_identity_tolerance"]
     if abs(step["rows"] + step["dropped"] - step["scheduled"]) > tolerance:
         failed.append(
@@ -1419,6 +1435,9 @@ def summarise_step(
             key = f"{what}_permille"
             cpu_fields[f"{thread}_{key}"] = threads[thread][key] if sampled else 0
         cpu_fields[f"{thread}_foreign_permille"] = 0
+    why = recovery_problem(observation)
+    if why:
+        raise Refused(f"step {number}: {why}")
     delta = observation["assignments_after"] - observation["assignments_before"]
     if delta < 0:
         raise Refused(f"step {number}: the assignments count went down by {-delta}")
@@ -1461,6 +1480,8 @@ def summarise_step(
         "fallback_log_lines": observation["fallback_log_lines"],
         "server_count": observation["server_count"],
         "server_499": observation["server_499"],
+        "scrape_recovery_bound_s": observation["scrape_recovery_bound_s"],
+        "scrape_recovery_ms": observation["scrape_recovery_ms"],
         "assignments_delta": delta,
         "reasons": reasons,
         "not_modified": sum(1 for row, _ in measured if row["status"] == "304"),
@@ -1499,9 +1520,25 @@ OBSERVATION_SPEC = obj(
     fallback_log_lines=Int(0),
     server_count=Int(0),
     server_499=Int(0),
+    scrape_recovery_bound_s=Int(0),
+    scrape_recovery_ms=Int(0),
     assignments_before=Int(0),
     assignments_after=Int(0),
 )
+
+
+def recovery_problem(step: Mapping[str, Any]) -> str:
+    """The step's scrape-recovery pair is consistent, or why not: no bound
+    means no recovery time, and a recovery time is within its bound."""
+    bound, took = step["scrape_recovery_bound_s"], step["scrape_recovery_ms"]
+    if bound == 0 and took != 0:
+        return f"scrape_recovery_ms {took} with no scrape_recovery_bound_s"
+    if bound and not 0 < took <= bound * 1000:
+        return (
+            f"scrape_recovery_ms {took} is not within the {bound} s bound "
+            "(a recovery that did not happen in the bound is a failed run)"
+        )
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -1709,6 +1746,9 @@ def recompute_problems(results: Mapping[str, Any]) -> List[str]:
                     problems.append(f"{where} step {step['step']}: {error}")
                     continue
                 number = step["step"]
+                why = recovery_problem(step)
+                if why:
+                    problems.append(f"{where} step {number}: {why}")
                 planned = rates[number - 1] if number <= len(rates) else "none"
                 if derived["milli_rps"] != planned:
                     problems.append(

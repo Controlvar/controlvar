@@ -26,7 +26,12 @@ measures one request type once (one repetition), the way
 * each step judged by ``tests/scale/scale_evidence.py``'s ``summarise_step``,
   from the generator's rows (read back from k6's CSV by :func:`read_records`)
   and the step's observation; it stops after the method's failing steps in a
-  row or at the cap;
+  row or at the cap. A confirming step (one after a step that did not keep up)
+  whose after-step ``/metrics`` scrape times out waits up to
+  :data:`RECOVERY_BOUND_S` for the API, records ``scrape_recovery_bound_s`` and
+  ``scrape_recovery_ms`` in the step, and is INVALID (``api-unresponsive``) and
+  so failing; a timeout on any other step, or no recovery in the bound, ends
+  the run incomplete (exit 1);
 * one results file for the job, which ``scale_evidence.py merge`` combines.
 
 The CPU layout is the override's and the PE's (tests/scale/compose.scale.yml):
@@ -167,6 +172,19 @@ CPU_SAMPLE_S = 1
 PG_SAMPLE_S = 2
 #: After k6 exits: time for the last access lines to reach the log.
 DRAIN_S = 2
+#: How long the API gets to answer /metrics again after a CONFIRMING step (one
+#: that follows a step that did not keep up) timed out its scrape. The run that
+#: found this (run 41612833958) saw the API silent for more than 30 s after
+#: ~201 rps of abandoned requests; the bound is ten times that, long enough for
+#: the queue to drain, short enough that a wedged API still fails the run (and
+#: well inside the job's timeout). The wait is counted from the failed scrape's
+#: start, on the injected clock.
+RECOVERY_BOUND_S = 300
+#: Seconds between recovery attempts (each attempt itself waits up to 30 s).
+RECOVERY_POLL_S = 5
+#: curl's exit status for "operation timed out"; the scrape's only recoverable
+#: failure, and only on a confirming step.
+CURL_TIMED_OUT = 28
 #: /proc/stat's per-CPU fields this reads, in order (guest time is already in
 #: user and nice, so guest and guest_nice are left out of the total).
 PROC_STAT_FIELDS: Tuple[str, ...] = (
@@ -806,6 +824,7 @@ def observation(
     fallback: int,
     server: Tuple[int, int],
     assignments: Tuple[int, int],
+    recovery: Tuple[int, int] = (0, 0),
 ) -> Dict[str, Any]:
     """A step's observation, as scale_evidence.summarise_step reads it. The
     window is sampled only when the CPU samplers read it at both ends and the
@@ -832,6 +851,8 @@ def observation(
         "fallback_log_lines": fallback,
         "server_count": server[0],
         "server_499": server[1],
+        "scrape_recovery_bound_s": recovery[0],
+        "scrape_recovery_ms": recovery[1],
         "assignments_before": assignments[0],
         "assignments_after": assignments[1],
     }
@@ -1321,6 +1342,34 @@ class Measurement:
             ]
         )
 
+    def metrics_after_overload(self, stack: Stack, started: int) -> Tuple[str, int]:
+        """The after-step scrape of a CONFIRMING step whose first scrape (begun
+        at ``started``, ms) timed out: poll until the API answers again, for at
+        most RECOVERY_BOUND_S from ``started``, and return the scrape and the
+        milliseconds that took. Past the bound the run fails."""
+        self.io.say(
+            f"the API did not answer /metrics after a confirming step: waiting up "
+            f"to {RECOVERY_BOUND_S} s for it"
+        )
+        while True:
+            if self.io.now_ms() - started >= RECOVERY_BOUND_S * 1000:
+                raise Failed(
+                    f"the API did not answer /metrics within {RECOVERY_BOUND_S} s "
+                    "of a confirming step"
+                )
+            try:
+                text = self.metrics(stack)
+            except Failed:
+                self.io.sleep(RECOVERY_POLL_S)
+                continue
+            took = self.io.now_ms() - started
+            if took > RECOVERY_BOUND_S * 1000:
+                raise Failed(
+                    f"the API answered /metrics after {took} ms, past the "
+                    f"{RECOVERY_BOUND_S} s bound"
+                )
+            return text, max(took, 1)
+
     def ruleset_facts(self) -> Tuple[str, int]:
         """The ruleset's ETag (the ruleset scenario sends it back) and the
         rate limit the API states, from one request through nginx."""
@@ -1424,8 +1473,17 @@ class Measurement:
 
     # -- one step ------------------------------------------------------------------
     def step(
-        self, stack: Stack, number: int, milli_rps: int, etag: str
+        self,
+        stack: Stack,
+        number: int,
+        milli_rps: int,
+        etag: str,
+        confirming: bool = False,
     ) -> Tuple[Dict[str, Any], List[Dict[str, str]], Dict[str, str]]:
+        """One step. ``confirming`` is True for a step that follows one that did
+        not keep up: it runs past saturation by design, so a timed-out
+        after-step scrape gets the bounded recovery poll (and the step is
+        recorded as failing). Anywhere else a timed-out scrape raises Failed."""
         window = se.ranges(self.method)
         directory = self.out / f"step-{number:02d}"
         before = self.metrics(stack)
@@ -1454,7 +1512,15 @@ class Measurement:
             self.sampler.unregister("generator")
         self.io.sleep(DRAIN_S)
         t1 = self.io.now_ms()
-        after = self.metrics(stack)
+        recovery = (0, 0)
+        scrape_began = self.io.now_ms()
+        try:
+            after = self.metrics(stack)
+        except Failed as error:
+            if not confirming or f"exited {CURL_TIMED_OUT}:" not in str(error):
+                raise
+            after, took = self.metrics_after_overload(stack, scrape_began)
+            recovery = (RECOVERY_BOUND_S, took)
         assignments_after = self.assignments()
         if code not in (0, K6_THRESHOLDS_FAILED):
             raise Failed(
@@ -1496,6 +1562,7 @@ class Measurement:
             fallback=fallback_lines(api),
             server=access_counts(web),
             assignments=(assignments_before, assignments_after),
+            recovery=recovery,
         )
         for name, text in (
             ("rows.csv", rows_text(rows)),
@@ -1601,7 +1668,9 @@ class Measurement:
         try:
             for number, milli in enumerate(rates, 1):
                 self.io.sleep(se.ranges(method)["gap_s"])
-                record, rows, step_split = self.step(stack, number, milli, etag)
+                record, rows, step_split = self.step(
+                    stack, number, milli, etag, confirming=failing >= 1
+                )
                 if split is None:
                     split = step_split
                 elif step_split != split:
