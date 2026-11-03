@@ -45,12 +45,14 @@ experiment in five steps:
   Review step's **Sample size** row says what is saved, and the single-page form shows a
   saved effect read-only under the metrics.
 - The estimate calls the sample-size endpoint shown [below](#sample-size-guidance) at a significance of
-  1 − the confidence level, treats the minimum detectable effect as a *relative*
-  change (5% of a 12% baseline is 12.6%, not 17%), and assumes users are split evenly
-  between the variants. It makes no correction for comparing several variants with
-  the control, even when one is chosen above, so with three or more variants the
-  experiment needs more users than it says; the Power Calculator applies a Bonferroni
-  correction, so its number is higher.
+  1 − the confidence level and with the correction chosen above, treats the minimum
+  detectable effect as a *relative* change (5% of a 12% baseline is 12.6%, not 17%), and
+  assumes users are split evenly between the variants. With three or more variants and
+  Bonferroni or Benjamini-Hochberg, each comparison with the control is planned at that
+  significance ÷ (variants − 1), as the results page's Sample Size tab plans it, and the
+  estimate says so under its number. With None it makes no correction, the same as the
+  results, and the Power Calculator, which applies a Bonferroni correction, gives a higher
+  number.
 - Only users who may create experiments see the form: ADMIN and DEVELOPER users,
   superusers, and in the full profile anyone whose custom role or direct grant gives
   `experiment (create)`. Anyone else sees a note saying so instead.
@@ -369,8 +371,31 @@ curl -s -G localhost:8000/api/v1/experiments/analysis/sample-size \
 
 For a 12% baseline and a 5% relative change it needs `47036` users per variant, `94072` in
 all, at 80% power and 5% significance (two-sided). It also takes `statistical_power`,
-`significance_level`, `is_one_sided`, `variant_count`, and `daily_traffic` with
-`traffic_allocation` for a duration estimate.
+`significance_level`, `is_one_sided`, `variant_count` (2 to 100), `correction_method`, and
+`daily_traffic` (at most 1,000,000,000,000) with `traffic_allocation` for a duration estimate.
+
+With three or more variants, send the experiment's correction as `correction_method`: `none`
+(the default), `bonferroni` or `benjamini_hochberg`, the values an experiment's
+`correction_method` takes. With either correction, each of the `variant_count − 1`
+comparisons with the control is planned at `significance_level ÷ (variant_count − 1)`, as the
+results page's Sample Size tab does; Benjamini-Hochberg is planned at the same level as
+Bonferroni. Three variants at 5%:
+
+```{.bash exec}
+curl -s -G localhost:8000/api/v1/experiments/analysis/sample-size \
+  -H "Authorization: Bearer $TOKEN" \
+  --data-urlencode "baseline_rate=0.12" \
+  --data-urlencode "minimum_detectable_effect=0.05" \
+  --data-urlencode "variant_count=3" \
+  --data-urlencode "correction_method=benjamini_hochberg" | jq '{samples_per_variant, comparisons, alpha}'
+```
+<!-- expect: "samples_per_variant": 56961 -->
+<!-- expect: "comparisons": 2 -->
+<!-- expect: "alpha": 0.025 -->
+
+That is `56961` users per variant, where no correction needs `47036`. The answer also carries
+`correction_method`, `comparisons` and `alpha`, the significance each comparison is planned
+at; `significance_level` is still the `0.05` you sent.
 
 The calculation is the standard one for two proportions (Fleiss), the same one the results
 page's Sample Size tab uses: the variance is pooled under the null hypothesis and unpooled
@@ -382,8 +407,8 @@ n = [z_α/2 × √(2p̄(1−p̄)) + z_β × √(p₁(1−p₁) + p₂(1−p₂))
 
 Where `p₁` = baseline rate, `p₂` = baseline rate × (1 + MDE), `p̄` = (p₁ + p₂) / 2,
 `z_α/2` = 1.96 (two-tailed, α=0.05; a one-sided test uses `z_α` = 1.645), `z_β` = 0.842
-(80% power), and `n` is rounded up. It is per variant, with no correction for comparing more
-than two variants; the total is `n` times the number of variants. A baseline that the effect
+(80% power), and `n` is rounded up. It is per variant: with a correction, `α` is
+`significance_level ÷ (variant_count − 1)`. The total is `n` times the number of variants. A baseline that the effect
 would raise to 100% or more is refused with a 422.
 
 ---

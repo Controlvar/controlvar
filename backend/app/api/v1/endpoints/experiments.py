@@ -34,6 +34,7 @@ from backend.app.api.segment_rules import (
     refuse_unusable_segments,
 )
 from backend.app.api.v1.endpoints import results as results_endpoints
+from backend.app.api.v1.endpoints.power_calculator import OUT_OF_RANGE_MESSAGE
 from backend.app.core.logger import failure_detail, unexpected_failure
 from backend.app.core.logging import logger
 from backend.app.core.optional_modules import (
@@ -64,6 +65,7 @@ from backend.app.schemas.experiment import (
     ExperimentUpdate,
     ScheduleConfig,
 )
+from backend.app.schemas.power_calculator import MAX_COUNT, MAX_VARIANTS
 from backend.app.schemas.results import ExperimentResultsResponse
 from backend.app.schemas.split_url_config import (
     CHAIN,
@@ -2208,13 +2210,23 @@ async def calculate_experiment_sample_size(
         0.8, ge=0.5, le=0.99, description="Statistical power (0.5-0.99)"
     ),
     significance_level: float = Query(
-        0.05, ge=0.01, le=0.1, description="Significance level (0.01-0.1)"
+        0.05,
+        ge=0.01,
+        le=0.1,
+        description=(
+            "Significance level (0.01-0.1): 1 minus the experiment's confidence "
+            "level. A correction divides it between the comparisons; the answer's "
+            "alpha is each comparison's level."
+        ),
     ),
     is_one_sided: bool = Query(
         False, description="Whether the test is one-sided (default: two-sided)"
     ),
     daily_traffic: Optional[int] = Query(
-        None, gt=0, description="Daily traffic to the experiment (optional)"
+        None,
+        gt=0,
+        le=MAX_COUNT,
+        description="Daily traffic to the experiment (optional)",
     ),
     traffic_allocation: Optional[float] = Query(
         None,
@@ -2223,21 +2235,41 @@ async def calculate_experiment_sample_size(
         description="Fraction of traffic allocated to the experiment (0-1)",
     ),
     variant_count: int = Query(
-        2, ge=2, description="Number of variants (including control)"
+        2,
+        ge=2,
+        le=MAX_VARIANTS,
+        description="Number of variants including control (2-100)",
+    ),
+    correction_method: str = Query(
+        "none",
+        pattern="^(none|bonferroni|benjamini_hochberg)$",
+        description=(
+            "Correction for comparing several variants with the control: send the "
+            "experiment's correction_method. 'bonferroni' and 'benjamini_hochberg' "
+            "plan each comparison at significance_level / (variant_count - 1), as "
+            "GET /api/v1/results/{experiment_id}/sample-size does; "
+            "Benjamini-Hochberg is planned at Bonferroni's level. The default, "
+            "'none', plans each comparison at significance_level."
+        ),
     ),
     current_user: User = Depends(deps.get_current_active_user),
 ) -> Dict[str, Any]:
     """
-    Calculate the required sample size for an experiment.
+    The users each variant needs, for planning a new experiment.
 
-    This endpoint calculates the number of samples needed per variant and in total
-    to achieve the desired statistical power for detecting the minimum effect size.
+    Plans a two-proportion test of a relative lift of ``minimum_detectable_effect``
+    over ``baseline_rate`` (pooled variance under the null hypothesis, unpooled
+    under the alternative), the formula ``GET /api/v1/results/{experiment_id}/sample-size``
+    uses. With ``correction_method`` ``bonferroni`` or ``benjamini_hochberg``, each
+    of the ``variant_count - 1`` comparisons with the control is planned at
+    ``significance_level / (variant_count - 1)``; Benjamini-Hochberg is planned at
+    Bonferroni's level. The answer echoes ``correction_method``, ``comparisons`` and
+    ``alpha``, the significance each comparison is planned at. With ``daily_traffic``
+    and ``traffic_allocation`` it also estimates the days needed, assuming an even
+    split. Nothing is saved.
 
-    Optionally, if daily traffic and traffic allocation are provided, it also
-    estimates how long the experiment will need to run to collect the required sample.
-
-    Returns:
-        Dict[str, Any]: Sample size calculation results
+    A baseline that the effect raises to 100% or more answers 422, and so does one
+    too close to its treatment rate for the size to be a finite number.
     """
     import math
 
@@ -2250,14 +2282,26 @@ async def calculate_experiment_sample_size(
             detail=TREATMENT_RATE_CEILING_MESSAGE,
         )
 
+    # Each of the variant_count - 1 comparisons with the control is planned at
+    # significance_level / (variant_count - 1) under either correction, as the
+    # results page's Sample Size tab plans it (results.py; Bonferroni bounds
+    # Benjamini-Hochberg, so BH is planned at Bonferroni's level). The division
+    # comes after validation, so 99% with several variants can be planned.
+    comparisons = variant_count - 1
+    alpha = (
+        significance_level
+        if correction_method == "none"
+        else significance_level / comparisons
+    )
+
     # Two arms through the same formula as the results page's Sample Size tab
-    # (pooled variance under H0, unpooled under H1), with no multiple-comparison
-    # correction; every variant needs this many users.
+    # (pooled variance under H0, unpooled under H1), at the per-comparison
+    # alpha; every variant needs this many users.
     try:
         samples_per_variant = sample_size_two_proportions(
             p1=baseline_rate,
             p2=treatment_rate,
-            alpha=significance_level,
+            alpha=alpha,
             power=statistical_power,
             two_tailed=not is_one_sided,
         )
@@ -2289,8 +2333,23 @@ async def calculate_experiment_sample_size(
         # Calculate daily traffic per variant
         daily_variant_traffic = daily_experiment_traffic / variant_count
 
+        # A traffic share so small that the users per variant per day come to 0
+        # (5e-324 of one user), or a day count too large to be a finite number,
+        # cannot be calculated with: the fixed out-of-range 422, not a 500.
+        if not daily_variant_traffic > 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=OUT_OF_RANGE_MESSAGE,
+            )
+        days = samples_per_variant / daily_variant_traffic
+        if not math.isfinite(days):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=OUT_OF_RANGE_MESSAGE,
+            )
+
         # Calculate days needed
-        days_needed = math.ceil(samples_per_variant / daily_variant_traffic)
+        days_needed = math.ceil(days)
 
         # Add estimates for different time periods
         estimated_duration_days = {
@@ -2312,6 +2371,9 @@ async def calculate_experiment_sample_size(
         "statistical_power": statistical_power,
         "significance_level": significance_level,
         "is_one_sided": is_one_sided,
+        "correction_method": correction_method,
+        "comparisons": comparisons,
+        "alpha": alpha,
         "samples_per_variant": samples_per_variant,
         "total_samples": total_samples,
         "estimated_duration_days": estimated_duration_days,

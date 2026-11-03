@@ -924,3 +924,21 @@ by = [
     "test:backend/tests/unit/api/test_power_mean_baseline.py",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
 ]
+
+[[unit]]
+text = "GET /api/v1/experiments/analysis/sample-size | #820 | The operation takes correction_method: none (the default), bonferroni or benjamini_hochberg, the values of an experiment's correction_method. With bonferroni or benjamini_hochberg, each of the variant_count - 1 comparisons with the control is planned at significance_level / (variant_count - 1), as GET /api/v1/results/{experiment_id}/sample-size plans it, so with three or more variants samples_per_variant, total_samples and estimated_duration_days are larger; Benjamini-Hochberg is planned at Bonferroni's level. The answer carries correction_method as sent, comparisons and alpha (the significance each comparison is planned at), and significance_level is still the level sent. A request without correction_method answers as before. Any other correction_method, the empty string included, answers 422 at [\"query\", \"correction_method\"] with \"type\": \"string_pattern_mismatch\"; the parameter used to be ignored. variant_count accepts at most 100 and daily_traffic at most 1,000,000,000,000 (10^12, the power routes' bound, #1003); a larger value answers 422 at [\"query\", <field>] with \"type\": \"less_than_equal\", where any value used to be accepted, and one too large to convert to a float answered 500 when daily_traffic and traffic_allocation were both sent. When both are sent and the days needed cannot be calculated, because the users per variant per day come to 0 or the day count is not finite (a traffic_allocation of 5e-324 or 1e-310 with a daily_traffic of 1, say), the answer is 422 with the detail \"These values are too large or too small to calculate with. Use values nearer those of a real experiment.\"; it used to be 500. The dashboard's new-experiment estimate sends the experiment's correction, and refuses more than 100 variants or more than 1,000,000,000,000 daily users before asking. The OpenAPI document changes in the new parameter, the maximum of variant_count and of daily_traffic, the descriptions of variant_count and significance_level, and the operation's description; the response schema is unchanged. See Sample Size Guidance."
+by = [
+    "test:backend/tests/unit/api/test_sample_size_correction.py::test_the_estimate_plans_each_comparison_at_the_corrected_level",
+    "test:backend/tests/unit/api/test_sample_size_correction.py::test_bonferroni_and_benjamini_hochberg_give_the_same_estimate",
+    "test:backend/tests/unit/api/test_sample_size_correction.py::test_without_correction_method_the_estimate_is_uncorrected",
+    "test:backend/tests/unit/api/test_sample_size_correction.py::test_an_unknown_correction_is_refused",
+    "test:backend/tests/unit/api/test_sample_size_correction.py::test_more_than_100_variants_is_refused",
+    "test:backend/tests/unit/api/test_sample_size_correction.py::test_more_than_10_to_the_12_daily_users_is_refused",
+    "test:backend/tests/unit/api/test_sample_size_correction.py::test_a_duration_that_cannot_be_calculated_answers_the_fixed_422",
+    "test:backend/tests/integration/api/test_results_sample_size_api.py::test_the_tab_and_the_guided_setup_agree",
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::sends the correction chosen above: %s",
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::refuses more than 100 variants in its own alert, without a request",
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::refuses %s in its own alert, without a request",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]

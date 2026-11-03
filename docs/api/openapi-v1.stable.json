@@ -17086,7 +17086,7 @@
     },
     "/api/v1/experiments/analysis/sample-size": {
       "get": {
-        "description": "Calculate the required sample size for an experiment.\n\nThis endpoint calculates the number of samples needed per variant and in total\nto achieve the desired statistical power for detecting the minimum effect size.\n\nOptionally, if daily traffic and traffic allocation are provided, it also\nestimates how long the experiment will need to run to collect the required sample.\n\nReturns:\n    Dict[str, Any]: Sample size calculation results",
+        "description": "The users each variant needs, for planning a new experiment.\n\nPlans a two-proportion test of a relative lift of ``minimum_detectable_effect``\nover ``baseline_rate`` (pooled variance under the null hypothesis, unpooled\nunder the alternative), the formula ``GET /api/v1/results/{experiment_id}/sample-size``\nuses. With ``correction_method`` ``bonferroni`` or ``benjamini_hochberg``, each\nof the ``variant_count - 1`` comparisons with the control is planned at\n``significance_level / (variant_count - 1)``; Benjamini-Hochberg is planned at\nBonferroni's level. The answer echoes ``correction_method``, ``comparisons`` and\n``alpha``, the significance each comparison is planned at. With ``daily_traffic``\nand ``traffic_allocation`` it also estimates the days needed, assuming an even\nsplit. Nothing is saved.\n\nA baseline that the effect raises to 100% or more answers 422, and so does one\ntoo close to its treatment rate for the size to be a finite number.",
         "operationId": "calculate_experiment_sample_size_api_v1_experiments_analysis_sample_size_get",
         "parameters": [
           {
@@ -17129,13 +17129,13 @@
             }
           },
           {
-            "description": "Significance level (0.01-0.1)",
+            "description": "Significance level (0.01-0.1): 1 minus the experiment's confidence level. A correction divides it between the comparisons; the answer's alpha is each comparison's level.",
             "in": "query",
             "name": "significance_level",
             "required": false,
             "schema": {
               "default": 0.05,
-              "description": "Significance level (0.01-0.1)",
+              "description": "Significance level (0.01-0.1): 1 minus the experiment's confidence level. A correction divides it between the comparisons; the answer's alpha is each comparison's level.",
               "maximum": 0.1,
               "minimum": 0.01,
               "title": "Significance Level",
@@ -17163,6 +17163,7 @@
               "anyOf": [
                 {
                   "exclusiveMinimum": 0,
+                  "maximum": 1000000000000,
                   "type": "integer"
                 },
                 {
@@ -17194,16 +17195,30 @@
             }
           },
           {
-            "description": "Number of variants (including control)",
+            "description": "Number of variants including control (2-100)",
             "in": "query",
             "name": "variant_count",
             "required": false,
             "schema": {
               "default": 2,
-              "description": "Number of variants (including control)",
+              "description": "Number of variants including control (2-100)",
+              "maximum": 100,
               "minimum": 2,
               "title": "Variant Count",
               "type": "integer"
+            }
+          },
+          {
+            "description": "Correction for comparing several variants with the control: send the experiment's correction_method. 'bonferroni' and 'benjamini_hochberg' plan each comparison at significance_level / (variant_count - 1), as GET /api/v1/results/{experiment_id}/sample-size does; Benjamini-Hochberg is planned at Bonferroni's level. The default, 'none', plans each comparison at significance_level.",
+            "in": "query",
+            "name": "correction_method",
+            "required": false,
+            "schema": {
+              "default": "none",
+              "description": "Correction for comparing several variants with the control: send the experiment's correction_method. 'bonferroni' and 'benjamini_hochberg' plan each comparison at significance_level / (variant_count - 1), as GET /api/v1/results/{experiment_id}/sample-size does; Benjamini-Hochberg is planned at Bonferroni's level. The default, 'none', plans each comparison at significance_level.",
+              "pattern": "^(none|bonferroni|benjamini_hochberg)$",
+              "title": "Correction Method",
+              "type": "string"
             }
           }
         ],
