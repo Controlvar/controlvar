@@ -1099,6 +1099,12 @@ A 422 names positions and fields, never the ids that were sent.
   missing, `null` and `""` mean none. An event sent again with the same `event_id`, user,
   experiment, flag and event name is not stored again; see
   [How events count](../guides/how-events-count.md#sending-an-event-again).
+- **Event limits**: `metadata` (`properties` on `/tracking/events`) may nest at most 64 levels,
+  every JSON object and array a level and the object itself the first, so `{"a": {"b": 1}}` is 2
+  levels. Deeper answers 422 and nothing is stored. A `timestamp` at the very edge of the date
+  range whose UTC offset moves it past 0001-01-01 or 9999-12-31 answers 422 too. `/tracking/batch`
+  and `/tracking/events` hold events to the same limits; in a batch the entry is reported in
+  `errors` and the others are stored.
 - **Headers**: X-API-Key: {api_key}
 - **Body**: `{"event_type": string, "event_name": string?, "user_id": string, "experiment_key": string?, "feature_flag_key": string?, "value": number?, "metadata": object?, "timestamp": datetime?, "event_id": string?}`
 - **Response**: 200 OK (the stored event, with `"duplicate": false` and the `event_id` sent, or null); 200 OK with `"duplicate": true` for an event already stored with that `event_id`: `id` is the stored event's, every other field is this request's, and nothing is written; 404 a key that was given was not found; 422 invalid body, an `event_id` that is not text or is over 255 characters among them

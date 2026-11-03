@@ -1842,6 +1842,28 @@ by = [
 ]
 
 [[unit]]
+text = "Event limits: metadata (properties on /tracking/events) may nest at most 64 levels, every JSON object and array a level and the object itself the first, so {\"a\": {\"b\": 1}} is 2 levels."
+by = [
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_over_deep_metadata_is_refused_and_nothing_is_stored",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_metadata_at_the_limit_is_stored",
+]
+
+[[unit]]
+text = "Deeper answers 422 and nothing is stored."
+by = ["test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_over_deep_metadata_is_refused_and_nothing_is_stored"]
+
+[[unit]]
+text = "A timestamp at the very edge of the date range whose UTC offset moves it past 0001-01-01 or 9999-12-31 answers 422 too."
+by = ["test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_edge_timestamp_is_refused_and_nothing_is_stored"]
+
+[[unit]]
+text = "/tracking/batch and /tracking/events hold events to the same limits; in a batch the entry is reported in errors and the others are stored."
+by = [
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_one_over_deep_item_does_not_fail_its_batch",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_events_route_refuses_over_deep_properties_too",
+]
+
+[[unit]]
 text = "Body: {\"event_type\": string, \"event_name\": string?, \"user_id\": string, \"experiment_key\": string?, \"feature_flag_key\": string?, \"value\": number?, \"metadata\": object?, \"timestamp\": datetime?, \"event_id\": string?}"
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 

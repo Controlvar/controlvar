@@ -86,7 +86,10 @@ An event counts for the variant the user is assigned to when the server receives
 - `timestamp` is when the event happened, by the sender's clock. Without one it is the time the
   server received the event. The Ruby, PHP and Elixir SDKs send the host's clock when you give
   none.
-- Any `timestamp` is stored, however far in the past or the future.
+- Any `timestamp` is stored, however far in the past or the future, with one exception: a value
+  at the very edge of the date range whose UTC offset moves it past 0001-01-01 or 9999-12-31
+  (`9999-12-31T23:59:59-01:00`, say) is refused with `422`, or reported in a batch's `errors`,
+  and nothing is stored.
 - `GET /api/v1/results/{experiment_id}` does not read it.
 - `GET /api/v1/results/{experiment_id}/daily` puts each user's first conversion on the UTC day
   of its `timestamp`. A day before the experiment's first day counts on that first day, and a

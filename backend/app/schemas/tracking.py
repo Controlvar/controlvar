@@ -16,6 +16,7 @@ from pydantic import (
     Field,
     StringConstraints,
     ValidationError,
+    ValidationInfo,
     field_validator,
     model_validator,
 )
@@ -92,6 +93,58 @@ class EventFields(BaseModel):
         return v
 
 
+#: The deepest an event's ``metadata`` / ``properties`` may nest (#1685). Every
+#: JSON object and array is a level, the attribute object itself the first, so
+#: ``{"a": {"b": 1}}`` is 2 levels. Far above any real attribute set, and far
+#: below the ~255 levels at which building the response overflowed the
+#: serialiser after the event was already stored.
+EVENT_METADATA_MAX_DEPTH = 64
+
+
+def exceeds_nesting_depth(value: Any, limit: int) -> bool:
+    """True if *value* nests more than *limit* levels of dict/list/tuple.
+
+    Iterative, and it stops at the first container deeper than *limit*, so a
+    hostile body costs at most the containers down to that depth.
+    """
+    stack = [(value, 1)]
+    while stack:
+        item, depth = stack.pop()
+        if isinstance(item, dict):
+            children = item.values()
+        elif isinstance(item, (list, tuple)):
+            children = item
+        else:
+            continue
+        if depth > limit:
+            return True
+        stack.extend(
+            (child, depth + 1)
+            for child in children
+            if isinstance(child, (dict, list, tuple))
+        )
+    return False
+
+
+class BoundedEventMetadata(BaseModel):
+    """Refuses ``metadata`` / ``properties`` nested deeper than the limit.
+
+    For the schemas an event is built from before it is stored (``EventCreate``
+    and ``UntaggedEventCreate``), so the refusal comes before any write. The
+    message names the field and never the value.
+    """
+
+    @field_validator("properties", "metadata", mode="after", check_fields=False)
+    @classmethod
+    def _refuse_deep_metadata(cls, value: Any, info: ValidationInfo) -> Any:
+        if exceeds_nesting_depth(value, EVENT_METADATA_MAX_DEPTH):
+            raise ValueError(
+                f"{info.field_name} must not be nested more than "
+                f"{EVENT_METADATA_MAX_DEPTH} levels deep"
+            )
+        return value
+
+
 class EventBase(EventFields):
     """Base model for event data."""
 
@@ -103,13 +156,13 @@ class EventBase(EventFields):
         return self
 
 
-class EventCreate(StorableTextModel, EventBase):
+class EventCreate(StorableTextModel, BoundedEventMetadata, EventBase):
     """Model for creating a new event."""
 
     event_id: EventId = None
 
 
-class UntaggedEventCreate(StorableTextModel, EventFields):
+class UntaggedEventCreate(StorableTextModel, BoundedEventMetadata, EventFields):
     """An event that names no experiment and no flag (#217).
 
     ``/tracking/track`` and ``/tracking/batch`` build this one when the
