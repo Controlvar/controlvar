@@ -108,8 +108,9 @@ DISTANCE = (
 )
 UNIT = "unknown distance unit; use km, mi or m, or leave it out for km"
 WINDOW = (
-    "unreadable time window; see the time_window example on the Targeting Rules: "
-    "Operator Reference page"
+    "unreadable time window; give days (0 to 6), start_time and end_time "
+    "(HH:MM), or start_date and end_date (YYYY-MM-DD); a timezone must be a "
+    "name such as Europe/Paris"
 )
 
 FLAG, EXPERIMENT, SEGMENT = "flag", "experiment", "segment"
@@ -388,21 +389,14 @@ REFUSED: Dict[str, Tuple[FrozenSet[str], Any, str]] = {
                 "ISO start and end",
                 {"start": "2024-01-01T09:00:00", "end": "2024-01-31T17:00:00"},
             ),
-            ("days outside 0-6", {"start": "x", "end": "y", "days": [7]}),
-            ("start_time alone", {"start": "x", "end": "y", "start_time": "09:00"}),
-            (
-                "an unknown timezone",
-                {"start": "x", "end": "y", "days": [1], "timezone": "Mars/Olympus"},
-            ),
+            ("days outside 0-6", {"days": [7]}),
+            ("start_time alone", {"start_time": "09:00"}),
+            ("an unknown timezone", {"days": [1], "timezone": "Mars/Olympus"}),
             (
                 "start_date after end_date",
-                {
-                    "start": "x",
-                    "end": "y",
-                    "start_date": "2024-02-01",
-                    "end_date": "2024-01-01",
-                },
+                {"start_date": "2024-02-01", "end_date": "2024-01-01"},
             ),
+            ("no key", {}),
         )
     },
     "native time_window in default_rule": (
@@ -500,28 +494,13 @@ ACCEPTED: Dict[str, Tuple[FrozenSet[str], Any]] = {
             native(cond("time_window", window)),
         )
         for name, window in (
+            ("with times", {"start_time": "09:00", "end_time": "17:00"}),
+            ("with days", {"days": [0, 1, 2, 3, 4]}),
+            ("with dates", {"start_date": "2024-01-01", "end_date": "2024-01-31"}),
+            ("with a timezone", {"days": [5, 6], "timezone": "Europe/Paris"}),
             (
-                "with times",
-                {
-                    "start": "09:00",
-                    "end": "17:00",
-                    "start_time": "09:00",
-                    "end_time": "17:00",
-                },
-            ),
-            ("with days", {"start": "x", "end": "y", "days": [0, 1, 2, 3, 4]}),
-            (
-                "with dates",
-                {
-                    "start": "x",
-                    "end": "y",
-                    "start_date": "2024-01-01",
-                    "end_date": "2024-01-31",
-                },
-            ),
-            (
-                "with a timezone",
-                {"start": "x", "end": "y", "days": [5, 6], "timezone": "Europe/Paris"},
+                "with start and end besides",
+                {"start": "09:00", "end": "17:00", "days": [0]},
             ),
         )
     },
@@ -583,8 +562,8 @@ def test_accepted(name, kind):
 @pytest.mark.regression
 @pytest.mark.parametrize("kind", [FLAG, EXPERIMENT, SEGMENT])
 def test_the_reference_pages_example_window_is_accepted(kind):
-    """(1n) The window the time_window reason sends a writer to is accepted on
-    flags and experiments (both shapes) and on segments (the dashboard shape)."""
+    """(1n) The reference page's example window is accepted on flags and
+    experiments (both shapes) and on segments (the dashboard shape)."""
     example = reference_example()
     condition = {**example, "operator": example["operator"].value}
     assert refusal(kind, dashboard(condition)) is None
@@ -702,28 +681,18 @@ GEO_CONTEXTS = [CENTRE, OAKLAND]
 WINDOW_CONTEXTS = [{"a": MOMENT}]
 
 #: (label, window): the first three match MOMENT; the engine cannot read the
-#: others.
+#: others. None carries ``start`` or ``end`` it does not need (#1527).
 WINDOWS = [
-    (
-        "times",
-        {"start": "00:00", "end": "23:59", "start_time": "00:00", "end_time": "23:59"},
-    ),
-    ("days", {"start": "x", "end": "y", "days": [2]}),
-    (
-        "dates",
-        {
-            "start": "x",
-            "end": "y",
-            "start_date": "2024-01-01",
-            "end_date": "2024-01-31",
-        },
-    ),
+    ("times", {"start_time": "00:00", "end_time": "23:59"}),
+    ("days", {"days": [2]}),
+    ("dates", {"start_date": "2024-01-01", "end_date": "2024-01-31"}),
     ("start and end only", {"start": "09:00", "end": "17:00"}),
     (
         "ISO start and end",
         {"start": "2024-01-01T09:00:00", "end": "2024-01-31T17:00:00"},
     ),
-    ("days 7", {"start": "x", "end": "y", "days": [7]}),
+    ("days 7", {"days": [7]}),
+    ("no key", {}),
 ]
 
 
@@ -855,7 +824,11 @@ def test_the_refusals_are_exercised():
     assert ("geo_distance", "unit None", EXPERIMENT) in refused
     assert ("time_window", "start and end only", FLAG) in refused
     assert ("time_window", "start and end only", EXPERIMENT) in refused
+    assert ("time_window", "no key", EXPERIMENT) in refused
     assert ("time_window", "times", FLAG) not in refused
+    # Readable without start or end (#1527): accepted, so 1a must see it match.
+    assert ("time_window", "days", FLAG) not in refused
+    assert ("time_window", "dates", EXPERIMENT) not in refused
 
 
 # ---------------------------------------------------------------------------

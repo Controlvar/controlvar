@@ -65,8 +65,9 @@ DISTANCE = (
 )
 UNIT = "unknown distance unit; use km, mi or m, or leave it out for km"
 WINDOW = (
-    "unreadable time window; see the time_window example on the Targeting Rules: "
-    "Operator Reference page"
+    "unreadable time window; give days (0 to 6), start_time and end_time "
+    "(HH:MM), or start_date and end_date (YYYY-MM-DD); a timezone must be a "
+    "name such as Europe/Paris"
 )
 
 # Plan D211 v1.4-B3's reasons for a value (#1525, #1526), verbatim.
@@ -159,6 +160,12 @@ ROWS: Dict[str, Any] = {
     "time window, native": (
         {"flag", "experiment"},
         _native(_cond("time_window", {"start": "09:00", "end": "17:00"})),
+        f"Value error, {_AT}.value: {WINDOW}",
+    ),
+    # #1527: no start or end, and no key the engine reads either.
+    "time window with no key, native": (
+        {"flag", "experiment"},
+        _native(_cond("time_window", {})),
         f"Value error, {_AT}.value: {WINDOW}",
     ),
     "distance unit, dashboard": (
@@ -609,7 +616,7 @@ def test_the_wizard_launch_reports_the_refusal_and_creates_nothing(
 
 @pytest.mark.regression
 def test_the_reference_pages_example_window_is_accepted_on_every_kind(admin_client):
-    """(1n) The window the time_window reason points a writer to."""
+    """(1n) The reference page's example window."""
     example = reference_example()
     condition = {**example, "operator": example["operator"].value}
     flag = admin_client.post(
@@ -631,6 +638,64 @@ def test_the_reference_pages_example_window_is_accepted_on_every_kind(admin_clie
         SEGMENTS, json={"name": f"Seg {uuid.uuid4().hex[:8]}", "rules": dashboard}
     )
     assert segment.status_code == 201, segment.text
+
+
+#: Native windows the engine reads with no start or end (#1527), refused on
+#: main with ``Value error, rules[0].rule.conditions[0]: not valid``.
+READABLE_WINDOWS = {
+    "days": {"days": [2]},
+    "times": {"start_time": "09:00", "end_time": "17:00"},
+    "dates": {"start_date": "2024-01-01", "end_date": "2024-01-31"},
+    "days and a timezone": {"days": [2], "timezone": "Europe/Paris"},
+}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("name", sorted(READABLE_WINDOWS))
+def test_a_readable_window_is_saved_on_every_kind(admin_client, db_session, name):
+    """(T1) Created and updated on flags, created on experiments, stored as
+    sent; and a flag holding one is evaluated by it: on at a 0% rollout on a
+    Wednesday at noon, which every one of these windows holds."""
+    rules = _native(_cond("time_window", READABLE_WINDOWS[name]))
+    key = unique_flag_key("window")
+    flag = admin_client.post(
+        f"{FLAGS}/",
+        json={
+            "key": key,
+            "name": "Window",
+            "targeting_rules": copy.deepcopy(rules),
+            "is_active": True,
+            "rollout_percentage": 0,
+        },
+    )
+    assert flag.status_code == 201, flag.text
+    assert (
+        flag.json()["targeting_rules"]["rules"][0]["rule"] == rules["rules"][0]["rule"]
+    )
+    evaluated = admin_client.get(
+        f"{FLAGS}/evaluate/{key}",
+        params={
+            "user_id": "u-1527",
+            "context": json.dumps({"a": "2024-01-10T12:00:00"}),
+        },
+    )
+    assert evaluated.status_code == 200, evaluated.text
+    assert (evaluated.json()["enabled"], evaluated.json()["reason"]) == (
+        True,
+        "targeting_rule",
+    )
+
+    updated = admin_client.put(
+        f"{FLAGS}/{flag.json()['id']}", json={"targeting_rules": copy.deepcopy(rules)}
+    )
+    assert updated.status_code == 200, updated.text
+
+    experiment = admin_client.post(
+        f"{EXPERIMENTS}/",
+        json=_experiment_body(f"Window {uuid.uuid4().hex[:8]}", copy.deepcopy(rules)),
+    )
+    assert experiment.status_code == 201, experiment.text
+    assert experiment.json()["targeting_rules"] == rules
 
 
 # ---------------------------------------------------------------------------

@@ -344,8 +344,8 @@ def _substring_of(item: Any, text: str) -> bool:
 #: The keys of a ``time_window`` value that say when it is open; ``timezone``
 #: only changes how they are read. A window with none of them cannot be read
 #: (#1145). It used to match at every moment, so a ``{"start": ..., "end": ...}``
-#: window, the two keys the ``Condition`` schema asks for and which the engine
-#: does not read, was always open.
+#: window, two keys the engine does not read (the ``Condition`` schema required
+#: them until #1527), was always open.
 TIME_WINDOW_KEYS = ("days", "start_time", "end_time", "start_date", "end_date")
 
 
