@@ -6,8 +6,9 @@ name: Platform
 # Every job that needs a *running* Controlvar used to repeat the same twenty
 # lines: pg + redis services, Python, bootstrap, seeds, uvicorn from the
 # repository root, poll /health. This is that sequence, once. Its callers
-# are pr-qa-gate.yml's sdk-live-contract and fuzz.yml's three API fuzzing
-# passes; the nightly suites do NOT call it (the `integration` and `smoke`
+# are pr-qa-gate.yml's sdk-live-contract, fuzz.yml's three API fuzzing
+# passes, ground-truth.yml's replay and nightly-qa.yml's ground-truth job;
+# the other nightly suites do NOT call it (the `integration` and `smoke`
 # suites below are there for when one does).
 #
 #   jobs:
@@ -49,7 +50,7 @@ on:
         type: string
         default: demo
       suite:
-        description: 'Named suite to run: sdk-live-contract | integration | smoke | fuzz.'
+        description: 'Named suite to run: sdk-live-contract | integration | smoke | fuzz | ground-truth | ground-truth-nightly.'
         type: string
         required: true
       sdks:
@@ -484,8 +485,23 @@ jobs:
               fi
               exit "$verdict"
               ;;
+            ground-truth|ground-truth-nightly)
+              # The ground-truth replay (#1544): seeded traffic through the
+              # public API, the results page against the event contract and
+              # an independent reference (tests/ground_truth/test_replay.py).
+              # The nightly suite sends four times the users. It signs in as
+              # the first administrator the bootstrap made and creates its
+              # own API key. Only counts and durations reach the step
+              # summary; each scenario's ledger stays in pytest's temporary
+              # directory, and nothing uploads it.
+              scale='pr'
+              if [ "$SUITE" = ground-truth-nightly ]; then
+                scale='nightly'
+              fi
+              GROUND_TRUTH_SCALE="$scale" python -m pytest tests/ground_truth/test_replay.py -p no:cov -v --tb=short
+              ;;
             *)
-              echo "::error::unknown suite '$SUITE'. Known: sdk-live-contract, integration, smoke, fuzz."
+              echo "::error::unknown suite '$SUITE'. Known: sdk-live-contract, integration, smoke, fuzz, ground-truth, ground-truth-nightly."
               echo "Add a new suite to the case statement in .github/workflows/_platform.yml."
               exit 1
               ;;

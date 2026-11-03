@@ -344,8 +344,8 @@ def _substring_of(item: Any, text: str) -> bool:
 #: The keys of a ``time_window`` value that say when it is open; ``timezone``
 #: only changes how they are read. A window with none of them cannot be read
 #: (#1145). It used to match at every moment, so a ``{"start": ..., "end": ...}``
-#: window, the two keys the ``Condition`` schema asks for and which the engine
-#: does not read, was always open.
+#: window, two keys the engine does not read (the ``Condition`` schema required
+#: them until #1527), was always open.
 TIME_WINDOW_KEYS = ("days", "start_time", "end_time", "start_date", "end_date")
 
 
@@ -464,6 +464,119 @@ GEO_UNITS = frozenset(
         "m",
     }
 )
+
+
+# ---------------------------------------------------------------------------
+# The values apply_operator reads (#1525)
+# ---------------------------------------------------------------------------
+#
+# Each predicate below says whether one branch of apply_operator can read a
+# rule's own value. It reads the value the way that branch does, and answers
+# False where the branch fails on the value alone, before a user's value can
+# make any difference: an exception, a _note_rule_problem, or NaN, which no
+# comparison holds for. A readable value whose range is empty (an
+# array_length below 0, a percentage_bucket of 0) is readable. The write path
+# (targeting_adapter._unreadable_value) refuses what these refuse.
+#
+# They do not log and do not call _note_rule_problem: a refused save is not an
+# evaluation, and must not use up the once-only warning a stored rule gets.
+# They mirror the branches; the branches are not built from them.
+# backend/tests/unit/core/test_targeting_values.py fails when a branch stops
+# reading a value its corpus says a predicate accepts. A branch that starts
+# reading a value a predicate refuses is not caught there; a save of that value
+# answers 422, which is loud, not silent.
+
+
+def date_value_readable(value: Any) -> bool:
+    """Whether ``before`` and ``after`` read ``value`` as a date.
+
+    The branch reads text with ``datetime.fromisoformat`` once every ``Z`` is
+    ``+00:00``, and a number (a boolean is one) with
+    ``datetime.fromtimestamp``. Anything else is not a date. A timestamp no
+    date can hold raises, and the exception depends on its size; all of them
+    are caught here. If the branch came to read more (another format), this
+    would still refuse it, and the value tests would not say so.
+    """
+    try:
+        if isinstance(value, str):
+            datetime.fromisoformat(value.replace("Z", "+00:00"))
+        elif isinstance(value, (int, float)):
+            datetime.fromtimestamp(value)
+        elif not isinstance(value, datetime):
+            return False
+    except (ValueError, TypeError, OverflowError, OSError):
+        return False
+    return True
+
+
+def length_value_readable(value: Any) -> bool:
+    """Whether ``array_length`` compared with ``eq``, ``gt``, ``gte``, ``lt``
+    or ``lte`` (or a false-y comparison, read as ``eq``) reads ``value``.
+
+    The branch reads it with ``int()``: ``3``, ``3.7`` (as 3), ``true``,
+    ``"3"``, ``" 3 "`` and ``"1_0"`` are read; ``"3.0"``, ``"abc"``, NaN,
+    infinity, a list and an object are not. A branch that came to read more
+    is not caught by the value tests (see above).
+    """
+    try:
+        int(value)
+    except (ValueError, TypeError, OverflowError):
+        return False
+    return True
+
+
+def length_bounds_readable(value: Any) -> bool:
+    """Whether ``array_length`` compared with ``between`` reads ``value``: an
+    object with ``min`` and ``max``, each read by ``int()``. Other keys are
+    ignored, and ``min`` above ``max`` is readable (it matches no list). A
+    branch that came to read more is not caught by the value tests."""
+    return (
+        isinstance(value, dict)
+        and "min" in value
+        and "max" in value
+        and length_value_readable(value["min"])
+        and length_value_readable(value["max"])
+    )
+
+
+def radius_readable(radius: Any) -> bool:
+    """Whether ``geo_distance`` reads ``radius``: ``float()`` reads it, and it
+    is neither NaN nor below 0. Infinity is read (every point is within it).
+    A branch that came to read more is not caught by the value tests."""
+    try:
+        number = float(radius)
+    except (ValueError, TypeError, OverflowError):
+        return False
+    return not math.isnan(number) and number >= 0
+
+
+def number_value_readable(value: Any) -> bool:
+    """Whether ``gt``, ``gte``, ``lt`` and ``lte`` read ``value`` as a number:
+    ``float()`` reads it and it is not NaN. Infinity is read. A branch that
+    came to read more is not caught by the value tests."""
+    try:
+        number = float(value)
+    except (ValueError, TypeError, OverflowError):
+        return False
+    return not math.isnan(number)
+
+
+def percentage_value_readable(value: Any) -> bool:
+    """Whether experiment targeting's ``percentage_bucket`` reads ``value``.
+
+    That branch is ``RulesEvaluationService._evaluate_percentage_bucket``,
+    which compares the user's bucket (0 to 99) with ``float(value)``.
+    Importing that service loads the adapter, so the adapter cannot import a
+    predicate placed beside it; this one is here instead. Read: what
+    ``float()`` reads, except NaN. A value of 0 or below is read, and
+    matches no user. Like the others, it catches the branch reading less,
+    not more (see above).
+    """
+    try:
+        number = float(value)
+    except (ValueError, TypeError, OverflowError):
+        return False
+    return not math.isnan(number)
 
 
 def apply_operator(
