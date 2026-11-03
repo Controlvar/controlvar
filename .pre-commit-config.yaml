@@ -27,18 +27,18 @@ repos:
   # Frontend checks
 
   # Python lint + format. Same ruff version, the same [tool.ruff] config and the
-  # same four trees as `make lint` and the `lint` CI job (backend/, modules/,
-  # scripts/, tests/acceptance/), so a clean commit is a green job. Scoped to
-  # ^backend/ the hook let a modules/ or scripts/ change through and the gate
-  # then failed on it.
+  # same five trees as `make lint` and the `lint` CI job (backend/, modules/,
+  # scripts/, tests/acceptance/, tests/ground_truth/), so a clean commit is a
+  # green job. Scoped to ^backend/ the hook let a modules/ or scripts/ change
+  # through and the gate then failed on it.
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.10
     hooks:
       - id: ruff
         args: [--fix]
-        files: ^(backend|modules|scripts|tests/acceptance)/
+        files: ^(backend|modules|scripts|tests/acceptance|tests/ground_truth)/
       - id: ruff-format
-        files: ^(backend|modules|scripts|tests/acceptance)/
+        files: ^(backend|modules|scripts|tests/acceptance|tests/ground_truth)/
 
   # The publication gate, run locally so it fails before a push rather than
   # after one. This repository is public and development happens in it, so a

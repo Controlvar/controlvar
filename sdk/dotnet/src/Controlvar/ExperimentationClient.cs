@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Controlvar.Models;
 
@@ -31,6 +32,7 @@ public class ExperimentationClient : IDisposable
     private readonly ExperimentationHttpClient _httpClient;
     private readonly UserKeyCache<FlagEvaluationResult> _flagCache;
     private readonly UserKeyCache<Assignment> _assignmentCache;
+    private readonly Action<Exposure>? _onExposure;
     private bool _disposed;
 
     /// <summary>
@@ -53,6 +55,7 @@ public class ExperimentationClient : IDisposable
         var ttl = TimeSpan.FromSeconds(config.CacheTtlSeconds);
         _flagCache = new UserKeyCache<FlagEvaluationResult>(config.MaxCacheSize, ttl);
         _assignmentCache = new UserKeyCache<Assignment>(config.MaxCacheSize, ttl);
+        _onExposure = config.OnExposure;
     }
 
     // -----------------------------------------------------------------
@@ -117,6 +120,12 @@ public class ExperimentationClient : IDisposable
     /// no control variant (404), or the request failed and nothing is cached. An experiment that
     /// is not ACTIVE answers its control variant. Never throws.
     /// </returns>
+    /// <remarks>
+    /// When the server answers <c>"assigned": true</c> and no unexpired answer for this user and
+    /// experiment was cached, <see cref="SdkConfig.OnExposure"/> is called before the returned
+    /// task completes. A cached answer calls nothing, and nothing the function throws reaches
+    /// the caller or changes the answer.
+    /// </remarks>
     public async Task<Assignment?> GetAssignmentAsync(
         string experimentKey,
         string userId,
@@ -126,6 +135,8 @@ public class ExperimentationClient : IDisposable
         if (cached != null)
             return cached;
 
+        Assignment? assignment;
+        Exposure? exposure = null;
         try
         {
             var body = new AssignRequest
@@ -134,19 +145,37 @@ public class ExperimentationClient : IDisposable
                 UserId = userId,
                 Context = attributes
             };
-            var assignment = await _httpClient.PostAsync<Assignment>("/api/v1/tracking/assign", body).ConfigureAwait(false);
+            // Read as a JSON element first: the answer becomes the Assignment, and its `assigned`,
+            // which Assignment does not carry, says whether the server recorded an exposure.
+            var answer = await _httpClient.PostAsync<JsonElement>("/api/v1/tracking/assign", body).ConfigureAwait(false);
+            assignment = JsonSerializer.Deserialize<Assignment>(answer, ExperimentationHttpClient.JsonOptions);
+            if (assignment == null)
+                return null; // a JSON null body, a failure as before
             if (string.IsNullOrEmpty(assignment.ExperimentKey))
                 assignment.ExperimentKey = experimentKey;
             if (string.IsNullOrEmpty(assignment.UserId))
                 assignment.UserId = userId;
 
-            _assignmentCache.Set(userId, experimentKey, assignment);
-            return assignment;
+            // Fill is Set that also says whether the slot held no live answer. Two calls that
+            // asked for the same new user and experiment at once each store an answer here; only
+            // the first is told the slot was empty.
+            bool filled = _assignmentCache.Fill(userId, experimentKey, assignment);
+            if (filled && _onExposure != null && SaysAssigned(answer))
+                exposure = new Exposure(assignment.ExperimentKey, assignment.UserId, assignment.VariantId, assignment.VariantName);
         }
         catch (Exception)
         {
             return null;
         }
+
+        if (exposure != null)
+        {
+            // Last, outside the request's try block, with no cache lock held. What the function
+            // throws is dropped (this SDK has no error channel): the answer below is returned
+            // whatever it did.
+            ExposureHook.Call(_onExposure!, exposure);
+        }
+        return assignment;
     }
 
     // -----------------------------------------------------------------
@@ -294,6 +323,16 @@ public class ExperimentationClient : IDisposable
         [JsonPropertyName("events")]
         public List<TrackBody> Events { get; set; } = new();
     }
+
+    /// <summary>
+    /// True only when the <c>/assign</c> answer's <c>assigned</c> is the JSON literal
+    /// <c>true</c>. A missing field, <c>null</c>, <c>"true"</c> or <c>1</c> is not: the server
+    /// recorded an exposure only for <c>true</c>.
+    /// </summary>
+    private static bool SaysAssigned(JsonElement answer) =>
+        answer.ValueKind == JsonValueKind.Object
+        && answer.TryGetProperty("assigned", out var assigned)
+        && assigned.ValueKind == JsonValueKind.True;
 
     /// <summary>One entry per cached assignment (experiment_key) plus one per cached flag (feature_flag_key).</summary>
     private List<TrackEvent> FanOut(TrackEvent trackEvent)

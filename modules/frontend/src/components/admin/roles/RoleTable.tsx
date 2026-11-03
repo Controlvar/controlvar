@@ -7,6 +7,18 @@ interface RoleTableProps {
   onEditRole: (role: CustomRole) => void;
 }
 
+/**
+ * The delete confirmation (#891): it says who loses the role's permissions,
+ * which take effect for everyone who has it.
+ */
+export function deleteConfirmText(role: Pick<CustomRole, 'name' | 'user_count'>): string {
+  const lead = `Delete the role "${role.name}"?`;
+  const tail = 'This cannot be undone.';
+  if (role.user_count <= 0) return `${lead} No user has it. ${tail}`;
+  if (role.user_count === 1) return `${lead} The 1 user who has it loses its permissions at once. ${tail}`;
+  return `${lead} The ${role.user_count} users who have it lose its permissions at once. ${tail}`;
+}
+
 export function RoleTable({ onEditRole }: RoleTableProps) {
   const [roles, setRoles] = useState<CustomRole[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,9 +42,7 @@ export function RoleTable({ onEditRole }: RoleTableProps) {
   }, [fetchRoles]);
 
   const handleDelete = async (role: CustomRole) => {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete the role "${role.name}"? This action cannot be undone.`
-    );
+    const confirmed = window.confirm(deleteConfirmText(role));
     if (!confirmed) return;
 
     try {

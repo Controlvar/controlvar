@@ -1,7 +1,8 @@
 /**
- * /admin/roles says that custom roles and direct permission grants do not
- * change what a user can do yet (#891): no permission check reads them, and
- * each user's built-in role decides.
+ * /admin/roles says what a custom role does now that custom roles and direct
+ * permission grants take effect (#891): it adds its permissions to the
+ * built-in role of everyone who has it, from their next request, and never
+ * takes one away; roles are assigned and grants made through the RBAC API.
  */
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -24,11 +25,20 @@ describe('RoleManagementPage', () => {
     mockListRoles.mockResolvedValue([]);
   });
 
-  it('says that custom roles and direct grants are recorded and do not change access yet', async () => {
+  it('says that a custom role adds to the built-in role, and where roles are assigned', async () => {
     render(<RoleManagementPage />);
-    expect(screen.getByTestId('roles-access-note')).toHaveTextContent(
-      "Custom roles and direct permission grants are recorded, but they do not change what anyone can do yet: each user's built-in role decides."
+    expect(screen.getByTestId('roles-subtitle')).toHaveTextContent(
+      "Define roles that add permissions to a user's built-in role."
     );
+    const note = screen.getByTestId('roles-access-note');
+    expect(note).toHaveTextContent(
+      'A custom role adds its permissions to the built-in role of everyone who has it, from their next ' +
+        'request, and never takes one away. Assign roles and grant permissions to a user through the RBAC API.'
+    );
+    // "the RBAC API" is an underlined link to the RBAC docs page.
+    const link = screen.getByRole('link', { name: 'the RBAC API' });
+    expect(link.getAttribute('href')).toMatch(/api\/rbac/);
+    expect(link.className).toMatch(/\bunderline\b/);
     // The page loaded its table, so the note is shown with it, not instead of it.
     expect(await screen.findByText('No custom roles found')).toBeInTheDocument();
     expect(mockListRoles).toHaveBeenCalledTimes(1);

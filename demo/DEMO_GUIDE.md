@@ -224,8 +224,10 @@ See `demo/streampulse/README.md`.
   - "Analyst and Viewer can see experiments and flags but can't create or change them."
   - Every role, Viewer included, can still create API keys for itself, and an API key can send
     assignments and events through the tracking API.
-- Four built-in roles are enforced today. Custom roles and resource-level grants exist in the data model but are
-  not yet enforced by the permission checks, so do not demo them (tracked in the launch plan, P5).
+- Custom roles and direct grants add permissions to a built-in role. To show one, grant the viewer `audit_log` read
+  ([RBAC API reference](../docs/api/rbac.md#let-a-viewer-read-the-audit-log)) and sign in as viewer@demo.com: the
+  Audit Log shows other users' entries too. Revoke it afterwards with
+  `DELETE /api/v1/rbac/users/{user_id}/grant/audit_log`.
 
 **API / Integrations:**
 - Open http://localhost:8000/api/v1/docs (Swagger UI)
@@ -237,7 +239,7 @@ See `demo/streampulse/README.md`.
 **Key talking points:**
 - An audit log of changes to flags, experiments, users and roles, and with the
   `compliance` module HMAC-SHA256 signed compliance events and report exports
-- RBAC with four built-in roles (custom roles: roadmap)
+- RBAC with four built-in roles, plus custom roles and time-limited grants
 - Full REST API + SDKs: Python and JavaScript on PyPI and npm, Go with `go get`, Java and React built from `sdk/`
 - Deployable to your own AWS account with the AWS CDK
 

@@ -16,7 +16,7 @@ import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
 export const ROLLOUT_ERROR_COPY: Record<number, string> & { fallback: string } = {
   400: 'The schedule has changed since the page loaded. Reload the page to see it.',
-  403: "Changing this flag's rollout requires the ADMIN or DEVELOPER role.",
+  403: "Changing this flag's rollout needs permission to change feature flags, which the ADMIN and DEVELOPER roles have.",
   404: 'This schedule no longer exists. Reload the page to see it.',
   409: "Something changed since the page loaded: a stage has started, or another schedule is now running this flag's rollout. Reload the page to see the rollout as it is now.",
   422: "The schedule was not accepted. Check each stage's name and target, and that targets never go down.",
@@ -511,7 +511,11 @@ export interface RolloutScheduleManagerProps {
   flagPercentage: number;
   /** The schedule the section shows (`pickSchedule`), or null. */
   schedule: RolloutSchedule | null;
-  /** `canChangeFeatureFlags`: false gives the read-only view and sends nothing. */
+  /**
+   * `canChangeFeatureFlags(user, effective)` (FEATURE_FLAG UPDATE, by role or
+   * by a custom role or direct grant): false gives the read-only view and
+   * sends nothing.
+   */
   canChange: boolean;
   /**
    * The section's heading (focusable, `tabIndex={-1}`). Focus goes there once
@@ -530,9 +534,10 @@ const PRIMARY = `${BUTTON} bg-blue-600 text-white border-blue-600 hover:bg-blue-
 const DANGER = `${BUTTON} bg-white text-red-700 border-red-300 hover:bg-red-50`;
 
 /**
- * A flag's rollout schedule (#1456): what it is, and for ADMIN, DEVELOPER and
- * superusers the controls to create one and run it. It offers only what C8
- * allows:
+ * A flag's rollout schedule (#1456): what it is, and, for a user who may
+ * change the flag (a superuser, ADMIN, DEVELOPER, or the effective
+ * `feature_flag: update`), the controls to create one and run it. It offers
+ * only what C8 allows:
  * - "Create a rollout schedule" only when no schedule is draft, active or
  *   paused (the API lets two ACTIVE schedules move one flag);
  * - stages added, edited or removed only while PENDING, and only while the
@@ -540,7 +545,7 @@ const DANGER = `${BUTTON} bg-white text-red-700 border-red-300 hover:bg-red-50`;
  * - no delete: Cancel covers a draft;
  * - advance only on the stage the schedule is at (`advanceTarget`);
  * - manual and time-based triggers only.
- * ANALYST and VIEWER get the schedule and its stages and nothing else.
+ * Anyone else gets the schedule and its stages and nothing else.
  */
 export function RolloutScheduleManager({
   flagId,

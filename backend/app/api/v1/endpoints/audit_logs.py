@@ -122,12 +122,14 @@ def resolve_audit_log_filters(
 ) -> AuditLogFilters:
     """Apply the access rule to a list or export request, and check its filters.
 
-    Superusers, ADMIN and ANALYST see every entry. DEVELOPER and VIEWER see
-    only their own: ``user_id`` is replaced by their own id, whatever was
-    asked. An unknown ``entity_type`` or ``action_type``, or a ``to_date``
-    that is not after ``from_date``, answers 400.
+    Superusers, ADMIN and ANALYST, and in the full profile anyone whose custom
+    role or direct grant gives ``audit_log (read)``, see other users' entries
+    too. Anyone else sees only their own: ``user_id`` is replaced by their own
+    id, whatever was asked. An unknown ``entity_type`` or ``action_type``, or a
+    ``to_date`` that is not after ``from_date``, answers 400.
     """
-    # ADMIN and ANALYST read all entries; DEVELOPER and VIEWER read their own.
+    # Other users' entries need can_read_all_audit_logs; anyone else reads
+    # their own.
     if not can_read_all_audit_logs(current_user):
         user_id = current_user.id
 
@@ -203,9 +205,10 @@ async def list_audit_logs(
     - **page**: Page number for pagination
     - **limit**: Number of records per page
 
-    Superusers, ADMIN and ANALYST see every entry. DEVELOPER and VIEWER
-    see only their own entries; a `user_id` filter naming anyone else is
-    replaced by their own id.
+    Superusers, ADMIN and ANALYST, and in the full profile anyone whose custom
+    role or direct grant gives audit_log (read), see other users' entries too.
+    Anyone else sees only their own entries; a `user_id` filter naming anyone
+    else is replaced by their own id.
     """
     filters = resolve_audit_log_filters(
         current_user,

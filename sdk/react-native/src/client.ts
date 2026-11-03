@@ -31,6 +31,7 @@ import type {
   AssignResponse,
   BatchResponse,
   BatchResult,
+  Exposure,
   FlagEvaluateResponse,
   FlagEvaluation,
   SdkConfig,
@@ -40,6 +41,7 @@ import type {
   TrackOptions,
 } from './types';
 import { EvaluationCache } from './cache';
+import { callExposureHook, checkOnExposure, exposureError } from './exposure';
 import { OfflineStorage } from './storage';
 
 const DEFAULT_TIMEOUT_MS = 5_000;
@@ -100,6 +102,7 @@ export class ExperimentationClient {
   private readonly cacheTtlMs: number;
   private readonly offlineFallback: boolean;
   private readonly onError: SdkConfig['onError'];
+  private readonly onExposure: ((exposure: Exposure) => unknown) | null;
 
   private readonly flagCache: EvaluationCache<FlagEvaluation>;
   private readonly assignmentCache: EvaluationCache<Assignment>;
@@ -117,6 +120,7 @@ export class ExperimentationClient {
     this.cacheTtlMs = config.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
     this.offlineFallback = config.offlineFallback ?? true;
     this.onError = config.onError;
+    this.onExposure = checkOnExposure(config.onExposure);
 
     this.flagCache = new EvaluationCache<FlagEvaluation>(this.cacheTtlMs);
     this.assignmentCache = new EvaluationCache<Assignment>(this.cacheTtlMs);
@@ -221,6 +225,11 @@ export class ExperimentationClient {
    * or a draft has no control variant (404), or the server cannot be reached and
    * nothing is persisted. An experiment that is not ACTIVE answers its control
    * variant.
+   *
+   * When the server answers `assigned: true` and no answer was cached for the
+   * user and experiment, `onExposure` is called before this resolves. An answer
+   * from the memory cache or from AsyncStorage (unexpired, or the offline
+   * fallback) calls nothing.
    */
   async getAssignment(
     experimentKey: string,
@@ -233,10 +242,13 @@ export class ExperimentationClient {
     return this.dedupe(`assign ${userId} ${experimentKey}`, async () => {
       const stored = this.offlineFallback ? await this.storage.getAssignment(userId, experimentKey) : null;
       if (stored && Date.now() <= stored.expiresAt) {
+        // Restored from AsyncStorage: no request, so no exposure, and no onExposure.
         this.assignmentCache.set(userId, experimentKey, stored.value);
         return stored.value;
       }
 
+      let assignment: Assignment;
+      let exposed: boolean;
       try {
         const body: Record<string, unknown> = { experiment_key: experimentKey, user_id: userId };
         if (attributes !== undefined) body.context = attributes;
@@ -244,7 +256,7 @@ export class ExperimentationClient {
         if (!data || typeof data.variant_name !== 'string') {
           throw new Error('Assignment response is missing variant_name');
         }
-        const assignment: Assignment = {
+        assignment = {
           experimentKey: typeof data.experiment_key === 'string' ? data.experiment_key : experimentKey,
           userId,
           variantId: data.variant_id ?? null,
@@ -252,15 +264,26 @@ export class ExperimentationClient {
           isControl: Boolean(data.is_control),
           configuration: data.configuration ?? null,
         };
+        // Whether this store fills an empty or expired slot, read just before it. `clearCache()`
+        // also drops the in-flight requests, so a call made after it while this request is in
+        // flight makes a second request: the answer stored first calls onExposure, and the other
+        // finds the slot filled.
+        const fresh = this.assignmentCache.get(userId, experimentKey) === undefined;
         this.assignmentCache.set(userId, experimentKey, assignment);
         if (this.offlineFallback) {
           await this.storage.setAssignment(userId, experimentKey, assignment, this.cacheTtlMs);
         }
-        return assignment;
+        // The server recorded an exposure for this request only if it said `assigned: true`
+        // (a missing field is not taken as true).
+        exposed = fresh && data.assigned === true;
       } catch (err) {
         this.report(err, 'getAssignment');
         return stored ? stored.value : null;
       }
+      // Last, once the answer is stored in memory and AsyncStorage, and outside the catch above,
+      // so a failing hook can never turn the answer into a request failure.
+      if (exposed) this.exposed(assignment);
+      return assignment;
     });
   }
 
@@ -396,6 +419,19 @@ export class ExperimentationClient {
       ...this.getAssignments(event.userId).map((a) => ({ ...base, experiment_key: a.experimentKey })),
       ...this.getEvaluatedFlags(event.userId).map((flagKey) => ({ ...base, feature_flag_key: flagKey })),
     ];
+  }
+
+  /** Give `onExposure` a new object holding the four values; its failures go to `onError`. */
+  private exposed(assignment: Assignment): void {
+    const hook = this.onExposure;
+    if (!hook) return;
+    const exposure: Exposure = {
+      experimentKey: assignment.experimentKey,
+      userId: assignment.userId,
+      variantId: assignment.variantId,
+      variantName: assignment.variantName,
+    };
+    callExposureHook(hook, exposure, (thrown) => this.report(exposureError(thrown), 'exposure'));
   }
 
   private report(err: unknown, operation: SwallowedOperation): void {

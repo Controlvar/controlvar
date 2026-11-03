@@ -133,9 +133,11 @@ it securely. If you lose it, create a new key and delete the old one. See
 The request also accepts an optional `"scopes"` list. The one scope that is enforced is
 `sdk:ruleset`, for server-side SDK use: `GET /api/v1/sdk/ruleset`,
 `POST /api/v1/tracking/evaluations` and `POST /api/v1/tracking/assign/batch` (all beta)
-refuse a key without it, or whose owner can no longer change feature flags or experiments.
-Only users who can change feature flags (ADMIN, DEVELOPER, or a superuser) can create a key
-with it; anyone else gets `403` and no key is created. Every other endpoint that takes an
+refuse a key without it, or whose owner can no longer change feature flags; batch assignment
+also refuses a key whose owner cannot change experiments. Only users who can change feature
+flags (ADMIN, DEVELOPER, a superuser, or in the full profile anyone whose custom role or direct
+grant gives `feature_flag (update)`) can create a key with it; anyone else gets `403` and no
+key is created. Every other endpoint that takes an
 API key accepts any active key, whatever its scopes; see
 [Scopes](../security/api-keys.md#scopes).
 
@@ -178,7 +180,8 @@ the flag ruleset. Everything else takes a bearer token.
 
 ## Roles and Permissions
 
-Every user has one of four built-in roles. The role decides which operations are available.
+Every user has one of four built-in roles. The role decides which operations are available;
+in the full profile a custom role or direct grant can add more.
 
 | Role | Description | Typical Users |
 |------|-------------|---------------|
@@ -198,8 +201,9 @@ Every user has one of four built-in roles. The role decides which operations are
 | View audit logs | Own | All | Own | All |
 | Manage users | — | — | — | Only with the superuser flag |
 
-Access to a feature flag is by role, not by who created it: a DEVELOPER can change any flag,
-and a VIEWER can change none, not even one they created.
+Access to a feature flag is by permission, not by who created it: a DEVELOPER can change any
+flag, and a VIEWER can change none, not even one they created, unless a custom role or direct
+grant (full profile) gives them `feature_flag (update)`.
 
 To see a refusal, create a VIEWER account as the administrator:
 
@@ -270,16 +274,17 @@ refused with `403`, for administrators too. Those routes set **another** account
 a superuser resets a password there, without knowing the old one.
 
 With the modules installed, admins can also create custom roles with fine-grained
-permissions, and grant temporary permissions to individual users. These are stored and
-shown, but no permission check reads them yet; routes check the base role
-([#891](https://github.com/Controlvar/controlvar/issues/891)). See the
-[RBAC API Reference](rbac.md).
+permissions, and grant temporary permissions to individual users. They add permissions to
+the base role in every permission check, from the user's next request, and never remove any.
+See the [RBAC API Reference](rbac.md).
 
 ---
 
 ## Example Authenticated Requests
 
-### Create an Experiment (DEVELOPER or ADMIN)
+### Create an Experiment
+
+This takes permission to create experiments, such as the DEVELOPER or ADMIN role.
 
 An experiment needs at least one variant and one metric:
 

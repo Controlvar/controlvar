@@ -2,8 +2,9 @@
  * Segments API client (#440): named audiences that flag and experiment
  * targeting rules can name with `in_segment` / `not_in_segment`.
  *
- * Segments use the EXPERIMENT permissions: every role can read them, ADMIN
- * and DEVELOPER can change them. Collection URLs have no trailing slash
+ * Segments use the EXPERIMENT permissions: every role can read them; ADMIN
+ * and DEVELOPER, or a custom role or grant, change them. Collection URLs
+ * have no trailing slash
  * (`/api/v1/segments`); with one the API answers 307.
  */
 import { apiFetch } from '@/services/api';

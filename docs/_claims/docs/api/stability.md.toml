@@ -812,6 +812,38 @@ by = [
 ]
 
 [[unit]]
+text = "Every operation that checks permission on experiments or feature flags, or reads other users' audit entries (full profile) | #891 | A user is admitted by their built-in role, as before, or by an active custom role or unexpired direct grant of the permission the operation checks; such a user used to be answered 403. A role or grant gives only experiment and feature_flag create, read, update, delete and list, and audit_log read, and never administration. For the four built-in roles and the core profile nothing changes. See RBAC."
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+    "test:modules/backend/tests/integration/rbac/test_rbac_no_escalation.py::test_all_forty_pairs_reach_no_administration",
+]
+
+[[unit]]
+text = "GET /api/v1/rbac/users/{user_id}/permissions, GET /api/v1/rbac/roles, GET /api/v1/rbac/roles/{role_name} (full profile) | #891 | The response shapes do not change; the values do. permissions lists only experiment and feature_flag (the actions the permission checks admit) and audit_log ([\"read\"] when the user may read other users' entries), where it listed every resource the built-in role names and every pair a role or grant stored; custom_roles and user_count count only assignments that take effect, not those recorded before custom roles took effect. See RBAC."
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_effective_permissions_display.py::test_the_display_equals_the_rules",
+    "test:modules/backend/tests/integration/rbac/test_rbac_activation.py::test_user_count_counts_only_assignments_that_take_effect",
+]
+
+[[unit]]
+text = "POST /api/v1/tracking/assign/batch (beta), GET /api/v1/sdk/ruleset (beta), POST /api/v1/tracking/evaluations (beta), POST /api/v1/api-keys | #891 | An sdk:ruleset key works while its owner can change feature flags, which in the full profile a custom role or direct grant of feature_flag (update) also gives. Batch assignment also needs the owner to be able to change experiments, and otherwise answers 403 with This key's owner cannot change experiments, so the key cannot assign users in a batch, and nobody was assigned. Use a server-side key whose owner can change experiments. before anyone is assigned. The 403 for an owner who cannot change feature flags now reads This key's owner can no longer change feature flags, so the key is refused for server-side SDK use., and the key-creation 403 reads Only users who can change feature flags can create an API key with the sdk:ruleset scope; the ADMIN and DEVELOPER roles and superusers can. Create the key without that scope, or ask someone who can. For the four built-in roles who is admitted does not change."
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+    "test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_owner_role_text",
+    "test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_owner_experiment_text",
+    "test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_key_creation_refusal_text",
+]
+
+[[unit]]
+text = "DELETE /api/v1/feature-flags/{flag_id}, POST /api/v1/feature-flags/{flag_id}/toggle, GET /api/v1/feature-flags/{flag_id}/history, GET /api/v1/audit-logs/, GET /api/v1/audit-logs/stream, POST /api/v1/bandit/{experiment_id}/update, POST /api/v1/mutual-exclusion-groups, PUT /api/v1/mutual-exclusion-groups/{group_id}, POST /api/v1/mutual-exclusion-groups/{group_id}/experiments, DELETE /api/v1/mutual-exclusion-groups/{group_id}/experiments/{experiment_id}, POST /api/v1/segments, PUT /api/v1/segments/{segment_id}, DELETE /api/v1/segments/{segment_id} and, in the full profile, POST /api/v1/counters/{experiment_id}/increment, POST /api/v1/counters/bulk, POST /api/v1/rbac/roles/assign and GET /api/v1/rbac/users/{user_id}/permissions | #891 | The OpenAPI document changes in the descriptions of these operations: they name the custom role or direct grant that also admits a user (the two RBAC operations describe what they now do). The 403 of POST /api/v1/bandit/{experiment_id}/update now reads Triggering a bandit update needs permission to change experiments, which the DEVELOPER and ADMIN roles have."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/unit/api/test_bandit_endpoints.py::TestTriggerBanditUpdate::test_viewer_gets_403_on_post_update",
+]
+
+[[unit]]
 text = "POST /api/v1/power/sample-size, POST /api/v1/power/mde | #1034 | With metric_type mean or ratio, baseline_rate is the metric's baseline mean in its own units and accepts any finite number above 0; it used to answer 422 unless the mean was below 1 and the mean raised by minimum_detectable_effect stayed below 1, so a mean such as an average order value of 45 could not be planned. A mean accepted before gets the same answer, except that a size that comes out as 0 (a baseline_std so small that its square underflows, such as 1e-200) now answers 422 with the fixed out-of-range message, where it answered 200 with per_variant: 0; two finite means that answered 422 with Python's own text (\"cannot convert float NaN to integer\", \"required_sample_size must be > 0\") now answer the same fixed message. A proportion (the default) keeps its bounds, but a baseline_rate of 1 or more now answers 422 at [\"body\"] with \"type\": \"value_error\" and a message that names metric_type, where it answered \"type\": \"less_than\" at [\"body\", \"baseline_rate\"]; an infinite or NaN baseline_rate answers 422 at [\"body\", \"baseline_rate\"] with \"type\": \"finite_number\". /mde is unchanged: it plans proportions only and ignores a metric_type sent to it, as its description now says. The OpenAPI document changes only in the sample-size request's baseline_rate (no exclusiveMaximum; its description) and in the description of /mde. See Planning a mean."
 by = [
     "test:backend/tests/unit/api/test_power_mean_baseline.py",

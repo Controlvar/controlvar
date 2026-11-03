@@ -1936,3 +1936,14 @@ by = ["exempt:instruction"]
 [[unit]]
 text = "It prints UTC."
 by = ["docex:docs/self-hosting/migrations.md#UTC"]
+
+[[unit]]
+text = "Since the release in which custom roles took effect, assigning a role or making a grant records an activation time, and only assignments and grants that have one take effect (see RBAC)."
+by = [
+    "test:modules/backend/tests/unit/models/test_rbac_activation_time_readers_and_writers.py::test_every_insert_sets_the_activation_time",
+    "test:modules/backend/tests/integration/rbac/test_rbac_activation.py::test_rows_written_by_the_previous_code_stay_inactive_until_made_again",
+]
+
+[[unit]]
+text = "Downgrading below this revision after that release drops every activation time: every assignment and grant is inactive again, and stays inactive after upgrading; assign the roles and make the grants again."
+by = ["test:backend/tests/integration/database/test_modules_0004_transitions.py"]

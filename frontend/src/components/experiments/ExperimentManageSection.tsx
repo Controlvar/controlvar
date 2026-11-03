@@ -8,7 +8,8 @@ import {
 import { isApiError } from '@/services/api';
 import { ExperimentDetailsUpdate, ExperimentsService } from '@/services/experiments';
 import { Experiment } from '@/types/experiments';
-import { canChangeExperiment, canCreateExperiment } from '@/utils/experimentPermissions';
+import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
+import { canChangeExperiment, canCreateExperiment, canDeleteExperiment } from '@/utils/experimentPermissions';
 import { DESIGN_HEADING, ExperimentDesignForm } from './ExperimentDesignForm';
 
 /** The API's limits on these fields (`ExperimentUpdate`). */
@@ -26,7 +27,7 @@ export const UNREACHABLE = 'Could not reach the server. Check your connection an
 
 export const ERROR_COPY: Record<ManageAction, Record<number, string> & { fallback: string }> = {
   clone: {
-    403: 'Cloning an experiment requires the ADMIN or DEVELOPER role.',
+    403: 'Cloning an experiment needs permission to create experiments, which the ADMIN and DEVELOPER roles have.',
     404: 'This experiment no longer exists, so it cannot be cloned.',
     409: "This experiment's targeting uses a segment that is not active, so it cannot be cloned.",
     501: 'This server cannot run split-URL experiments, so this one cannot be cloned.',
@@ -34,7 +35,7 @@ export const ERROR_COPY: Record<ManageAction, Record<number, string> & { fallbac
   },
   edit: {
     400: 'This experiment is no longer a draft, so its details cannot be changed. Reload the page to see its status.',
-    403: 'Changing an experiment requires the ADMIN or DEVELOPER role.',
+    403: 'Changing an experiment needs permission to change experiments, which the ADMIN and DEVELOPER roles have.',
     404: 'This experiment no longer exists.',
     422:
       'The details were not accepted. The name must be 1 to 100 characters, and the description ' +
@@ -43,7 +44,7 @@ export const ERROR_COPY: Record<ManageAction, Record<number, string> & { fallbac
   },
   delete: {
     400: 'This experiment has started and can no longer be deleted. Archive it once it is complete.',
-    403: 'Deleting an experiment requires the ADMIN or DEVELOPER role.',
+    403: 'Deleting an experiment needs permission to delete experiments, which the ADMIN and DEVELOPER roles have.',
     404: 'This experiment no longer exists.',
     fallback: 'Could not delete this draft. Try again.',
   },
@@ -51,7 +52,7 @@ export const ERROR_COPY: Record<ManageAction, Record<number, string> & { fallbac
     400:
       'This experiment is no longer a draft, so its variants and metrics cannot be changed. ' +
       'Reload the page to see its status.',
-    403: 'Changing an experiment requires the ADMIN or DEVELOPER role.',
+    403: 'Changing an experiment needs permission to change experiments, which the ADMIN and DEVELOPER roles have.',
     404: 'This experiment no longer exists.',
     422:
       'The variants and metrics were not accepted. Check that the split adds up to 100%, one ' +
@@ -134,11 +135,15 @@ const DANGER = `${BUTTON} bg-white text-red-700 border-red-300 hover:bg-red-50`;
 /**
  * Clone an experiment, and edit or delete a draft. It sits apart from the
  * lifecycle buttons, and offers only what the API would accept:
- * - Clone: any status, to a role that may create experiments.
- * - Edit details, Edit variants and metrics, and Delete draft: a DRAFT
- *   experiment, to a role that may change experiments. Who created the
- *   experiment is not considered.
- * ANALYST and VIEWER get nothing, so the section renders nothing for them.
+ * - Clone: any status, to a user who may create experiments.
+ * - Schedule, Edit details and Edit variants and metrics: a DRAFT
+ *   experiment, to a user who may change experiments.
+ * - Delete draft: a DRAFT experiment, to a user who may delete experiments.
+ * "May" is the built-in role or, in the full profile, the user's custom roles
+ * and direct grants (the effective map). Who created the experiment is not
+ * considered. A user who may do none of it gets nothing, so the section
+ * renders nothing for them (and nothing while the effective map is on its
+ * way).
  */
 export function ExperimentManageSection({
   experiment,
@@ -148,8 +153,10 @@ export function ExperimentManageSection({
 }: ExperimentManageSectionProps) {
   const router = useRouter();
   const isDraft = experiment.status === 'draft';
-  const mayClone = canCreateExperiment(user);
-  const mayChangeDraft = isDraft && canChangeExperiment(user);
+  const { effective } = useEffectivePermissions();
+  const mayClone = canCreateExperiment(user, effective);
+  const mayChangeDraft = isDraft && canChangeExperiment(user, effective);
+  const mayDeleteDraft = isDraft && canDeleteExperiment(user, effective);
 
   const [pending, setPending] = useState<ManageAction | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -201,7 +208,7 @@ export function ExperimentManageSection({
     setReturnFocus(null);
   }, [returnFocus, pending]);
 
-  if (!mayClone && !mayChangeDraft) return null;
+  if (!mayClone && !mayChangeDraft && !mayDeleteDraft) return null;
 
   // The page hears it in the same render, so its cards and the form never
   // show together or both go missing.
@@ -401,17 +408,19 @@ export function ExperimentManageSection({
             >
               {DESIGN_HEADING}
             </button>
-            <button
-              ref={deleteButton}
-              type="button"
-              onClick={askDelete}
-              disabled={busy || confirmingDelete}
-              className={DANGER}
-              data-testid="experiment-delete"
-            >
-              {pending === 'delete' ? 'Deleting…' : 'Delete draft'}
-            </button>
           </>
+        )}
+        {mayDeleteDraft && (
+          <button
+            ref={deleteButton}
+            type="button"
+            onClick={askDelete}
+            disabled={busy || confirmingDelete}
+            className={DANGER}
+            data-testid="experiment-delete"
+          >
+            {pending === 'delete' ? 'Deleting…' : 'Delete draft'}
+          </button>
         )}
       </div>
 
