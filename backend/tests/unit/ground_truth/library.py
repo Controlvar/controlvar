@@ -19,7 +19,8 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[4]
 LIBRARY_ROOT = REPO_ROOT / "tests" / "ground_truth"
 LIBRARY = LIBRARY_ROOT / "ground_truth"
-DOCS_RUNNER_ROOT = REPO_ROOT / "tests" / "acceptance" / "docs"
+#: The docs runner's root, not the docs site: nothing here reads a page.
+DOCS_RUNNER_ROOT = REPO_ROOT / "tests/acceptance/docs"
 
 for _root in (LIBRARY_ROOT, DOCS_RUNNER_ROOT):
     if str(_root) not in sys.path:

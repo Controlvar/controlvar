@@ -185,7 +185,7 @@ def test_the_corrections_equal_statsmodels(method, theirs):
 
 
 def test_the_docs_worked_example_and_the_decision_on_the_adjusted_p_value():
-    """docs/api/data-export.md: p 0.035 can be adjusted to 0.071 and not significant."""
+    """The data export page's example: p 0.035 adjusted to 0.071, not significant."""
     assert reference.adjust([0.0355, 0.5], "benjamini_hochberg") == [0.071, 0.5]
     assert reference.adjust([0.0355, 0.5], "none") == [0.0355, 0.5]
     assert reference.adjust([0.03, None], "bonferroni") == [0.03, None]
