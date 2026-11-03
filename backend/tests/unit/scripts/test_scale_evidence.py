@@ -975,6 +975,421 @@ def test_the_issue_is_linked_only_when_serialised_is_the_result():
 
 
 # ---------------------------------------------------------------------------
+# The schedulers' ticks during a step: recorded as data, never judged
+# ---------------------------------------------------------------------------
+#: An API that has been up a while (fx.tick_lines' cumulative state).
+UP_A_WHILE = {
+    "safety": {"success": 3, "seconds": "2.85"},
+    "metrics": {"success": 1, "seconds": "3.7"},
+    "experiment": {"success": 1, "seconds": "0.004"},
+}
+#: Every scheduler ticking every way between two scrapes.
+BUSY = {
+    name: {"success": 3, "partial": 2, "failed": 1, "skipped": 4, "seconds": "123.456"}
+    for name in se.SCHEDULERS
+}
+TICK_FIELDS = ("scheduler_metrics", "scheduler_ticks")
+JUDGEMENT = ("valid", "invalid_reason", "keeps_up", "fail_reason")
+
+
+def _judgement(record):
+    return {key: record[key] for key in JUDGEMENT}
+
+
+def test_a_tick_between_the_two_scrapes_is_counted_under_its_scheduler_and_outcome():
+    after = {
+        "safety": {"success": 4, "seconds": "3.80123456789"},
+        "metrics": {"success": 1, "failed": 1, "seconds": "5.15"},
+        "experiment": {"success": 1, "skipped": 1, "seconds": "0.004"},
+        "rollout": {"success": 1, "seconds": "0.0061"},
+    }
+    exported, ticks = se.scheduler_ticks(
+        fx.tick_lines(UP_A_WHILE), fx.tick_lines(after)
+    )
+    assert exported == "present"
+    assert ticks == fx.ticks(
+        # 0.95123456789 s, to the microsecond
+        safety={"success": 1, "duration_count": 1, "duration_sum_us": 951_235},
+        metrics={"failed": 1, "duration_count": 1, "duration_sum_us": 1_450_000},
+        # a skipped tick is counted and not timed
+        experiment={"skipped": 1},
+        # a scheduler whose first tick ends in the step counts from 0
+        rollout={"success": 1, "duration_count": 1, "duration_sum_us": 6100},
+    )
+
+
+@pytest.mark.parametrize("gap", [False, True], ids=["in-step-2", "between-2-and-3"])
+def test_a_planted_tick_lands_in_the_step_whose_scrapes_it_ends_between(gap):
+    """Three steps from six cumulative scrapes, each step's before and after. A
+    safety tick that ends between step 2's two scrapes is in step 2 and no
+    other; the same tick ending after step 2's after-scrape and before step 3's
+    before-scrape is in no step."""
+    ticked = {**UP_A_WHILE, "safety": {"success": 4, "seconds": "3.8"}}
+    first = 4 if gap else 3  # the scrape the tick first shows in
+    scrapes = [
+        fx.metrics(tick_state=ticked if index >= first else UP_A_WHILE)
+        for index in range(6)
+    ]
+    records = [
+        summarise(
+            "track",
+            number,
+            metrics_before=scrapes[2 * number - 2],
+            metrics_after=scrapes[2 * number - 1],
+        )[0]
+        for number in (1, 2, 3)
+    ]
+    one = fx.ticks(
+        safety={"success": 1, "duration_count": 1, "duration_sum_us": 950_000}
+    )
+    expected = [fx.ticks(), fx.ticks() if gap else one, fx.ticks()]
+    assert [record["scheduler_ticks"] for record in records] == expected
+    assert {record["scheduler_metrics"] for record in records} == {"present"}
+
+
+def test_an_api_without_the_tick_metrics_is_recorded_as_absent_never_as_zeros():
+    """An image from before the two families: "absent", naming no scheduler. A
+    fresh API that exports them with no sample yet is "present" with every
+    scheduler at zero. Both records pass the closed schema and agree."""
+    absent, _ = summarise()  # fx.metrics() exports no tick family
+    assert (absent["scheduler_metrics"], absent["scheduler_ticks"]) == ("absent", {})
+    fresh, _ = summarise(
+        metrics_before=fx.metrics(tick_state={}),
+        metrics_after=fx.metrics(tick_state={}),
+    )
+    assert (fresh["scheduler_metrics"], fresh["scheduler_ticks"]) == (
+        "present",
+        fx.ticks(),
+    )
+    for record in (absent, fresh):
+        problems = []
+        se.STEP_SPEC.check(record, "step", problems)
+        assert problems == []
+        assert se.scheduler_problem(record) == ""
+
+
+@pytest.mark.parametrize(
+    "before, after, named",
+    [
+        (
+            fx.tick_lines(UP_A_WHILE),
+            "",
+            "the scheduler tick metrics are not in both scrapes: before the step "
+            "scheduler_tick_duration_seconds, scheduler_ticks_total, after it neither",
+        ),
+        (
+            "",
+            'scheduler_ticks_total{name="safety",status="success"} 1.0\n',
+            "scheduler_ticks_total before its family's # TYPE line",
+        ),
+        (
+            fx.tick_lines({"warehouse": {"success": 1, "seconds": "0.1"}}),
+            fx.tick_lines(UP_A_WHILE),
+            "a tick of a scheduler named 'warehouse', not one of bandit, experiment",
+        ),
+        (
+            "# TYPE scheduler_ticks_total counter\n"
+            'scheduler_ticks_total{name="safety",status="timeout"} 1.0\n',
+            fx.tick_lines(UP_A_WHILE),
+            "a tick whose outcome is 'timeout'",
+        ),
+        (
+            "# TYPE scheduler_ticks_total counter\n"
+            'scheduler_ticks_total{name="safety"} 1.0\n',
+            fx.tick_lines(UP_A_WHILE),
+            "scheduler_ticks_total has no status label",
+        ),
+        (
+            "# TYPE scheduler_ticks_total gauge\n",
+            fx.tick_lines(UP_A_WHILE),
+            "scheduler_ticks_total is a gauge, not a counter",
+        ),
+        (
+            fx.tick_lines({"safety": {"success": 4, "seconds": "3.8"}}),
+            fx.tick_lines(UP_A_WHILE),
+            'scheduler_ticks_total{name="safety",status="success"} went from 4.0 '
+            "to 3.0; a counter only grows",
+        ),
+        (
+            fx.tick_lines({"safety": {"success": 3, "seconds": "3.0"}}),
+            fx.tick_lines({"safety": {"success": 3, "seconds": "2.0"}}),
+            "a sum of durations only grows",
+        ),
+    ],
+    ids=[
+        "one-scrape-only",
+        "no-type-line",
+        "unknown-scheduler",
+        "unknown-outcome",
+        "no-status-label",
+        "not-a-counter",
+        "counter-went-down",
+        "sum-went-down",
+    ],
+)
+def test_tick_metrics_that_cannot_be_read_as_one_step_are_refused(before, after, named):
+    assert named in refused(se.scheduler_ticks, before, after)
+
+
+def test_the_api_s_own_exposition_reads_back_as_the_ticks_it_recorded(monkeypatch):
+    """The API's recording function and prometheus_client's own text, on a
+    registry of this test's (the process-wide one holds other tests' made-up
+    scheduler names): the families' names, labels and layout read back as
+    recorded, and their # TYPE lines are there before anything ticks."""
+    from prometheus_client import CollectorRegistry, Counter, Histogram, generate_latest
+
+    from backend.app.core import metrics as prom
+
+    registry = CollectorRegistry()
+    real = prom.scheduler_ticks_total
+    monkeypatch.setattr(
+        prom,
+        "scheduler_ticks_total",
+        Counter(real._name, real._documentation, real._labelnames, registry=registry),
+    )
+    real = prom.scheduler_tick_duration_seconds
+    monkeypatch.setattr(
+        prom,
+        "scheduler_tick_duration_seconds",
+        Histogram(
+            real._name,
+            real._documentation,
+            real._labelnames,
+            registry=registry,
+            buckets=real._upper_bounds,
+        ),
+    )
+    before = generate_latest(registry).decode("utf-8")
+    prom.record_scheduler_tick("safety", "success", 0.95)
+    prom.record_scheduler_tick("metrics", "partial", 1.5)
+    prom.record_scheduler_tick("experiment", "skipped", 0.002)
+    after = generate_latest(registry).decode("utf-8")
+    assert se.scheduler_ticks(before, after) == (
+        "present",
+        fx.ticks(
+            safety={"success": 1, "duration_count": 1, "duration_sum_us": 950_000},
+            metrics={"partial": 1, "duration_count": 1, "duration_sum_us": 1_500_000},
+            experiment={"skipped": 1},
+        ),
+    )
+    assert se.scheduler_ticks(before, before) == ("present", fx.ticks())
+
+
+def test_the_scheduler_names_outcomes_and_families_are_the_api_s():
+    """SCHEDULERS is every name the code ticks under (each run_locked_tick call
+    passes its module's SCHEDULER_NAME), TICK_STATUSES every outcome it
+    records, and the two families are declared with the labels read here."""
+    names, calls = set(), 0
+    for root in (REPO_ROOT / "backend" / "app", REPO_ROOT / "modules" / "backend"):
+        for path in sorted(root.rglob("*.py")) if root.is_dir() else []:
+            text = path.read_text("utf-8")
+            names |= set(re.findall(r'^SCHEDULER_NAME = "([a-z_]+)"$', text, re.M))
+            for call in re.finditer(r"(?<!def )run_locked_tick\(\s*(\w+)", text):
+                calls += 1
+                assert call.group(1) == "SCHEDULER_NAME", path
+    assert names == set(se.SCHEDULERS)
+    assert calls >= len(se.SCHEDULERS)
+    core = REPO_ROOT / "backend" / "app" / "core"
+    tick = (core / "scheduler_tick.py").read_text("utf-8")
+    outcomes = set(re.findall(r'^STATUS_[A-Z]+ = "([a-z]+)"$', tick, re.M))
+    assert outcomes == set(se.TICK_STATUSES)
+    metrics = (core / "metrics.py").read_text("utf-8")
+    assert re.search(
+        r'Counter\(\s*"scheduler_ticks_total",\s*"[^"]*",\s*\["name", "status"\],',
+        metrics,
+    )
+    assert re.search(
+        r'Histogram\(\s*"scheduler_tick_duration_seconds",\s*"[^"]*",\s*\["name"\],',
+        metrics,
+    )
+
+
+@pytest.mark.parametrize(
+    "situation, expected",
+    [
+        ({}, (True, "none", True, "none")),
+        ({"latency_us": 1_500_000}, (True, "none", False, "p99")),
+        ({"dropped": 37}, (True, "none", False, "dropped")),
+        ({"generator": 960}, (False, "generator-cpu", False, "invalid")),
+    ],
+    ids=["healthy", "p99", "dropped", "generator-cpu"],
+)
+def test_the_tick_fields_change_no_step_judgement(situation, expected):
+    """The same rows and observation summarised with no tick metrics, with
+    idle schedulers, and with every scheduler ticking every way between the
+    scrapes: the same VALID, KEEPS UP, reasons and messages, and every other
+    field equal. Only the two tick fields differ."""
+    method = se.load_config()
+    rows = fx.step_rows(
+        method,
+        "track",
+        4,
+        dropped=situation.get("dropped", 0),
+        latency_us=situation.get("latency_us", 4000),
+    )
+    observed = {"dropped": situation.get("dropped", 0)}
+    if "generator" in situation:
+        cpu = fx.observation(method, "track", 4)["cpu_permille"]
+        observed["cpu_permille"] = {**cpu, "generator": situation["generator"]}
+    scrapes = {
+        "none": (fx.metrics(), fx.metrics()),
+        "idle": (fx.metrics(tick_state={}), fx.metrics(tick_state={})),
+        "busy": (fx.metrics(tick_state={}), fx.metrics(tick_state=BUSY)),
+    }
+    judged = {
+        name: summarise(
+            "track",
+            4,
+            rows=rows,
+            metrics_before=before,
+            metrics_after=after,
+            **observed,
+        )
+        for name, (before, after) in scrapes.items()
+    }
+    base, said = judged["none"]
+    assert tuple(_judgement(base).values()) == expected
+    others = {key: value for key, value in base.items() if key not in TICK_FIELDS}
+    for name, (record, messages) in judged.items():
+        assert (_judgement(record), messages) == (_judgement(base), said), name
+        assert {k: v for k, v in record.items() if k not in TICK_FIELDS} == others
+    assert judged["busy"][0]["scheduler_ticks"]["safety"]["success"] == 3
+
+
+def test_the_tick_fields_change_no_knee_bottleneck_or_summary():
+    """Three runs (failing on latency; on drops then errors; on an invalid
+    step) re-judged from their facts with no tick fields, with "absent", and
+    with every scheduler ticking every way in every step: the same step
+    judgements, knees, first failing steps and reasons, validity, bottlenecks
+    and scenario summary."""
+    method = se.load_config()
+    invalid = fx.rep_steps(method, "track", 4, ["p99"])
+    invalid[4] = fx.step_facts(method, "track", 5, generator_cpu_permille=950)
+    runs = [
+        fx.rep_steps(method, "track", 4, ["p99", "p99"]),
+        fx.rep_steps(method, "track", 3, ["dropped", "errors"]),
+        invalid,
+    ]
+    busy = fx.ticks(
+        **{
+            name: {
+                "success": 3,
+                "partial": 2,
+                "failed": 1,
+                "skipped": 4,
+                "duration_count": 6,
+                "duration_sum_us": 123_456_000,
+            }
+            for name in se.SCHEDULERS
+        }
+    )
+    variants = {
+        "removed": {},
+        "absent": {"scheduler_metrics": "absent", "scheduler_ticks": {}},
+        "busy": {"scheduler_metrics": "present", "scheduler_ticks": busy},
+    }
+    outcomes = {}
+    for how, fields in variants.items():
+        reps, said = [], []
+        for number, steps in enumerate(runs, 1):
+            judged = []
+            for step in steps:
+                facts = {
+                    key: value
+                    for key, value in step.items()
+                    if key not in TICK_FIELDS + JUDGEMENT
+                }
+                facts.update(copy.deepcopy(fields))
+                verdict, messages = se.judge_step(method, "track", facts, fx.SPLIT)
+                judged.append({**facts, **verdict})
+                said.append(messages)
+            reps.append(fx.rep(method, "track", number, judged))
+        outcomes[how] = (
+            [[_judgement(step) for step in rep["steps"]] for rep in reps],
+            [
+                {key: rep[key] for key in se.assess_rep(method, rep["steps"], fx.SPLIT)}
+                for rep in reps
+            ],
+            se.summarise_scenario(method, reps),
+            said,
+        )
+    assert outcomes["absent"] == outcomes["removed"]
+    assert outcomes["busy"] == outcomes["removed"]
+    assessed = outcomes["removed"][1]
+    assert [rep["knee_step"] for rep in assessed] == [4, 3, 4]
+    assert [rep["first_failing_reason"] for rep in assessed] == [
+        "p99",
+        "dropped",
+        "invalid",
+    ]
+
+
+def test_the_summariser_s_tick_fields_are_declared_in_the_closed_step_schema():
+    """The summariser's own record, every scheduler ticking, passes STEP_SPEC
+    with nothing left over; a field the schema does not declare is refused."""
+    record, _ = summarise(
+        metrics_before=fx.metrics(tick_state={}),
+        metrics_after=fx.metrics(tick_state=BUSY),
+    )
+    problems = []
+    se.STEP_SPEC.check(record, "step", problems)
+    assert problems == []
+    record["scheduler_ticks_by_minute"] = {}
+    se.STEP_SPEC.check(record, "step", problems)
+    assert problems == ["step.scheduler_ticks_by_minute: unknown key"]
+
+
+@pytest.mark.parametrize(
+    "edit, named",
+    [
+        (
+            lambda step: step["scheduler_ticks"].update(warehouse=fx.ticks()["safety"]),
+            "steps[0].scheduler_ticks.warehouse: unknown key",
+        ),
+        (
+            lambda step: step["scheduler_ticks"]["safety"].update(timed_out=0),
+            "steps[0].scheduler_ticks.safety.timed_out: unknown key",
+        ),
+        (
+            lambda step: step["scheduler_ticks"]["safety"].pop("skipped"),
+            "steps[0].scheduler_ticks.safety.skipped: missing key",
+        ),
+        (
+            lambda step: step.pop("scheduler_metrics"),
+            "steps[0].scheduler_metrics: missing key",
+        ),
+        (
+            lambda step: step.update(scheduler_metrics="partly"),
+            "steps[0].scheduler_metrics: must be one of ['present', 'absent']",
+        ),
+        (
+            lambda step: step.update(scheduler_metrics="absent"),
+            "evaluate_get run 1 step 1: scheduler_ticks names bandit, experiment, "
+            "metrics, rollout, safety with scheduler_metrics absent",
+        ),
+        (
+            lambda step: step["scheduler_ticks"].pop("bandit"),
+            "evaluate_get run 1 step 1: scheduler_ticks has no bandit with "
+            "scheduler_metrics present",
+        ),
+    ],
+    ids=[
+        "unknown-scheduler",
+        "unknown-field",
+        "missing-field",
+        "no-presence",
+        "unknown-presence",
+        "absent-with-schedulers",
+        "present-missing-one",
+    ],
+)
+def test_a_results_file_s_tick_fields_are_closed_and_agree(edit, named):
+    results = fx.small()
+    edit(results["scenarios"][0]["reps"][0]["steps"][0])
+    assert named in refused(se.load_results, json.dumps(results))
+
+
+# ---------------------------------------------------------------------------
 # The results file (V4, V5, V6, V7, V23, V24, V26, V40, V43, V44, V46)
 # ---------------------------------------------------------------------------
 def test_a_consistent_results_file_loads_and_is_publishable():

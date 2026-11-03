@@ -157,6 +157,16 @@ EVALUATE_REASONS: Tuple[str, ...] = ("targeting_rule", "rollout", "inactive", "e
 FLAG_CLASSES: Tuple[str, ...] = ("rule", "plain")
 ROW_ERRORS: Tuple[str, ...] = ("timeout", "connection")
 
+#: The API's background schedulers, by the ``name`` label of their tick metrics
+#: (each scheduler module's ``SCHEDULER_NAME``; a test holds the two equal).
+SCHEDULERS: Tuple[str, ...] = ("bandit", "experiment", "metrics", "rollout", "safety")
+#: A tick's outcomes, the ``status`` label (``backend/app/core/scheduler_tick.py``'s
+#: ``STATUS_*``; a test holds the two equal).
+TICK_STATUSES: Tuple[str, ...] = ("success", "partial", "failed", "skipped")
+#: Whether the API's /metrics exported the two tick families (see
+#: ``scheduler_ticks``): an API from before they existed is "absent".
+TICK_METRICS: Tuple[str, ...] = ("present", "absent")
+
 #: Why a step is INVALID, in the order the rules are checked (A3).
 INVALID_REASONS: Tuple[str, ...] = (
     "none",
@@ -578,6 +588,21 @@ STEP_SPEC = obj(
     assignments_delta=Int(0),
     reasons=MapOf((*EVALUATE_REASONS, "other"), Int(0)),
     not_modified=Int(0),
+    # Each background scheduler's ticks during the step, from the API's
+    # /metrics before and after it: scheduler_ticks_total's growth by outcome,
+    # and scheduler_tick_duration_seconds' count and sum (a histogram; a
+    # skipped tick is not timed), the sum in microseconds. Data only: no rule
+    # reads them. "absent", with no scheduler, when the API does not export the
+    # two families; never zeros. "present" names every scheduler.
+    scheduler_metrics=Enum(TICK_METRICS),
+    scheduler_ticks=MapOf(
+        SCHEDULERS,
+        obj(
+            **{status: Int(0) for status in TICK_STATUSES},
+            duration_count=Int(0),
+            duration_sum_us=Int(0),
+        ),
+    ),
     valid=Bool(),
     invalid_reason=Enum(INVALID_REASONS),
     keeps_up=Bool(),
@@ -917,6 +942,180 @@ def counter_delta(
             "whole numbers (did the API restart during the step?)"
         )
     return int(delta)
+
+
+# ---------------------------------------------------------------------------
+# The background schedulers' ticks during a step: data, never a rule
+# ---------------------------------------------------------------------------
+#: The two families (``backend/app/core/metrics.py``) and their ``# TYPE``: the
+#: ticks by scheduler and outcome, and their durations by scheduler. The API
+#: writes a family's ``# TYPE`` line in every scrape, before anything ticks.
+TICKS_FAMILY = "scheduler_ticks_total"
+DURATION_FAMILY = "scheduler_tick_duration_seconds"
+_TICK_FAMILIES: Dict[str, str] = {TICKS_FAMILY: "counter", DURATION_FAMILY: "histogram"}
+#: The samples read, each with the labels it must carry. The histogram's
+#: buckets and the ``_created`` samples are not read.
+_TICK_SAMPLES: Dict[str, Tuple[str, ...]] = {
+    TICKS_FAMILY: ("name", "status"),
+    DURATION_FAMILY + "_count": ("name",),
+    DURATION_FAMILY + "_sum": ("name",),
+}
+_LABEL = re.compile(r'([A-Za-z_][A-Za-z0-9_]{0,100})="((?:[^"\\]|\\.){0,200})"')
+
+
+def _tick_key(sample: str, scheduler: str, status: str = "") -> str:
+    """One tick series, written as its sample's name and labels."""
+    labels = f'name="{scheduler}"' + (f',status="{status}"' if status else "")
+    return f"{sample}{{{labels}}}"
+
+
+def _label_values(text: str, number: int) -> Dict[str, str]:
+    """A sample's labels: ``name="value"`` pairs, comma-separated. A value is
+    kept as written (escapes are not undone); the values read are plain words."""
+    labels: Dict[str, str] = {}
+    position = 0
+    while position < len(text):
+        match = _LABEL.match(text, position)
+        if not match:
+            raise Refused(f'metrics line {number}: its labels are not name="value"')
+        labels[match.group(1)] = match.group(2)
+        position = match.end()
+        if position < len(text):
+            if text[position] != ",":
+                raise Refused(
+                    f"metrics line {number}: its labels are not comma-separated"
+                )
+            position += 1
+    return labels
+
+
+def _tick_series(text: str, when: str) -> Tuple[set, Dict[str, decimal.Decimal]]:
+    """The tick families a scrape exports (by their ``# TYPE`` lines) and its
+    tick samples, keyed by ``_tick_key``."""
+    exported: set = set()
+    values: Dict[str, decimal.Decimal] = {}
+    for number, raw in enumerate(text.splitlines(), 1):
+        line = raw.strip()
+        if line.startswith("# TYPE "):
+            fields = line.split()
+            if len(fields) == 4 and fields[2] in _TICK_FAMILIES:
+                wanted = _TICK_FAMILIES[fields[2]]
+                if fields[3] != wanted:
+                    raise Refused(
+                        f"the metrics {when}: {fields[2]} is a {fields[3][:20]}, not a "
+                        f"{wanted}"
+                    )
+                exported.add(fields[2])
+            continue
+        if not line or line.startswith("#"):
+            continue
+        name, rest = _sample(line, number)
+        needed = _TICK_SAMPLES.get(name)
+        if needed is None:
+            continue
+        family = TICKS_FAMILY if name == TICKS_FAMILY else DURATION_FAMILY
+        if family not in exported:
+            raise Refused(
+                f"the metrics {when}, line {number}: {name} before its family's "
+                "# TYPE line"
+            )
+        labelled = line[len(name) : len(name) + 1] == "{"
+        labels = _label_values(
+            line[len(name) + 1 : len(line) - len(rest) - 1] if labelled else "",
+            number,
+        )
+        missing = [label for label in needed if label not in labels]
+        if missing:
+            raise Refused(f"metrics line {number}: {name} has no {missing[0]} label")
+        scheduler, status = labels["name"], labels.get("status", "")
+        if scheduler not in SCHEDULERS:
+            raise Refused(
+                f"the metrics {when}: a tick of a scheduler named {scheduler[:40]!r}, "
+                f"not one of {', '.join(SCHEDULERS)} (add it to SCHEDULERS)"
+            )
+        if name == TICKS_FAMILY and status not in TICK_STATUSES:
+            raise Refused(
+                f"the metrics {when}: a tick whose outcome is {status[:40]!r}, not one "
+                f"of {', '.join(TICK_STATUSES)}"
+            )
+        fields = rest.split()
+        try:
+            value = decimal.Decimal(fields[0]) if len(fields) == 1 else None
+        except decimal.InvalidOperation:
+            value = None
+        if value is None or not value.is_finite():
+            raise Refused(
+                f"metrics line {number}: {name} is not `name{{labels}} value`"
+            )
+        key = _tick_key(name, scheduler, status if name == TICKS_FAMILY else "")
+        values[key] = values.get(key, decimal.Decimal(0)) + value
+    return exported, values
+
+
+def scheduler_ticks(
+    metrics_before: str, metrics_after: str
+) -> Tuple[str, Dict[str, Dict[str, int]]]:
+    """Each background scheduler's ticks during a step, from the API's /metrics
+    before and after it.
+
+    ``("present", {scheduler: {each outcome: ticks, "duration_count": ticks
+    timed, "duration_sum_us": their duration}})`` naming every scheduler, or
+    ``("absent", {})`` when neither scrape exports the two families (an API from
+    before they existed): absent is said, never written as zeros. Once a
+    family is exported, a scheduler or an outcome with no sample has not ticked
+    yet: a count of 0. A tick is counted when it ends, so it is in the step
+    whose two scrapes it ends between; one that ends after a step's
+    after-scrape and before the next step's before-scrape is in no step.
+    """
+    exported_before, before = _tick_series(metrics_before, "before the step")
+    exported_after, after = _tick_series(metrics_after, "after the step")
+    if not exported_before and not exported_after:
+        return "absent", {}
+    families = set(_TICK_FAMILIES)
+    if exported_before != families or exported_after != families:
+        raise Refused(
+            "the scheduler tick metrics are not in both scrapes: before the step "
+            f"{', '.join(sorted(exported_before)) or 'neither'}, after it "
+            f"{', '.join(sorted(exported_after)) or 'neither'}"
+        )
+    ticks: Dict[str, Dict[str, int]] = {}
+    for scheduler in SCHEDULERS:
+        record = {
+            status: counter_delta(
+                before, after, _tick_key(TICKS_FAMILY, scheduler, status)
+            )
+            for status in TICK_STATUSES
+        }
+        record["duration_count"] = counter_delta(
+            before, after, _tick_key(DURATION_FAMILY + "_count", scheduler)
+        )
+        key = _tick_key(DURATION_FAMILY + "_sum", scheduler)
+        first = before.get(key, decimal.Decimal(0))
+        last = after.get(key, decimal.Decimal(0))
+        if last < first:
+            raise Refused(
+                f"metrics: {key} went from {first} to {last}; a sum of durations only "
+                "grows (did the API restart during the step?)"
+            )
+        micro = ((last - first) * 1_000_000).to_integral_value(decimal.ROUND_HALF_EVEN)
+        record["duration_sum_us"] = int(micro)
+        ticks[scheduler] = record
+    return "present", ticks
+
+
+def scheduler_problem(step: Mapping[str, Any]) -> str:
+    """A step's two tick fields agree, or why not: no scheduler when the
+    metrics were absent, every scheduler when they were present."""
+    ticks = step["scheduler_ticks"]
+    if step["scheduler_metrics"] == "absent":
+        if ticks:
+            names = ", ".join(ticks)
+            return f"scheduler_ticks names {names} with scheduler_metrics absent"
+        return ""
+    missing = ", ".join(name for name in SCHEDULERS if name not in ticks)
+    if missing:
+        return f"scheduler_ticks has no {missing} with scheduler_metrics present"
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -1423,6 +1622,7 @@ def summarise_step(
                 "the API always exports: an empty or failed scrape, or not the "
                 "API's /metrics"
             )
+    tick_metrics, ticks = scheduler_ticks(metrics_before, metrics_after)
     sampled = observation["sampled"]
     cpu = observation["cpu_permille"]
     threads = observation["threads"]
@@ -1485,6 +1685,8 @@ def summarise_step(
         "assignments_delta": delta,
         "reasons": reasons,
         "not_modified": sum(1 for row, _ in measured if row["status"] == "304"),
+        "scheduler_metrics": tick_metrics,
+        "scheduler_ticks": ticks,
     }
     step.update(_derived(step, method, split))
     fields, messages = judge_step(method, scenario, step, split)
@@ -1746,9 +1948,9 @@ def recompute_problems(results: Mapping[str, Any]) -> List[str]:
                     problems.append(f"{where} step {step['step']}: {error}")
                     continue
                 number = step["step"]
-                why = recovery_problem(step)
-                if why:
-                    problems.append(f"{where} step {number}: {why}")
+                for why in (recovery_problem(step), scheduler_problem(step)):
+                    if why:
+                        problems.append(f"{where} step {number}: {why}")
                 planned = rates[number - 1] if number <= len(rates) else "none"
                 if derived["milli_rps"] != planned:
                     problems.append(
