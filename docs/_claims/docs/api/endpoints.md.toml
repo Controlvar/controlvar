@@ -3245,12 +3245,22 @@ text = "AI Endpoints and the MCP Manifest"
 by = ["exempt:label"]
 
 [[unit]]
-text = "See AI Endpoints and the MCP Manifest for full documentation."
+text = "See The MCP Server and the AI Endpoints for full documentation."
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "The manifest describes these operations as tools in the vocabulary of the Model Context Protocol, but the platform runs no MCP server: an MCP client cannot connect to it or call a tool through it."
-by = ["test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_nothing_answers_an_mcp_client"]
+text = "The MCP server is a separate program on your computer that calls this API with your API key."
+by = [
+    "test:sdk/mcp/__tests__/surface.test.ts::initialize at %s",
+    "test:sdk/mcp/__tests__/tools.test.ts::list_feature_flags: the query, the projection, and only the configured key",
+]
+
+[[unit]]
+text = "Nothing on this API answers an MCP client, and the manifest only lists the server's tools."
+by = [
+    "test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_nothing_answers_an_mcp_client",
+    "test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_the_manifest_lists_the_tools_the_mcp_server_offers",
+]
 
 [[unit]]
 text = "Call the endpoints over HTTP."

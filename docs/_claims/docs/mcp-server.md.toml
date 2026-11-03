@@ -4,22 +4,39 @@
 document = "docs/mcp-server.md"
 
 [[unit]]
-text = "AI Endpoints and the MCP Manifest"
+text = "The MCP Server and the AI Endpoints"
 by = ["exempt:label"]
 
 [[unit]]
-text = "The platform serves two things for AI tooling:"
+text = "The Controlvar MCP server lets an AI assistant such as Claude Code, Claude Desktop or Cursor read your instance: list and read feature flags, evaluate a flag for a user, list experiments and read their results."
 by = [
-    "docex:docs/mcp-server.md#create_experiment",
-    "docex:docs/mcp-server.md#checkout-cta checkout",
+    "test:sdk/mcp/__tests__/surface.test.ts::the six tools and their annotations, whatever tools.json says",
+    "test:sdk/mcp/__tests__/tools.test.ts::get_experiment and get_experiment_results: the answer as served, on the checked routes",
 ]
 
 [[unit]]
-text = "a manifest at GET /api/v1/mcp/manifest, a JSON document that describes five tools in the vocabulary of the Model Context Protocol (MCP);"
-by = ["docex:docs/mcp-server.md#create_experiment"]
+text = "It runs on your computer, started by the assistant, and calls your instance's API with your own API key, so it sees what your role can see."
+by = [
+    "test:sdk/mcp/__tests__/surface.test.ts::initialize at %s",
+    "test:sdk/mcp/__tests__/tools.test.ts::list_feature_flags: the query, the projection, and only the configured key",
+    "test:sdk/mcp/__tests__/tools.test.ts::a role refused (403)",
+]
 
 [[unit]]
-text = "REST endpoints under /api/v1/ai/ that suggest an experiment design, interpret a result, estimate a sample size and list experiment templates."
+text = "It changes no flag or experiment; evaluating a flag is recorded as one evaluation, as an SDK's is."
+by = [
+    "test:sdk/mcp/__tests__/surface.test.ts::the six tools and their annotations, whatever tools.json says",
+    "test:sdk/mcp/__tests__/surface.test.ts::%s is unknown and sends nothing",
+    "test:sdk/mcp/__tests__/tools.test.ts::evaluate_feature_flag: a POST with the user and context in the body, config dropped",
+    "test:backend/tests/integration/services/test_feature_flag_targeting_rules.py::TestNativeRulesAndReasons::test_evaluation_records_matched_rule_id",
+]
+
+[[unit]]
+text = "Nothing on your instance answers an MCP client; add the server by command, not by URL."
+by = ["test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_nothing_answers_an_mcp_client"]
+
+[[unit]]
+text = "The platform also serves REST endpoints under /api/v1/ai/ that suggest an experiment design, interpret a result, estimate a sample size and list experiment templates."
 by = [
     "docex:docs/mcp-server.md#\"primary_metric\": \"activation_rate\"",
     "docex:docs/mcp-server.md#\"summary\": \"simplified showed a 3.2% improvement (p=0.030). Recommend shipping.\"",
@@ -28,42 +45,427 @@ by = [
 ]
 
 [[unit]]
-text = "The platform does not run an MCP server."
+text = "They come after the MCP server on this page."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The examples run against the Quick Start stack, in one terminal, in order: later steps use the $TOKEN and $KEY an earlier one sets."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Before you start"
+by = ["exempt:label"]
+
+[[unit]]
+text = "You need Node.js 22 or later and the address of your instance's API: http://localhost:8000 on the Quick Start stack and http://localhost:8080 on the compose stack."
 by = [
-    "test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_nothing_answers_an_mcp_client",
-    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/smoke/test_sdk_mcp_package.py::test_the_declared_node_floor_is_the_node_ci_runs",
+    "docex:docs/mcp-server.md#list_feature_flags",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_only_the_dashboard_publishes_a_port_on_loopback_by_default",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestGenerator::test_without_inputs_it_writes_the_local_url_and_the_example_admin",
 ]
 
 [[unit]]
-text = "The manifest describes tools, but nothing on the platform answers MCP's own requests, so an MCP client such as Claude Code or Cursor cannot connect to the manifest's URL or call a tool through it."
-by = ["test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_nothing_answers_an_mcp_client"]
+text = "Give the address only, with no path."
+by = ["test:sdk/mcp/__tests__/config.test.ts::a path is refused: %s"]
 
 [[unit]]
-text = "Call the REST endpoints with any HTTP client instead."
+text = "The server refuses a plain http:// address for any host other than localhost, 127.0.0.1 or [::1], because your API key would cross the network unencrypted."
+by = [
+    "test:sdk/mcp/__tests__/config.test.ts::accepted with no warning: %s",
+    "test:sdk/mcp/__tests__/config.test.ts::refused with E2d: %s",
+]
+
+[[unit]]
+text = "If your instance runs on a private network you trust and has no HTTPS, add CONTROLVAR_ALLOW_INSECURE_HTTP=1 to the server's env; the server then prints a warning each time it starts."
+by = ["test:sdk/mcp/__tests__/config.test.ts::http://10.0.0.5:8000 answers initialize, with exactly one W1 line at every start"]
+
+[[unit]]
+text = "Build the server"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Not yet published."
+by = ["mechanism:mcp-page-state"]
+
+[[unit]]
+text = "@controlvar/mcp-server is not on npm, so build it from a clone of this repository:"
+by = ["mechanism:mcp-page-state"]
+
+[[unit]]
+text = "Create an API key"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The server needs an API key that carries the mcp:read scope."
+by = [
+    "test:sdk/mcp/__tests__/tools.test.ts::a key without the scope (403)",
+    "docex:docs/mcp-server.md#[\"mcp:read\"]",
+]
+
+[[unit]]
+text = "It acts as the key's owner, so it reads what that user can read."
+by = [
+    "test:sdk/mcp/__tests__/tools.test.ts::a role refused (403)",
+    "test:sdk/mcp/__tests__/tools.test.ts::list_feature_flags: the query, the projection, and only the configured key",
+]
+
+[[unit]]
+text = "Who can create one:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An administrator can create one in the dashboard, under Admin and then API Keys, by ticking the mcp:read option."
+by = ["test:frontend/src/tests/admin/CreateApiKeyModal.test.tsx"]
+
+[[unit]]
+text = "If your instance signs people in with a local password, as the Quick Start does, anyone who can sign in can create their own with the request below."
+by = [
+    "docex:docs/mcp-server.md#[\"mcp:read\"]",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_scopes_round_trip_as_list",
+]
+
+[[unit]]
+text = "The request signs in as the Quick Start's administrator and creates the key, which is shown once."
+by = [
+    "docex:docs/mcp-server.md#[\"mcp:read\"]",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once",
+]
+
+[[unit]]
+text = "The last line prints the key's scopes:"
+by = ["docex:docs/mcp-server.md#[\"mcp:read\"]"]
+
+[[unit]]
+text = "Add the server to your assistant"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Each assistant starts the server itself, with two settings: CONTROLVAR_API_URL is your instance's address and CONTROLVAR_API_KEY is the key."
+by = [
+    "mechanism:mcp-page-snippets",
+    "test:sdk/mcp/__tests__/surface.test.ts::the environment variables are the ones the server reads",
+]
+
+[[unit]]
+text = "Claude Code"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Run this in the sdk/mcp directory you built, with the key in $KEY:"
+by = ["mechanism:mcp-page-snippets"]
+
+[[unit]]
+text = "The shell expands $KEY, so your shell history keeps $KEY, but Claude Code stores the key itself in plain text."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Claude Desktop"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Add the server to Claude Desktop's configuration file, which is ~/Library/Application Support/Claude/claude_desktop_config.json on macOS and %APPDATA%\\Claude\\claude_desktop_config.json on Windows."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Then quit Claude Desktop fully and open it again."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Cursor"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Add the same block to ~/.cursor/mcp.json."
+by = ["mechanism:mcp-page-snippets"]
+
+[[unit]]
+text = "Try it"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Ask your assistant a question that needs your instance, for example:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Is the flag beta_features on for the user user-123, on the pro plan?"
+by = ["exempt:example"]
+
+[[unit]]
+text = "How is the experiment checkout_button_color doing?"
+by = ["exempt:example"]
+
+[[unit]]
+text = "The first makes the assistant call evaluate_feature_flag."
+by = ["test:sdk/mcp/__tests__/tools.test.ts::evaluate_feature_flag: a POST with the user and context in the body, config dropped"]
+
+[[unit]]
+text = "The second makes it call list_experiments and then get_experiment_results, and a careful answer checks srm and sample_size_adequate."
+by = [
+    "test:sdk/mcp/__tests__/tools.test.ts::list_experiments: the status goes as status_filter, exactly",
+    "test:sdk/mcp/__tests__/tools.test.ts::get_experiment and get_experiment_results: the answer as served, on the checked routes",
+]
+
+[[unit]]
+text = "A command such as claude mcp list only shows that the process started, so a question is the check."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "The tools"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The server offers six tools:"
+by = ["test:sdk/mcp/__tests__/surface.test.ts::the six tools and their annotations, whatever tools.json says"]
+
+[[unit]]
+text = "Tool | What it answers | API route"
+by = ["exempt:label"]
+
+[[unit]]
+text = "list_feature_flags | The feature flags, a page at a time | GET /api/v1/feature-flags/"
+by = ["mechanism:mcp-page-tools"]
+
+[[unit]]
+text = "get_feature_flag | One feature flag, by its key | GET /api/v1/feature-flags/"
+by = ["mechanism:mcp-page-tools"]
+
+[[unit]]
+text = "evaluate_feature_flag | What a flag serves one user | POST /api/v1/feature-flags/evaluate/{flag_key}"
+by = ["mechanism:mcp-page-tools"]
+
+[[unit]]
+text = "list_experiments | The experiments, a page at a time | GET /api/v1/experiments/"
+by = ["mechanism:mcp-page-tools"]
+
+[[unit]]
+text = "get_experiment | One experiment, by its id | GET /api/v1/experiments/{experiment_id}"
+by = ["mechanism:mcp-page-tools"]
+
+[[unit]]
+text = "get_experiment_results | An experiment's statistical results | GET /api/v1/experiments/{experiment_id}/results"
+by = ["mechanism:mcp-page-tools"]
+
+[[unit]]
+text = "None of them changes a flag, an experiment or a setting."
+by = [
+    "test:sdk/mcp/__tests__/surface.test.ts::the six tools and their annotations, whatever tools.json says",
+    "test:sdk/mcp/__tests__/surface.test.ts::%s is unknown and sends nothing",
+]
+
+[[unit]]
+text = "A list tool returns at most 100 items and the total, and the assistant asks for the next page with skip."
+by = [
+    "test:sdk/mcp/__tests__/tools.test.ts::list_feature_flags: the defaults are limit 50 and skip 0",
+    "test:sdk/mcp/__tests__/tools.test.ts::list_feature_flags: a limit over 100 is refused before any request",
+]
+
+[[unit]]
+text = "What leaves your instance"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Whatever a tool returns is given to the AI model behind your assistant, and so goes to that model's provider."
+by = ["test:sdk/mcp/__tests__/tools.test.ts::get_experiment and get_experiment_results: the answer as served, on the checked routes"]
+
+[[unit]]
+text = "That includes targeting rules, which can hold user ids or email addresses, and experiment results."
+by = [
+    "test:sdk/mcp/__tests__/tools.test.ts::get_experiment and get_experiment_results: the answer as served, on the checked routes",
+    "test:sdk/mcp/__tests__/tools.test.ts::decoys before the target do not answer",
+]
+
+[[unit]]
+text = "Text that people on your instance wrote, such as the names, descriptions and hypotheses of flags and experiments, is given to the model as it is."
+by = ["test:sdk/mcp/__tests__/tools.test.ts::get_experiment and get_experiment_results: the answer as served, on the checked routes"]
+
+[[unit]]
+text = "Check this against your own data rules before you connect an assistant to an instance that holds personal data."
 by = ["exempt:advice"]
 
 [[unit]]
-text = "The examples run against the Quick Start stack, in one terminal, in order: later steps use the $TOKEN an earlier one sets."
+text = "Where the key is kept"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Your assistant keeps the key in plain text in its own settings."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "The server writes it nowhere else: it is in no tool result, error message or log line."
+by = ["test:sdk/mcp/__tests__/tools.test.ts::every tool, success and failure, leaves no part of the key anywhere"]
+
+[[unit]]
+text = "Do not use --scope project with Claude Code, and do not put the key in a .cursor/mcp.json inside a repository, because both write the key into a file in your repository, where it can be committed."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Do not put this key in a web or mobile app."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Errors"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A tool that fails answers with one message that says what failed and what to do."
+by = [
+    "test:sdk/mcp/__tests__/tools.test.ts::a role refused (403)",
+    "test:sdk/mcp/__tests__/tools.test.ts::connection refused is E5",
+]
+
+[[unit]]
+text = "A setting that can never work stops the server at start-up instead, with one line on stderr."
+by = [
+    "test:sdk/mcp/__tests__/config.test.ts::refused with E2d: %s",
+    "test:sdk/mcp/__tests__/config.test.ts::a path is refused: %s",
+]
+
+[[unit]]
+text = "Message | Cause | Fix"
+by = ["exempt:label"]
+
+[[unit]]
+text = "CONTROLVAR_API_URL is \"localhost:8000\", which is not an http:// or https:// address. | The address has no scheme. | Set it to your instance's address, for example http://localhost:8000."
+by = ["test:sdk/mcp/__tests__/config.test.ts::not http(s): %s"]
+
+[[unit]]
+text = "CONTROLVAR_API_URL is \"http://controlvar.internal:8080\", a plain http:// address on another computer, so your API key would cross the network unencrypted. | A plain http:// address for a host that is not this computer. | Use the https:// address, or set CONTROLVAR_ALLOW_INSECURE_HTTP=1 as described above."
+by = ["test:sdk/mcp/__tests__/config.test.ts::refused with E2d: %s"]
+
+[[unit]]
+text = "CONTROLVAR_ALLOW_INSECURE_HTTP has a value this server does not accept. | The setting has any value other than 1. | Remove it, or set it to 1."
+by = ["test:sdk/mcp/__tests__/config.test.ts::%j is refused with E2e, for an https:// address too"]
+
+[[unit]]
+text = "CONTROLVAR_API_KEY is not set. | The assistant's settings have no key. | Set CONTROLVAR_API_KEY to the key you created."
+by = ["test:sdk/mcp/__tests__/config.test.ts::blank"]
+
+[[unit]]
+text = "CONTROLVAR_API_KEY looks like a sign-in token, not an API key. | A sign-in token was pasted where the key goes. | Create an API key and use that."
+by = ["test:sdk/mcp/__tests__/config.test.ts::a sign-in token is named as one, and not echoed"]
+
+[[unit]]
+text = "Could not reach the Controlvar API at http://localhost:8000: connection refused. | The instance is not running at that address. | Start the instance, or correct CONTROLVAR_API_URL."
+by = ["test:sdk/mcp/__tests__/tools.test.ts::connection refused is E5"]
+
+[[unit]]
+text = "http://localhost:3100 answered, but not as the Controlvar API (it sent a web page). | The address is the dashboard's. | Use the address that serves /api/v1: http://localhost:8000 on the Quick Start stack."
+by = ["test:sdk/mcp/__tests__/tools.test.ts::a web page with 200 (the dashboard's address) is E9"]
+
+[[unit]]
+text = "The Controlvar API at http://127.0.0.1:8080 refused that host name (400: Invalid host header). | The instance does not accept that host name. | Use the host name your instance is set up for."
+by = ["test:sdk/mcp/__tests__/tools.test.ts::400 Invalid host header is E11"]
+
+[[unit]]
+text = "The Controlvar API at http://localhost:8000 did not accept the key in CONTROLVAR_API_KEY (401: Invalid API Key). | The key was deleted or has expired, or its owner's account is deactivated, or your instance is too old to accept an API key for these routes. | Create a new key, or upgrade the instance."
+by = [
+    "test:sdk/mcp/__tests__/tools.test.ts::a deleted or expired key (401 Invalid API Key)",
+    "test:sdk/mcp/__tests__/tools.test.ts::an instance older than the read scope (401 Not authenticated)",
+    "test:backend/tests/unit/api/test_api_key_owner_deactivated.py::test_a_valid_key_of_a_deactivated_or_missing_owner_is_refused",
+]
+
+[[unit]]
+text = "Listing feature flags failed: This API key does not have the 'mcp:read' scope. | The key was created without the mcp:read scope. | Create a key with the mcp:read scope."
+by = ["test:sdk/mcp/__tests__/tools.test.ts::a key without the scope (403)"]
+
+[[unit]]
+text = "Listing feature flags failed: You don't have permission to list feature flags (403). | The key's owner may not read this. | Use a key owned by a user who can."
+by = ["test:sdk/mcp/__tests__/tools.test.ts::a role refused (403)"]
+
+[[unit]]
+text = "The Controlvar API is limiting requests from this address (429). Try again in 30 seconds. | Too many requests. | Wait as long as the message says."
+by = ["test:sdk/mcp/__tests__/tools.test.ts::429 with Retry-After is E18"]
+
+[[unit]]
+text = "The Controlvar API at http://localhost:8000 failed while listing feature flags (500). | The instance failed. | Give your administrator the request id in the message."
+by = ["test:sdk/mcp/__tests__/tools.test.ts::500 with X-Request-ID is E19, naming that id"]
+
+[[unit]]
+text = "Revoking a key"
+by = ["exempt:label"]
+
+[[unit]]
+text = "To stop the server working, delete its key: in the dashboard under Admin and then API Keys, or with DELETE /api/v1/api-keys/{id}."
+by = [
+    "test:frontend/src/tests/admin/ApiKeyTable.test.tsx",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestDelete::test_deleted_key_no_longer_authenticates",
+]
+
+[[unit]]
+text = "When a key is deleted or expires, or its owner's account is deactivated, the next tool call fails with the 401 message above."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestDelete::test_deleted_key_no_longer_authenticates",
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_an_expired_or_inactive_key_is_401",
+    "test:backend/tests/unit/api/test_api_key_owner_deactivated.py::test_a_valid_key_of_a_deactivated_or_missing_owner_is_refused",
+    "test:sdk/mcp/__tests__/tools.test.ts::a deleted or expired key (401 Invalid API Key)",
+]
+
+[[unit]]
+text = "Removing a user from the identity provider does not revoke their API keys: deactivate the Controlvar user or delete the keys."
+by = [
+    "test:backend/tests/unit/api/test_api_key_owner_deactivated.py::test_a_valid_key_of_a_deactivated_or_missing_owner_is_refused",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestDelete::test_deleted_key_no_longer_authenticates",
+]
+
+[[unit]]
+text = "To use a new key, create it, run claude mcp remove controlvar, add the server again and start a new session."
 by = ["exempt:instruction"]
+
+[[unit]]
+text = "Versions"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The server reports the version in sdk/mcp/package.json to your assistant when it starts."
+by = ["test:sdk/mcp/__tests__/surface.test.ts::initialize at %s"]
 
 [[unit]]
 text = "The manifest"
 by = ["exempt:label"]
 
 [[unit]]
-text = "The manifest needs no sign-in:"
-by = ["docex:docs/mcp-server.md#create_experiment"]
+text = "The manifest at GET /api/v1/mcp/manifest lists the server's tools, so you can read what the server offers without installing it."
+by = [
+    "test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_the_manifest_lists_the_tools_the_mcp_server_offers",
+    "docex:docs/mcp-server.md#list_feature_flags",
+]
 
 [[unit]]
-text = "It lists five tools: create_experiment, get_results, toggle_feature_flag, suggest_experiment and interpret_results."
-by = ["docex:docs/mcp-server.md#create_experiment"]
+text = "It needs no sign-in:"
+by = ["docex:docs/mcp-server.md#list_feature_flags"]
 
 [[unit]]
 text = "Each entry has a name, a description and its parameters:"
 by = [
     "test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_each_tool_has_a_name_a_description_and_parameters",
-    "docex:docs/mcp-server.md#\"experiment_type\"",
+    "docex:docs/mcp-server.md#\"experiment_id\"",
 ]
+
+[[unit]]
+text = "The manifest's version is the manifest's own, not the server's."
+by = [
+    "test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_mcp_manifest_has_name_and_version",
+    "test:sdk/mcp/__tests__/surface.test.ts::initialize at %s",
+]
+
+[[unit]]
+text = "The AI endpoints"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The endpoints under /api/v1/ai/ suggest an experiment design, interpret a result, estimate a sample size and list experiment templates."
+by = [
+    "docex:docs/mcp-server.md#\"primary_metric\": \"activation_rate\"",
+    "docex:docs/mcp-server.md#\"summary\": \"simplified showed a 3.2% improvement (p=0.030). Recommend shipping.\"",
+    "docex:docs/mcp-server.md#\"required_per_variant\": 73855",
+    "docex:docs/mcp-server.md#checkout-cta checkout",
+]
+
+[[unit]]
+text = "Call them with any HTTP client."
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Signing in"

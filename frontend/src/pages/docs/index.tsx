@@ -64,7 +64,7 @@ const sections = [
       { label: 'Android Kotlin SDK', href: docsUrl('sdk/android'), desc: 'Native Kotlin SDK for Android (minSdk 21). Coroutines, OkHttp, Compose examples.' },
       { label: 'Flutter SDK', href: docsUrl('sdk/flutter'), desc: 'Dart SDK for Flutter (iOS, Android, web and desktop). Results are decided by the server, with an offline fallback.' },
       { label: 'React Native SDK', href: docsUrl('sdk/react-native'), desc: 'useFlag and useExperiment hooks, Provider, AsyncStorage offline support.' },
-      { label: 'MCP tool manifest', href: docsUrl('mcp-server'), desc: "Describes the API's tools for AI assistants." },
+      { label: 'MCP server', href: docsUrl('mcp-server'), desc: 'Connect Claude Code, Claude Desktop or Cursor to your instance: read flags and experiment results.' },
       { label: 'OpenFeature Provider', href: docsUrl('sdk/openfeature'), desc: 'OpenFeature (a CNCF project) providers' },
       { label: 'Edge SDK', href: docsUrl('sdk/edge'), desc: 'For Cloudflare Workers, Vercel Edge and Deno Deploy. Zero runtime dependencies; results cached in memory or KV.' },
       { label: 'Ruby SDK', href: docsUrl('sdk/ruby'), desc: 'Ruby gem with zero runtime dependencies, a thread-safe TTL cache and Net::HTTP.' },

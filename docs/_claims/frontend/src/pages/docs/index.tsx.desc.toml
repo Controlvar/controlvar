@@ -133,7 +133,7 @@ text = "useFlag and useExperiment hooks, Provider, AsyncStorage offline support.
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Describes the API's tools for AI assistants."
+text = "Connect Claude Code, Claude Desktop or Cursor to your instance: read flags and experiment results."
 by = ["mechanism:docs-hub"]
 
 [[unit]]

@@ -13,7 +13,7 @@
 
 [meta]
 documents = 57
-exec = 325
+exec = 326
 universe = [
     ".github/pull_request_template.md",
     ".github/qa-templates/README.md",
@@ -546,9 +546,9 @@ expects = 5
 [[document]]
 path = "docs/mcp-server.md"
 environment = "stack"
-exec = 12
-skip = 0
-expects = 34
+exec = 13
+skip = 2
+expects = 36
 
 # #1075: the API reference, compliance, RBAC and technical guide pages, each
 # signing in first and running as written.

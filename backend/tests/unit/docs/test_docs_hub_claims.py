@@ -263,10 +263,15 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         says("### useFlag(flagKey, attributes?): FlagState"),
         says("### useExperiment(experimentKey): ExperimentState"),
     ),
-    "Describes the API's tools for AI assistants.": (
+    "Connect Claude Code, Claude Desktop or Cursor to your instance: read flags and experiment results.": (
         lede(
-            "describes five tools in the vocabulary of the Model Context Protocol (MCP)"
+            "lets an AI assistant such as Claude Code, Claude Desktop or Cursor read your instance"
         ),
+        lede("list and read feature flags"),
+        lede("list experiments and read their results"),
+        says("### Claude Code"),
+        says("### Claude Desktop"),
+        says("### Cursor"),
     ),
     "OpenFeature (a CNCF project) providers": (
         lede("OpenFeature Provider"),
