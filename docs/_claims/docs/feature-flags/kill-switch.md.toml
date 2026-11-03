@@ -53,6 +53,14 @@ by = [
 ]
 
 [[unit]]
+text = "The server-mode JavaScript and Python SDKs ask the API again only after their cache lifetime ends, not before; a flag turned off is therefore served for at most that lifetime after the switch."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::caches a success for 300000 ms by default",
+    "test:sdk/js/__tests__/client.test.ts::a cached answer expires at exactly cacheTtlMs",
+    "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_cache_expires_after_ttl",
+]
+
+[[unit]]
 text = "SDK | Cache lifetime (default) | Clear it from your code"
 by = ["exempt:label"]
 

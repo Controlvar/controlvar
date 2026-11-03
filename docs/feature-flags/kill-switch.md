@@ -14,6 +14,9 @@ asks it for the flag, except the edge SDK: 1 minute, or about 2 with a KV store,
 own propagation time (an instance can copy a KV entry up to 60 seconds old into its memory for
 another 60).
 
+The server-mode JavaScript and Python SDKs ask the API again only after their cache lifetime ends,
+not before; a flag turned off is therefore served for at most that lifetime after the switch.
+
 | SDK | Cache lifetime (default) | Clear it from your code |
 |---|---|---|
 | JavaScript | `cacheTtlMs` (300000 ms) | `clearCache()` |
