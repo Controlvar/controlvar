@@ -1200,8 +1200,9 @@ DISTANCE_COMPARISON_REASON = (
 )
 DISTANCE_UNIT_REASON = "unknown distance unit; use km, mi or m, or leave it out for km"
 TIME_WINDOW_REASON = (
-    "unreadable time window; see the time_window example on the Targeting "
-    "Rules: Operator Reference page"
+    "unreadable time window; give days (0 to 6), start_time and end_time "
+    "(HH:MM), or start_date and end_date (YYYY-MM-DD); a timezone must be a "
+    "name such as Europe/Paris"
 )
 VOCABULARY_REASONS = (
     NOT_ON_FLAGS_REASON,
@@ -1771,9 +1772,12 @@ def _time_window_value(value: Any) -> Dict[str, Any]:
     """
     Normalise ``time_window`` into the dict the engine reads.
 
-    The ``Condition`` schema requires ``start``/``end`` keys while the engine
-    reads ``start_time``/``end_time``; both spellings are kept so the value
-    validates and evaluates.
+    The dashboard shape gives a window as ``start``/``end`` (``HH:MM``), which
+    the engine does not read; it reads ``start_time``/``end_time``. Both
+    spellings are kept, so a window saved with either is read as times of
+    day. This shape still requires one of the two pairs: a dashboard window
+    given only as ``days`` or dates is refused here (``value is not valid for
+    the operator``), although the native shape accepts one (#1527).
     """
     if isinstance(value, str):
         try:

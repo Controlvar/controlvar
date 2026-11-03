@@ -565,6 +565,10 @@ by = [
 ]
 
 [[unit]]
+text = "One open on weekdays, at any time of day:"
+by = ["test:backend/tests/unit/core/test_time_window_without_start_end.py::test_every_readable_window_is_accepted_and_evaluated"]
+
+[[unit]]
 text = "Keys that say when the window is open (every key given must hold):"
 by = [
     "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowCombined::test_weekday_outside_business_hours",
@@ -612,22 +616,27 @@ text = "Without it, the moment's own clock time is compared."
 by = ["test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_a_window_without_a_timezone_compares_the_moments_own_clock_time"]
 
 [[unit]]
-text = "start and end: the Condition schema requires them, but the engine does not read them."
+text = "start and end: the engine does not read them."
 by = [
     "test:backend/tests/unit/core/test_rules_engine_time_window.py::TestTimeWindowInvalidInputs::test_a_window_with_no_key_the_engine_reads_matches_nobody",
     "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_time_window_keeps_both_spellings",
 ]
 
 [[unit]]
-text = "A rule saved from the dashboard stores start and end as HH:MM, and those are read as start_time and end_time."
+text = "A rule saved from the dashboard stores start and end as HH:MM, and those are read as start_time and end_time; in the dashboard shape a window still needs start and end (or start_time and end_time)."
 by = [
     "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_time_window_keeps_both_spellings",
     "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_time_window_evaluates",
+    "test:backend/tests/unit/core/test_time_window_without_start_end.py::test_a_dashboard_window_still_needs_start_and_end",
 ]
 
 [[unit]]
-text = "In the native shape, give start_time and end_time (or the other keys) as well, as the example does."
-by = ["exempt:instruction"]
+text = "A native window needs at least one of days, start_time with end_time, or start_date with end_date; besides timezone, any other key is ignored."
+by = [
+    "test:backend/tests/unit/core/test_time_window_without_start_end.py::test_every_readable_window_is_accepted_and_evaluated",
+    "test:backend/tests/unit/core/test_time_window_without_start_end.py::test_an_unreadable_window_is_refused_with_the_reason",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_a_readable_window_is_saved_on_every_kind",
+]
 
 [[unit]]
 text = "A window with none of those keys, or with one that cannot be read (days not 0-6, a time that is not HH:MM, an unknown timezone, a date that is not YYYY-MM-DD), is refused, and a warning is logged once."
@@ -663,8 +672,10 @@ by = [
 ]
 
 [[unit]]
-text = "In the native shape, a window that cannot be read is also refused when the rules of a flag or an experiment are saved (422); one saved before that is evaluated as above."
+text = "In the native shape, a window that cannot be read is also refused when the rules of a flag or an experiment are saved (422, with the reason unreadable time window; give days (0 to 6), start_time and end_time (HH:MM), or start_date and end_date (YYYY-MM-DD); a timezone must be a name such as Europe/Paris); one saved before that is evaluated as above."
 by = [
+    "test:backend/tests/unit/core/test_time_window_without_start_end.py::test_the_reason_names_the_readable_keys_and_never_start_or_end",
+    "test:backend/tests/unit/core/test_time_window_without_start_end.py::test_a_stored_native_window_without_start_or_end_is_now_evaluated",
     "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_refused_with_fixed_text",
     "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_every_native_operator_is_refused_or_can_match",
     "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_create_refuses_the_word",
@@ -849,6 +860,22 @@ by = [
     "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_create_refuses_the_word",
     "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_an_unreadable_window_abandons_the_whole_ruleset",
     "test:backend/tests/unit/core/test_targeting_values.py::test_a_stored_dashboard_window_a_save_refuses_still_answers_error",
+    "test:backend/tests/unit/core/test_time_window_without_start_end.py::test_a_stored_unreadable_window_still_answers_error",
+]
+
+[[unit]]
+text = "Native rules stored with a window that has no start or end ({\"days\": [0, 1]}, or {}) are evaluated as written: a window that can be read applies with the rest of the rules, and one that cannot abandons the ruleset as above."
+by = [
+    "test:backend/tests/unit/core/test_time_window_without_start_end.py::test_a_stored_native_window_without_start_or_end_is_now_evaluated",
+    "test:backend/tests/unit/core/test_time_window_without_start_end.py::test_the_sdk_ruleset_serves_such_a_flag_for_remote_evaluation",
+]
+
+[[unit]]
+text = "python -m backend.scripts.check_targeting_rules --time-window-changes lists the flags and experiments that hold one, and how each one's answer changes on upgrade."
+by = [
+    "test:backend/tests/unit/scripts/test_check_targeting_rules.py::test_time_window_changes_lists_exactly_the_windows_without_start_or_end",
+    "test:backend/tests/unit/scripts/test_check_targeting_rules.py::test_a_time_window_change_says_how_the_answer_changes",
+    "test:backend/tests/integration/api/test_check_targeting_rules_time_windows.py::test_time_window_changes_lists_the_planted_flags_and_experiment",
 ]
 
 [[unit]]

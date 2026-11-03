@@ -136,8 +136,6 @@ as `null` means the current time; an attribute that is not sent does not match.
   "attribute": "current_time",
   "operator": "time_window",
   "value": {
-    "start": "09:00",
-    "end": "17:00",
     "start_time": "09:00",
     "end_time": "17:00",
     "days": [0, 1, 2, 3, 4],
@@ -148,7 +146,11 @@ as `null` means the current time; an attribute that is not sent does not match.
 ```
 
 This window is open from 09:00 to 17:00, Monday to Friday, from 1 to 31 January
-2024.
+2024. One open on weekdays, at any time of day:
+
+```json
+{"attribute": "current_time", "operator": "time_window", "value": {"days": [0, 1, 2, 3, 4]}}
+```
 
 **Keys that say when the window is open** (every key given must hold):
 - `start_time`, `end_time`: `HH:MM` or `HH:MM:SS`, both or neither. The end
@@ -159,11 +161,12 @@ This window is open from 09:00 to 17:00, Monday to Friday, from 1 to 31 January
 `timezone` (optional), a name such as `Europe/Paris`, reads the moment in that
 timezone. Without it, the moment's own clock time is compared.
 
-**`start` and `end`:** the `Condition` schema requires them, but the engine
-does not read them. A rule saved from the dashboard stores `start` and `end` as
-`HH:MM`, and those are read as `start_time` and `end_time`. In the native shape,
-give `start_time` and `end_time` (or the other keys) as well, as the example
-does. A window with none of those keys, or with one that cannot be read (`days`
+**`start` and `end`:** the engine does not read them. A rule saved from the
+dashboard stores `start` and `end` as `HH:MM`, and those are read as
+`start_time` and `end_time`; in the dashboard shape a window still needs `start`
+and `end` (or `start_time` and `end_time`). A native window needs at least one
+of `days`, `start_time` with `end_time`, or `start_date` with `end_date`; besides
+`timezone`, any other key is ignored. A window with none of those keys, or with one that cannot be read (`days`
 not 0-6, a time that is not `HH:MM`, an unknown timezone, a date that is not
 `YYYY-MM-DD`), is refused, and a warning is logged once. For a user whose
 evaluation reaches the window, the evaluation is abandoned: the flag answers off
@@ -172,12 +175,14 @@ segment that holds the window cannot be decided for them. A user decided by an
 earlier rule never reaches it, and a window in `default_rule` is never read. So
 a window with ISO datetimes in `start` and `end` is refused, in either shape
 (accepting them is #1156). In the native shape, a window that cannot be read is
-also refused when the rules of a flag or an experiment are saved (`422`); one
-saved before that is evaluated as above. A window in the dashboard shape that
-cannot be read is refused when the rules of a flag, an experiment or a segment
-are saved (`422`, `unreadable time window; give start and end as HH:MM ...`);
-one saved before that is evaluated as above. For a window between two moments,
-use `after` and `before` (below) in an `AND` group.
+also refused when the rules of a flag or an experiment are saved (`422`, with the
+reason `unreadable time window; give days (0 to 6), start_time and end_time
+(HH:MM), or start_date and end_date (YYYY-MM-DD); a timezone must be a name such
+as Europe/Paris`); one saved before that is evaluated as above. A window in the
+dashboard shape that cannot be read is refused when the rules of a flag, an
+experiment or a segment are saved (`422`, `unreadable time window; give start and
+end as HH:MM ...`); one saved before that is evaluated as above. For a window
+between two moments, use `after` and `before` (below) in an `AND` group.
 
 Flag targeting and experiment targeting read a window the same way.
 
@@ -229,7 +234,11 @@ no `default_rule` applies, and a `NOT` around the condition does not turn it int
   above, because the user's membership of that segment cannot be decided.
 
 A `time_window` that cannot be read, in either shape, is now refused when the rules are saved,
-and one stored before that still abandons the ruleset as above.
+and one stored before that still abandons the ruleset as above. Native rules stored with a window that has no
+`start` or `end` (`{"days": [0, 1]}`, or `{}`) are evaluated as written: a window that can be
+read applies with the rest of the rules, and one that cannot abandons the ruleset as above.
+`python -m backend.scripts.check_targeting_rules --time-window-changes` lists the flags and
+experiments that hold one, and how each one's answer changes on upgrade.
 
 ## Usage examples
 

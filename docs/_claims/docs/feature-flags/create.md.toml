@@ -643,6 +643,14 @@ by = [
 ]
 
 [[unit]]
+text = "in the native shape, a time_window the engine cannot read: it needs days, start_time with end_time, or start_date with end_date, and needs no start or end;"
+by = [
+    "test:backend/tests/unit/core/test_time_window_without_start_end.py::test_an_unreadable_window_is_refused_with_the_reason",
+    "test:backend/tests/unit/core/test_time_window_without_start_end.py::test_every_readable_window_is_accepted_and_evaluated",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_create_refuses_the_word",
+]
+
+[[unit]]
 text = "a rollout_percentage, top-level or on a native rule, that is not an integer from 0 to 100 (100.0 is accepted; 33.5, true and \"50\" are not), or an id that is not text of 1 to 100 characters."
 by = [
     "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused",

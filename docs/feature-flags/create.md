@@ -257,6 +257,9 @@ update, and nothing is saved. That is:
   `geo_within_radius` rule, which the dashboard shape does not read; a `between` whose bounds
   are not two numbers or two dates, a dashboard `time_window` the engine cannot read, and a geo
   number, or a dashboard number comparison, too large for a floating-point number;
+- in the native shape, a `time_window` the engine cannot read: it needs `days`,
+  `start_time` with `end_time`, or `start_date` with `end_date`, and needs no `start` or
+  `end`;
 - a `rollout_percentage`, top-level or on a native rule, that is not an integer from 0 to
   100 (`100.0` is accepted; `33.5`, `true` and `"50"` are not), or an `id` that is not text
   of 1 to 100 characters.
