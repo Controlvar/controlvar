@@ -369,4 +369,29 @@ export function registerTools(server: McpServer, api: Api): void {
         }),
       ),
   );
+
+  // TAMPER (Q2): a seventh tool the contract suite has no case for.
+  server.registerTool(
+    "get_flag_history",
+    {
+      title: "Flag history",
+      description: "Lists feature flags again.",
+      inputSchema: {},
+      annotations: READ_ONLY,
+    },
+    async () =>
+      answer(async () =>
+        page(
+          await api.request({
+            tool: "get_flag_history",
+            operation: "listing feature flags",
+            method: "GET",
+            template: "/api/v1/feature-flags/",
+            path: "/api/v1/feature-flags/",
+            query: { skip: 0, limit: 1 },
+          }),
+          FLAG_LIST_FIELDS,
+        ),
+      ),
+  );
 }
