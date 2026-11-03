@@ -359,15 +359,24 @@ def test_the_returning_user_gets_the_variant_the_preload_rule_gives():
 # ---------------------------------------------------------------------------
 def summarise(scenario="evaluate_get", number=4, rows=None, method=None, **observed):
     """summarise_step on a healthy step, with the observation's keys (and the
-    two metrics texts) replaced as given."""
+    two metrics texts, and the gap before the step) replaced as given. By
+    default a step after the first has a gap in which nothing ticked: the
+    previous after-scrape is its own before-scrape."""
     method = method or se.load_config()
     rows = fx.step_rows(method, scenario, number) if rows is None else rows
     before = observed.pop("metrics_before", fx.metrics("a"))
     after = observed.pop("metrics_after", fx.metrics("a"))
+    gap = observed.pop("gap", None if number == 1 else (before, fx.GAP_MS))
     observation = fx.observation(method, scenario, number, rows=len(rows))
     observation.update(observed)
     return se.summarise_step(
-        method, scenario, se.read_rows(fx.csv_text(rows)), observation, before, after
+        method,
+        scenario,
+        se.read_rows(fx.csv_text(rows)),
+        observation,
+        before,
+        after,
+        gap,
     )
 
 
@@ -988,7 +997,13 @@ BUSY = {
     name: {"success": 3, "partial": 2, "failed": 1, "skipped": 4, "seconds": "123.456"}
     for name in se.SCHEDULERS
 }
-TICK_FIELDS = ("scheduler_metrics", "scheduler_ticks")
+TICK_FIELDS = (
+    "scheduler_metrics",
+    "scheduler_ticks",
+    "gap_metrics",
+    "gap_ticks",
+    "gap_ms",
+)
 JUDGEMENT = ("valid", "invalid_reason", "keeps_up", "fail_reason")
 
 
@@ -1216,9 +1231,11 @@ def test_the_scheduler_names_outcomes_and_families_are_the_api_s():
 )
 def test_the_tick_fields_change_no_step_judgement(situation, expected):
     """The same rows and observation summarised with no tick metrics, with
-    idle schedulers, and with every scheduler ticking every way between the
-    scrapes: the same VALID, KEEPS UP, reasons and messages, and every other
-    field equal. Only the two tick fields differ."""
+    idle schedulers, with every scheduler ticking every way between the
+    scrapes, and with every scheduler ticking every way in the gap before the
+    step, each tick far longer than a 1 ms gap: the same VALID, KEEPS UP,
+    reasons and messages, and every other field equal. Only the tick and gap
+    fields differ."""
     method = se.load_config()
     rows = fx.step_rows(
         method,
@@ -1231,10 +1248,18 @@ def test_the_tick_fields_change_no_step_judgement(situation, expected):
     if "generator" in situation:
         cpu = fx.observation(method, "track", 4)["cpu_permille"]
         observed["cpu_permille"] = {**cpu, "generator": situation["generator"]}
+    idle = fx.metrics(tick_state={})
+    # (the previous step's after-scrape, the gap's width, before, after)
     scrapes = {
-        "none": (fx.metrics(), fx.metrics()),
-        "idle": (fx.metrics(tick_state={}), fx.metrics(tick_state={})),
-        "busy": (fx.metrics(tick_state={}), fx.metrics(tick_state=BUSY)),
+        "none": (fx.metrics(), fx.GAP_MS, fx.metrics(), fx.metrics()),
+        "idle": (idle, fx.GAP_MS, idle, idle),
+        "busy": (idle, fx.GAP_MS, idle, fx.metrics(tick_state=BUSY)),
+        "busy-gap": (
+            idle,
+            1,
+            fx.metrics(tick_state=BUSY),
+            fx.metrics(tick_state=BUSY),
+        ),
     }
     judged = {
         name: summarise(
@@ -1243,9 +1268,10 @@ def test_the_tick_fields_change_no_step_judgement(situation, expected):
             rows=rows,
             metrics_before=before,
             metrics_after=after,
+            gap=(previous, width),
             **observed,
         )
-        for name, (before, after) in scrapes.items()
+        for name, (previous, width, before, after) in scrapes.items()
     }
     base, said = judged["none"]
     assert tuple(_judgement(base).values()) == expected
@@ -1254,14 +1280,19 @@ def test_the_tick_fields_change_no_step_judgement(situation, expected):
         assert (_judgement(record), messages) == (_judgement(base), said), name
         assert {k: v for k, v in record.items() if k not in TICK_FIELDS} == others
     assert judged["busy"][0]["scheduler_ticks"]["safety"]["success"] == 3
+    gapped = judged["busy-gap"][0]
+    assert gapped["gap_ticks"]["safety"]["success"] == 3
+    assert gapped["gap_ticks"]["safety"]["duration_sum_us"] > 1000 * gapped["gap_ms"]
+    assert gapped["scheduler_ticks"] == fx.ticks()
 
 
 def test_the_tick_fields_change_no_knee_bottleneck_or_summary():
     """Three runs (failing on latency; on drops then errors; on an invalid
-    step) re-judged from their facts with no tick fields, with "absent", and
-    with every scheduler ticking every way in every step: the same step
-    judgements, knees, first failing steps and reasons, validity, bottlenecks
-    and scenario summary."""
+    step) re-judged from their facts with no tick or gap fields, with
+    "absent", and with every scheduler ticking every way in every step and in
+    every gap (each gap 1 ms wide, so every gap tick is longer than its gap):
+    the same step judgements, knees, first failing steps and reasons,
+    validity, bottlenecks and scenario summary."""
     method = se.load_config()
     invalid = fx.rep_steps(method, "track", 4, ["p99"])
     invalid[4] = fx.step_facts(method, "track", 5, generator_cpu_permille=950)
@@ -1283,11 +1314,25 @@ def test_the_tick_fields_change_no_knee_bottleneck_or_summary():
             for name in se.SCHEDULERS
         }
     )
-    variants = {
-        "removed": {},
-        "absent": {"scheduler_metrics": "absent", "scheduler_ticks": {}},
-        "busy": {"scheduler_metrics": "present", "scheduler_ticks": busy},
-    }
+    first = {"gap_metrics": se.FIRST_STEP, "gap_ticks": {}, "gap_ms": None}
+
+    def absent(number):
+        gap = {"gap_metrics": "absent", "gap_ticks": {}, "gap_ms": fx.GAP_MS}
+        return {
+            "scheduler_metrics": "absent",
+            "scheduler_ticks": {},
+            **(first if number == 1 else gap),
+        }
+
+    def ticking(number):
+        gap = {"gap_metrics": "present", "gap_ticks": busy, "gap_ms": 1}
+        return {
+            "scheduler_metrics": "present",
+            "scheduler_ticks": busy,
+            **(first if number == 1 else gap),
+        }
+
+    variants = {"removed": lambda number: {}, "absent": absent, "busy": ticking}
     outcomes = {}
     for how, fields in variants.items():
         reps, said = [], []
@@ -1299,7 +1344,7 @@ def test_the_tick_fields_change_no_knee_bottleneck_or_summary():
                     for key, value in step.items()
                     if key not in TICK_FIELDS + JUDGEMENT
                 }
-                facts.update(copy.deepcopy(fields))
+                facts.update(copy.deepcopy(fields(step["step"])))
                 verdict, messages = se.judge_step(method, "track", facts, fx.SPLIT)
                 judged.append({**facts, **verdict})
                 said.append(messages)
@@ -1325,15 +1370,27 @@ def test_the_tick_fields_change_no_knee_bottleneck_or_summary():
 
 
 def test_the_summariser_s_tick_fields_are_declared_in_the_closed_step_schema():
-    """The summariser's own record, every scheduler ticking, passes STEP_SPEC
-    with nothing left over; a field the schema does not declare is refused."""
+    """The summariser's own record, every scheduler ticking in the step and in
+    the gap before it, passes STEP_SPEC with nothing left over, and so does a
+    step 1; a field the schema does not declare is refused."""
     record, _ = summarise(
-        metrics_before=fx.metrics(tick_state={}),
+        metrics_before=fx.metrics(tick_state=BUSY),
         metrics_after=fx.metrics(tick_state=BUSY),
+        gap=(fx.metrics(tick_state={}), fx.GAP_MS),
     )
-    problems = []
-    se.STEP_SPEC.check(record, "step", problems)
-    assert problems == []
+    assert record["gap_ticks"]["bandit"]["skipped"] == 4
+    idle = fx.metrics(tick_state={})
+    first, _ = summarise("track", 1, metrics_before=idle, metrics_after=idle)
+    assert (first["gap_metrics"], first["gap_ticks"], first["gap_ms"]) == (
+        se.FIRST_STEP,
+        {},
+        None,
+    )
+    for step in (record, first):
+        problems = []
+        se.STEP_SPEC.check(step, "step", problems)
+        assert problems == []
+        assert se.gap_problem(step) == ""
     record["scheduler_ticks_by_minute"] = {}
     se.STEP_SPEC.check(record, "step", problems)
     assert problems == ["step.scheduler_ticks_by_minute: unknown key"]
@@ -1386,6 +1443,238 @@ def test_the_summariser_s_tick_fields_are_declared_in_the_closed_step_schema():
 def test_a_results_file_s_tick_fields_are_closed_and_agree(edit, named):
     results = fx.small()
     edit(results["scenarios"][0]["reps"][0]["steps"][0])
+    assert named in refused(se.load_results, json.dumps(results))
+
+
+# ---------------------------------------------------------------------------
+# The ticks that ended in the gap before a step: recorded as data, never judged
+# ---------------------------------------------------------------------------
+#: One more tick on UP_A_WHILE, as (scheduler, its cumulative state after the
+#: tick, the tick's duration in us): a metrics tick of 30.5 s, longer than a
+#: gap of fx.GAP_MS (12.48 s), and a safety tick of 1.25 s, shorter.
+LONG_TICK = ("metrics", {"success": 2, "seconds": "34.2"}, 30_500_000)
+SHORT_TICK = ("safety", {"success": 4, "seconds": "4.1"}, 1_250_000)
+
+
+def _longer_than_the_gap(record):
+    """The schedulers whose one tick in a step's gap took longer than the gap:
+    how the fields are read (such a tick started before the previous step's
+    sending ended). The summariser records; it never makes this reading."""
+    return [
+        name
+        for name, tick in record["gap_ticks"].items()
+        if tick["duration_count"] == 1
+        and tick["duration_sum_us"] > 1000 * record["gap_ms"]
+    ]
+
+
+@pytest.mark.parametrize(
+    "tick", [LONG_TICK, SHORT_TICK], ids=["longer-than-the-gap", "shorter"]
+)
+@pytest.mark.parametrize(
+    "first, where",
+    [(2, "gap 2"), (3, "step 2"), (4, "gap 3")],
+    ids=["ends-before-step-2", "ends-in-step-2", "ends-before-step-3"],
+)
+def test_a_planted_tick_is_in_the_gap_or_the_step_it_ended_in_and_nowhere_else(
+    tick, first, where
+):
+    """Three steps from six cumulative scrapes, each step's before and after,
+    and each later step's gap from the previous step's after-scrape. A tick
+    ending between step 1's after-scrape and step 2's before-scrape is in step
+    2's gap_ticks (and in no step's scheduler_ticks, #1705); one ending between
+    step 2's own scrapes is in step 2's scheduler_ticks and in no gap; one
+    after step 2's after-scrape is in step 3's gap. The tick keeps its
+    duration and the gap its width: read against gap_ms, the 30.5 s tick
+    started before the previous step's sending ended, the 1.25 s one may not
+    have."""
+    name, state, micro = tick
+    ticked = {**UP_A_WHILE, name: state}
+    scrapes = [
+        fx.metrics(tick_state=ticked if index >= first else UP_A_WHILE)
+        for index in range(6)
+    ]
+    widths = {1: None, 2: fx.GAP_MS, 3: fx.GAP_MS + 7}
+    records = [
+        summarise(
+            "track",
+            number,
+            metrics_before=scrapes[2 * number - 2],
+            metrics_after=scrapes[2 * number - 1],
+            gap=None if number == 1 else (scrapes[2 * number - 3], widths[number]),
+        )[0]
+        for number in (1, 2, 3)
+    ]
+    one = fx.ticks(
+        **{name: {"success": 1, "duration_count": 1, "duration_sum_us": micro}}
+    )
+    expected_steps = [fx.ticks(), one if where == "step 2" else fx.ticks(), fx.ticks()]
+    expected_gaps = [
+        {},
+        one if where == "gap 2" else fx.ticks(),
+        one if where == "gap 3" else fx.ticks(),
+    ]
+    assert [record["scheduler_ticks"] for record in records] == expected_steps
+    assert [record["gap_ticks"] for record in records] == expected_gaps
+    assert [record["gap_metrics"] for record in records] == [
+        se.FIRST_STEP,
+        "present",
+        "present",
+    ]
+    assert [record["gap_ms"] for record in records] == list(widths.values())
+    longer = [name] if micro > 1000 * fx.GAP_MS else []
+    assert [_longer_than_the_gap(record) for record in records[1:]] == [
+        longer if where == "gap 2" else [],
+        longer if where == "gap 3" else [],
+    ]
+
+
+def test_step_1_s_gap_is_said_to_be_unmeasured_never_zeros_and_never_counted():
+    """The warm-up before step 1 takes no scrape. A tick that ended in it,
+    however long, is in no field of step 1: "first-step", {} and null, never
+    zeros. A gap given for step 1 (here one holding that tick, beside a width
+    it is far longer than) is refused rather than recorded; a later step given
+    none is refused too."""
+    ticked = fx.metrics(tick_state={**UP_A_WHILE, "metrics": LONG_TICK[1]})
+    record, _ = summarise("track", 1, metrics_before=ticked, metrics_after=ticked)
+    assert (record["gap_metrics"], record["gap_ticks"], record["gap_ms"]) == (
+        se.FIRST_STEP,
+        {},
+        None,
+    )
+    assert record["scheduler_ticks"] == fx.ticks()
+    assert se.gap_problem(record) == ""
+    planted = (fx.metrics(tick_state=UP_A_WHILE), 1)
+    assert "step 1 has no gap before it to record" in refused(
+        summarise,
+        "track",
+        1,
+        metrics_before=ticked,
+        metrics_after=ticked,
+        gap=planted,
+    )
+    assert "step 2 needs the gap before it" in refused(summarise, "track", 2, gap=None)
+
+
+@pytest.mark.parametrize("width", [0, -40, True, "12480"])
+def test_a_gap_whose_width_is_not_a_positive_number_of_ms_is_refused(width):
+    message = refused(summarise, "track", 2, gap=(fx.metrics("a"), width))
+    assert "a gap's width is a positive number of milliseconds" in message
+
+
+@pytest.mark.parametrize(
+    "previous, named",
+    [
+        (
+            fx.metrics(tick_state={"safety": {"success": 4, "seconds": "3.8"}}),
+            'scheduler_ticks_total{name="safety",status="success"} went from 4.0 '
+            "to 3.0",
+        ),
+        (fx.metrics(), "the scheduler tick metrics are not in both scrapes"),
+    ],
+    ids=["api-restarted-in-the-gap", "one-scrape-only"],
+)
+def test_a_gap_that_cannot_be_read_as_one_gap_is_refused(previous, named):
+    """scheduler_ticks' own refusals, named as the gap's: the API restarted
+    between the steps (a counter went down), or only one of the two scrapes
+    exports the tick families."""
+    up = fx.metrics(tick_state=UP_A_WHILE)
+    message = refused(
+        summarise, "track", 2, metrics_before=up, metrics_after=up, gap=(previous, 1)
+    )
+    assert message.startswith("the gap before step 2: ") and named in message
+
+
+@pytest.mark.parametrize(
+    "index, edit, named",
+    [
+        (
+            1,
+            lambda step: step["gap_ticks"].update(warehouse=fx.ticks()["safety"]),
+            "steps[1].gap_ticks.warehouse: unknown key",
+        ),
+        (
+            1,
+            lambda step: step["gap_ticks"]["metrics"].pop("duration_sum_us"),
+            "steps[1].gap_ticks.metrics.duration_sum_us: missing key",
+        ),
+        (1, lambda step: step.pop("gap_ms"), "steps[1].gap_ms: missing key"),
+        (
+            1,
+            lambda step: step.update(gap_ms=0),
+            "steps[1].gap_ms: must be at least 1, got 0",
+        ),
+        (
+            1,
+            lambda step: step.update(gap_metrics="partly"),
+            "steps[1].gap_metrics: must be one of ['present', 'absent', 'first-step']",
+        ),
+        (
+            1,
+            lambda step: step.update(gap_ms=None),
+            "evaluate_get run 1 step 2: gap_ms is null on step 2",
+        ),
+        (
+            1,
+            lambda step: step.update(
+                gap_metrics="first-step", gap_ticks={}, gap_ms=None
+            ),
+            "evaluate_get run 1 step 2: gap_metrics first-step on step 2",
+        ),
+        (
+            1,
+            lambda step: step.update(gap_metrics="absent", gap_ticks={}),
+            "evaluate_get run 1 step 2: gap_metrics absent with scheduler_metrics "
+            "present",
+        ),
+        (
+            1,
+            lambda step: step["gap_ticks"].pop("bandit"),
+            "evaluate_get run 1 step 2: gap_ticks has no bandit with gap_metrics "
+            "present",
+        ),
+        (
+            1,
+            lambda step: step.update(
+                scheduler_metrics="absent", scheduler_ticks={}, gap_metrics="absent"
+            ),
+            "evaluate_get run 1 step 2: gap_ticks names bandit, experiment, metrics, "
+            "rollout, safety with gap_metrics absent",
+        ),
+        (0, lambda step: step.update(gap_ms=0), "steps[0].gap_ms: must be at least 1"),
+        (
+            0,
+            lambda step: step.update(gap_ticks=fx.ticks(), gap_ms=fx.GAP_MS),
+            "evaluate_get run 1 step 1: step 1 records gap_ticks ['bandit', "
+            "'experiment', 'metrics', 'rollout', 'safety'] and gap_ms 12480",
+        ),
+        (
+            0,
+            lambda step: step.update(
+                gap_metrics="present", gap_ticks=fx.ticks(), gap_ms=fx.GAP_MS
+            ),
+            "evaluate_get run 1 step 1: step 1 has gap_metrics present",
+        ),
+    ],
+    ids=[
+        "unknown-scheduler",
+        "missing-field",
+        "no-width",
+        "zero-width",
+        "unknown-presence",
+        "null-width-after-step-1",
+        "first-step-after-step-1",
+        "presence-disagrees",
+        "present-missing-one",
+        "absent-with-schedulers",
+        "step-1-zero-width",
+        "step-1-with-a-gap",
+        "step-1-present",
+    ],
+)
+def test_a_results_file_s_gap_fields_are_closed_and_agree(index, edit, named):
+    results = fx.small()
+    edit(results["scenarios"][0]["reps"][0]["steps"][index])
     assert named in refused(se.load_results, json.dumps(results))
 
 
@@ -2334,11 +2623,17 @@ def test_summarise_exits_by_validity(tmp_path):
         "--out",
         str(tmp_path / "step.json"),
     ]
+    gap = ["--metrics-previous-after", str(paths["a.txt"]), "--gap-ms", "12480"]
     paths["obs.json"].write_text(
         json.dumps(fx.observation(method, "track", 4)), "utf-8"
     )
+    alone = _cli(*common, gap[0], gap[1])
+    assert alone.returncode == 2 and "--gap-ms go together" in alone.stderr
+    common += gap
     assert _cli(*common).returncode == 0
-    assert json.loads((tmp_path / "step.json").read_text("utf-8"))["keeps_up"] is True
+    record = json.loads((tmp_path / "step.json").read_text("utf-8"))
+    assert record["keeps_up"] is True
+    assert (record["gap_metrics"], record["gap_ms"]) == ("absent", 12480)
     paths["obs.json"].write_text(
         json.dumps(fx.observation(method, "track", 4, fallback_log_lines=1)), "utf-8"
     )
