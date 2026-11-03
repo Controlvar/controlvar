@@ -50,19 +50,25 @@ C0, C1 = _users("control", 2)
 T0, T1 = _users("treatment", 2)
 
 
-def start(status: str | None = None, dedup: bool | None = None) -> list[dict]:
-    experiment = {
-        "exp": EXP,
-        "variants": [{"name": n, "allocation": a} for n, a in ARMS],
-    }
-    if status is not None:
-        experiment["status"] = status
+def start(
+    status: str | None = None, dedup: bool | None = None, extra: tuple[str, ...] = ()
+) -> list[dict]:
+    """A start listing EXP and, when given, the other experiments in *extra*."""
+    experiments = []
+    for key in (EXP, *extra):
+        experiment = {
+            "exp": key,
+            "variants": [{"name": n, "allocation": a} for n, a in ARMS],
+        }
+        if status is not None:
+            experiment["status"] = status
+        experiments.append(experiment)
     return [
         {
             "kind": "start",
             "source": "k1",
             "seed": 0,
-            "experiments": [experiment],
+            "experiments": experiments,
             "flags": [],
             "planted": {},
             "declared": {} if dedup is None else {"event_dedup": dedup},
@@ -86,14 +92,15 @@ def assign(
     reason="assigned",
     seq=None,
     index=None,
+    exp=EXP,
 ) -> list[dict]:
     record = {
         "kind": "assign",
         "user": user,
-        "exp": EXP,
+        "exp": exp,
         "status": status,
         "assigned": assigned if status == 200 else None,
-        "variant": (variant or hashing.variant_for(user, EXP, ARMS))
+        "variant": (variant or hashing.variant_for(user, exp, ARMS))
         if status == 200
         else None,
         "reason": reason if status == 200 else None,
@@ -105,12 +112,12 @@ def assign(
     return [record]
 
 
-def _event(user, event_type, event_name, value, status, event_id, exp, route):
+def _event(user, event_type, event_name, value, status, event_id, exp, route, flag):
     return {
         "kind": "event",
         "user": user,
         "exp": exp,
-        "flag": None,
+        "flag": flag,
         "event_type": event_type,
         "event_name": event_name,
         "value": value,
@@ -131,8 +138,11 @@ def track(
     event_id=None,
     exp=EXP,
     route="/track",
+    flag=None,
 ) -> list[dict]:
-    return [_event(user, event_type, event_name, value, status, event_id, exp, route)]
+    return [
+        _event(user, event_type, event_name, value, status, event_id, exp, route, flag)
+    ]
 
 
 def batch(seq: int, events: list[dict], *, status=200, errors=None) -> list[dict]:
@@ -281,6 +291,38 @@ def test_r4_an_event_sent_again_with_its_id_is_stored_once_the_first_kept():
     assert e.value_totals("control", "purchase") == [1.0 + 4.0 + 4.0 + 8.0 + 32.0]
     assert e.counts("control", "checkout") == [1]
     assert e.total_events == 1 + 6
+
+
+def test_r4_the_whole_key_counts_user_experiment_flag_and_event_name():
+    """The same ``event_id`` for another user, experiment, flag or event name is
+    another event; only all five equal is a repeat."""
+    other = "k1b"
+    found = contract.valid_events(
+        ledger_of(
+            start("active", dedup=True, extra=(other,)),
+            assign(C0),
+            assign(C1),
+            assign(C0, exp=other),
+            track(C0, value=1.0, event_id="same"),
+            track(C0, value=1.0, event_id="same"),  # repeat: not stored
+            track(C1, value=2.0, event_id="same"),  # another user
+            track(C0, value=4.0, event_id="same", flag="f1"),  # another flag
+            track(C0, value=4.0, event_id="same", flag="f1"),  # repeat: not stored
+            track(C0, value=8.0, event_id="same", flag="f2"),  # a third flag
+            track(C0, event_type="checkout", value=16.0, event_id="same"),  # a name
+            track(C0, value=32.0, event_id="same", exp=other),  # another experiment
+            track(C0, value=32.0, event_id="same", exp=other),  # repeat: not stored
+        )
+    )
+    e = found.experiments[EXP]
+    assert e.counts("control", "purchase") == [3, 1]
+    assert e.value_totals("control", "purchase") == [1.0 + 4.0 + 8.0, 2.0]
+    assert e.counts("control", "checkout") == [1, 0]
+    assert e.total_events == 2 + 5
+    b =found.experiments[other]
+    arm = hashing.variant_for(C0, other, ARMS)
+    assert b.counts(arm, "purchase") == [1]
+    assert b.total_events == 1 + 1
 
 
 def test_r4_a_repeat_of_an_event_first_received_while_paused_stays_out():
