@@ -446,6 +446,67 @@ def test_events_by_ids_count_only_for_a_user_assigned_to_that_variant(
     assert results["summary"]["total_events"] == before + 3
 
 
+def test_events_by_ids_sent_before_the_assignment_count_once_it_names_that_variant(
+    admin_client, db_session, experiment
+):
+    """``/tracking/events`` does not wait for the assignment: a purchase naming
+    each variant, sent before the user is assigned, counts for the variant the
+    user is then assigned to and in the other variant not at all. A user who is
+    never assigned counts nowhere."""
+    exp = experiment
+    ids = {arm: _variant_id(exp, arm) for arm in ("control", "treatment")}
+
+    def send(user_id: str, variant_id: str) -> None:
+        response = admin_client.post(
+            "/api/v1/tracking/events",
+            json={
+                "event_name": "purchase",
+                "user_id": user_id,
+                "experiment_id": str(exp.id),
+                "variant_id": variant_id,
+                "value": 20.0,
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["variant_id"] == variant_id
+
+    never = f"hec-{exp.key}-never"
+    send(never, ids["control"])
+    send(never, ids["treatment"])
+
+    users = [f"hec-{exp.key}-late-{i}" for i in range(6)]
+    for user_id in users:
+        send(user_id, ids["control"])
+        send(user_id, ids["treatment"])
+
+    assigned_to = {}
+    for user_id in users:
+        assigned = admin_client.post(
+            "/api/v1/tracking/assign",
+            json={"experiment_key": exp.key, "user_id": user_id},
+        )
+        assert assigned.status_code == 200, assigned.text
+        assigned_to[user_id] = assigned.json()["variant_name"]
+
+    arms = _arms(_results(admin_client, exp))
+    for arm in ("control", "treatment"):
+        # Each late user sent one purchase naming this arm; only those assigned
+        # to it count, once each, for their own purchase of 20.
+        mine = sum(1 for a in assigned_to.values() if a == arm)
+        assert arms[CONVERSION][arm]["conversions"] == mine, arm
+        assert arms[COUNT][arm]["mean"] == pytest.approx(
+            mine / arms[CONVERSION][arm]["sample_size"]
+        ), arm
+    # Both arms were drawn, so each case above is exercised.
+    assert set(assigned_to.values()) == {"control", "treatment"}
+    # The user who was never assigned is in no arm's counts.
+    assert all(
+        arms[CONVERSION][arm]["sample_size"]
+        == USERS + sum(1 for a in assigned_to.values() if a == arm)
+        for arm in ("control", "treatment")
+    )
+
+
 def test_an_event_from_a_crawler_is_stored_and_counted(
     admin_client, db_session, experiment
 ):
