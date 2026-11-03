@@ -36,6 +36,9 @@ DOCS = "backend/tests/unit/docs"
 #: The AWS installer beta's harness and sweep tests: they need only bash and jq,
 #: so a skip there is a gate that did not run.
 INSTALLER = "backend/tests/installer_sweeps"
+#: The ground-truth library's gates (#1544): its cross-checks need nothing a
+#: full checkout lacks, so a skip there is an answer left unchecked.
+GROUND_TRUTH = "backend/tests/unit/ground_truth"
 
 
 def _report(tmp_path: Path, cases: str) -> Path:
@@ -161,6 +164,7 @@ def _job_steps(workflow: str, job_name: str) -> list[dict]:
         ("pr-qa-gate.yml", "Unit Tests", SHOWCASE),
         ("pr-qa-gate.yml", "Unit Tests", DOCS),
         ("pr-qa-gate.yml", "Unit Tests", INSTALLER),
+        ("pr-qa-gate.yml", "Unit Tests", GROUND_TRUTH),
         (
             "pr-qa-gate.yml",
             "Unit Tests",

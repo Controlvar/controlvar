@@ -5,42 +5,67 @@
 
 ## Overview
 
-The RBAC (Role-Based Access Control) module stores three layers of permissions for a user:
+A user may do what their built-in role allows, plus what their custom roles and unexpired direct grants hold. Roles and grants only add: none takes a permission away. A role or grant can hold only the eleven permissions below, and none gives administration: managing users, custom roles and grants, other users' API keys, holdouts and exclusion-group status, and safety settings depends on the built-in role or the superuser flag, never on a custom role or grant.
 
-1. **Base Role** — One of four built-in system roles assigned to every user (`admin`, `developer`, `analyst`, `viewer`). Defined as the static `ROLE_PERMISSIONS` dict in `backend/app/core/permissions.py`.
+Three layers decide what a user may do:
+
+1. **Built-in role** (`base_role` in the API) — One of four roles every user has (`admin`, `developer`, `analyst`, `viewer`). Defined as the static `ROLE_PERMISSIONS` dict in `backend/app/core/permissions.py`.
 2. **Custom Roles** — DB-backed roles with configurable per-resource/action permission sets. An admin can create any number of custom roles and assign them to users.
 3. **Direct Permission Grants** — Per-user, per-resource grants made without assigning a role. Supports optional expiry timestamps for temporary grants.
 
-!!! warning "Only the base role decides what a user can do"
-    Routes check the base role (through `check_permission()` in
-    `backend/app/core/permissions.py`) or the superuser flag; none reads custom roles or
-    direct grants.
-    Custom roles and direct grants are stored, and shown by
-    `GET /api/v1/rbac/users/{user_id}/permissions`, but no permission check reads them:
-    assigning a custom role or granting a permission changes nothing a user can do.
-    Whether to make them take effect or remove them is tracked in
-    [#891](https://github.com/Controlvar/controlvar/issues/891).
+Roles are assigned and grants made through this API; the dashboard's Roles page defines roles.
 
-### Effective Permissions Resolution
+### How a permission check decides
 
-`GET /api/v1/rbac/users/{user_id}/permissions` merges all three layers to build the set it shows. No permission check uses this set (see the note above):
+Every permission check (`check_permission()`, `can_act_on_feature_flag()` and `can_read_all_audit_logs()` in `backend/app/core/permissions.py`) answers in this order:
 
 ```text
-effective_permissions(user) =
-    ROLE_PERMISSIONS[user.base_role]
-    ∪ union(custom_role.permissions for each custom_role assigned to user)
-    ∪ union(grant.permissions for each valid direct grant for user)
+allowed(user, resource, action) =
+    user.is_superuser
+    or ROLE_PERMISSIONS[user.base_role] holds (resource, action)
+    or (resource, action) is one of the eleven, and an active custom role
+       or an unexpired direct grant of the user holds it
 ```
 
-Superusers (`is_superuser=True`) pass every permission check and have full access to every resource and action.
+- Permissions are **additive** — a permission held by any layer is held. There is no deny: a custom role or grant cannot take away what the built-in role gives.
+- A custom role or direct grant of a `feature_flag` action admits any flag, whoever owns it: access to flags is by permission, not ownership.
+- Changes apply at once: a role assigned, a grant made, revoked or expired, or a role changed or deleted is read on the user's next request.
+- Expired or deactivated direct grants, and assignments and grants recorded before custom roles took effect (below), are left out.
+- A permission a role or grant stores outside the eleven (from before they were checked) never takes effect.
 
-### Permission Resolution Precedence
+Superusers (`is_superuser=True`) pass every permission check.
 
-These rules describe the set the endpoint shows:
+### What each permission allows
 
-- Permissions are **additive** — a permission granted by any layer is granted overall.
-- There is no deny mechanism; a higher layer cannot revoke a permission given by a lower layer.
-- Expired or deactivated direct grants are excluded from the union.
+| Permission | What a custom role or direct grant of it allows |
+|---|---|
+| `experiment (create)` | Create and clone experiments, including through the experiment wizard and LLM experiments. Also: read the global holdout, and manage exclusion groups (list, create, view, change other than their status, add and remove experiments). Create segments. |
+| `experiment (read)` | Every built-in role already has it. |
+| `experiment (update)` | Change, schedule, start, pause, complete, archive and annotate any experiment; trigger a bandit update; change LLM experiments; change segments and their members; in the full profile, write the real-time counters. |
+| `experiment (delete)` | Delete draft experiments, and archive segments. |
+| `experiment (list)` | Every built-in role already has it. |
+| `feature_flag (create)` | Create flags. |
+| `feature_flag (read)` | Every built-in role already has it. |
+| `feature_flag (update)` | Change any flag: on and off, targeting, values, rollout and rollout schedules, including bulk toggle. Also: create and use server-side SDK keys (API keys with the `sdk:ruleset` scope); assigning users in a batch with such a key also needs `experiment (update)`. |
+| `feature_flag (delete)` | Delete any flag. |
+| `feature_flag (list)` | Every built-in role already has it. |
+| `audit_log (read)` | Read the audit log, including other users' entries, its statistics and each item's history. Without it, Developer and Viewer users read only their own entries. It does not give the compliance audit events, reports or exports. |
+
+### What a role or grant cannot give
+
+A custom role or direct grant holds only the eleven permissions above and only adds to the built-in role. Whatever a user's roles and grants hold, these stay with the built-in role or the superuser flag:
+
+- **Administration:** managing users; defining custom roles, assigning them and making grants (ADMIN); other users' API keys; creating, activating and ending global holdouts, and archiving or unarchiving exclusion groups (ADMIN); safety settings; and the optional modules' administration (ETL, HIPAA, integrations, SSO, resetting counters).
+- **The compliance audit trail:** the compliance audit events (`GET /api/v1/compliance/audit-events`) and reports (`GET /api/v1/compliance/reports/{standard}`) need ADMIN or ANALYST, and the compliance export (`GET /api/v1/compliance/export`) needs ADMIN; a superuser reads all three. `audit_log (read)` reads the audit log, not this trail.
+- **Other built-in-role decisions:** the split-URL preview, interaction analysis, notifications and the warehouse analysis roles.
+
+To restrict someone, give them a lower built-in role. A custom role or grant never takes a permission away.
+
+### Assignments and grants made before custom roles took effect
+
+**Assignments and grants made before custom roles took effect** grant nothing, and the API does not list them: `custom_roles` and `user_count` count only assignments that take effect. To keep one, assign the role or make the grant again. The migration `modules_0004_rbac_activation` logged those that existed when it ran; any made after it ran were not logged. Making a grant again adds a new grant beside the old one, so a later revoke counts both; to drop an old grant, revoke it (`DELETE /api/v1/rbac/users/{user_id}/grant/{resource}` deletes inactive grants too).
+
+Downgrading the modules schema below `modules_0004_rbac_activation` after the release in which custom roles took effect drops every activation time: every assignment and grant is inactive again, and stays inactive after upgrading; assign the roles and make the grants again. See [Migrations](../self-hosting/migrations.md).
 
 ---
 
@@ -108,11 +133,10 @@ Returns all custom roles. Any authenticated user can call this.
   {
     "id": "a1b2c3d4-...",
     "name": "data-scientist",
-    "description": "Read access to experiments plus export",
+    "description": "Reads experiments and creates them",
     "is_system_role": false,
     "permissions": [
-      {"resource": "experiment", "actions": ["read", "list"]},
-      {"resource": "export", "actions": ["read"]}
+      {"resource": "experiment", "actions": ["read", "list", "create"]}
     ],
     "created_at": "2026-03-01T10:00:00Z",
     "user_count": 5
@@ -148,7 +172,7 @@ Creates a new custom role. **ADMIN only.**
   "description": "Can view experiments and results but not create or modify",
   "permissions": [
     {"resource": "experiment", "actions": ["read", "list"]},
-    {"resource": "report", "actions": ["read", "list"]}
+    {"resource": "feature_flag", "actions": ["read", "list"]}
   ]
 }
 ```
@@ -159,9 +183,13 @@ Creates a new custom role. **ADMIN only.**
 - Only lowercase letters, digits, hyphens (`-`), and underscores (`_`) are allowed
 - Examples of valid names: `data-scientist`, `read_only_experiments`, `analyst2`
 
-**Available resources:** `experiment`, `feature_flag`, `user`, `role`, `permission`, `report`, `audit_log`, `export`
-
-**Available actions:** `create`, `read`, `update`, `delete`, `list`
+**What a role or a grant can hold:** `experiment` and `feature_flag`, each with `create`,
+`read`, `update`, `delete` and `list`, and `audit_log` with `read`. A request that gives a
+custom role or a direct grant any other resource or action (`user`, `role`, `permission`,
+`report`, `export`, or `audit_log` with anything but `read`) is refused with `422`, and
+nothing is written. Roles and grants stored before this check read back unchanged; see
+[Update Custom Role](#update-custom-role) and
+[Revoke Direct Permission](#revoke-direct-permission) for removing what they hold.
 
 **Response 201**
 
@@ -173,7 +201,7 @@ Creates a new custom role. **ADMIN only.**
   "is_system_role": false,
   "permissions": [
     {"resource": "experiment", "actions": ["read", "list"]},
-    {"resource": "report", "actions": ["read", "list"]}
+    {"resource": "feature_flag", "actions": ["read", "list"]}
   ],
   "created_at": "2026-03-01T10:00:00Z",
   "user_count": 0
@@ -183,7 +211,32 @@ Creates a new custom role. **ADMIN only.**
 **Error responses:**
 - `409 Conflict` — A role with this name already exists
 - `403 Forbidden` — Caller is not an admin
-- `422 Unprocessable Entity` — Invalid name format or empty actions list
+- `422 Unprocessable Entity` — Invalid name format or empty actions list, or a permission
+  a role cannot hold (`"type": "not_grantable"`, below)
+
+A permission a role cannot hold is refused with `"type": "not_grantable"` at
+`["body", "permissions"]`. The message names each refused resource once, with only its
+refused actions, then what a role or a grant can hold:
+
+```{.bash exec}
+curl -s -X POST http://localhost:8000/api/v1/rbac/roles \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "exporter",
+    "permissions": [
+      {"resource": "export", "actions": ["read"]},
+      {"resource": "audit_log", "actions": ["read", "list"]}
+    ]
+  }' | jq '.detail[0] | {type, loc, msg}'
+```
+<!-- expect: "type": "not_grantable" -->
+<!-- expect: "msg": "export (read) and audit_log (list) cannot be granted. A custom role or a direct grant -->
+<!-- expect: can hold only experiment (create, read, update, delete, list), feature_flag (create, read, update, delete, list) and audit_log (read)" -->
+
+It prints `"type": "not_grantable"`, the `loc` and the message
+`export (read) and audit_log (list) cannot be granted. A custom role or a direct grant can hold only experiment (create, read, update, delete, list), feature_flag (create, read, update, delete, list) and audit_log (read)`.
+No `exporter` role is created.
 
 **Example**
 
@@ -195,10 +248,9 @@ curl -s -X POST http://localhost:8000/api/v1/rbac/roles \
   -H "Content-Type: application/json" \
   -d '{
     "name": "data-scientist",
-    "description": "Read access to experiments plus export",
+    "description": "Reads experiments and creates them",
     "permissions": [
-      {"resource": "experiment", "actions": ["read", "list"]},
-      {"resource": "export", "actions": ["read"]}
+      {"resource": "experiment", "actions": ["read", "list", "create"]}
     ]
   }' | jq '{name, is_system_role, user_count}'
 ```
@@ -264,10 +316,17 @@ Update a custom role's description or permission set. **ADMIN only.** System rol
 
 **Response 200** — Updated role object (same shape as GET)
 
+`permissions`, when it is sent, replaces the role's whole set and is checked like
+Create's: a permission a role cannot hold is refused with `422`
+(`"type": "not_grantable"`), and nothing changes. A role stored before that check with
+other permissions still reads back with them, and an update that sends only
+`description` keeps them; to remove them, send the permissions the role should keep.
+
 **Error responses:**
 - `400 Bad Request` — Attempted to modify a system role
 - `403 Forbidden` — Caller is not an admin
 - `404 Not Found` — Role does not exist
+- `422 Unprocessable Entity` — A permission a role cannot hold (`"type": "not_grantable"`)
 
 ---
 
@@ -294,7 +353,7 @@ Delete a custom role. **ADMIN only.** System roles cannot be deleted.
 POST /api/v1/rbac/roles/assign
 ```
 
-Assign a custom role to a user. **ADMIN only.** This operation is idempotent — assigning a role to a user who already has it is a no-op.
+Assign a custom role to a user. **ADMIN only.** The role takes effect from the user's next request. This operation is idempotent — assigning a role to a user who already has it is a no-op. Assigning a role whose assignment was recorded before custom roles took effect activates it; the response is the same `assigned`.
 
 **Request Body**
 
@@ -333,8 +392,9 @@ curl -s -X POST http://localhost:8000/api/v1/rbac/roles/assign \
 <!-- expect: "status": "assigned" -->
 <!-- expect: "role": "data-scientist" -->
 
-It prints `"status": "assigned"` and `"role": "data-scientist"`. The assignment is stored;
-the analyst can still do only what the `analyst` base role allows.
+It prints `"status": "assigned"` and `"role": "data-scientist"`. From the analyst's next
+request the role takes effect: the analyst can create experiments, which the `analyst`
+built-in role alone does not allow. The end of this page revokes it.
 
 ---
 
@@ -374,7 +434,7 @@ Revoke a custom role from a user. **ADMIN only.**
 GET /api/v1/rbac/users/{user_id}/permissions
 ```
 
-Returns the fully resolved permission set for a user, merging base role + custom roles + valid direct grants. This is a display: routes check only the base role, so a custom role or direct grant listed here does not let the user do anything their base role does not.
+Returns what the permission checks allow the user: for `experiment` and `feature_flag`, the actions the checks admit (from the built-in role, active custom roles and unexpired direct grants), and `audit_log` with `read` when the user may read other users' audit entries. Only these three resources are listed: no other can be held by a custom role or grant, and administration depends on the built-in role or the superuser flag. `custom_roles` lists only the roles that take effect.
 
 **Access control:** Users can view their own permissions. Admins can view any user's permissions.
 
@@ -411,16 +471,15 @@ An admin viewing another user's permissions, here the analyst's:
 
 ```{.bash exec}
 curl -s -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:8000/api/v1/rbac/users/$ANALYST_ID/permissions" | jq '{base_role, custom_roles, export: .permissions.export}'
+  "http://localhost:8000/api/v1/rbac/users/$ANALYST_ID/permissions" | jq -c '{base_role, custom_roles, experiment: .permissions.experiment}'
 ```
-<!-- expect: "base_role": "analyst" -->
+<!-- expect: "base_role":"analyst" -->
 <!-- expect: "data-scientist" -->
-<!-- expect: "export": [ -->
-<!-- expect: "read" -->
+<!-- expect: "experiment":["create","list","read"] -->
 
-It prints the base role, `"analyst"`, the stored `data-scientist` role, and `export: ["read"]`
-from that role in the set shown. The `analyst` base role holds no export permission, and
-it is still the only thing that decides what the analyst can do.
+It prints the built-in role, `"analyst"`, the `data-scientist` role, and
+`"experiment":["create","list","read"]`: `create` comes from that role, which the `analyst`
+built-in role does not have, and the analyst can now create experiments.
 
 ---
 
@@ -430,21 +489,24 @@ it is still the only thing that decides what the analyst can do.
 POST /api/v1/rbac/users/{user_id}/grant
 ```
 
-Grant a specific resource permission directly to a user, without assigning a role. The grant is stored and shown by Get Effective Permissions; no permission check reads it yet ([#891](https://github.com/Controlvar/controlvar/issues/891)). Supports optional expiry for temporary grants. **ADMIN only.**
+Grant a specific resource permission directly to a user, without assigning a role. The grant takes effect from the user's next request, until it expires or is revoked. Supports optional expiry for temporary grants. **ADMIN only.**
 
 **Request Body**
 
 ```json
 {
   "user_id": "user-uuid",
-  "resource": "report",
-  "actions": ["create", "read"],
-  "reason": "Temporary access for Q1 reporting",
+  "resource": "feature_flag",
+  "actions": ["update"],
+  "reason": "Covering the release rotation",
   "expires_at": "2026-04-01T00:00:00Z"
 }
 ```
 
-`expires_at` is optional. If omitted, the grant never expires.
+`expires_at` is optional. If omitted, the grant never expires. `resource` and `actions`
+are checked as a role's permissions are (see
+[What a role or a grant can hold](#create-custom-role)): any other pair is refused with
+`422` (`"type": "not_grantable"`, at `["body"]`), and nothing is written.
 
 **Response 201**
 
@@ -452,19 +514,20 @@ Grant a specific resource permission directly to a user, without assigning a rol
 {
   "status": "granted",
   "user_id": "user-uuid",
-  "resource": "report",
-  "actions": ["create", "read"]
+  "resource": "feature_flag",
+  "actions": ["update"]
 }
 ```
 
 **Error responses:**
 - `403 Forbidden` — Caller is not an admin
+- `422 Unprocessable Entity` — A permission a grant cannot hold (`"type": "not_grantable"`)
 
 **Example — Temporary permission with expiry**
 
 `expires_at` must be in the future: a grant whose `expires_at` has already passed is
 stored, but Get Effective Permissions leaves it out from the start. This grants the
-analyst `report` access for a week from now:
+analyst `feature_flag` `update` for a week from now:
 
 ```{.bash exec}
 WEEK=$(jq -nr 'now + 7*86400 | todate')
@@ -474,17 +537,17 @@ curl -s -X POST "http://localhost:8000/api/v1/rbac/users/$ANALYST_ID/grant" \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": "'"$ANALYST_ID"'",
-    "resource": "report",
-    "actions": ["create", "read"],
-    "reason": "One-week access for reporting",
+    "resource": "feature_flag",
+    "actions": ["update"],
+    "reason": "One-week release rotation",
     "expires_at": "'"$WEEK"'"
   }' | jq .
 ```
 <!-- expect: "status": "granted" -->
-<!-- expect: "resource": "report" -->
+<!-- expect: "resource": "feature_flag" -->
 
-It prints `"status": "granted"` and `"resource": "report"`. The grant is stored and shown;
-it changes nothing the analyst can do.
+It prints `"status": "granted"` and `"resource": "feature_flag"`. Until it expires, the
+analyst can change any flag. The end of this page revokes it.
 
 ---
 
@@ -501,7 +564,7 @@ Revoke all direct permission grants for a user+resource combination. **ADMIN onl
 | Parameter  | Type   | Description                |
 |------------|--------|----------------------------|
 | `user_id`  | UUID   | Target user's ID           |
-| `resource` | string | Resource name (e.g. `export`) |
+| `resource` | string | Resource name (e.g. `experiment`) |
 
 **Response 200**
 
@@ -512,7 +575,9 @@ Revoke all direct permission grants for a user+resource combination. **ADMIN onl
 }
 ```
 
-`count` is the number of grant records deleted.
+`count` is the number of grant records deleted, and includes inactive and expired grants.
+`resource` is any text, not only a resource a grant can hold now, so a grant stored before
+that check (of `report` or `export`, say) can still be deleted.
 
 ---
 
@@ -520,7 +585,7 @@ Revoke all direct permission grants for a user+resource combination. **ADMIN onl
 
 ### Create a "Read-Only Experiments" Custom Role
 
-This defines and assigns a role for a user who should see experiments and results but never create or modify them. The role is stored and shown; it does not change what the user can do, which their base role decides ([#891](https://github.com/Controlvar/controlvar/issues/891)). Today, to keep a user read-only, give them the `viewer` or `analyst` base role.
+This defines and assigns a role that holds only reading experiments and flags. Every built-in role already reads them, so for the analyst it adds nothing: a custom role only adds. To keep a user read-only, give them the `viewer` or `analyst` built-in role.
 
 Step 1: Create the role:
 
@@ -530,10 +595,9 @@ curl -s -X POST http://localhost:8000/api/v1/rbac/roles \
   -H "Content-Type: application/json" \
   -d '{
     "name": "read-only-experiments",
-    "description": "View-only access to experiments and reports",
+    "description": "View-only access to experiments and flags",
     "permissions": [
       {"resource": "experiment", "actions": ["read", "list"]},
-      {"resource": "report", "actions": ["read", "list"]},
       {"resource": "feature_flag", "actions": ["read", "list"]}
     ]
   }' | jq -r .name
@@ -558,7 +622,7 @@ curl -s -X POST http://localhost:8000/api/v1/rbac/roles/assign \
 
 It prints `assigned`.
 
-Step 3: Check that the assignment is stored, in the user's effective permissions:
+Step 3: Check the assignment in the user's effective permissions:
 
 ```{.bash exec}
 curl -s -H "Authorization: Bearer $TOKEN" \
@@ -566,12 +630,12 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 ```
 <!-- expect: "read-only-experiments" -->
 
-It prints the analyst's stored custom roles, `["data-scientist","read-only-experiments"]`
-after the examples above. What the analyst can do is unchanged.
+It prints the analyst's custom roles, `["data-scientist","read-only-experiments"]` after
+the examples above. The new role adds nothing the analyst could not already do.
 
-### Grant a Temporary Export Permission
+### Grant a Temporary Permission
 
-This records a week-long export grant for a data analyst without changing their role. The grant is stored and shown by Get Effective Permissions, but no permission check reads it: it does **not** let the analyst export anything their base role does not already allow ([#891](https://github.com/Controlvar/controlvar/issues/891)).
+This lets a data analyst change experiments for a week without changing their role. The grant takes effect from their next request.
 
 ```{.bash exec}
 WEEK=$(jq -nr 'now + 7*86400 | todate')
@@ -581,30 +645,81 @@ curl -s -X POST "http://localhost:8000/api/v1/rbac/users/$ANALYST_ID/grant" \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": "'"$ANALYST_ID"'",
-    "resource": "export",
-    "actions": ["read", "list"],
-    "reason": "Q1 compliance audit access",
+    "resource": "experiment",
+    "actions": ["update"],
+    "reason": "Covering the experiment review",
     "expires_at": "'"$WEEK"'"
   }' | jq -r .status
 ```
 <!-- expect: granted -->
 
-It prints `granted`. After `expires_at`, the direct grant is automatically excluded from the set Get Effective Permissions shows, without requiring manual cleanup.
+It prints `granted`. After `expires_at`, the grant no longer takes effect and Get Effective Permissions leaves it out, without manual cleanup.
 
 To revoke early:
 
 ```{.bash exec}
 curl -s -X DELETE \
-  "http://localhost:8000/api/v1/rbac/users/$ANALYST_ID/grant/export" \
+  "http://localhost:8000/api/v1/rbac/users/$ANALYST_ID/grant/experiment" \
   -H "Authorization: Bearer $TOKEN" | jq -c .
 ```
 <!-- expect: {"status":"revoked","count":1} -->
 
-It prints `{"status":"revoked","count":1}`: the one `export` grant is deleted.
+It prints `{"status":"revoked","count":1}`: the one `experiment` grant is deleted, and from
+the analyst's next request they can no longer change experiments.
 
-### Show a User's Stored Permissions
+### Let a Viewer Read the Audit Log
 
-This shows the merged set. What the user can actually do is decided by their base role alone (see [Overview](#overview)).
+A viewer reads only their own audit entries. A grant of `audit_log (read)` lets them read
+other users' entries too, and revoking it takes that away on their next request. Sign in as
+the demo viewer, `viewer@demo.com`, and save the viewer's token and user id:
+
+```{.bash exec}
+VIEWER_TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"viewer@demo.com","password":"Demo1234!"}' | jq -r .access_token)
+VIEWER_ID=$(curl -s http://localhost:8000/api/v1/auth/me \
+  -H "Authorization: Bearer $VIEWER_TOKEN" | jq -r .id)
+
+curl -s "http://localhost:8000/api/v1/audit-logs/?user_id=$MY_ID&action_type=user_login" \
+  -H "Authorization: Bearer $VIEWER_TOKEN" | jq -c '[.items[].user_email] | unique'
+```
+<!-- expect: ["viewer@demo.com"] -->
+
+It prints `["viewer@demo.com"]`: the viewer asked for the administrator's sign-ins and was
+answered with their own, whatever they ask for.
+
+The administrator grants the viewer `audit_log (read)`:
+
+```{.bash exec}
+curl -s -X POST "http://localhost:8000/api/v1/rbac/users/$VIEWER_ID/grant" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": "'"$VIEWER_ID"'", "resource": "audit_log", "actions": ["read"], "reason": "Quarterly access review"}' | jq -c '{status, resource}'
+
+curl -s "http://localhost:8000/api/v1/audit-logs/?user_id=$MY_ID&action_type=user_login" \
+  -H "Authorization: Bearer $VIEWER_TOKEN" | jq -c '[.items[].user_email] | unique'
+```
+<!-- expect: {"status":"granted","resource":"audit_log"} -->
+<!-- expect: ["admin@demo.com"] -->
+
+It prints `{"status":"granted","resource":"audit_log"}`, then `["admin@demo.com"]`: with the
+same token, the viewer now reads the administrator's entries. Revoke the grant:
+
+```{.bash exec}
+curl -s -X DELETE "http://localhost:8000/api/v1/rbac/users/$VIEWER_ID/grant/audit_log" \
+  -H "Authorization: Bearer $TOKEN" | jq -c '{audit_log_grants_revoked: .count}'
+
+curl -s "http://localhost:8000/api/v1/audit-logs/?user_id=$MY_ID&action_type=user_login" \
+  -H "Authorization: Bearer $VIEWER_TOKEN" | jq -c '[.items[].user_email] | unique'
+```
+<!-- expect: {"audit_log_grants_revoked":1} -->
+<!-- expect: ["viewer@demo.com"] -->
+
+It prints `{"audit_log_grants_revoked":1}`, then `["viewer@demo.com"]` again.
+
+### Show a User's Permissions
+
+This shows what the permission checks allow the user (see [Overview](#overview)).
 
 ```{.bash exec}
 curl -s -H "Authorization: Bearer $TOKEN" \
@@ -617,26 +732,51 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 It prints the whole set, beginning with the analyst's `user_id`, `username` and
 `"base_role": "analyst"`.
 
+### Leave the Demo as It Was
+
+No example on this page leaves a demo user with more than their built-in role allows. This
+revokes the two roles and the flag grant the examples above gave the analyst:
+
+```{.bash exec}
+for ROLE in data-scientist read-only-experiments; do
+  curl -s -X POST http://localhost:8000/api/v1/rbac/roles/revoke \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"user_id": "'"$ANALYST_ID"'", "role_name": "'"$ROLE"'"}' | jq -r .status
+done
+
+curl -s -X DELETE "http://localhost:8000/api/v1/rbac/users/$ANALYST_ID/grant/feature_flag" \
+  -H "Authorization: Bearer $TOKEN" | jq -r .status
+
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8000/api/v1/rbac/users/$ANALYST_ID/permissions" | \
+  jq -c '{custom_roles, experiment: .permissions.experiment}'
+```
+<!-- expect: {"custom_roles":[],"experiment":["list","read"]} -->
+
+It prints `revoked` three times, then `{"custom_roles":[],"experiment":["list","read"]}`:
+the analyst is back to what the `analyst` built-in role allows.
+
 ---
 
 ## Service API
 
-The `RBACService` in `modules/backend/app/services/rbac_service.py` provides these methods. `get_effective_permissions` builds the set the Get Effective Permissions endpoint returns. `check_effective_permission` is not called by any route ([#891](https://github.com/Controlvar/controlvar/issues/891)):
+Every permission check in `backend/app/core/permissions.py` reads custom roles and direct grants through one capability, `rbac.granted_permissions`, which the module registers as `granted_permission_pairs` in `modules/backend/app/services/rbac_service.py`. The `RBACService` there builds what Get Effective Permissions returns from the same checks:
 
 ```python
+from backend.app.core.permissions import Action, ResourceType, check_permission
 from modules.backend.app.services.rbac_service import RBACService
 
-# Would the merged set allow this action? No route calls this.
-can_do_it = RBACService.check_effective_permission(
-    db, user, resource="experiment", action="create"
-)
+# May this user (a row of the request's session) create experiments? The
+# built-in role first, then their active custom roles and unexpired grants.
+can_do_it = check_permission(user, ResourceType.EXPERIMENT, Action.CREATE)
 
-# Get the full resolved permission set
+# What the checks allow, for the three resources a role or grant can hold
 effective = RBACService.get_effective_permissions(db, user)
-print(effective.permissions)  # {"experiment": ["create", "list", "read", ...], ...}
+print(effective.permissions)  # {"experiment": ["create", "list", "read"], ...}
 ```
 
-`check_effective_permission` checks custom roles and direct grants in addition to the base role, but no route calls it. Routes call `check_permission()` from `backend/app/core/permissions.py`, which reads only the base role.
+`check_permission` reads a user's custom roles and grants only for a user that is a row of a database session (a request's own), once per request; a user object that is not one gets its built-in role alone.
 
 ---
 
@@ -665,6 +805,7 @@ print(effective.permissions)  # {"experiment": ["create", "list", "read", ...], 
 | `assigned_by_id` | UUID FK  | Admin who made the assignment  |
 | `reason`         | text     | Optional audit reason          |
 | `assigned_at`    | datetime | When the assignment was made   |
+| `activated_at`   | datetime | When the assignment took effect; `null` for one recorded before custom roles took effect, which grants nothing |
 
 ### DirectPermissionGrant
 
@@ -672,9 +813,10 @@ print(effective.permissions)  # {"experiment": ["create", "list", "read", ...], 
 |-----------------|----------|-----------------------------------------------|
 | `id`            | UUID     | Primary key                                   |
 | `user_id`       | UUID FK  | Target user                                   |
-| `resource`      | string   | Resource name (e.g. `export`)                 |
+| `resource`      | string   | Resource name (e.g. `experiment`)             |
 | `actions`       | JSONB    | List of action strings (e.g. `["read"]`)      |
 | `granted_by_id` | UUID FK  | Admin who granted the permission              |
 | `reason`        | text     | Optional audit reason                         |
 | `expires_at`    | datetime | Optional expiry; `null` means never expires   |
 | `is_active`     | boolean  | Can be deactivated without deleting           |
+| `activated_at`  | datetime | When the grant took effect; `null` for one recorded before custom roles took effect, which grants nothing |

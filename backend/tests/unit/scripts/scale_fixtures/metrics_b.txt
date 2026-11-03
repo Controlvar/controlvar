@@ -1,0 +1,22 @@
+# HELP rate_limit_hits_total Requests the rate limiter counted
+# TYPE rate_limit_hits_total counter
+rate_limit_hits_total{endpoint="track",method="POST",group="a"} 4410.0
+rate_limit_hits_total{endpoint="assign",method="POST",group="a"} 12.0
+# HELP rate_limit_rejections_total Requests the rate limiter refused
+# TYPE rate_limit_rejections_total counter
+rate_limit_rejections_total{endpoint="track",method="POST",group="a"} 2.0
+rate_limit_rejections_total{endpoint="track",method="GET",group="b"} 1.0
+rate_limit_rejections_total{endpoint="assign",method="POST",group="a"} 1.0
+rate_limit_rejections_total{endpoint="other",method="GET",group="b"} 0.0
+# HELP rate_limit_redis_fallbacks_total Times the limiter fell back to process-local counting
+# TYPE rate_limit_redis_fallbacks_total counter
+rate_limit_redis_fallbacks_total 2.0
+# HELP rate_limit_redis_fallback_active 1 while the limiter counts per process
+# TYPE rate_limit_redis_fallback_active gauge
+rate_limit_redis_fallback_active 0.0
+# HELP http_request_duration_seconds Request duration
+# TYPE http_request_duration_seconds histogram
+http_request_duration_seconds_bucket{le="0.1",method="POST"} 4300.0
+http_request_duration_seconds_bucket{le="+Inf",method="POST"} 4422.0
+http_request_duration_seconds_sum{method="POST"} 101.25
+http_request_duration_seconds_count{method="POST"} 4422.0

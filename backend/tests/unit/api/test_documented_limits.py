@@ -220,13 +220,19 @@ def test_a_local_sign_in_takes_an_email_and_a_password_alone(routes):
     assert [path for _, path in routes if pattern.search(path)] == []
 
 
-def test_the_permission_check_reads_only_the_built_in_role():
+def test_the_permission_check_reads_grants_only_through_the_capability():
+    """The built-in role first, then (full profile) what custom roles and
+    direct grants hold, read through one capability; never a workspace role,
+    and never a module table named in the core."""
     pattern = re.compile(
         r"custom_role|CustomRole|direct_permission|DirectPermission|workspace", re.I
     )
     for rel in ("backend/app/core/permissions.py", "backend/app/api/deps.py"):
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert not pattern.search(text), rel
+    permissions = (ROOT / "backend/app/core/permissions.py").read_text(encoding="utf-8")
+    assert "optional_modules.granted_permissions_provider()" in permissions
+    assert "in granted_permissions(user)" in permissions
 
 
 # ---------------------------------------------------------------------------
@@ -419,11 +425,6 @@ NATIVE_SDKS = {
         ],
         [("suspend fun getAssignment(", "suspend fun track(")],
     ),
-    "react-native": (
-        "sdk/react-native/src/client.ts",
-        [("async evaluateFlag(", "async isFeatureEnabled(")],
-        [("async getAssignment(", "async getVariant(")],
-    ),
     "flutter": (
         "sdk/flutter/lib/src/client.dart",
         [("Future<EvalResult> evaluateFlag(", "Future<bool> isEnabled(")],
@@ -433,7 +434,9 @@ NATIVE_SDKS = {
 
 #: A block comment, or a line comment (not the `//` of a URL's scheme).
 _COMMENT = re.compile(r"/\*.*?\*/|(?<![:\w])//[^\n]*", re.S)
-_CONTEXT = re.compile(r"\bcontext\b", re.I)
+#: Any word that starts with "context": `context`, and a helper such as
+#: `contextQuery(` that builds it (#1520), which `\bcontext\b` did not see.
+_CONTEXT = re.compile(r"\bcontext", re.I)
 
 
 def _native_code(rel: str, bounds) -> str:
@@ -451,11 +454,12 @@ def _native_code(rel: str, bounds) -> str:
 
 @pytest.mark.parametrize("sdk", sorted(NATIVE_SDKS))
 def test_the_native_sdks_send_no_context_on_flag_evaluation(sdk):
-    """iOS, Android, React Native and Flutter evaluate a flag with the user id
-    alone (#438), so a flag rule on attributes cannot match from them; each
-    sends the attributes as the context of an experiment assignment. When this
-    fails, the SDK has started to send a context on flag evaluation: say so on
-    the pages whose registries name this test."""
+    """iOS, Android and Flutter evaluate a flag with the user id alone (#438;
+    React Native sends the attributes since #1520), so a flag rule on
+    attributes cannot match from them; each sends the attributes as the context
+    of an experiment assignment. When this fails, the SDK has started to send a
+    context on flag evaluation: say so on the pages whose registries name this
+    test."""
     rel, evaluate, assign = NATIVE_SDKS[sdk]
     evaluation = _native_code(rel, evaluate)
     assert "feature-flags/evaluate" in evaluation, f"{sdk}: no evaluate request read"

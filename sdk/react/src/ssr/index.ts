@@ -14,6 +14,17 @@
  *   const hero = await client.assignExperiment('shoplab_hero_banner', user);
  *   return { props: { flags, hero } };
  * }
+ *
+ * `client.bootstrap({ flags, experiments }, user)` returns the answers in the
+ * form `ExperimentationProvider`'s `bootstrap` prop takes, so the page's first
+ * render shows them.
  */
 export { ServerClient } from '../client/ServerClient';
-export type { SdkConfig, UserContext, FeatureFlagEvaluation, ExperimentAssignment } from '../client/types';
+export type {
+  SdkConfig,
+  UserContext,
+  FeatureFlagEvaluation,
+  ExperimentAssignment,
+  ExperimentationBootstrap,
+  Exposure,
+} from '../client/types';

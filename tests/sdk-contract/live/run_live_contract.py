@@ -6,8 +6,22 @@ Runs every SDK's ``contract_smoke`` entry point against a running backend and
 checks that each one reports a sticky assignment, a flag evaluation and
 successful event tracking. This is the test that proves an SDK actually talks
 to the endpoints the backend serves (the golden-vector tests only cover
-hashing). An SDK listed in ``EXPOSURE_SDKS`` must also report what its
-exposure hook received, and no other SDK may report it.
+hashing). An SDK listed in ``EVENT_ID_SDKS`` must also send one event twice
+with one event_id, and the runner requires the database to hold one row for it.
+An SDK listed in ``EXPOSURE_SDKS`` must also report what its
+exposure hook received, and no other SDK may report it. An SDK listed in
+``ATTRIBUTE_SDKS`` must also report how it evaluated the seed's
+``sdk_contract_targeted`` flag (0% rollout, one rule ``plan`` equals ``pro`` at
+100%) with ``{"plan": "pro"}`` and ``{"plan": "free"}``: on with the server's
+reason ``targeting_rule``, and off. No other SDK may report it.
+
+After the react row, the React SDK's bootstrap runs for one new user
+(``BOOTSTRAP_SMOKE``): the documented ``ServerClient.bootstrap()`` call and a
+server render with it, then the one assignment the page's hook sends after
+hydration. The runner reads the database after each step and requires exactly
+one exposure row after the first and one more after the second, and requires
+that the bootstrap example on docs/sdk/react.md has the live bootstrap's
+fields.
 
 Before the SDKs, it checks the local-evaluation ruleset endpoint
 (``GET /api/v1/sdk/ruleset``) once: the seed's plain key gets 403, its
@@ -154,6 +168,69 @@ EXPOSURE_SDKS: frozenset[str] = frozenset(
     [
         # One line per SDK, in the form "js",
         "js",
+        "python",
+        "go",
+        "java",
+        "react",
+        "react-native",
+        "dotnet",
+    ]
+)
+
+# The SDKs whose contract smoke must report that the user's attributes reach
+# flag evaluation (#1520). A listed SDK's smoke is to evaluate the seed's
+# targeted flag (CONTRACT_TARGETED_FLAG_KEY, default sdk_contract_targeted: 0%
+# rollout, one rule plan equals pro at 100%) for one user with the attributes
+# {"plan": "pro"}, then, with nothing cached, {"plan": "free"}, and report
+#   "targeted": {"pro": <enabled>, "free": <enabled>,
+#                "reason": <the server's reason for the pro answer>}
+# validate() requires {"pro": true, "free": false, "reason": "targeting_rule"}:
+# an SDK that drops the attributes gets pro off, with the reason "rollout". The
+# check runs both ways, as EXPOSURE_SDKS does: a listed SDK whose smoke reports
+# no "targeted" fails, and so does an unlisted SDK whose smoke reports one. CI
+# runs every listed SDK with --strict, so a missing toolchain fails rather than
+# skips (backend/tests/unit/scripts/test_run_live_contract.py pins both).
+ATTRIBUTE_SDKS: frozenset[str] = frozenset(
+    [
+        # One line per SDK, in the form "js",
+        "js",
+        "react-native",
+    ]
+)
+TARGETED_FLAG_KEY = "sdk_contract_targeted"
+
+# The React SDK's bootstrap (#1518), run after the react row (which builds
+# sdk/react/dist) for one new user, in two steps: "server" is the documented
+# ``ServerClient.bootstrap()`` call and the page's server render with it,
+# "client" what the page's ``useExperiment`` sends once after hydration. The
+# runner counts the exposure rows the server stored for (user, experiment)
+# after each step: exactly BOOTSTRAP_SERVER_EXPOSURES after the server step
+# (one assignment of a new user), exactly one more after the client step (the
+# hook's own assignment). It also requires that the JSON example of a
+# bootstrap on docs/sdk/react.md has the same fields as the bootstrap the live
+# server just produced, and prints that bootstrap: the example is regenerated
+# from this line when the server's response bodies change.
+BOOTSTRAP_SMOKE = "cd sdk/react && node examples/bootstrap_smoke.mjs"
+BOOTSTRAP_SERVER_EXPOSURES = 1
+BOOTSTRAP_CLIENT_EXPOSURES = 1
+REACT_PAGE = REPO_ROOT / "docs" / "sdk" / "react.md"
+
+# The SDKs whose contract smoke must prove an event sent twice with the same
+# event_id is stored once (#1543, case C4). A listed SDK's smoke sends one keyed
+# event twice with one fixed id and reports
+#   "event_id": {"user_id": <user>, "event_name": <name>, "id": <the id>, "sends": 2}
+# validate() checks the shape; run_one() then counts the ``events`` rows for
+# that user and event name in the database and requires exactly 1 (an SDK that
+# makes a fresh id per send leaves 2). The check runs both ways, as
+# EXPOSURE_SDKS does: a listed SDK whose smoke reports no "event_id" fails, and
+# so does an unlisted one that reports it. The pull request that gives an SDK an
+# event id option is to add its line here and its report to the smoke.
+EVENT_ID_SDKS: frozenset[str] = frozenset(
+    [
+        # One line per SDK, in the form "js",
+        "java",
+        "js",
+        "python",
     ]
 )
 
@@ -185,6 +262,75 @@ def validate(sdk: str, payload: dict, experiment_key: str = "sdk_contract_ab") -
     if (payload.get("fanout") or {}).get("ok") is not True:
         problems.append("fan-out track failed")
     problems.extend(_exposure_problems(sdk, payload, experiment_key))
+    problems.extend(_targeting_problems(sdk, payload))
+    problems.extend(_event_id_problems(sdk, payload))
+    return problems
+
+
+def _event_id_problems(sdk: str, payload: dict) -> list[str]:
+    """What is wrong with the smoke's ``event_id`` report (see ``EVENT_ID_SDKS``)."""
+    if sdk not in EVENT_ID_SDKS:
+        return [f"event_id reported but {sdk} is not in EVENT_ID_SDKS"] if "event_id" in payload else []
+    report = payload.get("event_id")
+    if not isinstance(report, dict):
+        return [f"event_id missing ({sdk} is in EVENT_ID_SDKS)"]
+    problems: list[str] = []
+    for field in ("user_id", "event_name", "id"):
+        value = report.get(field)
+        if not isinstance(value, str) or not value:
+            problems.append(f"event_id.{field}={value!r} (expected a non-empty string)")
+    sends = report.get("sends")
+    if type(sends) is not int or sends != 2:  # JSON true and 2.0 are not a count of 2
+        problems.append(f"event_id.sends={sends!r} (the same event is to be sent twice)")
+    return problems
+
+
+def _event_rows(user_id: str, event_name: str) -> int:
+    """How many ``events`` rows the server holds for *user_id* and *event_name*."""
+    sys.path.insert(0, str(REPO_ROOT))
+    from backend.app.db.session import SessionLocal
+    from backend.app.models import register_core_models
+    from backend.app.models.event import Event
+
+    register_core_models()
+    db = SessionLocal()
+    try:
+        return db.query(Event).filter(Event.user_id == user_id, Event.event_type == event_name).count()
+    finally:
+        db.close()
+
+
+def _stored_once_problems(sdk: str, payload: dict) -> list[str]:
+    """The database half of C4: the one event sent twice is one row."""
+    if sdk not in EVENT_ID_SDKS:
+        return []
+    report = payload["event_id"]
+    try:
+        rows = _event_rows(report["user_id"], report["event_name"])
+    except Exception as exc:  # the backend package or its database is not reachable
+        return [f"cannot count the stored events: {exc}"]
+    if rows != 1:
+        return [
+            f"the event sent twice with event_id {report['id']!r} left {rows} stored row(s) "
+            f"for user {report['user_id']!r}, expected 1"
+        ]
+    return []
+
+
+def _targeting_problems(sdk: str, payload: dict) -> list[str]:
+    """What is wrong with the smoke's ``targeted`` report (see ``ATTRIBUTE_SDKS``)."""
+    if sdk not in ATTRIBUTE_SDKS:
+        return [f"targeted reported but {sdk} is not in ATTRIBUTE_SDKS"] if "targeted" in payload else []
+    targeted = payload.get("targeted")
+    if not isinstance(targeted, dict):
+        return [f"targeted missing ({sdk} is in ATTRIBUTE_SDKS)"]
+    problems: list[str] = []
+    if targeted.get("pro") is not True:
+        problems.append(f"targeted.pro={targeted.get('pro')!r} (seeded rule plan=pro)")
+    if targeted.get("free") is not False:
+        problems.append(f"targeted.free={targeted.get('free')!r} (seeded rollout 0)")
+    if targeted.get("reason") != "targeting_rule":
+        problems.append(f"targeted.reason={targeted.get('reason')!r} (expected 'targeting_rule' for plan=pro)")
     return problems
 
 
@@ -294,6 +440,140 @@ def _flag_counters(flag_key: str) -> dict[str, int]:
         }
     finally:
         db.close()
+
+
+def _exposure_rows(user_id: str, experiment_key: str) -> int:
+    """The exposure events the server stored for *user_id* in *experiment_key*."""
+    sys.path.insert(0, str(REPO_ROOT))
+    from backend.app.db.session import SessionLocal
+    from backend.app.models import register_core_models
+    from backend.app.models.event import Event
+    from backend.app.models.experiment import Experiment
+    from backend.app.services.event_matching import EXPOSURE_EVENT_TYPES
+
+    register_core_models()
+    db = SessionLocal()
+    try:
+        experiment = db.query(Experiment).filter(Experiment.key == experiment_key).first()
+        if experiment is None:
+            raise RuntimeError(f"experiment {experiment_key!r} is not in the database")
+        return int(
+            db.query(Event)
+            .filter(
+                Event.user_id == user_id,
+                Event.experiment_id == experiment.id,
+                Event.event_type.in_(EXPOSURE_EVENT_TYPES),
+            )
+            .count()
+        )
+    finally:
+        db.close()
+
+
+def documented_bootstrap(page_text: str) -> dict | None:
+    """The JSON example of a bootstrap on the React page: the first ``json``
+    fence whose object has ``userId``, ``flags`` and ``experiments``."""
+    for block in page_text.split("```json\n")[1:]:
+        try:
+            value = json.loads(block.split("\n```", 1)[0])
+        except ValueError:
+            continue
+        if isinstance(value, dict) and {"userId", "flags", "experiments"} <= set(value):
+            return value
+    return None
+
+
+def _entry_fields(entries: object) -> list[list[str]]:
+    """The sorted field names of each entry of a bootstrap's ``flags`` or ``experiments``."""
+    if not isinstance(entries, dict):
+        return []
+    return [sorted(entry) for entry in entries.values() if isinstance(entry, dict)]
+
+
+def bootstrap_problems(
+    server: dict,
+    client: dict,
+    counts: tuple[int, int],
+    user_id: str,
+    flag_key: str,
+    experiment_key: str,
+    documented: dict | None,
+) -> list[str]:
+    """What is wrong with a bootstrap run: the two steps' reports, the exposure
+    rows counted after each (*counts*), and the page's JSON example."""
+    problems: list[str] = []
+    bootstrap = server.get("bootstrap") if isinstance(server.get("bootstrap"), dict) else {}
+    if server.get("step") != "server" or bootstrap.get("userId") != user_id:
+        problems.append(f"the server step reported {server.get('step')!r} for {bootstrap.get('userId')!r}")
+    flag = (bootstrap.get("flags") or {}).get(flag_key)
+    if not isinstance(flag, dict) or flag.get("enabled") is not True:
+        problems.append(f"bootstrap.flags[{flag_key!r}] is {flag!r} (seeded flag is 100% on)")
+    assigned = (bootstrap.get("experiments") or {}).get(experiment_key)
+    if not isinstance(assigned, dict) or assigned.get("variant_name") not in EXPECTED_VARIANTS:
+        problems.append(f"bootstrap.experiments[{experiment_key!r}] is {assigned!r}")
+    if server.get("requests_during_render") != 0:
+        problems.append(f"the server render made {server.get('requests_during_render')!r} request(s), expected 0")
+    after_server, after_client = counts
+    if after_server != BOOTSTRAP_SERVER_EXPOSURES:
+        problems.append(
+            f"exposure rows after the server step: {after_server}, expected {BOOTSTRAP_SERVER_EXPOSURES}"
+        )
+    if after_client - after_server != BOOTSTRAP_CLIENT_EXPOSURES:
+        problems.append(
+            f"exposure rows added by the client step: {after_client - after_server},"
+            f" expected {BOOTSTRAP_CLIENT_EXPOSURES}"
+        )
+    if isinstance(assigned, dict) and client.get("variant_name") != assigned.get("variant_name"):
+        problems.append(
+            f"the client step was assigned {client.get('variant_name')!r},"
+            f" the bootstrap {assigned.get('variant_name')!r} (assignment is sticky)"
+        )
+    if documented is None:
+        problems.append(f"{REACT_PAGE.relative_to(REPO_ROOT)} has no JSON example of a bootstrap")
+    else:
+        for part in ("flags", "experiments"):
+            live_fields, doc_fields = _entry_fields(bootstrap.get(part)), _entry_fields(documented.get(part))
+            if not live_fields or any(fields != live_fields[0] for fields in doc_fields + live_fields):
+                problems.append(
+                    f"the page's example {part} entries have the fields {doc_fields},"
+                    f" the live server's {live_fields}: regenerate the example from the bootstrap printed here"
+                )
+        if sorted(documented) != sorted(bootstrap):
+            problems.append(f"the page's example has the keys {sorted(documented)}, the live one {sorted(bootstrap)}")
+    return problems
+
+
+def run_react_bootstrap(env: dict[str, str], timeout: int) -> tuple[str, str]:
+    """The React SDK's bootstrap, judged by what the server recorded (see BOOTSTRAP_SMOKE)."""
+    import uuid
+
+    user_id = f"bootstrap-{uuid.uuid4()}"
+    experiment_key, flag_key = env["CONTRACT_EXPERIMENT_KEY"], env["CONTRACT_FLAG_KEY"]
+    reports: dict[str, dict] = {}
+    counts: list[int] = []
+    for step in ("server", "client"):
+        status, detail, payload = _run_command(
+            BOOTSTRAP_SMOKE, dict(env, CONTRACT_USER_ID=user_id, CONTRACT_BOOTSTRAP_STEP=step), timeout
+        )
+        if status != "PASS":
+            return status, f"{step} step: {detail}"
+        reports[step] = payload
+        try:
+            counts.append(_exposure_rows(user_id, experiment_key))
+        except Exception as exc:  # the backend package or its database is not reachable
+            return "FAIL", f"cannot read the database for the exposure rows: {exc}"
+    documented = documented_bootstrap(REACT_PAGE.read_text(encoding="utf-8"))
+    problems = bootstrap_problems(
+        reports["server"], reports["client"], (counts[0], counts[1]), user_id, flag_key, experiment_key, documented
+    )
+    live = json.dumps(reports["server"].get("bootstrap"), sort_keys=True)
+    if problems:
+        return "FAIL", "; ".join(problems) + f"; live bootstrap: {live}"
+    return (
+        "PASS",
+        f"exposure rows {counts[0]} after the server render, +{counts[1] - counts[0]} after hydration;"
+        f" the page's example has the live fields; live bootstrap: {live}",
+    )
 
 
 def run_local(sdk: str, command: str, env: dict[str, str], timeout: int, flag_key: str) -> tuple[str, str]:
@@ -585,6 +865,8 @@ def run_one(sdk: str, command: str, env: dict[str, str], timeout: int) -> tuple[
     if status != "PASS":
         return status, detail
     problems = validate(sdk, payload, env["CONTRACT_EXPERIMENT_KEY"])
+    if not problems:
+        problems = _stored_once_problems(sdk, payload)
     if problems:
         return "FAIL", "; ".join(problems)
     return "PASS", f"{payload['assign']['variant_name']} in {detail}"
@@ -630,6 +912,7 @@ def main() -> int:
     )
     env.setdefault("CONTRACT_EXPERIMENT_KEY", "sdk_contract_ab")
     env.setdefault("CONTRACT_FLAG_KEY", "sdk_contract_flag")
+    env.setdefault("CONTRACT_TARGETED_FLAG_KEY", TARGETED_FLAG_KEY)
 
     selected = args.sdk or list(MANIFEST)
     unknown = [s for s in selected if s not in MANIFEST]
@@ -660,6 +943,12 @@ def main() -> int:
         status, detail = run_one(sdk, command, env, args.timeout)
         results.append((sdk, status, detail))
         print(f"{status:4} {sdk:<20} {detail}", flush=True)
+        if sdk == "react":
+            # After the react row, which built sdk/react/dist (#1518).
+            name = "react (bootstrap)"
+            status, detail = run_react_bootstrap(env, args.timeout)
+            results.append((name, status, detail))
+            print(f"{status:4} {name:<20} {detail}", flush=True)
 
     # Local evaluation, after every SDK above (its errors count against the shared flag).
     for sdk in [s for s in selected if s in LOCAL_MANIFEST]:

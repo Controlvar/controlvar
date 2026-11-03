@@ -4,9 +4,11 @@
  * #4, #5, #7, #9, #11, #16).
  *
  * `GET /api/v1/mutual-exclusion-groups/{id}` and `GET /api/v1/holdout` both
- * check EXPERIMENT CREATE: ADMIN, DEVELOPER and superusers read them, ANALYST
- * and VIEWER are refused. So the page asks only for the first three, and the
- * last two send no request and read the refusal from the role. Every user here
+ * check EXPERIMENT CREATE: ADMIN, DEVELOPER, superusers and, in the full
+ * profile, a custom role or grant of it read them; anyone else is refused.
+ * Outside the effective-permissions provider (role lists only) the page asks
+ * only for the first three roles, and ANALYST and VIEWER send no request and
+ * read the refusal from the role. Every user here
  * is RESOLVED and, but for one cell, not a superuser: a null user would read as
  * "may read", and a superuser passes every check.
  */
@@ -93,9 +95,10 @@ const HOLDOUT = {
 };
 
 const HOLDOUT_SENTENCE = 'Q4 baseline: keeps 5% of new users out of every experiment';
-const GROUP_REFUSED = 'In a group. Seeing its name requires the ADMIN or DEVELOPER role.';
+const GROUP_REFUSED =
+  'In a group. Seeing its name needs permission to create experiments, which the ADMIN and DEVELOPER roles have.';
 const GROUP_ERROR = 'In a group. Its name could not be loaded; reload the page to try again.';
-const HOLDOUT_REFUSED = 'Seeing this requires the ADMIN or DEVELOPER role.';
+const HOLDOUT_REFUSED = 'Seeing this needs permission to create experiments, which the ADMIN and DEVELOPER roles have.';
 const HOLDOUT_ERROR = 'Could not be loaded; reload the page to try again.';
 
 /** How a mocked route answers: a value, a promise, or a throw. */

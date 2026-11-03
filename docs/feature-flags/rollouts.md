@@ -26,8 +26,10 @@ stays `active`.
 
 ## In the Dashboard
 
-A flag's page has a **Rollout schedule** section. ADMIN and DEVELOPER create and run a
-schedule there; ANALYST and VIEWER see the schedule and its stages, and change nothing.
+A flag's page has a **Rollout schedule** section. Users who may change the flag create and run
+a schedule there: ADMIN and DEVELOPER, and in the full profile anyone whose custom role or
+direct grant gives `feature_flag (update)`. Everyone else sees the schedule and its stages, and
+changes nothing.
 
 - **Create a rollout schedule** is offered when the flag has no schedule that is a draft,
   active or paused. It takes a name and the stages, in order: each has a name, a target
@@ -66,7 +68,8 @@ and nothing is printed.
 
 ### Step 1: Log in
 
-Changing a flag's rollout takes a user with the ADMIN or DEVELOPER role:
+Changing a flag's rollout takes a user who may change feature flags, such as one with the ADMIN
+or DEVELOPER role:
 
 ```{.bash exec}
 TOKEN=$(curl -s -X POST localhost:8000/api/v1/auth/login \
@@ -175,6 +178,12 @@ above `max_percentage`, when two stages have the same stage order or the orders 
 gap, or when a stage order is above 1000. The orders need not start at 1: 5, 6, 7 is
 accepted.
 
+`min_stage_duration` is a whole number of hours from 0 to 8760, or `null` for no minimum;
+any other value is refused with `422`. A schedule's `end_date` must be after its
+`start_date`, or the request is refused with `422`. A date or time with no zone is read as
+UTC, so `2027-01-08T00:00:00` and `2027-01-08T00:00:00Z` are the same moment, and a
+schedule's `start_date` and `end_date` may mix the two forms.
+
 ### Step 4: Activate the schedule
 
 ```{.bash exec}
@@ -190,6 +199,15 @@ Activating a schedule doesn't change the flag: it is still at 0%.
 A flag has one active schedule at a time: activating a schedule while another schedule of
 the same flag is active answers `409`, and nothing changes. Pause or cancel the other one
 first.
+
+### Changing a schedule
+
+`PUT /api/v1/rollout-schedules/{schedule_id}` does not take `stages`; add a stage with
+`POST .../stages` and change one with `PUT .../stages/{stage_id}`. A request that contains
+`stages`, with any value including `null` and `[]`, is refused with `422`, and nothing is
+changed. A `PUT` that would leave the end date not after the start date, the stored one
+included, is refused with `422` too, and so is a `min_stage_duration` outside 0 to 8760;
+`null` clears it.
 
 ---
 
@@ -214,6 +232,11 @@ lowering `max_percentage` answers `409`, and nothing is changed.
 | `manual` | The stage starts only when you advance it. |
 | `metric_based` | Accepted, but not implemented in this release: such a stage never starts by itself. |
 
+`trigger_configuration.duration` is a number of hours from 0 to 8760; if it is missing the
+default is 24. Any other value, a string, `null` or a boolean included, is refused with
+`422`, on create, on adding a stage and on changing one. The rest of `trigger_configuration`
+is not checked.
+
 The scheduler never completes a manual stage, so **a time-based stage after a manual stage
 never starts by itself**. Advance the manual stage a second time to move on (see
 [Manual Advancement](#manual-advancement)).
@@ -230,8 +253,8 @@ the stage's target. When the scheduler starts the next stage, the previous one b
 
 A stage that has completed or failed cannot be changed. A stage in progress keeps its target
 and its place in the order: a `PUT` that changes `target_percentage` or `stage_order` answers
-`409`. Its trigger, start date, name and description can still be changed; editing it, a
-rename included, restarts the clock the scheduler measures its duration from. A new stage, or
+`409`. Its trigger, start date, name and description can still be changed, and editing it
+does not restart its clock (see [Time-Based Triggers](#time-based-triggers)). A new stage, or
 a pending stage you move, goes after every stage that has started; placing it at or before
 one answers `409`.
 
@@ -256,8 +279,17 @@ UTC; one with no zone is taken as UTC. So `2027-01-08T00:00:00Z`, `2027-01-07T16
 and `2027-01-08T00:00:00` are the same moment. Responses give stage dates in UTC with no zone
 (`2027-01-08T00:00:00`).
 
-Editing an in-progress stage, a rename included, restarts its clock: the scheduler measures
-time-based completion and `min_stage_duration` from the stage's last update.
+A stage's response carries `started_at`: the time the stage actually started, in UTC, or
+`null` until it starts (and for a stage that finished before the field existed, or that the
+previous release started during the upgrade to the release that added it, which keeps `null`
+while it runs and after). It is read-only; a request that sends it is ignored. A time-based stage completes once
+`trigger_configuration.duration` hours (24 if absent) have passed since `started_at`, and the
+schedule's `min_stage_duration` is measured from it too. `start_date` is different: it is the
+earliest a time-based stage may start. Editing a stage in progress does not change
+`started_at`; changing its `duration` moves its completion time.
+
+Pausing a schedule does not stop a stage's clock: a time-based stage whose duration passed
+while the schedule was paused completes on the scheduler's first pass after you resume it.
 
 ---
 

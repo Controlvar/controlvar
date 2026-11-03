@@ -5,7 +5,8 @@ This module defines Pydantic models for rollout schedule-related data structures
 These models are used for request/response validation and documentation.
 """
 
-from datetime import datetime
+import math
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID
@@ -17,12 +18,98 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from pydantic_core import PydanticCustomError
 
 #: The largest ``stage_order`` a request may set. A schedule has a handful of
 #: stages (the documented example has three, and their target percentages run
 #: from 0 to 100), so this is well above any real schedule. A larger value
 #: answers 422 naming the field.
 MAX_STAGE_ORDER = 1000
+
+#: The largest ``min_stage_duration`` a request may set, in hours: one year
+#: (#1086). The column is a 32-bit integer, so 2**31 and more answered 500.
+MAX_MIN_STAGE_DURATION_HOURS = 8760
+
+#: The date rule's text. Raised as a ``ValueError``, so the 422's ``msg`` is
+#: ``"Value error, " + END_DATE_AFTER_START``.
+END_DATE_AFTER_START = "End date must be after start date"
+
+#: The one message for ``stages`` sent to ``PUT /rollout-schedules/{id}``
+#: (#1529). The ``{...}`` placeholders are literal.
+STAGES_ON_UPDATE_REFUSED = (
+    "stages is not applied by this endpoint; use "
+    "POST /api/v1/rollout-schedules/{schedule_id}/stages to add a stage and "
+    "PUT /api/v1/rollout-schedules/stages/{stage_id} to change one"
+)
+
+_MIN_STAGE_DURATION_DESCRIPTION = (
+    "Minimum time (hours) between stages: a whole number from 0 to 8760, "
+    "or null for no minimum"
+)
+
+#: The largest ``trigger_configuration.duration`` a request may set, in hours
+#: (#1535): one year, as for ``min_stage_duration``.
+MAX_STAGE_DURATION_HOURS = 8760
+
+#: The one message for a ``trigger_configuration.duration`` that is not a
+#: number of hours from 0 to 8760 (#1535). Nothing in it comes from the value.
+DURATION_REFUSED = (
+    "trigger_configuration.duration must be a number of hours from 0 to 8760"
+)
+
+_TRIGGER_CONFIGURATION_DESCRIPTION = (
+    "Configuration for the trigger. When it has `duration`, that is the number "
+    "of hours from 0 to 8760 a time-based stage runs before the scheduler "
+    "completes it; without `duration` the default is 24. The rest of the "
+    "object is not checked."
+)
+
+
+def _check_duration(
+    configuration: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """Refuse a ``duration`` that is not a number of hours from 0 to 8760.
+
+    The scheduler reads ``duration`` as hours (default 24). A string, null or
+    a number it cannot use left the stage in progress for ever, a negative
+    one completed it at once, and ``true`` read as one hour (#1535). A
+    boolean is refused although ``bool`` is an ``int``; an ``int`` is compared
+    as it is (``math.isfinite`` raises ``OverflowError`` on a very large one).
+    The rest of ``trigger_configuration`` is free-form and not checked.
+    """
+    if not configuration or "duration" not in configuration:
+        return configuration
+    value = configuration["duration"]
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise PydanticCustomError("value_error", DURATION_REFUSED)
+    if isinstance(value, float) and not math.isfinite(value):
+        raise PydanticCustomError("value_error", DURATION_REFUSED)
+    if not 0 <= value <= MAX_STAGE_DURATION_HOURS:
+        raise PydanticCustomError("value_error", DURATION_REFUSED)
+    return configuration
+
+
+def _as_utc(value: Optional[datetime]) -> Optional[datetime]:
+    """``value`` with no zone taken as UTC (#1534); a zoned value is kept."""
+    if value is not None and value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def _check_schedule_dates(
+    start_date: Optional[datetime], end_date: Optional[datetime]
+) -> None:
+    """Refuse an end that is not after the start, when both are given.
+
+    Both are compared as UTC instants, so a zoned and an unzoned value can be
+    compared (#1534); before, that raised a ``TypeError`` and answered 500.
+    Equal instants are refused, as the database's
+    ``check_rollout_schedule_dates`` (``end_date > start_date``) refuses them.
+    """
+    if start_date is None or end_date is None:
+        return
+    if _as_utc(end_date) <= _as_utc(start_date):
+        raise ValueError(END_DATE_AFTER_START)
 
 
 class TriggerType(str, Enum):
@@ -119,6 +206,21 @@ class RolloutStageBase(BaseModel):
 class RolloutStageCreate(RolloutStageBase):
     """Model for creating a new rollout stage."""
 
+    # The duration check is here and on RolloutStageUpdate, never on the
+    # base: RolloutStageResponse inherits the base, and a stage stored with a
+    # bad duration before the check (#1535) must still read back.
+    trigger_configuration: Optional[Dict[str, Any]] = Field(
+        None, description=_TRIGGER_CONFIGURATION_DESCRIPTION
+    )
+
+    @field_validator("trigger_configuration")
+    @classmethod
+    def validate_duration(
+        cls, value: Optional[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        """``duration``, when present, is a number of hours from 0 to 8760."""
+        return _check_duration(value)
+
 
 class RolloutStageUpdate(BaseModel):
     """Model for updating a rollout stage."""
@@ -140,9 +242,17 @@ class RolloutStageUpdate(BaseModel):
         None, description="Type of trigger for this stage"
     )
     trigger_configuration: Optional[Dict[str, Any]] = Field(
-        None, description="Configuration for the trigger"
+        None, description=_TRIGGER_CONFIGURATION_DESCRIPTION
     )
     start_date: Optional[datetime] = Field(None, description="For time-based triggers")
+
+    @field_validator("trigger_configuration")
+    @classmethod
+    def validate_duration(
+        cls, value: Optional[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        """``duration``, when present, is a number of hours from 0 to 8760."""
+        return _check_duration(value)
 
 
 class RolloutStageResponse(RolloutStageBase):
@@ -158,6 +268,20 @@ class RolloutStageResponse(RolloutStageBase):
     rollout_schedule_id: UUID
     status: RolloutStageStatus
     completed_date: Optional[datetime] = None
+    # Read-only: no request schema has the field, so a request that sends it
+    # is ignored (#1528).
+    started_at: Optional[datetime] = Field(
+        None,
+        description=(
+            "When the stage started, in UTC: the time a time-based stage's "
+            "duration and the schedule's min_stage_duration are measured from. "
+            "Null until the stage starts, for a stage that completed or failed "
+            "before it was recorded, and for a stage a release that did not "
+            "record it started during an upgrade, while that stage runs and "
+            "after; the scheduler measures such a stage from updated_at. "
+            "Editing the stage does not change it."
+        ),
+    )
     created_at: datetime
     updated_at: datetime
 
@@ -182,6 +306,9 @@ class RolloutScheduleBase(BaseModel):
     max_percentage: int = Field(
         100, ge=0, le=100, description="Maximum rollout percentage"
     )
+    # Not bounded here: this base is also the response's, and a stored value
+    # from before the bound (#1086) must still read back. The bound is on
+    # RolloutScheduleCreate and RolloutScheduleUpdate.
     min_stage_duration: Optional[int] = Field(
         None, description="Minimum time (hours) between stages"
     )
@@ -207,17 +334,28 @@ class RolloutScheduleBase(BaseModel):
     @model_validator(mode="after")
     def validate_dates(self) -> "RolloutScheduleBase":
         """Validate date relationships."""
-        if self.start_date and self.end_date and self.end_date <= self.start_date:
-            raise ValueError("End date must be after start date")
+        _check_schedule_dates(self.start_date, self.end_date)
         return self
 
 
 class RolloutScheduleCreate(RolloutScheduleBase):
     """Model for creating a new rollout schedule."""
 
+    min_stage_duration: Optional[int] = Field(
+        None,
+        ge=0,
+        le=MAX_MIN_STAGE_DURATION_HOURS,
+        description=_MIN_STAGE_DURATION_DESCRIPTION,
+    )
     stages: List[RolloutStageCreate] = Field(
         ..., min_length=1, description="Rollout stages"
     )
+
+    @field_validator("start_date", "end_date")
+    @classmethod
+    def take_unzoned_as_utc(cls, value: Optional[datetime]) -> Optional[datetime]:
+        """Store a date with no zone as that moment in UTC (#1534)."""
+        return _as_utc(value)
 
     @model_validator(mode="after")
     def validate_stages(self) -> "RolloutScheduleCreate":
@@ -274,19 +412,69 @@ class RolloutScheduleUpdate(BaseModel):
         None, ge=0, le=100, description="Maximum rollout percentage"
     )
     min_stage_duration: Optional[int] = Field(
-        None, description="Minimum time (hours) between stages"
+        None,
+        ge=0,
+        le=MAX_MIN_STAGE_DURATION_HOURS,
+        description=(
+            _MIN_STAGE_DURATION_DESCRIPTION + "; null clears a stored minimum"
+        ),
     )
     status: Optional[RolloutScheduleStatus] = Field(
         None, description="Status of the schedule"
     )
+    # Kept, and refused whatever its value (#1529). Removing the field would
+    # let pydantic drop the key silently, which is the defect: the update
+    # never applied stages (a 200 that renamed the schedule and ignored them).
     stages: Optional[List[RolloutStageUpdate]] = Field(
-        None, description="Updated rollout stages"
+        None,
+        description=(
+            "Not accepted. A request that contains `stages`, with any value "
+            "including null, is refused with 422. Add a stage with "
+            "`POST /api/v1/rollout-schedules/{schedule_id}/stages` and change "
+            "one with `PUT /api/v1/rollout-schedules/stages/{stage_id}`."
+        ),
+        json_schema_extra={"deprecated": True},
     )
+
+    @field_validator("start_date", "end_date")
+    @classmethod
+    def take_unzoned_as_utc(cls, value: Optional[datetime]) -> Optional[datetime]:
+        """Store a date with no zone as that moment in UTC (#1534)."""
+        return _as_utc(value)
+
+    @field_validator("stages")
+    @classmethod
+    def refuse_stages(cls, value: Any) -> Any:
+        """Refuse ``stages`` on presence, whatever its value (#1529).
+
+        An ``after`` validator: an item that fails ``RolloutStageUpdate``
+        (a ``stage_order`` above the bound, say) answers its own 422 first.
+        It runs for a list, ``[]`` and null, and not when the key is absent:
+        pydantic does not validate a default. Nothing in the message comes
+        from the value.
+        """
+        raise PydanticCustomError("value_error", STAGES_ON_UPDATE_REFUSED)
+
+    @model_validator(mode="after")
+    def validate_dates(self) -> "RolloutScheduleUpdate":
+        """When both dates are sent, the end is after the start (#962).
+
+        A request that sends one date is judged against the stored one by the
+        database's ``check_rollout_schedule_dates``; the route answers that
+        refusal with this same 422.
+        """
+        _check_schedule_dates(self.start_date, self.end_date)
+        return self
 
 
 class RolloutScheduleResponse(RolloutScheduleBase):
     """Model for rollout schedule response data."""
 
+    # Not bounded: a value stored before the request bound (#1086), -5 or
+    # 100000 say, must still read back.
+    min_stage_duration: Optional[int] = Field(
+        None, description="Minimum time (hours) between stages"
+    )
     id: UUID
     owner_id: Optional[UUID]
     status: RolloutScheduleStatus

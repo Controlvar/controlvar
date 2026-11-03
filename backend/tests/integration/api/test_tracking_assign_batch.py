@@ -79,8 +79,8 @@ MISSING_SCOPE = (
     "'sdk:ruleset' scope for server-side SDK use."
 )
 OWNER_ROLE = (
-    "This key's owner can no longer change feature flags or experiments, so the "
-    "key is refused for server-side SDK use."
+    "This key's owner can no longer change feature flags, so the key is refused "
+    "for server-side SDK use."
 )
 CHANGED = (
     "The experiment changed during the request. Users earlier in the list may "

@@ -197,6 +197,14 @@ by = [
 ]
 
 [[unit]]
+text = "A server-rendered React page that uses a bootstrap shows the answer the server had when it rendered the page, then the answer its own request gets; if that request fails, it keeps the rendered answer."
+by = [
+    "test:sdk/react/src/__tests__/bootstrap.ssr.test.tsx::renders the bootstrapped flag and variant, and makes no request",
+    "test:sdk/react/src/__tests__/bootstrap.test.tsx::applies a refresh that answers differently as it applies a fetched answer",
+    "test:sdk/react/src/__tests__/bootstrap.test.tsx::keeps the bootstrapped answer, with error set, when its refresh fails",
+]
+
+[[unit]]
 text = "Local evaluation (JavaScript and Python, beta)"
 by = ["exempt:label"]
 
@@ -243,6 +251,13 @@ by = [
     "test:sdk/flutter/test/client_test.dart::stores the evaluation and serves it when the network fails",
     "test:sdk/flutter/test/shared_preferences_offline_store_test.dart::works end-to-end with the client on network failure",
     "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_the_mobile_sdks_serve_their_stored_answer_offline_by_default",
+]
+
+[[unit]]
+text = "A React page rendered with a bootstrap | The answer it was rendered with, until it is reloaded, or for the life of a shared cache entry that serves it."
+by = [
+    "test:sdk/react/src/__tests__/bootstrap.test.tsx::keeps the bootstrapped answer, with error set, when its refresh fails",
+    "test:sdk/react/src/__tests__/useFeatureFlag.test.tsx::a mounted hook does not ask again: past the cache lifetime it keeps its answer, one request",
 ]
 
 [[unit]]

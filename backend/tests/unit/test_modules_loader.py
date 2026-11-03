@@ -87,7 +87,7 @@ class TestModulesRegistration:
     def test_the_modules_package_registers_everything(self, fresh_hooks):
         """`modules/__init__.py` re-exports `register` from
         modules/backend/app/register.py; one call installs the signer, the
-        nine model modules, the five capabilities, the tags and the ten
+        nine model modules, the six capabilities, the tags and the ten
         module names."""
         assert modules_loader.load_modules(force=True) is True
 
@@ -97,6 +97,7 @@ class TestModulesRegistration:
             "compliance.export",
             "compliance.report",
             "counters.service",
+            "rbac.granted_permissions",
             "split_url.preview",
             "split_url.routing",
         }
@@ -794,7 +795,14 @@ class TestSchemaOnlyRegistration:
         assert modules_loader.load_modules() is True
 
         assert len(hooks._router_registrars) == 1
-        assert len(hooks.capability_names()) == 5
+        assert set(hooks.capability_names()) == {
+            "compliance.export",
+            "compliance.report",
+            "counters.service",
+            "rbac.granted_permissions",
+            "split_url.preview",
+            "split_url.routing",
+        }
         assert len(hooks.installed_modules()) == 10
 
     def test_a_router_load_satisfies_a_later_schema_builder(self, fresh_hooks):

@@ -5,6 +5,32 @@ export interface SdkConfig {
   timeoutMs?: number;
   /** TTL for the per-user flag/assignment caches (default 300 000 ms). */
   cacheTtlMs?: number;
+  /**
+   * Called once each time the server enrols the user in an experiment
+   * (`POST /api/v1/tracking/assign` answers `assigned: true`) and the answer
+   * did not come from the client's cache: the moment the server records the
+   * exposure. Not called for a cached answer, a request another caller
+   * already started, an `assigned: false` answer, an answer without
+   * `assigned`, a failed call or a flag, and never from a Provider rendered
+   * on the server (`useExperiment` assigns in an effect); a `ServerClient`
+   * calls its own for the assignments it makes, wherever it runs. What it throws, and a rejection of
+   * a Promise it returns, is dropped: the answer is unchanged. `null` or
+   * `undefined` sets none; any other value that is not a function is refused
+   * with `onExposure must be a function`.
+   */
+  onExposure?: ((exposure: Exposure) => void) | null;
+}
+
+/**
+ * What `onExposure` receives: a new object for each call, holding only these
+ * four values (not the user's attributes, not the variant's configuration).
+ */
+export interface Exposure {
+  readonly experimentKey: string;
+  readonly userId: string;
+  /** `null` when the server sends none. */
+  readonly variantId: string | null;
+  readonly variantName: string;
 }
 
 export interface UserContext {
@@ -95,6 +121,20 @@ export interface FeatureFlagEvaluateResponse {
   config: unknown | null;
   /** `targeting_rule` | `rollout` | `inactive` | `error`; absent on older servers. */
   reason?: string;
+}
+
+/**
+ * Answers the server already has for one user, to pass to
+ * `ExperimentationProvider` as `bootstrap`: what `ServerClient.bootstrap()`
+ * returns. Plain JSON, keyed by the flag and experiment keys asked for. The
+ * Provider uses it only when `userId` is its `user.userId`.
+ */
+export interface ExperimentationBootstrap {
+  userId: string;
+  /** Flag key -> the body of `GET /api/v1/feature-flags/evaluate/{key}` for this user. */
+  flags?: Record<string, FeatureFlagEvaluateResponse>;
+  /** Experiment key -> the body of `POST /api/v1/tracking/assign` for this user. */
+  experiments?: Record<string, ExperimentAssignResponse>;
 }
 
 /** `POST /api/v1/tracking/assign` */

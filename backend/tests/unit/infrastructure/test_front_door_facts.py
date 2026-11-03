@@ -247,11 +247,49 @@ def _live_contract_sdks() -> list:
     return found[0]
 
 
+#: Directories under sdk/ that are not SDKs, so not counted as one.
+NOT_SDKS = {"mcp"}
+
+
 def test_thirteen_of_the_sixteen_sdks_run_the_live_contract():
-    sdks = sorted(p.name for p in (ROOT / "sdk").iterdir() if p.is_dir())
+    directories = {p.name for p in (ROOT / "sdk").iterdir() if p.is_dir()}
+    assert NOT_SDKS <= directories
+    sdks = sorted(directories - NOT_SDKS)
     live = _live_contract_sdks()
     assert len(sdks) == 16 and len(live) == 13
     assert sorted(set(sdks) - set(live)) == ["elixir", "flutter", "ios"]
+
+
+def test_sdk_mcp_is_the_mcp_server_and_not_an_sdk():
+    from backend.tests.unit.docs.test_sdk_doc_versions import PUBLISHED
+
+    package = json.loads(_text("sdk/mcp/package.json"))
+    assert package["name"] == "@controlvar/mcp-server"
+    assert package["license"] == "MIT"
+    assert "mcp" not in _live_contract_sdks()
+    # The README and the SDK guide say it is not yet published. Publishing it
+    # puts it in PUBLISHED, and this fails until both sentences say so.
+    assert "mcp" not in PUBLISHED
+    tools = json.loads(_text("sdk/mcp/tools.json"))
+    # It reads flags, experiments and results; the one tool that is not
+    # read-only records an evaluation, as an SDK's does, and destroys nothing.
+    assert {tool["name"] for tool in tools["tools"]} == {
+        "list_feature_flags",
+        "get_feature_flag",
+        "evaluate_feature_flag",
+        "list_experiments",
+        "get_experiment",
+        "get_experiment_results",
+    }
+    not_read_only = {
+        tool["name"]: tool["annotations"]
+        for tool in tools["tools"]
+        if tool["annotations"].get("readOnlyHint") is not True
+    }
+    assert list(not_read_only) == ["evaluate_feature_flag"]
+    assert not_read_only["evaluate_feature_flag"]["destructiveHint"] is False
+    # With the user's own API key.
+    assert "CONTROLVAR_API_KEY" in tools["env"]
 
 
 def test_the_sdk_package_names():
@@ -301,11 +339,11 @@ def test_the_file_hygiene_hooks(precommit):
     assert hooks["check-added-large-files"]["args"] == ["--maxkb=1024"]
 
 
-def test_the_ruff_hooks_cover_the_four_trees_at_the_pinned_version(precommit):
+def test_the_ruff_hooks_cover_the_lint_trees_at_the_pinned_version(precommit):
     ruff = precommit["https://github.com/astral-sh/ruff-pre-commit"]
     assert [h["id"] for h in ruff["hooks"]] == ["ruff", "ruff-format"]
     assert {h["files"] for h in ruff["hooks"]} == {
-        "^(backend|modules|scripts|tests/acceptance)/"
+        "^(backend|modules|scripts|tests/acceptance|tests/ground_truth)/"
     }
     (pin,) = re.findall(r"^ruff==(\S+)", _text("backend/requirements.txt"), re.M)
     assert ruff["rev"] == f"v{pin}"
@@ -361,7 +399,7 @@ def test_make_lint_and_the_lint_job_run_the_same_checks():
         "actionlint",
     ):
         assert needle in job, needle
-    trees = "backend/ modules/ scripts/ tests/acceptance/"
+    trees = "backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/"
     assert f"ruff check {trees}" in job and f"ruff format --check {trees}" in job
 
 

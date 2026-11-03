@@ -112,6 +112,7 @@ bean suppresses the auto-configured one.
 | `timeoutMs(int)` | `timeout-ms` | `5000` | OkHttp connect/read/write timeout |
 | `cacheTtlMs(long)` | `cache-ttl-seconds` | `300000` ms / `300` s | Lifetime of a cached evaluation/assignment |
 | `cacheSize(int)` | `cache-size` | `1000` | Max entries per cache (flags and assignments each), LRU |
+| `exposureListener(ExposureListener)` | an `ExposureListener` bean | none | Called once each time the server enrols the user and the answer is not cached; `null` sets none; see [Exposure hook](#exposure-hook) |
 
 ## API
 
@@ -133,7 +134,10 @@ scalar / null), `getConfigMap()`. `ExperimentAssignment` → `getExperimentKey()
 `getVariantId()`, `getVariantName()`, `isControl()`, `getConfiguration()` (`Map<String,Object>`).
 `TrackEvent.builder(userId, eventName)` → `.eventType()` (defaults to the name), `.experimentKey()`,
 `.featureFlagKey()`, `.value(Double)`, `.property(k, v)` / `.properties(Map)` (sent as `metadata`),
-`.timestamp(Instant)`. `User.builder(userId).attribute(k, v)` — attributes are the assignment `context`.
+`.timestamp(Instant)`, `.eventId(String)` (sent as `event_id`, see [Event ids](#event-ids)).
+`User.builder(userId).attribute(k, v)` — attributes are the assignment `context`.
+`Exposure` → `getExperimentKey()`, `getUserId()`, `getVariantId()` (`null` when the server sends none),
+`getVariantName()`: what an `ExposureListener` receives.
 
 ## Caching and failure behaviour
 
@@ -153,11 +157,53 @@ entry per experiment the user was assigned to through this client (`experiment_k
 flag evaluated for the user (`feature_flag_key`), taken from the cache. Nothing cached → nothing is
 sent. Metrics match events by **event name**.
 
-This SDK reads only the variant from an answer: an `assigned: false` answer (a user the
+This SDK returns only the variant from an answer: an `assigned: false` answer (a user the
 experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as the
 control variant, and an event tracked without a key after the user's cache entries have expired
 (`cacheTtlMs`, 5 minutes by default) is not sent, so pass `experimentKey` on a conversion that can
 come later.
+
+## Event ids
+
+Every event this SDK sends carries an `event_id`, and the server stores an event sent again with
+the same `event_id`, user, experiment, flag and event name only once.
+
+- `.eventId("order-42")` on the `TrackEvent` builder sets the id. Without one, the SDK makes a
+  lowercase random UUID (version 4) each time you track the event, so tracking the same
+  `TrackEvent` twice sends two events.
+- A fanned-out event carries the same id in every entry. In `trackBatch`, each event has its own id.
+- At most 255 characters, with no NUL and no lone surrogate; the builder throws
+  `IllegalArgumentException` for any other id. `null` and `""` set none.
+- OkHttp can send a request again by itself when the connection drops after the request was written,
+  for example on a kept-alive connection the server or a proxy has closed. The request it sends again carries the same `event_id`, so the server stores the event once.
+- A request that times out is not sent again. To send it again yourself and have it stored once,
+  give the event an `eventId` and send that same id again.
+
+Full details: [Event ids](../../docs/sdk/java.md#event-ids).
+
+## Exposure hook
+
+`exposureListener(...)` gives the client an `ExposureListener` of yours when you create it. The
+client calls it once each time the server enrols the user in an experiment and the answer did not
+come from the client's cache: the moment the server records the exposure. With the Spring Boot
+starter, declare one `ExposureListener` bean instead; two stop the application at startup.
+
+```java
+BlockingQueue<Exposure> exposures = new ArrayBlockingQueue<>(10_000);
+
+SdkConfig config = SdkConfig.builder(System.getenv("CONTROLVAR_API_KEY"), "http://localhost:8000")
+        .exposureListener(exposures::offer)   // never waits: drops the exposure when the queue is full
+        .build();
+// A thread of your own takes each Exposure from the queue and calls your analytics tool.
+```
+
+It receives an `Exposure`: `getExperimentKey()`, `getUserId()`, `getVariantId()` (`null` when the
+server sends none) and `getVariantName()`. It is not called for a cached answer, a user the
+experiment did not enrol or an experiment that is not running (`assigned: false`), a call that
+fails, or a feature flag. It runs on the thread that called `getExperimentAssignment`, before the
+call returns, so keep it quick. If it throws, the answer is unchanged and nothing reports it.
+
+Full details: [Exposure hook](../../docs/sdk/java.md#exposure-hook).
 
 ## Consistent hash (compatibility utility)
 
@@ -173,8 +219,8 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
 | `evaluateFeatureFlag`, `isFeatureEnabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
-| `getExperimentAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
-| `trackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
+| `getExperimentAssignment` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
+| `trackEvent` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id}` | ignored |
 | `trackEvent` without keys, `trackBatch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored |
 
 ## Contract smoke
@@ -186,7 +232,7 @@ bash sdk/java/examples/contract_smoke.sh
 It prints:
 
 ```text
-{"sdk":"java","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
+{"sdk":"java","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true},"exposure":{"calls":1,"payload":{"experiment_key":"sdk_contract_ab","variant_name":"control","variant_id":"<variant id>","user_id":"smoke-<uuid>"}}}
 ```
 
 The script runs `./mvnw -q -B -pl core -am package -DskipTests` when `core/target` is stale (Maven output

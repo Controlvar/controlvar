@@ -97,7 +97,10 @@ def _stage(order: int, trigger: TriggerType, status: RolloutStageStatus, **kw: A
         status=status,
         start_date=kw.get("start_date"),
         trigger_configuration=kw.get("trigger_configuration"),
+        # The last edit, long ago. The scheduler measures from started_at
+        # (#1528), so a reader of updated_at would complete every stage here.
         updated_at=kw.get("updated_at", NOW - timedelta(days=30)),
+        started_at=kw.get("started_at"),
         completed_date=None,
     )
 
@@ -141,7 +144,7 @@ def test_a_time_based_stage_starts_once_the_stage_before_it_is_complete():
         1,
         TriggerType.TIME_BASED,
         RolloutStageStatus.IN_PROGRESS,
-        updated_at=NOW - timedelta(hours=25),
+        started_at=NOW - timedelta(hours=25),
     )
     second = _stage(
         2, TriggerType.TIME_BASED, RolloutStageStatus.PENDING, start_date=PAST
@@ -156,7 +159,7 @@ def test_a_time_based_stage_is_not_completed_before_24_hours():
         1,
         TriggerType.TIME_BASED,
         RolloutStageStatus.IN_PROGRESS,
-        updated_at=NOW - timedelta(hours=23),
+        started_at=NOW - timedelta(hours=23),
     )
     second = _stage(
         2, TriggerType.TIME_BASED, RolloutStageStatus.PENDING, start_date=PAST
@@ -171,7 +174,7 @@ def test_a_time_based_stage_with_a_future_start_date_waits_after_the_one_before(
         1,
         TriggerType.TIME_BASED,
         RolloutStageStatus.IN_PROGRESS,
-        updated_at=NOW - timedelta(hours=25),
+        started_at=NOW - timedelta(hours=25),
     )
     second = _stage(
         2,
@@ -220,6 +223,11 @@ def test_advancing_a_manual_stage_in_progress_starts_the_next_stage_at_once(
     RolloutService.manually_advance_stage(session, canary.id)
     assert canary.status is RolloutStageStatus.COMPLETED
     assert nxt.status is RolloutStageStatus.IN_PROGRESS
+    # The stage it starts records the start (#1528); the one it completes
+    # keeps its own.
+    assert nxt.started_at is not None
+    assert nxt.started_at == nxt.updated_at == canary.completed_date
+    assert canary.started_at is None
     assert flag.rollout_percentage == nxt.target_percentage
     assert schedule.status is RolloutScheduleStatus.ACTIVE
     session.commit.assert_called_once()

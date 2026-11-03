@@ -48,6 +48,27 @@ lines include such rules, with the API's path and reason:
 Such a stored rule keeps answering as it did: the condition does not hold
 (and a stored window that cannot be read abandons the whole ruleset).
 
+Since #1525 and #1526 a save also refuses a value the evaluator cannot read,
+and a dashboard geo comparison it ignores; the lines include those too:
+
+* a ``before`` or ``after`` value that is not an ISO 8601 date or a Unix
+  timestamp the engine can read;
+* an ``array_length`` value that is not a whole number, or, for ``between``,
+  a value without whole-number ``min`` and ``max``;
+* a ``geo_distance`` radius that is missing, below 0 or not a number, in
+  either shape;
+* a ``percentage_bucket`` value that is not a number (experiments);
+* a native ``gt``, ``gte``, ``lt`` or ``lte`` value that is not a number;
+* in the dashboard shape, a ``geo_within_radius`` value with a
+  ``comparison`` other than ``lte``, or a fifth list item or text part::
+
+    feature_flag  3f0c...  signup-gate  rules[0].rule.conditions[0].value  not a date; use an ISO 8601 date such as 2030-01-31 or 2030-01-31T09:00:00Z, or a Unix timestamp
+
+Such a stored rule keeps answering as it did: the condition does not hold, a
+dashboard comparison is read as "within the radius", and a timestamp no date
+can hold, or an integer too large for a floating-point number compared with
+``gt``, ``gte``, ``lt`` or ``lte``, abandons the whole ruleset.
+
 Segments get the same treatment (#440). Segment rules use the targeting
 rule format and are checked when saved; a segment stored before that whose
 rules fail the check is left as it is, and is never evaluated:
@@ -59,8 +80,10 @@ its name in place of a key and a reason starting ``rules not valid``::
 
 A problem that belongs to a segment's rules as a whole has the path ``rules``.
 A segment whose rules pass that check but use a distance unit membership
-never matches (#1204) is evaluated, and its condition never holds; it gets a
-line with the API's own path and reason, without that prefix::
+never matches (#1204), a geo comparison or a radius below 0 or not a number
+(#1525, #1526) is evaluated as before: the condition never holds, or, with a
+comparison, holds within the radius. It gets a line with the API's own path
+and reason, without that prefix::
 
     segment  9a1e...  Bay Area  groups[0].conditions[0].value  unknown distance unit; use km, mi or m, or leave it out for km
 
@@ -220,8 +243,9 @@ def segment_finding_for(row_id: Any, name: Any, rules: Any) -> Optional[Finding]
         reason = f"{SEGMENT_RULES_NOT_VALID}: {NOT_CHECKED}"
         return Finding(row_id, name, WHOLE_SEGMENT_RULES_PATH, reason, SEGMENT_ENTITY)
     try:
-        # Evaluated, so not "not valid": a save now refuses it (#1204).
-        check_segment_vocabulary(engine_rules)
+        # Evaluated, so not "not valid": a save now refuses it (#1204, #1525,
+        # #1526).
+        check_segment_vocabulary(engine_rules, rules)
     except TargetingRulesError as err:
         path = err.path or WHOLE_SEGMENT_RULES_PATH
         return Finding(row_id, name, path, err.code, SEGMENT_ENTITY)

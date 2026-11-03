@@ -82,6 +82,13 @@ export function warehouseRole(user: SessionUser): Role | null {
   return user.role ?? null;
 }
 
+/**
+ * Decided by the built-in role on purpose (#891, class B): the warehouse
+ * API's role bands read the user's built-in role, and no custom role or
+ * direct grant can hold a warehouse action (they hold only experiment and
+ * feature_flag actions and audit_log read), so the effective map has nothing
+ * to add here. `test_frontend_role_decisions.py` classifies this read.
+ */
 export function can(user: SessionUser, action: WarehouseCapability): boolean {
   const role = warehouseRole(user);
   return role !== null && CAPABILITIES[action].roles.includes(role);

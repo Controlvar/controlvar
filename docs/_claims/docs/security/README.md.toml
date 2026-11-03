@@ -51,8 +51,12 @@ by = [
 ]
 
 [[unit]]
-text = "RBAC enforcement: 4 roles (ADMIN, DEVELOPER, ANALYST, VIEWER) — backend/app/core/permissions.py"
-by = ["test:backend/tests/unit/core/test_permissions.py"]
+text = "RBAC enforcement: 4 roles (ADMIN, DEVELOPER, ANALYST, VIEWER), plus custom roles and direct grants in the full profile — backend/app/core/permissions.py"
+by = [
+    "test:backend/tests/unit/core/test_permissions.py",
+    "test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_permission_checks_read_custom_roles_and_grants_through_one_capability",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
 text = "bcrypt password hashing — backend/app/core/security.py"

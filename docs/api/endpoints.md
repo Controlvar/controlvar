@@ -75,15 +75,20 @@ on for that user: `"new_dashboard_ui": true` and `"beta_features": true`.
    - Can access their own data
    - Cannot access admin endpoints
 
-   - Feature flags are by role, not ownership: ADMIN and DEVELOPER may read, create,
-     change and delete any flag; ANALYST and VIEWER may read any flag and change none
+   - Feature flags are by permission, not ownership: ADMIN and DEVELOPER may read, create,
+     change and delete any flag; ANALYST and VIEWER may read any flag and, by their role,
+     change none. In the full profile a custom role or direct grant can add
+     `feature_flag (create)`, `(update)` or `(delete)`, and then admits any flag
    - Experiments: reading an experiment and its results under
      `/api/v1/experiments/{experiment_id}` needs the role's READ on experiments (all four
      roles hold it); who owns the experiment is not considered. ADMIN and DEVELOPER may create
      experiments, clone any experiment, and update, start, pause, complete, archive or
      annotate (`metadata`) any experiment, schedule any experiment, and delete any
-     experiment in DRAFT. ANALYST and VIEWER change no experiment, including one they
-     own
+     experiment in DRAFT. ANALYST and VIEWER change no experiment by their role, including
+     one they own. In the full profile a custom role or direct grant can add these:
+     `experiment (create)` creates and clones, `experiment (update)` updates, starts,
+     pauses, completes, archives, annotates and schedules, and `experiment (delete)` deletes
+     a draft
 
 2. **Superusers**:
    - Can access all user data
@@ -962,7 +967,8 @@ Each 400 carries the detail `This flag is archived. Unarchive it before turning 
   separately. A flag that is not archived is returned unchanged. Written to the audit
   log as `feature_flag_update` (`ARCHIVED` to `INACTIVE`).
 - **Headers**: Authorization: Bearer {token}
-- **Permissions**: ADMIN and DEVELOPER; ANALYST and VIEWER get 403
+- **Permissions**: ADMIN and DEVELOPER, and in the full profile anyone whose custom role or
+  direct grant gives `feature_flag (update)`; anyone else gets 403
 - **Response**: 200 OK, the flag (the same shape as `GET /api/v1/feature-flags/{flag_id}`)
 - **Errors**: 403 without permission to change flags, 404 for an unknown flag
 
@@ -1018,8 +1024,10 @@ their public `key`, except `POST /api/v1/tracking/events`, which takes ids. They
   they actually see the experiment) records the view. Assigned users count in the experiment's
   results from the moment they are assigned, and for a bandit experiment they count as pulls.
   See [Assign a customer list to an experiment](../guides/assign-customer-list.md).
-- **Headers**: `X-API-Key: {api_key}`, a key with the `sdk:ruleset` scope whose owner is an ADMIN,
-  a DEVELOPER or a superuser. That scope also lets the key download every feature flag's targeting
+- **Headers**: `X-API-Key: {api_key}`, a key with the `sdk:ruleset` scope whose owner can change
+  feature flags and experiments: an ADMIN, a DEVELOPER, a superuser, or in the full profile anyone
+  whose custom roles or direct grants give `feature_flag (update)` and `experiment (update)`.
+  That scope also lets the key download every feature flag's targeting
   rules (`GET /api/v1/sdk/ruleset`), so keep the key on a server; see
   [Scopes](../security/api-keys.md#scopes).
 - **Body**: `{"experiment_key": string, "users": [{"user_id": string, "context": object?}]}`
@@ -1061,7 +1069,8 @@ their public `key`, except `POST /api/v1/tracking/events`, which takes ids. They
 | 401 | no key | `API key missing` |
 | 401 | an unknown, expired or revoked key | `Invalid API Key` |
 | 403 | the key lacks the scope | `This API key does not have the 'sdk:ruleset' scope. Create a key with the 'sdk:ruleset' scope for server-side SDK use.` |
-| 403 | the key's owner is no longer an active ADMIN, DEVELOPER or superuser | `This key's owner can no longer change feature flags or experiments, so the key is refused for server-side SDK use.` |
+| 403 | the key's owner can no longer change feature flags: inactive, or given `feature_flag (update)` neither by their role nor, in the full profile, by a custom role or direct grant | `This key's owner can no longer change feature flags, so the key is refused for server-side SDK use.` |
+| 403 | the key's owner can change feature flags but not experiments; nobody is assigned | `This key's owner cannot change experiments, so the key cannot assign users in a batch, and nobody was assigned. Use a server-side key whose owner can change experiments.` |
 | 404 | no ACTIVE experiment has that key | `Active experiment with key 'spring-email' not found` |
 | 409 | the experiment was paused, completed or deleted (or its variants changed) during the request | `The experiment changed during the request. Users earlier in the list may already be assigned; resending the same request is safe.` |
 | 422 | `users` is empty | loc `["body","users"]`, msg `List should have at least 1 item after validation, not 0` |
@@ -1086,23 +1095,31 @@ A 422 names positions and fields, never the ids that were sent.
   events by `event_name`: a metric with `event_name: "purchase"` counts every `purchase` event.
   Which metrics read `value`: a revenue, duration or custom metric adds it up per user; a count
   metric counts the event and does not read it; a conversion metric does not read it.
+  `event_id` names one occurrence of the event: text of up to 255 characters, compared exactly;
+  missing, `null` and `""` mean none. An event sent again with the same `event_id`, user,
+  experiment, flag and event name is not stored again; see
+  [How events count](../guides/how-events-count.md#sending-an-event-again).
 - **Headers**: X-API-Key: {api_key}
-- **Body**: `{"event_type": string, "event_name": string?, "user_id": string, "experiment_key": string?, "feature_flag_key": string?, "value": number?, "metadata": object?, "timestamp": datetime?}`
-- **Response**: 200 OK (the stored event); 404 a key that was given was not found; 422 invalid body
+- **Body**: `{"event_type": string, "event_name": string?, "user_id": string, "experiment_key": string?, "feature_flag_key": string?, "value": number?, "metadata": object?, "timestamp": datetime?, "event_id": string?}`
+- **Response**: 200 OK (the stored event, with `"duplicate": false` and the `event_id` sent, or null); 200 OK with `"duplicate": true` for an event already stored with that `event_id`: `id` is the stored event's, every other field is this request's, and nothing is written; 404 a key that was given was not found; 422 invalid body, an `event_id` that is not text or is over 255 characters among them
 
 ### Batch Track Events
 - **Endpoint**: `POST /api/v1/tracking/batch`
 - **Description**: Record up to 100 events (same shape as `/track`) in one request. An entry with no
   key is stored as history, not refused; an entry whose key is not found is reported in `errors`.
   Each entry is tagged with a variant as `/track` tags it: only while its experiment is running.
-- **Response**: 200 OK `{"success_count": int, "failure_count": int, "errors": [...]|null}`; 422 above 100 events, and none is stored
+  An entry already stored with its `event_id` (an earlier request's, or an earlier entry of this
+  one) counts in `success_count` and in `duplicate_count`, and nothing is written for it.
+- **Response**: 200 OK `{"success_count": int, "failure_count": int, "duplicate_count": int, "errors": [...]|null}`; 422 above 100 events, or one entry invalid (its `event_id` among them), and none is stored
 
 ### Track Event by Ids
 - **Endpoint**: `POST /api/v1/tracking/events`
 - **Description**: Same as `/track` but keyed by internal ids (`experiment_id`, `variant_id`, `feature_flag_id`);
   `event_name` is required. It stores the `variant_id` it is given, whatever the experiment's status.
+  It takes `event_id` as `/track` does, and the same event sent through either route is stored
+  once.
 - **Headers**: X-API-Key: {api_key}
-- **Response**: 200 OK (the stored event); 404 an id names no stored row, and nothing is stored: the detail names
+- **Response**: 200 OK (the stored event, or `"duplicate": true` as from `/track`); 404 an id names no stored row, and nothing is stored: the detail names
   each such field, for example `No experiment has that experiment_id.`; 422 invalid body, or an id that is not a UUID
 
 ### Get User Assignments
@@ -1893,8 +1910,9 @@ POST /api/v1/feature-flags/bulk-toggle    — Bulk enable/disable/archive (DEVEL
 GET  /api/v1/feature-flags/{id}/history   — Flag change history
 ```
 
-ADMIN and ANALYST read every audit entry; DEVELOPER and VIEWER read only their
-own entries on the list, user, stream and history routes. See
+ADMIN and ANALYST, and in the full profile anyone whose custom role or direct grant gives
+`audit_log (read)`, read other users' audit entries too; anyone else reads only their own
+entries on the list, user, stream and history routes. See
 [Permissions](audit-logging.md#permissions).
 
 ---
@@ -2057,7 +2075,9 @@ POST /api/v1/segments/{id}/members/remove   {"remove": ["user-123", "user-999"]}
   most 1,000,000` and adds nothing. A rules segment answers 409 `members can be added only
   to an id_list segment` (`removed only from` on remove), an archived one 409 `this
   segment is archived; its members cannot be changed`, an unknown one 404.
-- **Who.** DEVELOPER and ADMIN; ANALYST and VIEWER get 403. Each change writes one
+- **Who.** Users who may change experiments: DEVELOPER and ADMIN, and in the full profile
+  anyone whose custom role or direct grant gives `experiment (update)`; anyone else gets 403.
+  Each change writes one
   `segment_update` audit entry with the counts, never the IDs.
 
 `POST /api/v1/segments/{id}/evaluate` answers an id list on `user_context.user_id`: the user
@@ -2257,7 +2277,7 @@ variant, and the decision.
 
 See [Split URL API Reference](split-url.md) for full documentation.
 
-Split URL experiments use `experiment_type: split_url` and carry a `split_url_config` in the request body. How visitors are meant to be redirected, and what does not work in this release, is on the [Split URL API Reference](split-url.md).
+Split URL experiments use `experiment_type: split_url` and carry a `split_url_config` in the request body. Your server or edge asks the API where to send each visitor, and redirects them: how to set it up is on the [Split URL API Reference](split-url.md).
 
 **Experiment management** uses the existing experiment CRUD endpoints with `experiment_type=split_url`:
 
@@ -2267,14 +2287,17 @@ PUT  /api/v1/experiments/{id}          — Update split URL config
 GET  /api/v1/experiments/{id}          — Returns split_url_config in response
 ```
 
-**Split URL-specific endpoint**:
+**Split URL-specific endpoints**:
 
 ```text
-GET /api/v1/experiments/{experiment_id}/split-url/preview  — Preview variant assignment for a user (dev/QA)
+GET  /api/v1/tracking/split-url/routes                     — Every active split URL experiment's control host and path (API key, beta)
+POST /api/v1/tracking/split-url/assign                     — Where to send one visitor: redirect, with the variant's URL, or serve (API key, beta)
+GET  /api/v1/experiments/{experiment_id}/split-url/preview — The URL a visitor id gets now, recording nothing (dev/QA)
 ```
 
-Query parameters for preview: `user_id` (required). The preview hashes `{user_id}:{experiment_id}`;
-it does not predict the edge router.
+Query parameters for preview: `user_id` (required). The preview answers the visitor's stored
+variant, or the variant a new visitor with that id would get, as the assign route does,
+without recording anything.
 
 **`SplitUrlConfig` schema** (`split_url_config` field):
 
@@ -2291,4 +2314,4 @@ At least two URL variants, with `traffic_allocation` values (0-100) that sum to 
 In a `split_url` experiment the URL variants name the experiment's variants one to one,
 with the same allocations, and each `url` is an absolute `http://` or `https://` URL; see
 [Validation Rules](split-url.md#validation-rules).
-`cookie_name` and `cookie_ttl_days` (default 30) are optional.
+`cookie_name` and `cookie_ttl_days` (default 30) are optional, stored, and read by nothing.

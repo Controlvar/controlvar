@@ -482,8 +482,8 @@ by = [
 ]
 
 [[unit]]
-text = "npm run typecheck fails inside sdk/react/src | The app is written against React SDK v1.1.0's surface (useExperiment, useTrackEvent, ExperimentAssignment.configuration, ...). Make sure sdk/react is on that version."
-by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_react_sdk_is_1_1_0_with_the_hooks_the_apps_use"]
+text = "npm run typecheck fails inside sdk/react/src | The app is written against React SDK 0.1.0's surface (useExperiment, useTrackEvent, ExperimentAssignment.configuration, ...). Make sure sdk/react is on that version."
+by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_react_sdk_is_0_1_0_with_the_hooks_the_apps_use"]
 
 [[unit]]
 text = "Running with docker compose --profile demo: 401 everywhere, and the simulator log says no /data/demo/shoplab/.api_key | The shoplab seed did not run. Run SEED=demo,shoplab,streampulse docker compose --profile demo up -d --wait: it applies the missing seeds to the existing database (no down -v)."

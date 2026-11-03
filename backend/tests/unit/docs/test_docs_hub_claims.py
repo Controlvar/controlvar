@@ -157,15 +157,16 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
             "Set optimization_type to one of thompson_sampling, ucb1 or epsilon_greedy when you create the experiment"
         ),
     ),
-    "Full profile: store split URL experiments and preview the URL a user id hashes to. The edge router does not split traffic yet.": (
+    "Full profile: give each variant its own URL. Your server or edge, or on AWS an optional CloudFront router, asks Controlvar where to send each visitor, and conversions count for the variant they saw.": (
         lede("present in the full profile"),
-        lede("The edge router does not split traffic in this release"),
+        lede("A split URL experiment gives each variant its own page"),
+        lede("your server or edge asks Controlvar which variant the visitor is in"),
+        lede("On AWS, an optional CloudFront router can do the asking for your site"),
         lede(
-            "What works today is storing a split URL experiment and its configuration, and the preview endpoint"
+            "conversions tracked with their id and the experiment count for the variant they saw"
         ),
-        lede("it hashes the user_id you pass with the experiment's id"),
         says(
-            "Returns the URL variant the preview's own hash gives a user_id, without redirecting"
+            "A conversion counts for a variant only when it is tracked with the same visitor id"
         ),
     ),
     "Keep users out of conflicting experiments, and a share of new users out of every experiment": (
@@ -259,7 +260,7 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
     "useFlag and useExperiment hooks, Provider, AsyncStorage offline support.": (
         lede("a context provider, three hooks"),
         lede("AsyncStorage-backed offline fallback"),
-        says("### useFlag(flagKey): FlagState"),
+        says("### useFlag(flagKey, attributes?): FlagState"),
         says("### useExperiment(experimentKey): ExperimentState"),
     ),
     "Describes the API's tools for AI assistants.": (
@@ -402,16 +403,15 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("No API edits or deletes an entry"),
         lede("It records the changes people make through the API"),
     ),
-    "Admin, Developer, Analyst and Viewer decide what a user can do; custom roles (full profile) are stored but not applied yet": (
+    "Admin, Developer, Analyst and Viewer decide what a user can do; in the full profile, custom roles and direct grants add to them": (
         lede(
             "Custom roles is one of the optional modules -- present in the full profile"
         ),
+        says("One of four roles every user has (admin, developer, analyst, viewer)"),
         says(
-            "One of four built-in system roles assigned to every user (admin, developer, analyst, viewer)"
+            "A user may do what their built-in role allows, plus what their custom roles and unexpired direct grants hold"
         ),
-        says("Only the base role decides what a user can do"),
-        says("Custom roles and direct grants are stored"),
-        says("no permission check reads them"),
+        says("Roles and grants only add"),
     ),
     "Create, expire and delete keys; the sdk:ruleset scope for local evaluation": (
         lede("an API key lasts until you delete it or it reaches its own expires_at"),

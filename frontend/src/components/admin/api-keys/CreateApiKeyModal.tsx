@@ -6,6 +6,8 @@ import {
   MCP_READ_SCOPE_HELP,
   MCP_READ_SCOPE_LABEL,
 } from '@/components/admin/api-keys/mcpReadScope';
+import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
+import { EffectivePermissions, holds } from '@/utils/effectivePermissions';
 
 /**
  * `POST /api/v1/api-keys` response. The plaintext key is returned once as
@@ -40,22 +42,31 @@ interface CreateApiKeyModalProps {
 export const SDK_RULESET_SCOPE = 'sdk:ruleset';
 
 /**
- * Server-side evaluation keys are for roles that can change flags: the API
- * refuses `sdk:ruleset` with 403 for anyone else, so the option is disabled
- * here for the same users, with the reason shown. No signed-in user (no
- * AuthProvider) is treated as not allowed.
+ * Server-side evaluation keys are for users who can change feature flags: the
+ * API refuses `sdk:ruleset` with 403 for anyone else, so the option is
+ * disabled here for the same users, with the reason shown. "Can change
+ * feature flags" is `check_permission(user, FEATURE_FLAG, UPDATE)`
+ * (`may_use_server_key`): a superuser, the ADMIN and DEVELOPER roles, or the
+ * effective map's `feature_flag: update` (a custom role or direct grant).
+ * No signed-in user (no AuthProvider) is treated as not allowed.
  */
-export function canCreateRulesetKey(user: UserMe | null | undefined): boolean {
+const ROLES_THAT_CHANGE_FLAGS = ['ADMIN', 'DEVELOPER'];
+
+export function canCreateRulesetKey(user: UserMe | null | undefined, effective?: EffectivePermissions): boolean {
   if (!user) return false;
-  return user.is_superuser || user.role === 'ADMIN' || user.role === 'DEVELOPER';
+  if (user.is_superuser) return true;
+  return ROLES_THAT_CHANGE_FLAGS.includes(user.role) || holds(effective, 'feature_flag', 'update');
 }
 
 export const RULESET_SCOPE_ROLE_REASON =
-  'Only users who can change feature flags (the ADMIN and DEVELOPER roles, or a superuser) can create a key with this scope.';
+  'Only users who can change feature flags can create a key with this scope; the ADMIN and DEVELOPER roles and superusers can.';
 
 export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyModalProps) {
   const auth = useOptionalAuth();
-  const rulesetAllowed = canCreateRulesetKey(auth?.user);
+  const { effective, loading } = useEffectivePermissions();
+  const rulesetAllowed = canCreateRulesetKey(auth?.user, effective);
+  // While the effective map is on its way, neither the option nor the reason.
+  const rulesetPending = !rulesetAllowed && loading;
   const [name, setName] = useState('');
   const [rulesetScope, setRulesetScope] = useState(false);
   const [mcpReadScope, setMcpReadScope] = useState(false);
@@ -169,7 +180,9 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
             </div>
 
             {/* Scopes: one checkbox each, sdk:ruleset first, then mcp:read */}
-            <div className="mb-4">
+            {!rulesetPending && (
+            <div className="mb-4" data-testid="api-key-ruleset-scope-section">
+
               <div className="flex items-start gap-2">
                 <input
                   id="api-key-ruleset-scope"
@@ -212,6 +225,7 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
                 </p>
               )}
             </div>
+            )}
 
             {/* mcp:read: offered to every role */}
             <div className="mb-4">

@@ -169,6 +169,10 @@ tracking against a live API in CI (the SDK Live Contract job of `pr-qa-gate.yml`
 Every other SDK installs from a clone of this repository. The [SDK guide](docs/sdk-guide.md) says
 how, and what CI runs for each one.
 
+[`sdk/mcp`](sdk/mcp/) holds the Controlvar MCP server, which is not an SDK and is not yet published;
+it is meant for an AI assistant such as Claude Code to start on your computer, to read your
+instance's feature flags, experiments and results with your API key.
+
 ---
 
 ## Documentation
@@ -206,8 +210,8 @@ the core through the registration hooks in `backend/app/core/`:
 
 | Module | What it adds |
 |---|---|
-| `workspaces` | Group users into teams, with workspace roles and email invites. Grouping only: access to experiments and flags is by platform role |
-| `rbac` | Roles beyond the built-in four, and permissions granted directly to a user. Both are recorded, but they do not change what anyone can do yet: each user's built-in role decides ([#891](https://github.com/Controlvar/controlvar/issues/891)) |
+| `workspaces` | Group users into teams, with workspace roles and email invites. Grouping only: workspace roles play no part in access to experiments and flags |
+| `rbac` | Roles beyond the built-in four, and permissions granted directly to a user, optionally until a date. Both add to what the user's built-in role allows |
 | `sso` | OIDC identity providers with just-in-time provisioning and role mapping. SAML 2.0 sign-in is not available yet; use OIDC |
 | `hipaa` | PHI encryption, PHI access records stamped with a six-year retention (nothing deletes them), BAA records |
 | `compliance` | SOC 2 / ISO 27001 reports, signed audit exports |
@@ -215,7 +219,7 @@ the core through the registration hooks in `backend/app/core/`:
 | `integrations` | Jira, Salesforce and GitHub |
 | `counters` | Routes to increment and read assignment and conversion counters in DynamoDB; assignment and tracking do not write them |
 | `etl` | Glue crawlers, Athena partitions and scheduled jobs |
-| `split_url` | Server-side URL splitting at the edge. The edge router has no configuration source in this release, so it does not split traffic yet; experiments, their URL configuration and the preview work ([#393](https://github.com/Controlvar/controlvar/issues/393)) |
+| `split_url` | Split URL experiments: each variant is its own URL. Your server or edge asks the API where to send each visitor (on AWS an optional CloudFront router can). The AWS installer installs the core profile, so it does not include them |
 
 `GET /api/v1/modules` reports the running profile and the installed modules — ask it first, rather
 than inferring the profile from a status code. A core deployment is the repository with `modules/`

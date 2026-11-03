@@ -47,13 +47,15 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends.
 REVISION = "d29a479daafe"
 PREVIOUS_CORE_HEAD = "806901fb7735"
-#: The core head of this tree: ``607c51a59bf5`` (#1497), after ``4c2c09a2b3e8``
-#: (#1206) and ``37dcb2969766`` (#440), the revision after this one.
-CORE_HEAD = "607c51a59bf5"
+#: The core head of this tree: ``7b6b4b4fe246`` (#1528), after ``85dd4796bb8b``
+#: (#1543), ``607c51a59bf5`` (#1497), ``4c2c09a2b3e8`` (#1206) and
+#: ``37dcb2969766`` (#440), the revision after this one.
+CORE_HEAD = "7b6b4b4fe246"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``37dcb2969766``
-#: (#440) drops ``segment_members``.
-LATER_DOWNGRADE_TABLES = {"segment_members"}
+#: (#440) drops ``segment_members``; ``85dd4796bb8b`` (#1543) drops
+#: ``event_dedup_keys``.
+LATER_DOWNGRADE_TABLES = {"segment_members", "event_dedup_keys"}
 MODULES_HEAD = "modules_0004_rbac_activation"
 
 PREVIOUS_ROWS = {

@@ -685,7 +685,10 @@ class TestRequest:
         assert body["analysis_status"] == "beta"
         assert notice == ANALYSIS_STATUS["holdout"].notice
         lowered = notice.lower()
-        assert "feature flags and split-url experiments ignore the holdout" in lowered
+        # Split URL experiments honour the holdout: their visitors are assigned
+        # through /tracking/assign's own function (#393).
+        assert "feature flags ignore the holdout" in lowered
+        assert "split" not in lowered
         assert "first seen while the holdout was active" in lowered
         assert "stay valid however often you check" in lowered
 

@@ -107,6 +107,25 @@ by = [
 ]
 
 [[unit]]
+text = "WithOnExposure is new: an option that gives the client a function it calls once each time the server enrols a user in an experiment and the answer did not come from its cache."
+by = [
+    "test:sdk/go/exposure_test.go::TestOnExposure_CalledOnceWithTheFourValues",
+    "test:sdk/go/exposure_test.go::TestOnExposure_ACachedAnswerCallsNothing",
+]
+
+[[unit]]
+text = "Its argument is the new Exposure type."
+by = ["test:sdk/go/exposure_test.go::TestExposure_HasExactlyFourStringFields"]
+
+[[unit]]
+text = "Run go get github.com/controlvar/controlvar/sdk/go again to have it."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "See Exposure hook below."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "Quick Start"
 by = ["exempt:label"]
 
@@ -153,6 +172,14 @@ by = [
 [[unit]]
 text = "WithCacheSize | int | 1000 | Max cached evaluations + assignments (LRU eviction)"
 by = ["test:sdk/go/client_test.go::TestCache_LRUEviction"]
+
+[[unit]]
+text = "WithOnExposure | func(context.Context, Exposure) | none | Called once each time the server enrols the user and the answer is not cached; nil sets none (Exposure hook, below)"
+by = [
+    "test:sdk/go/exposure_test.go::TestOnExposure_CalledOnceWithTheFourValues",
+    "test:sdk/go/exposure_test.go::TestOnExposure_ACachedAnswerCallsNothing",
+    "test:sdk/go/exposure_test.go::TestWithOnExposure_NilSetsNone",
+]
 
 [[unit]]
 text = "WithLocalEval | bool | — | Deprecated no-op kept for source compatibility"
@@ -252,6 +279,14 @@ by = [
 [[unit]]
 text = "Assignment | ExperimentKey, UserID, VariantID, VariantName string, IsControl bool, Configuration map[string]any"
 by = ["test:sdk/go/client_test.go::TestClient_GetAssignment_RequestAndMapping"]
+
+[[unit]]
+text = "Exposure | ExperimentKey, UserID, VariantID (\"\" when the server sent none), VariantName string: what the WithOnExposure function receives (Exposure hook, below)"
+by = [
+    "test:sdk/go/exposure_test.go::TestExposure_HasExactlyFourStringFields",
+    "test:sdk/go/exposure_test.go::TestOnExposure_CalledOnceWithTheFourValues",
+    "test:sdk/go/exposure_test.go::TestOnExposure_VariantIDIsEmptyWhenTheServerSendsNone",
+]
 
 [[unit]]
 text = "TrackEvent | UserID, EventName (required), EventType (defaults to EventName), ExperimentKey, FeatureFlagKey, Value float64 (exp.Float64(v)), Properties (sent as metadata), Timestamp time.Time (ISO-8601 when non-zero)"
@@ -460,7 +495,7 @@ text = "Conversions are matched to metrics by event name."
 by = ["test:backend/tests/integration/services/test_conversion_event_matching.py::TestConversionEventFilter::test_matches_both_producer_shapes_and_excludes_exposures"]
 
 [[unit]]
-text = "This SDK reads only the variant from an answer: an assigned: false answer (a user the experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as the control variant, and an event tracked without a key after the user's cache entries have expired (CacheTTL, 5 minutes by default) is not sent, so pass ExperimentKey on a conversion that can come later."
+text = "This SDK returns only the variant from an answer: an assigned: false answer (a user the experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as the control variant, and an event tracked without a key after the user's cache entries have expired (CacheTTL, 5 minutes by default) is not sent, so pass ExperimentKey on a conversion that can come later."
 by = [
     "test:sdk/go/client_test.go::TestClient_GetAssignment_RequestAndMapping",
     "test:sdk/go/client_test.go::TestClient_GetAssignment_Sticky_CacheHit",
@@ -471,6 +506,62 @@ by = [
     "test:sdk/go/client_test.go::TestClient_Track_WithoutKey_FansOutToCachedEntries",
     "test:sdk/go/client_test.go::TestClient_Track_WithoutKey_NothingCached_SendsNothing",
 ]
+
+[[unit]]
+text = "Exposure hook"
+by = ["exempt:label"]
+
+[[unit]]
+text = "WithOnExposure gives the client a function of yours when you create it."
+by = [
+    "test:sdk/go/exposure_test.go::TestOnExposure_CalledOnceWithTheFourValues",
+    "test:sdk/go/exposure_test.go::TestWithOnExposure_NilSetsNone",
+]
+
+[[unit]]
+text = "The client calls it once each time the server enrols the user in an experiment and the answer did not come from the client's cache: the moment the server records the exposure."
+by = [
+    "test:sdk/go/exposure_test.go::TestOnExposure_CalledOnceWithTheFourValues",
+    "test:sdk/go/exposure_test.go::TestOnExposure_ACachedAnswerCallsNothing",
+    "test:sdk/go/exposure_test.go::TestOnExposure_OncePerUserAndExperiment",
+    "test:backend/tests/integration/services/test_assignment_service_coverage.py::TestAssignUser::test_track_exposure_called_on_existing_assignment",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+]
+
+[[unit]]
+text = "Use it to send the exposure to your analytics tool or warehouse."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "It receives an Exposure: ExperimentKey, UserID, VariantID (\"\" when the server sends none) and VariantName."
+by = [
+    "test:sdk/go/exposure_test.go::TestOnExposure_CalledOnceWithTheFourValues",
+    "test:sdk/go/exposure_test.go::TestOnExposure_VariantIDIsEmptyWhenTheServerSendsNone",
+]
+
+[[unit]]
+text = "It is not called for a cached answer, a user the experiment did not enrol or an experiment that is not running (assigned: false), a call that fails, or a feature flag."
+by = [
+    "test:sdk/go/exposure_test.go::TestOnExposure_ACachedAnswerCallsNothing",
+    "test:sdk/go/exposure_test.go::TestOnExposure_NotCalledForAssignedFalse",
+    "test:sdk/go/exposure_test.go::TestOnExposure_AFailedCallCallsNothing",
+    "test:sdk/go/exposure_test.go::TestOnExposure_FlagsNeverCallIt",
+]
+
+[[unit]]
+text = "It runs on the goroutine that called GetAssignment, before that call returns, so its running time is added to the call: hand the exposure on, as above."
+by = ["test:sdk/go/exposure_test.go::TestOnExposure_RunsOnTheCallersGoroutineBeforeGetAssignmentReturns"]
+
+[[unit]]
+text = "If it panics, the client recovers: GetAssignment returns the answer and a nil error, and nothing records the panic."
+by = [
+    "test:sdk/go/exposure_test.go::TestOnExposure_APanicChangesNothing",
+    "test:sdk/go/exposure_test.go::TestOnExposure_SendsNothingOfItsOwn",
+]
+
+[[unit]]
+text = "Full details: Exposure hook."
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Consistent hash (compatibility utility)"
@@ -514,9 +605,11 @@ by = [
 ]
 
 [[unit]]
-text = "GetAssignment | POST /api/v1/tracking/assign | {experiment_key, user_id, context?} | {experiment_key, user_id, variant_id, variant_name, is_control, configuration}; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with assigned: false"
+text = "GetAssignment | POST /api/v1/tracking/assign | {experiment_key, user_id, context?} | {experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with assigned: false"
 by = [
     "test:sdk/go/client_test.go::TestClient_GetAssignment_RequestAndMapping",
+    "test:sdk/go/exposure_test.go::TestOnExposure_CalledOnceWithTheFourValues",
+    "test:sdk/go/exposure_test.go::TestOnExposure_NotCalledForAssignedFalse",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
     "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_unknown_key_returns_404",
     "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_a_draft_with_no_control_variant_returns_404",

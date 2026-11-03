@@ -16,10 +16,14 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
-from backend.app.api.sdk_scope import require_sdk_ruleset_key
+from backend.app.api.sdk_scope import require_batch_assign_key
 from backend.app.core.context_limits import check_context
 from backend.app.core.logger import failure_detail, unexpected_failure
-from backend.app.core.metrics import record_event_tracked, record_experiment_assignment
+from backend.app.core.metrics import (
+    record_event_duplicate,
+    record_event_tracked,
+    record_experiment_assignment,
+)
 from backend.app.models.api_key import APIKey
 from backend.app.models.assignment import Assignment
 from backend.app.models.event import Event
@@ -139,10 +143,23 @@ def _variant_at_receipt(db: Session, experiment: Experiment, user_id: str) -> An
     return assignment.variant_id if assignment else None
 
 
-def _event_response(event: Event) -> EventResponse:
-    """Build the public response model from a stored Event row."""
+def _event_response(
+    event: Event,
+    *,
+    event_id: Optional[str],
+    stored_id: Any = None,
+) -> EventResponse:
+    """Build the public response model from an Event.
+
+    For a stored event, ``event`` is the row and ``stored_id`` is None. For a
+    duplicate (#1543), ``event`` is the one this request built and never
+    stored, and ``stored_id`` is the id of the event already stored with the
+    same key: the answer's ``id`` is that one, and every other field comes
+    from this request or this request's time, never from the stored row.
+    """
+    duplicate = stored_id is not None
     return EventResponse(
-        id=str(event.id),
+        id=str(stored_id if duplicate else event.id),
         event_type=event.event_type,
         event_name=event.event_name or event.event_type,
         user_id=event.user_id,
@@ -154,7 +171,36 @@ def _event_response(event: Event) -> EventResponse:
         timestamp=event.created_at,
         created_at=event.created_at,
         updated_at=event.updated_at or datetime.now(timezone.utc),
+        duplicate=duplicate,
+        event_id=event_id,
     )
+
+
+def _store_once(
+    db: Session,
+    event_data: EventCreate | UntaggedEventCreate,
+    event_id: Optional[str],
+    *,
+    route: str,
+    allow_untagged: bool,
+) -> tuple[Event, Any]:
+    """Store one event unless its ``event_id`` was already stored (#1543).
+
+    Returns ``(event, stored_id)``: the stored row and None, or, for a
+    duplicate, the event this request built (never stored) and the id of the
+    event already stored. Counts the event in ``events_tracked_total`` only
+    when a row was written, and a duplicate in ``events_duplicate_total``.
+    """
+    stored_id, created, event = EventService(db).track_event_once(
+        event_data, event_id, allow_untagged=allow_untagged
+    )
+    if created:
+        record_event_tracked(str(event_data.event_type))
+        return event, None
+    record_event_duplicate(route)
+    return EventService.build_event(
+        event_data, allow_untagged=allow_untagged
+    ), stored_id
 
 
 def _not_running_answer(
@@ -402,7 +448,7 @@ def assign_users_to_experiment_batch(
         ..., description="The experiment and its users"
     ),
     db: Session = Depends(deps.get_db),
-    api_key: APIKey = Depends(require_sdk_ruleset_key),
+    api_key: APIKey = Depends(require_batch_assign_key),
 ) -> AssignmentBatchResponse:
     """
     Assign up to 1,000 users to an ACTIVE experiment in one request.
@@ -418,7 +464,11 @@ def assign_users_to_experiment_batch(
     ``POST /api/v1/tracking/assign`` records that they saw the experiment.
 
     **Authentication**: an API key with the ``sdk:ruleset`` scope, whose owner
-    can change feature flags and experiments (ADMIN, DEVELOPER or a superuser).
+    can change feature flags and experiments: ADMIN, DEVELOPER, a superuser, or
+    in the full profile anyone whose custom roles or direct grants give
+    ``feature_flag (update)`` and ``experiment (update)``. A key whose owner can
+    change feature flags but not experiments is refused with 403 before anyone
+    is assigned.
 
     A plain ``def``: FastAPI runs it in the thread pool, so a batch does not
     hold the event loop while it works through its users.
@@ -641,12 +691,14 @@ async def track_event(
             value=request.value,
             properties=request.metadata,
             timestamp=request.timestamp or datetime.now(timezone.utc),
+            event_id=request.event_id,
         )
 
-        # Track the event
-        event = EventService(db).track_event(event_data, allow_untagged=True)
-        record_event_tracked(str(event_data.event_type))
-        return _event_response(event)
+        # Track the event, once per event_id (#1543)
+        event, stored_id = _store_once(
+            db, event_data, request.event_id, route="track", allow_untagged=True
+        )
+        return _event_response(event, event_id=request.event_id, stored_id=stored_id)
     except ValidationError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -704,9 +756,17 @@ async def track_event_by_ids(
         # Raises ValueError for an id that is not a UUID, as track_event does.
         unknown = service.unknown_id_fields(event_data)
         if not unknown:
-            event = service.track_event(event_data)
-            record_event_tracked(str(event_data.event_type))
-            return _event_response(event)
+            # Once per event_id (#1543), with the rule /track and /batch use.
+            event, stored_id = _store_once(
+                db,
+                event_data,
+                event_data.event_id,
+                route="events",
+                allow_untagged=False,
+            )
+            return _event_response(
+                event, event_id=event_data.event_id, stored_id=stored_id
+            )
     except ValidationError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -797,12 +857,11 @@ async def track_events_batch(
             detail="Batch size exceeds the limit of 100 events",
         )
 
-    # Create event service
-    event_service = EventService(db)
-
-    # Initialize counters
+    # Initialize counters. A duplicate (#1543) counts in success_count and in
+    # duplicate_count; nothing is written for it.
     success_count = 0
     failure_count = 0
+    duplicate_count = 0
     errors = []
 
     # Process each event
@@ -867,12 +926,21 @@ async def track_events_batch(
                 value=event_request.value,
                 properties=event_request.metadata,
                 timestamp=event_request.timestamp or datetime.now(timezone.utc),
+                event_id=event_request.event_id,
             )
 
-            # Track the event
-            event_service.track_event(event_data, allow_untagged=True)
-            record_event_tracked(str(event_data.event_type))
+            # Track the event, once per event_id (#1543). Items commit one at
+            # a time, so a repeat later in this batch finds the earlier one.
+            _, stored_id = _store_once(
+                db,
+                event_data,
+                event_request.event_id,
+                route="batch",
+                allow_untagged=True,
+            )
             success_count += 1
+            if stored_id is not None:
+                duplicate_count += 1
 
         except ValidationError as e:
             failure_count += 1
@@ -911,6 +979,7 @@ async def track_events_batch(
     return EventBatchResponse(
         success_count=success_count,
         failure_count=failure_count,
+        duplicate_count=duplicate_count,
         errors=errors if errors else None,
     )
 

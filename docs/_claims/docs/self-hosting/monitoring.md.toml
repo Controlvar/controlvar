@@ -86,10 +86,19 @@ by = [
 ]
 
 [[unit]]
-text = "events_tracked_total | Counter | Tracked events by type"
+text = "events_tracked_total | Counter | Events stored by the tracking routes, by type; an event not stored because it was already stored with its event_id is not counted"
 by = [
     "test:backend/tests/unit/core/test_metrics.py::test_record_event_tracked",
     "test:backend/tests/unit/core/test_metrics.py::test_record_event_tracked_bounds_label_cardinality",
+    "test:backend/tests/unit/core/test_metrics_increments.py::TestTrackingCounters::test_a_duplicate_counts_in_events_duplicate_total_only",
+]
+
+[[unit]]
+text = "events_duplicate_total | Counter | Events not stored because an event with the same event_id, user, experiment, flag and event name was already stored, by route (track, batch or events)"
+by = [
+    "test:backend/tests/unit/core/test_metrics.py::test_record_event_duplicate",
+    "test:backend/tests/unit/core/test_metrics.py::test_record_event_duplicate_refuses_a_label_it_does_not_know",
+    "test:backend/tests/unit/core/test_metrics_increments.py::TestTrackingCounters::test_a_duplicate_counts_in_events_duplicate_total_only",
 ]
 
 [[unit]]

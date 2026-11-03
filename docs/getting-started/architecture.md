@@ -144,33 +144,28 @@ OpenSearch domain: created; nothing writes to it
 
 ---
 
-## Split URL Testing (Lambda@Edge)
+## Split URL Testing
 
-A split URL experiment gives each variant its own URL. The split-URL module ships
-a CloudFront construct (`modules/infrastructure/constructs/split_url_distribution.py`) with a
-Lambda@Edge `viewer-request` router. **No stack uses it**: `infrastructure/cdk/app.py` creates
-no CloudFront distribution, so a deployment has it only if you add it to a stack yourself.
-
-The router (`modules/lambda/split_url_router/handler.py`):
+A split URL experiment gives each variant its own URL. The API decides where each visitor
+goes, in the code that answers `POST /api/v1/tracking/assign`; whatever performs the redirect
+asks it and does what it is told:
 
 ```text
-Viewer request
-    |
-    +-- Read the experiment config from the X-Split-URL-Config request header
-    |     - Missing, invalid, or fewer than two variants: pass the request through
-    |
-    +-- Read the assignment cookie
-    |     - Holds a known variant URL: pass through
-    |     - Absent or unknown: hash the client fingerprint (IP + User-Agent) to pick a variant
-    |
-    +-- Return 302 to the variant URL
-    |
-    +-- Set-Cookie with Max-Age of cookie_ttl_days (default 30 days)
+Visitor asks for https://shop.example.com/checkout?utm_source=mail
+  +-- Your server or edge (or, on AWS, the optional CloudFront router)
+  |     reads the visitor's id cookie, or makes one; asks Controlvar (API key)
+  +-- Controlvar assigns the visitor as /tracking/assign does
+  |     (a stored assignment first; holdout, mutual exclusion, targeting; bandit weights)
+  +-- Treatment: 302 to the variant's URL (with the query string when the variant is on the control URL's host)
+  +-- Control, not eligible, not running, or no answer in time: the page they asked for
 ```
 
-The construct does not set `X-Split-URL-Config`, so how the configuration reaches the router is
-left to you. Lambda@Edge functions must be deployed in `us-east-1`. See
-[Split URL testing](../api/split-url.md).
+On AWS, the split-URL module's CloudFront edge router (beta) can do the asking: a CloudFront
+distribution in front of the site, with a Lambda@Edge function at viewer request and viewer
+response that follows the same rules as any server or edge. It is a CDK app of its own
+(`modules/infrastructure/split_url_edge/`), in `us-east-1`, which nothing deploys but you:
+`infrastructure/cdk/app.py` creates no CloudFront distribution. See
+[Split URL testing](../api/split-url.md#the-cloudfront-edge-router).
 
 ---
 
@@ -200,7 +195,7 @@ Every user has one of four roles, each with progressively broader permissions:
 | **DEVELOPER** | Create and manage experiments and feature flags |
 | **ADMIN** | Full access: user management, global settings, compliance exports |
 
-Custom roles and direct permission grants are stored and shown alongside the base role, but no permission check reads them yet: routes check the base role ([#891](https://github.com/Controlvar/controlvar/issues/891)).
+In the full profile, custom roles and direct permission grants add permissions to the base role in every permission check.
 
 ---
 
@@ -212,8 +207,8 @@ The Fargate stack runs the dashboard as its own ECS service behind the API's loa
 balancer: `/api/*`, `/health`, `/health/*` and `/metrics` go to the API, everything
 else to the dashboard. `cdk deploy` starts it on `experimentation-platform/web:bootstrap`;
 the Deploy workflow rolls each release onto it by digest, after the API. No
-stack creates CloudFront. The split-URL module's CloudFront construct
-exists but `app.py` does not use it. See [AWS CDK Deployment](../self-hosting/cdk.md).
+stack creates CloudFront. The split URL edge router is a CDK app of its own,
+which `app.py` does not include. See [AWS CDK Deployment](../self-hosting/cdk.md).
 
 ### Stacks
 

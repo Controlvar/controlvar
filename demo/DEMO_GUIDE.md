@@ -108,8 +108,8 @@ of devices through the same API, and a scripted "rollout story" walks the platfo
 - Server-side targeting with 20+ operators, including semantic versions
 - Rollout schedules and safety monitoring work together: expand automatically, retreat automatically
 - Kill switches take effect without a release, which is the whole point in a native app
-- Native apps: kill switches and percentage rollouts work; attribute rules do not until
-  [#438](https://github.com/Controlvar/controlvar/issues/438).
+- Native apps: kill switches and percentage rollouts work; attribute rules do not on iOS, Android and Flutter until
+  [#438](https://github.com/Controlvar/controlvar/issues/438). React Native sends the attributes.
 
 Run pieces by hand: `python backend/scripts/seed_streampulse.py`, `cd demo/streampulse && npm run dev`,
 `python demo/streampulse/simulator/traffic.py --rate 3`, `python demo/streampulse/simulator/rollout_story.py --auto`.
@@ -224,8 +224,10 @@ See `demo/streampulse/README.md`.
   - "Analyst and Viewer can see experiments and flags but can't create or change them."
   - Every role, Viewer included, can still create API keys for itself, and an API key can send
     assignments and events through the tracking API.
-- Four built-in roles are enforced today. Custom roles and resource-level grants exist in the data model but are
-  not yet enforced by the permission checks, so do not demo them (tracked in the launch plan, P5).
+- Custom roles and direct grants add permissions to a built-in role. To show one, grant the viewer `audit_log` read
+  ([RBAC API reference](../docs/api/rbac.md#let-a-viewer-read-the-audit-log)) and sign in as viewer@demo.com: the
+  Audit Log shows other users' entries too. Revoke it afterwards with
+  `DELETE /api/v1/rbac/users/{user_id}/grant/audit_log`.
 
 **API / Integrations:**
 - Open http://localhost:8000/api/v1/docs (Swagger UI)
@@ -237,7 +239,7 @@ See `demo/streampulse/README.md`.
 **Key talking points:**
 - An audit log of changes to flags, experiments, users and roles, and with the
   `compliance` module HMAC-SHA256 signed compliance events and report exports
-- RBAC with four built-in roles (custom roles: roadmap)
+- RBAC with four built-in roles, plus custom roles and time-limited grants
 - Full REST API + SDKs: Python and JavaScript on PyPI and npm, Go with `go get`, Java and React built from `sdk/`
 - Deployable to your own AWS account with the AWS CDK
 

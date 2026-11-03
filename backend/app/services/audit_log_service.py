@@ -37,24 +37,26 @@ _SENSITIVE_FIELDS = {
 }
 
 
-def _redact_sensitive(data: Optional[Dict]) -> Optional[Dict]:
+def _redact_sensitive(data: Optional[Any]) -> Optional[Any]:
     """Replace sensitive field values with [REDACTED].
 
     Performs case-insensitive substring matching so that fields like
     'hashed_password', 'ACCESS_TOKEN', etc. are also caught.
-    Recurses into nested dicts.
+    Recurses into nested dicts and lists.
     """
     if data is None:
         return None
-    result = {}
-    for k, v in data.items():
-        if any(s in k.lower() for s in _SENSITIVE_FIELDS):
-            result[k] = "[REDACTED]"
-        elif isinstance(v, dict):
-            result[k] = _redact_sensitive(v)
-        else:
-            result[k] = v
-    return result
+    if isinstance(data, dict):
+        result = {}
+        for k, v in data.items():
+            if any(s in k.lower() for s in _SENSITIVE_FIELDS):
+                result[k] = "[REDACTED]"
+            else:
+                result[k] = _redact_sensitive(v)
+        return result
+    if isinstance(data, list):
+        return [_redact_sensitive(item) for item in data]
+    return data
 
 
 def _get_retention_expiry(standard: str = "soc2") -> datetime:
