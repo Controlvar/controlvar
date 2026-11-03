@@ -23,11 +23,12 @@ class UTCDateTime(TypeDecorator):
 
     - ``experiments.start_date`` and ``end_date``: west of UTC an end date
       landed before its start and completing answered 500 (#704).
-    - ``rollout_stages.start_date``, ``completed_date`` and ``updated_at``:
-      a stage date sent with ``Z`` or an offset was stored and served back
-      shifted, so time-based stages started early west of UTC and late east
-      of it; the scheduler measures a stage's duration from ``updated_at``
-      (#1462).
+    - ``rollout_stages.start_date``, ``completed_date``, ``updated_at`` and
+      ``started_at``: a stage date sent with ``Z`` or an offset was stored and
+      served back shifted, so time-based stages started early west of UTC and
+      late east of it (#1462). The scheduler measures a stage's duration from
+      ``started_at`` (#1528), and from ``updated_at`` for a stage that a release
+      without ``started_at`` started.
 
     Every bound value is converted here to naive UTC, the stored form,
     whatever the session's zone; a naive value is taken to be UTC already. An

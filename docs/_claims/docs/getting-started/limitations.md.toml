@@ -319,10 +319,11 @@ by = [
 ]
 
 [[unit]]
-text = "An event_id sent by the SDK, so that an event sent again is stored once | The Java SDK sends one with every event (Event ids), and the Python SDK sends the event_id you give it, from its next published version (Event ids). No other SDK has an event_id option yet: not the JavaScript, React, React Native, edge, Go, Android, iOS, Flutter, .NET, PHP, Ruby or Elixir SDK, nor the OpenFeature providers. Send an event that may be sent again to POST /api/v1/tracking/track or POST /api/v1/tracking/batch with its event_id (#1543)."
+text = "An event_id sent by the SDK, so that an event sent again is stored once | The Java SDK sends one with every event (Event ids). The JavaScript SDK sends the eventId you give it and the Python SDK the event_id you give it, each from its next published version (JavaScript, Python). No other SDK has an event_id option yet: not the React, React Native, edge, Go, Android, iOS, Flutter, .NET, PHP, Ruby or Elixir SDK, nor the OpenFeature providers. Send an event that may be sent again to POST /api/v1/tracking/track or POST /api/v1/tracking/batch with its event_id (#1543)."
 by = [
     "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::trackSendsAGeneratedEventId",
     "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::fanOutEntriesShareOneEventId",
+    "test:sdk/js/__tests__/event-id.test.ts::sends event_id on a track with an explicit key",
     "test:sdk/python/tests/test_event_id.py::TestEventId::test_sends_event_id_on_a_track_with_an_explicit_key",
     "test:backend/tests/unit/api/test_how_events_count_rules.py::test_the_sdks_with_an_event_id_option_name_it",
     "test:backend/tests/unit/api/test_how_events_count_rules.py::test_no_other_sdk_has_an_event_id_option_yet",

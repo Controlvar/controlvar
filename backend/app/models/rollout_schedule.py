@@ -169,13 +169,20 @@ class RolloutStage(Base, BaseModel):
     # zone``, as before.
     start_date = Column(UTCDateTime)  # For time-based triggers
     completed_date = Column(UTCDateTime)  # When the stage was completed
-    # BaseModel's updated_at, bound as UTC: the scheduler reads it as the time
-    # the stage started (time-based completion and min_stage_duration), and
-    # the scheduler and the manual advance write it from an aware now. Only
-    # this table's updated_at changes; BaseModel is left alone.
+    # BaseModel's updated_at, bound as UTC: the scheduler and the manual
+    # advance write it from an aware now. Every edit of the stage moves it, so
+    # it is not when the stage started; the scheduler reads it as the start
+    # only for a stage with no started_at (one an older release started).
+    # Only this table's updated_at changes; BaseModel is left alone.
     updated_at = Column(
         UTCDateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
+    # When the stage went from pending to in progress, written once by the
+    # scheduler or the manual advance and by nothing else, so an edit of the
+    # stage never moves it (#1528). The scheduler measures time-based
+    # completion and min_stage_duration from it. NULL until the stage starts,
+    # and for a stage that completed or failed before migration 7b6b4b4fe246.
+    started_at = Column(UTCDateTime, nullable=True)
 
     # Relationships
     rollout_schedule = relationship("RolloutSchedule", back_populates="stages")

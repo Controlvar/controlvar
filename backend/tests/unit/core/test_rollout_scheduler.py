@@ -432,9 +432,10 @@ class TestRolloutScheduler:
         stage = MagicMock(spec=RolloutStage)
         stage.status = RolloutStageStatus.IN_PROGRESS
         stage.trigger_type = TriggerType.TIME_BASED
-        stage.updated_at = current_time - timedelta(
+        stage.started_at = current_time - timedelta(
             hours=25
         )  # Default duration is 24 hours
+        stage.updated_at = current_time  # edited just now (#1528)
         stage.trigger_configuration = None
         assert scheduler._is_stage_eligible_for_completion(stage, current_time) is True
 
@@ -442,11 +443,12 @@ class TestRolloutScheduler:
         stage = MagicMock(spec=RolloutStage)
         stage.status = RolloutStageStatus.IN_PROGRESS
         stage.trigger_type = TriggerType.TIME_BASED
-        stage.updated_at = current_time - timedelta(hours=6)
+        stage.started_at = current_time - timedelta(hours=6)
+        stage.updated_at = current_time - timedelta(days=30)
         stage.trigger_configuration = {"duration": 12}
         assert scheduler._is_stage_eligible_for_completion(stage, current_time) is False
 
-        stage.updated_at = current_time - timedelta(hours=13)
+        stage.started_at = current_time - timedelta(hours=13)
         assert scheduler._is_stage_eligible_for_completion(stage, current_time) is True
 
         # MANUAL trigger (not eligible for automatic completion)

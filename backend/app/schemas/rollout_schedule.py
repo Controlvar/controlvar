@@ -268,6 +268,20 @@ class RolloutStageResponse(RolloutStageBase):
     rollout_schedule_id: UUID
     status: RolloutStageStatus
     completed_date: Optional[datetime] = None
+    # Read-only: no request schema has the field, so a request that sends it
+    # is ignored (#1528).
+    started_at: Optional[datetime] = Field(
+        None,
+        description=(
+            "When the stage started, in UTC: the time a time-based stage's "
+            "duration and the schedule's min_stage_duration are measured from. "
+            "Null until the stage starts, for a stage that completed or failed "
+            "before it was recorded, and for a stage a release that did not "
+            "record it started during an upgrade, while that stage runs and "
+            "after; the scheduler measures such a stage from updated_at. "
+            "Editing the stage does not change it."
+        ),
+    )
     created_at: datetime
     updated_at: datetime
 
