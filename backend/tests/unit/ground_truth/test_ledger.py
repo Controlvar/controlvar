@@ -316,6 +316,45 @@ def test_the_writer_refuses_a_registered_secret():
     assert "registered-key-value" not in stream.getvalue()
 
 
+_SECRET = "sk-live-abcdef123456"
+
+
+@pytest.mark.parametrize(
+    "where",
+    [
+        {"declared": {f"token {_SECRET}": 1}},
+        {"declared": {f"note {_SECRET}": 1}},
+        {"planted": {f"arm {_SECRET}": {"conversion": 0.1}}},
+        {"declared": {"a": {f"{_SECRET}": 1}}},
+    ],
+    ids=["secret-named-key", "key-with-secret", "planted-key", "nested-key"],
+)
+def test_a_refusal_names_a_field_by_its_path_never_by_the_text_of_its_key(where):
+    stream = io.StringIO()
+    with pytest.raises(ledger.LedgerRefused) as refused:
+        ledger.Writer(
+            stream,
+            source="test",
+            seed=1,
+            experiments=[
+                {"exp": EXP, "variants": [{"name": "control", "allocation": 100}]}
+            ],
+            secrets=[_SECRET],
+            **where,
+        )
+    assert _SECRET not in str(refused.value)
+    assert _SECRET not in stream.getvalue()
+    assert "<key 0>" in str(refused.value)  # the path, by position
+
+
+def test_a_refusal_message_carrying_a_registered_secret_is_withheld():
+    writer, stream = _writer(secrets=[_SECRET])
+    with pytest.raises(ledger.LedgerRefused, match="message was withheld"):
+        writer.send(f"/not-a-route-{_SECRET}", {})
+    assert _SECRET not in stream.getvalue()
+    _refused_then_explained(stream, "message was withheld")
+
+
 def test_the_writer_refuses_a_send_with_no_answer_at_the_end():
     writer, stream = _writer()
     writer.send(ledger.TRACK, {"event_type": "purchase", "user_id": "u-1"})
@@ -385,7 +424,7 @@ _EVENT = 4  # the index of MINIMAL's first event
         (_with(MINIMAL, _EVENT, status=0, error="timeout"), r"no answer \(timeout\)"),
         (
             _with(MINIMAL, 0, declared={"request_headers": {"accept": "json"}}),
-            "field named like a credential or a header: declared.request_headers",
+            "field named like a credential or a header: declared.<key 0>",
         ),
         (
             _with(MINIMAL, 3, reason="Authorization: Bearer abcdefghijklmnopqrstuvwx"),

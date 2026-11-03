@@ -241,17 +241,36 @@ def _fields(
             )
 
 
+#: A key short and plain enough to name in a path.
+_PLAIN_KEY = re.compile(r"[A-Za-z0-9_-]{1,40}")
+
+
+def _label(name: str, index: int, secrets: Sequence[str]) -> str:
+    """How a key appears in a refusal's path: itself when it is plain text that
+    is not a credential's name, shape or registered value, else its position.
+    A refusal never repeats the text of a key the caller supplied."""
+    if (
+        _PLAIN_KEY.fullmatch(name)
+        and not _SECRET_NAME.search(name)
+        and not _AWS_KEY_ID.search(name)
+        and not any(secret in name for secret in secrets)
+    ):
+        return name
+    return f"<key {index}>"
+
+
 def _scan(where: str, value: Any, secrets: Sequence[str], path: str = "") -> None:
     """Refuse a credential or a header anywhere in *value*, naming only where."""
     if isinstance(value, dict):
-        for name, inner in value.items():
+        for index, (name, inner) in enumerate(value.items()):
+            label = _label(name, index, secrets)
             if _SECRET_NAME.search(name):
                 raise LedgerRefused(
                     f"{where} carries a field named like a credential or a header:"
-                    f" {path}{name}"
+                    f" {path}{label}"
                 )
-            _scan(where, name, secrets, path)
-            _scan(where, inner, secrets, f"{path}{name}.")
+            _scan(where, name, secrets, f"{path}{label}.")
+            _scan(where, inner, secrets, f"{path}{label}.")
     elif isinstance(value, list):
         for index, inner in enumerate(value):
             _scan(where, inner, secrets, f"{path}{index}.")
@@ -550,6 +569,10 @@ class Writer:
 
     # -- the refusal path --------------------------------------------------
     def _refuse(self, message: str) -> NoReturn:
+        try:
+            _scan("a refusal", message, self._checker.secrets)
+        except LedgerRefused:
+            message = "a refusal's message was withheld: it carried a credential"
         if not self._closed:
             self._closed = True
             self._stream.write(
