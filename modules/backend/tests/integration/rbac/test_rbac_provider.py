@@ -128,9 +128,7 @@ def test_a_grant_yields_its_pairs_only_when_activated_active_and_unexpired(
     assert pairs == expected, f"{label} yields {sorted(pairs)}"
 
 
-def test_each_users_answer_combines_only_their_own_roles_and_grants(
-    db_session, user
-):
+def test_each_users_answer_combines_only_their_own_roles_and_grants(db_session, user):
     other = make_user(db_session, UserRole.VIEWER, tag=TAG)
     role_id = _role(
         db_session,
