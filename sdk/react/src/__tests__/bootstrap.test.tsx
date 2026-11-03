@@ -434,12 +434,19 @@ describe('bootstrap: warnings', () => {
       tree(<Banner />, {
         userId: 'u-1',
         flags: { 'flag-1': flagOn, 'flag-2': { enabled: 'yes' } },
-        experiments: { 'exp-1': { variant: 'treatment' }, 'exp-2': null },
+        experiments: {
+          'exp-1': { variant: 'treatment' },
+          'exp-2': null,
+          // variant_name must be a string: a number and null are malformed too.
+          'exp-3': { ...treatment, variant_name: 5 },
+          'exp-4': { ...treatment, variant_name: null },
+        },
       })
     );
     await act(flush);
-    expect(warn.mock.calls).toEqual([[warningEntries(1, 2)]]);
+    expect(warn.mock.calls).toEqual([[warningEntries(1, 4)]]);
   });
+
 
   it('warns once per reason per Provider, under StrictMode and across re-renders', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -565,6 +572,37 @@ describe('bootstrap: after the first render', () => {
     await act(flush);
     expect(distinct(frames)).toEqual(['FLAG-ON', 'FLAG-OFF|loading', 'FLAG-ON']);
     expect(evaluations(api, 'flag-2')).toBe(1);
+  });
+
+  it('changes user before any answer: loading, then an error, never the bootstrapped answer of the user before', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    // No answer for u-1; a failure for u-2.
+    const fetchMock = jest.fn().mockImplementation((url: string, init?: { body?: string }) =>
+      `${url} ${init?.body ?? ''}`.includes('u-2')
+        ? Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) })
+        : new Promise(() => {})
+    );
+    global.fetch = fetchMock;
+    const both = (
+      <>
+        <FlagProbe />
+        <ExperimentProbe />
+      </>
+    );
+    const { rerender, container } = render(tree(both));
+    expect(container.textContent).toBe('FLAG-ONtreatment');
+    rerender(tree(both, bootstrap, {}, { userId: 'u-2' }));
+    expect(container.textContent).toBe('FLAG-OFF|loadingControl|loading');
+    await act(flush);
+    expect(container.textContent).toBe('FLAG-OFF|errorControl|error');
+  });
+
+  it('changes key before any answer: loading, never the bootstrapped answer of the key before', async () => {
+    global.fetch = jest.fn().mockReturnValue(new Promise(() => {})); // never answers
+    const { rerender, container } = render(tree(<FlagProbe flagKey="flag-1" />));
+    expect(container.textContent).toBe('FLAG-ON');
+    rerender(tree(<FlagProbe flagKey="flag-2" />));
+    expect(container.textContent).toBe('FLAG-OFF|loading');
   });
 
   it('a hook already mounted ignores a new bootstrap prop, and a hook that mounts later reads it', async () => {
