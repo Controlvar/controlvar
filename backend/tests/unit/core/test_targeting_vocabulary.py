@@ -572,8 +572,20 @@ def test_the_reference_pages_example_window_is_accepted(kind):
 
 
 def test_the_reasons_are_the_plans():
-    """The write path's constants are plan D211's text, verbatim (EMD-1)."""
+    """The write path's constants are plan D211's text, verbatim (EMD-1), the
+    values' reasons (#1525, #1526: plan v1.4-B3, test_targeting_values.py)
+    first."""
+    from backend.tests.unit.core import test_targeting_values as values
+
     assert targeting_adapter.VOCABULARY_REASONS == (
+        values.DATE,
+        values.LENGTH_VALUE,
+        values.BETWEEN,
+        values.RADIUS,
+        values.NO_RADIUS,
+        values.PERCENTAGE,
+        values.NUMBER,
+        values.DASH_COMPARISON,
         NOT_ON_FLAGS,
         VERSION,
         LENGTH,

@@ -445,6 +445,105 @@ def test_a_segment_with_an_unknown_unit_has_a_line_without_not_valid():
     )
 
 
+# --- #1525, #1526: values the evaluator cannot read ---------------------------
+
+NOT_A_DATE = {"attribute": "signup", "operator": "before", "value": "not-a-date"}
+LENGTH_ABC = {"attribute": "tags", "operator": "array_length", "value": "abc"}
+NEGATIVE_RADIUS = {
+    "attribute": "loc",
+    "operator": "geo_distance",
+    "value": [37.7749, -122.4194],
+    "additional_value": -1,
+}
+BUCKET_ABC = {"attribute": "user_id", "operator": "percentage_bucket", "value": "abc"}
+GT_ABC = {"attribute": "age", "operator": "gt", "value": "abc"}
+DASH_COMPARISON = {
+    "attribute": "loc",
+    "operator": "geo_within_radius",
+    "value": {"lat": 37.7749, "lon": -122.4194, "radius": 10, "comparison": "gt"},
+}
+DASH_NEGATIVE = {
+    "attribute": "loc",
+    "operator": "geo_within_radius",
+    "value": "37.7749,-122.4194,-1",
+}
+_AT = "rules[0].rule.conditions[0]"
+
+
+@pytest.mark.regression
+def test_a_flag_with_a_value_the_evaluator_cannot_read_has_a_line():
+    """(B7) The API's own path and reason; a readable value has no line."""
+    rows = [
+        (
+            "id-1",
+            "signup-gate",
+            _native({"operator": "and", "conditions": [NOT_A_DATE]}),
+        ),
+        ("id-2", "tags", _native({"operator": "and", "conditions": [LENGTH_ABC]})),
+        ("id-3", "near", _native({"operator": "and", "conditions": [NEGATIVE_RADIUS]})),
+        ("id-4", "adults", _native({"operator": "and", "conditions": [GT_ABC]})),
+        ("id-5", "bay", _dash(US, DASH_COMPARISON)),
+        ("id-6", "clean", _native({"operator": "and", "conditions": [EQ]})),
+    ]
+    assert [f.line() for f in check.findings_for(rows)] == [
+        f"feature_flag\tid-1\tsignup-gate\t{_AT}.value\tnot a date; use an ISO 8601 "
+        "date such as 2030-01-31 or 2030-01-31T09:00:00Z, or a Unix timestamp",
+        f"feature_flag\tid-2\ttags\t{_AT}.value\tnot a whole number; use a number "
+        "such as 3",
+        f"feature_flag\tid-3\tnear\t{_AT}.additional_value\tradius must be a number "
+        "of 0 or more",
+        f"feature_flag\tid-4\tadults\t{_AT}.value\tnot a number; use a number such "
+        "as 5",
+        "feature_flag\tid-5\tbay\tgroups[0].conditions[1].value\tcomparison is not "
+        "read in the dashboard shape, so the rule would mean within the radius; to "
+        "use gt, lt, gte or eq, write the rule in the native shape",
+    ]
+
+
+@pytest.mark.regression
+def test_an_experiment_with_a_value_it_cannot_read_has_a_line():
+    """(B7) percentage_bucket is checked on experiments, which implement it."""
+    rows = [
+        (
+            "e-1",
+            "k1",
+            "ACTIVE",
+            _native({"operator": "and", "conditions": [BUCKET_ABC]}),
+        ),
+        ("e-2", "k2", "DRAFT", _dash(US, DASH_NEGATIVE)),
+    ]
+    assert [f.line() for f in check.experiment_findings_for(rows)] == [
+        f"experiment\te-1\tk1\tACTIVE\t{_AT}.value\tnot a number; use a percentage "
+        "from 0 to 100",
+        "experiment\te-2\tk2\tDRAFT\tgroups[0].conditions[1].value\tradius must be "
+        "a number of 0 or more",
+    ]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "condition, reason",
+    [
+        (
+            DASH_COMPARISON,
+            "comparison is not read in the dashboard shape, so the rule would mean "
+            "within the radius; to use gt, lt, gte or eq, write the rule in the "
+            "native shape",
+        ),
+        (DASH_NEGATIVE, "radius must be a number of 0 or more"),
+    ],
+)
+def test_a_segment_with_a_comparison_or_a_negative_radius_has_a_line_without_not_valid(
+    condition, reason
+):
+    """(B7) Still evaluated, so not "rules not valid": the segment schema
+    passes the stored value to the check, as a save does."""
+    found = check.segment_finding_for("id", "Bay Area", _dash(US, condition))
+    assert found.line() == (
+        f"segment\tid\tBay Area\tgroups[0].conditions[1].value\t{reason}"
+    )
+
+
 @pytest.mark.regression
 def test_an_unreadable_database_exits_2(monkeypatch, capsys):
     """Not 0: a report that cannot read the database must not look clean."""

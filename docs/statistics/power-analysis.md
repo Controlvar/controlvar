@@ -6,7 +6,7 @@ This guide explains how to use the pre-experiment Power Calculator to plan your 
 
 ### 1. Baseline Rate
 
-The current performance of your metric before any change. For a conversion rate experiment, this might be 5% (0.05). This must be between 0 and 1 exclusive.
+The current performance of your metric before any change. For a conversion rate experiment, this might be 5% (0.05). A rate must be between 0 and 1 exclusive. Through the API you can also plan a metric that is an average per user, such as order value, from its mean: see [Planning a mean](#planning-a-mean).
 
 ### 2. Minimum Detectable Effect (MDE)
 
@@ -116,7 +116,8 @@ plans again from the experiment's own data, with the same formula as above:
 
 The tab plans a conversion rate (a two-proportion test) whatever the metric's type, and it
 says so. For a revenue, count, duration or custom metric, which the results analyse as a mean
-per user, the plan is for the share of users who send its event. Nothing typed on the tab is
+per user, the plan is for the share of users who send its event. To plan the mean per user itself, send `metric_type` `mean` to
+`POST /api/v1/power/sample-size`: see [Planning a mean](#planning-a-mean). Nothing typed on the tab is
 saved.
 
 **Worked example**: a control rate of 12% so far, a 5% relative MDE, 80% power, 5%
@@ -138,7 +139,7 @@ control user converted) the tab asks for the rate you expect, and the API answer
 
 All endpoints are unauthenticated (no login required). They perform pure computation with no database access.
 
-**Limits.** `n_variants` is at most 100 (an experiment's variants split its traffic in whole percentages, so no more than 100 of them receive any), and `sample_size_per_variant`, `required_sample_size` and `daily_traffic` are at most 1,000,000,000,000 (10^12, more than a hundred times the world's population). A larger value answers 422 naming the field: the error's `loc` is `["body", "<field>"]` and its `type` is `less_than_equal`. A calculation whose numbers still leave floating-point range, such as a `mean` metric with a very large `baseline_std`, answers 422 with the detail "These values are too large or too small to calculate with. Use values nearer those of a real experiment." A `proportion` sample size whose treatment rate (the baseline raised by the effect) is too close to the baseline for the size to be a finite number, such as a `baseline_rate` of `1e-300` or a `minimum_detectable_effect` of `1e-17`, answers 422 with the detail "This baseline raised by this effect changes too little to estimate a sample size. Raise the baseline rate or the effect."
+**Limits.** `n_variants` is at most 100 (an experiment's variants split its traffic in whole percentages, so no more than 100 of them receive any), and `sample_size_per_variant`, `required_sample_size` and `daily_traffic` are at most 1,000,000,000,000 (10^12, more than a hundred times the world's population). A larger value answers 422 naming the field: the error's `loc` is `["body", "<field>"]` and its `type` is `less_than_equal`. A calculation whose numbers still leave floating-point range, such as a `mean` metric with a very large or very small `baseline_std`, answers 422 with the detail "These values are too large or too small to calculate with. Use values nearer those of a real experiment." A `proportion` sample size whose treatment rate (the baseline raised by the effect) is too close to the baseline for the size to be a finite number, such as a `baseline_rate` of `1e-300` or a `minimum_detectable_effect` of `1e-17`, answers 422 with the detail "This baseline raised by this effect changes too little to estimate a sample size. Raise the baseline rate or the effect."
 
 ### POST /api/v1/power/sample-size
 
@@ -177,9 +178,49 @@ Compute the required sample size per variant.
 }
 ```
 
+#### Planning a mean
+
+The dashboard's Power Calculator plans conversion rates only. Through the API, send `"metric_type": "mean"` to plan a metric that is an average per user, such as order value. `baseline_rate` is then the metric's mean before the change, in its own units, and `baseline_std` is required: the standard deviation of the metric across users, in the same units. Any finite mean above 0 is accepted; a mean of 0 or below cannot be planned with a relative effect and answers 422. `minimum_detectable_effect` is still relative: `0.05` on a mean of `45` plans for a change to `47.25`. `"metric_type": "ratio"` is planned exactly as `"mean"`.
+
+**Request body**:
+```json
+{
+  "baseline_rate": 45.0,
+  "minimum_detectable_effect": 0.05,
+  "metric_type": "mean",
+  "baseline_std": 12.0
+}
+```
+
+**Response**:
+```json
+{
+  "per_variant": 447,
+  "total": 894,
+  "alpha": 0.05,
+  "power": 0.8,
+  "baseline_rate": 45.0,
+  "mde_absolute": 2.25,
+  "mde_relative": 0.05,
+  "confidence_level": 0.95,
+  "runtime_days": null,
+  "n_variants": 2,
+  "two_tailed": true,
+  "metric_type": "mean"
+}
+```
+
+The size is a two-sample z-test on means, rounded up, with the same Bonferroni correction over `n_variants - 1` comparisons:
+
+```text
+n = 2 * baseline_std^2 * (z_alpha + z_power)^2 / (baseline_rate * minimum_detectable_effect)^2
+```
+
+Here that is 447 users per variant, 894 in all. Without `metric_type`, a `baseline_rate` of 1 or more answers 422 with a message saying to send `"metric_type": "mean"`.
+
 ### POST /api/v1/power/mde
 
-Given a fixed sample size per variant, compute the minimum detectable effect.
+Given a fixed sample size per variant, compute the minimum detectable effect. It plans a conversion rate only: `baseline_rate` is a rate between 0 and 1, and a `metric_type` sent with the request is ignored.
 
 **Request body**:
 ```json

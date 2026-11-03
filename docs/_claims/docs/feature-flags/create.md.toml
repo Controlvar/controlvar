@@ -32,10 +32,11 @@ text = "On your own deployment, use its URL wherever this page says localhost:80
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "A user account with the ADMIN or DEVELOPER role."
+text = "A user account that may create and change flags: one with the ADMIN or DEVELOPER role, or in the full profile one whose custom role or direct grant gives feature_flag (create) and feature_flag (update)."
 by = [
     "test:backend/tests/integration/api/test_flag_contract.py::test_post_checks_permission_before_the_body",
     "test:backend/tests/smoke/test_flag_change_routes_guarded.py::test_the_inventory_is_exact",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
 ]
 
 [[unit]]
@@ -630,10 +631,14 @@ by = [
 ]
 
 [[unit]]
-text = "a value the operator cannot use (\"abc\" for greater_than, \"not-a-version\" for semver_gte), a regex pattern RE2 refuses, and a list operator with more than 1,000 values;"
+text = "a value the operator cannot use (\"abc\" for greater_than, \"not-a-version\" for semver_gte), a regex pattern RE2 refuses, and a list operator with more than 1,000 values; a before or after value that cannot be read as a date, an array_length value that cannot be read as a whole number (or between without whole-number min and max), a native gt, gte, lt or lte value that cannot be read as a number, a geo_distance radius that is missing, below 0 or not a number, and a comparison on a dashboard geo_within_radius rule, which the dashboard shape does not read;"
 by = [
     "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused",
     "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_list_operators_keep_their_limit",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_every_value_is_refused_or_can_match",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_value_is_refused_with_fixed_text",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_dashboard_geo_comparison_is_refused",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_create_refuses_the_word",
 ]
 
 [[unit]]
@@ -1206,10 +1211,11 @@ by = [
 ]
 
 [[unit]]
-text = "The errors your applications see behind a flag (crashes, failed requests) count toward it when they are reported with a server-side key: an API key with the sdk:ruleset scope, created by a user who can change feature flags (ADMIN, DEVELOPER or a superuser)."
+text = "The errors your applications see behind a flag (crashes, failed requests) count toward it when they are reported with a server-side key: an API key with the sdk:ruleset scope, created by a user who can change feature flags (ADMIN, DEVELOPER, a superuser, or in the full profile anyone whose custom role or direct grant gives feature_flag (update))."
 by = [
     "test:backend/tests/integration/api/test_error_report_source.py::test_a_report_sent_with_a_server_side_key_rolls_back",
     "test:backend/tests/integration/api/test_error_report_source.py::test_a_scoped_key_whose_owner_can_no_longer_change_flags_does_not_count",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
 ]
 
 [[unit]]

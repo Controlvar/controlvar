@@ -1,14 +1,28 @@
 """
 RBAC service — custom role management and effective permissions resolution.
+
+Custom roles and direct grants take effect (#891): an assignment or a grant
+with an activation time (``activated_at``) adds its permissions to the user's
+built-in role in every permission check, through
+:func:`granted_permission_pairs`, which ``register.py`` installs as the
+``rbac.granted_permissions`` capability. Rows recorded before custom roles
+took effect have no activation time and grant nothing until the role is
+assigned or the grant made again.
 """
 
-from datetime import datetime
-from typing import Dict, List, Optional, Set
+from datetime import datetime, timezone
+from typing import Any, List, Optional, Tuple
 from uuid import UUID
 
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from backend.app.core.permissions import ROLE_PERMISSIONS, ResourceType
+from backend.app.core.permissions import (
+    Action,
+    ResourceType,
+    can_read_all_audit_logs,
+    check_permission,
+)
 from backend.app.models.user import User, UserRole
 from modules.backend.app.models.custom_role import (
     CustomRole,
@@ -20,6 +34,69 @@ from modules.backend.app.schemas.rbac import (
     CustomRoleUpdate,
     EffectivePermissionsResponse,
 )
+
+#: The resources ``GET /rbac/users/{user_id}/permissions`` lists: the three a
+#: custom role or a direct grant can hold (``permissions.GRANTABLE``).
+SHOWN_RESOURCES = (ResourceType.EXPERIMENT, ResourceType.FEATURE_FLAG)
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def granted_permission_pairs(session: Session, user_id: Any) -> List[Tuple[str, str]]:
+    """The ``rbac.granted_permissions`` provider: what *user_id*'s rows hold.
+
+    Two indexed SELECTs on *session*, which it never flushes, commits or
+    writes to:
+
+    * the permissions of every custom role assigned to the user by an
+      assignment with an activation time;
+    * the actions of every direct grant of the user that has an activation
+      time, is active and has not expired, by the database's clock.
+
+    A role's stored entry is ``{"resource": str, "actions": [str, ...]}``; an
+    entry of any other shape, and an action that is not a string, is skipped,
+    never raised on. Pairs outside ``permissions.GRANTABLE`` are returned as
+    stored: the core drops them.
+    """
+    pairs: List[Tuple[str, str]] = []
+    with session.no_autoflush:
+        roles = (
+            session.query(CustomRole.permissions)
+            .join(UserCustomRole, UserCustomRole.role_id == CustomRole.id)
+            .filter(
+                UserCustomRole.user_id == user_id,
+                UserCustomRole.activated_at.isnot(None),
+            )
+            .all()
+        )
+        grants = (
+            session.query(DirectPermissionGrant.resource, DirectPermissionGrant.actions)
+            .filter(
+                DirectPermissionGrant.user_id == user_id,
+                DirectPermissionGrant.is_active.is_(True),
+                DirectPermissionGrant.activated_at.isnot(None),
+                or_(
+                    DirectPermissionGrant.expires_at.is_(None),
+                    DirectPermissionGrant.expires_at > func.now(),
+                ),
+            )
+            .all()
+        )
+    for (permissions,) in roles:
+        if not isinstance(permissions, list):
+            continue
+        for entry in permissions:
+            if not isinstance(entry, dict):
+                continue
+            resource, actions = entry.get("resource"), entry.get("actions")
+            if isinstance(resource, str) and isinstance(actions, list):
+                pairs.extend((resource, a) for a in actions if isinstance(a, str))
+    for resource, actions in grants:
+        if isinstance(resource, str) and isinstance(actions, list):
+            pairs.extend((resource, a) for a in actions if isinstance(a, str))
+    return pairs
 
 
 class RBACService:
@@ -87,7 +164,12 @@ class RBACService:
         assigned_by_id: UUID,
         reason: Optional[str] = None,
     ) -> UserCustomRole:
-        """Assign a custom role to a user. Idempotent — no error if already assigned."""
+        """Assign a custom role to a user, so that it takes effect.
+
+        Idempotent: assigning a role the user already has, with an activation
+        time, changes nothing. An assignment recorded before custom roles took
+        effect (no activation time) is activated: it takes effect from now.
+        """
         role = db.query(CustomRole).filter(CustomRole.name == role_name).first()
         if not role:
             raise ValueError(f"Role '{role_name}' not found")
@@ -100,12 +182,16 @@ class RBACService:
             .first()
         )
         if existing:
+            if existing.activated_at is None:
+                existing.activated_at = _now()
+                db.flush()
             return existing
         assignment = UserCustomRole(
             user_id=user_id,
             role_id=role.id,
             assigned_by_id=assigned_by_id,
             reason=reason,
+            activated_at=_now(),
         )
         db.add(assignment)
         db.flush()
@@ -113,11 +199,35 @@ class RBACService:
 
     @staticmethod
     def has_role(db: Session, user_id: UUID, role_name: str) -> bool:
-        """Whether the user holds the custom role (False if the role does not exist)."""
+        """Whether the user holds the custom role, taking effect.
+
+        An assignment recorded before custom roles took effect (no activation
+        time) does not count. False if the role does not exist.
+        """
         return (
             db.query(UserCustomRole)
             .join(CustomRole, UserCustomRole.role_id == CustomRole.id)
-            .filter(UserCustomRole.user_id == user_id, CustomRole.name == role_name)
+            .filter(
+                UserCustomRole.user_id == user_id,
+                CustomRole.name == role_name,
+                UserCustomRole.activated_at.isnot(None),
+            )
+            .first()
+            is not None
+        )
+
+    @staticmethod
+    def has_role_not_activated(db: Session, user_id: UUID, role_name: str) -> bool:
+        """Whether an assignment of the role, recorded before custom roles took
+        effect, is stored without an activation time."""
+        return (
+            db.query(UserCustomRole)
+            .join(CustomRole, UserCustomRole.role_id == CustomRole.id)
+            .filter(
+                UserCustomRole.user_id == user_id,
+                CustomRole.name == role_name,
+                UserCustomRole.activated_at.is_(None),
+            )
             .first()
             is not None
         )
@@ -152,7 +262,7 @@ class RBACService:
         reason: Optional[str] = None,
         expires_at: Optional[datetime] = None,
     ) -> DirectPermissionGrant:
-        """Grant a direct permission to a user."""
+        """Grant a direct permission to a user; it takes effect from now."""
         grant = DirectPermissionGrant(
             user_id=user_id,
             resource=resource,
@@ -161,6 +271,7 @@ class RBACService:
             reason=reason,
             expires_at=expires_at,
             is_active=True,
+            activated_at=_now(),
         )
         db.add(grant)
         db.flush()
@@ -184,62 +295,41 @@ class RBACService:
     def get_effective_permissions(
         db: Session, user: User
     ) -> EffectivePermissionsResponse:
+        """What the permission checks allow *user*, for the grantable resources.
+
+        Built on the checks themselves, so the display and the enforcement
+        cannot drift apart: for ``experiment`` and ``feature_flag``, the
+        actions ``check_permission`` admits (a resource with none is left
+        out); ``audit_log: ["read"]`` exactly when ``can_read_all_audit_logs``
+        answers yes. Nothing else is listed: no other resource can be held by
+        a custom role or grant, and administration is decided by the built-in
+        role or the superuser flag. *user* is a row of *db*, so its custom
+        roles and grants are read on it. ``custom_roles`` lists only the roles
+        assigned with an activation time.
         """
-        Resolve a user's full permission set:
-        1. Start with base role permissions (ROLE_PERMISSIONS)
-        2. Merge in custom role permissions
-        3. Merge in valid direct permission grants
-        4. Superusers get all permissions
-        """
-        perms: Dict[str, Set[str]] = {}
-
-        if user.is_superuser:
-            # Superuser: all resources, all actions
-            for resource in ResourceType:
-                perms[resource.value] = {"create", "read", "update", "delete", "list"}
-        else:
-            # 1. Base role — safely handle mock objects or missing roles
-            try:
-                base_role = getattr(user, "role", UserRole.VIEWER)
-                base_role_perms = ROLE_PERMISSIONS.get(base_role, {})
-            except Exception:
-                base_role_perms = {}
-
-            for resource, actions in base_role_perms.items():
-                perms.setdefault(resource.value, set()).update(a.value for a in actions)
-
-            # 2. Custom roles
-            custom_assignments = (
-                db.query(UserCustomRole).filter(UserCustomRole.user_id == user.id).all()
+        perms = {}
+        for resource in SHOWN_RESOURCES:
+            actions = sorted(
+                action.value
+                for action in Action
+                if check_permission(user, resource, action)
             )
-            for assignment in custom_assignments:
-                role = assignment.role
-                for perm in role.permissions or []:
-                    resource_key = perm.get("resource", "")
-                    actions_list = perm.get("actions", [])
-                    perms.setdefault(resource_key, set()).update(actions_list)
+            if actions:
+                perms[resource.value] = actions
+        if can_read_all_audit_logs(user):
+            perms["audit_log"] = ["read"]
 
-            # 3. Direct grants (valid only)
-            direct_grants = (
-                db.query(DirectPermissionGrant)
-                .filter(
-                    DirectPermissionGrant.user_id == user.id,
-                    DirectPermissionGrant.is_active == True,
-                )
-                .all()
+        custom_role_names = [
+            name
+            for (name,) in db.query(CustomRole.name)
+            .join(UserCustomRole, UserCustomRole.role_id == CustomRole.id)
+            .filter(
+                UserCustomRole.user_id == user.id,
+                UserCustomRole.activated_at.isnot(None),
             )
-            for grant in direct_grants:
-                if grant.is_valid:
-                    perms.setdefault(grant.resource, set()).update(grant.actions or [])
-
-        # Get custom role names
-        custom_role_names = []
-        assignments = (
-            db.query(UserCustomRole).filter(UserCustomRole.user_id == user.id).all()
-        )
-        for a in assignments:
-            if a.role:
-                custom_role_names.append(a.role.name)
+            .order_by(CustomRole.name)
+            .all()
+        ]
 
         # Build base_role string safely
         user_role = getattr(user, "role", UserRole.VIEWER)
@@ -253,19 +343,6 @@ class RBACService:
             username=user.username,
             base_role=base_role_str,
             custom_roles=custom_role_names,
-            permissions={k: sorted(v) for k, v in perms.items()},
+            permissions=perms,
             is_superuser=bool(user.is_superuser),
         )
-
-    @staticmethod
-    def check_effective_permission(
-        db: Session, user: User, resource: str, action: str
-    ) -> bool:
-        """
-        Check if a user has an effective permission (base + custom + direct).
-        Used as a drop-in enhancement for check_permission().
-        """
-        if user.is_superuser:
-            return True
-        effective = RBACService.get_effective_permissions(db, user)
-        return action in effective.permissions.get(resource, [])

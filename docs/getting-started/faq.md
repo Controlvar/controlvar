@@ -203,7 +203,7 @@ The platform uses a layered role-based access control system with four built-in 
 | **DEVELOPER** | Create and manage experiments and feature flags; read integration settings, but not change them |
 | **ADMIN** | Full access: user management, compliance exports, global settings, integrations |
 
-Beyond the four base roles, admins can create **custom roles** with specific per-resource and per-action permissions. They can also grant **direct permission** to a user for a specific resource, with an optional expiry timestamp for temporary access. Both are stored and shown by `GET /api/v1/rbac/users/{user_id}/permissions`, but no permission check reads them yet: what a user can do is decided by their base role ([#891](https://github.com/Controlvar/controlvar/issues/891)).
+Beyond the four base roles, admins can create **custom roles** with specific per-resource and per-action permissions. They can also grant **direct permission** to a user for a specific resource, with an optional expiry timestamp for temporary access. Both add to what the user's base role allows, from their next request; they never remove a permission and never give administration.
 
 See [RBAC API Reference](../api/rbac.md) for the full role and permission management API.
 

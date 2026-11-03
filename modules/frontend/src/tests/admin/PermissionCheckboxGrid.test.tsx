@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { PermissionCheckboxGrid } from '@modules/components/admin/roles/PermissionCheckboxGrid';
 
-// Exactly the pairs the API accepts (GRANTABLE in modules/backend/app/schemas/rbac.py).
+// Exactly the pairs the API accepts (GRANTABLE in backend/app/core/permissions.py).
 const ALL_PERMISSIONS = [
   'experiment:create',
   'experiment:read',
@@ -125,6 +125,57 @@ describe('PermissionCheckboxGrid', () => {
     checkboxes.forEach((checkbox) => {
       expect(checkbox).toBeDisabled();
     });
+  });
+
+  // W2 PR 2: what each pair lets its holder do, linked to its checkbox (#891).
+  it.each([
+    [
+      'experiment:create',
+      'Create and clone experiments. Also: read the global holdout, manage exclusion groups (not archive them), create segments.',
+    ],
+    ['experiment:update', 'Change, schedule, start, pause, complete and archive any experiment, and change segments.'],
+    ['experiment:delete', 'Delete draft experiments, and archive segments.'],
+    ['experiment:read', 'Every user already has this.'],
+    ['experiment:list', 'Every user already has this.'],
+    ['feature_flag:create', 'Create flags.'],
+    ['feature_flag:update', 'Change any flag: on and off, targeting, values, rollout and rollout schedules.'],
+    ['feature_flag:delete', 'Delete any flag.'],
+    ['feature_flag:read', 'Every user already has this.'],
+    ['feature_flag:list', 'Every user already has this.'],
+    [
+      'audit_log:read',
+      "Read the audit log, including other users' entries, its statistics and each item's history. " +
+        'Without it, Developer and Viewer users read only their own entries. ' +
+        'It does not give the compliance audit events, reports or exports.',
+    ],
+  ])('describes %s, as its checkbox\'s description', (pair, text) => {
+    render(<PermissionCheckboxGrid selectedPermissions={[]} onChange={jest.fn()} />);
+    expect(screen.getByTestId(`permission-checkbox-${pair}`)).toHaveAccessibleDescription(text);
+  });
+
+  it('describes every pair, each with an id of its own', () => {
+    render(<PermissionCheckboxGrid selectedPermissions={[]} onChange={jest.fn()} />);
+    const ids = screen.getAllByRole('checkbox').map((c) => c.getAttribute('aria-describedby'));
+    expect(ids.every((id) => id && document.getElementById(id)?.textContent)).toBe(true);
+    expect(new Set(ids).size).toBe(ALL_PERMISSIONS.length);
+  });
+
+  it('says after the grid what Feature flags: Update also allows (D1.4)', () => {
+    render(<PermissionCheckboxGrid selectedPermissions={[]} onChange={jest.fn()} />);
+    const note = screen.getByTestId('permission-server-key-note');
+    expect(note).toHaveTextContent(
+      'With Feature flags: Update, a user can also create server-side SDK keys (API keys with the sdk:ruleset scope) ' +
+        'through the API. Assigning users in a batch with such a key also needs Experiments: Update.',
+    );
+    // Plain text in reading order, after the last group; no live region.
+    const groups = screen.getAllByRole('group');
+    expect(groups[groups.length - 1].compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(note).not.toHaveAttribute('aria-live');
+  });
+
+  it('never says "every entry", "every audit entry" or "both feature flags and experiments"', () => {
+    const { container } = render(<PermissionCheckboxGrid selectedPermissions={[]} onChange={jest.fn()} />);
+    expect(container.textContent).not.toMatch(/every (audit )?entr(y|ies)|both feature flags and experiments/i);
   });
 
   it('renders with data-testid="permission-checkbox-grid"', () => {

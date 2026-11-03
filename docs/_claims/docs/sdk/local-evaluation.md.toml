@@ -120,10 +120,11 @@ by = [
 ]
 
 [[unit]]
-text = "An API key with the sdk:ruleset scope, created by a user who can change feature flags (ADMIN or DEVELOPER)."
+text = "An API key with the sdk:ruleset scope, created by a user who can change feature flags (ADMIN, DEVELOPER, a superuser, or in the full profile anyone whose custom role or direct grant gives feature_flag (update))."
 by = [
     "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestOwnerRole::test_only_an_owner_who_can_change_flags_is_served",
     "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestOwnerRole::test_a_demoted_owners_key_stops_working",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
 ]
 
 [[unit]]
@@ -717,8 +718,11 @@ text = "refresh error: \"The API key was refused (403) fetching the flag ruleset
 by = ["test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestScope::test_a_key_without_the_exact_scope_is_refused"]
 
 [[unit]]
-text = "The same, with \"This key's owner can no longer change feature flags or experiments …\" | The key's owner is ANALYST or VIEWER | Use a key created by an ADMIN or DEVELOPER."
-by = ["test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestOwnerRole::test_a_demoted_owners_key_stops_working"]
+text = "The same, with \"This key's owner can no longer change feature flags …\" | The key's owner can no longer change feature flags: an inactive user, or an ANALYST or VIEWER with no custom role or direct grant giving feature_flag (update) | Use a key created by a user who can change feature flags."
+by = [
+    "test:backend/tests/integration/api/test_sdk_ruleset_api.py::TestOwnerRole::test_a_demoted_owners_key_stops_working",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+]
 
 [[unit]]
 text = "\"The server has no /api/v1/sdk/ruleset (404). Local evaluation needs Controlvar 0.11.0 or later …\" | The server predates the ruleset | Upgrade the server, or leave evaluation at server."

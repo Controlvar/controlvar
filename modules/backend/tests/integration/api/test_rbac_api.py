@@ -61,7 +61,7 @@ def _valid_role_payload(name: str = None) -> dict:
 def system_role(db_session: Session):
     """A role marked is_system_role, written straight to the table.
 
-    Nothing in the product creates one (``test_rbac_layers_are_display_only``
+    Nothing in the product creates one (``test_rbac_layers_take_effect``
     pins that), so a test of the refusal has to make its own rather than look
     for one and skip when there is none. Removed afterwards, so the listing
     tests that follow see only custom roles.

@@ -26,6 +26,7 @@ import {
   experimentTypeLabel,
 } from '@/types/experiments';
 import { canChangeExperiment } from '@/utils/experimentPermissions';
+import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
 import { correctionName, formatConfidence } from '@/components/results/shared/analysisSettings';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
@@ -143,10 +144,10 @@ export const ELIGIBILITY_COPY = {
   loading: 'Loading…',
   groupNone: 'None',
   groupArchived: ' (archived; it no longer applies)',
-  groupRefused: 'In a group. Seeing its name requires the ADMIN or DEVELOPER role.',
+  groupRefused: 'In a group. Seeing its name needs permission to create experiments, which the ADMIN and DEVELOPER roles have.',
   groupError: 'In a group. Its name could not be loaded; reload the page to try again.',
   holdoutNone: 'None active',
-  holdoutRefused: 'Seeing this requires the ADMIN or DEVELOPER role.',
+  holdoutRefused: 'Seeing this needs permission to create experiments, which the ADMIN and DEVELOPER roles have.',
   holdoutError: 'Could not be loaded; reload the page to try again.',
 } as const;
 
@@ -258,6 +259,7 @@ export function keepOwnerName(previous: Experiment | null, updated: Experiment):
 export default function ExperimentDetailPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const { effective, loading: permissionsLoading } = useEffectivePermissions();
   const rawId = router.query.id;
   const id = typeof rawId === 'string' ? rawId : undefined;
 
@@ -383,16 +385,20 @@ export default function ExperimentDetailPage() {
 
   const status = experiment.status;
   const statusActions = ACTIONS_BY_STATUS[status] ?? [];
-  const mayChange = canChangeExperiment(user);
-  // Offer only what the API would accept: a role without EXPERIMENT UPDATE is
-  // refused every lifecycle change, including on an experiment it owns.
+  const mayChange = canChangeExperiment(user, effective);
+  // Not refused yet: the effective map may still add EXPERIMENT UPDATE (#891).
+  // Until it answers the page shows neither the buttons nor the note.
+  const mayChangePending = !mayChange && permissionsLoading;
+  // Offer only what the API would accept: a user without EXPERIMENT UPDATE
+  // (by role, custom role or direct grant) is refused every lifecycle change,
+  // including on an experiment they own.
   const actions = mayChange ? statusActions : [];
   // A null owner (the creator's account was removed) is nobody, so it is
   // never you.
   const isOwner =
     user !== null && experiment.owner_id !== null && user.id === experiment.owner_id;
   const resultsAvailable = status !== 'draft';
-  const showRoleNote = !mayChange && statusActions.length > 0;
+  const showRoleNote = !mayChange && !mayChangePending && statusActions.length > 0;
   const primaryMetric = experiment.metrics.find((m) => m.is_primary) ?? experiment.metrics[0];
   const algorithm = algorithmLabel(experiment.optimization_type);
   // Read at render, after the experiment has loaded in the browser (#1443).
@@ -583,8 +589,8 @@ export default function ExperimentDetailPage() {
           {showRoleNote && (
             <p className="mt-4 text-sm text-slate-700" data-testid="experiment-role-note">
               {isOwner
-                ? 'You own this experiment, but starting, pausing, completing and archiving it requires the ADMIN or DEVELOPER role; '
-                : 'Starting, pausing, completing and archiving an experiment requires the ADMIN or DEVELOPER role; '}
+                ? 'You own this experiment, but starting, pausing, completing and archiving it needs permission to change experiments, which the ADMIN and DEVELOPER roles have; '
+                : 'Starting, pausing, completing and archiving an experiment needs permission to change experiments, which the ADMIN and DEVELOPER roles have; '}
               you are {user?.role || 'signed in without a role'}.{' '}
               {resultsAvailable
                 ? 'You can read its results.'
@@ -771,6 +777,7 @@ export default function ExperimentDetailPage() {
         <TargetingSection
           experiment={experiment}
           mayChange={mayChange}
+          mayChangePending={mayChangePending}
           role={user?.role}
           onPause={() => onActionClick('pause')}
           pauseBusy={pendingAction === 'pause'}

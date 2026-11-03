@@ -173,6 +173,7 @@ EXPOSURE_SDKS: frozenset[str] = frozenset(
         "java",
         "react",
         "react-native",
+        "dotnet",
     ]
 )
 

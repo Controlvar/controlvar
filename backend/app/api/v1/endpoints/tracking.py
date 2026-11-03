@@ -16,7 +16,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
-from backend.app.api.sdk_scope import require_sdk_ruleset_key
+from backend.app.api.sdk_scope import require_batch_assign_key
 from backend.app.core.context_limits import check_context
 from backend.app.core.logger import failure_detail, unexpected_failure
 from backend.app.core.metrics import (
@@ -448,7 +448,7 @@ def assign_users_to_experiment_batch(
         ..., description="The experiment and its users"
     ),
     db: Session = Depends(deps.get_db),
-    api_key: APIKey = Depends(require_sdk_ruleset_key),
+    api_key: APIKey = Depends(require_batch_assign_key),
 ) -> AssignmentBatchResponse:
     """
     Assign up to 1,000 users to an ACTIVE experiment in one request.
@@ -464,7 +464,11 @@ def assign_users_to_experiment_batch(
     ``POST /api/v1/tracking/assign`` records that they saw the experiment.
 
     **Authentication**: an API key with the ``sdk:ruleset`` scope, whose owner
-    can change feature flags and experiments (ADMIN, DEVELOPER or a superuser).
+    can change feature flags and experiments: ADMIN, DEVELOPER, a superuser, or
+    in the full profile anyone whose custom roles or direct grants give
+    ``feature_flag (update)`` and ``experiment (update)``. A key whose owner can
+    change feature flags but not experiments is refused with 403 before anyone
+    is assigned.
 
     A plain ``def``: FastAPI runs it in the thread pool, so a batch does not
     hold the event loop while it works through its users.

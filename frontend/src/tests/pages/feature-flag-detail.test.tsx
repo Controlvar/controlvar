@@ -497,7 +497,7 @@ describe('who may change a flag (#917)', () => {
       expect(screen.queryByTestId('flag-toggle')).toBeNull();
       expect(screen.queryByRole('switch')).toBeNull();
       expect(screen.getByTestId('flag-role-note')).toHaveTextContent(
-        'Feature flags are created and changed by the ADMIN and DEVELOPER roles.',
+        'Feature flags are created and changed with the feature flag permissions, which the ADMIN and DEVELOPER roles have.',
       );
 
       // The builder shows the stored rules and takes no change.

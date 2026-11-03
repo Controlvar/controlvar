@@ -190,7 +190,7 @@ function install(current: Experiment, put?: Put, get?: () => unknown) {
           return put ? put(body) : stored(current, body);
         },
       },
-      // #1452's rows on the same page: the eligibility reads, for ADMIN and DEVELOPER.
+      // #1452's rows on the same page: the eligibility reads, for a user who may create experiments.
       { path: '/api/v1/holdout', handler: () => null },
     ]) as unknown as typeof apiFetch,
   );
@@ -629,7 +629,7 @@ describe('a refused save shows fixed copy, never the server text', () => {
       400:
         'This experiment is no longer a draft, so its variants and metrics cannot be changed. ' +
         'Reload the page to see its status.',
-      403: 'Changing an experiment requires the ADMIN or DEVELOPER role.',
+      403: 'Changing an experiment needs permission to change experiments, which the ADMIN and DEVELOPER roles have.',
       404: 'This experiment no longer exists.',
       422:
         'The variants and metrics were not accepted. Check that the split adds up to 100%, one ' +

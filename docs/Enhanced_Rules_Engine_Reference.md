@@ -32,7 +32,7 @@ A condition on an attribute the request's context does not carry does not hold, 
 |---|---|---|
 | `equals` | `eq` | the attribute equals the value. Text and a number or boolean are compared as that type (`"17"` equals `17`, `"true"` equals `true`); two texts are compared as they are. |
 | `not_equals` | `neq` | the attribute does not equal the value, compared as `equals` compares. |
-| `greater_than`, `greater_than_or_equal`, `less_than`, `less_than_or_equal` | `gt`, `gte`, `lt`, `lte` | the attribute compares so with the value, both read as numbers: text that is a number (`"21"`) counts. |
+| `greater_than`, `greater_than_or_equal`, `less_than`, `less_than_or_equal` | `gt`, `gte`, `lt`, `lte` | the attribute compares so with the value, both read as numbers: text that is a number (`"21"`) counts. A value that cannot be read as a number, such as `"abc"`, `null`, a list or an object, is refused when the rules are saved. |
 | `in` | `in` | the attribute equals one of the values, compared as `equals` compares. |
 | `not_in` | `not_in` | the attribute equals none of the values. |
 | `contains`, `not_contains` | `contains`, `not_contains` | the attribute, as text, contains the value, or does not. |
@@ -48,15 +48,21 @@ A condition on an attribute the request's context does not carry does not hold, 
 | `in_segment`, `not_in_segment` | `in_segment`, `not_in_segment` | the user is, or is not, a member of the segment ([below](#in_segment-in_segment-not_in_segment-not_in_segment)). |
 | none | `between` | the attribute is a number, or a date, from `value` to `additional_value`, both included. |
 | none | `before`, `after` | the attribute is a date before, or after, the value ([below](#before-before-after-after)). |
-| none | `array_length` | the attribute is a list, text or object whose length compares with the value as `additional_value` says: `eq` (the default), `gt`, `gte`, `lt`, `lte`, or `between` a `{"min", "max"}` value, both included. A number or `null` has no length and does not match. |
+| none | `array_length` | the attribute is a list, text or object whose length compares with the value as `additional_value` says: `eq` (the default), `gt`, `gte`, `lt`, `lte`, or `between` a `{"min", "max"}` value, both included. A number or `null` has no length and does not match. A value that is not a whole number, such as `"abc"`, `"3.0"` or `null` (a number with a fraction, `3.7`, is read as `3`), or for `between` one without whole-number `min` and `max`, is refused when the rules are saved. |
 
 Experiment targeting also accepts `json_path` and `percentage_bucket`, in the native shape;
 they are not documented here. Flag targeting refuses them with `422`, because flag evaluation
-does not implement them.
+does not implement them. A `percentage_bucket` value that cannot be read as a number, such as
+`"abc"` or `null`, is refused when an experiment's rules are saved.
 
 A distance unit, or a native-shape comparison, this page does not list is refused when rules
-are saved (`422`). Rules saved earlier with one keep answering as they did: the condition does
-not hold, so under `NOT` it holds for every user. `python -m backend.scripts.check_targeting_rules` lists the flags,
+are saved (`422`), and so is a value its operator cannot read (`"abc"` for `gt`,
+`"next week"` for `before`, a radius below 0) and a comparison in a dashboard-shape geo rule,
+which is not read. Rules saved earlier with one keep answering as they did: the condition does not
+hold, so under `NOT` it holds for every user. A dashboard-shape geo rule with a comparison
+still holds within the radius, and a comparison with a timestamp no date can hold, or with a
+number too large for a floating-point number, still abandons the ruleset
+([below](#when-a-rule-cannot-be-evaluated)). `python -m backend.scripts.check_targeting_rules` lists the flags,
 experiments and segments that have such rules, and a save that sends them back is refused until
 they are corrected.
 
@@ -106,7 +112,11 @@ rule's point is at most the radius, in kilometres unless the rule gives a unit: 
 `kilometers`, `kilometre` or `kilometres`; `mi` or `miles`; `m`, `meters` or `metres`, in any
 case. In the native shape `additional_value` may also carry `comparison`: `lte` (the default,
 within the radius), `lt`, `gt`, `gte`, or `eq` (within 0.01 of the radius, in the rule's unit).
-Any other unit or comparison is refused when the rules are saved.
+Any other unit or comparison is refused when the rules are saved. The radius must be a number
+of 0 or more, and a rule without one is refused. In the dashboard shape `comparison` is not
+read: a rule that carries one, in the object or as a fifth item of the list or the text, is
+refused, because it would be applied as "within the radius". Write the rule in the native shape
+to use `gt`, `lt`, `gte` or `eq`.
 
 - Dashboard: `{"lat": 37.7749, "lon": -122.4194, "radius": 15, "unit": "km"}`, the list
   `[37.7749, -122.4194, 15, "km"]` or the text `"37.7749,-122.4194,15,km"`. The unit is
@@ -177,7 +187,9 @@ Flag targeting and experiment targeting read a window the same way.
 
 `before` and `after` compare dates: an ISO 8601 string or a Unix timestamp, in the attribute
 and in the value. The condition holds when the attribute is strictly before, or strictly
-after, the value.
+after, the value. A value that is neither, such as `"next week"` or `null`, and a timestamp no
+date can hold, such as `1e20`, are refused when the rules are saved (`422`, with the reason
+`not a date; ...`).
 
 ### IN_SEGMENT (`in_segment`), NOT_IN_SEGMENT (`not_in_segment`)
 

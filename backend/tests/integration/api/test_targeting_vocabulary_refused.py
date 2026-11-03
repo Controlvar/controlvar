@@ -1,9 +1,11 @@
-"""A save refuses a targeting word its evaluator never matches (#1204), through
-the routes.
+"""A save refuses a targeting word its evaluator never matches (#1204), a
+value it cannot read (#1525) and a dashboard geo comparison it ignores (#1526),
+through the routes.
 
-Each reason of plan D211 S1 is sent to every write route it applies to, and
-the 422 is asserted whole: the exact ``loc`` and the exact ``msg``, written
-out here rather than imported, so a changed reason fails (EMD-1). The routes:
+Each reason of plan D211 S1 and of its amendment v1.4-B3 is sent to every
+write route it applies to, and the 422 is asserted whole: the exact ``loc``
+and the exact ``msg``, written out here rather than imported, so a changed
+reason fails (EMD-1). The routes:
 
 * ``POST /api/v1/feature-flags/`` (and without the slash), ``PUT
   /api/v1/feature-flags/{flag_id}``;
@@ -68,7 +70,41 @@ WINDOW = (
     "name such as Europe/Paris"
 )
 
+# Plan D211 v1.4-B3's reasons for a value (#1525, #1526), verbatim.
+DATE = (
+    "not a date; use an ISO 8601 date such as 2030-01-31 or 2030-01-31T09:00:00Z, "
+    "or a Unix timestamp"
+)
+LENGTH_VALUE = "not a whole number; use a number such as 3"
+BETWEEN = "between needs a value with min and max, both whole numbers"
+RADIUS = "radius must be a number of 0 or more"
+NO_RADIUS = "a radius is required; use a number of 0 or more"
+PERCENTAGE = "not a number; use a percentage from 0 to 100"
+NUMBER = "not a number; use a number such as 5"
+DASH_COMPARISON = (
+    "comparison is not read in the dashboard shape, so the rule would mean within "
+    "the radius; to use gt, lt, gte or eq, write the rule in the native shape"
+)
+
 POINT = [37.7749, -122.4194]
+
+
+def _dashboard_geo(value: Any) -> Dict[str, Any]:
+    return {
+        "logical_operator": "AND",
+        "groups": [
+            {
+                "logical_operator": "AND",
+                "conditions": [
+                    {
+                        "attribute": "location",
+                        "operator": "geo_within_radius",
+                        "value": value,
+                    }
+                ],
+            }
+        ],
+    }
 
 
 def _native(condition: Dict[str, Any]) -> Dict[str, Any]:
@@ -137,7 +173,75 @@ ROWS: Dict[str, Any] = {
         FRONTEND_FIXTURE["rules"],
         FRONTEND_FIXTURE["msg"],
     ),
+    # A value the evaluator cannot read (#1525).
+    "date value": (
+        {"flag", "experiment"},
+        _native(_cond("before", "not-a-date")),
+        f"Value error, {_AT}.value: {DATE}",
+    ),
+    "length value": (
+        {"flag", "experiment"},
+        _native(_cond("array_length", "abc")),
+        f"Value error, {_AT}.value: {LENGTH_VALUE}",
+    ),
+    "length bounds": (
+        {"flag", "experiment"},
+        _native(_cond("array_length", {"min": 1}, "between")),
+        f"Value error, {_AT}.value: {BETWEEN}",
+    ),
+    "radius, native": (
+        {"flag", "experiment"},
+        _native(_cond("geo_distance", POINT, -1)),
+        f"Value error, {_AT}.additional_value: {RADIUS}",
+    ),
+    "no radius, native": (
+        {"flag", "experiment"},
+        _native(_cond("geo_distance", POINT, {"unit": "km"})),
+        f"Value error, {_AT}.additional_value: {NO_RADIUS}",
+    ),
+    "percentage value": (
+        {"experiment"},
+        _native(_cond("percentage_bucket", "abc")),
+        f"Value error, {_AT}.value: {PERCENTAGE}",
+    ),
+    "number value": (
+        {"flag", "experiment"},
+        _native(_cond("gt", "abc")),
+        f"Value error, {_AT}.value: {NUMBER}",
+    ),
+    "radius, dashboard": (
+        {"flag", "experiment", "segment"},
+        _dashboard_geo("37.7749,-122.4194,-1"),
+        f"Value error, groups[0].conditions[0].value: {RADIUS}",
+    ),
+    # A dashboard geo comparison the converter drops (#1526).
+    "comparison, dashboard": (
+        {"flag", "experiment", "segment"},
+        _dashboard_geo(
+            {"lat": 37.7749, "lon": -122.4194, "radius": 10, "comparison": "gt"}
+        ),
+        f"Value error, groups[0].conditions[0].value: {DASH_COMPARISON}",
+    ),
+    "fifth part, dashboard": (
+        {"flag", "experiment", "segment"},
+        _dashboard_geo("37.7749,-122.4194,10,km,gt"),
+        f"Value error, groups[0].conditions[0].value: {DASH_COMPARISON}",
+    ),
 }
+
+#: The rows #1525 and #1526 added.
+VALUE_ROWS = (
+    "date value",
+    "length value",
+    "length bounds",
+    "radius, native",
+    "no radius, native",
+    "percentage value",
+    "number value",
+    "radius, dashboard",
+    "comparison, dashboard",
+    "fifth part, dashboard",
+)
 
 #: The dashboard line's msg, written out (the fixture is the frontend's copy).
 DASHBOARD_UNIT_MSG = f"Value error, groups[0].conditions[1].value: {UNIT}"
@@ -664,3 +768,174 @@ def test_the_check_script_lists_what_a_save_now_refuses(
     assert flag_lines <= out
     assert experiment_line in out
     assert segment_line in out
+
+
+# ---------------------------------------------------------------------------
+# #1525, #1526: a value the evaluator cannot read, a dashboard geo comparison
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("name", [n for n in VALUE_ROWS if n in _rows("segment")])
+def test_segment_create_update_and_preview_refuse_an_unreadable_value(
+    admin_client, db_session, name
+):
+    _, rules, msg = ROWS[name]
+    title = f"Seg {uuid.uuid4().hex[:8]}"
+    _refused(
+        admin_client.post(SEGMENTS, json={"name": title, "rules": rules}), msg, "rules"
+    )
+    assert _count(db_session, Segment, name=title) == 0
+
+    segment = _segment(admin_client)
+    _refused(
+        admin_client.put(f"{SEGMENTS}/{segment['id']}", json={"rules": rules}),
+        msg,
+        "rules",
+    )
+    assert admin_client.get(f"{SEGMENTS}/{segment['id']}").json()["rules"] == US_SEGMENT
+    _refused(
+        admin_client.post(
+            f"{SEGMENTS}/{segment['id']}/preview",
+            json={"name": "preview", "rules": rules},
+        ),
+        msg,
+        "rules",
+    )
+
+
+@pytest.mark.regression
+def test_the_wizard_launch_reports_a_dashboard_comparison_and_creates_nothing(
+    admin_client, db_session
+):
+    title = f"Wizard {uuid.uuid4().hex[:8]}"
+    created = admin_client.post("/api/v1/wizard/drafts", json={"experiment_type": "ab"})
+    assert created.status_code in (200, 201), created.text
+    draft_id = created.json()["id"]
+    _step(admin_client, draft_id, "choose_type", {"experiment_type": "ab"})
+    _step(
+        admin_client,
+        draft_id,
+        "define_hypothesis",
+        {
+            "name": title,
+            "hypothesis": "A geo comparison the converter drops is refused",
+            "primary_metric_id": "checkout_completed",
+        },
+    )
+    conditions = [
+        {"attribute": "country", "operator": "equals", "value": "US"},
+        *ROWS["comparison, dashboard"][1]["groups"][0]["conditions"],
+    ]
+    _step(admin_client, draft_id, "targeting", {"targeting_rules": conditions})
+    _step(admin_client, draft_id, "sample_size", {"baseline_rate": 0.1, "mde": 0.05})
+
+    submitted = admin_client.post(f"/api/v1/wizard/drafts/{draft_id}/submit")
+
+    assert submitted.status_code == 200, submitted.text
+    assert submitted.json()["success"] is False
+    assert submitted.json()["experiment_id"] is None
+    assert submitted.json()["errors"] == [
+        "targeting_rules: Value error, groups[0].conditions[1].value: "
+        f"{DASH_COMPARISON}"
+    ]
+    assert _count(db_session, Experiment, name=title) == 0
+
+
+@pytest.mark.regression
+def test_a_stored_flag_with_an_unreadable_value_keeps_its_answer_and_cannot_be_sent_back(
+    admin_client, db_session, make_feature_flag
+):
+    """Stored before #1525: evaluated as before (the date condition never
+    holds, so the 0% rollout decides); sent back unchanged it answers 422;
+    leaving the rules out still saves."""
+    _, stored, msg = ROWS["date value"]
+    flag = make_feature_flag(
+        key=unique_flag_key("value-stored"),
+        targeting_rules=copy.deepcopy(stored),
+        status=FeatureFlagStatus.ACTIVE,
+        rollout_percentage=0,
+    )
+    evaluated = admin_client.get(
+        f"{FLAGS}/evaluate/{flag.key}",
+        params={"user_id": "u-1525", "context": json.dumps({"a": "2000-01-01"})},
+    )
+    assert evaluated.status_code == 200, evaluated.text
+    assert (evaluated.json()["enabled"], evaluated.json()["reason"]) == (
+        False,
+        "rollout",
+    )
+
+    body = admin_client.get(f"{FLAGS}/{flag.id}").json()
+    assert body["targeting_rules"] == stored
+    _refused(admin_client.put(f"{FLAGS}/{flag.id}", json=body), msg)
+
+    without = {k: v for k, v in body.items() if k != "targeting_rules"}
+    without["rollout_percentage"] = 30
+    saved = admin_client.put(f"{FLAGS}/{flag.id}", json=without)
+    assert saved.status_code == 200, saved.text
+    db_session.expire_all()
+    row = db_session.get(FeatureFlag, flag.id)
+    assert (row.targeting_rules, row.rollout_percentage) == (stored, 30)
+
+
+@pytest.mark.regression
+def test_the_check_script_lists_a_value_a_save_now_refuses(
+    db_session, make_feature_flag, make_experiment, admin_user, capsys
+):
+    """(B7) Flags, experiments and segments, with the API's path and reason,
+    and nothing is written."""
+    date = make_feature_flag(targeting_rules=copy.deepcopy(ROWS["date value"][1]))
+    radius = make_feature_flag(targeting_rules=copy.deepcopy(ROWS["radius, native"][1]))
+    suffix = uuid.uuid4().hex[:8]
+    experiment = make_experiment(
+        name=f"Values {suffix}",
+        key=f"values-{suffix}",
+        status=ExperimentStatus.ACTIVE,
+        targeting_rules=copy.deepcopy(ROWS["percentage value"][1]),
+    )
+    segment = Segment(
+        name=f"Stored {suffix}",
+        rules=copy.deepcopy(ROWS["comparison, dashboard"][1]),
+        status=ModelSegmentStatus.ACTIVE,
+        owner_id=admin_user.id,
+    )
+    db_session.add(segment)
+    db_session.commit()
+    expected = {
+        f"feature_flag\t{date.id}\t{date.key}\t{_AT}.value\t{DATE}",
+        f"feature_flag\t{radius.id}\t{radius.key}\t{_AT}.additional_value\t{RADIUS}",
+        f"experiment\t{experiment.id}\t{experiment.key}\tACTIVE\t{_AT}.value\t"
+        f"{PERCENTAGE}",
+        f"segment\t{segment.id}\t{segment.name}\tgroups[0].conditions[0].value\t"
+        f"{DASH_COMPARISON}",
+    }
+    experiment_id = experiment.id
+
+    def rows():
+        db_session.expire_all()
+        return [
+            tuple(r)
+            for r in db_session.execute(
+                text(
+                    "SELECT 'f', id::text, targeting_rules::text FROM feature_flags "
+                    "UNION ALL SELECT 'e', id::text, targeting_rules::text FROM "
+                    "experiments UNION ALL SELECT 's', id::text, rules::text FROM "
+                    "segments ORDER BY 1, 2"
+                )
+            ).all()
+        ]
+
+    before = rows()
+    try:
+        assert check_targeting_rules.main([]) == 0
+        assert rows() == before, "the check wrote"
+    finally:
+        db_session.rollback()
+        db_session.query(Experiment).filter(Experiment.id == experiment_id).delete(
+            synchronize_session=False
+        )
+        db_session.commit()
+    out = set(capsys.readouterr().out.splitlines())
+
+    assert expected <= out

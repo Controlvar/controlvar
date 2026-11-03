@@ -43,6 +43,14 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+#: The 403 of ``POST /bandit/{experiment_id}/update`` (#891): it names the
+#: permission, then the built-in roles that have it, so it stays true when a
+#: custom role or direct grant gives the permission instead.
+TRIGGER_UPDATE_FORBIDDEN = (
+    "Triggering a bandit update needs permission to change experiments, which "
+    "the DEVELOPER and ADMIN roles have."
+)
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -198,13 +206,13 @@ def trigger_bandit_update(
     """
     Trigger an immediate weight recalculation for a MAB experiment.
 
-    Requires DEVELOPER or ADMIN role.
+    Requires permission to change experiments: DEVELOPER or ADMIN, or in the
+    full profile a custom role or direct grant giving experiment (update).
     """
-    # Require at least DEVELOPER role
     if not check_permission(current_user, ResourceType.EXPERIMENT, Action.UPDATE):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="DEVELOPER or ADMIN role required to trigger bandit updates",
+            detail=TRIGGER_UPDATE_FORBIDDEN,
         )
 
     experiment = _get_mab_experiment(experiment_id, db)

@@ -30,6 +30,7 @@ import {
   record,
   RECORD_KEY,
   rowFor,
+  sentOffsetUs,
   startLagUs,
   summaryFacts,
 } from './lib.js';
@@ -74,7 +75,9 @@ export const options = {
 export default function () {
   const iteration = exec.scenario.iterationInTest;
   const startTime = exec.scenario.startTime;
-  const lag = startLagUs(Date.now(), startTime, iteration, env.rate, env.timeUnitMs);
+  const now = Date.now();
+  const lag = startLagUs(now, startTime, iteration, env.rate, env.timeUnitMs);
+  const sentOffset = sentOffsetUs(now, startTime);
   const scenario = env.scenario === 'mix' ? mixScenario(iteration, env.mix) : env.scenario;
   const request = buildRequest(scenario, iteration, context);
   const res = http.request(request.method, request.url, request.body, {
@@ -96,12 +99,15 @@ export default function () {
     },
     lag,
     startTime,
+    sentOffset,
   );
   const value = latencyUs(res.timings) / 1000;
   exec.vu.metrics.metadata[RECORD_KEY] = record(fields);
   requests.add(value);
   delete exec.vu.metrics.metadata[RECORD_KEY];
-  if (iteration >= env.firstMeasured) {
+  // Measured: sent after the settle, by send time (the iteration number counts
+  // started iterations, not scheduled slots, once one is dropped: #1667).
+  if (sentOffset >= env.settleMs * 1000) {
     measured.add(value);
   }
 }

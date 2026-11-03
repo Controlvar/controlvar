@@ -47,8 +47,13 @@ class SampleSizeRequest(BaseModel):
     baseline_rate: float = Field(
         ...,
         gt=0,
-        lt=1,
-        description="Current baseline conversion/success rate (exclusive 0–1).",
+        allow_inf_nan=False,
+        description=(
+            "The metric before the change. For metric_type 'proportion' (the "
+            "default), a rate above 0 and below 1: 0.05 is 5%. For 'mean' or "
+            "'ratio', the baseline mean in the metric's own units, such as "
+            "45.0 for an average order value of 45: any finite number above 0."
+        ),
     )
     minimum_detectable_effect: float = Field(
         ...,
@@ -126,15 +131,30 @@ class SampleSizeRequest(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_baseline_plus_mde(self) -> "SampleSizeRequest":
-        """Ensure the treatment rate is still a valid probability."""
-        mde_absolute = self.baseline_rate * self.minimum_detectable_effect
-        p2 = self.baseline_rate + mde_absolute
+    def validate_proportion_bounds(self) -> "SampleSizeRequest":
+        """A proportion is a rate: it, and the rate it is raised to, stay below 1.
+
+        Only a ``proportion`` is bounded. A ``mean`` or ``ratio`` baseline is in
+        the metric's own units (#1034), so any finite value above 0 is planned.
+        """
+        if self.metric_type != "proportion":
+            return self
+        if self.baseline_rate >= 1.0:
+            raise ValueError(
+                f"baseline_rate is {self.baseline_rate}. With metric_type "
+                "'proportion' (the default) it is a rate and must be below 1: "
+                "0.05 means 5%. For a mean, such as an average order value, "
+                "send metric_type 'mean' and baseline_std."
+            )
+        p2 = self.baseline_rate + self.baseline_rate * self.minimum_detectable_effect
         if p2 >= 1.0:
             raise ValueError(
-                f"baseline_rate ({self.baseline_rate}) + mde_absolute "
-                f"({mde_absolute:.4f}) = {p2:.4f} which is >= 1.0. "
-                "Reduce baseline_rate or minimum_detectable_effect."
+                f"baseline_rate ({self.baseline_rate}) raised by "
+                f"minimum_detectable_effect ({self.minimum_detectable_effect}) "
+                f"is {p2:.4f}, and a proportion must stay below 1. Lower "
+                "baseline_rate or minimum_detectable_effect. For a mean, such "
+                "as an average order value, send metric_type 'mean' and "
+                "baseline_std."
             )
         return self
 

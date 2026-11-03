@@ -35,8 +35,9 @@ If you set `EXPERIMENTLY_SERVER_KEY` or `EXPERIMENTLY_API_URL` from an earlier v
   `POST /api/v1/tracking/evaluations` (both are beta). A server without the ruleset answers 404,
   and the SDK then evaluates on the server (see [Freshness](#freshness)).
 - An API key with the **`sdk:ruleset`** scope, created by a user who can change feature flags
-  (ADMIN or DEVELOPER). The scope works only while its owner can change flags: it is checked on
-  every request.
+  (ADMIN, DEVELOPER, a superuser, or in the full profile anyone whose custom role or direct grant
+  gives `feature_flag (update)`). The scope works only while its owner can change flags: it is
+  checked on every request.
 - Node 18 or later (the JavaScript SDK), or Python 3.9 or later (the Python SDK).
 
 ## JavaScript
@@ -329,7 +330,7 @@ It prints `{"enabled":true,"reason":"targeting_rule"}`: `country` in the context
 |---|---|---|
 | Constructor throws "evaluation: 'local' downloads every flag's targeting rules, …" | `evaluation: 'local'` in a browser (JavaScript) | Leave the browser client in server mode. |
 | `refresh` error: "The API key was refused (403) fetching the flag ruleset: This API key does not have the 'sdk:ruleset' scope …" | The key lacks the scope | Create a key with the `sdk:ruleset` scope. |
-| The same, with "This key's owner can no longer change feature flags or experiments …" | The key's owner is ANALYST or VIEWER | Use a key created by an ADMIN or DEVELOPER. |
+| The same, with "This key's owner can no longer change feature flags …" | The key's owner can no longer change feature flags: an inactive user, or an ANALYST or VIEWER with no custom role or direct grant giving `feature_flag (update)` | Use a key created by a user who can change feature flags. |
 | "The server has no /api/v1/sdk/ruleset (404). Local evaluation needs Controlvar 0.11.0 or later …" | The server predates the ruleset | Upgrade the server, or leave evaluation at `server`. |
 | "… a format this SDK does not understand …" | The server is newer than the SDK | Upgrade the SDK. |
 | `status()` lists server-evaluated flags | Those flags use rules that are evaluated on the server | Nothing to fix; they keep working with a request each. |

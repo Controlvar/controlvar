@@ -928,15 +928,26 @@ by = [
 ]
 
 [[unit]]
-text = "Four built-in roles are enforced today."
+text = "Custom roles and direct grants add permissions to a built-in role."
 by = [
-    "test:backend/tests/unit/core/test_built_in_roles_decide.py::test_there_are_four_built_in_roles",
-    "test:backend/tests/unit/core/test_built_in_roles_decide.py::test_a_custom_role_or_a_grant_does_not_change_what_a_user_can_do",
+    "test:backend/tests/unit/core/test_built_in_roles_decide.py::test_a_custom_role_or_a_grant_adds_only_grantable_pairs",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
 ]
 
 [[unit]]
-text = "Custom roles and resource-level grants exist in the data model but are not yet enforced by the permission checks, so do not demo them (tracked in the launch plan, P5)."
-by = ["test:backend/tests/unit/core/test_built_in_roles_decide.py::test_a_custom_role_or_a_grant_does_not_change_what_a_user_can_do"]
+text = "To show one, grant the viewer audit_log read (RBAC API reference) and sign in as viewer@demo.com: the Audit Log shows other users' entries too."
+by = [
+    "docex:docs/api/rbac.md#[\"admin@demo.com\"]",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:frontend/src/tests/admin/AuditLogAccess.test.tsx",
+]
+
+[[unit]]
+text = "Revoke it afterwards with DELETE /api/v1/rbac/users/{user_id}/grant/audit_log."
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_revocation.py::test_delete_grant",
+    "test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestGrantRevokePermission::test_revoke_permission_returns_200",
+]
 
 [[unit]]
 text = "API / Integrations:"
@@ -972,10 +983,11 @@ by = [
 ]
 
 [[unit]]
-text = "RBAC with four built-in roles (custom roles: roadmap)"
+text = "RBAC with four built-in roles, plus custom roles and time-limited grants"
 by = [
     "test:backend/tests/unit/core/test_built_in_roles_decide.py::test_there_are_four_built_in_roles",
-    "test:backend/tests/unit/core/test_built_in_roles_decide.py::test_a_custom_role_or_a_grant_does_not_change_what_a_user_can_do",
+    "test:backend/tests/unit/core/test_built_in_roles_decide.py::test_a_custom_role_or_a_grant_adds_only_grantable_pairs",
+    "test:modules/backend/tests/integration/rbac/test_rbac_provider.py::test_a_grant_yields_its_pairs_only_when_activated_active_and_unexpired",
 ]
 
 [[unit]]

@@ -161,6 +161,7 @@ ROW_ERRORS: Tuple[str, ...] = ("timeout", "connection")
 INVALID_REASONS: Tuple[str, ...] = (
     "none",
     "sent-identity",
+    "nothing-measured",
     "start-lag",
     "not-sampled",
     "foreign-cpu",
@@ -216,6 +217,11 @@ ROW_FIELDS: Tuple[str, ...] = (
     "error",
     "latency_us",
     "start_lag_us",
+    # When the request was sent, in microseconds after the step's start (the
+    # script's clock, 1 ms resolution). The measure window is decided by this,
+    # not by ``iteration``: k6 numbers the iterations that STARTED, so once one
+    # is dropped the number is no longer the scheduled slot (#1667).
+    "sent_offset_us",
     "rate_limit",
     "flag_class",
     "reason",
@@ -1143,6 +1149,14 @@ def judge_step(
                 f"!= scheduled {step['scheduled']}",
             )
         )
+    if step["measured"] == 0:
+        failed.append(
+            (
+                "nothing-measured",
+                f"step {number}: no request was sent in the measure window, so "
+                "nothing was measured",
+            )
+        )
     lag = validity["max_start_lag_p99_us"]
     if step["dropped"] == 0 and step["start_lag_p99_us"] > lag:
         failed.append(
@@ -1339,7 +1353,7 @@ def summarise_step(
         )
     window = ranges(method)
     scheduled = scheduled_count(rate, unit, window["settle_s"] + window["measure_s"])
-    first = first_measured(rate, unit, window["settle_s"])
+    settle_us = window["settle_s"] * 1_000_000
     allowed = set(method["smoke"]["mix"]) if scenario == SMOKE_ONLY else {scenario}
     expect = expectations(method, observation["variants"])
     seen: set = set()
@@ -1367,10 +1381,18 @@ def summarise_step(
         client_429 += status == 429
         if 200 <= status < 400 and row["rate_limit"] != limit:
             mismatches += 1
-        if iteration >= first:
+        # Measured: sent after the settle, by the send time, never by the
+        # iteration number (which counts started iterations, not slots).
+        if _number(row, "sent_offset_us") >= settle_us:
             measured.append((row, verdict))
     latencies = sorted(_number(row, "latency_us") for row, _ in measured)
-    lags = sorted(_number(row, "start_lag_us") for row, _ in measured)
+    # The start lag is the distance from the iteration's scheduled slot, which
+    # the iteration number only names while nothing was dropped: with drops it
+    # is not computed (judge_step ignores it then, too).
+    dropped = observation["dropped"]
+    lags = (
+        [] if dropped else sorted(_number(row, "start_lag_us") for row, _ in measured)
+    )
     reasons: Dict[str, int] = {}
     if scenario == "evaluate_get":
         for row, _ in measured:
