@@ -246,6 +246,13 @@ def _chunks(items: Sequence[Any], size: int) -> Iterator[list[Any]]:
         yield list(items[start : start + size])
 
 
+def user_ids(seed: int, count: int) -> list[str]:
+    """The ids of a scenario's *count* users under *seed*, in number order
+    (``simulate`` shuffles them): the users a scenario defines, and no user a
+    fault adds."""
+    return [f"gt-{seed}-{number:06d}" for number in range(count)]
+
+
 def simulate(seed: int, scenario: Scenario) -> Plan:
     """The plan for *scenario* under *seed*; the same inputs, the same plan."""
     _check(scenario)
@@ -254,7 +261,7 @@ def simulate(seed: int, scenario: Scenario) -> Plan:
     allocations = [(arm.name, arm.allocation) for arm in scenario.arms]
     arms = {arm.name: arm for arm in scenario.arms}
 
-    users = [f"gt-{seed}-{number:06d}" for number in range(scenario.users)]
+    users = user_ids(seed, scenario.users)
     _shuffle(users, draw)
 
     singles: list[str] = []
