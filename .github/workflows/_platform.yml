@@ -7,9 +7,9 @@ name: Platform
 # lines: pg + redis services, Python, bootstrap, seeds, uvicorn from the
 # repository root, poll /health. This is that sequence, once. Its callers
 # are pr-qa-gate.yml's sdk-live-contract, fuzz.yml's three API fuzzing
-# passes, ground-truth.yml's replay and nightly-qa.yml's ground-truth job;
-# the other nightly suites do NOT call it (the `integration` and `smoke`
-# suites below are there for when one does).
+# passes, ground-truth.yml's replay and nightly-qa.yml's ground-truth and
+# flags-over-time jobs; the other nightly suites do NOT call it (the
+# `integration` and `smoke` suites below are there for when one does).
 #
 #   jobs:
 #     live-contract:
@@ -50,7 +50,7 @@ on:
         type: string
         default: demo
       suite:
-        description: 'Named suite to run: sdk-live-contract | integration | smoke | fuzz | ground-truth | ground-truth-nightly.'
+        description: 'Named suite to run: sdk-live-contract | integration | smoke | fuzz | ground-truth | ground-truth-nightly | usecases-flags.'
         type: string
         required: true
       sdks:
@@ -500,8 +500,24 @@ jobs:
               fi
               GROUND_TRUTH_SCALE="$scale" python -m pytest tests/ground_truth/test_replay.py -p no:cov -v --tb=short
               ;;
+            usecases-flags)
+              # The over-the-wire flag use cases (D210 use cases #1 and #2):
+              # this checkout's Python and JS SDKs, each behind a recording
+              # proxy, against the API above (tests/usecases). It signs in
+              # as the first administrator the bootstrap made. The JS SDK is
+              # built from this checkout first, on a line of its own, so a
+              # failed build ends the step here. `timeout 15m` ends a hung
+              # run inside the job's limit, so it fails (exit 124) and the
+              # nightly issue job still runs; it bounds liveness and gates
+              # no timing. The whole root runs (the JS driver's gates beside
+              # the cases). The log is public: --tb=short, never -l. Only
+              # counts and synthetic ids reach the step summary, which the
+              # tests write.
+              (cd sdk/js && npm ci --ignore-scripts --no-audit --no-fund && npm run build --silent)
+              timeout 15m python -P -m pytest tests/usecases -p no:cov -v --tb=short
+              ;;
             *)
-              echo "::error::unknown suite '$SUITE'. Known: sdk-live-contract, integration, smoke, fuzz, ground-truth, ground-truth-nightly."
+              echo "::error::unknown suite '$SUITE'. Known: sdk-live-contract, integration, smoke, fuzz, ground-truth, ground-truth-nightly, usecases-flags."
               echo "Add a new suite to the case statement in .github/workflows/_platform.yml."
               exit 1
               ;;

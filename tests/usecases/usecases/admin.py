@@ -3,18 +3,22 @@ change a flag, and evaluate it directly.
 
 * **Sign-in and the API key** go through the ground-truth replay's driver
   (``tests/ground_truth/driver.py``), unchanged: ``sign_in`` returns its token
-  and its key, which has the ``sdk:ruleset`` scope local evaluation needs.
-  That driver waits out a 429 and sends the request again
-  (``Driver._admin``), so afterwards ``sign_in`` asserts that no route it used
-  was answered 429 (``routes[route].rate_limited == 0``) and raises
+  and its key, which has the ``sdk:ruleset`` scope local evaluation needs,
+  and hands each to ``mask`` the moment it is minted (the cases mask them in
+  the GitHub Actions log). That driver waits out a 429 and sends the request
+  again (``Driver._admin``), so afterwards ``sign_in`` asserts that no route
+  it used was answered 429 (``routes[route].rate_limited == 0``) and raises
   ``RateLimited`` otherwise.
 * **Flag changes and raw evaluations** go through ``Admin``, a small httpx
   helper: ``create_flag``, ``set_rollout`` (``PUT`` of the rollout
-  percentage), ``toggle`` and ``evaluate`` (``GET`` of the evaluate route with
-  the API key). Raw evaluations are paced at most 80 a second, 80% of the SDK
-  routes' 6,000 a minute; everything else at most 4 a second, 80% of the
-  other routes' 300 a minute. A 429 raises ``RateLimited`` and is never sent
-  again; any other answer outside 2xx raises ``AdminError``.
+  percentage), ``toggle`` (with an empty JSON body: the route answers 422 to
+  none, ``test_toggle_requires_json_body``), ``evaluate`` (``GET`` of the
+  evaluate route with the API key) and ``ruleset`` (``GET`` of the SDK
+  ruleset with the API key: the version the server serves now). Raw
+  evaluations are paced at most 80 a second, 80% of the SDK routes' 6,000 a
+  minute; everything else at most 4 a second, 80% of the other routes' 300 a
+  minute. A 429 raises ``RateLimited`` and is never sent again; any other
+  answer outside 2xx raises ``AdminError``.
 
 ``429 == 0`` is a pacing guard: the pacing is meant to keep the rate limiter
 from ever answering 429, and a 429 means it did not. It says nothing about how
@@ -40,6 +44,7 @@ FLAGS = "/api/v1/feature-flags/"
 FLAG = "/api/v1/feature-flags/{flag_id}"
 TOGGLE = "/api/v1/feature-flags/{flag_id}/toggle"
 EVALUATE = "/api/v1/feature-flags/evaluate/{flag_key}"
+RULESET = "/api/v1/sdk/ruleset"
 
 #: The least time between two raw evaluations: 80% of 6,000 a minute.
 EVALUATE_INTERVAL = 60 / 4800
@@ -56,20 +61,29 @@ class RateLimited(AdminError):
     """The rate limiter answered 429: the pacing did not keep it quiet."""
 
 
+def _no_mask(value: str | None) -> None:
+    return None
+
+
 def sign_in(
     client: httpx.Client,
     email: str,
     password: str,
     *,
+    mask: Callable[[str | None], None] = _no_mask,
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
 ) -> tuple[str, str]:
     """A bearer token for *email* and a new API key with the ``sdk:ruleset``
     scope, through the ground-truth driver; ``RateLimited`` if any of its
-    requests was answered 429 (it sends them again, so it would pass)."""
+    requests was answered 429 (it sends them again, so it would pass). Each
+    credential goes to ``mask`` as soon as it is minted, the token before the
+    key is asked for (as ``tests/ground_truth/test_replay.py`` does)."""
     session = ground_truth_driver.Driver(client, clock=clock, sleep=sleep)
     session.sign_in(email, password)
+    mask(session.token)
     session.create_api_key()
+    mask(session.api_key)
     limited = sorted(r for r, stats in session.routes.items() if stats.rate_limited)
     if limited:
         raise RateLimited(f"429 from {', '.join(limited)} while signing in")
@@ -180,13 +194,27 @@ class Admin:
         )
 
     def toggle(self, flag_id: str) -> dict[str, Any]:
-        """``POST /api/v1/feature-flags/{flag_id}/toggle``."""
+        """``POST /api/v1/feature-flags/{flag_id}/toggle`` with an empty JSON
+        body (no ``reason``): the route answers 422 to a request with none."""
         return self._send(
             "POST",
             TOGGLE.format(flag_id=flag_id),
             route=TOGGLE,
             kind="admin",
             headers=self._bearer(),
+            json={},
+        )
+
+    def ruleset(self) -> dict[str, Any]:
+        """``GET /api/v1/sdk/ruleset`` with the API key: the document the
+        server serves now, ``version`` included (its ETag is that version in
+        quotes). Paced as an admin request: a case reads it a few times."""
+        return self._send(
+            "GET",
+            RULESET,
+            route=RULESET,
+            kind="admin",
+            headers={"X-API-Key": self._api_key},
         )
 
     def evaluate(self, flag_key: str, user_id: str) -> dict[str, Any]:

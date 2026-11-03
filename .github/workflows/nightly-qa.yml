@@ -489,11 +489,28 @@ jobs:
       suite: ground-truth-nightly
       timeout-minutes: 45
 
+  # The over-the-wire flag use cases (D210 use cases #1 and #2): this
+  # checkout's Python and JS SDKs follow a percentage ramp user by user, and
+  # turn a flag off within their cache and refresh bounds
+  # (tests/usecases/test_flags_over_time.py), against the core profile with no
+  # seed data. `sdks: python js` sets up Node; the suite builds sdk/js. The
+  # suite ends itself after 15 minutes, inside this limit, so a hung night
+  # still fails and files the issue below.
+  flags-over-time:
+    name: Flags over time
+    uses: ./.github/workflows/_platform.yml
+    with:
+      profile: core
+      seed: ''
+      suite: usecases-flags
+      sdks: 'python js'
+      timeout-minutes: 20
+
   # A red night has to leave something behind that a human sees in the morning.
   nightly-failure-issue:
     name: File an issue on failure
     runs-on: ubuntu-latest
-    needs: [unit-tests, integration-tests, benchmarks, smoke-tests, sdk-contract-tests, frontend-tests, e2e-tests, synthetic-freshness, ground-truth]
+    needs: [unit-tests, integration-tests, benchmarks, smoke-tests, sdk-contract-tests, frontend-tests, e2e-tests, synthetic-freshness, ground-truth, flags-over-time]
     if: failure()
     permissions:
       contents: read

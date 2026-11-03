@@ -1,8 +1,13 @@
 """The admin helper against a fake server (httpx's MockTransport), with no
 database and no network: sign-in through the ground-truth driver and the 429
-it would otherwise wait out unseen, the 429 every other request raises, the
-pacing of raw evaluations and of everything else, and the credential each
-request carries.
+it would otherwise wait out unseen, each credential handed to ``mask`` as it
+is minted, the 429 every other request raises, the pacing of raw evaluations
+and of everything else, and the credential and body each request carries.
+
+The fake answers a toggle with no JSON body 422, as the API does
+(``backend/tests/integration/api/test_feature_flags_api.py``,
+``test_toggle_requires_json_body``): a helper that drops the body fails here,
+not first against a live server.
 
 Time is a fake clock (``harness.Clock``): pacing is checked exactly and takes
 no time.
@@ -28,6 +33,7 @@ FLAG_ID = "11111111-1111-4111-8111-111111111111"
 USER = "u-" + "7" * 8
 LOGIN = "/api/v1/auth/login"
 API_KEYS = "/api/v1/api-keys"
+RULESET = "/api/v1/sdk/ruleset"
 
 
 class FakeServer:
@@ -54,7 +60,15 @@ class FakeServer:
         if path.startswith("/api/v1/feature-flags/evaluate/"):
             return httpx.Response(200, json={"enabled": True, "reason": "rollout"})
         if path.endswith("/toggle"):
+            if request.headers.get("content-type") != "application/json" or not (
+                request.content
+            ):
+                return httpx.Response(422, json={"detail": "body required"})
             return httpx.Response(200, json={"id": FLAG_ID, "is_active": False})
+        if path == RULESET:
+            return httpx.Response(
+                200, json={"schema": 1, "version": "v9"}, headers={"ETag": '"v9"'}
+            )
         return httpx.Response(200, json={"id": FLAG_ID})
 
     def paths(self) -> list[str]:
@@ -92,6 +106,7 @@ def _flag_calls(helper: admin.Admin) -> dict[str, Any]:
         "rollout": lambda: helper.set_rollout(FLAG_ID, 50),
         "toggle": lambda: helper.toggle(FLAG_ID),
         "evaluate": lambda: helper.evaluate("uc-flag", USER),
+        "ruleset": lambda: helper.ruleset(),
     }
 
 
@@ -123,14 +138,48 @@ def test_a_429_while_signing_in_raises_although_the_driver_sends_it_again(
     assert server.paths() == [LOGIN, LOGIN, API_KEYS]
 
 
+def test_each_credential_is_masked_as_it_is_minted(client, server, clock):
+    masked: list[tuple[str | None, int]] = []
+
+    def mask(value: str | None) -> None:
+        masked.append((value, len(server.sent)))
+
+    admin.sign_in(
+        client,
+        "admin@example.com",
+        "admin",
+        mask=mask,
+        clock=clock.time,
+        sleep=clock.sleep,
+    )
+    # The token before the key is asked for (one request sent), then the key.
+    assert masked == [(TOKEN, 1), (KEY, 2)]
+
+
+def test_the_token_is_masked_although_the_key_is_refused(client, server, clock):
+    server.script[API_KEYS] = [httpx.Response(403, json={"detail": "no"})]
+    masked: list[str | None] = []
+    with pytest.raises(admin.ground_truth_driver.ReplayError, match="answered 403"):
+        admin.sign_in(
+            client,
+            "admin@example.com",
+            "admin",
+            mask=masked.append,
+            clock=clock.time,
+            sleep=clock.sleep,
+        )
+    assert masked == [TOKEN]
+
+
 # -- a 429 raises, and is never sent again ---------------------------------------------
-@pytest.mark.parametrize("call", ["create", "rollout", "toggle", "evaluate"])
+@pytest.mark.parametrize("call", ["create", "rollout", "toggle", "evaluate", "ruleset"])
 def test_a_429_raises_and_is_not_sent_again(helper, server, call):
     for path in (
         "/api/v1/feature-flags/",
         f"/api/v1/feature-flags/{FLAG_ID}",
         f"/api/v1/feature-flags/{FLAG_ID}/toggle",
         "/api/v1/feature-flags/evaluate/uc-flag",
+        RULESET,
     ):
         server.script[path] = [
             httpx.Response(429, json={"detail": "x"}, headers={"Retry-After": "1"})
@@ -215,6 +264,8 @@ def test_the_intervals_are_80_percent_of_the_server_s_limits():
         f"/api/v1/feature-flags/{FLAG_ID}/toggle",
     ):
         assert admin.ADMIN_INTERVAL == pytest.approx(interval(path), rel=1e-12)
+    # The ruleset is an SDK route (6,000 a minute), read at the admin pace.
+    assert admin.ADMIN_INTERVAL >= interval(admin.RULESET)
 
 
 # -- what each request carries ---------------------------------------------------------------
@@ -223,12 +274,20 @@ def test_each_request_carries_its_one_credential_and_its_body(helper, server):
     helper.set_rollout(FLAG_ID, 60)
     helper.toggle(FLAG_ID)
     helper.evaluate("uc-flag", USER)
-    (create, rollout, toggle, evaluate) = (request for _, request in server.sent)
+    assert helper.ruleset()["version"] == "v9"
+    (create, rollout, toggle, evaluate, ruleset) = (
+        request for _, request in server.sent
+    )
     for request in (create, rollout, toggle):
         assert request.headers["Authorization"] == f"Bearer {TOKEN}"
         assert "X-API-Key" not in request.headers
-    assert evaluate.headers["X-API-Key"] == KEY
-    assert "Authorization" not in evaluate.headers
+    for request in (evaluate, ruleset):
+        assert request.headers["X-API-Key"] == KEY
+        assert "Authorization" not in request.headers
+    assert (ruleset.method, ruleset.url.path) == ("GET", RULESET)
+    # The toggle route answers 422 to a request with no JSON body.
+    assert toggle.headers["content-type"] == "application/json"
+    assert json.loads(toggle.content) == {}
     assert (create.method, create.url.path) == ("POST", "/api/v1/feature-flags/")
     assert json.loads(create.content) == {
         "key": "uc-flag",
@@ -255,5 +314,6 @@ def test_each_request_carries_its_one_credential_and_its_body(helper, server):
         admin.FLAG: 1,
         admin.TOGGLE: 1,
         admin.EVALUATE: 1,
+        admin.RULESET: 1,
     }
     assert helper.secrets == (TOKEN, KEY)
