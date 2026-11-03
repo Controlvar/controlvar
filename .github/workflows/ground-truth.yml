@@ -5,7 +5,7 @@ name: Ground-truth Replay
 # API to a Controlvar booted by _platform.yml (core profile, no seed data),
 # and the results page checked against the event contract and an independent
 # reference computed on the same sample. The suite is
-# tests/ground_truth/test_replay.py; the library it uses is
+# the tests/ground_truth directory (test_replay.py and test_faults.py); the library it uses is
 # tests/ground_truth/ground_truth.
 #
 # It runs on a pull request that changes what the replay exercises (the
