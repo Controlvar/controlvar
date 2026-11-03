@@ -6,13 +6,11 @@ aggregating raw metrics data into summary data for efficient querying.
 """
 
 import asyncio
-import contextvars
-import functools
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional
 
 from backend.app.core.logging import get_logger
-from backend.app.core.scheduler_tick import run_locked_tick
+from backend.app.core.scheduler_tick import run_in_worker, run_locked_tick
 from backend.app.db.session import SessionLocal
 from backend.app.models.metrics.metric import AggregationPeriod
 from backend.app.services.metrics_service import MetricsService
@@ -90,32 +88,19 @@ class MetricsScheduler:
 
         The work is synchronous SQLAlchemy (the history purge and six GROUP BY
         aggregations over ``raw_metrics``), so it runs in one worker thread
-        through ``asyncio.to_thread``; on the loop it would stop the API from
-        answering anything else until it finished.
-
-        This coroutine does not return before the thread does, in both ways
-        it can be cancelled: when its own task is cancelled (it waits for the
-        thread, then re-raises the cancellation), and when the event loop is
-        torn down (``asyncio.run`` cancels every task). The second holds
-        because the worker is a plain ``Future`` from ``run_in_executor``, not
-        a task, so teardown does not cancel it; a task such as
-        ``ensure_future(to_thread(...))`` would be cancelled with the rest and
-        this coroutine would return at once. ``run_locked_tick`` releases the
-        scheduler's advisory lock when this returns, so returning early would
-        let another replica's tick aggregate beside a thread that is still
-        running. The context copy is what ``asyncio.to_thread`` does.
+        through ``run_in_worker``; on the loop it would stop the API from
+        answering anything else until it finished. ``run_in_worker`` does not
+        return before the thread does, when this tick is cancelled and when
+        the event loop is torn down, so ``run_locked_tick`` keeps the
+        scheduler's advisory lock until the aggregation has stopped.
 
         Returns ``{"items_processed": n, "items_failed": m}`` for the run record.
         """
-        worker = asyncio.get_running_loop().run_in_executor(
-            None,
-            functools.partial(contextvars.copy_context().run, self._aggregate_sync),
+        # self._aggregate_sync is read here, at call time: the tests replace
+        # it on the instance.
+        return await run_in_worker(
+            self._aggregate_sync, label=f"{SCHEDULER_NAME} aggregation"
         )
-        try:
-            return await asyncio.shield(worker)
-        except asyncio.CancelledError:
-            await _wait_for_worker(worker)
-            raise
 
     @staticmethod
     def _aggregate_sync() -> Dict[str, int]:
@@ -201,25 +186,6 @@ class MetricsScheduler:
             else 0,
             "items_failed": failed_periods,
         }
-
-
-async def _wait_for_worker(worker: "asyncio.Future[Dict[str, int]]") -> None:
-    """
-    Wait until *worker* is done, absorbing any further cancellation.
-
-    ``asyncio.wait`` neither cancels *worker* nor raises its exception, so a
-    second cancel during shutdown cannot end the wait early either.
-    """
-    while not worker.done():
-        try:
-            await asyncio.wait({worker})
-        except asyncio.CancelledError:
-            continue
-    if not worker.cancelled() and worker.exception() is not None:
-        logger.error(
-            "metrics aggregation failed after the tick was cancelled: %s",
-            worker.exception(),
-        )
 
 
 # Create a singleton instance of the scheduler
