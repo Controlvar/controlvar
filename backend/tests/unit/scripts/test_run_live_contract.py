@@ -849,3 +849,177 @@ def test_a_release_that_cannot_read_the_ruleset_fails_before_any_change(
     assert "did not load the ruleset the server serves (v1)" in detail
     assert '"source": "server"' in detail
     assert turned == []
+
+
+# ---------------------------------------------------------------------------
+# The React SDK's bootstrap (#1518)
+# ---------------------------------------------------------------------------
+
+#: A bootstrap as the live server builds it for the contract seed.
+LIVE_BOOTSTRAP = {
+    "userId": "bootstrap-user",
+    "flags": {
+        "sdk_contract_flag": {
+            "key": "sdk_contract_flag",
+            "enabled": True,
+            "value": True,
+            "value_type": "boolean",
+            "config": None,
+            "reason": "rollout",
+        }
+    },
+    "experiments": {
+        "sdk_contract_ab": {
+            "experiment_key": "sdk_contract_ab",
+            "user_id": "bootstrap-user",
+            "variant_id": "v-control",
+            "variant_name": "control",
+            "is_control": True,
+            "configuration": None,
+            "assigned": True,
+            "reason": "assigned",
+        }
+    },
+}
+#: The page's example: other keys and values, the live fields.
+DOCUMENTED = {
+    "userId": "9f1c",
+    "flags": {
+        "new_search": {
+            **LIVE_BOOTSTRAP["flags"]["sdk_contract_flag"],
+            "key": "new_search",
+        }
+    },
+    "experiments": {
+        "checkout_flow": {
+            **LIVE_BOOTSTRAP["experiments"]["sdk_contract_ab"],
+            "experiment_key": "checkout_flow",
+        }
+    },
+}
+
+
+def _server_report(user_id: str = "bootstrap-user") -> dict:
+    bootstrap = json.loads(
+        json.dumps(LIVE_BOOTSTRAP).replace("bootstrap-user", user_id)
+    )
+    return {
+        "sdk": "react",
+        "step": "server",
+        "bootstrap": bootstrap,
+        "html": "<span>on|control|ready</span>",
+        "requests_during_render": 0,
+    }
+
+
+def _problems(runner, counts, server=None, client=None, documented=DOCUMENTED):
+    return runner.bootstrap_problems(
+        server or _server_report(),
+        client or {"sdk": "react", "step": "client", "variant_name": "control"},
+        counts,
+        "bootstrap-user",
+        "sdk_contract_flag",
+        "sdk_contract_ab",
+        documented,
+    )
+
+
+def test_a_bootstrap_run_passes_with_one_exposure_row_per_step(runner):
+    assert _problems(runner, (1, 2)) == []
+
+
+def test_each_wrong_exposure_count_gives_exactly_its_problem(runner):
+    """5i's planted defect, in memory: a server step that assigns twice stores
+    two rows; a client step that does not assign stores none."""
+    assert _problems(runner, (2, 3)) == [
+        "exposure rows after the server step: 2, expected 1"
+    ]
+    assert _problems(runner, (1, 1)) == [
+        "exposure rows added by the client step: 0, expected 1"
+    ]
+    assert _problems(runner, (0, 1)) == [
+        "exposure rows after the server step: 0, expected 1"
+    ]
+
+
+def test_a_server_render_that_made_a_request_fails(runner):
+    server = {**_server_report(), "requests_during_render": 1}
+    assert _problems(runner, (1, 2), server=server) == [
+        "the server render made 1 request(s), expected 0"
+    ]
+
+
+def test_the_pages_example_must_have_the_live_fields(runner):
+    old_body = json.loads(json.dumps(DOCUMENTED))
+    del old_body["flags"]["new_search"]["value_type"]
+    problems = _problems(runner, (1, 2), documented=old_body)
+    assert len(problems) == 1
+    assert problems[0].startswith("the page's example flags entries have the fields")
+    assert "regenerate the example" in problems[0]
+    (missing,) = _problems(runner, (1, 2), documented=None)
+    assert missing.endswith("/react.md has no JSON example of a bootstrap")
+
+
+def test_the_pages_example_is_the_json_fence_holding_a_bootstrap(runner):
+    page = (
+        'text\n```json\n{"not": "it"}\n```\nmore\n```json\n'
+        + json.dumps(DOCUMENTED, indent=2)
+        + "\n```\n"
+    )
+    assert runner.documented_bootstrap(page) == DOCUMENTED
+    assert runner.documented_bootstrap("```json\n{broken\n```\n") is None
+
+
+def test_react_runs_its_bootstrap_after_its_row_for_one_new_user(
+    monkeypatch, runner, tmp_path, capsys
+):
+    """main() --sdk react: the react smoke, then the bootstrap's server and
+    client steps for one user, the rows read after each."""
+    page = tmp_path / "react.md"
+    page.write_text("```json\n" + json.dumps(DOCUMENTED) + "\n```\n", encoding="utf-8")
+    monkeypatch.setattr(runner, "REACT_PAGE", page)
+    monkeypatch.setattr(runner, "REPO_ROOT", tmp_path)
+    ran: List[Tuple[str, Dict[str, str]]] = []
+    rows = iter([1, 2])
+
+    def fake_run(command, env, timeout):
+        ran.append((command, env))
+        if command == runner.BOOTSTRAP_SMOKE:
+            step = env["CONTRACT_BOOTSTRAP_STEP"]
+            if step == "server":
+                return "PASS", "0.1s", _server_report(env["CONTRACT_USER_ID"])
+            return (
+                "PASS",
+                "0.1s",
+                {"sdk": "react", "step": "client", "variant_name": "control"},
+            )
+        return "PASS", "0.1s", good(runner, "react")
+
+    read: List[Tuple[str, str]] = []
+    monkeypatch.setattr(runner, "_run_command", fake_run)
+    monkeypatch.setattr(
+        runner,
+        "_exposure_rows",
+        lambda user, key: read.append((user, key)) or next(rows),
+    )
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: f"/usr/bin/{tool}")
+    monkeypatch.setattr(sys, "argv", ["run_live_contract.py", "--sdk", "react"])
+    assert runner.main() == 0
+    assert [command for command, _ in ran] == [
+        runner.MANIFEST["react"][0],
+        runner.BOOTSTRAP_SMOKE,
+        runner.BOOTSTRAP_SMOKE,
+    ]
+    steps = [
+        (env["CONTRACT_BOOTSTRAP_STEP"], env["CONTRACT_USER_ID"]) for _, env in ran[1:]
+    ]
+    assert [step for step, _ in steps] == ["server", "client"]
+    user = steps[0][1]
+    assert user.startswith("bootstrap-") and steps[1][1] == user
+    assert read == [(user, "sdk_contract_ab"), (user, "sdk_contract_ab")]
+    out = " ".join(capsys.readouterr().out.split())
+    assert (
+        "PASS react (bootstrap) exposure rows 1 after the server render, +1 after hydration"
+        in out
+    )
+    assert '"value_type": "boolean"' in out
