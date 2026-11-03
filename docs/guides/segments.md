@@ -18,7 +18,9 @@ demo data.
 
 ## Sign in
 
-Changing a segment takes the ADMIN or DEVELOPER role. Sign in as the demo administrator:
+Changing a segment takes the experiment permissions, which the ADMIN and DEVELOPER roles have;
+in the full profile a custom role or direct grant can give them too. Sign in as the demo
+administrator:
 
 ```{.bash exec}
 TOKEN=$(curl -s -X POST localhost:8000/api/v1/auth/login \
@@ -217,7 +219,7 @@ archive the flag, then archive the segment.
 | IDs per request | 1 to 10,000 |
 | Characters per ID | 1 to 255 |
 | IDs per segment | 1,000,000 |
-| Who can change members | ADMIN and DEVELOPER (ANALYST and VIEWER get `403`) |
+| Who can change members | Users who may change experiments: ADMIN and DEVELOPER, and in the full profile anyone whose custom role or direct grant gives `experiment (update)`; anyone else gets `403` |
 | Segments per targeting ruleset | 10 |
 
 A request body is at most 5 MiB (5,242,880 bytes); a larger one is answered `413`. 10,000 IDs

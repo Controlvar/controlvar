@@ -4,6 +4,7 @@ import { PageTitle } from '@/components/PageTitle';
 import { HoldoutForm } from '@/components/experiments/HoldoutForm';
 import { HoldoutResultsPanel } from '@/components/experiments/HoldoutResultsPanel';
 import { useOptionalAuth } from '@/contexts/AuthContext';
+import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
 import { holdoutAnswer } from '@/hooks/useExperimentEligibility';
 import { isApiError } from '@/services/api';
 import { EligibilityService } from '@/services/eligibility';
@@ -60,7 +61,10 @@ function draftOf(holdout: HoldoutDetail): HoldoutDraft {
  *   `GET /api/v1/holdout/all`; create, edit, activate and end; results (beta).
  * - DEVELOPER: the active holdout (`GET /api/v1/holdout`) and its results
  *   (beta). Never `/holdout/all`, which would answer 403.
- * - ANALYST and VIEWER: told who can see it, and no request is sent.
+ * - A custom role or direct grant of `experiment: create` (full profile, the
+ *   effective map): as DEVELOPER.
+ * - Anyone else: told who can see it, and no request is sent; nor is one
+ *   while the effective map is on its way.
  *
  * Only one holdout is active at a time, so after every activate or end the
  * list is read again rather than patched: the page shows what the server
@@ -69,9 +73,11 @@ function draftOf(holdout: HoldoutDetail): HoldoutDraft {
  */
 export default function HoldoutsPage() {
   const auth = useOptionalAuth();
+  const { effective, loading: permissionsLoading } = useEffectivePermissions();
   const user = auth?.user ?? null;
-  const resolved = user !== null;
-  const mayRead = resolved && canReadEligibility(user);
+  const mayRead = user !== null && canReadEligibility(user, effective);
+  // Resolved: the user is known, and so is the answer (#891).
+  const resolved = user !== null && (mayRead || !permissionsLoading);
   const isAdmin = mayRead && canAdministerEligibility(user);
 
   const [state, setState] = useState<PageState>({ kind: 'loading' });

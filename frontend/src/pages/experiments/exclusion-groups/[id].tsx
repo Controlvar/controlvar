@@ -4,6 +4,7 @@ import { useRouter } from 'next/router';
 import { PageTitle } from '@/components/PageTitle';
 import { ExclusionGroupForm } from '@/components/experiments/ExclusionGroupForm';
 import { useOptionalAuth } from '@/contexts/AuthContext';
+import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
 import { ExclusionGroupsService } from '@/services/exclusionGroups';
 import { ExperimentsService } from '@/services/experiments';
 import { ExclusionGroupDetail, ExclusionGroupMember } from '@/types/eligibility';
@@ -66,18 +67,21 @@ async function loadCandidates(): Promise<Experiment[]> {
  * are in no group, and is not offered for an archived group; Remove stays, so
  * an experiment can be freed. Every change re-reads the group.
  *
- * Roles: ADMIN, DEVELOPER and superusers (`canReadEligibility`) do all of it
- * but archiving, which is `canAdministerEligibility` (ADMIN or a superuser).
- * ANALYST and VIEWER are told who can, and no request is sent for them.
+ * Who: a user who may create experiments (`canReadEligibility`: a superuser,
+ * ADMIN, DEVELOPER, or the effective `experiment: create`) does all of it but
+ * archiving, which is `canAdministerEligibility` (ADMIN or a superuser, never
+ * a grant). Anyone else is told who can, and no request is sent for them.
  */
 export default function ExclusionGroupPage() {
   const router = useRouter();
   const rawId = router.query.id;
   const id = typeof rawId === 'string' && rawId !== '' ? rawId : null;
   const auth = useOptionalAuth();
+  const { effective, loading: permissionsLoading } = useEffectivePermissions();
   const user = auth?.user ?? null;
-  const resolved = user !== null;
-  const mayManage = resolved && canReadEligibility(user);
+  const mayManage = user !== null && canReadEligibility(user, effective);
+  // Resolved: the user is known, and so is the answer (#891).
+  const resolved = user !== null && (mayManage || !permissionsLoading);
   const mayAdminister = canAdministerEligibility(user);
 
   const [state, setState] = useState<GroupState>({ kind: 'loading' });

@@ -1,10 +1,16 @@
-"""Custom roles and direct grants are stored and shown, and decide nothing (#1142, #891).
+"""Custom roles and direct grants take effect, through one capability (#891).
 
-Every route decides with ``check_permission()`` (the base role) or the
-superuser flag. ``RBACService.get_effective_permissions`` merges the three
-layers into the set ``GET /rbac/users/{id}/permissions`` shows; nothing else
-reads the custom roles, the assignments or the grants, and
-``check_effective_permission`` is called by no route.
+Every permission check (``check_permission``, ``can_act_on_feature_flag``,
+``can_read_all_audit_logs`` in ``backend/app/core/permissions.py``) asks, when
+the built-in role says no, what the user's custom roles and direct grants
+hold. The core reads them only through the ``rbac.granted_permissions``
+capability, which ``modules/backend/app/register.py`` installs as
+``rbac_service.granted_permission_pairs``; the core never names a custom-role
+table. ``GET /rbac/users/{id}/permissions`` is built on the same checks.
+
+These pins are structural; the behaviour is held on Postgres through real
+sign-in by ``modules/backend/tests/integration/api/test_rbac_enforcement_routes.py``
+(each pair) and ``test_rbac_revocation.py`` (a revoke on the next request).
 """
 
 from __future__ import annotations
@@ -13,13 +19,14 @@ import ast
 import pathlib
 import re
 import uuid
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from sqlalchemy.orm import Session, make_transient_to_detached
 
+from backend.app.core import hooks
 from backend.app.core.permissions import Action, ResourceType, check_permission
-from backend.app.models.user import UserRole
+from backend.app.models.user import User, UserRole
 from modules.backend.app.models.custom_role import (
     CustomRole,
     DirectPermissionGrant,
@@ -34,7 +41,7 @@ LAYER_NAMES = {
     "UserCustomRole",
     "DirectPermissionGrant",
     "RBACService",
-    "check_effective_permission",
+    "granted_permission_pairs",
     "get_effective_permissions",
 }
 
@@ -61,87 +68,106 @@ def _references():
     return found
 
 
-def test_no_permission_check_reads_custom_roles_or_direct_grants():
+def test_the_permission_checks_read_custom_roles_and_grants_through_one_capability():
     found = _references()
-    # The models, the service that merges them, and the RBAC routes that store
-    # and show them. Not backend/app/core/permissions.py, not deps.py, not
-    # any other route.
+    # The models, the service, the RBAC routes, and the registration that
+    # installs the provider. Not permissions.py, not deps.py: the core reads
+    # the layers only through the capability.
     assert set(found) == {
         "modules/backend/app/models/custom_role.py",
         "modules/backend/app/services/rbac_service.py",
         "modules/backend/app/api/v1/endpoints/rbac.py",
+        "modules/backend/app/register.py",
     }
-    # check_effective_permission is defined and called by no route.
-    assert (
-        "check_effective_permission"
-        not in found["modules/backend/app/api/v1/endpoints/rbac.py"]
+    assert found["modules/backend/app/register.py"] == {"granted_permission_pairs"}
+    core = (REPO / "backend" / "app" / "core" / "permissions.py").read_text()
+    assert "granted_permissions_provider()" in core
+    accessor = (REPO / "backend" / "app" / "core" / "optional_modules.py").read_text()
+    assert 'hooks.get_capability("rbac.granted_permissions")' in accessor
+    # check_effective_permission, a second decision function no route called,
+    # is gone: display and enforcement are built on the same checks.
+    assert not hasattr(RBACService, "check_effective_permission")
+
+
+def _bound(role):
+    user = User(
+        id=uuid.uuid4(),
+        username="ana",
+        email="ana@layers.test",
+        hashed_password="x",
+        is_active=True,
+        is_superuser=False,
+        role=role,
+    )
+    make_transient_to_detached(user)
+    Session().add(user)
+    return user
+
+
+@pytest.fixture
+def registered_provider():
+    """The module's own provider, registered as register.py does, with its two
+    queries answered by a fake session-level stub."""
+    saved = hooks.get_capability("rbac.granted_permissions")
+    yield
+    hooks.register_capability("rbac.granted_permissions", saved)
+
+
+def test_a_custom_role_or_grant_changes_what_the_user_can_do_and_is_shown(
+    registered_provider, monkeypatch
+):
+    analyst = _bound(UserRole.ANALYST)
+    # What register.py installs, fed a role holding experiment create and
+    # update and a grant of export read (never effective) and flag update.
+    from modules.backend.app.services import rbac_service
+
+    def fake_pairs(session, user_id):
+        assert user_id == analyst.id
+        return [
+            ("experiment", "create"),
+            ("experiment", "update"),
+            ("export", "read"),
+            ("feature_flag", "update"),
+        ]
+
+    monkeypatch.setattr(rbac_service, "granted_permission_pairs", fake_pairs)
+    hooks.register_capability(
+        "rbac.granted_permissions", rbac_service.granted_permission_pairs
     )
 
+    # What the routes ask now admits the granted pairs ...
+    assert check_permission(analyst, ResourceType.EXPERIMENT, Action.CREATE)
+    assert check_permission(analyst, ResourceType.EXPERIMENT, Action.UPDATE)
+    assert check_permission(analyst, ResourceType.FEATURE_FLAG, Action.UPDATE)
+    # ... and nothing else: not the neighbouring pair, not a stored pair no
+    # check reads.
+    assert not check_permission(analyst, ResourceType.EXPERIMENT, Action.DELETE)
+    assert not check_permission(analyst, ResourceType.FEATURE_FLAG, Action.DELETE)
 
-def _user(role):
-    return SimpleNamespace(
-        id=uuid.uuid4(), username="ana", role=role, is_superuser=False, is_active=True
+    shown = RBACService.get_effective_permissions(MagicMock(), analyst)
+    assert shown.permissions == {
+        "experiment": ["create", "list", "read", "update"],
+        "feature_flag": ["list", "read", "update"],
+        "audit_log": ["read"],
+    }
+    assert "export" not in shown.permissions
+
+
+def test_the_layers_only_add_and_actions_are_sorted(registered_provider, monkeypatch):
+    developer = _bound(UserRole.DEVELOPER)
+    hooks.register_capability("rbac.granted_permissions", None)
+    base = RBACService.get_effective_permissions(MagicMock(), developer).permissions
+    hooks.register_capability(
+        "rbac.granted_permissions",
+        lambda session, user_id: [("audit_log", "read"), ("report", "update")],
     )
-
-
-def _db(custom_permissions=(), grants=()):
-    role = SimpleNamespace(name="data-scientist", permissions=list(custom_permissions))
-    assignments = [SimpleNamespace(role=role)] if custom_permissions else []
-    stored_grants = [
-        SimpleNamespace(resource=r, actions=a, is_valid=True) for r, a in grants
-    ]
-
-    def query(model):
-        q = MagicMock()
-        rows = assignments if model is UserCustomRole else stored_grants
-        q.filter.return_value.all.return_value = rows
-        return q
-
-    db = MagicMock()
-    db.query.side_effect = query
-    return db
-
-
-def test_a_custom_role_or_grant_is_shown_and_changes_nothing_the_user_can_do():
-    analyst = _user(UserRole.ANALYST)
-    assert (
-        "export"
-        not in RBACService.get_effective_permissions(_db(), analyst).permissions
-    )
-    db = _db(
-        custom_permissions=[
-            {"resource": "experiment", "actions": ["create", "update"]}
-        ],
-        grants=[("export", ["read"]), ("feature_flag", ["update"])],
-    )
-
-    shown = RBACService.get_effective_permissions(db, analyst)
-    assert "create" in shown.permissions["experiment"]
-    assert shown.permissions["export"] == ["read"]
-    assert "update" in shown.permissions["feature_flag"]
-    assert shown.custom_roles == ["data-scientist"]
-
-    # The service's own check would say yes; no route asks it.
-    assert RBACService.check_effective_permission(db, analyst, "experiment", "create")
-    # What the routes ask: the analyst base role, unchanged.
-    assert not check_permission(analyst, ResourceType.EXPERIMENT, Action.CREATE)
-    assert not check_permission(analyst, ResourceType.EXPERIMENT, Action.UPDATE)
-    assert not check_permission(analyst, ResourceType.FEATURE_FLAG, Action.UPDATE)
-
-
-def test_the_layers_only_add_and_actions_are_sorted():
-    developer = _user(UserRole.DEVELOPER)
-    base = RBACService.get_effective_permissions(_db(), developer).permissions
     with_layers = RBACService.get_effective_permissions(
-        _db(
-            custom_permissions=[{"resource": "experiment", "actions": []}],
-            grants=[("experiment", []), ("report", ["update", "create"])],
-        ),
-        developer,
+        MagicMock(), _bound(UserRole.DEVELOPER)
     ).permissions
     # Nothing a layer holds removes what the base role gives: no deny.
     for resource, actions in base.items():
         assert set(actions) <= set(with_layers[resource]), resource
+    assert with_layers["audit_log"] == ["read"]
     for actions in with_layers.values():
         assert actions == sorted(actions)
 
@@ -195,6 +221,7 @@ def test_the_three_data_models():
         "assigned_by_id": ("UUID", True),
         "reason": ("Text", False),
         "assigned_at": ("DateTime", False),
+        "activated_at": ("DateTime", False),
     }.items():
         assert assignment[name] == kind, name
     grant = described(DirectPermissionGrant)
@@ -207,9 +234,12 @@ def test_the_three_data_models():
         "reason": ("Text", False),
         "expires_at": ("DateTime", False),
         "is_active": ("Boolean", False),
+        "activated_at": ("DateTime", False),
     }.items():
         assert grant[name] == kind, name
     assert DirectPermissionGrant.__table__.c.expires_at.nullable
+    assert UserCustomRole.__table__.c.activated_at.nullable
+    assert DirectPermissionGrant.__table__.c.activated_at.nullable
 
 
 def test_role_names_are_lower_case_slugs():

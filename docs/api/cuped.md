@@ -287,10 +287,12 @@ Three things can surprise:
 ## Permissions
 
 Any logged-in user can read the results. Changing an experiment's
-`variance_reduction_config` is a change to the experiment, decided by role and by the
-experiment's state, not by who created it. ANALYST and VIEWER cannot change any experiment:
-the `PUT` above answers `403` with `"You don't have permission to update experiments"`.
-ADMIN and DEVELOPER may change experiments, but only a superuser may change one that is no
-longer a draft, and the demo experiment is running: for a DEVELOPER (or an ADMIN who is not
-a superuser) the `PUT` above answers `400` with `"Cannot update experiments in active
-status"`. The demo's `admin@demo.com` is a superuser, which is why it gets `200`.
+`variance_reduction_config` is a change to the experiment, decided by permission and by the
+experiment's state, not by who created it. ADMIN and DEVELOPER may change experiments, and in
+the full profile so may anyone whose custom role or direct grant gives `experiment (update)`;
+for anyone else the `PUT` above answers `403` with
+`"You don't have permission to update experiments"`. Only a superuser may change an experiment
+that is no longer a draft, and the demo experiment is running: for anyone else who may change
+experiments, such as a DEVELOPER or an ADMIN who is not a superuser, the `PUT` above answers
+`400` with `"Cannot update experiments in active status"`. The demo's `admin@demo.com` is a
+superuser, which is why it gets `200`.

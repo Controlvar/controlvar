@@ -141,6 +141,14 @@ def main() -> None:
     if not batch.ok:
         fail(f"track_batch failed: {batch.errors}")
 
+    # 4b. One keyed event sent twice with one fixed event_id (#1543, C4). The server is to store
+    #     it once: the runner counts the rows for this user and event name.
+    dedup_name = f"contract_dedup_{uuid.uuid4()}"
+    dedup_id = f"contract-{uuid.uuid4()}"
+    for _ in range(2):
+        if not client.track(user_id, dedup_name, experiment_key=experiment_key, event_id=dedup_id):
+            fail("track(contract_dedup) with an event_id was not accepted")
+
     # 5. The exposure hook (#1499): a NEW client with on_exposure assigns the same user twice,
     #    with no clear_cache() in between. The server records an exposure for the first request
     #    (assigned: true) and the second answer comes from the cache, so the hook is called once.
@@ -195,6 +203,7 @@ def main() -> None:
                 "flag": {"enabled": flag.enabled},
                 "track": {"ok": True},
                 "fanout": {"ok": True},
+                "event_id": {"user_id": user_id, "event_name": dedup_name, "id": dedup_id, "sends": 2},
                 "exposure": {
                     "calls": len(exposures),
                     "payload": None

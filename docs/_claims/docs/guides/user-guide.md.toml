@@ -504,11 +504,12 @@ by = [
 ]
 
 [[unit]]
-text = "Through the API, this is PUT /api/v1/experiments/{experiment_id}/schedule, on a DRAFT experiment, with an ADMIN or DEVELOPER token."
+text = "Through the API, this is PUT /api/v1/experiments/{experiment_id}/schedule, on a DRAFT experiment, with the token of a user who may change experiments, such as an ADMIN or DEVELOPER."
 by = [
     "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestUpdateExperimentSchedule::test_admin_can_schedule_draft_experiment",
     "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestUpdateExperimentSchedule::test_schedule_active_experiment_returns_400",
     "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestUpdateExperimentSchedule::test_analyst_cannot_schedule_other_users_experiment",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
 ]
 
 [[unit]]

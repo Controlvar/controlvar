@@ -36,11 +36,12 @@ text = "Mutual Exclusion Groups"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "In the dashboard, an ADMIN or DEVELOPER opens Exclusion groups from the Experiments page: it lists the groups and creates one."
+text = "In the dashboard, a user who may create experiments (ADMIN, DEVELOPER, and in the full profile anyone whose custom role or direct grant gives experiment (create)) opens Exclusion groups from the Experiments page: it lists the groups and creates one."
 by = [
     "test:frontend/src/tests/pages/experiments-index.test.tsx::offers %s the \"Exclusion groups\" link, underlined",
     "test:frontend/src/tests/pages/exclusion-groups.test.tsx::sees each group, its share as a percent, its count and its status as a word, after one read",
     "test:frontend/src/tests/pages/exclusion-groups.test.tsx::sends exactly the name and the share as a fraction: 50% is 0.5",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
 ]
 
 [[unit]]
@@ -157,13 +158,14 @@ by = [
 ]
 
 [[unit]]
-text = "Requires DEVELOPER or ADMIN role."
+text = "Requires permission to create experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (create)."
 by = [
     "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestCreateGroup::test_create_group_returns_201",
     "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestCreateGroup::test_create_group_returns_201_for_admin",
     "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestListGroups::test_list_groups_returns_403_for_viewer",
     "test:backend/tests/integration/api/test_holdout_admin_roles.py::test_developer_may_rename_a_group",
     "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestUpdateGroup::test_update_group_returns_200",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
 ]
 count = 2
 
@@ -313,11 +315,12 @@ text = "Global Holdout"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "In the dashboard, Global holdouts on the Experiments page shows the active holdout to an ADMIN or DEVELOPER, and reads a holdout's results (beta) for one event name."
+text = "In the dashboard, Global holdouts on the Experiments page shows the active holdout to a user who may create experiments (ADMIN, DEVELOPER, and in the full profile anyone whose custom role or direct grant gives experiment (create)), and reads a holdout's results (beta) for one event name."
 by = [
     "test:frontend/src/tests/pages/experiments-index.test.tsx::offers %s the \"Global holdouts\" link, underlined, after \"Exclusion groups\"",
     "test:frontend/src/tests/pages/holdouts.test.tsx::a DEVELOPER reads the active holdout only, never /holdout/all, and is told who changes it",
     "test:frontend/src/tests/pages/holdouts.test.tsx::sends query {metric}, then shows each group, the difference, its interval, p and the verdict as a word",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
 ]
 
 [[unit]]
@@ -681,10 +684,11 @@ text = "Action | Minimum Role"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "List groups / view holdout | DEVELOPER"
+text = "List groups / view holdout | DEVELOPER, or in the full profile a custom role or direct grant of experiment (create)"
 by = [
     "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestListGroups::test_list_groups_returns_403_for_viewer",
     "test:backend/tests/unit/api/test_global_holdout_endpoints.py::TestGetActiveHoldout::test_get_active_holdout_returns_403_for_viewer",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
 ]
 
 [[unit]]
@@ -692,17 +696,19 @@ text = "Read holdout results | VIEWER"
 by = ["test:backend/tests/integration/api/test_holdout_results.py::TestAccess::test_every_role_can_read"]
 
 [[unit]]
-text = "Create / update groups (name, description, traffic allocation) | DEVELOPER"
+text = "Create / update groups (name, description, traffic allocation) | DEVELOPER, or in the full profile a custom role or direct grant of experiment (create)"
 by = [
     "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestCreateGroup::test_create_group_returns_201",
     "test:backend/tests/integration/api/test_holdout_admin_roles.py::test_developer_may_rename_a_group",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
 ]
 
 [[unit]]
-text = "Add/remove experiments from groups | DEVELOPER"
+text = "Add/remove experiments from groups | DEVELOPER, or in the full profile a custom role or direct grant of experiment (create)"
 by = [
     "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestAddExperimentToGroup::test_add_experiment_returns_200",
     "test:backend/tests/unit/api/test_mutual_exclusion_group_endpoints.py::TestRemoveExperimentFromGroup::test_remove_experiment_returns_200",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
 ]
 
 [[unit]]

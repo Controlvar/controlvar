@@ -181,7 +181,8 @@ the time it will be saved as, in your zone and in UTC. **Save dates** sends only
 changed, and **Remove** clears one. The page refuses a start or an end in the past, and an end
 less than an hour after the start, before it sends anything. Through the API, this is
 `PUT /api/v1/experiments/{experiment_id}/schedule`,
-on a `DRAFT` experiment, with an ADMIN or DEVELOPER token. The experiment activates at
+on a `DRAFT` experiment, with the token of a user who may change experiments, such as an
+ADMIN or DEVELOPER. The experiment activates at
 `start_date` and completes at `end_date`, which must be at least an hour later. The scheduler
 checks every 15 minutes by default (`EXPERIMENT_SCHEDULER_INTERVAL_MINUTES`), so it can start
 or complete up to that much later. A draft that

@@ -127,6 +127,7 @@ RECORD_FIELDS: Tuple[str, ...] = (
     "error",
     "latency_us",
     "start_lag_us",
+    "sent_offset_us",
     "rate_limit",
     "flag_class",
     "reason",
@@ -382,6 +383,34 @@ def k6_summary(text: str) -> Dict[str, int]:
         ):
             raise Refused(f"k6's summary: {key} is {data[key]!r}")
     return data
+
+
+def measured_count(rows: Sequence[Mapping[str, str]], settle_s: int) -> int:
+    """The rows sent after the settle: by ``sent_offset_us``, the same rule as
+    ``summarise_step`` and the script (never by the iteration number, #1667)."""
+    return sum(1 for row in rows if int(row["sent_offset_us"]) >= settle_s * 1_000_000)
+
+
+def step_line(record: Mapping[str, Any], k6_p99_us: int) -> str:
+    """One step's line. A step that measured nothing says so in words: it has
+    no percentile and no failure count to print."""
+    head = f"step {record['step']}: {se.rps(record['milli_rps'])}"
+    if record["measured"] == 0:
+        return (
+            f"{head}: INVALID ({record['invalid_reason']}), no request was sent "
+            "in the measure window, so no latency or failure count was measured"
+        )
+    verdict = "valid" if record["valid"] else f"INVALID ({record['invalid_reason']})"
+    kept = (
+        "kept up"
+        if record["keeps_up"]
+        else f"did not keep up ({record['fail_reason']})"
+    )
+    return (
+        f"{head}: {verdict}, {kept}, p99 {se._ms(record['p99_us'])}, "
+        f"{record['errors']} of {record['measured']} failed "
+        f"(k6's own p99 {se._ms(k6_p99_us)})"
+    )
 
 
 def k6_counts_problems(
@@ -1336,7 +1365,7 @@ class Measurement:
             "SCALE_RATE": str(rate),
             "SCALE_TIME_UNIT_MS": str(unit),
             "SCALE_DURATION_S": str(seconds),
-            "SCALE_FIRST_MEASURED": str(se.first_measured(rate, unit, settle_s)),
+            "SCALE_SETTLE_MS": str(settle_s * 1000),
             "SCALE_VUS": str(vus or se.vus(self.method, milli_rps)),
             "SCALE_TIMEOUT_MS": str(self.method["timeout_ms"]),
             "SCALE_STEP": str(step),
@@ -1437,8 +1466,7 @@ class Measurement:
         rows = to_rows(records)
         start = scenario_start(records)
         summary = k6_summary((directory / "summary.json").read_text(encoding="utf-8"))
-        first = se.first_measured(rate, unit, window["settle_s"])
-        measured = sum(1 for row in rows if int(row["iteration"]) >= first)
+        measured = measured_count(rows, window["settle_s"])
         problems = k6_counts_problems(summary, len(records), measured, code)
         if problems:
             raise Failed(f"step {number}: " + "; ".join(problems))
@@ -1482,19 +1510,7 @@ class Measurement:
         (directory / "step.json").write_text(
             json.dumps(record, indent=1) + "\n", "utf-8"
         )
-        verdict = (
-            "valid" if record["valid"] else f"INVALID ({record['invalid_reason']})"
-        )
-        kept = (
-            "kept up"
-            if record["keeps_up"]
-            else f"did not keep up ({record['fail_reason']})"
-        )
-        self.io.say(
-            f"step {number}: {se.rps(record['milli_rps'])}: {verdict}, {kept}, p99 "
-            f"{se._ms(record['p99_us'])}, {record['errors']} of {record['measured']} "
-            f"failed (k6's own p99 {se._ms(summary['measured_p99_us'])})"
-        )
+        self.io.say(step_line(record, summary["measured_p99_us"]))
         for message in messages:
             self.io.say(f"  {message}")
         return record, rows, split

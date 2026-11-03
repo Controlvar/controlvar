@@ -22,6 +22,7 @@ export const RECORD_FIELDS = [
   'error',
   'latency_us',
   'start_lag_us',
+  'sent_offset_us',
   'rate_limit',
   'flag_class',
   'reason',
@@ -115,7 +116,7 @@ export function readEnv(env) {
     rate: whole(env.SCALE_RATE, 'SCALE_RATE', 1),
     timeUnitMs: whole(env.SCALE_TIME_UNIT_MS, 'SCALE_TIME_UNIT_MS', 1),
     durationS: whole(env.SCALE_DURATION_S, 'SCALE_DURATION_S', 1),
-    firstMeasured: whole(env.SCALE_FIRST_MEASURED, 'SCALE_FIRST_MEASURED', 0),
+    settleMs: whole(env.SCALE_SETTLE_MS, 'SCALE_SETTLE_MS', 0),
     vus: whole(env.SCALE_VUS, 'SCALE_VUS', 1),
     timeoutMs: whole(env.SCALE_TIMEOUT_MS, 'SCALE_TIMEOUT_MS', 1),
     step: whole(env.SCALE_STEP, 'SCALE_STEP', 0),
@@ -157,6 +158,15 @@ export function startLagUs(nowMs, startTimeMs, iteration, rate, timeUnitMs) {
   const dueMs = startTimeMs + (iteration * timeUnitMs) / rate;
   const lag = Math.round((nowMs - dueMs) * 1000);
   return lag > 0 ? lag : 0;
+}
+
+// When the request was sent, in microseconds after the scenario's start (1 ms
+// resolution; never negative). The measure window is decided by this, not by
+// the iteration number: k6 counts the iterations that STARTED, so after a
+// dropped one the number is no longer the scheduled slot (#1667).
+export function sentOffsetUs(nowMs, startTimeMs) {
+  const offset = Math.round((nowMs - startTimeMs) * 1000);
+  return offset > 0 ? offset : 0;
 }
 
 // The request's time from its start to its last byte, any wait for a
@@ -349,7 +359,15 @@ export function bodyFacts(scenario, status, body) {
 
 // The record for one request, from what was asked and a plain view of k6's
 // response: {status, error_code, headers, body, timings: {blocked, duration}}.
-export function rowFor(scenario, iteration, request, response, startLag, scenarioStartMs) {
+export function rowFor(
+  scenario,
+  iteration,
+  request,
+  response,
+  startLag,
+  scenarioStartMs,
+  sentOffset,
+) {
   const status = Number(response.status) || 0;
   const limit = headerValue(response.headers, LIMIT_HEADER);
   return {
@@ -359,6 +377,7 @@ export function rowFor(scenario, iteration, request, response, startLag, scenari
     error: errorKind(status, response.error_code),
     latency_us: String(latencyUs(response.timings)),
     start_lag_us: String(startLag),
+    sent_offset_us: String(sentOffset),
     // A value that is not a number cannot be the configured limit: it is kept
     // as a mismatch, never as text.
     rate_limit: limit === '' ? '' : code(limit, DIGITS, 'x'),

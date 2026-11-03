@@ -182,7 +182,14 @@ by = [
 ]
 
 [[unit]]
-text = "Only ADMIN and DEVELOPER users (and superusers) can create experiments; anyone else sees a note saying so instead of the form."
+text = "Only users who may create experiments see the form: ADMIN and DEVELOPER users, superusers, and in the full profile anyone whose custom role or direct grant gives experiment (create)."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+]
+
+[[unit]]
+text = "Anyone else sees a note saying so instead."
 by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
 
 [[unit]]

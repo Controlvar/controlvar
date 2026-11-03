@@ -146,7 +146,8 @@ remount is answered from the memory cache.
 | `timeoutMs` | `number` | `5000` | Per-request timeout (`AbortController`) |
 | `cacheTtlMs` | `number` | `300000` | How long a successful evaluation/assignment is reused per user + key (memory and AsyncStorage) |
 | `offlineFallback` | `boolean` | `true` | Persist results to AsyncStorage and serve them (even past their TTL) when the API is unreachable |
-| `onError` | `(error, operation) => void` | — | Called for every swallowed failure; `operation` is `'evaluateFlag' \| 'getAssignment' \| 'getAllFlags' \| 'track' \| 'trackBatch'` |
+| `onError` | `(error, operation) => void` | — | Called for every swallowed failure; `operation` is `'evaluateFlag' \| 'getAssignment' \| 'getAllFlags' \| 'track' \| 'trackBatch' \| 'exposure'` |
+| `onExposure` | `(exposure: Exposure) => void` | — | Called once each time the server enrols the user in an experiment and the answer is not cached; see [Exposure hook](#exposure-hook) |
 
 ---
 
@@ -241,9 +242,9 @@ to the event name), `timestamp?` (`Date` or string, sent as ISO-8601). `properti
 plus one per flag evaluated for the user (`feature_flag_key`), both taken from the in-memory cache.
 If nothing is cached, nothing is sent. `trackBatch` applies the same expansion to keyless entries.
 
-This SDK reads only the variant from an answer: an `assigned: false` answer (a user the
-experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as the
-control variant, and an event tracked without a key after the user's in-memory cache entries have
+This SDK's `Assignment` does not say whether the user was enrolled: an `assigned: false` answer (a
+user the experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as
+the control variant, and an event tracked without a key after the user's in-memory cache entries have
 expired (`cacheTtlMs`, 5 minutes by default) is not sent, so pass `experimentKey` on a conversion
 that can come later.
 
@@ -278,6 +279,78 @@ skip persistence entirely; `client.clearStorage()` removes only these keys.
 
 ---
 
+## Exposure hook
+
+`onExposure` is a function you give the client when you create it. The client calls it once each
+time the server enrols the user in an experiment and the answer did not come from the client's
+memory cache or from AsyncStorage: the moment the server records the exposure. Use it to send the
+exposure to your analytics tool or warehouse.
+
+```typescript
+const client = new ExperimentationClient({
+  apiKey: 'YOUR_API_KEY',
+  baseUrl: 'http://localhost:8000',
+  onExposure: (exposure) => {
+    // your analytics tool's call goes here
+    console.log('exposure', exposure.experimentKey, exposure.variantName, exposure.userId);
+  },
+  onError: (error, operation) => {
+    if (operation === 'exposure') console.warn('onExposure failed', error);
+  },
+});
+```
+
+It receives an `Exposure`, a new object each time: `experimentKey`, `userId`, `variantId` (`null`
+when the server sends none) and `variantName`. Nothing else: not the user's attributes and not the
+variant's configuration. `Exposure` is exported from `@controlvar/react-native-sdk` as a type.
+
+It is not called for:
+
+- an answer from the client's memory cache;
+- an answer read from AsyncStorage: an unexpired stored answer (after an app restart, or in a new
+  client) or the offline fallback, served when the request fails;
+- a user the experiment did not enrol (`assigned: false`, with `reason` `'holdout'`,
+  `'mutual_exclusion'` or `'targeting'`), or an experiment that is not running (`'draft'`,
+  `'paused'`, `'completed'` or `'archived'`): the server records no exposure for them;
+- a call that fails;
+- a feature flag.
+
+This SDK's `Assignment` does not say whether the user was enrolled; the hook is not called for a
+user who was not. It is not called when the server does not send `assigned`; every Controlvar
+server release sends it.
+
+Calls for the same user and experiment that are made while the first is still waiting share its
+request, so together they call it once, and so do components that mount `useExperiment` for the
+same experiment. A call made after `clearCache()` while a request is still in flight makes a second
+request, and the server records a second exposure, but the hook is called once, for the answer
+stored first.
+
+With the default `offlineFallback: true`, the answer is kept in AsyncStorage for the cache lifetime
+(`cacheTtlMs`, 5 minutes by default), so on one device neither `clearCache()` nor a new client
+calls it again until that stored answer expires. It is called again, and the server records
+another exposure, after the cache lifetime, and, with `offlineFallback: false` or after
+`await clearStorage()`, after `clearCache()` and in every new client. So your tool can receive
+several exposures for one user and experiment: count users, not events. It never receives one the
+server did not record.
+
+It is called when your code asks for the assignment, whether or not you then show the variant, so
+ask for it where the variant is shown.
+
+It runs before `getAssignment` resolves, and before every call waiting on the same request, so
+keep it quick: hand the exposure to your analytics library, which sends it later. The client does
+not wait for a Promise it returns.
+
+If it throws, or returns a Promise that rejects, the answer is unchanged and `onError` receives the
+error with the operation `'exposure'`: what your function threw, or an `Error` wrapping it when it
+is not one.
+
+The constructor throws `ExperimentationClient: onExposure must be a function` for any other value;
+`null` and `undefined` set none.
+
+In a test, a mocked `/assign` answer must include `"assigned": true`, or the hook is not called.
+
+---
+
 ## Backend endpoints used
 
 Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept: application/json`.
@@ -285,7 +358,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 
 | SDK call | Method and path | Body / query | 200 response |
 |---|---|---|---|
-| `getAssignment`, `getVariant`, `useExperiment` | `POST /api/v1/tracking/assign` | `{"experiment_key","user_id","context"?: object}` | `{"experiment_key","user_id","variant_id","variant_name","is_control","configuration"}` |
+| `getAssignment`, `getVariant`, `useExperiment` | `POST /api/v1/tracking/assign` | `{"experiment_key","user_id","context"?: object}` | `{"experiment_key","user_id","variant_id","variant_name","is_control","configuration","assigned","reason"}` |
 | `evaluateFlag`, `isFeatureEnabled`, `useFlag` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<id>&context=<url-encoded JSON>` (no `context` for missing or empty attributes) | — | `{"key","enabled","config"}` |
 | `getAllFlags` | `GET /api/v1/feature-flags/user/{user_id}?context=<url-encoded JSON>` (no `context` for missing or empty attributes) | — | `{"<flag_key>": bool, ...}` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{"event_type","event_name","user_id","experiment_key"?,"feature_flag_key"?,"value"?,"metadata"?,"timestamp"?}` | stored event (ignored) |

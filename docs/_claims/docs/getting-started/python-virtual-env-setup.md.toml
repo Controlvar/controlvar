@@ -121,6 +121,6 @@ by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the
 [[unit]]
 text = "ruff (format, import order and lint) is pinned in backend/requirements.txt like everything else, so the version in your venv is the version CI runs — see Pre-commit Hooks."
 by = [
-    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_ruff_hooks_cover_the_four_trees_at_the_pinned_version",
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_ruff_hooks_cover_the_lint_trees_at_the_pinned_version",
     "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_make_lint_and_the_lint_job_run_the_same_checks",
 ]

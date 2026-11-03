@@ -53,8 +53,9 @@ experiment in five steps:
   estimate says so under its number. With None it makes no correction, the same as the
   results, and the Power Calculator, which applies a Bonferroni correction, gives a higher
   number.
-- Only ADMIN and DEVELOPER users (and superusers) can create experiments; anyone else
-  sees a note saying so instead of the form.
+- Only users who may create experiments see the form: ADMIN and DEVELOPER users,
+  superusers, and in the full profile anyone whose custom role or direct grant gives
+  `experiment (create)`. Anyone else sees a note saying so instead.
 - If **Create Experiment** fails, you stay where you are with every answer kept, in
   either view. A key another experiment already has is named, with **Edit details** to
   change it. If your session has ended, sign in again in another tab, then press

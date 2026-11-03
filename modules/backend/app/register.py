@@ -4,7 +4,7 @@ The modules' registration entry point: ``modules.register(hooks)``.
 One ``register(hooks)`` that installs the optional modules into the core
 application through the seam in :mod:`backend.app.core.hooks`: the modules'
 settings, the nine model modules, the audit signer, the nine endpoint modules' routers, the
-OpenAPI tags, the five capabilities and the ten module names.
+OpenAPI tags, the six capabilities and the ten module names.
 ``backend/app/modules_loader.py`` calls it once per process, from whichever of
 ``modules.register`` and ``modules.backend.app.register`` it finds first
 (``modules/__init__`` re-exports this function), and never by importing
@@ -376,6 +376,13 @@ def register(hooks: Any, with_routers: bool = True) -> None:
         return dynamodb_counter_service.DynamoDBCounterService
 
     hooks.register_capability("counters.service", counter_service_provider)
+
+    # Custom roles and direct grants take effect (#891): every core permission
+    # check asks this provider when the built-in role says no.  Only on this
+    # branch, so a schema tool (which checks no permission) registers none.
+    from modules.backend.app.services.rbac_service import granted_permission_pairs
+
+    hooks.register_capability("rbac.granted_permissions", granted_permission_pairs)
 
     # Last, and only on this branch: the names `GET /api/v1/modules` reports
     # are exactly the modules whose routes and capabilities were just mounted

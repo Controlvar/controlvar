@@ -277,7 +277,14 @@ class TestRegistrationValidates:
     def test_registration_succeeds_under_test_settings(self, fresh_hooks):
         assert modules_loader.load_modules(force=True) is True
         assert modules_loader.modules_failure() is None
-        assert len(hooks.capability_names()) == 5
+        assert set(hooks.capability_names()) == {
+            "compliance.export",
+            "compliance.report",
+            "counters.service",
+            "rbac.granted_permissions",
+            "split_url.preview",
+            "split_url.routing",
+        }
 
     @pytest.mark.regression
     def test_a_rejected_audit_key_reaches_neither_the_log_nor_the_raised_error(

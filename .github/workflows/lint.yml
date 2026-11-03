@@ -2,6 +2,7 @@ name: Lint
 
 # One fast job: everything that reads the tree without running it.
 #   ruff check / ruff format --check   backend/ modules/ scripts/ tests/acceptance/
+#                                      tests/ground_truth/
 #                                      (replaces black + isort + flake8)
 #   lint-imports                       the core/modules import boundary ([tool.importlinter]
 #                                      in pyproject.toml, backend/lambda/.importlinter)
@@ -56,10 +57,10 @@ jobs:
       # Configuration lives in [tool.ruff] in pyproject.toml; the docs-journey
       # runner adds one rule of its own in tests/acceptance/docs/ruff.toml.
       - name: ruff check
-        run: ruff check backend/ modules/ scripts/ tests/acceptance/ --output-format=github
+        run: ruff check backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ --output-format=github
 
       - name: ruff format --check
-        run: ruff format --check backend/ modules/ scripts/ tests/acceptance/
+        run: ruff format --check backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/
 
       # The core/modules boundary, statically: backend.app / backend.lambda
       # never import modules; backend.app never imports backend.tests, sdk,

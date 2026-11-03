@@ -266,8 +266,8 @@ def test_each_wrong_exposure_report_gives_exactly_its_problem(
     assert runner.validate(sdk, report) == [problem]
 
 
-def test_java_and_js_are_the_sdks_that_send_one_event_twice_with_one_id(runner):
-    assert runner.EVENT_ID_SDKS == frozenset({"java", "js"})
+def test_java_js_and_python_are_the_sdks_that_send_one_event_twice_with_one_id(runner):
+    assert runner.EVENT_ID_SDKS == frozenset({"java", "js", "python"})
     for sdk in sorted(runner.EVENT_ID_SDKS):
         assert good(runner, sdk)["event_id"] == EVENT_ID
         assert runner.validate(sdk, good(runner, sdk)) == []
@@ -943,6 +943,49 @@ def test_each_wrong_exposure_count_gives_exactly_its_problem(runner):
     assert _problems(runner, (0, 1)) == [
         "exposure rows after the server step: 0, expected 1"
     ]
+
+
+def test_a_client_step_that_adds_two_rows_gives_exactly_its_problem(runner):
+    """The count is exact, not a lower bound: a client step that records two
+    exposures is as wrong as one that records none (#1653)."""
+    assert _problems(runner, (1, 3)) == [
+        "exposure rows added by the client step: 2, expected 1"
+    ]
+
+
+def test_a_client_assigned_another_variant_than_the_bootstrap_fails(runner):
+    client = {"sdk": "react", "step": "client", "variant_name": "treatment"}
+    assert _problems(runner, (1, 2), client=client) == [
+        "the client step was assigned 'treatment', the bootstrap 'control'"
+        " (assignment is sticky)"
+    ]
+
+
+def test_a_flag_that_is_not_on_in_the_bootstrap_fails(runner):
+    server = _server_report()
+    server["bootstrap"]["flags"]["sdk_contract_flag"]["enabled"] = False
+    (problem,) = _problems(runner, (1, 2), server=server)
+    assert problem.startswith("bootstrap.flags['sdk_contract_flag'] is {")
+    assert problem.endswith("(seeded flag is 100% on)")
+    server["bootstrap"]["flags"] = {}
+    # (The page-example comparison also notices the empty flags; only the first
+    # problem is this check's.)
+    assert _problems(runner, (1, 2), server=server)[0] == (
+        "bootstrap.flags['sdk_contract_flag'] is None (seeded flag is 100% on)"
+    )
+
+
+def test_a_page_example_with_other_top_level_keys_than_the_live_bootstrap_fails(
+    runner,
+):
+    extra = {**DOCUMENTED, "extra": 1}
+    assert _problems(runner, (1, 2), documented=extra) == [
+        "the page's example has the keys ['experiments', 'extra', 'flags', 'userId'],"
+        " the live one ['experiments', 'flags', 'userId']"
+    ]
+    short = {k: v for k, v in DOCUMENTED.items() if k != "experiments"}
+    (problem,) = [p for p in _problems(runner, (1, 2), documented=short) if "keys" in p]
+    assert problem.startswith("the page's example has the keys ['flags', 'userId']")
 
 
 def test_a_server_render_that_made_a_request_fails(runner):

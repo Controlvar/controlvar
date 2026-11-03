@@ -92,6 +92,71 @@ text = "Quick start"
 by = ["exempt:label"]
 
 [[unit]]
+text = "Exposure hook"
+by = ["exempt:label"]
+
+[[unit]]
+text = "onExposure, a function you give ExperimentationClient when you create it, is called once each time the server enrols the user in an experiment and the answer did not come from the client's memory cache or from AsyncStorage: the moment the server records the exposure."
+by = [
+    "test:sdk/react-native/__tests__/exposure.test.tsx::is called once, with exactly the experiment key, user id, variant id and variant name, for an assigned: true answer",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::a cached answer calls nothing: however often the answer is asked for, one request and one call",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::an unexpired stored answer, as after an app restart: no request and no call",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::is not called for assigned: false (%s): the control answer comes back unchanged",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::the constructor refuses %s as onExposure",
+    "test:backend/tests/integration/services/test_assignment_service_coverage.py::TestAssignUser::test_track_exposure_called_on_existing_assignment",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+]
+
+[[unit]]
+text = "It receives an Exposure: experimentKey, userId, variantId (null when the server sends none) and variantName."
+by = [
+    "test:sdk/react-native/__tests__/exposure.test.tsx::is called once, with exactly the experiment key, user id, variant id and variant name, for an assigned: true answer",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::passes variantId null when the server sends no variant_id",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::has four readonly fields, in the order experimentKey, userId, variantId, variantName",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::is exported as a type from the package",
+]
+
+[[unit]]
+text = "It is not called for an answer from the client's memory cache or from AsyncStorage, a user the experiment did not enrol (assigned: false), a call that fails or a feature flag."
+by = [
+    "test:sdk/react-native/__tests__/exposure.test.tsx::a cached answer calls nothing: however often the answer is asked for, one request and one call",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::an unexpired stored answer, as after an app restart: no request and no call",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::the offline fallback: an expired stored answer is returned when the request fails, and onError gets getAssignment once",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::is not called for assigned: false (%s): the control answer comes back unchanged",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::a failed call calls nothing: %s",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::a call that times out calls nothing, even if the server recorded the exposure",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::flags never call it: evaluateFlag, isFeatureEnabled and getAllFlags",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_an_answer_for_an_experiment_that_is_not_running_records_nothing",
+]
+
+[[unit]]
+text = "With the default offlineFallback, the answer stays in AsyncStorage for the cache lifetime, so neither clearCache() nor a new client calls it again until that answer expires; with offlineFallback: false, or after clearStorage(), both do."
+by = [
+    "test:sdk/react-native/__tests__/exposure.test.tsx::not after clearCache() with the default offlineFallback: the stored answer is served, with no request",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::not in a new client with the default offlineFallback: the stored answer is served, with no request",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::after the cache lifetime (one millisecond past it, never at the boundary), when the stored answer has expired too",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::after clearCache() with offlineFallback false",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::in a new client with offlineFallback false",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::after clearCache() and clearStorage()",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::in a new client after clearStorage()",
+]
+
+[[unit]]
+text = "If it throws, or returns a Promise that rejects, the answer is unchanged and onError receives the error with the operation 'exposure'."
+by = [
+    "test:sdk/react-native/__tests__/exposure.test.tsx::changes nothing: getVariant returns the variant and getAssignment resolves to it",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::leaves the answer cached: a second call makes no request and calls nothing",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::is reported to onError once, with the operation exposure and the Error it threw, never as a request failure",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::a thrown value that is not an Error is reported as an Error whose message is that value",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::an async hook that rejects is reported to onError with exposure, and the answer is unchanged",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::reports the rejection of the Promise an async hook returns",
+]
+
+[[unit]]
+text = "Full details: Exposure hook."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "Testing with Jest"
 by = ["exempt:label"]
 
