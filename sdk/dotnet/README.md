@@ -116,7 +116,7 @@ user has been assigned to through this client plus one per flag evaluated for th
 cache). If nothing is cached, nothing is sent and `true` is returned. `event_type` defaults to
 the event name; `properties` are sent as `metadata`; `timestamp` is sent as ISO-8601 UTC when set.
 
-This SDK reads only the variant from an answer: an `assigned: false` answer (a user the
+This SDK returns only the variant from an answer: an `assigned: false` answer (a user the
 experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as the
 control variant, and an event tracked without a key after the user's cache entries have expired
 (`CacheTtlSeconds`, 300 by default) is not sent, so pass `experimentKey` on a conversion that can
@@ -130,6 +130,33 @@ come later.
 
 ---
 
+## Exposure hook
+
+`OnExposure` on `SdkConfig` is a function the client calls once each time the server enrols the
+user in an experiment and the answer did not come from the client's cache: the moment the server
+records the exposure.
+
+```csharp
+var exposures = Channel.CreateBounded<Exposure>(10_000);   // System.Threading.Channels
+
+var config = new SdkConfig("http://localhost:8000", Environment.GetEnvironmentVariable("CONTROLVAR_API_KEY")!)
+{
+    OnExposure = e => exposures.Writer.TryWrite(e),   // never waits: drops the exposure when the channel is full
+};
+// A task of your own reads each Exposure from the channel and calls your analytics tool.
+```
+
+It receives an `Exposure` record (`Controlvar.Models`): `ExperimentKey`, `UserId`, `VariantId`
+(`null` when the server sends none) and `VariantName`. It is not called for a cached answer, a user
+the experiment did not enrol or an experiment that is not running (`assigned: false`), a call that
+fails, or a feature flag. It runs inside `GetAssignmentAsync`, before its `Task` completes, usually
+on a thread-pool thread, so keep it quick. If it throws, the answer is unchanged and nothing
+reports it. An async lambda or `async` method is refused with `ArgumentException`.
+
+Full details: [Exposure hook](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/dotnet.md#exposure-hook).
+
+---
+
 ## Backend endpoints used
 
 Every request carries `X-API-Key` and `Accept: application/json`; POSTs carry
@@ -138,7 +165,7 @@ Every request carries `X-API-Key` and `Accept: application/json`; POSTs carry
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
 | `EvaluateFlagAsync` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; off with `reason: "inactive"` when the flag exists but is not ACTIVE; 404 only for an unknown key |
-| `GetAssignmentAsync` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
+| `GetAssignmentAsync` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `TrackAsync` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `TrackAsync` without keys, `TrackBatchAsync` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored (status only) |
 
@@ -190,6 +217,7 @@ dotnet test --filter "FullyQualifiedName~HashCompatibilityTests"
 | Test class | Coverage |
 |------------|----------|
 | `ExperimentationClientTests` | Request URL/method/headers/body per endpoint, response mapping, per-user cache + TTL, 404 → failure value, track fan-out + chunking, never-throws |
+| `ExposureTests` | `OnExposure`: once per stored `assigned: true` answer, never for a cached, `assigned: false` or failed answer or a flag, again after TTL / `ClearCache()` / eviction / a new client, concurrent first calls, a throwing function, the async refusal, the `Exposure` record's shape |
 | `ExperimentationHttpClientTests` | URL building/encoding, headers, JSON body, 401/404/422/500 mapping, network errors |
 | `CacheTests` | TTL, eviction, thread safety |
 | `HashCompatibilityTests` | Cross-SDK hash vector |
@@ -202,7 +230,7 @@ Standalone check of the hash without .NET: `python3 sdk/dotnet/verify_hash.py`.
 ### Contract smoke
 
 Runs the four contract steps (sticky assignment, flag evaluation, keyed track, key-less fan-out
-plus a 2-event batch) against a live backend and prints one JSON line:
+plus a 2-event batch) and the exposure hook against a live backend and prints one JSON line:
 
 ```bash
 CONTROLVAR_API_KEY=<key> dotnet run --project sdk/dotnet/examples/ContractSmoke
@@ -211,7 +239,7 @@ CONTROLVAR_API_KEY=<key> dotnet run --project sdk/dotnet/examples/ContractSmoke
 It prints:
 
 ```text
-{"sdk":"dotnet","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
+{"sdk":"dotnet","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true},"exposure":{"calls":1,"payload":{"experiment_key":"sdk_contract_ab","variant_name":"control","variant_id":"<variant id>","user_id":"smoke-<guid>"}}}
 ```
 
 Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
@@ -234,9 +262,10 @@ sdk/dotnet/
     ExperimentationClient.cs              # public API (evaluate / assign / track / batch / cache helpers)
     ExperimentationHttpClient.cs          # X-API-Key, JSON, error mapping
     Cache.cs                              # SdkCache<T> + UserKeyCache<T> (per user + key, TTL)
+    ExposureHook.cs                       # calls OnExposure; refuses an async one
     FeatureFlagEvaluator.cs               # HashUser utility
     IsExternalInit.cs                     # `init` accessor polyfill for netstandard2.1
-    Models/                               # FlagEvaluationResult, Assignment, TrackEvent
+    Models/                               # FlagEvaluationResult, Assignment, Exposure, TrackEvent
     Exceptions/                           # ExperimentationException, NetworkException, ApiException, AuthException
   tests/Controlvar.Tests/    # xUnit (net8.0 + net10.0), fake HttpMessageHandler
   tests/Controlvar.Tests.NetStandard/     # the same tests against the netstandard2.1 build
