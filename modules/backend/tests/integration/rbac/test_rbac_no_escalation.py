@@ -14,7 +14,9 @@ with a valid body (FastAPI answers 422 before the endpoint's own check):
 * other users' API keys (``?all=true``, deleting another user's key);
 * the compliance audit trail (``audit_log (read)`` reads the audit log, not
   this);
-* holdout and exclusion-group administration, the bandit override,
+* holdout and exclusion-group administration, the bandit override, the
+  counter reset (ADMIN only, beside counter writes that ``experiment (update)``
+  admits; its counter service is a stand-in, so nothing reaches DynamoDB),
   notifications administration, interaction analysis;
 * the superuser-only routes (users, safety settings, results).
 
@@ -26,10 +28,12 @@ from __future__ import annotations
 
 import json
 import uuid
+from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy import text
 
+from backend.app.main import app
 from backend.app.models.api_key import APIKey
 from backend.app.models.experiment import Experiment, ExperimentStatus
 from backend.app.models.mutual_exclusion_group import (
@@ -43,6 +47,7 @@ from backend.tests.integration.api.route_helpers import (
     local_sign_in,
     make_user,
 )
+from modules.backend.app.api.v1.endpoints.realtime_counters import get_counter_service
 from modules.backend.tests.integration.rbac.rbac_states import assign, cleanup, grant
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db, pytest.mark.regression]
@@ -73,6 +78,15 @@ def _sign_in(monkeypatch):
 def client(db_session):
     with api_client(db_session) as c:
         yield c
+
+
+@pytest.fixture
+def counters():
+    """A stand-in counter service, so the counter reset reaches no DynamoDB."""
+    service = MagicMock()
+    app.dependency_overrides[get_counter_service] = lambda: service
+    yield service
+    app.dependency_overrides.pop(get_counter_service, None)
 
 
 @pytest.fixture(autouse=True)
@@ -115,7 +129,7 @@ def holder(db_session):
     return user
 
 
-def test_all_forty_pairs_reach_no_administration(client, db_session, holder):
+def test_all_forty_pairs_reach_no_administration(client, db_session, holder, counters):
     other = make_user(db_session, UserRole.DEVELOPER, tag=TAG)
     other_key, _ = APIKey.create_for_user(db_session, other.id, "other's key")
     experiment = Experiment(
@@ -199,6 +213,12 @@ def test_all_forty_pairs_reach_no_administration(client, db_session, holder):
             f"{V1}/bandit/{experiment.id}/weights",
             {"weights": {"a": 0.5, "b": 0.5}},
         ),
+        # The counter reset, beside counter writes that experiment (update) admits.
+        (
+            "POST",
+            f"{V1}/counters/{experiment.id}/reset",
+            {"experiment_id": str(experiment.id), "reason": "no escalation"},
+        ),
         # Notifications administration, interaction analysis.
         ("GET", f"{V1}/notifications/admin/preferences", None),
         ("GET", f"{V1}/interactions/scan", None),
@@ -219,6 +239,7 @@ def test_all_forty_pairs_reach_no_administration(client, db_session, holder):
     assert wrong == [], "\n".join(wrong)
 
     # And nothing was written by those requests.
+    assert counters.reset_counters.call_count == 0, "a counter was reset"
     db_session.expire_all()
     assert db_session.get(APIKey, other_key.id) is not None
     assert (
