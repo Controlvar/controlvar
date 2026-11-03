@@ -133,15 +133,19 @@ def welch(
 def adjust(p_values: Sequence[float | None], method: str) -> list[float | None]:
     """The p-values adjusted by *method* across one metric's treatments.
 
-    ``none`` leaves them; ``bonferroni`` multiplies each by their number;
-    ``benjamini_hochberg`` is the step-up adjustment. A None stays None and is
-    not counted.
+    ``none`` adjusts nothing and returns None for each comparison, which
+    mirrors ``GET /api/v1/results/{id}`` (``adjusted_p_value`` is null under
+    ``none``; the decision is then made on the p-value, see ``compare``);
+    ``bonferroni`` multiplies each by their number; ``benjamini_hochberg`` is
+    the step-up adjustment. A None stays None and is not counted.
     """
     if method not in CORRECTION_METHODS:
         raise ValueError(
             f"correction method {method!r} is not one of {CORRECTION_METHODS}"
         )
     present = [i for i, p in enumerate(p_values) if p is not None]
+    if method == "none":
+        return [None] * len(p_values)
     adjusted: list[float | None] = list(p_values)
     m = len(present)
     if method == "bonferroni":
@@ -212,14 +216,17 @@ def compare(
             )
     adjusted = adjust([p for _, p, _, _ in found], correction_method)
     alpha = 1 - confidence_level
-    return [
-        Comparison(
-            variant=name,
-            p_value=p,
-            adjusted_p_value=q,
-            absolute_difference=difference,
-            absolute_difference_ci=ci,
-            is_significant=None if q is None else q < alpha,
+    comparisons = []
+    for (name, p, difference, ci), q in zip(found, adjusted, strict=True):
+        decisive = q if q is not None else p  # under ``none``, the p-value itself
+        comparisons.append(
+            Comparison(
+                variant=name,
+                p_value=p,
+                adjusted_p_value=q,
+                absolute_difference=difference,
+                absolute_difference_ci=ci,
+                is_significant=None if decisive is None else decisive < alpha,
+            )
         )
-        for (name, p, difference, ci), q in zip(found, adjusted, strict=True)
-    ]
+    return comparisons

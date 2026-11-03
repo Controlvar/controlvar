@@ -189,7 +189,9 @@ def test_the_corrections_equal_statsmodels(method, theirs):
 def test_the_docs_worked_example_and_the_decision_on_the_adjusted_p_value():
     """The data export page's example: p 0.035 adjusted to 0.071, not significant."""
     assert reference.adjust([0.0355, 0.5], "benjamini_hochberg") == [0.071, 0.5]
-    assert reference.adjust([0.0355, 0.5], "none") == [0.0355, 0.5]
+    # `/results` gives adjusted_p_value null under `none`: so does the reference
+    assert reference.adjust([0.0355, 0.5], "none") == [None, None]
+    assert reference.adjust([0.03, None], "none") == [None, None]
     assert reference.adjust([0.03, None], "bonferroni") == [0.03, None]
     control = [0.0] * 900 + [1.0] * 100
     near = [0.0] * 870 + [1.0] * 130  # p about 0.04 against the control
@@ -206,6 +208,11 @@ def test_the_docs_worked_example_and_the_decision_on_the_adjusted_p_value():
         {"control": control, "near": near}, "proportion", "benjamini_hochberg", 0.95
     )
     assert alone.adjusted_p_value == alone.p_value and alone.is_significant is True
+    (raw,) = reference.compare(
+        {"control": control, "near": near}, "proportion", "none", 0.95
+    )
+    assert raw.adjusted_p_value is None  # as `/results` shows it under `none`
+    assert raw.is_significant is True  # decided on the p-value, about 0.04
 
 
 def test_welch_with_no_variation_or_one_user_has_no_test():
