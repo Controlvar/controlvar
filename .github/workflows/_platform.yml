@@ -168,8 +168,10 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
+      # sdk-live-contract needs Node whatever `sdks` names: its second step runs
+      # the MCP server (sdk/mcp), on the Node its `engines` floor names.
       - name: Set up Node.js
-        if: ${{ !inputs.skip && (contains(inputs.sdks, 'js') || contains(inputs.sdks, 'react') || contains(inputs.sdks, 'edge') || contains(inputs.sdks, 'openfeature')) }}
+        if: ${{ !inputs.skip && (inputs.suite == 'sdk-live-contract' || contains(inputs.sdks, 'js') || contains(inputs.sdks, 'react') || contains(inputs.sdks, 'edge') || contains(inputs.sdks, 'openfeature')) }}
         uses: actions/setup-node@v7
         with:
           node-version: '22'
@@ -504,6 +506,21 @@ jobs:
               exit 1
               ;;
           esac
+
+      # ── the MCP server's contract suite ─────────────────────────────────────
+      # The second step of sdk-live-contract (#1607), and of no other suite:
+      # fuzz.yml calls this workflow three times, and the condition keeps the
+      # step out of every fuzz pass. It installs sdk/mcp with its own `npm ci`
+      # and no fallback, so a lock that does not install fails here rather than
+      # being re-resolved; builds dist/; and runs the server against the API
+      # above, through a recording proxy. The runner makes its own users, keys,
+      # flags and experiments, and changes nothing the sdk-contract seed made.
+      - name: Run the MCP server's contract suite
+        if: ${{ !inputs.skip && inputs.suite == 'sdk-live-contract' }}
+        run: |
+          set -euo pipefail
+          (cd sdk/mcp && npm ci --no-audit --no-fund --ignore-scripts && npm run build)
+          python tests/mcp-contract/run_mcp_contract.py
 
       # Not for fuzz: the API log of a fuzz run quotes the requests and the
       # failures, and this job's log is public.
