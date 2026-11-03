@@ -125,7 +125,7 @@ def register_core_routers(router: APIRouter) -> APIRouter:
     )
     # Issue #23: AI-Powered Experiment Design & Recommendations
     router.include_router(ai_design.router, prefix="/ai", tags=["AI Design"])
-    # Issue #23: MCP (Model Context Protocol) server for AI agent access
+    # Issue #23: the tool list of the MCP server (sdk/mcp), which is not this API
     router.include_router(mcp.router, prefix="/mcp", tags=["MCP"])
     # Issue #27: guided experiment builder (draft-and-submit API; no dashboard UI)
     router.include_router(
@@ -301,7 +301,7 @@ CORE_TAGS_METADATA = [
     },
     {
         "name": "MCP",
-        "description": "Model Context Protocol server — exposes platform APIs to AI coding assistants and agents",
+        "description": "The tool list of the Controlvar MCP server, which runs on your computer and calls this API",
     },
     {
         "name": "Experiment Wizard",

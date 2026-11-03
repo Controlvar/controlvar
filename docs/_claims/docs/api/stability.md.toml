@@ -317,7 +317,7 @@ text = "POST /api/v1/tracking/events | #400 | An experiment_id, feature_flag_id 
 by = ["test:backend/tests/integration/api/test_tracking_events_unknown_ids.py"]
 
 [[unit]]
-text = "POST /api/v1/ai/design, POST /api/v1/ai/interpret/{experiment_id} | #1043 | Each operation allows 10 requests a minute per client address, where it had the default of 300, and above that answers 429 Too Many Requests with Retry-After: 60; every experiment id draws on the interpretation's one count. With ANTHROPIC_API_KEY set, each call to Claude gives up when Claude has not answered in 30 seconds, and is tried at most twice (it used to give up only after 600 seconds and be tried three times); when it fails, the operation answers with its template-based suggestion or interpretation, as it already did when Claude was unavailable. Without the key only the limit is new. The request and response are the same, and so is the OpenAPI document. See AI Endpoints and the MCP Manifest."
+text = "POST /api/v1/ai/design, POST /api/v1/ai/interpret/{experiment_id} | #1043 | Each operation allows 10 requests a minute per client address, where it had the default of 300, and above that answers 429 Too Many Requests with Retry-After: 60; every experiment id draws on the interpretation's one count. With ANTHROPIC_API_KEY set, each call to Claude gives up when Claude has not answered in 30 seconds, and is tried at most twice (it used to give up only after 600 seconds and be tried three times); when it fails, the operation answers with its template-based suggestion or interpretation, as it already did when Claude was unavailable. Without the key only the limit is new. The request and response are the same, and so is the OpenAPI document. See The MCP Server and the AI Endpoints."
 by = [
     "test:backend/tests/unit/middleware/test_ai_rate_limits.py",
     "test:backend/tests/unit/api/test_ai_design_claude_calls.py",
@@ -922,6 +922,14 @@ by = [
 text = "POST /api/v1/power/sample-size, POST /api/v1/power/mde | #1034 | With metric_type mean or ratio, baseline_rate is the metric's baseline mean in its own units and accepts any finite number above 0; it used to answer 422 unless the mean was below 1 and the mean raised by minimum_detectable_effect stayed below 1, so a mean such as an average order value of 45 could not be planned. A mean accepted before gets the same answer, except that a size that comes out as 0 (a baseline_std so small that its square underflows, such as 1e-200) now answers 422 with the fixed out-of-range message, where it answered 200 with per_variant: 0; two finite means that answered 422 with Python's own text (\"cannot convert float NaN to integer\", \"required_sample_size must be > 0\") now answer the same fixed message. A proportion (the default) keeps its bounds, but a baseline_rate of 1 or more now answers 422 at [\"body\"] with \"type\": \"value_error\" and a message that names metric_type, where it answered \"type\": \"less_than\" at [\"body\", \"baseline_rate\"]; an infinite or NaN baseline_rate answers 422 at [\"body\", \"baseline_rate\"] with \"type\": \"finite_number\". /mde is unchanged: it plans proportions only and ignores a metric_type sent to it, as its description now says. The OpenAPI document changes only in the sample-size request's baseline_rate (no exclusiveMaximum; its description) and in the description of /mde. See Planning a mean."
 by = [
     "test:backend/tests/unit/api/test_power_mean_baseline.py",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "GET /api/v1/mcp/manifest | #1607 | The tool list is the Controlvar MCP server's: list_feature_flags, get_feature_flag, evaluate_feature_flag, list_experiments, get_experiment and get_experiment_results. It used to list five tools that no server offered: create_experiment, get_results, toggle_feature_flag, suggest_experiment and interpret_results. The response schema does not change, and name is still controlvar. The OpenAPI document changes only in this operation's description and the MCP tag's. See The MCP Server and the AI Endpoints."
+by = [
+    "test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_the_manifest_lists_the_tools_the_mcp_server_offers",
+    "test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_mcp_manifest_names_the_server_controlvar",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
 ]
 
