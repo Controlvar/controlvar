@@ -248,7 +248,11 @@ update, and nothing is saved. That is:
 - an unknown operator or logical operator (`and`, `or` or `not`, in any case);
 - a value the operator cannot use (`"abc"` for `greater_than`, `"not-a-version"` for
   `semver_gte`), a `regex` pattern RE2 refuses, and a list operator with more than 1,000
-  values;
+  values; a `before` or `after` value that cannot be read as a date, an `array_length` value
+  that cannot be read as a whole number (or `between` without whole-number `min` and `max`), a
+  native `gt`, `gte`, `lt` or `lte` value that cannot be read as a number, a `geo_distance`
+  radius that is missing, below 0 or not a number, and a comparison on a dashboard
+  `geo_within_radius` rule, which the dashboard shape does not read;
 - a `rollout_percentage`, top-level or on a native rule, that is not an integer from 0 to
   100 (`100.0` is accepted; `33.5`, `true` and `"50"` are not), or an `id` that is not text
   of 1 to 100 characters.

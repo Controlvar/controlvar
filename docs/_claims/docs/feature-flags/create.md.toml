@@ -630,10 +630,14 @@ by = [
 ]
 
 [[unit]]
-text = "a value the operator cannot use (\"abc\" for greater_than, \"not-a-version\" for semver_gte), a regex pattern RE2 refuses, and a list operator with more than 1,000 values;"
+text = "a value the operator cannot use (\"abc\" for greater_than, \"not-a-version\" for semver_gte), a regex pattern RE2 refuses, and a list operator with more than 1,000 values; a before or after value that cannot be read as a date, an array_length value that cannot be read as a whole number (or between without whole-number min and max), a native gt, gte, lt or lte value that cannot be read as a number, a geo_distance radius that is missing, below 0 or not a number, and a comparison on a dashboard geo_within_radius rule, which the dashboard shape does not read;"
 by = [
     "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused",
     "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_list_operators_keep_their_limit",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_every_value_is_refused_or_can_match",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_value_is_refused_with_fixed_text",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_dashboard_geo_comparison_is_refused",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_create_refuses_the_word",
 ]
 
 [[unit]]
