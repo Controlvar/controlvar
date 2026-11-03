@@ -53,6 +53,12 @@ by = [
 ]
 
 [[unit]]
+text = "The server-mode JavaScript and Python SDKs ask the API again only after their cache lifetime ends, not before; a flag turned off is therefore served for at most that lifetime after the switch."
+by = [
+    "test:tests/usecases/test_flags_over_time.py::test_g2_1_a_flag_turned_off_reaches_a_server_mode_sdk_when_its_cache_ends",
+]
+
+[[unit]]
 text = "SDK | Cache lifetime (default) | Clear it from your code"
 by = ["exempt:label"]
 

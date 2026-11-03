@@ -82,6 +82,9 @@ def _mask(config: pytest.Config, value: str | None) -> None:
     """Keep *value* out of a GitHub Actions log."""
     if value and os.environ.get("GITHUB_ACTIONS") == "true":
         _say(config, f"::add-mask::{value}")
+        reporter = config.pluginmanager.get_plugin("terminalreporter")
+        if reporter is not None:
+            reporter.flush()
 
 
 @dataclass
