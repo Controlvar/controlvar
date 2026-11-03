@@ -80,7 +80,7 @@ text = "Python lint and format (astral-sh/ruff-pre-commit)"
 by = ["exempt:label"]
 
 [[unit]]
-text = "ruff --fix and ruff-format, both scoped to ^(backend|modules|scripts|tests/acceptance|tests/ground_truth)/ — the same five trees as make lint and the lint CI job."
+text = "ruff --fix and ruff-format, both scoped to ^(backend|modules|scripts|tests/acceptance|tests/ground_truth|tests/usecases)/ — the same six trees as make lint and the lint CI job."
 by = [
     "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_ruff_hooks_cover_the_lint_trees_at_the_pinned_version",
     "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_make_lint_and_the_lint_job_run_the_same_checks",
