@@ -61,7 +61,7 @@ import math
 import os
 import random
 import statistics
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -193,12 +193,14 @@ SCENARIOS = scenarios(SEED, SCALES[SCALE])
 API_URL = api_url(os.environ)
 
 
-def reproduce(name: str, *, seed: int = SEED, scale: str = SCALE) -> str:
-    """The one command that runs scenario *name* again with *seed*."""
+def reproduce(name: str = "", *, seed: int = SEED, scale: str = SCALE) -> str:
+    """The one command that runs scenario *name* (every scenario when empty)
+    again with *seed*."""
     env = f"GROUND_TRUTH_SEED={seed}"
     if scale != "pr":
         env += f" GROUND_TRUTH_SCALE={scale}"
-    return f"{env} python -m pytest tests/ground_truth/test_replay.py -k {name}"
+    command = f"{env} python -m pytest tests/ground_truth/test_replay.py"
+    return f"{command} -k {name}" if name else command
 
 
 # ---------------------------------------------------------------------------
@@ -296,9 +298,28 @@ def assignment_answers(records: Sequence[Mapping[str, Any]], key: str) -> int:
     )
 
 
-def g0_findings(experiment: contract.ExperimentExpected) -> list[Finding]:
-    """G0: answers that are not O-ASSIGN's variant, or not the user's first."""
-    found = [
+def g0_findings(
+    experiment: contract.ExperimentExpected,
+    *,
+    answers: int | None = None,
+    users: int | None = None,
+) -> list[Finding]:
+    """G0: answers that are not O-ASSIGN's variant, or not the user's first.
+    With *answers* and *users*, also fewer assignment answers than users: a
+    server that assigned nobody has no wrong answer to find."""
+    found = []
+    if answers is not None and users is not None and answers < users:
+        found.append(
+            Finding(
+                "assignment answers",
+                answers,
+                users,
+                "at least one per user",
+                got_label="answered",
+                want_label="users",
+            )
+        )
+    found += [
         Finding(
             f"user {m.user} (ledger line {m.record})",
             m.answered,
@@ -582,6 +603,45 @@ def report(
     return "\n".join(lines)
 
 
+def g6_message(origin: str | None, *, seed: int = SEED, scale: str = SCALE) -> str:
+    """G6's failure: the tree the replay runs from has ``modules/``."""
+    return (
+        f"G6 failed: seed {seed}, scale {scale}: modules importable (from {origin}):"
+        " the replay must run the core profile, a tree with no modules/"
+        " (_platform.yml with profile: core removes it)\n"
+        f"  reproduce: {reproduce('g6', seed=seed, scale=scale)}"
+    )
+
+
+def setup_message(exc: Exception, *, seed: int = SEED, scale: str = SCALE) -> str:
+    """The replay could not start (sign-in or key creation refused)."""
+    return (
+        f"setup failed: seed {seed}, scale {scale}: {exc}\n"
+        f"  reproduce, from the repository root against a server started with"
+        f" ENVIRONMENT=development on an empty database: {reproduce(seed=seed, scale=scale)}"
+    )
+
+
+def start_session(
+    session: driver.Driver,
+    email: str,
+    password: str,
+    *,
+    mask: Callable[[str | None], None],
+    seed: int = SEED,
+    scale: str = SCALE,
+) -> None:
+    """Sign in and create the API key; a refusal fails with the seed and the
+    command, not a bare ``ReplayError``."""
+    try:
+        session.sign_in(email, password)
+        mask(session.token)
+        session.create_api_key()
+        mask(session.api_key)
+    except driver.ReplayError as exc:
+        pytest.fail(setup_message(exc, seed=seed, scale=scale), pytrace=False)
+
+
 def _completed(gate: str, replayed: Replayed) -> None:
     if replayed.failure is not None:
         pytest.fail(
@@ -637,10 +697,12 @@ def live(pytestconfig: pytest.Config) -> Iterator[driver.Driver]:
     with httpx.Client(base_url=API_URL, timeout=driver.TIMEOUT) as client:
         session = driver.Driver(client)
         try:
-            session.sign_in(email, password)
-            _mask(pytestconfig, session.token)
-            session.create_api_key()
-            _mask(pytestconfig, session.api_key)
+            start_session(
+                session,
+                email,
+                password,
+                mask=lambda value: _mask(pytestconfig, value),
+            )
             yield session
         finally:
             text = summary_text(session)
@@ -694,20 +756,17 @@ def test_g6_the_replay_runs_the_core_profile() -> None:
     """G6: ``import modules`` fails in the copy the replay runs from."""
     spec = importlib.util.find_spec("modules")
     if spec is not None:
-        pytest.fail(
-            f"G6 failed: modules importable (from {spec.origin}): the replay must run"
-            " the core profile, a tree with no modules/ (_platform.yml with"
-            " profile: core removes it)",
-            pytrace=False,
-        )
+        pytest.fail(g6_message(spec.origin), pytrace=False)
 
 
 def test_g0_every_assignment_answer_is_o_assign(replayed: Replayed) -> None:
     _completed("G0", replayed)
     assert replayed.records is not None
-    findings = g0_findings(replayed.experiment)
+    answers = assignment_answers(replayed.records, replayed.scenario.experiment_key)
+    findings = g0_findings(
+        replayed.experiment, answers=answers, users=replayed.scenario.users
+    )
     if findings:
-        answers = assignment_answers(replayed.records, replayed.scenario.experiment_key)
         pytest.fail(
             report(
                 "G0",

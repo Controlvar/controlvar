@@ -216,13 +216,20 @@ def test_each_route_is_paced_at_80_percent_of_its_limit(signed_in, server, route
 
 
 def test_the_limits_are_80_percent_of_the_server_s():
-    # 6,000 a minute for the SDK paths and 60 a minute for /assign/batch
-    # (backend/app/middleware/rate_limiter.py); 300 a minute for the rest.
-    assert driver.MIN_INTERVAL[ledger.ASSIGN] == 60 / (6000 * 0.8)
-    assert driver.MIN_INTERVAL[ledger.TRACK] == 60 / (6000 * 0.8)
-    assert driver.MIN_INTERVAL[ledger.BATCH] == 60 / (6000 * 0.8)
-    assert driver.MIN_INTERVAL[ledger.ASSIGN_BATCH] == 60 / (60 * 0.8)
-    assert driver.OTHER_INTERVAL == 60 / (300 * 0.8)
+    # The server's own limits (the driver, as library code, may not import
+    # backend; this unit test may).
+    from backend.app.middleware.rate_limiter import resolve_rate_limit
+
+    def interval(path: str) -> float:
+        limit, window = resolve_rate_limit(path)
+        return window / (limit * 0.8)
+
+    for route in (ledger.ASSIGN, ledger.TRACK, ledger.BATCH, ledger.ASSIGN_BATCH):
+        assert driver.MIN_INTERVAL[route] == pytest.approx(interval(route), rel=1e-12)
+    # Any route the driver has no entry for: the default limit.
+    assert driver.OTHER_INTERVAL == pytest.approx(
+        interval("/api/v1/experiments"), rel=1e-12
+    )
 
 
 def test_a_429_is_recorded_waited_out_and_sent_again(signed_in, server, clock):

@@ -37,8 +37,8 @@ EXPECTED = {
     "test_independence.py": 3,
     "test_ledger.py": 55,
     "test_reference.py": 27,
-    "test_replay_gates.py": 33,
-    "test_replay_workflow.py": 19,
+    "test_replay_gates.py": 37,
+    "test_replay_workflow.py": 20,
 }
 
 # Assembled so that this file does not match its own check.

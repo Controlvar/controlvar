@@ -76,8 +76,9 @@ documented event contract and an independent reference compute from the
 server's own answers.
 
 The Ground-truth Replay workflow runs it on a pull request that changes code the
-replay exercises, or one labelled `e2e`; the nightly QA suite runs it with four
-times the users. It is not a required check.
+replay exercises, or one labelled `e2e` (adding the label starts nothing by
+itself: it takes effect on the next push or a dispatch); the nightly QA suite
+runs it with four times the users. It is not a required check.
 
 To run one scenario against an API you started with `ENVIRONMENT=development` on
 an empty database:

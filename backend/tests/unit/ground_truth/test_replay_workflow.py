@@ -202,6 +202,14 @@ def test_it_runs_on_a_pull_request_and_by_hand_only():
     assert set(wg.triggers(_workflow())) == {"pull_request", "workflow_dispatch"}
 
 
+def test_adding_the_e2e_label_starts_nothing_by_itself():
+    """No ``types:`` on the trigger: the default is opened, synchronize and
+    reopened, so a label alone starts no run (a ``labeled`` type would need a
+    concurrency group the B3 rule forbids on a label-triggered workflow)."""
+    trigger = wg.triggers(_workflow())["pull_request"]
+    assert "types" not in (trigger or {})
+
+
 def test_its_permissions_are_read_only_and_it_reads_no_secret():
     workflow = _workflow()
     assert workflow["permissions"] == {"contents": "read", "pull-requests": "read"}

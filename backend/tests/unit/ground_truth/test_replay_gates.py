@@ -176,6 +176,38 @@ def test_g0_a_server_whose_bucket_moved_answers_other_variants():
     assert {(f.got_label, f.want_label) for f in findings} == {("answered", "O-ASSIGN")}
 
 
+def test_g0_a_server_that_assigned_nobody_is_refused():
+    """No answer says ``assigned: true``: there is no wrong variant to find, and
+    G0 alone must not pass on that."""
+    scenario = SCENARIOS["S2"]
+
+    def nobody(op, default):
+        status, body = default
+        if op.kind == "assign":
+            return status, {**body, "assigned": False, "reason": "targeting"}
+        if op.kind == "assign_batch":
+            rows = [{**r, "assigned": False} for r in body["assignments"]]
+            return status, {**body, "assignments": rows}
+        return default
+
+    _, records, experiment = _replayed(scenario, answer=nobody)
+    answers = suite.assignment_answers(records, scenario.experiment_key)
+    assert answers == 0
+    assert suite.g0_findings(experiment) == []  # what G0 saw before the check
+    findings = suite.g0_findings(experiment, answers=answers, users=scenario.users)
+    assert [f.line() for f in findings] == [
+        f"assignment answers: answered 0, users {scenario.users}"
+        " (at least one per user)"
+    ]
+
+
+def test_g0_every_user_answered_is_not_a_finding():
+    scenario = SCENARIOS["S2"]
+    _, records, experiment = _replayed(scenario)
+    answers = suite.assignment_answers(records, scenario.experiment_key)
+    assert suite.g0_findings(experiment, answers=answers, users=scenario.users) == []
+
+
 def _shifted(user, key, allocations):
     bucket = (hashing.bucket(user, key) + 50) % 100
     cumulative = 0
@@ -559,7 +591,8 @@ def test_the_suite_prints_its_seed_first_and_g6_reads_the_tree():
     assert "ground-truth replay: seed 4242, scale pr" in out, out
     if (REPO_ROOT / "modules").exists():
         assert result.returncode == 1, out
-        assert "G6 failed: modules importable" in out, out
+        assert "G6 failed: seed 4242, scale pr: modules importable" in out, out
+        assert "GROUND_TRUTH_SEED=4242 python -m pytest" in out, out
     else:
         assert result.returncode == 0, out
         assert "1 passed" in out, out
@@ -596,6 +629,53 @@ def test_a_failure_names_the_scenario_seed_values_tolerance_and_the_command(
         f"GROUND_TRUTH_SEED={SEED} GROUND_TRUTH_SCALE=nightly python -m pytest"
         in nightly
     )
+
+
+def test_g6_names_the_seed_and_the_command():
+    text = suite.g6_message("/x/modules/__init__.py", seed=SEED, scale="nightly")
+    assert text.startswith(f"G6 failed: seed {SEED}, scale nightly: modules importable")
+    assert (
+        f"GROUND_TRUTH_SEED={SEED} GROUND_TRUTH_SCALE=nightly python -m pytest"
+        " tests/ground_truth/test_replay.py -k g6"
+    ) in text
+
+
+def test_a_refused_sign_in_or_key_fails_with_the_seed_and_the_command():
+    """The ``live`` fixture's setup: a 401 from sign-in, then a 403 from key
+    creation, each fails (not a bare ReplayError) naming seed and command."""
+
+    def sign_in_refused(request):
+        return httpx.Response(401, json={"detail": "no"})
+
+    def key_refused(request):
+        if request.url.path == driver.SIGN_IN:
+            return httpx.Response(200, json={"access_token": "T" * 40})
+        return httpx.Response(403, json={"detail": "no"})
+
+    for handler, route in (
+        (sign_in_refused, driver.SIGN_IN),
+        (key_refused, driver.API_KEYS),
+    ):
+        with httpx.Client(
+            transport=httpx.MockTransport(handler), base_url="http://api.invalid"
+        ) as client:
+            session = driver.Driver(client)
+            with pytest.raises(pytest.fail.Exception) as raised:
+                suite.start_session(
+                    session,
+                    "a@example.com",
+                    "pw",
+                    mask=lambda value: None,
+                    seed=SEED,
+                    scale="pr",
+                )
+        message = str(raised.value)
+        assert route in message, message
+        assert f"seed {SEED}, scale pr" in message, message
+        assert (
+            f"GROUND_TRUTH_SEED={SEED} python -m pytest tests/ground_truth/test_replay.py"
+            in message
+        ), message
 
 
 def test_the_step_summary_carries_the_seed_and_counts_only():
