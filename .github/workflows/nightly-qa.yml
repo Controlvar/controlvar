@@ -476,11 +476,24 @@ jobs:
           SYNTH_ENABLED: ${{ vars.SYNTH_ENABLED }}
         run: python3 scripts/synthetic_report.py freshness
 
+  # The ground-truth replay (#1544) at nightly scale: the pull request's
+  # scenarios with four times the users (tests/ground_truth/test_replay.py,
+  # GROUND_TRUTH_SCALE=nightly), against the core profile with no seed data.
+  # Not release evidence: rc_evidence.py does not read this workflow.
+  ground-truth:
+    name: Ground-truth replay
+    uses: ./.github/workflows/_platform.yml
+    with:
+      profile: core
+      seed: ''
+      suite: ground-truth-nightly
+      timeout-minutes: 45
+
   # A red night has to leave something behind that a human sees in the morning.
   nightly-failure-issue:
     name: File an issue on failure
     runs-on: ubuntu-latest
-    needs: [unit-tests, integration-tests, benchmarks, smoke-tests, sdk-contract-tests, frontend-tests, e2e-tests, synthetic-freshness]
+    needs: [unit-tests, integration-tests, benchmarks, smoke-tests, sdk-contract-tests, frontend-tests, e2e-tests, synthetic-freshness, ground-truth]
     if: failure()
     permissions:
       contents: read

@@ -1,0 +1,100 @@
+name: Ground-truth Replay
+
+# =============================================================================
+# The live replay (#1544): seeded, realistic traffic sent through the public
+# API to a Controlvar booted by _platform.yml (core profile, no seed data),
+# and the results page checked against the event contract and an independent
+# reference computed on the same sample. The suite is
+# tests/ground_truth/test_replay.py; the library it uses is
+# tests/ground_truth/ground_truth.
+#
+# It runs on a pull request that changes what the replay exercises (the
+# filter below), or one labelled `e2e`, and when dispatched by hand. It is
+# never a required check. The filter is the import closure of
+# backend.app.main on the core profile plus the replay's own files:
+# backend/tests/unit/ground_truth/test_replay_workflow.py (G7) fails when a
+# file the API imports matches none of its globs.
+#
+# `labeled` is not among the triggers: a run started by a label would share
+# the head commit with the run before it, and the concurrency group below
+# would cancel one of the two (test_ci_concurrency.py, B3). Add the label and
+# push, or dispatch the workflow on the branch.
+#
+# The job runs the pull request's code, so it is `pull_request`, never
+# `pull_request_target`: read-only permissions and no secrets.
+# =============================================================================
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  # Keyed on the pull request number, as in sdk-unit-tests.yml: a newer push
+  # replaces the run in flight, so runs do not stack on the job pool.
+  group: ground-truth-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  # dorny/paths-filter asks the API which files a pull request touched.
+  pull-requests: read
+
+jobs:
+  decide:
+    name: Decide
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - name: Filter changed paths
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            replay:
+              - 'backend/__init__.py'
+              - 'backend/app/**'
+              - 'backend/requirements.txt'
+              - 'backend/requirements/**'
+              - 'tests/ground_truth/**'
+              - '.github/workflows/ground-truth.yml'
+              - '.github/workflows/_platform.yml'
+              - 'scripts/core_build.sh'
+
+      - name: Decide
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          MATCHED: ${{ steps.filter.outputs.replay }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = workflow_dispatch ]; then
+            run=true
+            reason="dispatched by hand"
+          elif [ "$MATCHED" = true ]; then
+            run=true
+            reason="the pull request changes a file the replay exercises"
+          elif [[ "$LABELS" == *'"e2e"'* ]]; then
+            run=true
+            reason="the pull request is labelled e2e"
+          else
+            run=false
+            reason="no file the replay exercises changed, and there is no e2e label"
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "replay: $run ($reason)"
+
+  replay:
+    name: Replay
+    needs: decide
+    if: needs.decide.outputs.run == 'true'
+    uses: ./.github/workflows/_platform.yml
+    with:
+      profile: core
+      seed: ''
+      suite: ground-truth
+      timeout-minutes: 15
