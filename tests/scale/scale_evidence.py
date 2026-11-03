@@ -15,10 +15,11 @@ Commands (``python tests/scale/scale_evidence.py <command> --help``):
     One step of one run: the generator's per-request rows (CSV, ``ROW_FIELDS``)
     and the step's observation (JSON: the rate pair, the drops, each container's
     recorded cpuset, the samplers' readings) and the API's ``/metrics`` before
-    and after, judged by the method in ``config.json``. Writes the step's
-    record. Exit 0 when the step is VALID (whether or not it kept up), 1 when
-    it is INVALID (the record is still written, with its reason), 2 on a
-    refusal (nothing written).
+    and after (and, for a step after the first, the previous step's after-step
+    ``/metrics`` and the gap's width), judged by the method in ``config.json``.
+    Writes the step's record. Exit 0 when the step is VALID (whether or not it
+    kept up), 1 when it is INVALID (the record is still written, with its
+    reason), 2 on a refusal (nothing written).
 ``merge``
     The per-job results files of one run (one scenario, one repetition each)
     into the one results file, with each scenario's summary computed from its
@@ -166,6 +167,12 @@ TICK_STATUSES: Tuple[str, ...] = ("success", "partial", "failed", "skipped")
 #: Whether the API's /metrics exported the two tick families (see
 #: ``scheduler_ticks``): an API from before they existed is "absent".
 TICK_METRICS: Tuple[str, ...] = ("present", "absent")
+#: Step 1's ``gap_metrics``: the gap before step 1 is not measured, because the
+#: warm-up before it takes no scrape. Its ``gap_ticks`` is ``{}`` and its
+#: ``gap_ms`` null: absent is said, never written as zeros.
+FIRST_STEP = "first-step"
+#: Whether a step's ``gap_ticks`` were read: TICK_METRICS, or FIRST_STEP.
+GAP_METRICS: Tuple[str, ...] = (*TICK_METRICS, FIRST_STEP)
 
 #: Why a step is INVALID, in the order the rules are checked (A3).
 INVALID_REASONS: Tuple[str, ...] = (
@@ -462,6 +469,17 @@ class MapOf(Spec):
                 self.item.check(item, _join(path, key), problems)
 
 
+@dataclasses.dataclass(frozen=True)
+class Nullable(Spec):
+    """``item``, or null for a value the record says was not measured."""
+
+    item: Spec
+
+    def check(self, value: Any, path: str, problems: List[str]) -> None:
+        if value is not None:
+            self.item.check(value, path, problems)
+
+
 def _join(path: str, key: str) -> str:
     return f"{path}.{key}" if path else key
 
@@ -529,6 +547,16 @@ CONFIG_SPEC = obj(
     ),
 )
 
+#: A step's ticks by scheduler: each outcome's count, and the timed ticks'
+#: count and summed duration (``scheduler_ticks``' shape).
+TICKS_BY_SCHEDULER = MapOf(
+    SCHEDULERS,
+    obj(
+        **{status: Int(0) for status in TICK_STATUSES},
+        duration_count=Int(0),
+        duration_sum_us=Int(0),
+    ),
+)
 COUNTS = obj(
     flags=Int(0),
     rule_flags=Int(0),
@@ -595,14 +623,24 @@ STEP_SPEC = obj(
     # reads them. "absent", with no scheduler, when the API does not export the
     # two families; never zeros. "present" names every scheduler.
     scheduler_metrics=Enum(TICK_METRICS),
-    scheduler_ticks=MapOf(
-        SCHEDULERS,
-        obj(
-            **{status: Int(0) for status in TICK_STATUSES},
-            duration_count=Int(0),
-            duration_sum_us=Int(0),
-        ),
-    ),
+    scheduler_ticks=TICKS_BY_SCHEDULER,
+    # The ticks that ended in the gap BEFORE the step: from the previous step's
+    # after-scrape to this step's before-scrape (scheduler_ticks over those two
+    # scrapes, the same shape; a tick ending there is in no step's
+    # scheduler_ticks). gap_ms is that gap's width, from the previous step's
+    # last send (k6's record of it: its scenario start plus the largest send
+    # offset, rounded down, so at or before the real one) to this step's
+    # before-scrape (the clock read once that scrape has answered, so at or
+    # after the moment it read the counters): both ends err outward, so gap_ms
+    # is never less than the time from the end of sending to the scrape, and a
+    # gap tick that took longer than gap_ms started before that sending ended.
+    # Data only: no rule reads them. Step 1's gap is not measured (the warm-up
+    # before it takes no scrape): gap_metrics "first-step", gap_ticks {},
+    # gap_ms null; never zeros. Every later step has a gap_ms, and its
+    # gap_metrics is its scheduler_metrics (the before-scrape is in both).
+    gap_metrics=Enum(GAP_METRICS),
+    gap_ticks=TICKS_BY_SCHEDULER,
+    gap_ms=Nullable(Int(1)),
     valid=Bool(),
     invalid_reason=Enum(INVALID_REASONS),
     keeps_up=Bool(),
@@ -1118,6 +1156,44 @@ def scheduler_problem(step: Mapping[str, Any]) -> str:
     return ""
 
 
+def gap_problem(step: Mapping[str, Any]) -> str:
+    """A step's three gap fields agree, or why not: step 1 and only step 1 is
+    "first-step", with no tick and no width; every later step has a width, the
+    before-scrape's presence (its scheduler_metrics), and every scheduler when
+    present, none when absent."""
+    number, presence = step["step"], step["gap_metrics"]
+    ticks, width = step["gap_ticks"], step["gap_ms"]
+    if number == 1 or presence == FIRST_STEP:
+        if number != 1:
+            return f"gap_metrics {FIRST_STEP} on step {number}: only step 1 has one"
+        if presence != FIRST_STEP:
+            return (
+                f"step 1 has gap_metrics {presence}: its gap is not measured (the "
+                f"warm-up takes no scrape), which is {FIRST_STEP}"
+            )
+        if ticks or width is not None:
+            return (
+                f"step 1 records gap_ticks {sorted(ticks)} and gap_ms {width}: its "
+                "gap is not measured (the warm-up takes no scrape)"
+            )
+        return ""
+    if width is None:
+        return f"gap_ms is null on step {number}: only step 1's gap is not measured"
+    if presence != step["scheduler_metrics"]:
+        return (
+            f"gap_metrics {presence} with scheduler_metrics "
+            f"{step['scheduler_metrics']}: the scrape before the step is in both"
+        )
+    if presence == "absent":
+        if ticks:
+            return f"gap_ticks names {', '.join(ticks)} with gap_metrics absent"
+        return ""
+    missing = ", ".join(name for name in SCHEDULERS if name not in ticks)
+    if missing:
+        return f"gap_ticks has no {missing} with gap_metrics present"
+    return ""
+
+
 # ---------------------------------------------------------------------------
 # The per-request rows, and what passed
 # ---------------------------------------------------------------------------
@@ -1538,8 +1614,14 @@ def summarise_step(
     observation: Mapping[str, Any],
     metrics_before: str,
     metrics_after: str,
+    gap: Optional[Tuple[str, int]] = None,
 ) -> Tuple[Dict[str, Any], List[str]]:
-    """One step's record from its rows, its observation and its metrics."""
+    """One step's record from its rows, its observation and its metrics.
+
+    ``gap`` is the gap before the step: the previous step's after-scrape and
+    the gap's width in milliseconds (see STEP_SPEC's gap fields). Every step
+    after the first needs one; step 1 has none (the warm-up before it takes no
+    scrape), and one given for it is refused rather than recorded."""
     if scenario == SMOKE_ONLY and method["mode"] != "smoke":
         raise Refused("mix is smoke only: refusing a mix row")
     if scenario not in SCENARIOS and scenario != SMOKE_ONLY:
@@ -1623,6 +1705,27 @@ def summarise_step(
                 "API's /metrics"
             )
     tick_metrics, ticks = scheduler_ticks(metrics_before, metrics_after)
+    if number == 1 and gap is not None:
+        raise Refused(
+            "step 1 has no gap before it to record: the warm-up takes no scrape"
+        )
+    if number > 1 and gap is None:
+        raise Refused(
+            f"step {number} needs the gap before it: the previous step's "
+            "after-scrape and the gap's width"
+        )
+    gap_metrics, gap_ticks, gap_ms = FIRST_STEP, {}, None
+    if gap is not None:
+        previous_after, gap_ms = gap
+        if not isinstance(gap_ms, int) or isinstance(gap_ms, bool) or gap_ms < 1:
+            raise Refused(
+                f"the gap before step {number} is {gap_ms!r} ms: a gap's width is "
+                "a positive number of milliseconds (did the clock go back?)"
+            )
+        try:
+            gap_metrics, gap_ticks = scheduler_ticks(previous_after, metrics_before)
+        except Refused as error:
+            raise Refused(f"the gap before step {number}: {error}") from None
     sampled = observation["sampled"]
     cpu = observation["cpu_permille"]
     threads = observation["threads"]
@@ -1687,6 +1790,9 @@ def summarise_step(
         "not_modified": sum(1 for row, _ in measured if row["status"] == "304"),
         "scheduler_metrics": tick_metrics,
         "scheduler_ticks": ticks,
+        "gap_metrics": gap_metrics,
+        "gap_ticks": gap_ticks,
+        "gap_ms": gap_ms,
     }
     step.update(_derived(step, method, split))
     fields, messages = judge_step(method, scenario, step, split)
@@ -1948,7 +2054,11 @@ def recompute_problems(results: Mapping[str, Any]) -> List[str]:
                     problems.append(f"{where} step {step['step']}: {error}")
                     continue
                 number = step["step"]
-                for why in (recovery_problem(step), scheduler_problem(step)):
+                for why in (
+                    recovery_problem(step),
+                    scheduler_problem(step),
+                    gap_problem(step),
+                ):
                     if why:
                         problems.append(f"{where} step {number}: {why}")
                 planned = rates[number - 1] if number <= len(rates) else "none"
@@ -2864,6 +2974,16 @@ def _say(lines: Sequence[str]) -> None:
 def _cmd_summarise(args: argparse.Namespace) -> int:
     method = load_config(pathlib.Path(args.method), args.mode)
     observation = loads(_read(args.observation))
+    if (args.metrics_previous_after is None) != (args.gap_ms is None):
+        raise Refused(
+            "--metrics-previous-after and --gap-ms go together: the gap before a "
+            "step after the first"
+        )
+    gap = (
+        None
+        if args.gap_ms is None
+        else (_read(args.metrics_previous_after), args.gap_ms)
+    )
     step, messages = summarise_step(
         method,
         args.scenario,
@@ -2871,6 +2991,7 @@ def _cmd_summarise(args: argparse.Namespace) -> int:
         observation,
         _read(args.metrics_before),
         _read(args.metrics_after),
+        gap,
     )
     _write(args.out, json.dumps(step, indent=1) + "\n")
     _say(messages)
@@ -2942,6 +3063,10 @@ def parser() -> argparse.ArgumentParser:
     one.add_argument("--observation", required=True)
     one.add_argument("--metrics-before", required=True)
     one.add_argument("--metrics-after", required=True)
+    # The gap before a step after the first: the previous step's after-scrape
+    # and the gap's width (STEP_SPEC). Step 1 takes neither.
+    one.add_argument("--metrics-previous-after")
+    one.add_argument("--gap-ms", type=int)
     one.add_argument("--out", required=True)
     one.set_defaults(handler=_cmd_summarise)
 

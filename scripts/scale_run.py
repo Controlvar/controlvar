@@ -349,6 +349,17 @@ def scenario_start(records: Sequence[Mapping[str, str]]) -> int:
     return int(next(iter(starts)))
 
 
+def last_send_ms(records: Sequence[Mapping[str, str]]) -> int:
+    """When the step's last request went out (ms since the epoch): its scenario
+    start plus the largest send offset, rounded down. Both are k6's clock,
+    which is the host's (the CPU and database windows already compare them
+    with this process's and PostgreSQL's). k6 reads the clock before it sends,
+    so this is at or before the real last send, and a request with no record
+    only makes it earlier. The next step's ``gap_ms`` counts from here."""
+    start = scenario_start(records)  # refuses a step with no record
+    return start + max(se._number(r, "sent_offset_us") for r in records) // 1000
+
+
 def to_rows(records: Sequence[Mapping[str, str]]) -> List[Dict[str, str]]:
     """The summariser's rows (scale_evidence.ROW_FIELDS): each record's fields,
     and its endpoint from the fixed list."""
@@ -1484,14 +1495,23 @@ class Measurement:
         milli_rps: int,
         etag: str,
         confirming: bool = False,
-    ) -> Tuple[Dict[str, Any], List[Dict[str, str]], Dict[str, str]]:
+        previous: Optional[Tuple[str, int]] = None,
+    ) -> Tuple[Dict[str, Any], List[Dict[str, str]], Dict[str, str], Tuple[str, int]]:
         """One step. ``confirming`` is True for a step that follows one that did
         not keep up: it runs past saturation by design, so a timed-out
         after-step scrape gets the bounded recovery poll (and the step is
-        recorded as failing). Anywhere else a timed-out scrape raises Failed."""
+        recorded as failing). Anywhere else a timed-out scrape raises Failed.
+
+        ``previous`` is where the gap before this step begins: the previous
+        step's after-scrape and its last send (ms); None for step 1, whose gap
+        is not measured. Returns the record, its rows, its split, and the same
+        pair for the next step."""
         window = se.ranges(self.method)
         directory = self.out / f"step-{number:02d}"
         before = self.metrics(stack)
+        # Read once the scrape has answered, so at or after the moment the API
+        # read its counters: the gap's width can only come out wider.
+        before_ms = self.io.now_ms()
         restarts_before = self.docker.inspect(stack.ids["api"])["RestartCount"]
         assignments_before = self.assignments()
         t0 = self.io.now_ms()
@@ -1586,8 +1606,9 @@ class Measurement:
             ("metrics-after.txt", after),
         ):
             (directory / name).write_text(text, encoding="utf-8")
+        gap = None if previous is None else (previous[0], before_ms - previous[1])
         record, messages = se.summarise_step(
-            self.method, self.scenario, rows, seen, before, after
+            self.method, self.scenario, rows, seen, before, after, gap
         )
         (directory / "step.json").write_text(
             json.dumps(record, indent=1) + "\n", "utf-8"
@@ -1595,7 +1616,7 @@ class Measurement:
         self.io.say(step_line(record, summary["measured_p99_us"]))
         for message in messages:
             self.io.say(f"  {message}")
-        return record, rows, split
+        return record, rows, split, (after, last_send_ms(records))
 
     # -- the whole repetition -----------------------------------------------------
     def warm_up(self, stack: Stack, milli_rps: int, etag: str) -> None:
@@ -1680,11 +1701,19 @@ class Measurement:
         status = "complete"
         failing = 0
         split: Optional[Dict[str, str]] = None
+        # Where the gap before the next step begins (see step); none before
+        # step 1, after a warm-up that takes no scrape.
+        previous: Optional[Tuple[str, int]] = None
         try:
             for number, milli in enumerate(rates, 1):
                 self.io.sleep(se.ranges(method)["gap_s"])
-                record, rows, step_split = self.step(
-                    stack, number, milli, etag, confirming=failing >= 1
+                record, rows, step_split, previous = self.step(
+                    stack,
+                    number,
+                    milli,
+                    etag,
+                    confirming=failing >= 1,
+                    previous=previous,
                 )
                 if split is None:
                     split = step_split
