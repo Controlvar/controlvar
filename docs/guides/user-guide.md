@@ -147,15 +147,20 @@ whose title shows the current values.
 
 Then, optionally, the estimate. Enter your baseline conversion rate and the smallest change
 worth detecting — a *relative* change, so 5% on a 12% baseline means 12% → 12.6% — and press
-**Calculate estimate**. At 80% power and 95% confidence that example needs 47,036 users per
+**Calculate estimate**. With two variants, at 80% power and 95% confidence that example needs 47,036 users per
 variant. Add your daily users to see roughly how many days that takes. The smallest change
 worth detecting (the minimum detectable effect) is saved with the experiment, and the results
 page's **Planned sample** plans for it; leave it blank and the results page plans for 5%. An
 effect below 0.1%, or of 100% or more, cannot be saved, and **Next** says so. The rest of the
 estimate is a guide and is not saved: the results page plans from the control variant's own
-conversion rate, at 80% power. The estimate plans each comparison at 1 − the confidence level and makes no
-correction for comparing several variants, so with three or more variants and a correction
-the experiment needs more users than it says.
+conversion rate, at 80% power. The estimate plans at 1 − the confidence level and uses the
+correction chosen above, as the results page's **Sample Size** tab does. With three or more
+variants and Bonferroni or Benjamini-Hochberg, each comparison with the control is planned at
+that level ÷ (variants − 1): with three variants the example needs 56,961 users per variant.
+With None, each comparison is planned at the full level, the same as the results.
+Benjamini-Hochberg is planned at the same level as Bonferroni and gives the same estimate.
+That is cautious: Benjamini-Hochberg finds every winner Bonferroni finds, so it may need fewer
+users.
 
 **Step 5: Review and create**
 

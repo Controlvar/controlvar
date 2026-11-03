@@ -7,10 +7,13 @@ when saved (#535)::
     python -m backend.scripts.check_targeting_rules
 
 Stored rules are not re-judged: they are evaluated as before, and a flag whose
-rules are listed here keeps working. But a ``PUT`` that sends those rules back
-unchanged answers 422, so fix them (or leave ``targeting_rules`` out of the
-request). The report reads, and never writes, ``feature_flags.targeting_rules``
-and prints one tab-separated line per flag it lists::
+rules are listed here keeps working, with one exception: native rules holding
+a ``time_window`` without ``start`` or ``end`` were ignored and are read from
+#1527, so their answer changes (``--time-window-changes``, below, lists them).
+But a ``PUT`` that sends listed rules back unchanged answers 422, so fix them
+(or leave ``targeting_rules`` out of the request). The report reads, and
+never writes, ``feature_flags.targeting_rules`` and prints one tab-separated
+line per flag it lists::
 
     feature_flag  3f0c...  checkout-v2  groups[0].conditions[1].operator  unknown operator
 
@@ -43,10 +46,54 @@ lines include such rules, with the API's path and reason:
 * in the native shape, a ``time_window`` the engine cannot read, such as one
   given only as ``start`` and ``end``::
 
-    feature_flag  3f0c...  office-hours  rules[0].rule.conditions[0].value  unreadable time window; see the time_window example on the Targeting Rules: Operator Reference page
+    feature_flag  3f0c...  office-hours  rules[0].rule.conditions[0].value  unreadable time window; give days (0 to 6), start_time and end_time (HH:MM), or start_date and end_date (YYYY-MM-DD); a timezone must be a name such as Europe/Paris
 
 Such a stored rule keeps answering as it did: the condition does not hold
-(and a stored window that cannot be read abandons the whole ruleset).
+(and a stored window that cannot be read abandons the whole ruleset). The
+exception is a native window without ``start`` or ``end``, such as ``{}``:
+its rules used to be ignored (``--time-window-changes``).
+
+Since #1525 and #1526 a save also refuses a value the evaluator cannot read,
+and a dashboard geo comparison it ignores; the lines include those too:
+
+* a ``before`` or ``after`` value that is not an ISO 8601 date or a Unix
+  timestamp the engine can read;
+* an ``array_length`` value that is not a whole number, or, for ``between``,
+  a value without whole-number ``min`` and ``max``;
+* a ``geo_distance`` radius that is missing, below 0 or not a number, in
+  either shape;
+* a ``percentage_bucket`` value that is not a number (experiments);
+* a native ``gt``, ``gte``, ``lt`` or ``lte`` value that is not a number;
+* in the dashboard shape, a ``geo_within_radius`` value with a
+  ``comparison`` other than ``lte``, or a fifth list item or text part::
+
+    feature_flag  3f0c...  signup-gate  rules[0].rule.conditions[0].value  not a date; use an ISO 8601 date such as 2030-01-31 or 2030-01-31T09:00:00Z, or a Unix timestamp
+
+Such a stored rule keeps answering as it did: the condition does not hold, a
+dashboard comparison is read as "within the radius", and a timestamp no date
+can hold, or an integer too large for a floating-point number compared with
+``gt``, ``gte``, ``lt`` or ``lte``, abandons the whole ruleset.
+
+Since #1666, #1669, #1672 and #1673 the lines also include:
+
+* a native ``between`` whose bounds are not two numbers or two dates, or are
+  two dates only one of which has a time zone;
+* in the dashboard shape, a ``time_window`` the engine cannot read, and a
+  ``greater_than``, ``greater_than_or_equal``, ``less_than`` or
+  ``less_than_or_equal`` value that is NaN or an integer too large for a
+  floating-point number::
+
+    feature_flag  3f0c...  office-hours  groups[0].conditions[1].value  unreadable time window; give start and end as HH:MM such as 09:00 and 17:00, days as numbers 0 to 6, start_date and end_date as YYYY-MM-DD in order, a timezone as a name such as Europe/Paris
+
+* a geo coordinate, or a dashboard radius, that is an integer too large for
+  a floating-point number: on a flag or an experiment with the API's path and
+  reason (``value is not valid for the operator``, or in the native shape
+  ``not valid``), where it was ``could not be checked``. A segment's line for
+  it is still ``rules not valid: could not be checked``.
+
+Such a stored rule keeps answering as it did: a ``between`` that cannot be
+read does not hold, or, with a bound no number or date can hold, abandons
+the ruleset, as a window or a number that cannot be read does.
 
 Segments get the same treatment (#440). Segment rules use the targeting
 rule format and are checked when saved; a segment stored before that whose
@@ -59,8 +106,11 @@ its name in place of a key and a reason starting ``rules not valid``::
 
 A problem that belongs to a segment's rules as a whole has the path ``rules``.
 A segment whose rules pass that check but use a distance unit membership
-never matches (#1204) is evaluated, and its condition never holds; it gets a
-line with the API's own path and reason, without that prefix::
+never matches (#1204), a geo comparison or a radius below 0 or not a number
+(#1525, #1526), a window or a number comparison that cannot be read (#1669,
+#1673) is evaluated as before: the condition never holds, or, with a
+comparison, holds within the radius, or the window or number abandons it. It
+gets a line with the API's own path and reason, without that prefix::
 
     segment  9a1e...  Bay Area  groups[0].conditions[0].value  unknown distance unit; use km, mi or m, or leave it out for km
 
@@ -83,6 +133,31 @@ Stored rules that assignment cannot read are listed too, with the path
 ``targeting_rules`` and the reason ``could not be checked``. Users already
 assigned keep their variant.
 
+``--time-window-changes`` prints a third report (#1527): every flag and
+experiment whose stored native rules hold a ``time_window`` object without
+``start`` or ``end``, at any depth, inside ``NOT`` and in ``default_rule``
+too, read from the raw JSON. The ``Condition`` schema refused such a window
+until #1527, so the whole ruleset was ignored: the flag served its global
+rollout, and the experiment made no new user eligible. From that release
+the rules are read, so the answer changes. Run it from the new image before
+it takes traffic. One line per flag or experiment (an experiment's status
+after its key), with the path of the first evaluated window the engine
+cannot read, else of the first window without ``start`` or ``end``. Both kinds
+print the status after the key; a flag that is ``INACTIVE`` or ``ARCHIVED``
+answers off, reason ``inactive``, before and after, so its reason ends
+``(inactive: no change while it stays inactive)`` (it is listed all the same,
+because switching it on makes the change real)::
+
+    feature_flag  3f0c...  weekdays  ACTIVE  rules[0].rule.conditions[0].value  answer changes on upgrade: the flag's rules were ignored (it served its global rollout) because this time_window has no start or end; they now apply
+    feature_flag  8b41...  office  ACTIVE  rules[0].rule.conditions[0].value  answer changes on upgrade: the flag's rules were ignored (it served its global rollout); now this time_window cannot be read, so the flag answers off, reason error, for each user whose evaluation reaches it
+
+An experiment's line starts ``answer may change on upgrade`` when a window
+cannot be read, because a new user whose evaluation reaches it is still not
+eligible. A window in ``default_rule`` is never evaluated, so it decides only
+whether the rules are read. Rules that cannot be read for another reason are
+not listed: they are still ignored (the default report lists them). Segments
+are not in this report: their rules take the dashboard shape only.
+
 Connection settings are the ``POSTGRES_*`` environment variables that
 ``backend.app.db.bootstrap`` reads. Exit status: 0 whether or not anything is
 listed (the report is advisory); 2 when the database cannot be read.
@@ -91,12 +166,15 @@ listed (the report is advisory); 2 when the database cannot be read.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from dataclasses import dataclass
-from typing import Any, Iterable, Iterator, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
+from backend.app.core.rules_engine import TimeWindowUnreadable, check_time_window
 from backend.app.core.targeting_adapter import (
     TargetingRulesError,
+    _is_dashboard_rules_shape,
     check_segment_vocabulary,
     validate_experiment_targeting,
     validate_flag_targeting,
@@ -134,6 +212,44 @@ LEGACY_MATCHES_NO_USER = (
 
 #: The reason printed for a stored value the check itself could not read.
 NOT_CHECKED = "could not be checked"
+
+#: ``--time-window-changes`` (#1527): the start of every reason but one.
+ANSWER_CHANGES = "answer changes on upgrade"
+
+#: ``--time-window-changes``: the start of an experiment's reason when every
+#: new user may still be refused, as before.
+ANSWER_MAY_CHANGE = "answer may change on upgrade"
+
+#: ``--time-window-changes``: a flag in one of these statuses answers off,
+#: reason ``inactive``, before and after (the SDK serves it inactive), so its
+#: line says so.
+NOT_ACTIVE_FLAG_STATUSES = ("INACTIVE", "ARCHIVED")
+
+#: ``--time-window-changes``: a flag whose windows can all be read.
+FLAG_RULES_NOW_APPLY = (
+    f"{ANSWER_CHANGES}: the flag's rules were ignored (it served its global "
+    "rollout) because this time_window has no start or end; they now apply"
+)
+
+#: ``--time-window-changes``: a flag with a window that cannot be read.
+FLAG_WINDOW_ANSWERS_ERROR = (
+    f"{ANSWER_CHANGES}: the flag's rules were ignored (it served its global "
+    "rollout); now this time_window cannot be read, so the flag answers off, "
+    "reason error, for each user whose evaluation reaches it"
+)
+
+#: ``--time-window-changes``: an experiment whose windows can all be read.
+EXPERIMENT_RULES_NOW_APPLY = (
+    f"{ANSWER_CHANGES}: the experiment's rules made no new user eligible because "
+    "this time_window has no start or end; they now apply"
+)
+
+#: ``--time-window-changes``: an experiment with a window that cannot be read.
+EXPERIMENT_WINDOW_UNREADABLE = (
+    f"{ANSWER_MAY_CHANGE}: the experiment's rules made no new user eligible; they "
+    "now apply, and this time_window cannot be read, so each new user whose "
+    "evaluation reaches it is still not eligible"
+)
 
 
 @dataclass(frozen=True)
@@ -220,8 +336,9 @@ def segment_finding_for(row_id: Any, name: Any, rules: Any) -> Optional[Finding]
         reason = f"{SEGMENT_RULES_NOT_VALID}: {NOT_CHECKED}"
         return Finding(row_id, name, WHOLE_SEGMENT_RULES_PATH, reason, SEGMENT_ENTITY)
     try:
-        # Evaluated, so not "not valid": a save now refuses it (#1204).
-        check_segment_vocabulary(engine_rules)
+        # Evaluated, so not "not valid": a save now refuses it (#1204, #1525,
+        # #1526).
+        check_segment_vocabulary(engine_rules, rules)
     except TargetingRulesError as err:
         path = err.path or WHOLE_SEGMENT_RULES_PATH
         return Finding(row_id, name, path, err.code, SEGMENT_ENTITY)
@@ -339,6 +456,149 @@ def enrolment_changes_for(
             yield found
 
 
+def _stored_native_rules(rules: Any, entity: str) -> Optional[Dict[str, Any]]:
+    """The stored value, when the reader of ``entity`` reads it as native rules.
+
+    A flag's reader is ``normalise_targeting_rules``: a dict with ``groups``
+    is dashboard-shaped, else one with ``rules`` is native, and text is never
+    read. An experiment's is ``AssignmentService._coerce_targeting_rules``:
+    text is parsed first, and a dict that is not dashboard-shaped
+    (``_is_dashboard_rules_shape``) is native.
+    """
+    if entity == EXPERIMENT_ENTITY and isinstance(rules, str):
+        try:
+            rules = json.loads(rules)
+        except Exception:
+            # Assignment cannot read it either, before or after the upgrade.
+            return None
+    if not isinstance(rules, dict) or not rules:
+        return None
+    if entity == ENTITY:
+        return rules if "groups" not in rules and "rules" in rules else None
+    return None if _is_dashboard_rules_shape(rules) else rules
+
+
+def native_time_windows(rules: Dict[str, Any]) -> List[Tuple[str, Any, bool]]:
+    """``(path, value, evaluated)`` for each ``time_window`` condition in stored
+    native rules, read from the raw JSON, not through ``TargetingRules``.
+
+    In rule order, depth first (a group's conditions, then its groups),
+    ``NOT`` groups and ``default_rule`` included. ``evaluated`` is false in
+    ``default_rule``, whose conditions are never evaluated. An explicit
+    stack, not recursion, so a deep stored ruleset cannot stop the report.
+    """
+    roots: List[Tuple[str, Any, bool]] = []
+    stored_rules = rules.get("rules")
+    if isinstance(stored_rules, list):
+        for index, rule in enumerate(stored_rules):
+            if isinstance(rule, dict):
+                roots.append((f"rules[{index}].rule", rule.get("rule"), True))
+    default_rule = rules.get("default_rule")
+    if isinstance(default_rule, dict):
+        roots.append(("default_rule.rule", default_rule.get("rule"), False))
+    found: List[Tuple[str, Any, bool]] = []
+    stack = list(reversed(roots))
+    while stack:
+        path, group, evaluated = stack.pop()
+        if not isinstance(group, dict):
+            continue
+        conditions = group.get("conditions")
+        if isinstance(conditions, list):
+            for index, condition in enumerate(conditions):
+                if (
+                    isinstance(condition, dict)
+                    and condition.get("operator") == OperatorType.TIME_WINDOW.value
+                ):
+                    at = f"{path}.conditions[{index}].value"
+                    found.append((at, condition.get("value"), evaluated))
+        groups = group.get("groups")
+        if isinstance(groups, list):
+            for index, child in reversed(list(enumerate(groups))):
+                stack.append((f"{path}.groups[{index}]", child, evaluated))
+    return found
+
+
+def _lacks_start_or_end(window: Any) -> bool:
+    """A window object the ``Condition`` schema refused until #1527."""
+    return isinstance(window, dict) and ("start" not in window or "end" not in window)
+
+
+def _silent(_operator: Any, _reason: str) -> None:
+    """A ``note`` for ``check_time_window`` that logs nothing (a report is not
+    an evaluation, and must not use up a stored window's once-only warning)."""
+
+
+def _readable(window: Any) -> bool:
+    """Whether the engine can read ``window`` (its own check)."""
+    try:
+        check_time_window(OperatorType.TIME_WINDOW, window, note=_silent)
+    except TimeWindowUnreadable:
+        return False
+    return True
+
+
+def time_window_change_for(
+    row_id: Any, key: Any, rules: Any, entity: str = ENTITY, status: Any = None
+) -> Optional[Finding]:
+    """The ``--time-window-changes`` line for one stored flag or experiment, or
+    ``None`` (#1527).
+
+    Listed: native rules holding a ``time_window`` object without ``start`` or
+    ``end``, which the ``Condition`` schema refused until #1527, so the reader
+    ignored the whole ruleset, and which it now reads (they pass
+    ``TargetingRules``). Rules it still cannot read are not listed: they are
+    still ignored, so their answer does not change. The path is that of the
+    first evaluated window the engine cannot read, if there is one (each user
+    whose evaluation reaches it is refused), else that of the first window
+    without ``start`` or ``end``.
+    """
+    row_id, key = str(row_id), str(key or "")
+    status = None if status is None else _status(status)
+    native = _stored_native_rules(rules, entity)
+    if native is None:
+        return None
+    windows = native_time_windows(native)
+    changed = [path for path, window, _ in windows if _lacks_start_or_end(window)]
+    if not changed:
+        return None
+    try:
+        TargetingRules.model_validate(native)
+    except Exception:
+        return None
+    unreadable = [
+        path
+        for path, window, evaluated in windows
+        if evaluated and not _readable(window)
+    ]
+    flag = entity == ENTITY
+    if unreadable:
+        path = unreadable[0]
+        reason = FLAG_WINDOW_ANSWERS_ERROR if flag else EXPERIMENT_WINDOW_UNREADABLE
+    else:
+        path = changed[0]
+        reason = FLAG_RULES_NOW_APPLY if flag else EXPERIMENT_RULES_NOW_APPLY
+    if flag and status in NOT_ACTIVE_FLAG_STATUSES:
+        # Listed all the same: a flag that is switched on later is concerned,
+        # and listing too much is safe where hiding one that matters is not.
+        reason += f" ({status.lower()}: no change while it stays {status.lower()})"
+    return Finding(row_id, key, path, reason, entity, status)
+
+
+def time_window_changes_for(
+    flag_rows: Iterable[Tuple[Any, Any, Any, Any]],
+    experiment_rows: Iterable[Tuple[Any, Any, Any, Any]],
+) -> Iterator[Finding]:
+    """``--time-window-changes`` findings: flags, then experiments."""
+    for row_id, key, status, rules in flag_rows:
+        found = time_window_change_for(row_id, key, rules, ENTITY, status)
+        if found is not None:
+            yield found
+    for row_id, key, status, rules in experiment_rows:
+        found = time_window_change_for(row_id, key, rules, EXPERIMENT_ENTITY, status)
+        if found is not None:
+            yield found
+
+
 def read_experiment_rows(
     connection: Any, schema: str
 ) -> List[Tuple[Any, Any, Any, Any]]:
@@ -359,6 +619,19 @@ def read_segment_rows(connection: Any, schema: str) -> List[Tuple[Any, Any, Any]
     statement = text(
         f'SELECT id, "name", "rules" FROM "{schema}"."segments" '
         "WHERE \"status\" <> 'ARCHIVED' ORDER BY id"
+    )
+    return [tuple(row) for row in connection.execute(statement).all()]
+
+
+def read_flag_rows_with_status(
+    connection: Any, schema: str
+) -> List[Tuple[Any, Any, Any, Any]]:
+    """Every flag with stored targeting rules, with its status."""
+    from sqlalchemy import text
+
+    statement = text(
+        f'SELECT id, "key", "status", "targeting_rules" FROM "{schema}"."feature_flags" '
+        'WHERE "targeting_rules" IS NOT NULL ORDER BY id'
     )
     return [tuple(row) for row in connection.execute(statement).all()]
 
@@ -387,6 +660,16 @@ def scan_enrolment_changes(connection: Any, schema: str) -> List[Finding]:
     return list(enrolment_changes_for(read_experiment_rows(connection, schema)))
 
 
+def scan_time_window_changes(connection: Any, schema: str) -> List[Finding]:
+    """The ``--time-window-changes`` findings (read-only)."""
+    return list(
+        time_window_changes_for(
+            read_flag_rows_with_status(connection, schema),
+            read_experiment_rows(connection, schema),
+        )
+    )
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m backend.scripts.check_targeting_rules",
@@ -396,13 +679,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "not valid or that a save now refuses."
         ),
     )
-    parser.add_argument(
+    report = parser.add_mutually_exclusive_group()
+    report.add_argument(
         "--enrolment-changes",
         action="store_true",
         help=(
             "list instead the experiments whose stored rules hold an "
             "array_length or attribute_type condition: the new users they "
             "enrol may change (#1159)"
+        ),
+    )
+    report.add_argument(
+        "--time-window-changes",
+        action="store_true",
+        help=(
+            "list instead the flags and experiments whose stored native rules "
+            "hold a time_window without start or end: they were ignored, and "
+            "from this release they are read, so their answer changes (#1527)"
         ),
     )
     args = parser.parse_args(argv)
@@ -426,6 +719,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             connection.exec_driver_sql("SET TRANSACTION READ ONLY")
             if args.enrolment_changes:
                 found = scan_enrolment_changes(connection, schema)
+            elif args.time_window_changes:
+                found = scan_time_window_changes(connection, schema)
             else:
                 found = scan(connection, schema)
             connection.rollback()
@@ -445,6 +740,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(
             f"{len(found)} experiment(s) listed whose enrolment of new users may "
             f"change (schema {schema!r}).",
+            file=sys.stderr,
+        )
+        return 0
+    if args.time_window_changes:
+        changed_flags = sum(1 for f in found if f.entity == ENTITY)
+        print(
+            f"{changed_flags} flag(s) and {len(found) - changed_flags} "
+            "experiment(s) listed whose stored rules hold a time_window without "
+            f"start or end, read from this release (schema {schema!r}).",
             file=sys.stderr,
         )
         return 0

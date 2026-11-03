@@ -3,7 +3,9 @@ User-owned API keys (core) — ``/api/v1/api-keys``.
 
 Keys authenticate SDK traffic (``X-API-Key`` header on ``/tracking/*``,
 flag evaluation, the ruleset ...) as the owning user via
-``deps.get_api_key``.  The plaintext secret is returned exactly once by the
+``deps.get_api_key``.  A key with the ``mcp:read`` scope also reads on four
+read routes (``backend/app/api/read_scope.py``); creating one needs no role.
+The plaintext secret is returned exactly once by the
 create endpoint; only its SHA-256 hash is persisted (``APIKey.key``).
 
 * ``GET /``            — the caller's keys; ADMIN may pass ``?all=true``.

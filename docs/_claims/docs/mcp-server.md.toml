@@ -116,7 +116,7 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "An administrator can create one in the dashboard, under Admin and then API Keys, by ticking the mcp:read option."
-by = ["test:frontend/src/tests/admin/CreateApiKeyModal.test.tsx"]
+by = ["test:frontend/src/tests/admin/CreateApiKeyModal.test.tsx::sends scopes [\"mcp:read\"] when ticked"]
 
 [[unit]]
 text = "If your instance signs people in with a local password, as the Quick Start does, anyone who can sign in can create their own with the request below."
@@ -124,6 +124,7 @@ by = [
     "docex:docs/mcp-server.md#[\"mcp:read\"]",
     "test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once",
     "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_scopes_round_trip_as_list",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_the_scope_carries_no_role_rule_on_creation",
 ]
 
 [[unit]]

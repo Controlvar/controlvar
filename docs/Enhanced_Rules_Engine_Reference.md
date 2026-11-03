@@ -32,7 +32,7 @@ A condition on an attribute the request's context does not carry does not hold, 
 |---|---|---|
 | `equals` | `eq` | the attribute equals the value. Text and a number or boolean are compared as that type (`"17"` equals `17`, `"true"` equals `true`); two texts are compared as they are. |
 | `not_equals` | `neq` | the attribute does not equal the value, compared as `equals` compares. |
-| `greater_than`, `greater_than_or_equal`, `less_than`, `less_than_or_equal` | `gt`, `gte`, `lt`, `lte` | the attribute compares so with the value, both read as numbers: text that is a number (`"21"`) counts. |
+| `greater_than`, `greater_than_or_equal`, `less_than`, `less_than_or_equal` | `gt`, `gte`, `lt`, `lte` | the attribute compares so with the value, both read as numbers: text that is a number (`"21"`) counts. A value that cannot be read as a number, such as `"abc"`, `null`, a list or an object, is refused when the rules are saved. So is NaN, or an integer too large for a floating-point number, in either shape. |
 | `in` | `in` | the attribute equals one of the values, compared as `equals` compares. |
 | `not_in` | `not_in` | the attribute equals none of the values. |
 | `contains`, `not_contains` | `contains`, `not_contains` | the attribute, as text, contains the value, or does not. |
@@ -46,17 +46,23 @@ A condition on an attribute the request's context does not carry does not hold, 
 | `geo_within_radius` | `geo_distance` | the attribute is a point within the radius ([below](#geo_distance-geo_distance)). |
 | `time_window` | `time_window` | the attribute is a moment inside the window ([below](#time_window-time_window)). |
 | `in_segment`, `not_in_segment` | `in_segment`, `not_in_segment` | the user is, or is not, a member of the segment ([below](#in_segment-in_segment-not_in_segment-not_in_segment)). |
-| none | `between` | the attribute is a number, or a date, from `value` to `additional_value`, both included. |
+| none | `between` | the attribute is a number, or a date, from `value` to `additional_value`, both included. Both bounds are numbers (a JSON number, or text of digits with at most one dot) or both dates (ISO 8601 text, or a Unix timestamp in seconds, which has no time zone). Two dates must both have a time zone or both lack one. Any other pair is refused when the rules are saved (`422`), and so is a JSON integer too large for a floating-point number. A range whose `value` is above its `additional_value` matches nobody and is accepted. |
 | none | `before`, `after` | the attribute is a date before, or after, the value ([below](#before-before-after-after)). |
-| none | `array_length` | the attribute is a list, text or object whose length compares with the value as `additional_value` says: `eq` (the default), `gt`, `gte`, `lt`, `lte`, or `between` a `{"min", "max"}` value, both included. A number or `null` has no length and does not match. |
+| none | `array_length` | the attribute is a list, text or object whose length compares with the value as `additional_value` says: `eq` (the default), `gt`, `gte`, `lt`, `lte`, or `between` a `{"min", "max"}` value, both included. A number or `null` has no length and does not match. A value that is not a whole number, such as `"abc"`, `"3.0"` or `null` (a number with a fraction, `3.7`, is read as `3`), or for `between` one without whole-number `min` and `max`, is refused when the rules are saved. |
 
 Experiment targeting also accepts `json_path` and `percentage_bucket`, in the native shape;
 they are not documented here. Flag targeting refuses them with `422`, because flag evaluation
-does not implement them.
+does not implement them. A `percentage_bucket` value that cannot be read as a number, such as
+`"abc"` or `null`, is refused when an experiment's rules are saved.
 
 A distance unit, or a native-shape comparison, this page does not list is refused when rules
-are saved (`422`). Rules saved earlier with one keep answering as they did: the condition does
-not hold, so under `NOT` it holds for every user. `python -m backend.scripts.check_targeting_rules` lists the flags,
+are saved (`422`), and so is a value its operator cannot read (`"abc"` for `gt`,
+`"next week"` for `before`, a radius below 0) and a comparison in a dashboard-shape geo rule,
+which is not read. Rules saved earlier with one keep answering as they did: the condition does not
+hold, so under `NOT` it holds for every user. A dashboard-shape geo rule with a comparison
+still holds within the radius, and a comparison with a timestamp no date can hold, or with a
+number too large for a floating-point number, still abandons the ruleset
+([below](#when-a-rule-cannot-be-evaluated)). `python -m backend.scripts.check_targeting_rules` lists the flags,
 experiments and segments that have such rules, and a save that sends them back is refused until
 they are corrected.
 
@@ -106,7 +112,12 @@ rule's point is at most the radius, in kilometres unless the rule gives a unit: 
 `kilometers`, `kilometre` or `kilometres`; `mi` or `miles`; `m`, `meters` or `metres`, in any
 case. In the native shape `additional_value` may also carry `comparison`: `lte` (the default,
 within the radius), `lt`, `gt`, `gte`, or `eq` (within 0.01 of the radius, in the rule's unit).
-Any other unit or comparison is refused when the rules are saved.
+Any other unit or comparison is refused when the rules are saved. The radius must be a number
+of 0 or more, and a rule without one is refused. In the dashboard shape `comparison` is not
+read: a rule that carries one, in the object or as a fifth item of the list or the text, is
+refused, because it would be applied as "within the radius". Write the rule in the native shape
+to use `gt`, `lt`, `gte` or `eq`. A latitude, longitude or radius must fit in a floating-point
+number; a larger integer is refused like any value that is not a number (`422`).
 
 - Dashboard: `{"lat": 37.7749, "lon": -122.4194, "radius": 15, "unit": "km"}`, the list
   `[37.7749, -122.4194, 15, "km"]` or the text `"37.7749,-122.4194,15,km"`. The unit is
@@ -125,8 +136,6 @@ as `null` means the current time; an attribute that is not sent does not match.
   "attribute": "current_time",
   "operator": "time_window",
   "value": {
-    "start": "09:00",
-    "end": "17:00",
     "start_time": "09:00",
     "end_time": "17:00",
     "days": [0, 1, 2, 3, 4],
@@ -137,7 +146,11 @@ as `null` means the current time; an attribute that is not sent does not match.
 ```
 
 This window is open from 09:00 to 17:00, Monday to Friday, from 1 to 31 January
-2024.
+2024. One open on weekdays, at any time of day:
+
+```json
+{"attribute": "current_time", "operator": "time_window", "value": {"days": [0, 1, 2, 3, 4]}}
+```
 
 **Keys that say when the window is open** (every key given must hold):
 - `start_time`, `end_time`: `HH:MM` or `HH:MM:SS`, both or neither. The end
@@ -148,11 +161,12 @@ This window is open from 09:00 to 17:00, Monday to Friday, from 1 to 31 January
 `timezone` (optional), a name such as `Europe/Paris`, reads the moment in that
 timezone. Without it, the moment's own clock time is compared.
 
-**`start` and `end`:** the `Condition` schema requires them, but the engine
-does not read them. A rule saved from the dashboard stores `start` and `end` as
-`HH:MM`, and those are read as `start_time` and `end_time`. In the native shape,
-give `start_time` and `end_time` (or the other keys) as well, as the example
-does. A window with none of those keys, or with one that cannot be read (`days`
+**`start` and `end`:** the engine does not read them. A rule saved from the
+dashboard stores `start` and `end` as `HH:MM`, and those are read as
+`start_time` and `end_time`; in the dashboard shape a window still needs `start`
+and `end` (or `start_time` and `end_time`). A native window needs at least one
+of `days`, `start_time` with `end_time`, or `start_date` with `end_date`; besides
+`timezone`, any other key is ignored. A window with none of those keys, or with one that cannot be read (`days`
 not 0-6, a time that is not `HH:MM`, an unknown timezone, a date that is not
 `YYYY-MM-DD`), is refused, and a warning is logged once. For a user whose
 evaluation reaches the window, the evaluation is abandoned: the flag answers off
@@ -161,10 +175,14 @@ segment that holds the window cannot be decided for them. A user decided by an
 earlier rule never reaches it, and a window in `default_rule` is never read. So
 a window with ISO datetimes in `start` and `end` is refused, in either shape
 (accepting them is #1156). In the native shape, a window that cannot be read is
-also refused when the rules of a flag or an experiment are saved (`422`); one
-saved before that is evaluated as above. A window in the dashboard shape is not
-checked when it is saved. For a window between two moments, use `after` and
-`before` (below) in an `AND` group.
+also refused when the rules of a flag or an experiment are saved (`422`, with the
+reason `unreadable time window; give days (0 to 6), start_time and end_time
+(HH:MM), or start_date and end_date (YYYY-MM-DD); a timezone must be a name such
+as Europe/Paris`); one saved before that is evaluated as above. A window in the
+dashboard shape that cannot be read is refused when the rules of a flag, an
+experiment or a segment are saved (`422`, `unreadable time window; give start and
+end as HH:MM ...`); one saved before that is evaluated as above. For a window
+between two moments, use `after` and `before` (below) in an `AND` group.
 
 Flag targeting and experiment targeting read a window the same way.
 
@@ -172,7 +190,9 @@ Flag targeting and experiment targeting read a window the same way.
 
 `before` and `after` compare dates: an ISO 8601 string or a Unix timestamp, in the attribute
 and in the value. The condition holds when the attribute is strictly before, or strictly
-after, the value.
+after, the value. A value that is neither, such as `"next week"` or `null`, and a timestamp no
+date can hold, such as `1e20`, are refused when the rules are saved (`422`, with the reason
+`not a date; ...`).
 
 ### IN_SEGMENT (`in_segment`), NOT_IN_SEGMENT (`not_in_segment`)
 
@@ -213,8 +233,12 @@ no `default_rule` applies, and a `NOT` around the condition does not turn it int
 - a flag or an experiment that names a segment whose rules hold the condition answers as
   above, because the user's membership of that segment cannot be decided.
 
-A native `time_window` that cannot be read is now refused when the rules are saved, and one
-stored before that still abandons the ruleset as above.
+A `time_window` that cannot be read, in either shape, is now refused when the rules are saved,
+and one stored before that still abandons the ruleset as above. Native rules stored with a window that has no
+`start` or `end` (`{"days": [0, 1]}`, or `{}`) are evaluated as written: a window that can be
+read applies with the rest of the rules, and one that cannot abandons the ruleset as above.
+`python -m backend.scripts.check_targeting_rules --time-window-changes` lists the flags and
+experiments that hold one, and how each one's answer changes on upgrade.
 
 ## Usage examples
 

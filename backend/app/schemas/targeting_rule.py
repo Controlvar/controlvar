@@ -179,16 +179,14 @@ class Condition(BaseModel):
                     "JSON_PATH operator requires value as JSONPath string starting with '$.'"
                 )
 
-        # Validate time window format
-        if operator == OperatorType.TIME_WINDOW:
-            if (
-                not isinstance(value, dict)
-                or "start" not in value
-                or "end" not in value
-            ):
-                raise ValueError(
-                    "TIME_WINDOW operator requires value as dict with 'start' and 'end' keys"
-                )
+        # A time window is an object; which of its keys the engine can read
+        # (``rules_engine.check_time_window``) is decided when rules are saved,
+        # by ``targeting_adapter._unsupported_word``, and not here: this model
+        # also decides whether stored rules are read at all, so a check here
+        # would change the answer of rules already stored. ``start`` and
+        # ``end`` are not required: the engine does not read them (#1527).
+        if operator == OperatorType.TIME_WINDOW and not isinstance(value, dict):
+            raise ValueError("TIME_WINDOW operator requires value as an object")
 
         return self
 

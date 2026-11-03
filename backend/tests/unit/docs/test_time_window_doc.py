@@ -240,3 +240,23 @@ def test_after_and_before_make_a_window_between_two_moments():
         context = {"current_time": moment}
         assert rules_engine.evaluate_rule_group(group, context) is inside, moment
         assert service._evaluate_rule_group_enhanced(group, context) is inside, moment
+
+
+#: The sentence #1669 makes false: a dashboard window that cannot be read is
+#: now refused when it is saved.
+UNCHECKED = "A window in the dashboard shape is not checked when it is saved."
+CHECKED = (
+    "A window in the dashboard shape that cannot be read is refused when the rules "
+    "of a flag, an experiment or a segment are saved (`422`, `unreadable time "
+    "window; give start and end as HH:MM ...`); one saved before that is evaluated "
+    "as above."
+)
+
+
+def test_the_page_no_longer_says_a_dashboard_window_goes_unchecked():
+    """(#1669, W7) The page is read with its whitespace folded, because the old
+    sentence was wrapped across two lines and a plain search for it found
+    nothing even while it was there (PE-B3P3-1)."""
+    page = " ".join(PAGE.read_text(encoding="utf-8").split())
+    assert UNCHECKED not in page
+    assert CHECKED in page

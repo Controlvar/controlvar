@@ -198,7 +198,7 @@ expects = 0
 path = "docs/development/testing-guide.md"
 environment = "bare"
 exec = 0
-skip = 3
+skip = 4
 expects = 0
 
 [[document]]
@@ -295,9 +295,9 @@ expects = 15
 [[document]]
 path = "docs/guides/experiment-wizard.md"
 environment = "stack"
-exec = 11
+exec = 12
 skip = 0
-expects = 19
+expects = 22
 
 [[document]]
 path = "docs/llm-evaluation/quickstart.md"
