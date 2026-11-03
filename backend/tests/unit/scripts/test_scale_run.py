@@ -406,7 +406,7 @@ def test_the_environment_k6_is_given_is_checked():
         "SCALE_RATE": "63",
         "SCALE_TIME_UNIT_MS": "10000",
         "SCALE_DURATION_S": "70",
-        "SCALE_FIRST_MEASURED": "63",
+        "SCALE_SETTLE_MS": "10000",
         "SCALE_VUS": "20",
         "SCALE_TIMEOUT_MS": "5000",
         "SCALE_STEP": "2",
@@ -447,8 +447,14 @@ def test_the_scenario_script_is_an_open_model_with_every_vu_allocated():
     assert "exec.vu.metrics.metadata[RECORD_KEY] = record(fields)" in text
     assert "delete exec.vu.metrics.metadata[RECORD_KEY]" in text
     assert f"new Trend('{sr.RECORD_METRIC}', true)" in text
-    # The start lag is computed before the request is sent.
-    assert text.index("startLagUs(Date.now()") < text.index("http.request(")
+    # The clock is read, and the start lag and send offset taken from it,
+    # before the request is sent.
+    assert text.index("const now = Date.now();") < text.index("http.request(")
+    assert text.index("startLagUs(now,") < text.index("http.request(")
+    assert text.index("sentOffsetUs(now,") < text.index("http.request(")
+    # The measure window is the send time, never the iteration number (#1667).
+    assert "sentOffset >= env.settleMs * 1000" in text
+    assert "firstMeasured" not in text
 
 
 #: Stand-ins for k6's modules, enough to load scenarios.js under node and run
@@ -493,10 +499,13 @@ globalThis.__ENV = input.env;
 globalThis.open = () => JSON.stringify(input.fixtures);
 const script = await import('./scenarios.js');
 response.value = input.response;
-for (const i of input.iterations) {
+const realNow = Date.now;
+for (const [i, atMs] of input.iterations) {
   state.iteration = i;
+  Date.now = () => exec.scenario.startTime + atMs;
   script.default();
 }
+Date.now = realNow;
 const summary = script.handleSummary({ metrics: {
   scale_request: { values: { count: 2 } },
   scale_measured: { values: { count: 1, 'p(99)': 2.5 } },
@@ -529,7 +538,7 @@ def test_the_scenario_script_runs_its_steps_as_lib_js_says(tmp_path):
         "SCALE_RATE": "1",
         "SCALE_TIME_UNIT_MS": "200",
         "SCALE_DURATION_S": "70",
-        "SCALE_FIRST_MEASURED": "50",
+        "SCALE_SETTLE_MS": "10000",
         "SCALE_VUS": "20",
         "SCALE_TIMEOUT_MS": "5000",
         "SCALE_STEP": "1",
@@ -557,7 +566,10 @@ def test_the_scenario_script_runs_its_steps_as_lib_js_says(tmp_path):
                     "env": env,
                     "fixtures": FIXTURES,
                     "response": response,
-                    "iterations": [3, 60],
+                    # [iteration, ms after the scenario's start it was sent]: a
+                    # drop before the second, so its number (60) is not its
+                    # slot; what counts is that it went out after the settle.
+                    "iterations": [[3, 600], [4, 10_000], [60, 12_000]],
                 }
             ),
         ],
@@ -587,26 +599,28 @@ def test_the_scenario_script_runs_its_steps_as_lib_js_says(tmp_path):
         "expected_response",
     ]
     assert out["options"]["thresholds"] == {"dropped_iterations": ["count<1"]}
-    assert [c["params"]["timeout"] for c in out["calls"]] == ["5000ms", "5000ms"]
+    assert [c["params"]["timeout"] for c in out["calls"]] == ["5000ms"] * 3
     assert all(c["params"]["redirects"] == 0 for c in out["calls"])
     records = [s for s in out["samples"] if s["name"] == "scale_request"]
-    assert [s["value"] for s in records] == [3.75, 3.75]
+    assert [s["value"] for s in records] == [3.75] * 3
     lines = [s["metadata"]["scale_row"] for s in records]
-    assert [line.split("|")[1] for line in lines] == ["3", "60"]
+    assert [line.split("|")[1] for line in lines] == ["3", "4", "60"]
     (read,) = sr.read_records(
         ",".join(K6_HEADER)
         + "\n"
-        + f"scale_request,1,3.75,,,s,,,scale_row={lines[1]}\n"
+        + f"scale_request,1,3.75,,,s,,,scale_row={lines[2]}\n"
     )
+    assert read["sent_offset_us"] == "12000000"
     assert read["scenario"] == "track" and read["latency_us"] == "3750"
     assert (
         read["rate_limit"] == "10000000"
         and read["scenario_start_ms"] == "1793604814000"
     )
-    # Only the measured iteration (60 >= 50) is in scale_measured, and that
-    # sample carries no record.
+    # Only the requests sent at or after the settle (10 s) are in
+    # scale_measured, whatever their iteration numbers, and those samples
+    # carry no record.
     measured = [s for s in out["samples"] if s["name"] == "scale_measured"]
-    assert len(measured) == 1 and measured[0]["metadata"] == {}
+    assert len(measured) == 2 and all(s["metadata"] == {} for s in measured)
     assert out["metadata_after"] == {}
     summary = json.loads(out["summary"]["/out/summary.json"])
     assert summary == {
@@ -742,7 +756,14 @@ def test_records_written_by_lib_js_are_read_by_the_adapter():
     }
     request = one("buildRequest", "assign_returning", 1, CONTEXT)
     fields = one(
-        "rowFor", "assign_returning", 1, request, response, 2000, 1793604814000
+        "rowFor",
+        "assign_returning",
+        1,
+        request,
+        response,
+        2000,
+        1793604814000,
+        11_000_000,
     )
     line = one("record", fields)
     text = "\n".join(
@@ -755,11 +776,47 @@ def test_records_written_by_lib_js_are_read_by_the_adapter():
     (record,) = sr.read_records(text)
     (row,) = sr.to_rows([record])
     assert row["latency_us"] == "6500" and row["start_lag_us"] == "2000"
+    assert row["sent_offset_us"] == "11000000"
     assert row["rate_limit"] == "10000000"
     variant = fx.VARIANTS[int(row["user_index"]) % 2]
     assert se.judge("assign_returning", row, expect) == (
         "" if variant == "treatment" else "body"
     )
+
+
+def test_the_measured_count_is_by_send_time_not_iteration_number():
+    rows = [{"sent_offset_us": str(s * 1_000_000)} for s in (0, 4, 5, 6, 24)]
+    assert sr.measured_count(rows, 5) == 3
+    assert sr.measured_count(rows, 0) == 5
+
+
+@pytest.mark.regression
+def test_a_step_that_measured_nothing_says_so_and_prints_no_percentile():
+    """#1667: the line over an empty set read 'p99 under 1 ms, 0 of 0 failed'."""
+    meth = se.load_config(mode="smoke")
+    # Four requests, all sent in the 5 s settle; 121 of the 125 dropped.
+    rows = [fx.row("track", i, sent_offset_us=i * 1_000_000) for i in range(4)]
+    observation = fx.observation(meth, "mix", 1, rows=4, samples=20)
+    observation.update(scenario="mix", dropped=121)
+    record, _ = se.summarise_step(
+        meth,
+        "mix",
+        se.read_rows(fx.csv_text(rows)),
+        observation,
+        fx.metrics("a"),
+        fx.metrics("a"),
+    )
+    assert record["measured"] == 0
+    line = sr.step_line(record, 0)
+    assert line == (
+        f"step 1: {se.rps(record['milli_rps'])}: INVALID (nothing-measured), no "
+        "request was sent in the measure window, so no latency or failure count "
+        "was measured"
+    )
+    assert "p99" not in line and "failed" not in line.replace("failure count", "")
+    # A step that did measure still prints its numbers.
+    ok = {**record, "measured": 16, "valid": True, "invalid_reason": "none"}
+    assert "p99" in sr.step_line(ok, 0) and "of 16 failed" in sr.step_line(ok, 0)
 
 
 def test_k6_s_own_counts_check_the_reading():
@@ -1629,7 +1686,7 @@ class FakeWorld:
         directory = Path(mount.rsplit(":", 1)[0])
         rate, unit = int(variables["SCALE_RATE"]), int(variables["SCALE_TIME_UNIT_MS"])
         seconds = int(variables["SCALE_DURATION_S"])
-        first = int(variables["SCALE_FIRST_MEASURED"])
+        settle_us = int(variables["SCALE_SETTLE_MS"]) * 1000
         step = int(variables["SCALE_STEP"])
         scheduled = se.scheduled_count(rate, unit, seconds)
         start = self.now + 100
@@ -1649,6 +1706,7 @@ class FakeWorld:
             row = fx.row(
                 scenario,
                 i,
+                sent_offset_us=i * unit * 1000 // rate,
                 status=503 if erring and i % 10 == 0 else 200,
                 latency_us=1_500_000 if failing else self.latency_us + i % 900,
             )
@@ -1656,7 +1714,7 @@ class FakeWorld:
             record["scenario_start_ms"] = str(start)
             records.append(record)
         (directory / "k6.csv").write_text(k6_csv(records), "utf-8")
-        measured = sum(1 for r in records if int(r["iteration"]) >= first)
+        measured = sum(1 for r in records if int(r["sent_offset_us"]) >= settle_us)
         (directory / "summary.json").write_text(
             json.dumps(
                 {
