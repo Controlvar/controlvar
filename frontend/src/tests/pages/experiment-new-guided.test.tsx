@@ -1426,7 +1426,7 @@ describe('the estimate plans with the experiment\'s correction (#820)', () => {
     ['a correction and no comparisons', { correction_method: 'bonferroni' }, 'none'],
     ['no echo (an older API)', {}, 'none'],
     ['none', { correction_method: 'none', comparisons: 2 }, 'none'],
-  ])('treats an answer with %s as applying %s', (_label, echo, applied) => {
+  ])('treats an answer with %s (%j) as applying %s', (_label, echo, applied) => {
     expect(appliedCorrection({ ...ESTIMATE_47036, ...echo } as Parameters<typeof appliedCorrection>[0])).toBe(applied);
   });
 });
