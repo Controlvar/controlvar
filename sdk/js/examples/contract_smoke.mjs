@@ -78,6 +78,15 @@ try {
     fail(`batch: ${JSON.stringify(batch)}`);
   }
 
+  // 4b2. One keyed event sent twice with one fixed eventId (#1543, C4). The server is to store
+  //      it once: the runner counts the rows for this user and event name.
+  const dedupName = `contract_dedup_${randomUUID()}`;
+  const dedupId = `contract-${randomUUID()}`;
+  for (let i = 0; i < 2; i++) {
+    await client.track(userId, dedupName, { experimentKey, eventId: dedupId });
+  }
+  if (trackErrors.length) fail(`event_id: ${trackErrors[0]}`);
+
   // 4c. The attributes reach flag evaluation (#1520). The seeded targeted flag is at 0% with one
   //     rule, plan equals pro, at 100%. A NEW client (so the fan-out above is untouched) asks for
   //     it with plan=pro, then, after clearCache() (the cache key is user + flag), with plan=free.
@@ -127,6 +136,7 @@ try {
       track: { ok: true },
       fanout: { ok: true },
       targeted: { pro: pro.enabled, free: free.enabled, reason: pro.reason ?? null },
+      event_id: { user_id: userId, event_name: dedupName, id: dedupId, sends: 2 },
       exposure: {
         calls: exposures.length,
         payload: exposure

@@ -587,6 +587,10 @@ export class ExperimentationClient {
     if (event.value !== undefined) base.value = event.value;
     if (event.properties !== undefined) base.metadata = event.properties;
     if (event.timestamp !== undefined) base.timestamp = toIso(event.timestamp);
+    // The caller's id, copied into every fan-out entry below. None is made here.
+    if (event.eventId !== undefined && event.eventId !== null && event.eventId !== '') {
+      base.event_id = event.eventId;
+    }
 
     if (event.experimentKey || event.featureFlagKey) {
       const body: TrackBody = { ...base };

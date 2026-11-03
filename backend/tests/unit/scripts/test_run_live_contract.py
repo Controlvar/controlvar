@@ -259,15 +259,18 @@ def test_each_wrong_exposure_report_gives_exactly_its_problem(
     """The gate's own planted reports, with "js" listed and "python" not."""
     monkeypatch.setattr(runner, "EXPOSURE_SDKS", frozenset({"js"}))
     monkeypatch.setattr(runner, "ATTRIBUTE_SDKS", frozenset())  # exposure alone here
+    monkeypatch.setattr(runner, "EVENT_ID_SDKS", frozenset())  # exposure alone here
     report = {"sdk": sdk, **GOOD}
     if exposure is not None:
         report["exposure"] = exposure
     assert runner.validate(sdk, report) == [problem]
 
 
-def test_java_is_the_sdk_that_sends_one_event_twice_with_one_id(runner):
-    assert runner.EVENT_ID_SDKS == frozenset({"java"})
-    assert runner.validate("java", good(runner, "java")) == []
+def test_java_and_js_are_the_sdks_that_send_one_event_twice_with_one_id(runner):
+    assert runner.EVENT_ID_SDKS == frozenset({"java", "js"})
+    for sdk in sorted(runner.EVENT_ID_SDKS):
+        assert good(runner, sdk)["event_id"] == EVENT_ID
+        assert runner.validate(sdk, good(runner, sdk)) == []
 
 
 @pytest.mark.parametrize(
@@ -295,9 +298,9 @@ def test_java_is_the_sdk_that_sends_one_event_twice_with_one_id(runner):
             id="no-id",
         ),
         pytest.param(
-            "python",
+            "go",
             EVENT_ID,
-            ["event_id reported but python is not in EVENT_ID_SDKS"],
+            ["event_id reported but go is not in EVENT_ID_SDKS"],
             id="unlisted",
         ),
     ],
@@ -305,7 +308,7 @@ def test_java_is_the_sdk_that_sends_one_event_twice_with_one_id(runner):
 def test_each_wrong_event_id_report_gives_exactly_its_problems(
     monkeypatch, runner, sdk, report, problems
 ):
-    """The gate's own planted reports, with "java" listed and "python" not."""
+    """The gate's own planted reports, with "java" listed and "go" not."""
     monkeypatch.setattr(runner, "EVENT_ID_SDKS", frozenset({"java"}))
     payload = {**good(runner, sdk)}
     payload.pop("event_id", None)

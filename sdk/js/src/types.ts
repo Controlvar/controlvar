@@ -173,6 +173,14 @@ export interface TrackOptions {
   eventType?: string;
   /** Client-side timestamp; sent as an ISO-8601 string. */
   timestamp?: Date | string;
+  /**
+   * Your id for this event (sent as `event_id`). The server stores an event sent again with the
+   * same `event_id`, user, experiment, flag and event name only once. The SDK makes no id: leave
+   * it out, or pass `undefined`, `null` or `''`, and none is sent. An event fanned out to several
+   * experiments and flags carries the same id in every entry. The server refuses (422) an id of
+   * more than 255 characters or one holding NUL; the SDK does not check it.
+   */
+  eventId?: string;
 }
 
 /** One entry for `trackBatch`. */
@@ -272,4 +280,5 @@ export interface TrackBody {
   value?: number;
   metadata?: Record<string, unknown>;
   timestamp?: string;
+  event_id?: string;
 }

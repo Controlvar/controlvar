@@ -203,6 +203,7 @@ EVENT_ID_SDKS: frozenset[str] = frozenset(
     [
         # One line per SDK, in the form "js",
         "java",
+        "js",
     ]
 )
 
