@@ -268,23 +268,39 @@ text = "Through the API, send \"scopes\": [\"sdk:ruleset\"]."
 by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_ruleset_scope_by_role"]
 
 [[unit]]
-text = "Only users who can change feature flags can create a key with the sdk:ruleset scope: the ADMIN and DEVELOPER roles, and superusers."
-by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_ruleset_scope_by_role"]
+text = "Only users who can change feature flags can create a key with the sdk:ruleset scope: the ADMIN and DEVELOPER roles, superusers, and in the full profile anyone whose custom role or direct grant gives feature_flag (update)."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_ruleset_scope_by_role",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+]
 
 [[unit]]
-text = "For anyone else (ANALYST or VIEWER) the request is refused with 403 Forbidden, whose message names the roles that may create such a key, and no key is created."
-by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_ruleset_scope_by_role"]
+text = "For anyone else the request is refused with 403 Forbidden, whose message says who may create such a key, and no key is created."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_ruleset_scope_by_role",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_experiment_update_alone_gives_no_server_key",
+    "test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_key_creation_refusal_text",
+]
 
 [[unit]]
 text = "Keys without that scope can be created by every role, as before."
 by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_keys_without_the_scope_are_unchanged"]
 
 [[unit]]
-text = "Using such a key follows the same rule: both routes above accept a key with sdk:ruleset only while its owner can change feature flags, checked on every request, so a key whose owner is moved to ANALYST or VIEWER is refused with 403 from then on."
+text = "Using such a key follows the same rule: the three routes above accept a key with sdk:ruleset only while its owner can change feature flags, checked on every request, so a key whose owner loses that (moved to ANALYST or VIEWER, or a grant revoked or expired) is refused with 403 from then on."
 by = [
     "test:backend/tests/integration/api/test_sdk_ruleset_api.py",
     "test:backend/tests/integration/api/test_flag_evaluations_api.py",
     "test:backend/tests/integration/api/test_tracking_assign_batch.py",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+    "test:modules/backend/tests/integration/rbac/test_rbac_provider.py::test_a_grant_yields_its_pairs_only_when_activated_active_and_unexpired",
+]
+
+[[unit]]
+text = "POST /api/v1/tracking/assign/batch also needs the owner to be able to change experiments; otherwise it answers 403 and assigns nobody."
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+    "test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_owner_experiment_text",
 ]
 
 [[unit]]

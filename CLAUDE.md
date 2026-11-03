@@ -390,7 +390,9 @@ The `core/permissions.py` module implements a comprehensive RBAC system with fou
 #### Feature Flag Permissions
 - **Access to a flag is by role, not ownership** (founder decision D11): ADMIN and
   DEVELOPER read, create, change and delete any flag; ANALYST and VIEWER read any flag
-  and change none, not even one they own. The creator is recorded as `owner_id` (a
+  and change none, not even one they own, unless (full profile) a custom role or direct
+  grant gives them feature_flag create, update or delete, which admits any flag. The
+  creator is recorded as `owner_id` (a
   UUID) and shown, but it is not an access rule.
 - **The one decision is `can_act_on_feature_flag(user, owner_id, action)`** in
   `backend/app/core/permissions.py`: the role matrix first, then `FEATURE_FLAG_SCOPE`
