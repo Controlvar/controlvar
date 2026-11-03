@@ -13,7 +13,7 @@ record carries ``"v": 1`` and a ``kind``:
 ``start``   first, once: ``source``, ``seed``, ``experiments`` (each ``exp``,
             the experiment's public key, and ``variants``, its variants'
             ``name`` and ``allocation`` in creation order, as the test sent
-            them), ``flags``, ``planted`` (the planted rates) and ``declared``
+            them), ``flags``, ``planted`` (a list of the planted rates, each with its arm's ``name``) and ``declared``
             (what the run declares about the server and the stack).
 ``assign``  ``user``, ``exp``, ``status``, ``assigned``, ``variant``,
             ``reason``, ``attempts``: written from the answer's body only.
@@ -107,7 +107,7 @@ REQUIRED: dict[str, dict[str, tuple[str, ...]]] = {
         "seed": ("int", "str"),
         "experiments": ("list",),
         "flags": ("list",),
-        "planted": ("object",),
+        "planted": ("list",),
         "declared": ("object",),
     },
     "assign": {
@@ -545,7 +545,7 @@ class Writer:
         seed: int | str,
         experiments: Sequence[Mapping[str, Any]],
         flags: Sequence[Any] = (),
-        planted: Mapping[str, Any] | None = None,
+        planted: Sequence[Mapping[str, Any]] | None = None,
         declared: Mapping[str, Any] | None = None,
         secrets: Iterable[str] = (),
     ) -> None:
@@ -562,7 +562,7 @@ class Writer:
                 "seed": seed,
                 "experiments": [dict(e) for e in experiments],
                 "flags": list(flags),
-                "planted": dict(planted or {}),
+                "planted": list(planted or ()),
                 "declared": dict(declared or {}),
             }
         )

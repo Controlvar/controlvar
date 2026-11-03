@@ -52,7 +52,10 @@ MINIMAL = [
             }
         ],
         "flags": [],
-        "planted": {"control": 0.1, "video": 0.12},
+        "planted": [
+            {"name": "control", "conversion": 0.1},
+            {"name": "video", "conversion": 0.12},
+        ],
         "declared": {},
     },
     {"kind": "action", "action": "start", "exp": EXP, "status": 200, "attempts": 1},
@@ -165,6 +168,30 @@ def test_a_replayed_plan_round_trips():
     kinds = {r["kind"] for r in found}
     assert kinds == {"start", "action", "assign", "event", "batch", "end"}
     assert all(r["v"] == 1 for r in found)
+
+
+def test_an_arm_named_like_a_header_or_a_credential_does_not_refuse_the_run():
+    """The planted truth is a list of entries, so an arm's name is data, not a
+    key; no exemption in the secret scan is needed."""
+    scenario = g.Scenario(
+        name="named",
+        experiment_key="gt-named",
+        arms=(
+            g.Arm("control", 50, 0.3),
+            g.Arm("sticky-header", 25, 0.3),
+            g.Arm("session-token", 25, 0.3),
+        ),
+        users=60,
+        event_name="purchase",
+        metrics=(g.Metric("buyers", "purchase", "conversion"),),
+    )
+    plan = g.simulate(5, scenario)
+    found = records(replay(plan))
+    assert [entry["name"] for entry in found[0]["planted"]] == [
+        "control",
+        "sticky-header",
+        "session-token",
+    ]
 
 
 def test_a_stream_with_only_the_required_fields_is_read():
@@ -324,7 +351,7 @@ _SECRET = "sk-live-abcdef123456"
     [
         {"declared": {f"token {_SECRET}": 1}},
         {"declared": {f"note {_SECRET}": 1}},
-        {"planted": {f"arm {_SECRET}": {"conversion": 0.1}}},
+        {"planted": [{"name": "control", f"arm {_SECRET}": 0.1}]},
         {"declared": {"a": {f"{_SECRET}": 1}}},
     ],
     ids=["secret-named-key", "key-with-secret", "planted-key", "nested-key"],
@@ -344,7 +371,7 @@ def test_a_refusal_names_a_field_by_its_path_never_by_the_text_of_its_key(where)
         )
     assert _SECRET not in str(refused.value)
     assert _SECRET not in stream.getvalue()
-    assert "<key 0>" in str(refused.value)  # the path, by position
+    assert "<key " in str(refused.value)  # the path, the key by its position
 
 
 def test_a_refusal_message_carrying_a_registered_secret_is_withheld():

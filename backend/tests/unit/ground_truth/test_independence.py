@@ -116,7 +116,7 @@ plan = generator.simulate(1, scenario)
 arms = plan.allocations()
 users = [f"gt-g4-{{n}}" for n in range(40)]
 lines = [ledger.dumps(r) for r in [
-    {{"kind": "start", "source": "g4", "seed": 1, "flags": [], "planted": {{}},
+    {{"kind": "start", "source": "g4", "seed": 1, "flags": [], "planted": [],
       "declared": {{"event_dedup": True}},
       "experiments": [{{"exp": "gt-g4", "status": "active",
                         "variants": [{{"name": n, "allocation": a}} for n, a in arms]}}]}},

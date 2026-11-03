@@ -70,7 +70,7 @@ def start(
             "seed": 0,
             "experiments": experiments,
             "flags": [],
-            "planted": {},
+            "planted": [],
             "declared": {} if dedup is None else {"event_dedup": dedup},
         }
     ]

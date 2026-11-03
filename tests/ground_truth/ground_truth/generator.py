@@ -148,8 +148,11 @@ class Plan:
                 }
             ],
             "flags": [],
-            "planted": {
-                arm.name: {
+            # A list of entries, not a dict keyed by arm name: an arm's name is
+            # data, and a key named like a header would be refused as one.
+            "planted": [
+                {
+                    "name": arm.name,
                     "conversion": arm.conversion,
                     "repeat": arm.repeat,
                     "values": None
@@ -157,7 +160,7 @@ class Plan:
                     else {"mu": arm.values.mu, "sigma": arm.values.sigma},
                 }
                 for arm in scenario.arms
-            },
+            ],
             "declared": dict(declared or {}),
         }
 

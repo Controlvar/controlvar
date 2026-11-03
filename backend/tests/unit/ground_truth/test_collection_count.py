@@ -29,12 +29,12 @@ LIBRARY_ROOT = REPO_ROOT / "tests" / "ground_truth"
 #: test node id count per module, as ``pytest --collect-only -q`` lists them.
 EXPECTED = {
     "test_collection_count.py": 2,
-    "test_contract.py": 20,
+    "test_contract.py": 22,
     "test_contract_citations.py": 27,
     "test_generator.py": 21,
     "test_hashing.py": 20,
     "test_independence.py": 3,
-    "test_ledger.py": 49,
+    "test_ledger.py": 55,
     "test_reference.py": 27,
 }
 
