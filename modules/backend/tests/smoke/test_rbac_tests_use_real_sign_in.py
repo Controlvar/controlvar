@@ -13,8 +13,9 @@ effect therefore must:
   shadows the shared one for every test in the file;
 * never build a ``TestClient`` of their own.
 
-The provider's contract test (check #29) calls the provider directly and
-makes no request; it is held to the first rule only.
+The provider's contract test (check #29) calls the provider directly, and the
+writers' test (check #33) calls the route functions directly on one session;
+neither makes a request, so they are held to the first rule only.
 """
 
 from __future__ import annotations
@@ -39,8 +40,9 @@ REQUEST_FILES = (
     "test_rbac_effective_permissions_display.py",
     "test_rbac_statement_count.py",
 )
-#: Check #29 (the provider, called directly).
-DIRECT_FILES = ("test_rbac_provider.py",)
+#: Check #29 (the provider, called directly) and check #33 (the writers, called
+#: directly on one session).
+DIRECT_FILES = ("test_rbac_provider.py", "test_rbac_writers_forget.py")
 
 
 def problems(name: str, source: str, *, makes_requests: bool) -> list[str]:
