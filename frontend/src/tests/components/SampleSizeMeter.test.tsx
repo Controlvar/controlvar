@@ -263,7 +263,7 @@ describe('SampleSizeMeter', () => {
         const note = screen.getByTestId('sample-size-metric-type-note');
         expect(note).toHaveTextContent(
           `Visits is analysed as ${label}, but this plan is for the share of users who send visit (a two-proportion test). ` +
-            `A sample-size plan for ${label} is not available, and the Power Calculator plans conversion rates only.`
+            `This tab and the Power Calculator page plan conversion rates only. To plan ${label} itself, send metric_type mean to POST /api/v1/power/sample-size: see Planning a mean in the Statistical Power Analysis guide.`
         );
         expect(note).not.toHaveTextContent(/analysed as a conversion/i);
         expect(note).not.toHaveTextContent(/use the Power Calculator/i);
@@ -306,8 +306,9 @@ describe('SampleSizeMeter', () => {
       const note = screen.getByTestId('sample-size-metric-type-note');
       expect(note).toHaveTextContent(
         'Order value is analysed as revenue per user, but this plan is for the share of users who send purchase (a two-proportion test). ' +
-          'A sample-size plan for revenue per user is not available, and the Power Calculator plans conversion rates only.'
+          'This tab and the Power Calculator page plan conversion rates only. To plan revenue per user itself, send metric_type mean to POST /api/v1/power/sample-size: see Planning a mean in the Statistical Power Analysis guide.'
       );
+      expect(within(note).getByText('POST /api/v1/power/sample-size').tagName).toBe('CODE');
       expect(within(note).getByText('purchase').tagName).toBe('CODE');
       expect(note).not.toHaveTextContent(/analysed as a conversion today/i);
       expect(within(note).queryByRole('link')).not.toBeInTheDocument();

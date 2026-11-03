@@ -48,11 +48,12 @@ text = "Log in first."
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Creating and starting an experiment takes the DEVELOPER or ADMIN role:"
+text = "Creating and starting an experiment takes permission to create and change experiments, such as the DEVELOPER or ADMIN role:"
 by = [
     "test:backend/tests/integration/api/test_llm_experiments_api.py::TestCreateLLMExperiment::test_viewer_cannot_create_experiment",
     "test:backend/tests/integration/api/test_llm_experiments_api.py::TestCreateLLMExperiment::test_analyst_cannot_create_experiment",
     "test:backend/tests/integration/api/test_llm_experiments_api.py::TestStartPauseLLMExperiment::test_viewer_cannot_start",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
 ]
 
 [[unit]]
@@ -221,32 +222,48 @@ text = "Permissions"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Action | Required Role"
-by = ["exempt:baseline"]
+text = "Action | Needs"
+by = ["exempt:label"]
 
 [[unit]]
-text = "Create / Start / Pause experiment | DEVELOPER or ADMIN"
+text = "Create experiment | experiment (create) (DEVELOPER or ADMIN, or in the full profile a custom role or direct grant)"
 by = [
     "test:backend/tests/integration/api/test_llm_experiments_api.py::TestCreateLLMExperiment::test_viewer_cannot_create_experiment",
-    "test:backend/tests/integration/api/test_llm_experiments_api.py::TestStartPauseLLMExperiment::test_viewer_cannot_start",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
 ]
 
 [[unit]]
-text = "Add / update variants | DEVELOPER or ADMIN"
-by = ["test:backend/tests/integration/api/test_llm_variants_and_cost.py::test_adding_and_updating_variants_takes_developer_or_admin"]
+text = "Start / Pause experiment | experiment (update) (DEVELOPER or ADMIN, or in the full profile a custom role or direct grant)"
+by = [
+    "test:backend/tests/integration/api/test_llm_experiments_api.py::TestStartPauseLLMExperiment::test_viewer_cannot_start",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
+
+[[unit]]
+text = "Add / update variants | experiment (update) (DEVELOPER or ADMIN, or in the full profile a custom role or direct grant)"
+by = [
+    "test:backend/tests/integration/api/test_llm_variants_and_cost.py::test_adding_and_updating_variants_takes_developer_or_admin",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
 text = "Get completion | Any authenticated user (READ)"
 by = ["test:backend/tests/integration/api/test_llm_experiments_api.py::TestLLMComplete::test_viewer_can_call_complete"]
 
 [[unit]]
-text = "Submit evaluation | DEVELOPER or ADMIN"
-by = ["test:backend/tests/integration/api/test_llm_experiments_api.py::TestSubmitEvaluation::test_viewer_cannot_submit_evaluation"]
+text = "Submit evaluation | experiment (update) (DEVELOPER or ADMIN, or in the full profile a custom role or direct grant)"
+by = [
+    "test:backend/tests/integration/api/test_llm_experiments_api.py::TestSubmitEvaluation::test_viewer_cannot_submit_evaluation",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
 text = "Get results | Any authenticated user (READ)"
 by = ["test:backend/tests/integration/api/test_llm_experiments_api.py::TestGetResults::test_viewer_can_get_results"]
 
 [[unit]]
-text = "Run LLM-as-judge | DEVELOPER or ADMIN"
-by = ["test:backend/tests/integration/api/test_llm_experiments_api.py::TestJudgeEndpoint::test_viewer_cannot_run_judge"]
+text = "Run LLM-as-judge | experiment (update) (DEVELOPER or ADMIN, or in the full profile a custom role or direct grant)"
+by = [
+    "test:backend/tests/integration/api/test_llm_experiments_api.py::TestJudgeEndpoint::test_viewer_cannot_run_judge",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]

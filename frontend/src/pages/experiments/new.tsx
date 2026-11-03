@@ -15,6 +15,7 @@ import {
   validateForm,
 } from '@/components/experiments/new/formState';
 import { useOptionalAuth } from '@/contexts/AuthContext';
+import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
 import { canCreateExperiment } from '@/utils/experimentPermissions';
 import {
   CreateError,
@@ -40,6 +41,7 @@ const INITIAL_SNAPSHOT = JSON.stringify(createInitialFormState());
 export default function NewExperimentPage() {
   const router = useRouter();
   const auth = useOptionalAuth();
+  const { effective, loading: permissionsLoading } = useEffectivePermissions();
   const [state, dispatch] = useReducer(experimentFormReducer, undefined, createInitialFormState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<CreateError | null>(null);
@@ -115,9 +117,13 @@ export default function NewExperimentPage() {
     void submit('advanced');
   };
 
+  const allowed = canCreateExperiment(auth?.user, effective);
+
   // Nothing reads the query before the router has it: a static export renders
-  // first with an empty one, which would drop `?advanced` and `?step`.
-  if (!router.isReady) {
+  // first with an empty one, which would drop `?advanced` and `?step`. Nor is
+  // the notice shown while the effective map may still add EXPERIMENT CREATE
+  // (#891): neither the notice nor the form until it answers.
+  if (!router.isReady || (!allowed && permissionsLoading)) {
     return (
       <div className="flex-1 bg-slate-50">
         <PageTitle title="New Experiment" />
@@ -130,7 +136,6 @@ export default function NewExperimentPage() {
 
   // `?advanced` carries no value, so it parses to "" — check for the key.
   const advanced = 'advanced' in router.query;
-  const allowed = canCreateExperiment(auth?.user);
   const freshLoad = !shownViewRef.current;
 
   return (

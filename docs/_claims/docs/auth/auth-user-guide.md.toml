@@ -488,6 +488,13 @@ text = "After a save the list reloads on the page and search you were on."
 by = ["test:frontend/src/tests/admin/UserTable.test.tsx::a reload from the page keeps the current page and search term"]
 
 [[unit]]
+text = "Permissions (full profile) shows what the user can do: their role plus their custom roles and direct grants."
+by = [
+    "test:frontend/src/tests/admin/UsersPagePermissions.test.tsx",
+    "test:modules/backend/tests/integration/rbac/test_rbac_effective_permissions_display.py::test_the_display_equals_the_rules",
+]
+
+[[unit]]
 text = "Delete removes the account after you confirm it."
 by = [
     "test:frontend/src/tests/admin/UserTable.test.tsx::shows confirmation before delete",

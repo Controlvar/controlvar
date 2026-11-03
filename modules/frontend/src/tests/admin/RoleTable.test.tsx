@@ -106,6 +106,24 @@ describe('RoleTable', () => {
     expect(mockDeleteRole).not.toHaveBeenCalled();
   });
 
+  // Check #47: the confirmation says who loses the role's permissions (#891).
+  it.each([
+    [0, 'Delete the role "data-scientist"? No user has it. This cannot be undone.'],
+    [1, 'Delete the role "data-scientist"? The 1 user who has it loses its permissions at once. This cannot be undone.'],
+    [
+      3,
+      'Delete the role "data-scientist"? The 3 users who have it lose its permissions at once. This cannot be undone.',
+    ],
+  ])('the delete confirmation for a role with %i users says who is affected', async (userCount, text) => {
+    (window.confirm as jest.Mock).mockReturnValue(false);
+    mockListRoles.mockResolvedValue([makeRole({ name: 'data-scientist', user_count: userCount })]);
+    render(<RoleTable onEditRole={jest.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete data-scientist' }));
+    expect(window.confirm).toHaveBeenCalledTimes(1);
+    expect(window.confirm).toHaveBeenCalledWith(text);
+    expect(mockDeleteRole).not.toHaveBeenCalled();
+  });
+
   it('delete calls RbacService.deleteRole', async () => {
     mockListRoles.mockResolvedValue(mockRoles);
     mockDeleteRole.mockResolvedValue(undefined);

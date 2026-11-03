@@ -194,6 +194,22 @@ by = [
 ]
 
 [[unit]]
+text = "The JavaScript SDK sends the eventId you give it, from its next published version, and makes none itself (Event ids)."
+by = [
+    "test:sdk/js/__tests__/event-id.test.ts::sends event_id on a track with an explicit key",
+    "test:sdk/js/__tests__/event-id.test.ts::makes no id of its own: two tracks without an eventId send none",
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_the_sdks_with_an_event_id_option_name_it",
+]
+
+[[unit]]
+text = "The Python SDK sends the event_id you give it, from its next published version, and makes none itself (Event ids)."
+by = [
+    "test:sdk/python/tests/test_event_id.py::TestEventId::test_sends_event_id_on_a_track_with_an_explicit_key",
+    "test:sdk/python/tests/test_event_id.py::TestEventId::test_makes_no_id_of_its_own_two_tracks_without_an_event_id_send_none",
+    "test:backend/tests/unit/api/test_how_events_count_rules.py::test_the_sdks_with_an_event_id_option_name_it",
+]
+
+[[unit]]
 text = "No other SDK has an event_id option yet (Limitations): send an event that may be sent again to POST /api/v1/tracking/track or POST /api/v1/tracking/batch yourself."
 by = [
     "test:backend/tests/unit/api/test_how_events_count_rules.py::test_no_other_sdk_has_an_event_id_option_yet",
@@ -232,7 +248,7 @@ text = "When an event counts"
 by = ["exempt:label"]
 
 [[unit]]
-text = "An event counts for the variant the user is assigned to when the server receives it."
+text = "An event sent to POST /api/v1/tracking/track or POST /api/v1/tracking/batch counts for the variant the user is assigned to when the server receives it."
 by = [
     "test:backend/tests/integration/api/test_how_events_count.py::test_an_event_received_before_the_assignment_counts_in_no_variant",
     "test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp",
@@ -243,7 +259,7 @@ text = "Its timestamp does not change that."
 by = ["test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp"]
 
 [[unit]]
-text = "An event received before the user's assignment is stored with no variant, and counts in no variant's results, even after the user is assigned."
+text = "An event received by /track or /batch before the user's assignment is stored with no variant, and counts in no variant's results, even after the user is assigned."
 by = ["test:backend/tests/integration/api/test_how_events_count.py::test_an_event_received_before_the_assignment_counts_in_no_variant"]
 
 [[unit]]
@@ -259,8 +275,9 @@ by = [
 ]
 
 [[unit]]
-text = "POST /api/v1/tracking/events stores the variant_id it is sent, whatever the experiment's status; the event counts only for a user assigned to that variant."
+text = "POST /api/v1/tracking/events stores the variant_id it is sent, whatever the experiment's status; the event counts for that variant once the user is assigned to it, whether the assignment came before or after the event, and in no variant while the user is assigned to another or to none."
 by = [
+    "test:backend/tests/integration/api/test_how_events_count.py::test_events_by_ids_sent_before_the_assignment_count_once_it_names_that_variant",
     "test:backend/tests/integration/api/test_tracking_inactive_experiment_events.py::test_events_by_ids_keep_the_variant_they_name_for_a_paused_experiment",
     "test:backend/tests/integration/api/test_how_events_count.py::test_events_by_ids_count_only_for_a_user_assigned_to_that_variant",
 ]
@@ -304,8 +321,12 @@ by = [
 ]
 
 [[unit]]
-text = "Any timestamp is stored, however far in the past or the future."
-by = ["test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp"]
+text = "Any timestamp is stored, however far in the past or the future, with one exception: a value at the very edge of the date range whose UTC offset moves it past 0001-01-01 or 9999-12-31 (9999-12-31T23:59:59-01:00, say) is refused with 422, or reported in a batch's errors, and nothing is stored."
+by = [
+    "test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_edge_timestamp_is_refused_and_nothing_is_stored",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_the_same_edges_in_range_are_still_stored",
+]
 
 [[unit]]
 text = "GET /api/v1/results/{experiment_id} does not read it."

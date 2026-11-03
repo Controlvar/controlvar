@@ -1,9 +1,12 @@
 import { PermissionGrant } from '@/types/admin';
 
 /**
- * The (resource, action) pairs a custom role may hold: the API refuses any
- * other with a 422 (`GRANTABLE` in `modules/backend/app/schemas/rbac.py`).
- * The grid offers exactly these, in this order.
+ * The (resource, action) pairs a custom role or a direct grant may hold: the
+ * API refuses any other with a 422, and the permission checks read exactly
+ * these (`GRANTABLE` in `backend/app/core/permissions.py`, which the rbac
+ * module's validators use). The grid offers exactly these, in this order.
+ * `modules/backend/tests/unit/test_grantable_typescript_copy.py` holds this
+ * copy equal to the backend's set.
  */
 export const GRANTABLE_GROUPS: ReadonlyArray<{
   resource: string;

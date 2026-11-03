@@ -109,7 +109,9 @@ describe('canChangeFeatureFlags (#917)', () => {
     }
   });
 
-  it('the note names the roles the helper accepts', () => {
-    expect(FLAG_ROLE_NOTE).toBe('Feature flags are created and changed by the ADMIN and DEVELOPER roles.');
+  it('the note names the permission, then the roles that have it', () => {
+    expect(FLAG_ROLE_NOTE).toBe(
+      'Feature flags are created and changed with the feature flag permissions, which the ADMIN and DEVELOPER roles have.',
+    );
   });
 });

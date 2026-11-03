@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { RbacService } from '@modules/rbac';
+import { RbacService, UserPermissionsResponse } from '@modules/rbac';
+import { USER_ROLE_LABELS, UserRole } from '@/types/admin';
 
 interface EffectivePermissionsModalProps {
   isOpen: boolean;
@@ -19,13 +20,38 @@ function resourceLabel(resource: string): string {
   return RESOURCE_LABELS[resource] ?? resource.charAt(0).toUpperCase() + resource.slice(1).replace(/_/g, ' ');
 }
 
+/** The API's `base_role` (`analyst`) as the dashboard names it (`Analyst`). */
+function builtInRoleLabel(baseRole: string | null | undefined): string {
+  const key = String(baseRole ?? '').toUpperCase() as UserRole;
+  return USER_ROLE_LABELS[key] ?? (baseRole || 'none');
+}
+
+/** What the dialog says above the lists (#891). */
+export const PERMISSIONS_NOTE =
+  'What this user can do: their built-in role, plus their custom roles and unexpired direct grants. ' +
+  "Managing users, custom roles and grants, other users' API keys, holdouts and safety settings is not " +
+  'listed: it depends on the built-in role or the superuser flag, never on a custom role or grant.';
+
+/** The audit-log line: the API lists `audit_log: ["read"]` only for a user who reads other users' entries. */
+export function auditLogLine(permissions: Record<string, string[]>): string {
+  const actions = permissions.audit_log ?? [];
+  return actions.includes('read')
+    ? "Audit log: read, including other users' entries"
+    : 'Audit log: own entries only';
+}
+
+/**
+ * The Users page's Permissions dialog: what `GET /api/v1/rbac/users/{id}/permissions`
+ * answers, which is what the permission checks allow (#891), plus the
+ * built-in role, the custom roles that take effect and the superuser flag.
+ */
 export function EffectivePermissionsModal({
   isOpen,
   userId,
   userEmail,
   onClose,
 }: EffectivePermissionsModalProps) {
-  const [permissions, setPermissions] = useState<Record<string, string[]>>({});
+  const [answer, setAnswer] = useState<UserPermissionsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -34,11 +60,11 @@ export function EffectivePermissionsModal({
     if (isOpen && userId) {
       setLoading(true);
       setError(null);
-      setPermissions({});
+      setAnswer(null);
 
       RbacService.getUserPermissions(userId)
         .then((data) => {
-          setPermissions(data.permissions ?? {});
+          setAnswer(data);
         })
         .catch((err: Error) => {
           setError(err.message || 'Failed to load permissions');
@@ -66,7 +92,11 @@ export function EffectivePermissionsModal({
 
   if (!isOpen) return null;
 
-  const rows = Object.entries(permissions).filter(([, actions]) => actions.length > 0);
+  const permissions = answer?.permissions ?? {};
+  const rows = Object.entries(permissions).filter(
+    ([resource, actions]) => resource !== 'audit_log' && actions.length > 0,
+  );
+  const customRoles = answer?.custom_roles ?? [];
 
   return (
     <div
@@ -81,7 +111,7 @@ export function EffectivePermissionsModal({
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 id="permissions-modal-title" className="text-lg font-semibold text-slate-900">
-              Recorded Permissions
+              Effective permissions
             </h2>
             {userEmail && (
               <p className="text-sm text-slate-500 mt-0.5">{userEmail}</p>
@@ -101,15 +131,12 @@ export function EffectivePermissionsModal({
           </button>
         </div>
 
-        {/* No permission check reads custom roles or direct grants yet (#891). */}
         <p
           id="permissions-access-note"
           data-testid="permissions-access-note"
           className="text-sm text-slate-700"
         >
-          {
-            "This list adds the user's custom roles and direct grants to their built-in role. Custom roles and direct permission grants are recorded, but they do not change what anyone can do yet: each user's built-in role decides."
-          }
+          {PERMISSIONS_NOTE}
         </p>
 
         {/* Loading */}
@@ -130,20 +157,22 @@ export function EffectivePermissionsModal({
           </div>
         )}
 
-        {/* Permissions List */}
-        {!loading && !error && (
+        {/* What the user is, then what the checks allow */}
+        {!loading && !error && answer && (
           <>
-            {rows.length === 0 ? (
-              <p className="text-sm text-slate-600 py-4">No permissions assigned.</p>
-            ) : (
-              <ul data-testid="permissions-list" className="py-2 space-y-1 text-sm text-slate-800">
-                {rows.map(([resource, actions]) => (
-                  <li key={resource}>
-                    {resourceLabel(resource)}: {actions.join(', ')}
-                  </li>
-                ))}
-              </ul>
-            )}
+            <ul data-testid="permissions-summary" className="pt-3 space-y-1 text-sm text-slate-800">
+              <li>Built-in role: {builtInRoleLabel(answer.base_role)}</li>
+              <li>Custom roles: {customRoles.length > 0 ? customRoles.join(', ') : 'None'}</li>
+              {answer.is_superuser && <li>Superuser: passes every permission check</li>}
+            </ul>
+            <ul data-testid="permissions-list" className="py-2 space-y-1 text-sm text-slate-800">
+              {rows.map(([resource, actions]) => (
+                <li key={resource}>
+                  {resourceLabel(resource)}: {actions.join(', ')}
+                </li>
+              ))}
+              <li data-testid="permissions-audit-log">{auditLogLine(permissions)}</li>
+            </ul>
           </>
         )}
 

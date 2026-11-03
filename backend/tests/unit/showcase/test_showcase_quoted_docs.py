@@ -381,7 +381,8 @@ CLAIMS: Dict[str, Claim] = {
         (Drawn("copy", "Until then it stays a draft", SCHEDULE),),
         ((USER_GUIDE, "stays a draft until it"),),
     ),
-    # Narration review condition 1: what the docs say (md:189, the guide's row)
+    # Narration review condition 1: what the docs say (the mutual-exclusion-groups
+    # page's "A global holdout keeps..." line, the guide's row)
     # and the route the page is at; nothing the docs do not contain.
     "A holdout covers all your experiments, so it has its own page.": Claim(
         D,
@@ -578,14 +579,23 @@ def test_a_claim_whose_page_no_longer_says_it_is_refused():
 
 
 def test_the_holdout_pages_line_cites_only_what_the_docs_and_the_route_hold():
-    """Narration review condition 1: md:189, the guide's global-holdouts row, and
-    the /experiments/holdouts route; no row claims the docs say the holdout has
-    its own page."""
+    """Narration review condition 1: the mutual-exclusion-groups page's line that
+    opens "A global holdout keeps a percentage of new users out of **all**", the
+    guide's global-holdouts row, and the /experiments/holdouts route; no row
+    claims the docs say the holdout has its own page.
+
+    The line is found by its words, not by its number, so rewrapping the
+    paragraphs above it does not move what this test reads."""
     claim = CLAIMS["A holdout covers all your experiments, so it has its own page."]
     cited = [words for _page, words in claim.pages]
     assert not [w for w in cited if "own page" in w]
-    line = read_page(MEGS).splitlines()[188]
-    assert squeezed(cited[0]) in squeezed(line) and squeezed(cited[1]) in squeezed(line)
+    lines = [
+        line
+        for line in read_page(MEGS).splitlines()
+        if squeezed(cited[0]) in squeezed(line)
+    ]
+    assert len(lines) == 1, f"{MEGS}: {len(lines)} lines hold {cited[0]!r}"
+    assert squeezed(cited[1]) in squeezed(lines[0])
     assert (REPO / "frontend/src/pages/experiments/holdouts.tsx").is_file()
 
 

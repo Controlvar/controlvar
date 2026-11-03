@@ -13,7 +13,7 @@
 
 [meta]
 documents = 57
-exec = 321
+exec = 327
 universe = [
     ".github/pull_request_template.md",
     ".github/qa-templates/README.md",
@@ -198,7 +198,7 @@ expects = 0
 path = "docs/development/testing-guide.md"
 environment = "bare"
 exec = 0
-skip = 3
+skip = 4
 expects = 0
 
 [[document]]
@@ -295,9 +295,9 @@ expects = 15
 [[document]]
 path = "docs/guides/experiment-wizard.md"
 environment = "stack"
-exec = 11
+exec = 12
 skip = 0
-expects = 19
+expects = 22
 
 [[document]]
 path = "docs/llm-evaluation/quickstart.md"
@@ -546,9 +546,9 @@ expects = 5
 [[document]]
 path = "docs/mcp-server.md"
 environment = "stack"
-exec = 12
-skip = 0
-expects = 34
+exec = 13
+skip = 2
+expects = 36
 
 # #1075: the API reference, compliance, RBAC and technical guide pages, each
 # signing in first and running as written.
@@ -586,9 +586,9 @@ expects = 12
 [[document]]
 path = "docs/api/rbac.md"
 environment = "stack-full"
-exec = 15
+exec = 19
 skip = 0
-expects = 27
+expects = 33
 
 # The operator's migration commands, run in the API container of the Quick
 # Start's stack (docker compose exec api ...), as a self-hoster runs them.
@@ -596,7 +596,7 @@ expects = 27
 path = "docs/self-hosting/migrations.md"
 environment = "stack"
 exec = 7
-skip = 11
+skip = 12
 expects = 6
 
 # The beta AWS installer's page. One block runs: the installer's --help, which

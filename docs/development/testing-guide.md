@@ -65,3 +65,31 @@ that one runs.
   superuser passes every permission check.
 - [Dependency Injection](dependency-injection.md) says which dependencies are
   async, and so which ones a test awaits.
+
+## Replaying traffic through the API
+
+`tests/ground_truth/test_replay.py` sends seeded, realistic traffic through the
+public tracking API to a running Controlvar: four experiments, whose users are
+assigned in batches and one at a time and send conversions, repeat purchases and
+revenue. It then checks `GET /api/v1/results/{experiment_id}` against what the
+documented event contract and an independent reference compute from the
+server's own answers.
+
+The Ground-truth Replay workflow runs it on a pull request that changes code the
+replay exercises, or one labelled `e2e` (adding the label starts nothing by
+itself: it takes effect on the next push or a dispatch); the nightly QA suite
+runs it with four times the users. It is not a required check.
+
+To run one scenario against an API you started with `ENVIRONMENT=development` on
+an empty database:
+
+```{.bash skip reason="dev: needs a running API started with ENVIRONMENT=development on an empty database"}
+GROUND_TRUTH_SEED=1234 python -m pytest tests/ground_truth/test_replay.py -k S2
+```
+
+Each run prints its seed at the start, in the GitHub step summary and in every
+failure message, with this command filled in. Without `GROUND_TRUTH_SEED` a run
+picks a new seed. The run signs in as the first administrator the bootstrap
+creates on an empty development database; `GROUND_TRUTH_ADMIN_EMAIL` and
+`GROUND_TRUTH_ADMIN_PASSWORD` name another, and `CONTROLVAR_API_URL` another
+address than `http://127.0.0.1:8000`.

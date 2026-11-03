@@ -91,6 +91,13 @@ COMPOSE_FILE_NAMES = (
 )
 
 PROJECT = "controlvar-scale"
+#: The containers scale_run.py starts itself (the load generator, the database
+#: sampler, the calibration stub); ``down`` removes them too.
+HARNESS_CONTAINERS = (
+    f"{PROJECT}-k6",
+    f"{PROJECT}-pg-sampler",
+    f"{PROJECT}-stub",
+)
 #: What a child process inherits: ``scripts/check_compose_config.py``'s list.
 KEEP_ENV = ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG", "DOCKER_CONTEXT")
 #: The line ``up`` adds to the env file it generated. Without it, the file is
@@ -752,6 +759,11 @@ def cmd_fixtures(work: Path, users: int, events: int, raw_metrics: int, io: Io) 
 
 def cmd_down(work: Path, io: Io) -> None:
     own_env(work)
+    # The measurement starts three containers of its own on the project's
+    # network, under fixed names; a run that was killed leaves them there, and
+    # the network cannot be removed under them. A missing one is not an error.
+    for name in HARNESS_CONTAINERS:
+        io.run(["docker", "rm", "-f", name], child_env())
     result = io.run(compose_argv(work, "down", "-v"), child_env())
     if result.returncode != 0:
         raise Failed(f"docker compose down failed ({result.returncode})")

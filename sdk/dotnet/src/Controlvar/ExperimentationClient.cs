@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Controlvar.Models;
 
@@ -8,7 +9,7 @@ namespace Controlvar;
 /// and tracking analytics events.
 ///
 /// <para><b>The server decides.</b> <see cref="EvaluateFlagAsync"/> calls
-/// <c>GET /api/v1/feature-flags/evaluate/{key}?user_id=…</c> and <see cref="GetAssignmentAsync"/>
+/// <c>GET /api/v1/feature-flags/evaluate/{key}?user_id=…&amp;context=…</c> and <see cref="GetAssignmentAsync"/>
 /// calls <c>POST /api/v1/tracking/assign</c>; no bucketing happens in the SDK.</para>
 ///
 /// <para><b>Caching.</b> Successful results are cached per user + key for
@@ -31,6 +32,7 @@ public class ExperimentationClient : IDisposable
     private readonly ExperimentationHttpClient _httpClient;
     private readonly UserKeyCache<FlagEvaluationResult> _flagCache;
     private readonly UserKeyCache<Assignment> _assignmentCache;
+    private readonly Action<Exposure>? _onExposure;
     private bool _disposed;
 
     /// <summary>
@@ -53,6 +55,7 @@ public class ExperimentationClient : IDisposable
         var ttl = TimeSpan.FromSeconds(config.CacheTtlSeconds);
         _flagCache = new UserKeyCache<FlagEvaluationResult>(config.MaxCacheSize, ttl);
         _assignmentCache = new UserKeyCache<Assignment>(config.MaxCacheSize, ttl);
+        _onExposure = config.OnExposure;
     }
 
     // -----------------------------------------------------------------
@@ -61,12 +64,17 @@ public class ExperimentationClient : IDisposable
 
     /// <summary>
     /// Evaluates a feature flag for a specific user via
-    /// <c>GET /api/v1/feature-flags/evaluate/{flagKey}?user_id={userId}</c>.
+    /// <c>GET /api/v1/feature-flags/evaluate/{flagKey}?user_id={userId}&amp;context={attributes}</c>.
     /// </summary>
     /// <param name="flagKey">The feature flag key.</param>
     /// <param name="userId">The user ID.</param>
     /// <param name="attributes">
-    /// Accepted for source compatibility and not sent: the evaluate endpoint takes a context, which this SDK does not send yet.
+    /// Optional user attributes, sent as <c>context</c> for the flag's targeting rules: compact
+    /// JSON, serialised with the options the assignment body is serialised with, then
+    /// percent-encoded. Nothing is sent for <c>null</c> or an empty dictionary. The cache key is
+    /// user + flag key only, so a cached answer is returned whatever the attributes; call
+    /// <see cref="ClearCache"/> after changing a user's attributes. Attributes that cannot be
+    /// serialised send no request and give the disabled result, which is not cached.
     /// </param>
     /// <returns>
     /// The server's decision (<c>Key</c>, <c>Enabled</c>, <c>Config</c>). Never throws: on failure
@@ -86,6 +94,9 @@ public class ExperimentationClient : IDisposable
         {
             var path = $"/api/v1/feature-flags/evaluate/{Uri.EscapeDataString(flagKey)}";
             var query = new Dictionary<string, string> { ["user_id"] = userId };
+            var context = ContextParam(attributes);
+            if (context != null)
+                query["context"] = context;
             var result = await _httpClient.GetAsync<FlagEvaluationResult>(path, query).ConfigureAwait(false);
             if (string.IsNullOrEmpty(result.Key))
                 result.Key = flagKey;
@@ -117,6 +128,12 @@ public class ExperimentationClient : IDisposable
     /// no control variant (404), or the request failed and nothing is cached. An experiment that
     /// is not ACTIVE answers its control variant. Never throws.
     /// </returns>
+    /// <remarks>
+    /// When the server answers <c>"assigned": true</c> and no unexpired answer for this user and
+    /// experiment was cached, <see cref="SdkConfig.OnExposure"/> is called before the returned
+    /// task completes. A cached answer calls nothing, and nothing the function throws reaches
+    /// the caller or changes the answer.
+    /// </remarks>
     public async Task<Assignment?> GetAssignmentAsync(
         string experimentKey,
         string userId,
@@ -126,6 +143,8 @@ public class ExperimentationClient : IDisposable
         if (cached != null)
             return cached;
 
+        Assignment? assignment;
+        Exposure? exposure = null;
         try
         {
             var body = new AssignRequest
@@ -134,19 +153,37 @@ public class ExperimentationClient : IDisposable
                 UserId = userId,
                 Context = attributes
             };
-            var assignment = await _httpClient.PostAsync<Assignment>("/api/v1/tracking/assign", body).ConfigureAwait(false);
+            // Read as a JSON element first: the answer becomes the Assignment, and its `assigned`,
+            // which Assignment does not carry, says whether the server recorded an exposure.
+            var answer = await _httpClient.PostAsync<JsonElement>("/api/v1/tracking/assign", body).ConfigureAwait(false);
+            assignment = JsonSerializer.Deserialize<Assignment>(answer, ExperimentationHttpClient.JsonOptions);
+            if (assignment == null)
+                return null; // a JSON null body, a failure as before
             if (string.IsNullOrEmpty(assignment.ExperimentKey))
                 assignment.ExperimentKey = experimentKey;
             if (string.IsNullOrEmpty(assignment.UserId))
                 assignment.UserId = userId;
 
-            _assignmentCache.Set(userId, experimentKey, assignment);
-            return assignment;
+            // Fill is Set that also says whether the slot held no live answer. Two calls that
+            // asked for the same new user and experiment at once each store an answer here; only
+            // the first is told the slot was empty.
+            bool filled = _assignmentCache.Fill(userId, experimentKey, assignment);
+            if (filled && _onExposure != null && SaysAssigned(answer))
+                exposure = new Exposure(assignment.ExperimentKey, assignment.UserId, assignment.VariantId, assignment.VariantName);
         }
         catch (Exception)
         {
             return null;
         }
+
+        if (exposure != null)
+        {
+            // Last, outside the request's try block, with no cache lock held. What the function
+            // throws is dropped (this SDK has no error channel): the answer below is returned
+            // whatever it did.
+            ExposureHook.Call(_onExposure!, exposure);
+        }
+        return assignment;
     }
 
     // -----------------------------------------------------------------
@@ -294,6 +331,30 @@ public class ExperimentationClient : IDisposable
         [JsonPropertyName("events")]
         public List<TrackBody> Events { get; set; } = new();
     }
+
+    /// <summary>
+    /// The <c>context</c> query value of a flag evaluation: <paramref name="attributes"/> as
+    /// compact JSON, serialised with the options of the assignment body, or <c>null</c> when there
+    /// are none (<c>null</c> or empty), so the URL is then the one sent without them.
+    /// <see cref="ExperimentationHttpClient.BuildUri"/> percent-encodes it. Throws what
+    /// <see cref="JsonSerializer"/> throws for attributes it cannot serialise.
+    /// </summary>
+    private static string? ContextParam(Dictionary<string, object>? attributes)
+    {
+        if (attributes == null || attributes.Count == 0)
+            return null;
+        return JsonSerializer.Serialize(attributes, ExperimentationHttpClient.JsonOptions);
+    }
+
+    /// <summary>
+    /// True only when the <c>/assign</c> answer's <c>assigned</c> is the JSON literal
+    /// <c>true</c>. A missing field, <c>null</c>, <c>"true"</c> or <c>1</c> is not: the server
+    /// recorded an exposure only for <c>true</c>.
+    /// </summary>
+    private static bool SaysAssigned(JsonElement answer) =>
+        answer.ValueKind == JsonValueKind.Object
+        && answer.TryGetProperty("assigned", out var assigned)
+        && assigned.ValueKind == JsonValueKind.True;
 
     /// <summary>One entry per cached assignment (experiment_key) plus one per cached flag (feature_flag_key).</summary>
     private List<TrackEvent> FanOut(TrackEvent trackEvent)

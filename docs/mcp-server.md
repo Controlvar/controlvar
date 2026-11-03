@@ -1,66 +1,260 @@
-# AI Endpoints and the MCP Manifest
+# The MCP Server and the AI Endpoints
 
-The platform serves two things for AI tooling:
+The Controlvar MCP server lets an AI assistant such as Claude Code, Claude
+Desktop or Cursor read your instance: list and read feature flags, evaluate a
+flag for a user, list experiments and read their results. It runs on your
+computer, started by the assistant, and calls your instance's API with your own
+API key, so it sees what your role can see. It changes no flag or experiment;
+evaluating a flag is recorded as one evaluation, as an SDK's is.
 
-- a **manifest** at `GET /api/v1/mcp/manifest`, a JSON document that describes
-  five tools in the vocabulary of the Model Context Protocol (MCP);
-- **REST endpoints** under `/api/v1/ai/` that suggest an experiment design,
-  interpret a result, estimate a sample size and list experiment templates.
+Nothing on your instance answers an MCP client; add the server by command, not
+by URL.
 
-The platform does not run an MCP server. The manifest describes tools, but
-nothing on the platform answers MCP's own requests, so an MCP client such as
-Claude Code or Cursor cannot connect to the manifest's URL or call a tool
-through it. Call the REST endpoints with any HTTP client instead.
+The platform also serves REST endpoints under `/api/v1/ai/` that suggest an
+experiment design, interpret a result, estimate a sample size and list
+experiment templates. They come after the MCP server on this page.
 
 The examples run against the [Quick Start](getting-started/quick-start.md)
-stack, in one terminal, in order: later steps use the `$TOKEN` an earlier one
-sets.
+stack, in one terminal, in order: later steps use the `$TOKEN` and `$KEY` an
+earlier one sets.
 
 ---
 
-## The manifest
+## Before you start
 
-The manifest needs no sign-in:
+You need Node.js 22 or later and the address of your instance's API:
+`http://localhost:8000` on the Quick Start stack and `http://localhost:8080` on
+the compose stack. Give the address only, with no path.
+
+The server refuses a plain `http://` address for any host other than
+`localhost`, `127.0.0.1` or `[::1]`, because your API key would cross the
+network unencrypted. If your instance runs on a private network you trust and
+has no HTTPS, add `CONTROLVAR_ALLOW_INSECURE_HTTP=1` to the server's `env`; the
+server then prints a warning each time it starts.
+
+## Build the server
+
+**Not yet published.** `@controlvar/mcp-server` is not on npm, so build it from
+a clone of this repository:
+
+```{.bash skip reason="registry: the package is not on npm yet; npm ci installs its dependencies"}
+git clone https://github.com/Controlvar/controlvar.git
+cd controlvar/sdk/mcp
+npm ci
+npm run build
+```
+
+## Create an API key
+
+The server needs an API key that carries the `mcp:read` scope. It acts as the
+key's owner, so it reads what that user can read.
+
+Who can create one:
+
+- An administrator can create one in the dashboard, under Admin and then API
+  Keys, by ticking the `mcp:read` option.
+- If your instance signs people in with a local password, as the Quick Start
+  does, anyone who can sign in can create their own with the request below.
+
+The request signs in as the Quick Start's administrator and creates the key,
+which is shown once. The last request reads the key back from your list of keys
+and prints its scopes:
 
 ```{.bash exec}
-curl -s localhost:8000/api/v1/mcp/manifest | jq -r '.tools[].name'
-```
-<!-- expect: create_experiment -->
-<!-- expect: get_results -->
-<!-- expect: toggle_feature_flag -->
-<!-- expect: suggest_experiment -->
-<!-- expect: interpret_results -->
+TOKEN=$(curl -s -X POST localhost:8000/api/v1/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"admin@demo.com","password":"Demo1234!"}' | jq -r .access_token)
 
-It lists five tools: `create_experiment`, `get_results`,
-`toggle_feature_flag`, `suggest_experiment` and `interpret_results`. Each
-entry has a `name`, a `description` and its `parameters`:
+CREATED=$(curl -s -X POST localhost:8000/api/v1/api-keys \
+  -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"name":"mcp","scopes":["mcp:read"]}')
+KEY=$(echo "$CREATED" | jq -r .key)
+ID=$(echo "$CREATED" | jq -r .id)
 
-```{.bash exec}
-curl -s localhost:8000/api/v1/mcp/manifest \
-  | jq '.tools[] | select(.name == "suggest_experiment")'
+curl -s localhost:8000/api/v1/api-keys -H "Authorization: Bearer $TOKEN" \
+  | jq -c --arg id "$ID" '.[] | select(.id == $id) | .scopes'
 ```
-<!-- expect: "name": "suggest_experiment" -->
-<!-- expect: "description": "Get AI-powered experiment design suggestions based on a natural language description" -->
-<!-- expect: "experiment_type" -->
+<!-- expect: ["mcp:read"] -->
+
+## Add the server to your assistant
+
+Each assistant starts the server itself, with two settings: `CONTROLVAR_API_URL`
+is your instance's address and `CONTROLVAR_API_KEY` is the key.
+
+### Claude Code
+
+Run this in the `sdk/mcp` directory you built, with the key in `$KEY`:
+
+```{.bash skip reason="toolchain: needs the Claude Code CLI and the key from the step above"}
+claude mcp add controlvar \
+  -e CONTROLVAR_API_URL=http://localhost:8000 \
+  -e CONTROLVAR_API_KEY="$KEY" \
+  -- node "$PWD/dist/index.js"
+```
+
+The shell expands `$KEY`, so your shell history keeps `$KEY`, but Claude Code
+stores the key itself in plain text.
+
+### Claude Desktop
+
+Add the server to Claude Desktop's configuration file, which is
+`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS and
+`%APPDATA%\Claude\claude_desktop_config.json` on Windows. Then quit Claude
+Desktop fully and open it again.
 
 ```json
 {
-  "name": "suggest_experiment",
-  "description": "Get AI-powered experiment design suggestions based on a natural language description",
-  "parameters": {
-    "description": {
-      "type": "string",
-      "description": "Natural language description of the experiment goal"
-    },
-    "experiment_type": {
-      "type": "string",
-      "description": "Type of experiment (checkout, onboarding, pricing, email, landing_page)"
+  "mcpServers": {
+    "controlvar": {
+      "command": "node",
+      "args": ["/path/to/controlvar/sdk/mcp/dist/index.js"],
+      "env": {
+        "CONTROLVAR_API_URL": "http://localhost:8000",
+        "CONTROLVAR_API_KEY": "paste the key here"
+      }
     }
   }
 }
 ```
 
+### Cursor
+
+Add the same block to `~/.cursor/mcp.json`.
+
+## Try it
+
+Ask your assistant a question that needs your instance, for example:
+
+- Is the flag `beta_features` on for the user `user-123`, on the pro plan?
+- How is the experiment `checkout_button_color` doing?
+
+The first makes the assistant call `evaluate_feature_flag`. The second makes it
+call `list_experiments` and then `get_experiment_results`, and a careful answer
+checks `srm` and `sample_size_adequate`. A command such as `claude mcp list`
+only shows that the process started, so a question is the check.
+
+## The tools
+
+The server offers six tools:
+
+| Tool | What it answers | API route |
+|---|---|---|
+| `list_feature_flags` | The feature flags, a page at a time | `GET /api/v1/feature-flags/` |
+| `get_feature_flag` | One feature flag, by its key | `GET /api/v1/feature-flags/` |
+| `evaluate_feature_flag` | What a flag serves one user | `POST /api/v1/feature-flags/evaluate/{flag_key}` |
+| `list_experiments` | The experiments, a page at a time | `GET /api/v1/experiments/` |
+| `get_experiment` | One experiment, by its id | `GET /api/v1/experiments/{experiment_id}` |
+| `get_experiment_results` | An experiment's statistical results | `GET /api/v1/experiments/{experiment_id}/results` |
+
+None of them changes a flag, an experiment or a setting. A list tool returns at
+most 100 items and the total, and the assistant asks for the next page with
+`skip`.
+
+## What leaves your instance
+
+Whatever a tool returns is given to the AI model behind your assistant, and so
+goes to that model's provider. That includes targeting rules, which can hold
+user ids or email addresses, and experiment results. Text that people on your
+instance wrote, such as the names, descriptions and hypotheses of flags and
+experiments, is given to the model as it is. Check this against your own data
+rules before you connect an assistant to an instance that holds personal data.
+
+## Where the key is kept
+
+Your assistant keeps the key in plain text in its own settings. The server
+writes it nowhere else: it is in no tool result, error message or log line.
+Do not use `--scope project` with Claude Code, and do not put the key in a
+`.cursor/mcp.json` inside a repository, because both write the key into a file
+in your repository, where it can be committed. Do not put this key in a web or
+mobile app.
+
+## Errors
+
+A tool that fails answers with one message that says what failed and what to
+do. A setting that can never work stops the server at start-up instead, with one
+line on stderr.
+
+| Message | Cause | Fix |
+|---|---|---|
+| `CONTROLVAR_API_URL is "localhost:8000", which is not an http:// or https:// address.` | The address has no scheme. | Set it to your instance's address, for example `http://localhost:8000`. |
+| `CONTROLVAR_API_URL is "http://controlvar.internal:8080", a plain http:// address on another computer, so your API key would cross the network unencrypted.` | A plain `http://` address for a host that is not this computer. | Use the `https://` address, or set `CONTROLVAR_ALLOW_INSECURE_HTTP=1` as described above. |
+| `CONTROLVAR_ALLOW_INSECURE_HTTP has a value this server does not accept.` | The setting has any value other than `1`. | Remove it, or set it to `1`. |
+| `CONTROLVAR_API_KEY is not set.` | The assistant's settings have no key. | Set `CONTROLVAR_API_KEY` to the key you created. |
+| `CONTROLVAR_API_KEY looks like a sign-in token, not an API key.` | A sign-in token was pasted where the key goes. | Create an API key and use that. |
+| `Could not reach the Controlvar API at http://localhost:8000: connection refused.` | The instance is not running at that address. | Start the instance, or correct `CONTROLVAR_API_URL`. |
+| `http://localhost:3100 answered, but not as the Controlvar API (it sent a web page).` | The address is the dashboard's. | Use the address that serves `/api/v1`: `http://localhost:8000` on the Quick Start stack. |
+| `The Controlvar API at http://127.0.0.1:8080 refused that host name (400: Invalid host header).` | The instance does not accept that host name. | Use the host name your instance is set up for. |
+| `The Controlvar API at http://localhost:8000 did not accept the key in CONTROLVAR_API_KEY (401: Invalid API Key).` | The key was deleted or has expired, or its owner's account is deactivated, or your instance is too old to accept an API key for these routes. | Create a new key, or upgrade the instance. |
+| `Listing feature flags failed: This API key does not have the 'mcp:read' scope. Create a key with the 'mcp:read' scope to read flags, experiments and results with it. (403).` | The key was created without the `mcp:read` scope. | Create a key with the `mcp:read` scope. |
+| `Listing feature flags failed: You don't have permission to list feature flags (403).` | The key's owner may not read this. | Use a key owned by a user who can. |
+| `The Controlvar API is limiting requests from this address (429). Try again in 30 seconds.` | Too many requests. | Wait as long as the message says. |
+| `The Controlvar API at http://localhost:8000 failed while listing feature flags (500). Request ID: req-from-the-api-42; your administrator can find it in the API's logs.` | The instance failed. | Give your administrator the request id in the message. |
+
+## Revoking a key
+
+To stop the server working, delete its key: in the dashboard under Admin and
+then API Keys, or with `DELETE /api/v1/api-keys/{id}`. When a key is deleted or
+expires, or its owner's account is deactivated, the next tool call fails with
+the 401 message above. Removing a user from the identity provider does not
+revoke their API keys: deactivate the Controlvar user or delete the keys.
+
+To use a new key, create it, run `claude mcp remove controlvar`, add the server
+again and start a new session.
+
+## Versions
+
+The server reports the version in `sdk/mcp/package.json` to your assistant when
+it starts.
+
 ---
+
+## The manifest
+
+The manifest at `GET /api/v1/mcp/manifest` lists the server's tools, so you can
+read what the server offers without installing it. It needs no sign-in:
+
+```{.bash exec}
+curl -s localhost:8000/api/v1/mcp/manifest | jq -r '.tools[].name'
+```
+<!-- expect: list_feature_flags -->
+<!-- expect: get_feature_flag -->
+<!-- expect: evaluate_feature_flag -->
+<!-- expect: list_experiments -->
+<!-- expect: get_experiment -->
+<!-- expect: get_experiment_results -->
+
+Each entry has a `name`, a `description` and its `parameters`:
+
+```{.bash exec}
+curl -s localhost:8000/api/v1/mcp/manifest \
+  | jq '.tools[] | select(.name == "get_experiment")'
+```
+<!-- expect: "name": "get_experiment" -->
+<!-- expect: "description": "Reads one experiment by its id (from list_experiments) -->
+<!-- expect: "experiment_id" -->
+
+```json
+{
+  "name": "get_experiment",
+  "description": "Reads one experiment by its id (from list_experiments): hypothesis, status, variants and their traffic allocation, metrics (one is primary), targeting rules and dates.",
+  "parameters": {
+    "experiment_id": {
+      "type": "string",
+      "description": "The experiment's id, from list_experiments."
+    }
+  }
+}
+```
+
+The manifest's `version` is the manifest's own, not the server's.
+
+---
+
+## The AI endpoints
+
+The endpoints under `/api/v1/ai/` suggest an experiment design, interpret a
+result, estimate a sample size and list experiment templates. Call them with any
+HTTP client.
 
 ## Signing in
 

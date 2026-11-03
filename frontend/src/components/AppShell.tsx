@@ -35,7 +35,8 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Feature Flags', href: '/feature-flags', testId: 'nav-feature-flags' },
   { label: 'Segments', href: '/segments', testId: 'nav-segments' },
   // Every role: the audit API answers each one, narrowed to their own entries
-  // for DEVELOPER and VIEWER. `roles` also keeps it off anonymous renders.
+  // for anyone who may not read the audit log. `roles` also keeps it off
+  // anonymous renders.
   { label: 'Audit Log', href: '/admin/audit', testId: 'nav-audit-log', roles: AUDIT_LOG_ROLES },
   { label: 'Admin', href: '/admin', testId: 'nav-admin', superuser: true },
   { label: 'Docs', href: '/docs', testId: 'nav-docs' },
@@ -56,6 +57,20 @@ export const CHANGE_PASSWORD_ITEM: NavItem = {
   label: 'Change password',
   href: CHANGE_PASSWORD_PATH,
   testId: 'change-password-link',
+};
+
+/** The page where any signed-in user manages their own API keys. */
+export const OWN_API_KEYS_PATH = '/account/api-keys';
+
+/**
+ * "Your API keys", beside "Change password" in More. Every signed-in user
+ * gets it, whatever their role or sign-in: the keys API serves each caller's
+ * own keys.
+ */
+export const OWN_API_KEYS_ITEM: NavItem = {
+  label: 'Your API keys',
+  href: OWN_API_KEYS_PATH,
+  testId: 'own-api-keys-link',
 };
 
 export function isNavActive(pathname: string, href: string): boolean {
@@ -118,8 +133,9 @@ export function installedModuleNav(
  * Collapsed "More" disclosure. Closed by default and never opened for the
  * viewer. It carries the installed modules' routes, which otherwise have no
  * navigation at all, in the core profile a "Modules" link to the guide
- * that says what the modules are and how to run the full profile, and, for a
- * local sign-in user, "Change password".
+ * that says what the modules are and how to run the full profile, and the
+ * signed-in user's own pages: "Your API keys", and, for a local sign-in user,
+ * "Change password".
  */
 function MoreNavGroup({
   items,
@@ -131,7 +147,7 @@ function MoreNavGroup({
   items: NavItem[];
   /** Add the "Modules" documentation link (the core profile). */
   showModulesGuide: boolean;
-  /** The signed-in user's own pages, listed last ("Change password"). */
+  /** The signed-in user's own pages, listed last ("Your API keys", "Change password"). */
   accountItems: NavItem[];
   id: string;
   /** Called when a link inside the group is followed (closes the mobile menu). */
@@ -255,7 +271,8 @@ interface AppShellProps {
 
 /**
  * Application chrome: top navigation (Experiments · Feature Flags · Segments ·
- * Audit Log · Admin · Docs · More, which holds "Change password") and the user
+ * Audit Log · Admin · Docs · More, which holds "Your API keys" and "Change
+ * password") and the user
  * area with a visible "Log out" button. Mounted by `_app.tsx` for every route
  * except `/login`.
  */
@@ -291,9 +308,15 @@ export function AppShell({ children }: AppShellProps) {
   // Also a dashboard concern: the marketing build probes no API, so the
   // profile it reports is meaningless there.
   const showModulesGuide = !marketing && !modulesLoading && modulesError === null && profile === 'core';
-  // Only local sign-in has a password the API can change; under any other
-  // provider the route answers 404. It does not wait for the modules probe.
-  const accountNav = !marketing && user?.auth_provider === 'local' ? [CHANGE_PASSWORD_ITEM] : [];
+  // The signed-in user's own pages. "Your API keys" is every user's. Only
+  // local sign-in has a password the API can change; under any other provider
+  // that route answers 404. Neither waits for the modules probe.
+  const accountNav: NavItem[] =
+    marketing || !user
+      ? []
+      : user.auth_provider === 'local'
+        ? [OWN_API_KEYS_ITEM, CHANGE_PASSWORD_ITEM]
+        : [OWN_API_KEYS_ITEM];
   const moreRoutes = modulesLoading ? [] : moduleNav;
   const showMore = accountNav.length > 0 || moreRoutes.length > 0 || showModulesGuide;
 

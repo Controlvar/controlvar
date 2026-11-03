@@ -387,7 +387,7 @@ text = "Enter your baseline conversion rate and the smallest change worth detect
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "At 80% power and 95% confidence that example needs 47,036 users per variant."
+text = "With two variants, at 80% power and 95% confidence that example needs 47,036 users per variant."
 by = ["test:backend/tests/unit/api/test_sample_size_pinned_answer.py::test_twelve_percent_baseline_five_percent_relative_mde"]
 
 [[unit]]
@@ -415,8 +415,34 @@ by = [
 ]
 
 [[unit]]
-text = "The estimate plans each comparison at 1 − the confidence level and makes no correction for comparing several variants, so with three or more variants and a correction the experiment needs more users than it says."
-by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
+text = "The estimate plans at 1 − the confidence level and uses the correction chosen above, as the results page's Sample Size tab does."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::sends each power option, and 1 minus each confidence level as the significance",
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::sends the correction chosen above: %s",
+    "test:backend/tests/integration/api/test_results_sample_size_api.py::test_the_tab_and_the_guided_setup_agree",
+]
+
+[[unit]]
+text = "With three or more variants and Bonferroni or Benjamini-Hochberg, each comparison with the control is planned at that level ÷ (variants − 1): with three variants the example needs 56,961 users per variant."
+by = [
+    "test:backend/tests/unit/api/test_sample_size_correction.py::test_the_estimate_plans_each_comparison_at_the_corrected_level",
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::with Benjamini-Hochberg applied, says each comparison is planned at the corrected level, and no Power Calculator sentence",
+]
+
+[[unit]]
+text = "With None, each comparison is planned at the full level, the same as the results."
+by = [
+    "test:backend/tests/unit/api/test_sample_size_correction.py::test_without_correction_method_the_estimate_is_uncorrected",
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::with None chosen and applied, says no correction is made, as the results will not make one",
+]
+
+[[unit]]
+text = "Benjamini-Hochberg is planned at the same level as Bonferroni and gives the same estimate."
+by = ["test:backend/tests/unit/api/test_sample_size_correction.py::test_bonferroni_and_benjamini_hochberg_give_the_same_estimate"]
+
+[[unit]]
+text = "That is cautious: Benjamini-Hochberg finds every winner Bonferroni finds, so it may need fewer users."
+by = ["exempt:theory"]
 
 [[unit]]
 text = "Step 5: Review and create"
@@ -478,11 +504,12 @@ by = [
 ]
 
 [[unit]]
-text = "Through the API, this is PUT /api/v1/experiments/{experiment_id}/schedule, on a DRAFT experiment, with an ADMIN or DEVELOPER token."
+text = "Through the API, this is PUT /api/v1/experiments/{experiment_id}/schedule, on a DRAFT experiment, with the token of a user who may change experiments, such as an ADMIN or DEVELOPER."
 by = [
     "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestUpdateExperimentSchedule::test_admin_can_schedule_draft_experiment",
     "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestUpdateExperimentSchedule::test_schedule_active_experiment_returns_400",
     "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestUpdateExperimentSchedule::test_analyst_cannot_schedule_other_users_experiment",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
 ]
 
 [[unit]]
@@ -1166,7 +1193,10 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "100% | All users see the feature"
-by = ["test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_vector_matches"]
+by = [
+    "test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_vector_matches",
+    "test:backend/tests/unit/ground_truth/test_flag_rollout_use_cases.py::test_a_user_keeps_their_side_as_the_rollout_moves",
+]
 
 [[unit]]
 text = "Who gets the feature?"
@@ -1174,11 +1204,17 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "The platform uses a deterministic hash of the user's ID."
-by = ["test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_vector_matches"]
+by = [
+    "test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_vector_matches",
+    "test:backend/tests/unit/ground_truth/test_flag_rollout_use_cases.py::test_a_user_keeps_their_side_as_the_rollout_moves",
+]
 
 [[unit]]
 text = "The same user always gets the same result (sticky assignment)."
-by = ["test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_vector_matches"]
+by = [
+    "test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_vector_matches",
+    "test:backend/tests/unit/ground_truth/test_flag_rollout_use_cases.py::test_a_user_keeps_their_side_as_the_rollout_moves",
+]
 
 [[unit]]
 text = "This means:"

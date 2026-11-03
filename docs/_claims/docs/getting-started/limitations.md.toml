@@ -215,10 +215,20 @@ by = [
 ]
 
 [[unit]]
-text = "Custom roles and direct permission grants that change access | The rbac module records them and shows them, but no permission check reads them: each user's built-in role decides (#891)."
+text = "A custom role that removes access, or that grants administration | Custom roles and direct permission grants (the rbac module) only add, and only to experiments, flags and reading the audit log; never administration or the compliance audit trail. Administration depends on the built-in role or the superuser flag; to restrict someone, give them a lower built-in role. See What a role or grant cannot give."
 by = [
-    "test:modules/backend/tests/unit/services/test_rbac_service.py::TestCreateCustomRole::test_creates_role_with_name",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_only_the_built_in_role",
+    "test:modules/backend/tests/integration/rbac/test_rbac_no_escalation.py::test_all_forty_pairs_reach_no_administration",
+    "test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_layers_only_add_and_actions_are_sorted",
+    "test:backend/tests/unit/core/test_built_in_roles_decide.py::test_a_custom_role_or_a_grant_adds_only_grantable_pairs",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_grantable_is_exactly_the_eleven_pairs",
+]
+
+[[unit]]
+text = "Assigning roles and granting permissions in the dashboard | The Roles page defines roles; assigning them and granting permissions go through the RBAC API."
+by = [
+    "test:backend/tests/unit/api/test_route_surface_rules.py::test_custom_roles_are_assigned_through_the_api_and_no_dashboard_page",
+    "test:modules/frontend/src/tests/pages/admin-roles.test.tsx::saves a custom role the way the API takes it: a list of {resource, actions} (#891)",
+    "test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestGrantRevokePermission::test_grant_permission_returns_201",
 ]
 
 [[unit]]
@@ -319,10 +329,12 @@ by = [
 ]
 
 [[unit]]
-text = "An event_id sent by the SDK, so that an event sent again is stored once | Only the Java SDK sends one, with every event (Event ids). No other SDK has an event_id option yet: not the JavaScript, React, React Native, edge, Python, Go, Android, iOS, Flutter, .NET, PHP, Ruby or Elixir SDK, nor the OpenFeature providers. Send an event that may be sent again to POST /api/v1/tracking/track or POST /api/v1/tracking/batch with its event_id (#1543)."
+text = "An event_id sent by the SDK, so that an event sent again is stored once | The Java SDK sends one with every event (Event ids). The JavaScript SDK sends the eventId you give it and the Python SDK the event_id you give it, each from its next published version (JavaScript, Python). No other SDK has an event_id option yet: not the React, React Native, edge, Go, Android, iOS, Flutter, .NET, PHP, Ruby or Elixir SDK, nor the OpenFeature providers. Send an event that may be sent again to POST /api/v1/tracking/track or POST /api/v1/tracking/batch with its event_id (#1543)."
 by = [
     "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::trackSendsAGeneratedEventId",
     "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::fanOutEntriesShareOneEventId",
+    "test:sdk/js/__tests__/event-id.test.ts::sends event_id on a track with an explicit key",
+    "test:sdk/python/tests/test_event_id.py::TestEventId::test_sends_event_id_on_a_track_with_an_explicit_key",
     "test:backend/tests/unit/api/test_how_events_count_rules.py::test_the_sdks_with_an_event_id_option_name_it",
     "test:backend/tests/unit/api/test_how_events_count_rules.py::test_no_other_sdk_has_an_event_id_option_yet",
     "test:backend/tests/unit/api/test_how_events_count_rules.py::test_every_sdk_directory_is_listed",

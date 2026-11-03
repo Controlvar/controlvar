@@ -37,8 +37,16 @@ pytestmark = pytest.mark.smoke
 
 # The dependencies whose override decides who a request acts as.  A fixture
 # that writes one of them into app.dependency_overrides signs a client in.
+# get_current_reader (backend/app/api/read_scope.py) is the user of the four
+# read routes that also take an mcp:read key; an override of the others does
+# not reach it.
 AUTH_DEPENDENCIES = frozenset(
-    {"get_current_active_user", "get_current_user", "get_current_superuser"}
+    {
+        "get_current_active_user",
+        "get_current_user",
+        "get_current_superuser",
+        "get_current_reader",
+    }
 )
 
 # Every fixture that installs the auth override: it calls make_client_for_user
@@ -279,6 +287,12 @@ def planted():
 def planted():
     app.dependency_overrides.update({deps.get_current_superuser: override})
     return TestClient(app)
+""",
+    "reader_only": """
+@pytest.fixture
+def planted(viewer):
+    app.dependency_overrides[get_current_reader] = lambda: viewer
+    yield TestClient(app)
 """,
     "through_local_helper": """
 def _sign_in(user):

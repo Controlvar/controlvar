@@ -420,11 +420,13 @@ describe('ExperimentDetailPage — lifecycle actions', () => {
 
 describe('ExperimentDetailPage — lifecycle actions by role', () => {
   // The API's change routes (start, pause, complete, archive) require a
-  // superuser or a role holding EXPERIMENT UPDATE -- ADMIN or DEVELOPER --
-  // whoever owns the experiment. The page offers exactly those buttons.
+  // superuser or EXPERIMENT UPDATE -- the ADMIN and DEVELOPER roles, or a
+  // custom role or direct grant -- whoever owns the experiment. The page
+  // offers exactly those buttons.
   const OTHER_OWNER = 'someone-else';
   const NOTE =
-    'Starting, pausing, completing and archiving an experiment requires the ADMIN or DEVELOPER role; ';
+    'Starting, pausing, completing and archiving an experiment needs permission to change experiments, ' +
+    'which the ADMIN and DEVELOPER roles have; ';
 
   function signIn(user: Record<string, unknown> | null) {
     mockUseAuth.mockReturnValue({
@@ -498,8 +500,9 @@ describe('ExperimentDetailPage — lifecycle actions by role', () => {
     expect(screen.getByTestId('experiment-owner')).toHaveTextContent('You (analyst@demo.com)');
     expect(lifecycleButtons()).toEqual([]);
     expect(screen.getByTestId('experiment-role-note')).toHaveTextContent(
-      'You own this experiment, but starting, pausing, completing and archiving it requires ' +
-        'the ADMIN or DEVELOPER role; you are ANALYST. You can read its results.',
+      'You own this experiment, but starting, pausing, completing and archiving it needs permission ' +
+        'to change experiments, which the ADMIN and DEVELOPER roles have; you are ANALYST. You can ' +
+        'read its results.',
     );
   });
 

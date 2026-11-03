@@ -2,8 +2,9 @@
 
 Read from the application's own routes: ReDoc is served at ``/api/v1/redoc``;
 no route overrides a flag for one user; the experiments collection lives at
-``/api/v1/experiments/``; an API key is read only by the routes an SDK calls;
-signing out revokes nothing; ``sdk:ruleset`` and its owner rule; and the
+``/api/v1/experiments/``; an API key is read only by the routes an SDK calls
+and the four read operations that take an ``mcp:read`` key; signing out
+revokes nothing; ``sdk:ruleset`` and its owner rule; and the
 dashboard pages that need a superuser.
 """
 
@@ -17,13 +18,16 @@ from unittest.mock import MagicMock
 
 import pytest
 from fastapi.routing import APIRoute
+from fastapi.security import APIKeyHeader
 from fastapi.testclient import TestClient
 
 from backend.app.api import deps, sdk_scope
+from backend.app.api.read_scope import get_current_reader
 from backend.app.core.config import settings
 from backend.app.core.security import create_local_access_token, decode_local_token
 from backend.app.main import app
 from backend.app.models.user import UserRole
+from backend.tests.smoke.test_mcp_read_routes import MCP_READ_ROUTES
 
 REPO = pathlib.Path(__file__).resolve().parents[4]
 
@@ -82,16 +86,44 @@ def test_the_experiments_collection_url_ends_with_a_slash():
     assert response.headers["location"].endswith("/api/v1/experiments/")
 
 
-def test_an_api_key_is_accepted_only_by_the_routes_an_sdk_calls():
+def _reads_the_key_header(call) -> bool:
+    """A security dependency that reads ``X-API-Key``, whatever wraps it."""
+    return isinstance(call, APIKeyHeader) and call.model.name.lower() == "x-api-key"
+
+
+def test_an_api_key_is_accepted_only_by_the_sdk_routes_and_the_mcp_read_routes():
+    """The routes an SDK calls take an API key; outside them, only the pinned
+    ``mcp:read`` routes do (read_scope.py), and nothing else reads the header.
+
+    A route is keyed when any dependency in its tree reads the ``X-API-Key``
+    header, so a wrapper that calls ``get_api_key`` as a plain function, as
+    ``get_current_reader`` does, is seen too.
+    """
+    contexts = list(_contexts())
     keyed = {
         (method, path)
-        for method, path, ctx in _contexts()
-        if deps.get_api_key in set(_calls(ctx.dependant))
+        for method, path, ctx in contexts
+        if any(_reads_the_key_header(call) for call in _calls(ctx.dependant))
     }
     assert len(keyed) >= 10, keyed
-    assert [r for r in keyed if not r[1].startswith(SDK_PREFIXES)] == []
+    outside_sdk = {r for r in keyed if not r[1].startswith(SDK_PREFIXES)}
+    assert outside_sdk == MCP_READ_ROUTES, sorted(outside_sdk ^ MCP_READ_ROUTES)
+    # get_api_key itself, as a dependency, stays on the SDK routes; the read
+    # routes reach it only through get_current_reader.
+    via_get_api_key = {
+        (method, path)
+        for method, path, ctx in contexts
+        if deps.get_api_key in set(_calls(ctx.dependant))
+    }
+    assert [r for r in via_get_api_key if not r[1].startswith(SDK_PREFIXES)] == []
+    readers_of_the_scope = {
+        (method, path)
+        for method, path, ctx in contexts
+        if get_current_reader in set(_calls(ctx.dependant))
+    }
+    assert readers_of_the_scope == MCP_READ_ROUTES
     # Nothing else reads the header: deps.py declares it, sdk_scope.py re-reads
-    # it for the scoped routes.
+    # it for the scoped routes, and read_scope.py declares the mcp:read scheme.
     readers = set()
     for tree in (REPO / "backend" / "app", REPO / "modules" / "backend" / "app"):
         if not tree.is_dir():
@@ -103,6 +135,7 @@ def test_an_api_key_is_accepted_only_by_the_routes_an_sdk_calls():
     assert readers <= {
         "backend/app/api/deps.py",
         "backend/app/api/sdk_scope.py",
+        "backend/app/api/read_scope.py",
         "backend/app/main.py",  # the CORS allow-list names it
         "backend/app/middleware/error_middleware.py",  # redacted from error reports
     }, readers
@@ -189,7 +222,7 @@ def test_the_ruleset_scope_and_its_owner_rule(scopes, owner, refusal):
     ],
 )
 def test_the_users_api_keys_and_safety_pages_need_a_superuser(page):
-    # The Roles page is the rbac module's: test_rbac_layers_are_display_only.py.
+    # The Roles page is the rbac module's: test_rbac_layers_take_effect.py.
     source = (REPO / page).read_text()
     assert "export default withAdminGuard(" in source
     # The guard's default audience is superusers; only an explicit

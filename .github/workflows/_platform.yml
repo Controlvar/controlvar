@@ -6,9 +6,10 @@ name: Platform
 # Every job that needs a *running* Controlvar used to repeat the same twenty
 # lines: pg + redis services, Python, bootstrap, seeds, uvicorn from the
 # repository root, poll /health. This is that sequence, once. Its callers
-# are pr-qa-gate.yml's sdk-live-contract and fuzz.yml's three API fuzzing
-# passes; the nightly suites do NOT call it (the `integration` and `smoke`
-# suites below are there for when one does).
+# are pr-qa-gate.yml's sdk-live-contract, fuzz.yml's three API fuzzing
+# passes, ground-truth.yml's replay and nightly-qa.yml's ground-truth and
+# flags-over-time jobs; the other nightly suites do NOT call it (the
+# `integration` and `smoke` suites below are there for when one does).
 #
 #   jobs:
 #     live-contract:
@@ -49,7 +50,7 @@ on:
         type: string
         default: demo
       suite:
-        description: 'Named suite to run: sdk-live-contract | integration | smoke | fuzz.'
+        description: 'Named suite to run: sdk-live-contract | integration | smoke | fuzz | ground-truth | ground-truth-nightly | usecases-flags.'
         type: string
         required: true
       sdks:
@@ -167,8 +168,10 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
+      # sdk-live-contract needs Node whatever `sdks` names: its second step runs
+      # the MCP server (sdk/mcp), on the Node its `engines` floor names.
       - name: Set up Node.js
-        if: ${{ !inputs.skip && (contains(inputs.sdks, 'js') || contains(inputs.sdks, 'react') || contains(inputs.sdks, 'edge') || contains(inputs.sdks, 'openfeature')) }}
+        if: ${{ !inputs.skip && (inputs.suite == 'sdk-live-contract' || contains(inputs.sdks, 'js') || contains(inputs.sdks, 'react') || contains(inputs.sdks, 'edge') || contains(inputs.sdks, 'openfeature')) }}
         uses: actions/setup-node@v7
         with:
           node-version: '22'
@@ -482,12 +485,64 @@ jobs:
               fi
               exit "$verdict"
               ;;
+            ground-truth)
+              # The ground-truth replay (#1544) at pull-request scale: seeded
+              # traffic through the public API, the results page against the
+              # event contract and an independent reference. Every test file
+              # under tests/ground_truth runs: the clean scenarios
+              # (test_replay.py) and the fault scenarios (test_faults.py). It
+              # signs in as the first administrator the bootstrap made and
+              # creates its own API key. Only counts and durations reach the
+              # step summary; each scenario's ledger stays in pytest's
+              # temporary directory, and nothing uploads it. The JUnit
+              # report's classnames carry the directory (--junit-prefix), so
+              # check_junit_skips.py fails a skipped gate, or a run of none.
+              GROUND_TRUTH_SCALE='pr' python -m pytest tests/ground_truth -p no:cov -v --tb=short --junitxml="$RUNNER_TEMP/ground-truth-junit.xml" --junit-prefix=tests.ground_truth
+              python scripts/check_junit_skips.py "$RUNNER_TEMP/ground-truth-junit.xml" tests/ground_truth
+              ;;
+            ground-truth-nightly)
+              # The clean scenarios alone (tests/ground_truth/test_replay.py)
+              # with four times the users. The fault scenarios are
+              # pull-request scale only, and do not run here.
+              GROUND_TRUTH_SCALE='nightly' python -m pytest tests/ground_truth/test_replay.py -p no:cov -v --tb=short
+              ;;
+            usecases-flags)
+              # The over-the-wire flag use cases (D210 use cases #1 and #2):
+              # this checkout's Python and JS SDKs, each behind a recording
+              # proxy, against the API above (tests/usecases). It signs in
+              # as the first administrator the bootstrap made. The JS SDK is
+              # built from this checkout first, on a line of its own, so a
+              # failed build ends the step here. `timeout 15m` ends a hung
+              # run inside the job's limit, so it fails (exit 124) and the
+              # nightly issue job still runs; it bounds liveness and gates
+              # no timing. The whole root runs (the JS driver's gates beside
+              # the cases). The log is public: --tb=short, never -l. Only
+              # counts and synthetic ids reach the step summary, which the
+              # tests write.
+              (cd sdk/js && npm ci --ignore-scripts --no-audit --no-fund && npm run build --silent)
+              timeout 15m python -P -m pytest tests/usecases -p no:cov -v --tb=short
+              ;;
             *)
-              echo "::error::unknown suite '$SUITE'. Known: sdk-live-contract, integration, smoke, fuzz."
+              echo "::error::unknown suite '$SUITE'. Known: sdk-live-contract, integration, smoke, fuzz, ground-truth, ground-truth-nightly, usecases-flags."
               echo "Add a new suite to the case statement in .github/workflows/_platform.yml."
               exit 1
               ;;
           esac
+
+      # ── the MCP server's contract suite ─────────────────────────────────────
+      # The second step of sdk-live-contract (#1607), and of no other suite:
+      # fuzz.yml calls this workflow three times, and the condition keeps the
+      # step out of every fuzz pass. It installs sdk/mcp with its own `npm ci`
+      # and no fallback, so a lock that does not install fails here rather than
+      # being re-resolved; builds dist/; and runs the server against the API
+      # above, through a recording proxy. The runner makes its own users, keys,
+      # flags and experiments, and changes nothing the sdk-contract seed made.
+      - name: Run the MCP server's contract suite
+        if: ${{ !inputs.skip && inputs.suite == 'sdk-live-contract' }}
+        run: |
+          set -euo pipefail
+          (cd sdk/mcp && npm ci --no-audit --no-fund --ignore-scripts && npm run build)
+          python tests/mcp-contract/run_mcp_contract.py
 
       # Not for fuzz: the API log of a fuzz run quotes the requests and the
       # failures, and this job's log is public.

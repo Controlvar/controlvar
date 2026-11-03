@@ -39,7 +39,9 @@ no token.
 ### API Key Authentication
 
 API keys are used by client applications for the tracking and feature flag evaluation
-endpoints.
+endpoints. A key that carries the `mcp:read` scope can also list feature flags and
+experiments and read an experiment and its results (see
+[Scopes](../security/api-keys.md#scopes)).
 
 **1. Obtain an API key.** Any signed-in user can create one, whatever their role (see
 [API Keys](../security/api-keys.md)), and an API key writes tracking data. The full key is
@@ -75,15 +77,20 @@ on for that user: `"new_dashboard_ui": true` and `"beta_features": true`.
    - Can access their own data
    - Cannot access admin endpoints
 
-   - Feature flags are by role, not ownership: ADMIN and DEVELOPER may read, create,
-     change and delete any flag; ANALYST and VIEWER may read any flag and change none
+   - Feature flags are by permission, not ownership: ADMIN and DEVELOPER may read, create,
+     change and delete any flag; ANALYST and VIEWER may read any flag and, by their role,
+     change none. In the full profile a custom role or direct grant can add
+     `feature_flag (create)`, `(update)` or `(delete)`, and then admits any flag
    - Experiments: reading an experiment and its results under
      `/api/v1/experiments/{experiment_id}` needs the role's READ on experiments (all four
      roles hold it); who owns the experiment is not considered. ADMIN and DEVELOPER may create
      experiments, clone any experiment, and update, start, pause, complete, archive or
      annotate (`metadata`) any experiment, schedule any experiment, and delete any
-     experiment in DRAFT. ANALYST and VIEWER change no experiment, including one they
-     own
+     experiment in DRAFT. ANALYST and VIEWER change no experiment by their role, including
+     one they own. In the full profile a custom role or direct grant can add these:
+     `experiment (create)` creates and clones, `experiment (update)` updates, starts,
+     pauses, completes, archives, annotates and schedules, and `experiment (delete)` deletes
+     a draft
 
 2. **Superusers**:
    - Can access all user data
@@ -962,7 +969,8 @@ Each 400 carries the detail `This flag is archived. Unarchive it before turning 
   separately. A flag that is not archived is returned unchanged. Written to the audit
   log as `feature_flag_update` (`ARCHIVED` to `INACTIVE`).
 - **Headers**: Authorization: Bearer {token}
-- **Permissions**: ADMIN and DEVELOPER; ANALYST and VIEWER get 403
+- **Permissions**: ADMIN and DEVELOPER, and in the full profile anyone whose custom role or
+  direct grant gives `feature_flag (update)`; anyone else gets 403
 - **Response**: 200 OK, the flag (the same shape as `GET /api/v1/feature-flags/{flag_id}`)
 - **Errors**: 403 without permission to change flags, 404 for an unknown flag
 
@@ -1018,8 +1026,10 @@ their public `key`, except `POST /api/v1/tracking/events`, which takes ids. They
   they actually see the experiment) records the view. Assigned users count in the experiment's
   results from the moment they are assigned, and for a bandit experiment they count as pulls.
   See [Assign a customer list to an experiment](../guides/assign-customer-list.md).
-- **Headers**: `X-API-Key: {api_key}`, a key with the `sdk:ruleset` scope whose owner is an ADMIN,
-  a DEVELOPER or a superuser. That scope also lets the key download every feature flag's targeting
+- **Headers**: `X-API-Key: {api_key}`, a key with the `sdk:ruleset` scope whose owner can change
+  feature flags and experiments: an ADMIN, a DEVELOPER, a superuser, or in the full profile anyone
+  whose custom roles or direct grants give `feature_flag (update)` and `experiment (update)`.
+  That scope also lets the key download every feature flag's targeting
   rules (`GET /api/v1/sdk/ruleset`), so keep the key on a server; see
   [Scopes](../security/api-keys.md#scopes).
 - **Body**: `{"experiment_key": string, "users": [{"user_id": string, "context": object?}]}`
@@ -1061,7 +1071,8 @@ their public `key`, except `POST /api/v1/tracking/events`, which takes ids. They
 | 401 | no key | `API key missing` |
 | 401 | an unknown, expired or revoked key | `Invalid API Key` |
 | 403 | the key lacks the scope | `This API key does not have the 'sdk:ruleset' scope. Create a key with the 'sdk:ruleset' scope for server-side SDK use.` |
-| 403 | the key's owner is no longer an active ADMIN, DEVELOPER or superuser | `This key's owner can no longer change feature flags or experiments, so the key is refused for server-side SDK use.` |
+| 403 | the key's owner can no longer change feature flags: inactive, or given `feature_flag (update)` neither by their role nor, in the full profile, by a custom role or direct grant | `This key's owner can no longer change feature flags, so the key is refused for server-side SDK use.` |
+| 403 | the key's owner can change feature flags but not experiments; nobody is assigned | `This key's owner cannot change experiments, so the key cannot assign users in a batch, and nobody was assigned. Use a server-side key whose owner can change experiments.` |
 | 404 | no ACTIVE experiment has that key | `Active experiment with key 'spring-email' not found` |
 | 409 | the experiment was paused, completed or deleted (or its variants changed) during the request | `The experiment changed during the request. Users earlier in the list may already be assigned; resending the same request is safe.` |
 | 422 | `users` is empty | loc `["body","users"]`, msg `List should have at least 1 item after validation, not 0` |
@@ -1090,6 +1101,14 @@ A 422 names positions and fields, never the ids that were sent.
   missing, `null` and `""` mean none. An event sent again with the same `event_id`, user,
   experiment, flag and event name is not stored again; see
   [How events count](../guides/how-events-count.md#sending-an-event-again).
+- **Event limits**: `metadata` may nest at most 64 levels,
+  every JSON object and array a level and the object itself the first, so `{"a": {"b": 1}}` is 2
+  levels. Deeper answers 422 and nothing is stored. `/tracking/events` accepts `properties` as well
+  as `metadata`, with the same limit. A refusal on `/tracking/track` and `/tracking/batch` names
+  `properties`, which is what the stored event calls `metadata`. A `timestamp` at the very edge of the date
+  range whose UTC offset moves it past 0001-01-01 or 9999-12-31 answers 422 too. `/tracking/batch`
+  and `/tracking/events` hold events to the same limits; in a batch the entry is reported in
+  `errors` and the others are stored.
 - **Headers**: X-API-Key: {api_key}
 - **Body**: `{"event_type": string, "event_name": string?, "user_id": string, "experiment_key": string?, "feature_flag_key": string?, "value": number?, "metadata": object?, "timestamp": datetime?, "event_id": string?}`
 - **Response**: 200 OK (the stored event, with `"duplicate": false` and the `event_id` sent, or null); 200 OK with `"duplicate": true` for an event already stored with that `event_id`: `id` is the stored event's, every other field is this request's, and nothing is written; 404 a key that was given was not found; 422 invalid body, an `event_id` that is not text or is over 255 characters among them
@@ -1101,7 +1120,7 @@ A 422 names positions and fields, never the ids that were sent.
   Each entry is tagged with a variant as `/track` tags it: only while its experiment is running.
   An entry already stored with its `event_id` (an earlier request's, or an earlier entry of this
   one) counts in `success_count` and in `duplicate_count`, and nothing is written for it.
-- **Response**: 200 OK `{"success_count": int, "failure_count": int, "duplicate_count": int, "errors": [...]|null}`; 422 above 100 events, or one entry invalid (its `event_id` among them), and none is stored
+- **Response**: 200 OK `{"success_count": int, "failure_count": int, "duplicate_count": int, "errors": [...]|null}`; 422 above 100 events, or one entry invalid (its `event_id` among them), and none is stored. An entry that is valid as a request but refused when its event is built (metadata nested too deep, an edge `timestamp`, a key not found) is reported in `errors` and the others are stored
 
 ### Track Event by Ids
 - **Endpoint**: `POST /api/v1/tracking/events`
@@ -1901,8 +1920,9 @@ POST /api/v1/feature-flags/bulk-toggle    — Bulk enable/disable/archive (DEVEL
 GET  /api/v1/feature-flags/{id}/history   — Flag change history
 ```
 
-ADMIN and ANALYST read every audit entry; DEVELOPER and VIEWER read only their
-own entries on the list, user, stream and history routes. See
+ADMIN and ANALYST, and in the full profile anyone whose custom role or direct grant gives
+`audit_log (read)`, read other users' audit entries too; anyone else reads only their own
+entries on the list, user, stream and history routes. See
 [Permissions](audit-logging.md#permissions).
 
 ---
@@ -2065,7 +2085,9 @@ POST /api/v1/segments/{id}/members/remove   {"remove": ["user-123", "user-999"]}
   most 1,000,000` and adds nothing. A rules segment answers 409 `members can be added only
   to an id_list segment` (`removed only from` on remove), an archived one 409 `this
   segment is archived; its members cannot be changed`, an unknown one 404.
-- **Who.** DEVELOPER and ADMIN; ANALYST and VIEWER get 403. Each change writes one
+- **Who.** Users who may change experiments: DEVELOPER and ADMIN, and in the full profile
+  anyone whose custom role or direct grant gives `experiment (update)`; anyone else gets 403.
+  Each change writes one
   `segment_update` audit entry with the counts, never the IDs.
 
 `POST /api/v1/segments/{id}/evaluate` answers an id list on `user_context.user_id`: the user
@@ -2091,10 +2113,10 @@ POST /api/v1/notifications/test                — Send test notification (DEVEL
 
 ### AI Endpoints and the MCP Manifest
 
-See [AI Endpoints and the MCP Manifest](../mcp-server.md) for full documentation. The
-manifest describes these operations as tools in the vocabulary of the Model Context
-Protocol, but the platform runs no MCP server: an MCP client cannot connect to it or call a
-tool through it. Call the endpoints over HTTP.
+See [The MCP Server and the AI Endpoints](../mcp-server.md) for full documentation. The
+MCP server is a separate program on your computer that calls this API with your API key.
+Nothing on this API answers an MCP client, and the manifest only lists the server's tools.
+Call the endpoints over HTTP.
 
 ```text
 POST /api/v1/ai/design                    — AI experiment design suggestion
@@ -2102,7 +2124,7 @@ POST /api/v1/ai/interpret/{experiment_id} — AI results interpretation
 GET  /api/v1/ai/sample-size               — Sample size calculator
 GET  /api/v1/ai/templates                 — List experiment templates
 GET  /api/v1/ai/templates/{id}            — Get template
-GET  /api/v1/mcp/manifest                 — Tool manifest in MCP's vocabulary (no sign-in)
+GET  /api/v1/mcp/manifest                 — The MCP server's tools (no sign-in)
 ```
 
 ---

@@ -372,8 +372,11 @@ export class ExperimentationClient {
         return evaluation;
       }
     }
+    // Only a server answer is reused here. A local one stays in the cache (getEvaluatedFlags), but
+    // it was computed from a ruleset that no longer answers this call (discarded, too stale, closed,
+    // the flag now remote or gone, or attributes it cannot compare), so the server is asked (#1709).
     const cached = this.flags.get(userId, flagKey);
-    if (cached) return cached;
+    if (cached && cached.source !== 'local') return cached;
 
     return this.dedupe(`flag\u0000${userId}\u0000${flagKey}`, async () => {
       const data = await this.requestJson<FlagEvaluateResponse>(
@@ -587,6 +590,10 @@ export class ExperimentationClient {
     if (event.value !== undefined) base.value = event.value;
     if (event.properties !== undefined) base.metadata = event.properties;
     if (event.timestamp !== undefined) base.timestamp = toIso(event.timestamp);
+    // The caller's id, copied into every fan-out entry below. None is made here.
+    if (event.eventId !== undefined && event.eventId !== null && event.eventId !== '') {
+      base.event_id = event.eventId;
+    }
 
     if (event.experimentKey || event.featureFlagKey) {
       const body: TrackBody = { ...base };

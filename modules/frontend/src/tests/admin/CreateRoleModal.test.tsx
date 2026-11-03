@@ -203,12 +203,28 @@ describe('CreateRoleModal', () => {
     mockUpdateRole.mockResolvedValue(stored);
     render(<CreateRoleModal isOpen={true} role={stored} onClose={jest.fn()} onSuccess={jest.fn()} />);
     expect(screen.getByTestId('legacy-permissions-note')).toHaveTextContent(
-      'Not grantable, removed when you save: export (read), report (read, list). No permission check reads them.',
+      'Not grantable, removed when you save: export (read), report (read, list). They give no permission.',
     );
     expect(screen.getByTestId('permission-checkbox-experiment:read')).toBeChecked();
     fireEvent.click(screen.getByTestId('modal-submit-button'));
     await waitFor(() => expect(mockUpdateRole).toHaveBeenCalled());
     expect(mockUpdateRole.mock.calls[0][1].permissions).toEqual([{ resource: 'experiment', actions: ['read'] }]);
+  });
+
+  // Check #47: an edit says who it reaches, for 0, 1 and 3 users (#891).
+  it.each([
+    [0, 'No user has this role.'],
+    [1, 'Changes apply at once to the 1 user who has this role.'],
+    [3, 'Changes apply at once to the 3 users who have this role.'],
+  ])('editing a role with %i users says who the change reaches', (userCount, text) => {
+    const role = makeRole({ name: 'data-scientist', user_count: userCount });
+    render(<CreateRoleModal isOpen={true} role={role} onClose={jest.fn()} onSuccess={jest.fn()} />);
+    expect(screen.getByTestId('role-users-affected')).toHaveTextContent(new RegExp(`^${text.replace(/\./g, '\\.')}$`));
+  });
+
+  it('creating a role says nothing about users', () => {
+    render(<CreateRoleModal isOpen={true} onClose={jest.fn()} onSuccess={jest.fn()} />);
+    expect(screen.queryByTestId('role-users-affected')).toBeNull();
   });
 
   it('names the audit log checkbox "Read the audit log", inside its group', () => {

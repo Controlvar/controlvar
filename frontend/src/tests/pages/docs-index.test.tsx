@@ -112,11 +112,13 @@ describe('/docs hub entries for methods that do not work yet', () => {
     expect(python[0].getAttribute('href')).toMatch(/\/sdk\/python\.md$/);
   });
 
-  it('says custom roles are not applied yet (#891)', () => {
+  it('says custom roles and direct grants add to the built-in roles (#891)', () => {
     const { getAllByRole } = render(<DocsIndex />);
     const rbac = getAllByRole('link').filter((a) => /^RBAC/.test(a.textContent ?? ''));
     expect(rbac).toHaveLength(1);
-    expect(rbac[0].textContent ?? '').toMatch(/custom roles \(full profile\) are stored but not applied yet/);
+    expect(rbac[0].textContent ?? '').toMatch(
+      /in the full profile, custom roles and direct grants add to them/,
+    );
   });
 
   it('lists the Kubernetes (Helm) self-hosting guide', () => {

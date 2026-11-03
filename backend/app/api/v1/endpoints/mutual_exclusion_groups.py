@@ -154,7 +154,9 @@ def list_groups(
     status_code=status.HTTP_201_CREATED,
     summary="Create a mutual exclusion group",
     description=(
-        "Create a new mutual exclusion group. Requires DEVELOPER or ADMIN role. "
+        "Create a new mutual exclusion group. Requires permission to create "
+        "experiments: DEVELOPER or ADMIN, or in the full profile a custom role "
+        "or direct grant giving experiment (create). "
         "409 when another group has the name (compared exactly, case included)."
     ),
     tags=["Mutual Exclusion Groups"],
@@ -232,7 +234,9 @@ def get_group(
     summary="Update a mutual exclusion group",
     description=(
         "Update a mutual exclusion group's name, description or traffic "
-        "allocation. Requires DEVELOPER or ADMIN role. Changing status "
+        "allocation. Requires permission to create experiments: DEVELOPER or "
+        "ADMIN, or in the full profile a custom role or direct grant giving "
+        "experiment (create). Changing status "
         "(archiving or unarchiving) requires ADMIN role, as archiving through "
         "DELETE does; sending the group's current status is accepted from a "
         "DEVELOPER. 409 when another group has the name (compared exactly, "
@@ -353,7 +357,11 @@ def archive_group(
     "/{group_id}/experiments",
     status_code=status.HTTP_200_OK,
     summary="Add experiment to mutual exclusion group",
-    description="Add an experiment to a mutual exclusion group. Requires DEVELOPER or ADMIN role.",
+    description=(
+        "Add an experiment to a mutual exclusion group. Requires permission to "
+        "create experiments: DEVELOPER or ADMIN, or in the full profile a custom "
+        "role or direct grant giving experiment (create)."
+    ),
     tags=["Mutual Exclusion Groups"],
 )
 async def add_experiment_to_group(
@@ -409,7 +417,11 @@ async def add_experiment_to_group(
     "/{group_id}/experiments/{experiment_id}",
     status_code=status.HTTP_200_OK,
     summary="Remove experiment from mutual exclusion group",
-    description="Remove an experiment from a mutual exclusion group. Requires DEVELOPER or ADMIN role.",
+    description=(
+        "Remove an experiment from a mutual exclusion group. Requires permission "
+        "to create experiments: DEVELOPER or ADMIN, or in the full profile a "
+        "custom role or direct grant giving experiment (create)."
+    ),
     tags=["Mutual Exclusion Groups"],
 )
 async def remove_experiment_from_group(

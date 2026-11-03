@@ -4,8 +4,10 @@
   61st request in a minute is refused with 429 by the real middleware (the
   application turns the middleware off under test, so it is driven with
   ``enabled=True`` here, as ``test_own_password_rate_limit.py`` does);
-* the two ``sdk:ruleset`` 403 texts, as literal strings: the other tests
-  compare responses with the constants, a copy against a copy;
+* the three ``sdk:ruleset`` 403 texts (the scope, the owner who cannot
+  change feature flags, batch assignment's owner who cannot change
+  experiments) and the key-creation refusal, as literal strings: the other
+  tests compare responses with the constants, a copy against a copy;
 * ``AssignmentService.bulk_assign_users`` is gone: it skipped the holdout,
   mutual exclusion and targeting checks.
 """
@@ -100,8 +102,29 @@ def test_the_missing_scope_text():
 
 def test_the_owner_role_text():
     assert sdk_scope.OWNER_ROLE_DETAIL == (
-        "This key's owner can no longer change feature flags or experiments, so "
-        "the key is refused for server-side SDK use."
+        "This key's owner can no longer change feature flags, so the key is "
+        "refused for server-side SDK use."
+    )
+
+
+def test_the_owner_experiment_text():
+    """Batch assignment's own 403 (#891, option B): the owner can change feature
+    flags but not experiments, and nobody is assigned."""
+    assert sdk_scope.OWNER_EXPERIMENT_DETAIL == (
+        "This key's owner cannot change experiments, so the key cannot assign "
+        "users in a batch, and nobody was assigned. Use a server-side key whose "
+        "owner can change experiments."
+    )
+    assert sdk_scope.OWNER_EXPERIMENT_DETAIL != sdk_scope.OWNER_ROLE_DETAIL
+
+
+def test_the_key_creation_refusal_text():
+    from backend.app.api.v1.endpoints.api_keys import SDK_RULESET_CREATE_FORBIDDEN
+
+    assert SDK_RULESET_CREATE_FORBIDDEN == (
+        "Only users who can change feature flags can create an API key with the "
+        "sdk:ruleset scope; the ADMIN and DEVELOPER roles and superusers can. "
+        "Create the key without that scope, or ask someone who can."
     )
 
 

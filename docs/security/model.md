@@ -19,7 +19,8 @@ report a vulnerability, follow
 ## API keys
 
 - An API key is stored only as a hash. Its value is shown once, in the response that creates it.
-- A request that carries an API key and no sign-in is refused with `401` by the routes that manage experiments, feature flags and users.
+- A request that carries an API key and no sign-in is refused with `401` by the routes that create, change or delete experiments and feature flags, and by the routes that manage users.
+- Four read operations also accept a key that carries the `mcp:read` scope: listing feature flags, listing experiments, reading an experiment and reading its results. The key reads there as the user who created it, under that user's role; a key without the scope is refused with `403`.
 - A deleted or expired key is refused with `401`.
 
 ## Response headers

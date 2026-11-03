@@ -649,13 +649,14 @@ class TestVectorsThroughTheRoutes:
         monkeypatch.setattr(
             MetricsService, "record_flag_evaluation", staticmethod(lambda **_: None)
         )
-        checked = values = 0
+        checked = values = skipped = 0
         wrong = []
         for case in stored_corpus["cases"]:
             if _has_lone_surrogate(case["user_id"]) or _has_lone_surrogate(
                 case["context"]
             ):
                 assert not case["must_local"], case["id"]
+                skipped += 1
                 continue
             params = {"user_id": case["user_id"]}
             if case["context"] is not None:
@@ -678,6 +679,14 @@ class TestVectorsThroughTheRoutes:
                     wrong.append((case["id"], served, case["expected_value"]))
             checked += 1
         assert not wrong, wrong[:10]
+        # An exact accounting: every case went through HTTP or is one of the 11
+        # lone-surrogate cases no client can send. A loop that quietly skipped
+        # more (or fewer) cases would break this equation, which a bare
+        # `checked >= must_local` let through.
+        assert skipped == 11
+        total = len(stored_corpus["cases"])
+        assert total == stored_corpus["counts"]["cases"] == 2242
+        assert checked + skipped == total
         assert checked >= stored_corpus["counts"]["must_local"]
         # Every value flag's case, all 51 of them well-formed.
         assert values == 51
