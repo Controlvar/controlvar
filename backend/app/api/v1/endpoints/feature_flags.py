@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import deps
 from backend.app.api.enum_filters import enum_filter
+from backend.app.api.read_scope import get_current_reader
 from backend.app.api.segment_rules import refuse_unusable_segments
 from backend.app.core.context_limits import (
     CONTEXT_TOO_DEEP,
@@ -269,7 +270,8 @@ async def list_feature_flags(
         None, alias="status", description=FLAG_STATUS_FILTER_DESCRIPTION
     ),
     search: Optional[str] = None,
-    current_user=Depends(deps.get_current_active_user),
+    # A sign-in, or an API key with the mcp:read scope (read_scope.py).
+    current_user=Depends(get_current_reader),
 ) -> FeatureFlagListResponse:
     """
     Retrieve feature flags.

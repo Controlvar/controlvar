@@ -811,6 +811,17 @@ by = [
 ]
 
 [[unit]]
+text = "GET /api/v1/feature-flags/, GET /api/v1/experiments/, GET /api/v1/experiments/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results | #1607 | Each of these four read operations also accepts an API key that carries the mcp:read scope, in the X-API-Key header, where it took a sign-in only. The request then reads as the user who created the key, and the operation's role check is the one a sign-in gets. A valid key without mcp:read answers 403; an unknown, inactive, expired or deleted key, or one whose owner is deactivated, answers 401 Invalid API Key. A request with a bearer token is judged on the token alone, and one with neither credential still answers 401 Not authenticated. Keys already labelled mcp:read gain this access at upgrade; an ADMIN lists keys with GET /api/v1/api-keys?all=true. This is additive for existing clients, and the routes that create, change or delete flags or experiments, and the routes that manage users, still take a sign-in. The OpenAPI document changes: each operation's security adds the MCPReadAPIKey scheme, and that scheme's description names mcp:read. See Scopes."
+by = [
+    "test:backend/tests/smoke/test_mcp_read_routes.py",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py",
+    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_admin_all_sees_everyone",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "POST /api/v1/tracking/track, POST /api/v1/tracking/batch, POST /api/v1/tracking/events | #1543 | Each event takes an optional event_id: text of at most 255 characters, compared exactly. Missing, null and \"\" mean none, and an event without one is stored as before. An event sent again with the same event_id, user, experiment, flag and event name is not stored again: /track and /events answer 200 with \"duplicate\": true and the stored event's id, and /batch counts it in success_count and in the new duplicate_count. The answers of /track and /events gain duplicate and event_id, and the answer of /batch gains duplicate_count. An event_id these routes ignored before is now refused with 422 when it is not a string (a number, say), is over 255 characters, or holds NUL or a lone surrogate; in /batch one such entry refuses the whole request, and nothing in it is stored. The OpenAPI document changes only in these three operations' request and response schemas. See How events count."
 by = [
     "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
