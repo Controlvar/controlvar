@@ -289,10 +289,10 @@ def test_the_scheduler_starts_a_time_based_stage_at_its_utc_instant(
 def test_min_stage_duration_and_completion_are_recorded_in_utc(
     la_api, la_factory, flag_id
 ):
-    """The scheduler writes ``updated_at`` (the stage's start, as it reads it)
-    and ``completed_date`` from an aware now. On an LA session they used to
-    be stored eight hours early, so ``min_stage_duration=24`` let the next
-    stage start 16 hours after the first."""
+    """The scheduler writes ``started_at`` (the stage's start, #1528),
+    ``updated_at`` and ``completed_date`` from an aware now. On an LA session
+    they used to be stored eight hours early, so ``min_stage_duration=24`` let
+    the next stage start 16 hours after the first."""
     start = _utc(2026, 11, 5, 17, 0)
     schedule = _create(
         la_api,
@@ -316,7 +316,7 @@ def test_min_stage_duration_and_completion_are_recorded_in_utc(
     assert _statuses(la_factory, schedule["id"]) == ["IN_PROGRESS", "PENDING"]
 
     # Stage 1's own duration (1 h) is over; min_stage_duration (24 h) is not.
-    started = _stored(la_factory, first, "updated_at")
+    started = _stored(la_factory, first, "started_at")
     later = start + timedelta(hours=17)
     assert _tick(la_factory, schedule["id"], later) == 0, (
         f"advanced at T+17h: min_stage_duration was measured from {started}, "
@@ -324,6 +324,7 @@ def test_min_stage_duration_and_completion_are_recorded_in_utc(
     )
     assert _statuses(la_factory, schedule["id"]) == ["IN_PROGRESS", "PENDING"]
     assert started == NOV_17
+    assert _stored(la_factory, first, "updated_at") == NOV_17
 
     due = start + timedelta(hours=24, minutes=1)
     assert _tick(la_factory, schedule["id"], due) == 1
@@ -331,18 +332,24 @@ def test_min_stage_duration_and_completion_are_recorded_in_utc(
     naive_due = datetime(2026, 11, 6, 17, 1)
     assert _stored(la_factory, first, "completed_date") == naive_due
     assert _stored(la_factory, first, "updated_at") == naive_due
+    assert _stored(la_factory, first, "started_at") == NOV_17
     assert _stored(la_factory, second, "updated_at") == naive_due
+    assert _stored(la_factory, second, "started_at") == naive_due
 
 
 # ---------------------------------------------------------------------------
-# Shipped behaviour the docs state: an edit restarts a stage's clock
+# An edit does not restart a stage's clock (#1528), on an LA session too
 # ---------------------------------------------------------------------------
 
 
-def test_editing_an_in_progress_stage_restarts_its_clock(la_api, la_factory, flag_id):
+@pytest.mark.regression
+def test_editing_an_in_progress_stage_keeps_its_clock(la_api, la_factory, flag_id):
     """The scheduler measures time-based completion and ``min_stage_duration``
-    from the stage's ``updated_at``, and any edit sets it, a rename included.
-    This pins the behaviour the docs state until it is changed (#1528)."""
+    from the stage's ``started_at``, which a rename does not move. It used to
+    measure from ``updated_at``, which the rename set to now, so the stage
+    completed an hour after the rename and the next one started a day after
+    it. On an LA session, so that a start stored eight hours off (#1462) would
+    show here too."""
     began = _utc(2020, 1, 1, 0, 0)
     schedule = _create(
         la_api,
@@ -355,37 +362,31 @@ def test_editing_an_in_progress_stage_restarts_its_clock(la_api, la_factory, fla
     assert activated.status_code == 200, activated.text
     assert _tick(la_factory, schedule["id"], began) == 1
     assert _stored(la_factory, first, "updated_at") == datetime(2020, 1, 1, 0, 0)
-    # Untouched, it is due a day later (nothing is kept).
-    due = began + timedelta(hours=24, minutes=1)
-    assert _tick(la_factory, schedule["id"], due, keep=False) == 1
 
     renamed = la_api.put(f"{BASE}/stages/{first}", json={"name": "Renamed"})
     assert renamed.status_code == 200, renamed.text
     assert renamed.json()["status"] == RolloutStageStatus.IN_PROGRESS.value
-    edited = _stored(la_factory, first, "updated_at")
-    assert edited > datetime(2020, 1, 2, 0, 1), edited
-    edited_utc = edited.replace(tzinfo=timezone.utc)
+    # The rename moved updated_at.
+    assert _stored(la_factory, first, "updated_at") > datetime(2020, 1, 2, 0, 1)
 
-    # Completion (its 1 h duration) is measured from the rename ...
+    # Completion (its 1 h duration) is measured from the start ...
     session = la_factory()
     try:
         stage = session.get(RolloutStage, uuid.UUID(first))
         completes = RolloutScheduler()._is_stage_eligible_for_completion
-        assert not completes(stage, edited_utc + timedelta(minutes=30))
-        assert completes(stage, edited_utc + timedelta(hours=1))
+        assert not completes(stage, began + timedelta(minutes=59, seconds=59))
+        assert completes(stage, began + timedelta(hours=1)), (
+            "the rename restarted the clock"
+        )
     finally:
         session.close()
-    # ... and so is min_stage_duration (24 h).
-    assert (
-        _tick(la_factory, schedule["id"], edited_utc + timedelta(hours=2), keep=False)
-        == 0
+    # ... and so is min_stage_duration (24 h): nothing is kept.
+    before_due = began + timedelta(hours=23, minutes=59)
+    assert _tick(la_factory, schedule["id"], before_due, keep=False) == 0
+    due = began + timedelta(hours=24, minutes=1)
+    assert _tick(la_factory, schedule["id"], due, keep=False) == 1, (
+        "the rename restarted the min_stage_duration clock"
     )
-    assert (
-        _tick(
-            la_factory,
-            schedule["id"],
-            edited_utc + timedelta(hours=24, minutes=1),
-            keep=False,
-        )
-        == 1
-    )
+    # The recorded start is the tick's instant, in UTC, and the rename left it.
+    assert _stored(la_factory, first, "started_at") == datetime(2020, 1, 1, 0, 0)
+    assert renamed.json()["started_at"] == "2020-01-01T00:00:00"

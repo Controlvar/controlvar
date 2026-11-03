@@ -91,7 +91,8 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini history
 Output, for example:
 
 ```text
-607c51a59bf5 -> 85dd4796bb8b (head), Events: an event_id is stored once per user, experiment, flag and event name
+85dd4796bb8b -> 7b6b4b4fe246 (head), Rollout stages: record when each stage started
+607c51a59bf5 -> 85dd4796bb8b, Events: an event_id is stored once per user, experiment, flag and event name
 4c2c09a2b3e8 -> 607c51a59bf5, Feature flags: a value type and two values, held by one check
 ...
 <base> -> 84a772608a6e, Initial schema
@@ -116,7 +117,7 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini current
 Output, for a full install (a core install prints the first line only):
 
 ```text
-85dd4796bb8b (head)
+7b6b4b4fe246 (head)
 modules_0004_rbac_activation (head)
 ```
 
@@ -405,6 +406,10 @@ Past `85dd4796bb8b` it also drops the table `event_dedup_keys`, and with it ever
 stored `event_id` (see
 [`85dd4796bb8b`](#85dd4796bb8b-stores-an-event-sent-again-with-its-event_id-once)).
 
+Past `7b6b4b4fe246` it first runs that revision's downgrade, which drops
+`rollout_stages.started_at`, the recorded start of every rollout stage (see
+[`7b6b4b4fe246`](#7b6b4b4fe246-records-when-each-rollout-stage-started)).
+
 ### `d29a479daafe` records who each global holdout covers
 
 This revision adds `activated_at`, `deactivated_at` and `hash_salt` to
@@ -477,6 +482,10 @@ while any flag is a string, number or json flag (see
 [`607c51a59bf5`](#607c51a59bf5-gives-each-flag-a-value-type-and-two-values)).
 From a release that carries `85dd4796bb8b`, it also drops the table
 `event_dedup_keys` before that.
+From a release that carries `7b6b4b4fe246`, it also runs that revision's
+downgrade, which drops `rollout_stages.started_at`, the recorded start of every
+rollout stage (see
+[`7b6b4b4fe246`](#7b6b4b4fe246-records-when-each-rollout-stage-started)).
 
 ### `4c2c09a2b3e8` keeps rollback records without a safety configuration
 
@@ -534,6 +543,11 @@ backup taken before the upgrade. With only boolean flags stored, the downgrade
 drops the check and the three columns, and nothing else. Neither the upgrade
 nor the downgrade can be emitted as SQL (`--sql`).
 
+From a release that carries `7b6b4b4fe246`, a downgrade to `4c2c09a2b3e8` first
+runs that revision's downgrade, which drops `rollout_stages.started_at`, the
+recorded start of every rollout stage (see
+[`7b6b4b4fe246`](#7b6b4b4fe246-records-when-each-rollout-stage-started)).
+
 ### `85dd4796bb8b` stores an event sent again with its event_id once
 
 This revision adds the table `event_dedup_keys`: one row per event stored with
@@ -553,6 +567,48 @@ removed. Until the API is rolled back too, this release answers `500` to an
 event that carries an `event_id`, because the table is gone, and stores every
 other event as before; so roll the API back straight after the downgrade, as the
 rollback runbook does.
+
+### `7b6b4b4fe246` records when each rollout stage started
+
+This revision adds `rollout_stages.started_at`, the time the scheduler or
+`POST /api/v1/rollout-schedules/stages/{stage_id}/advance` started the stage. It
+is empty until a stage starts. The upgrade fills it for every stage in progress
+with the time the scheduler measured from before, so no stage's completion time
+moves; a stage that was pending, or that finished before the upgrade, stays
+empty.
+
+The previous release runs against this schema unchanged: it never reads or
+writes the column. A stage it starts while a deploy is rolling has an empty
+`started_at`; this release then measures from the stage's `updated_at`, as
+before, so an edit to that stage restarts its clock until it completes. To list
+them:
+
+```sql
+-- Stages in progress with no recorded start
+SELECT id FROM experimentation.rollout_stages
+ WHERE status = 'IN_PROGRESS' AND started_at IS NULL;
+```
+
+**The downgrade drops every recorded start.** `7b6b4b4fe246`'s downgrade drops
+`rollout_stages.started_at`; it does not refuse, and nothing can restore the
+exact values. An upgrade afterwards sets each stage in progress from its
+`updated_at`, which an edit may have moved, so a stage edited in the meantime
+restarts its clock from the edit. Where the API migrates on start (Docker
+Compose, and the Helm chart's init container), the previous release refuses to
+start against this revision. To go back to it, first downgrade to the previous
+release's heads, with this release still running
+([An Older Image Against a Newer Database](#an-older-image-against-a-newer-database)),
+and with the Engineering Lead's approval at the moment it runs when any stage
+is `IN_PROGRESS`. This revision's own `down_revision` is `85dd4796bb8b`; this
+undoes this revision alone:
+
+```{.bash skip reason="destructive: drops rollout_stages.started_at"}
+docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade 85dd4796bb8b
+```
+
+On Helm, run the same command in an API pod with `kubectl exec`. Once the
+database is at the previous release's heads, start the previous release. The
+upgrade cannot be emitted as SQL (`--sql`).
 
 Roll back to a specific revision:
 
@@ -768,6 +824,18 @@ names:
 - restore the backup taken before that upgrade, and run the older image
   against the restored database.
 
+A third way, when the newer release's migrations can be undone: with the newer
+release still running, downgrade to the heads of the older release, then start
+the older image. Those are its core head and, on a full install, its modules
+head too, one `alembic downgrade <id>` for each; `alembic heads`, run with the
+older image, prints them. The core head alone is not enough when the newer
+release also moved the modules branch: the older image still refuses, naming
+the modules revision. Each migration in between runs its downgrade on the way:
+from a release that carries `7b6b4b4fe246`, whose own `down_revision` is
+`85dd4796bb8b`, that includes its downgrade, which drops the recorded start of
+every rollout stage (see
+[`7b6b4b4fe246`](#7b6b4b4fe246-records-when-each-rollout-stage-started)).
+
 Do not edit `alembic_version` to make the older image start.
 
 The refusal is at start-up, so instances of the older image that were
@@ -840,6 +908,10 @@ What this means for you:
   [`85dd4796bb8b`](#85dd4796bb8b-stores-an-event-sent-again-with-its-event_id-once)
   is backward-compatible for a rollback too, and undoing it drops
   `event_dedup_keys`, every stored `event_id`, and no event.
+  [`7b6b4b4fe246`](#7b6b4b4fe246-records-when-each-rollout-stage-started)
+  is backward-compatible for a rollback too, and undoing it drops the recorded
+  start of every rollout stage; an upgrade afterwards sets each stage in
+  progress from its `updated_at`.
   [`modules_0003_lower_is_better`](#modules_0003_lower_is_better-gives-each-warehouse-metric-source-a-direction)
   is backward-compatible for a rollback, and undoing it drops every warehouse
   metric source's lower-is-better setting; an upgrade afterwards sets each back

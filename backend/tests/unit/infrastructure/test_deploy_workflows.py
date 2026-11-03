@@ -242,8 +242,17 @@ def _offenders(scripts: list[tuple[str, str]]) -> list[str]:
     ]
 
 
+#: Every workflow this rule covers: the three AWS ones, and the scale
+#: evidence workflow, whose dispatch inputs and step outputs reach its
+#: scripts (V30, PE-S13: here rather than an improvised check of its own).
+SCALE_EVIDENCE = WORKFLOWS / "scale-evidence.yml"
+INTERPOLATION_WORKFLOWS = (*AWS_WORKFLOWS, SCALE_EVIDENCE)
+
+
 @pytest.mark.regression
-@pytest.mark.parametrize("path", AWS_WORKFLOWS, ids=IDS)
+@pytest.mark.parametrize(
+    "path", INTERPOLATION_WORKFLOWS, ids=[p.name for p in INTERPOLATION_WORKFLOWS]
+)
 def test_nothing_is_interpolated_into_a_shell_script(path):
     """`${{ }}` inside `run:` is substituted before bash parses the line.
 
@@ -1076,7 +1085,7 @@ def test_db_migrate_refuses_relative_and_whole_graph_targets(
     assert code == 1, f"{direction} {target!r} was accepted:\n{log}"
     (error,) = [line for line in log.splitlines() if line.startswith("::error")]
     assert "nothing was migrated" in error
-    assert "607c51a59bf5" in error, "the refusal does not show an id to name"
+    assert "85dd4796bb8b" in error, "the refusal does not show an id to name"
     # The target is printed only when it is made of safe characters, so an
     # operator's text cannot write a workflow command of its own.
     assert not any(line.startswith("::warning") for line in log.splitlines())

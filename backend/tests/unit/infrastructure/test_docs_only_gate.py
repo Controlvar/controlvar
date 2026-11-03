@@ -263,6 +263,10 @@ NOT_DOCS_TESTS = {
     "backend/tests/unit/scripts/test_docs_journeys_workflow.py": (
         "fixture strings only"
     ),
+    # Pins scale-evidence.yml's pull_request path filter, two of whose entries
+    # name docs/ paths (the capacity page, the results directory); opens no
+    # file under docs/.
+    "backend/tests/unit/scripts/test_scale_workflow.py": "fixture strings only",
     # Hands stub `git` and `python3` path STRINGS such as "docs/a.md" to the
     # classifier step's script; opens no file under docs/.
     "backend/tests/unit/infrastructure/test_ci_classification.py": (

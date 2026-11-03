@@ -338,6 +338,31 @@ text = "Rollback does not check its target: that is this command."
 by = ["test:backend/tests/unit/infrastructure/test_rollback_workflow_contract.py::test_it_does_not_check_whether_the_target_runs_migrations_on_start"]
 
 [[unit]]
+text = "Where the API migrates on start (Docker Compose, and the Helm chart's init container), start the older image only after the database has been downgraded to the heads of the release you go back to, with the newer release still running: its core head, and on a full install its modules head too, one alembic downgrade <id> for each."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts",
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_previous_release_starts_only_after_the_downgrade",
+]
+
+[[unit]]
+text = "alembic heads, run with the older image, prints them."
+by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts"]
+
+[[unit]]
+text = "Without that the older image refuses to start with this database was migrated by a newer Controlvar release than this image."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated",
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_previous_release_starts_only_after_the_downgrade",
+]
+
+[[unit]]
+text = "Each migration in between runs its downgrade on the way; from a release that carries 7b6b4b4fe246 (its own down_revision is 85dd4796bb8b), that includes 7b6b4b4fe246's, which drops rollout_stages.started_at (Step 2 says what each downgrade loses)."
+by = [
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_previous_release_starts_only_after_the_downgrade",
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_downgrade_drops_the_column_only_and_an_upgrade_sets_it_from_updated_at",
+]
+
+[[unit]]
 text = "Rolling back past segment targeting"
 by = ["exempt:label"]
 
@@ -1315,12 +1340,20 @@ by = [
 ]
 
 [[unit]]
-text = "607c51a59bf5 to undo 85dd4796bb8b."
+text = "85dd4796bb8b to undo 7b6b4b4fe246."
 by = ["test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch"]
 
 [[unit]]
-text = "That downgrade drops the table event_dedup_keys, every stored event_id, and no event; until the API is rolled back, the release still serving answers 500 to an event that carries an event_id."
+text = "That downgrade drops rollout_stages.started_at, the time each rollout stage started (nothing restores the exact values: an upgrade afterwards sets each stage in progress from its updated_at, which an edit may have moved, so a stage edited in the meantime restarts its clock from the edit), and it does not refuse, so it needs the Engineering Lead's approval at the moment it runs when any stage is IN_PROGRESS."
 by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_downgrade_drops_the_column_only_and_an_upgrade_sets_it_from_updated_at",
+]
+
+[[unit]]
+text = "A downgrade to 607c51a59bf5 also undoes 85dd4796bb8b, which drops the table event_dedup_keys, every stored event_id, and no event; until the API is rolled back, the release still serving answers 500 to an event that carries an event_id."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m5_the_downgrade_removes_exactly_the_table_online",
     "test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_after_the_downgrade_this_release_refuses_only_events_with_an_event_id",
 ]

@@ -13,8 +13,12 @@ the test removes what it seeded, whatever happens.
 
 from __future__ import annotations
 
+import asyncio
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
+from backend.app.core.rollout_scheduler import RolloutScheduler
 from backend.app.models.feature_flag import FeatureFlag
 from backend.app.models.rollout_schedule import (
     RolloutSchedule,
@@ -103,3 +107,28 @@ def test_reset_and_a_reseed_start_the_rollout_story_again(
         .one()
     )
     assert config.enabled and config.rollback_percentage == 5
+
+
+@pytest.mark.regression
+def test_the_seeded_stage_started_two_days_ago_and_the_first_tick_completes_it(
+    db_session, admin_user, story_seed
+):
+    """The story's first step: stage 1 went live two days ago, so the next
+    scheduler pass completes it (#1528: the start is ``started_at``)."""
+    seed_streampulse.seed_feature_flags(db_session, admin_user)
+    schedule = _schedule(db_session, _player(db_session))
+    first, second = sorted(schedule.stages, key=lambda stage: stage.stage_order)[:2]
+    assert first.status == RolloutStageStatus.IN_PROGRESS
+    assert first.started_at is not None, "the seed records no start"
+    assert first.started_at == first.updated_at == first.start_date
+    now = datetime.now(timezone.utc)
+    started = first.started_at.replace(tzinfo=timezone.utc)
+    assert now - timedelta(days=2, minutes=5) < started <= now - timedelta(days=2)
+
+    try:
+        asyncio.run(RolloutScheduler()._process_schedule(db_session, schedule, now))
+        assert first.status == RolloutStageStatus.COMPLETED
+        # Stage 2's start_date is tomorrow, so it waits.
+        assert second.status == RolloutStageStatus.PENDING
+    finally:
+        db_session.rollback()

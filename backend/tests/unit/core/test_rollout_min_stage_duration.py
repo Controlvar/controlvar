@@ -61,7 +61,7 @@ def test_the_scheduler_waits_for_min_stage_duration(hours_in):
         1,
         TriggerType.TIME_BASED,
         RolloutStageStatus.IN_PROGRESS,
-        updated_at=NOW - timedelta(hours=hours_in),
+        started_at=NOW - timedelta(hours=hours_in),
     )
     second = _stage(
         2, TriggerType.TIME_BASED, RolloutStageStatus.PENDING, start_date=PAST
@@ -79,7 +79,7 @@ def test_the_scheduler_starts_the_next_stage_once_min_stage_duration_has_passed(
         1,
         TriggerType.TIME_BASED,
         RolloutStageStatus.IN_PROGRESS,
-        updated_at=NOW - timedelta(hours=HOURS + 1),
+        started_at=NOW - timedelta(hours=HOURS + 1),
     )
     second = _stage(
         2, TriggerType.TIME_BASED, RolloutStageStatus.PENDING, start_date=PAST
@@ -101,7 +101,7 @@ def test_a_stored_negative_min_stage_duration_is_no_minimum(stored):
         1,
         TriggerType.TIME_BASED,
         RolloutStageStatus.IN_PROGRESS,
-        updated_at=NOW - timedelta(hours=25),
+        started_at=NOW - timedelta(hours=25),
     )
     second = _stage(
         2, TriggerType.TIME_BASED, RolloutStageStatus.PENDING, start_date=PAST
@@ -119,7 +119,7 @@ def test_a_manual_advance_does_not_wait_for_min_stage_duration(trigger):
         TriggerType.MANUAL,
         RolloutStageStatus.IN_PROGRESS,
         schedule_id=schedule.id,
-        updated_at=NOW - timedelta(minutes=5),
+        started_at=NOW - timedelta(minutes=5),
     )
     nxt = _stage(2, trigger, RolloutStageStatus.PENDING, schedule_id=schedule.id)
     flag = SimpleNamespace(rollout_percentage=canary.target_percentage, updated_at=None)
