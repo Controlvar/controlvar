@@ -288,9 +288,10 @@ describe('AppShell', () => {
       expect(screen.getByTestId('user-menu')).not.toContainElement(link);
       const group = screen.getAllByTestId('more-nav-group')[0] as HTMLDetailsElement;
       expect(group).toContainElement(link);
-      // Last in the group, after the modules guide, with a rule between them.
+      // Last in the group, after the modules guide and the user's own API
+      // keys, with a rule between the guide and the user's own pages.
       const panelLinks = Array.from(group.querySelectorAll('a'));
-      expect(panelLinks.map((a) => a.textContent)).toEqual(['Modules', 'Change password']);
+      expect(panelLinks.map((a) => a.textContent)).toEqual(['Modules', 'Your API keys', 'Change password']);
       expect(group.querySelector('[role="separator"]')).not.toBeNull();
 
       // Reachable: More opens, the link is followed, More closes.
@@ -311,9 +312,9 @@ describe('AppShell', () => {
       expect(mobile.querySelector('[data-testid="more-nav-group"]')).toContainElement(link as HTMLElement);
     });
 
-    it('shows More with only Change password while the modules are still being probed', async () => {
-      // The password page does not depend on the modules, so it does not wait
-      // for the probe; the module routes and the guide link still do.
+    it('shows More with only the user\'s own pages while the modules are still being probed', async () => {
+      // The password and API-key pages do not depend on the modules, so they
+      // do not wait for the probe; the module routes and the guide link still do.
       mockFetch.mockImplementation((url: string) =>
         url.endsWith('/api/v1/modules')
           ? new Promise(() => {})
@@ -331,8 +332,46 @@ describe('AppShell', () => {
       );
       await waitFor(() => expect(screen.getByTestId('user-menu')).toBeInTheDocument());
       const group = screen.getAllByTestId('more-nav-group')[0];
-      expect(Array.from(group.querySelectorAll('a')).map((a) => a.textContent)).toEqual(['Change password']);
+      expect(Array.from(group.querySelectorAll('a')).map((a) => a.textContent)).toEqual([
+        'Your API keys',
+        'Change password',
+      ]);
       expect(group.querySelector('[role="separator"]')).toBeNull();
+    });
+  });
+
+  describe('Your API keys (every signed-in user)', () => {
+    it('offers Your API keys to a VIEWER who is not a superuser and does not sign in locally', async () => {
+      signInAs(makeUser({ role: 'VIEWER', is_superuser: false, auth_provider: 'sso' }));
+      renderShell();
+      await waitFor(() => expect(screen.getByTestId('user-menu')).toBeInTheDocument());
+      const link = screen.getByTestId('own-api-keys-link');
+      expect(link).toHaveTextContent('Your API keys');
+      expect(link).toHaveAttribute('href', '/account/api-keys');
+      expect(screen.getAllByTestId('more-nav-group')[0]).toContainElement(link);
+      expect(screen.queryByTestId('change-password-link')).not.toBeInTheDocument();
+    });
+
+    it('offers it to every role, in the mobile menu too', async () => {
+      for (const role of ['ADMIN', 'DEVELOPER', 'ANALYST', 'VIEWER'] as const) {
+        localStorage.clear();
+        mockFetch.mockReset();
+        signInAs(makeUser({ role, is_superuser: false }));
+        const view = renderShell(full());
+        await waitFor(() => expect(screen.getByTestId('user-menu')).toBeInTheDocument());
+        fireEvent.click(screen.getByTestId('mobile-nav-toggle'));
+        const mobile = screen.getByTestId('mobile-nav');
+        expect(mobile.querySelector('[data-testid="own-api-keys-link"]')).toHaveAttribute('href', '/account/api-keys');
+        view.unmount();
+      }
+    });
+
+    it('does not offer it to an anonymous visitor', async () => {
+      mockPathname = '/docs/[...slug]';
+      mockAsPath = '/docs/quick-start';
+      renderShell();
+      await waitFor(() => expect(screen.getByTestId('nav-sign-in')).toBeInTheDocument());
+      expect(screen.queryByTestId('own-api-keys-link')).not.toBeInTheDocument();
     });
   });
 
@@ -533,21 +572,33 @@ describe('AppShell', () => {
       expect(screen.getAllByTestId('nav-workspaces')[0]).toHaveAttribute('href', '/workspaces');
     });
 
-    it('shows no More group at all in a full profile with no routed module installed', async () => {
-      // A full instance whose installed modules carry no dashboard route has
-      // nothing to put in the group, and an empty disclosure is noise.
-      // An SSO user: a local one's group would still hold Change password.
+    it('in a full profile with no routed module installed, More holds only the user\'s own pages', async () => {
+      // A full instance whose installed modules carry no dashboard route puts
+      // no module link in the group. A signed-in user still has Your API keys
+      // there (an SSO user: a local one's group would also hold Change password).
       signInAs(makeUser({ auth_provider: 'sso' }));
-      renderShell(full({ modules: [MODULES.HIPAA] }));
+      const view = renderShell(full({ modules: [MODULES.HIPAA] }));
       await waitFor(() => expect(screen.getByTestId('user-menu')).toBeInTheDocument());
+      const group = screen.getAllByTestId('more-nav-group')[0];
+      expect(Array.from(group.querySelectorAll('a')).map((a) => a.textContent)).toEqual(['Your API keys']);
+      expect(group.querySelector('[role="separator"]')).toBeNull();
+      view.unmount();
+    });
+
+    it('shows no More group at all to an anonymous visitor when there is nothing to put in it', async () => {
+      // An empty disclosure is noise.
+      mockPathname = '/docs/[...slug]';
+      mockAsPath = '/docs/quick-start';
+      renderShell(full({ modules: [MODULES.HIPAA] }));
+      await waitFor(() => expect(screen.getByTestId('nav-sign-in')).toBeInTheDocument());
       expect(screen.queryByTestId('more-nav-group')).not.toBeInTheDocument();
     });
 
-    it('hides the More group while the modules are still being probed', async () => {
+    it('shows no module link in More while the modules are still being probed', async () => {
       // The provider's initial state is core, so an unseeded shell would
       // otherwise paint the "Modules" guide link on a full instance and swap
-      // it for the routes when the probe resolved.
-      // An SSO user: a local one's group holds Change password from the start.
+      // it for the routes when the probe resolved. Only the user's own pages
+      // are there (an SSO user: Your API keys).
       mockFetch.mockImplementation((url: string) =>
         url.endsWith('/api/v1/modules')
           ? new Promise(() => {})
@@ -564,7 +615,8 @@ describe('AppShell', () => {
         </ModulesProvider>,
       );
       await waitFor(() => expect(screen.getByTestId('user-menu')).toBeInTheDocument());
-      expect(screen.queryByTestId('more-nav-group')).not.toBeInTheDocument();
+      const group = screen.getAllByTestId('more-nav-group')[0];
+      expect(Array.from(group.querySelectorAll('a')).map((a) => a.textContent)).toEqual(['Your API keys']);
       expect(screen.queryByTestId('nav-modules-docs')).not.toBeInTheDocument();
     });
 
@@ -596,7 +648,8 @@ describe('AppShell', () => {
         ),
       );
       expect(screen.queryByTestId('nav-modules-docs')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('more-nav-group')).not.toBeInTheDocument();
+      const group = screen.getAllByTestId('more-nav-group')[0];
+      expect(Array.from(group.querySelectorAll('a')).map((a) => a.textContent)).toEqual(['Your API keys']);
     });
 
     it('installedModuleNav lists exactly the routes whose module is installed', () => {
