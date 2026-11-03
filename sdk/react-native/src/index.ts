@@ -37,6 +37,7 @@ export { useExperimentationClient } from './hooks/useExperimentationClient';
 export type {
   SdkConfig,
   SwallowedOperation,
+  Exposure,
   FlagEvaluation,
   Assignment,
   TrackOptions,
