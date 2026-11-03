@@ -15,12 +15,13 @@ import that skips when CI happens to lack a package, a ``-m`` or
   with ``shutil`` (``scripts/core_build.sh``'s copy has no ``.git``, so no
   ``git archive``), with nothing on ``PYTHONPATH``. ``-P`` keeps the working
   directory off ``sys.path``, so only the ini's ``pythonpath`` can make the
-  imports work; dropping ``../ground_truth`` from it fails collection (exit 2:
-  the cases import the admin helper, which imports the ground-truth driver)
-  and dropping ``../..`` fails the ``-p backend.tests.no_real_aws`` plugin
-  (exit 1), both checked here on the copy;
+  imports work; dropping ``../ground_truth`` from it fails loading the root's
+  ``conftest.py`` (exit 4, pytest's usage error: it imports the admin helper,
+  which imports the ground-truth driver) and dropping ``../..`` fails the
+  ``-p backend.tests.no_real_aws`` plugin (exit 1), both checked here on the
+  copy;
 * no file here or under ``tests/usecases`` (the harness, the drivers, the
-  cases) may carry a skip or an expected-failure marker.
+  shared fixtures, the cases) may carry a skip or an expected-failure marker.
 
 When you add or remove a gate or a case, change ``EXPECTED`` or
 ``EXPECTED_CASES`` in the same commit.
@@ -46,9 +47,9 @@ USECASES_ROOT = REPO_ROOT / "tests" / "usecases"
 EXPECTED = {
     "test_admin.py": 21,
     "test_collection_count.py": 5,
-    "test_gates.py": 25,
-    "test_proxy.py": 55,
-    "test_python_driver.py": 6,
+    "test_gates.py": 64,
+    "test_proxy.py": 105,
+    "test_python_driver.py": 9,
     "test_runner.py": 12,
     "test_sdks.py": 22,
     "test_usecases_workflow.py": 12,
@@ -56,7 +57,7 @@ EXPECTED = {
 #: The same, for the cases under ``tests/usecases``.
 EXPECTED_CASES = {
     "test_flags_over_time.py": 5,
-    "test_js_driver.py": 5,
+    "test_js_driver.py": 7,
 }
 #: What a copy needs to collect the cases: the root, the ground-truth library
 #: and driver it imports, and the one plugin it loads from the repository.
@@ -167,7 +168,7 @@ def test_exactly_the_expected_cases_are_collected_from_a_copy(tmp_path):
     assert _counts(result.stdout) == EXPECTED_CASES, result.stdout
 
 
-@pytest.mark.parametrize(("entry", "status"), [("../ground_truth", 2), ("../..", 1)])
+@pytest.mark.parametrize(("entry", "status"), [("../ground_truth", 4), ("../..", 1)])
 def test_the_copy_collects_only_through_its_pythonpath(tmp_path, entry, status):
     """Each ``pythonpath`` entry is needed: without it the copy does not
     collect. (Without ``-P`` the working directory would stand in for
@@ -196,6 +197,7 @@ def test_no_gate_here_or_under_tests_usecases_can_skip():
         "tests/usecases/usecases/runner.py",
         "tests/usecases/usecases/sdks.py",
         "tests/usecases/drivers/python_driver.py",
+        "tests/usecases/conftest.py",
         "tests/usecases/test_flags_over_time.py",
         "tests/usecases/test_js_driver.py",
     } <= scanned

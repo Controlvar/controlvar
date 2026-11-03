@@ -11,6 +11,11 @@ documented would leave, and fires on the trace of the defect it exists for.
   told to serve the old one (a stale ruleset) or to answer off early.
 * The ETag comparison is ``etag_of``'s: ``status()`` gives the bare version,
   the wire carries it in quotes.
+* Use case #4's traces: ``outage_trace`` lays out the ruleset requests of an
+  SDK through a 503 outage, each retry its backoff step after the previous
+  failure's answer (plus a few ms, as a runner adds); with a plain interval,
+  short steps or an early recovery the outage gate fires. The other #4 gates
+  get small hand-made traces, each with the defect it exists for.
 """
 
 from __future__ import annotations
@@ -30,7 +35,18 @@ RULESET = proxy.RULESET_PATH
 TTL = 10.0
 
 
-def _record(seq, t, path, status=200, etag=None, answered=None) -> Record:
+def _record(
+    seq,
+    t,
+    path,
+    status=200,
+    etag=None,
+    answered=None,
+    *,
+    fault=None,
+    if_none_match=False,
+    client_closed=False,
+) -> Record:
     return Record(
         seq=seq,
         t_recv=t,
@@ -39,7 +55,9 @@ def _record(seq, t, path, status=200, etag=None, answered=None) -> Record:
         path=path,
         status=status,
         etag=etag,
-        if_none_match=False,
+        if_none_match=if_none_match,
+        fault=fault,
+        client_closed=client_closed,
     )
 
 
@@ -275,3 +293,381 @@ def test_o_flag_fires_on_a_wrong_missing_or_misordered_answer(change, fragment):
     answers = [(u, _bucket(u, "f") < 30) for u in users]
     (finding,) = gates.o_flag_findings("raw", "f", 30, change(answers), users, _bucket)
     assert fragment in finding
+
+
+# -- relayed ruleset 200s only (local_proxy and local_kill) ----------------------------
+def test_a_corrupt_200_is_not_the_proof_that_a_driver_is_behind_its_proxy():
+    corrupt = _record(1, 1.0, RULESET, 200, fault="corrupt:truncated")
+    (void,) = gates.local_proxy_findings([corrupt], "d")
+    assert void.startswith("void:")
+    relayed = _record(2, 2.0, RULESET, 200, '"v"')
+    assert gates.local_proxy_findings([corrupt, relayed], "d") == []
+
+
+def _with_corrupt_after_the_toggle(records):
+    """*records* (``local_trace``'s) with a corrupt 200 at 11 s, between the
+    toggle (10 s) and the next relayed ruleset (12 s), in sequence order as
+    ``records()`` returns them."""
+    corrupt = _record(3, 11.0, RULESET, 200, fault="corrupt:truncated")
+    later = [replace(r, seq=r.seq + 1) for r in records[2:]]
+    return [*records[:2], corrupt, *later]
+
+
+def test_g2_2_ignores_a_corrupt_200_and_still_sees_a_stale_one():
+    """A corrupt 200 between the toggle and the new ruleset carries no ETag:
+    it is not "the first ruleset after the toggle". A relayed stale 200 still
+    fires with it present."""
+    records, polls = local_trace()
+    assert _local(_with_corrupt_after_the_toggle(records), polls) == []
+    stale, _ = local_trace(served_after=V1, off_at=99.0)
+    findings = _local(_with_corrupt_after_the_toggle(stale), polls)
+    assert any("still carry" in f for f in findings)
+
+
+# -- use case #4: the outage ---------------------------------------------------------------
+#: The refresh interval (R) and the documented backoff after 1-4 failures.
+R = 5.0
+STEPS = (5.0, 10.0, 20.0, 40.0)
+
+
+def outage_trace(
+    delays=STEPS, *, faulted=5, recovery=80.0, latency=0.02, overshoot=0.003
+):
+    """A relayed 200 at 95 s; *faulted* ruleset requests answered 503 by the
+    proxy from 102 s, each the previous answer + its delay + *overshoot*
+    later; then, unless *recovery* is None, a relayed 304 (sent with
+    If-None-Match) *recovery* + *overshoot* after the last answer."""
+    records = [_record(1, 95.0, RULESET, 200, '"v1"')]
+    t = 102.0
+    for k in range(faulted):
+        records.append(
+            _record(
+                len(records) + 1,
+                t,
+                RULESET,
+                503,
+                answered=t + latency,
+                fault="status:503",
+                if_none_match=True,
+            )
+        )
+        if k < faulted - 1:
+            t += latency + delays[k] + overshoot
+    if recovery is not None:
+        start = records[-1].t_answer + recovery + overshoot
+        records.append(
+            _record(len(records) + 1, start, RULESET, 304, '"v1"', if_none_match=True)
+        )
+    return records
+
+
+def test_the_outage_gate_holds_for_the_documented_backoff():
+    assert gates.outage_findings(outage_trace(), "d") == []
+    # Steps measured from the end of each failure, so latency does not matter.
+    assert gates.outage_findings(outage_trace(latency=0.3), "d") == []
+
+
+def test_the_outage_gate_fires_on_a_plain_interval():
+    """Retrying every R s through the 120 s cut: 24 faulted, not 5."""
+    findings = gates.outage_findings(
+        outage_trace((R,) * 23, faulted=24, recovery=R), "d"
+    )
+    assert "d: 24 faulted ruleset requests during the cut, expected 5" in findings
+    assert any("22 retries came before their backoff step" in f for f in findings)
+    assert any("first ruleset request after the outage" in f for f in findings)
+
+
+def test_the_outage_gate_fires_on_short_steps():
+    findings = gates.outage_findings(outage_trace(tuple(s / 2 for s in STEPS)), "d")
+    assert findings == [
+        "d: 4 retries came before their backoff step: retry 2 came 2.50 s after"
+        " failure 1, expected at least 5 s"
+    ]
+
+
+def test_the_outage_gate_fires_on_an_early_recovery():
+    (finding,) = gates.outage_findings(outage_trace(recovery=40.0), "d")
+    assert "came 40.00 s after the last failure, expected at least 80 s" in finding
+
+
+def test_the_outage_gate_fires_when_recovery_was_not_seen():
+    (finding,) = gates.outage_findings(outage_trace(recovery=None), "d")
+    assert "recovery was not seen" in finding
+
+
+def test_the_outage_gate_fires_on_a_relayed_request_inside_the_outage():
+    records = outage_trace()
+    inside = _record(99, records[2].t_answer + 1.0, RULESET, 200, '"v1"')
+    renumbered = [*records[:3], inside, *records[3:]]
+    renumbered = [replace(r, seq=i + 1) for i, r in enumerate(renumbered)]
+    findings = gates.outage_findings(renumbered, "d")
+    assert any("1 relayed ruleset requests came between" in f for f in findings)
+
+
+def test_the_outage_gate_fires_on_another_answer_than_503():
+    records = outage_trace()
+    records[3] = replace(records[3], status=502, fault="status:502")
+    (finding,) = gates.outage_findings(records, "d")
+    assert "[(502, 'status:502')], expected every one 503" in finding
+
+
+def test_the_outage_gate_is_void_when_nothing_was_faulted():
+    (finding,) = gates.outage_findings(outage_trace(faulted=0, recovery=None), "d")
+    assert finding.startswith("void:")
+
+
+def test_the_outage_report_gives_f_the_excess_and_the_recovery():
+    report = gates.outage_report(outage_trace(), t_cut=100.0)
+    assert report.startswith("f 2.00 s after the cut")
+    assert "[+0.00, +0.00, +0.00, +0.00]" in report
+    assert "next request after the last failure 80.00 s" in report
+
+
+def test_the_backoff_step_doubles_from_r_up_to_the_cap():
+    assert [gates.backoff_step(R, k) for k in range(1, 9)] == [
+        5.0,
+        10.0,
+        20.0,
+        40.0,
+        80.0,
+        160.0,
+        300.0,
+        300.0,
+    ]
+
+
+# -- use case #4: the error tally ------------------------------------------------------------
+NO_ERRORS = dict.fromkeys(gates.ERROR_KEYS, 0)
+
+
+def test_the_error_tally_holds_when_it_counts_every_faulted_request():
+    records = outage_trace()
+    assert gates.error_tally_findings({**NO_ERRORS, "refresh": 5}, records, "d") == []
+    flushes = [
+        replace(
+            _record(i, float(i), "/api/v1/tracking/evaluations", 503),
+            fault="status:503",
+        )
+        for i in (1, 2)
+    ]
+    assert (
+        gates.error_tally_findings(
+            {**NO_ERRORS, "flush": 2},
+            flushes,
+            "d",
+            operation="flush",
+            path="/api/v1/tracking/evaluations",
+        )
+        == []
+    )
+
+
+def test_the_error_tally_fires_on_a_driver_that_counts_nothing():
+    """A driver whose client has no on_error counts 0 through the outage."""
+    (finding,) = gates.error_tally_findings(NO_ERRORS, outage_trace(), "d")
+    assert finding == "d: on_error(refresh) 0, the proxy faulted 5"
+
+
+@pytest.mark.parametrize(
+    "errors", [None, {}, {"refresh": 5}, {**NO_ERRORS, "value": 0}], ids=repr
+)
+def test_the_error_tally_fires_when_the_status_carries_no_tally(errors):
+    (finding,) = gates.error_tally_findings(errors, outage_trace(), "d")
+    assert "carries no error tally" in finding
+
+
+def test_the_error_tally_is_void_when_nothing_was_faulted():
+    (finding,) = gates.error_tally_findings(NO_ERRORS, outage_trace(faulted=0), "d")
+    assert finding.startswith("void:")
+
+
+# -- use case #4: the last known answers ------------------------------------------------------
+A0 = {("f1", "u1"): True, ("f1", "u2"): False, ("f2", "u1"): True}
+
+
+def _round():
+    """One round answering every pair of A0 as A0 does, locally."""
+    return {
+        pair: gates.Poll(1.0, 1.001, enabled, "local", "rollout")
+        for pair, enabled in A0.items()
+    }
+
+
+def test_last_known_holds_when_every_round_answers_a0_locally():
+    assert gates.last_known_findings(A0, [_round(), _round()], "d") == []
+
+
+@pytest.mark.parametrize(
+    ("poll", "fragment"),
+    [
+        (
+            gates.Poll(1.0, 1.1, False, "local", "rollout"),
+            "1 of 3 answers differ from A0",
+        ),
+        (gates.Poll(1.0, 1.1, True, "server", "rollout"), "1 answers were not local"),
+        (
+            gates.Poll(1.0, 1.1, True, "local", None, {"type": "E", "status": None}),
+            "1 answers were not local or carried an error",
+        ),
+    ],
+    ids=["changed", "server", "error"],
+)
+def test_last_known_fires_on_an_answer_that_is_not_a0_s_local_one(poll, fragment):
+    second = _round()
+    second[("f1", "u1")] = poll
+    (finding,) = gates.last_known_findings(A0, [_round(), second], "d")
+    assert finding.startswith("d: round 2") and fragment in finding
+
+
+def test_last_known_fires_on_a_missing_pair_and_is_void_without_rounds():
+    short = _round()
+    del short[("f2", "u1")]
+    (finding,) = gates.last_known_findings(A0, [short], "d")
+    assert "(1 missing, 0 not in A0)" in finding
+    (void,) = gates.last_known_findings(A0, [], "d")
+    assert void.startswith("void:")
+
+
+# -- use case #4: deferral ----------------------------------------------------------------------
+def _evaluates(*keys):
+    return [
+        _record(i, float(i), gates.EVALUATE_PREFIX + key)
+        for i, key in enumerate(keys, 1)
+    ]
+
+
+def test_deferral_holds_at_one_request_per_distinct_user_for_remote_flags_only():
+    records = [_record(1, 0.5, RULESET, 200, '"v"'), *_evaluates("r1", "r1", "r2")]
+    remote = {"r1": ["u1", "u2", "u2"], "r2": ["u1"]}
+    assert gates.deferral_findings(records, "d", remote=remote, local={"l1"}) == []
+
+
+@pytest.mark.parametrize(
+    ("keys", "fragment"),
+    [
+        (("r1", "r1", "l1"), "1 evaluate requests for the local flag 'l1', expected 0"),
+        (
+            ("r1", "r1", "r1"),
+            "3 evaluate requests for the remote flag 'r1', expected 2",
+        ),
+        (("r1",), "1 evaluate requests for the remote flag 'r1', expected 2"),
+        (("r1", "r1", "x9"), "flags the case did not name: ['x9']"),
+    ],
+    ids=["local-deferred", "over-deferred", "under-deferred", "unnamed"],
+)
+def test_deferral_fires_on_the_wrong_count(keys, fragment):
+    findings = gates.deferral_findings(
+        _evaluates(*keys), "d", remote={"r1": ["u1", "u2"]}, local={"l1"}
+    )
+    assert any(fragment in f for f in findings), findings
+
+
+def test_deferral_is_void_with_no_flag_named():
+    (void,) = gates.deferral_findings(_evaluates("r1"), "d", remote={}, local=())
+    assert void.startswith("void:")
+
+
+# -- use case #4: the kept ETag -----------------------------------------------------------------
+def _corrupt_then(first_after):
+    records = [_record(1, 1.0, RULESET, 200, '"v1"')]
+    for seq in (2, 3, 4):
+        records.append(
+            _record(
+                seq,
+                float(seq),
+                RULESET,
+                200,
+                fault="corrupt:truncated",
+                if_none_match=True,
+            )
+        )
+    if first_after is not None:
+        records.append(first_after)
+    return records
+
+
+def test_kept_etag_holds_on_a_304_to_if_none_match_after_the_faults():
+    after = _record(5, 30.0, RULESET, 304, '"v1"', if_none_match=True)
+    assert gates.kept_etag_findings(_corrupt_then(after), "d") == []
+
+
+def test_kept_etag_fails_when_the_sdk_asked_again_without_its_etag():
+    """The SDK discarded its ruleset: the next refresh carries no
+    If-None-Match and the server answers 200."""
+    after = _record(5, 30.0, RULESET, 200, '"v1"')
+    (finding,) = gates.kept_etag_findings(_corrupt_then(after), "d")
+    assert "was 200 to a request without If-None-Match, expected a 304" in finding
+
+
+def test_kept_etag_is_void_without_faults_and_fails_without_a_request_after():
+    (void,) = gates.kept_etag_findings([_record(1, 1.0, RULESET, 200, '"v1"')], "d")
+    assert void.startswith("void:")
+    (finding,) = gates.kept_etag_findings(_corrupt_then(None), "d")
+    assert "was not seen" in finding
+
+
+# -- use case #4: a hung refresh ---------------------------------------------------------------
+def _held(client_closed=True):
+    return _record(
+        2,
+        10.0,
+        RULESET,
+        0,
+        answered=13.0,
+        fault="blackhole",
+        if_none_match=True,
+        client_closed=client_closed,
+    )
+
+
+def _polls_during(count, *, start=10.1, every=0.2):
+    """*count* polls of one pair of A0, every *every* s from *start*, each
+    answered A0's way, locally, in a millisecond."""
+    pair = ("f1", "u1")
+    return [
+        (pair, gates.Poll(start + i * every, start + i * every + 0.001, True, "local"))
+        for i in range(count)
+    ]
+
+
+def test_a_hung_refresh_holds_when_evaluation_never_waited():
+    records = [_record(1, 1.0, RULESET, 200, '"v1"'), _held()]
+    assert gates.hung_refresh_findings(records, A0, _polls_during(12), "d") == []
+
+
+def test_a_hung_refresh_fires_when_evaluation_waited_on_it():
+    """Polls that waited for the refresh are answered after the hold ended:
+    none counts as inside it."""
+    blocked = [(pair, replace(poll, answered=13.5)) for pair, poll in _polls_during(12)]
+    (finding,) = gates.hung_refresh_findings([_held()], A0, blocked, "d")
+    assert (
+        "0 polls were sent and answered while the ruleset request was held" in finding
+    )
+
+
+def test_a_hung_refresh_fires_when_the_sdk_never_gave_up_the_request():
+    (finding,) = gates.hung_refresh_findings(
+        [_held(client_closed=False)], A0, _polls_during(12), "d"
+    )
+    assert "did not give up the held ruleset request" in finding
+
+
+def test_a_hung_refresh_fires_on_an_answer_that_was_not_a0_s_local_one():
+    polls = _polls_during(12)
+    polls[3] = (polls[3][0], replace(polls[3][1], source="server"))
+    (finding,) = gates.hung_refresh_findings([_held()], A0, polls, "d")
+    assert "1 of the polls during the hold were not A0's local answer" in finding
+
+
+def test_a_hung_refresh_is_void_without_a_held_request():
+    (void,) = gates.hung_refresh_findings([], A0, _polls_during(12), "d")
+    assert void.startswith("void:")
+
+
+# -- use case #4: an upstream failure is not a fault ---------------------------------------------
+def test_an_unfaulted_502_is_its_own_finding():
+    injected = _record(1, 1.0, RULESET, 502, fault="status:502")
+    assert gates.upstream_failure_findings([injected], "d") == []
+    failed = _record(2, 2.0, RULESET, 502)
+    (finding,) = gates.upstream_failure_findings([injected, failed], "d")
+    assert "1 unfaulted 502 answers (/api/v1/sdk/ruleset)" in finding
