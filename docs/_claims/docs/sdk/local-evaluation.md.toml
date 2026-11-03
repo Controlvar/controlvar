@@ -83,6 +83,8 @@ text = "When the SDK cannot be sure of that, it does not guess: it makes the sam
 by = [
     "test:sdk/js/__tests__/local.test.ts::an unknown key and a remote flag are evaluated by the server",
     "test:sdk/python/tests/test_local.py::test_an_unknown_key_and_a_remote_flag_go_to_the_server",
+    "test:sdk/js/__tests__/local.test.ts::a call that defers after a local answer for the same pair goes to the server",
+    "test:sdk/python/tests/test_local.py::test_a_call_that_defers_after_a_local_answer_for_the_same_pair_goes_to_the_server",
 ]
 
 [[unit]]
@@ -162,7 +164,10 @@ by = [
 
 [[unit]]
 text = "maxStaleMs | Optional. When the ruleset has not been refreshed successfully for this long, flags are evaluated by the server until a refresh succeeds. Default: no limit."
-by = ["test:sdk/js/__tests__/local.test.ts::maxStaleMs: a ruleset older than that is not used"]
+by = [
+    "test:sdk/js/__tests__/local.test.ts::maxStaleMs: a ruleset older than that is not used",
+    "test:sdk/js/__tests__/local.test.ts::past maxStaleMs, a pair answered locally goes to the server",
+]
 
 [[unit]]
 text = "ready({ timeoutMs? }) | Resolves { ok: true, rulesetVersion } once flags can be answered locally, or { ok: false, error } when the first fetch failed or timeoutMs passed. Never rejects. Evaluations never wait for it."
@@ -178,7 +183,10 @@ by = ["test:sdk/js/__tests__/local.test.ts::status() reports the ruleset"]
 
 [[unit]]
 text = "close() | Stops the refresh, sends the remaining evaluation counts, and from then on evaluates on the server."
-by = ["test:sdk/js/__tests__/local.test.ts::close() sends one entry per flag; deferred evaluations are not counted"]
+by = [
+    "test:sdk/js/__tests__/local.test.ts::close() sends one entry per flag; deferred evaluations are not counted",
+    "test:sdk/js/__tests__/local.test.ts::after close(), a pair answered locally goes to the server",
+]
 
 [[unit]]
 text = "source on FlagEvaluation | 'local' or 'server' (set only in local mode)."
@@ -207,6 +215,7 @@ text = "A local answer uses the attributes passed to that call, so the \"call cl
 by = [
     "test:sdk/js/__tests__/local.test.ts::after ready, evaluations make no request and follow the attributes passed",
     "test:sdk/js/__tests__/local.test.ts::a local answer is recorded for the key-less track() fan-out",
+    "test:sdk/js/__tests__/local.test.ts::a call that defers after a local answer for the same pair goes to the server",
 ]
 
 [[unit]]
@@ -249,7 +258,10 @@ by = [
 
 [[unit]]
 text = "max_stale_seconds | Optional. When the ruleset has not been refreshed successfully for this long, flags are evaluated by the server until a refresh succeeds. Default: no limit."
-by = ["test:sdk/python/tests/test_local.py::test_max_stale_seconds"]
+by = [
+    "test:sdk/python/tests/test_local.py::test_max_stale_seconds",
+    "test:sdk/python/tests/test_local.py::test_past_max_stale_seconds_a_pair_answered_locally_goes_to_the_server",
+]
 
 [[unit]]
 text = "on_error(error, operation) | \"refresh\", \"flush\" or \"evaluate\", as in JavaScript. A handler that raises is logged and ignored."
@@ -275,6 +287,7 @@ by = [
     "test:sdk/python/tests/test_local.py::test_the_thread_is_a_daemon_and_close_stops_it",
     "test:sdk/python/tests/test_local.py::test_close_sends_one_entry_per_flag_and_deferred_evaluations_are_not_counted",
     "test:sdk/python/tests/test_local.py::test_the_context_manager_closes",
+    "test:sdk/python/tests/test_local.py::test_after_close_a_pair_answered_locally_goes_to_the_server",
 ]
 
 [[unit]]
@@ -286,6 +299,7 @@ text = "get_feature_flag, is_feature_enabled and get_all_flags keep their signat
 by = [
     "test:sdk/python/tests/test_local.py::test_a_local_answer_is_recorded_for_the_keyless_track_fan_out",
     "test:sdk/python/tests/test_local.py::test_get_all_flags_one_remote_flag_sends_the_whole_call",
+    "test:sdk/python/tests/test_local.py::test_a_call_that_defers_after_a_local_answer_for_the_same_pair_goes_to_the_server",
 ]
 
 [[unit]]
@@ -380,6 +394,8 @@ text = "Anything else is evaluated by the server, for the flag or for that one e
 by = [
     "test:backend/tests/unit/services/test_sdk_ruleset.py::test_every_other_operator_is_remote",
     "test:sdk/python/tests/test_evaluator.py::test_defers",
+    "test:sdk/js/__tests__/local.test.ts::a call that defers after a local answer for the same pair goes to the server",
+    "test:sdk/python/tests/test_local.py::test_a_call_that_defers_after_a_local_answer_for_the_same_pair_goes_to_the_server",
 ]
 
 [[unit]]
@@ -462,6 +478,8 @@ by = [
     "test:sdk/js/__tests__/local.test.ts::is jittered by ±10%",
     "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_local_evaluation_timings_are_the_numbers_the_page_states",
     "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p6_the_ruleset_and_local_sdk_agree_with_the_server",
+    "test:sdk/js/__tests__/local.test.ts::a new ruleset that %s: a pair answered locally goes to the server",
+    "test:sdk/python/tests/test_local.py::test_a_new_ruleset_that_makes_the_flag_remote_or_removes_it_sends_a_pair_answered_locally_to_the_server",
 ]
 
 [[unit]]
@@ -480,6 +498,8 @@ text = "Set maxStaleMs / max_stale_seconds if you prefer evaluations to go to th
 by = [
     "test:sdk/js/__tests__/local.test.ts::maxStaleMs: a ruleset older than that is not used",
     "test:sdk/python/tests/test_local.py::test_max_stale_seconds",
+    "test:sdk/js/__tests__/local.test.ts::past maxStaleMs, a pair answered locally goes to the server",
+    "test:sdk/python/tests/test_local.py::test_past_max_stale_seconds_a_pair_answered_locally_goes_to_the_server",
 ]
 
 [[unit]]
@@ -521,6 +541,8 @@ text = "401 / 403 (key revoked, scope removed, owner no longer allowed) | evalua
 by = [
     "test:sdk/js/__tests__/local.test.ts::a scope granted later is picked up by the 10-minute retry",
     "test:sdk/python/tests/test_local.py::test_a_refusal_after_a_load_discards_the_ruleset",
+    "test:sdk/js/__tests__/local.test.ts::%i discards the ruleset: a pair answered locally goes to the server",
+    "test:sdk/python/tests/test_local.py::test_a_refusal_that_discards_the_ruleset_sends_a_pair_answered_locally_to_the_server",
 ]
 
 [[unit]]
@@ -529,6 +551,8 @@ by = [
     "test:sdk/js/__tests__/local.test.ts::404 names the minimum server release; after a load it discards",
     "test:sdk/python/tests/test_local.py::test_404_names_the_minimum_server_release_and_discards",
     "test:sdk/python/tests/test_local.py::test_an_unknown_format_discards_and_defers",
+    "test:sdk/js/__tests__/local.test.ts::%s discards the ruleset: a pair answered locally goes to the server",
+    "test:sdk/python/tests/test_local.py::test_a_404_or_an_unknown_format_that_discards_the_ruleset_sends_a_pair_answered_locally_to_the_server",
 ]
 
 [[unit]]
@@ -553,6 +577,10 @@ by = [
     "test:sdk/js/__tests__/local.test.ts::the refused retry is exactly 10 minutes (Math.random %p)",
     "test:sdk/python/tests/test_local.py::test_only_the_regular_interval_is_jittered",
 ]
+
+[[unit]]
+text = "With @controlvar/js-sdk 0.2.0 or controlvar 0.2.0 and earlier, set cacheTtlMs / cache_ttl_seconds (5 minutes by default) lower if these limits must hold: once those versions stop evaluating a flag locally (maxStaleMs / max_stale_seconds passed, the ruleset dropped, close()), a user they answered locally keeps that answer from their cache for up to that lifetime."
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Safety monitoring and the dashboard"
