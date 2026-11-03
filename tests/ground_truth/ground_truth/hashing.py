@@ -11,6 +11,11 @@ goes to the last variant.
 This is a third copy, beside the product's and the docs runner's, written so
 that a defect in the product's copy is caught rather than shared. The unit
 gates hold it to the golden vectors and to the docs runner on 20,000 ids.
+
+``flag_bucket`` is the other hash, the one a feature flag's rollout uses
+(O-FLAG). It is a different function, held to the documented example, to the
+docs runner's copy and to the rollout-decided cases of
+``tests/sdk-contract/ruleset-vectors.json``.
 """
 
 from __future__ import annotations
@@ -57,3 +62,21 @@ def variant_for(
         if position < cumulative:
             return name
     return allocations[-1][0]
+
+
+def flag_bucket(user_id: str, flag_key: str) -> int:
+    """The user's rollout bucket in [0, 100) for a feature flag (O-FLAG).
+
+    ``docs/sdk/local-evaluation.md`` gives it ("Rollout percentages bucket
+    users exactly as the server does"): the whole MD5 digest of
+    ``"{user_id}:{flag_key}"`` read as a big-endian integer, modulo 100
+    (``md5-mod100-v1``). A flag at ``p`` percent is on for a user whose bucket
+    is below ``p``, so 0 serves nobody and 100 everybody. It is not
+    :func:`bucket`: ``user-123`` and ``my-flag`` are bucket 79 here and 69
+    there. An id that UTF-8 cannot encode (a lone surrogate) raises
+    ``UnicodeEncodeError``.
+    """
+    digest = hashlib.md5(
+        f"{user_id}:{flag_key}".encode("utf-8"), usedforsecurity=False
+    ).digest()
+    return int.from_bytes(digest, "big") % 100

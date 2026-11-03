@@ -1167,7 +1167,10 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "100% | All users see the feature"
-by = ["test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_vector_matches"]
+by = [
+    "test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_vector_matches",
+    "test:backend/tests/unit/ground_truth/test_flag_rollout_use_cases.py::test_a_user_keeps_their_side_as_the_rollout_moves",
+]
 
 [[unit]]
 text = "Who gets the feature?"
@@ -1175,11 +1178,17 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "The platform uses a deterministic hash of the user's ID."
-by = ["test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_vector_matches"]
+by = [
+    "test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_vector_matches",
+    "test:backend/tests/unit/ground_truth/test_flag_rollout_use_cases.py::test_a_user_keeps_their_side_as_the_rollout_moves",
+]
 
 [[unit]]
 text = "The same user always gets the same result (sticky assignment)."
-by = ["test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_vector_matches"]
+by = [
+    "test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_vector_matches",
+    "test:backend/tests/unit/ground_truth/test_flag_rollout_use_cases.py::test_a_user_keeps_their_side_as_the_rollout_moves",
+]
 
 [[unit]]
 text = "This means:"
