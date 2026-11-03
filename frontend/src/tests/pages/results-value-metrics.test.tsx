@@ -293,7 +293,7 @@ describe.each(CASES)('a %s primary on the results page', (type, name, event, lab
     const note = await screen.findByTestId('sample-size-metric-type-note');
     expect(note).toHaveTextContent(
       `${name} is analysed as ${label}, but this plan is for the share of users who send ${event} (a two-proportion test). ` +
-        `A sample-size plan for ${label} is not available, and the Power Calculator plans conversion rates only.`,
+        `This tab and the Power Calculator page plan conversion rates only. To plan ${label} itself, send metric_type mean to POST /api/v1/power/sample-size: see Planning a mean in the Statistical Power Analysis guide.`,
     );
     expect(note).not.toHaveTextContent(/analysed as a conversion/);
   });
