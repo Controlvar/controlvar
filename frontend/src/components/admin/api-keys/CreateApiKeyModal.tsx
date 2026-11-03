@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 import { apiFetch, UserMe } from '@/services/api';
 import { useOptionalAuth } from '@/contexts/AuthContext';
+import {
+  MCP_READ_SCOPE,
+  MCP_READ_SCOPE_HELP,
+  MCP_READ_SCOPE_LABEL,
+} from '@/components/admin/api-keys/mcpReadScope';
 import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
 import { EffectivePermissions, holds } from '@/utils/effectivePermissions';
 
@@ -30,9 +35,9 @@ interface CreateApiKeyModalProps {
 }
 
 /**
- * The one scope a key can carry. Only this scope is meant to be enforced: it
- * will gate the server-side local-evaluation ruleset download. A key created
- * without it carries no scope at all.
+ * `sdk:ruleset` gates the server-side local-evaluation ruleset download. The
+ * other scope this dialog offers is `mcp:read`. A key created with neither
+ * carries no scope at all.
  */
 export const SDK_RULESET_SCOPE = 'sdk:ruleset';
 
@@ -64,6 +69,7 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
   const rulesetPending = !rulesetAllowed && loading;
   const [name, setName] = useState('');
   const [rulesetScope, setRulesetScope] = useState(false);
+  const [mcpReadScope, setMcpReadScope] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdKey, setCreatedKey] = useState<CreatedApiKey | null>(null);
@@ -77,12 +83,14 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
     setSubmitting(true);
     setError(null);
 
+    const scopes: string[] = [];
+    if (rulesetScope && rulesetAllowed) scopes.push(SDK_RULESET_SCOPE);
+    if (mcpReadScope) scopes.push(MCP_READ_SCOPE);
+
     try {
       const data = await apiFetch<CreatedApiKey>('/api/v1/api-keys', {
         method: 'POST',
-        json: rulesetScope && rulesetAllowed
-          ? { name: name.trim(), scopes: [SDK_RULESET_SCOPE] }
-          : { name: name.trim() },
+        json: scopes.length > 0 ? { name: name.trim(), scopes } : { name: name.trim() },
       });
       setCreatedKey(data);
       onSuccess(plaintextKey(data));
@@ -96,6 +104,7 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
   const handleClose = () => {
     setName('');
     setRulesetScope(false);
+    setMcpReadScope(false);
     setError(null);
     setCreatedKey(null);
     onClose();
@@ -170,9 +179,10 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
               />
             </div>
 
-            {/* Scope: one checkbox, for the one scope that is meant to be enforced */}
+            {/* Scopes: one checkbox each, sdk:ruleset first, then mcp:read */}
             {!rulesetPending && (
             <div className="mb-4" data-testid="api-key-ruleset-scope-section">
+
               <div className="flex items-start gap-2">
                 <input
                   id="api-key-ruleset-scope"
@@ -216,6 +226,34 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
               )}
             </div>
             )}
+
+            {/* mcp:read: offered to every role */}
+            <div className="mb-4">
+              <div className="flex items-start gap-2">
+                <input
+                  id="api-key-mcp-read-scope"
+                  data-testid="api-key-mcp-read-scope"
+                  type="checkbox"
+                  checked={mcpReadScope}
+                  onChange={(e) => setMcpReadScope(e.target.checked)}
+                  aria-describedby="api-key-mcp-read-scope-help"
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <label
+                  htmlFor="api-key-mcp-read-scope"
+                  className="text-sm font-medium text-slate-700"
+                >
+                  {MCP_READ_SCOPE_LABEL}
+                </label>
+              </div>
+              <p
+                id="api-key-mcp-read-scope-help"
+                data-testid="api-key-mcp-read-scope-help"
+                className="mt-1 ml-6 text-sm text-slate-600"
+              >
+                {MCP_READ_SCOPE_HELP}
+              </p>
+            </div>
 
             {/* Error */}
             {error && (
