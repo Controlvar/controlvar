@@ -50,7 +50,8 @@ by = [
 text = "An API key can't do them (the API answers 401)."
 by = [
     "test:backend/tests/integration/api/test_flag_guide_behaviour.py::test_an_api_key_does_not_create_change_or_turn_on_a_flag",
-    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_management_route_refuses_a_request_that_carries_only_an_api_key",
+    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_route_outside_the_sdk_and_mcp_read_sets_refuses_a_request_that_carries_only_an_api_key",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_scoped_key_is_refused_by_the_routes_that_change_things",
 ]
 
 [[unit]]
@@ -360,11 +361,16 @@ text = "Each user always lands on the same side of the percentage."
 by = [
     "test:backend/tests/unit/core/test_consistent_hash.py::test_every_golden_vector_matches",
     "journey:feature-flag-create#rollout-users",
+    "test:backend/tests/unit/ground_truth/test_flag_rollout_use_cases.py::test_a_user_keeps_their_side_as_the_rollout_moves",
 ]
 
 [[unit]]
 text = "Raising it adds users, and takes none away."
 by = ["test:backend/tests/integration/api/test_flag_guide_behaviour.py::test_raising_the_rollout_adds_users_and_takes_none_away"]
+
+[[unit]]
+text = "Lowering it takes users away and adds none, and returning to an earlier percentage gives back the same users."
+by = ["test:backend/tests/unit/ground_truth/test_flag_rollout_use_cases.py::test_a_user_keeps_their_side_as_the_rollout_moves"]
 
 [[unit]]
 text = "Step 5: Create the flag, then turn it on"
@@ -631,13 +637,14 @@ by = [
 ]
 
 [[unit]]
-text = "a value the operator cannot use (\"abc\" for greater_than, \"not-a-version\" for semver_gte), a regex pattern RE2 refuses, and a list operator with more than 1,000 values; a before or after value that cannot be read as a date, an array_length value that cannot be read as a whole number (or between without whole-number min and max), a native gt, gte, lt or lte value that cannot be read as a number, a geo_distance radius that is missing, below 0 or not a number, and a comparison on a dashboard geo_within_radius rule, which the dashboard shape does not read;"
+text = "a value the operator cannot use (\"abc\" for greater_than, \"not-a-version\" for semver_gte), a regex pattern RE2 refuses, and a list operator with more than 1,000 values; a before or after value that cannot be read as a date, an array_length value that cannot be read as a whole number (or between without whole-number min and max), a native gt, gte, lt or lte value that cannot be read as a number, a geo_distance radius that is missing, below 0 or not a number, and a comparison on a dashboard geo_within_radius rule, which the dashboard shape does not read; a between whose bounds are not two numbers or two dates, a dashboard time_window the engine cannot read, and a geo number, or a dashboard number comparison, too large for a floating-point number;"
 by = [
     "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_refused",
     "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_list_operators_keep_their_limit",
     "test:backend/tests/unit/core/test_targeting_values.py::test_every_value_is_refused_or_can_match",
     "test:backend/tests/unit/core/test_targeting_values.py::test_a_value_is_refused_with_fixed_text",
     "test:backend/tests/unit/core/test_targeting_values.py::test_a_dashboard_geo_comparison_is_refused",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_dashboard_window_the_engine_cannot_read_is_refused",
     "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_create_refuses_the_word",
 ]
 

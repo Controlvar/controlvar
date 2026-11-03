@@ -1,6 +1,7 @@
 """A save refuses a targeting word its evaluator never matches (#1204), a
-value it cannot read (#1525) and a dashboard geo comparison it ignores (#1526),
-through the routes.
+value it cannot read (#1525, #1666, #1669, #1673) and a dashboard geo
+comparison it ignores (#1526), through the routes; and a geo number too large
+for a float answers 422 where it answered 500 (#1672).
 
 Each reason of plan D211 S1 and of its amendment v1.4-B3 is sent to every
 write route it applies to, and the 422 is asserted whole: the exact ``loc``
@@ -85,25 +86,40 @@ DASH_COMPARISON = (
     "comparison is not read in the dashboard shape, so the rule would mean within "
     "the radius; to use gt, lt, gte or eq, write the rule in the native shape"
 )
+# Plan D211 v1.4-B3-1666's reasons (#1666, #1669), verbatim, and the answer an
+# integer too large for a float gets (#1672): the one for a value that is not
+# a number.
+BETWEEN_VALUE = (
+    "not a number or a date; between needs two numbers such as 18 and 65 (text "
+    "must be digits, with at most one dot), or two dates, each ISO 8601 such as "
+    "2030-01-31 or a Unix timestamp in seconds"
+)
+BETWEEN_ZONE = (
+    "one bound has a time zone and the other does not, so no date is ever between "
+    "them; give both a zone, such as Z, or neither (a Unix timestamp has none)"
+)
+DASH_WINDOW = (
+    "unreadable time window; give start and end as HH:MM such as 09:00 and 17:00, "
+    "days as numbers 0 to 6, start_date and end_date as YYYY-MM-DD in order, a "
+    "timezone as a name such as Europe/Paris"
+)
+DASH_NOT_VALID = "value is not valid for the operator"
+#: An integer no float can hold: JSON allows it, and float() raises on it.
+HUGE = 10**400
 
 POINT = [37.7749, -122.4194]
 
 
 def _dashboard_geo(value: Any) -> Dict[str, Any]:
+    return _dashboard(
+        {"attribute": "location", "operator": "geo_within_radius", "value": value}
+    )
+
+
+def _dashboard(condition: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "logical_operator": "AND",
-        "groups": [
-            {
-                "logical_operator": "AND",
-                "conditions": [
-                    {
-                        "attribute": "location",
-                        "operator": "geo_within_radius",
-                        "value": value,
-                    }
-                ],
-            }
-        ],
+        "groups": [{"logical_operator": "AND", "conditions": [condition]}],
     }
 
 
@@ -227,7 +243,57 @@ ROWS: Dict[str, Any] = {
         _dashboard_geo("37.7749,-122.4194,10,km,gt"),
         f"Value error, groups[0].conditions[0].value: {DASH_COMPARISON}",
     ),
+    # A between whose bounds cannot be read (#1666), native only.
+    "between bounds": (
+        {"flag", "experiment"},
+        _native(_cond("between", "-5", 5)),
+        f"Value error, {_AT}.value: {BETWEEN_VALUE}",
+    ),
+    "between time zone": (
+        {"flag", "experiment"},
+        _native(_cond("between", 18, "2030-01-01T00:00:00Z")),
+        f"Value error, {_AT}.additional_value: {BETWEEN_ZONE}",
+    ),
+    # A dashboard window the engine cannot read (#1669).
+    "time window, dashboard": (
+        {"flag", "experiment", "segment"},
+        _dashboard(
+            {
+                "attribute": "now",
+                "operator": "time_window",
+                "value": {"start": "9am", "end": "5pm"},
+            }
+        ),
+        f"Value error, groups[0].conditions[0].value: {DASH_WINDOW}",
+    ),
+    # A geo number too large for a float, which answered 500 (#1672).
+    "geo number too large, dashboard": (
+        {"flag", "experiment", "segment"},
+        _dashboard_geo({"lat": 37.7749, "lon": -122.4194, "radius": HUGE}),
+        f"Value error, groups[0].conditions[0].value: {DASH_NOT_VALID}",
+    ),
+    "geo number too large, native": (
+        {"flag", "experiment"},
+        _native(_cond("geo_distance", [HUGE, -122.4194], 10)),
+        f"Value error, {_AT}: not valid",
+    ),
+    # A dashboard number comparison too large for a float (#1673).
+    "number too large, dashboard": (
+        {"flag", "experiment", "segment"},
+        _dashboard({"attribute": "age", "operator": "greater_than", "value": HUGE}),
+        f"Value error, groups[0].conditions[0].value: {NUMBER}",
+    ),
 }
+
+#: The rows plan D211 v1.4-B3-1666 added (#1666, #1669, #1672, #1673).
+ADDENDUM_ROWS = (
+    "between bounds",
+    "between time zone",
+    "time window, dashboard",
+    "geo number too large, dashboard",
+    "geo number too large, native",
+    "number too large, dashboard",
+)
 
 #: The rows #1525 and #1526 added.
 VALUE_ROWS = (
@@ -776,7 +842,9 @@ def test_the_check_script_lists_what_a_save_now_refuses(
 
 
 @pytest.mark.regression
-@pytest.mark.parametrize("name", [n for n in VALUE_ROWS if n in _rows("segment")])
+@pytest.mark.parametrize(
+    "name", [n for n in (*VALUE_ROWS, *ADDENDUM_ROWS) if n in _rows("segment")]
+)
 def test_segment_create_update_and_preview_refuse_an_unreadable_value(
     admin_client, db_session, name
 ):
@@ -909,6 +977,129 @@ def test_the_check_script_lists_a_value_a_save_now_refuses(
         f"{PERCENTAGE}",
         f"segment\t{segment.id}\t{segment.name}\tgroups[0].conditions[0].value\t"
         f"{DASH_COMPARISON}",
+    }
+    experiment_id = experiment.id
+
+    def rows():
+        db_session.expire_all()
+        return [
+            tuple(r)
+            for r in db_session.execute(
+                text(
+                    "SELECT 'f', id::text, targeting_rules::text FROM feature_flags "
+                    "UNION ALL SELECT 'e', id::text, targeting_rules::text FROM "
+                    "experiments UNION ALL SELECT 's', id::text, rules::text FROM "
+                    "segments ORDER BY 1, 2"
+                )
+            ).all()
+        ]
+
+    before = rows()
+    try:
+        assert check_targeting_rules.main([]) == 0
+        assert rows() == before, "the check wrote"
+    finally:
+        db_session.rollback()
+        db_session.query(Experiment).filter(Experiment.id == experiment_id).delete(
+            synchronize_session=False
+        )
+        db_session.commit()
+    out = set(capsys.readouterr().out.splitlines())
+
+    assert expected <= out
+
+
+# ---------------------------------------------------------------------------
+# #1666, #1669, #1672, #1673 (plan D211 v1.4-B3-1666)
+# ---------------------------------------------------------------------------
+
+#: The addendum's rows the wizard can carry: it collects dashboard conditions
+#: only (``ExperimentWizardService.build_experiment_payload``), so a native
+#: between or geo_distance never reaches it.
+WIZARD_ROWS = [n for n in ADDENDUM_ROWS if n in _rows("segment")]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("name", WIZARD_ROWS)
+def test_the_wizard_launch_reports_the_addendums_refusals_and_creates_nothing(
+    admin_client, db_session, name
+):
+    """A window, a geo number and a number comparison, each beside
+    ``country equals US``: ``success: false`` with the message, and no
+    experiment (a geo number too large for a float answered 500 before)."""
+    _, rules, msg = ROWS[name]
+    title = f"Wizard {uuid.uuid4().hex[:8]}"
+    created = admin_client.post("/api/v1/wizard/drafts", json={"experiment_type": "ab"})
+    assert created.status_code in (200, 201), created.text
+    draft_id = created.json()["id"]
+    _step(admin_client, draft_id, "choose_type", {"experiment_type": "ab"})
+    _step(
+        admin_client,
+        draft_id,
+        "define_hypothesis",
+        {
+            "name": title,
+            "hypothesis": "A value the evaluator cannot read is refused",
+            "primary_metric_id": "checkout_completed",
+        },
+    )
+    conditions = [
+        {"attribute": "country", "operator": "equals", "value": "US"},
+        *copy.deepcopy(rules["groups"][0]["conditions"]),
+    ]
+    _step(admin_client, draft_id, "targeting", {"targeting_rules": conditions})
+    _step(admin_client, draft_id, "sample_size", {"baseline_rate": 0.1, "mde": 0.05})
+
+    submitted = admin_client.post(f"/api/v1/wizard/drafts/{draft_id}/submit")
+
+    assert submitted.status_code == 200, submitted.text
+    assert submitted.json()["success"] is False
+    assert submitted.json()["experiment_id"] is None
+    # The condition is the second, after country equals US.
+    second = msg.replace("groups[0].conditions[0]", "groups[0].conditions[1]", 1)
+    assert submitted.json()["errors"] == [f"targeting_rules: {second}"]
+    assert _count(db_session, Experiment, name=title) == 0
+
+
+@pytest.mark.regression
+def test_the_check_script_lists_the_addendums_refusals(
+    db_session, make_feature_flag, make_experiment, admin_user, capsys
+):
+    """(V8, W6, Z5) A between and a window on flags, a geo number too large
+    for a float on a flag and an experiment (a precise line, where it was
+    "could not be checked"), and a window on a segment, with the API's path
+    and reason; nothing is written."""
+    between = make_feature_flag(
+        targeting_rules=copy.deepcopy(ROWS["between bounds"][1])
+    )
+    window = make_feature_flag(
+        targeting_rules=copy.deepcopy(ROWS["time window, dashboard"][1])
+    )
+    geo = make_feature_flag(
+        targeting_rules=copy.deepcopy(ROWS["geo number too large, dashboard"][1])
+    )
+    suffix = uuid.uuid4().hex[:8]
+    experiment = make_experiment(
+        name=f"Addendum {suffix}",
+        key=f"addendum-{suffix}",
+        status=ExperimentStatus.ACTIVE,
+        targeting_rules=copy.deepcopy(ROWS["geo number too large, native"][1]),
+    )
+    segment = Segment(
+        name=f"Stored {suffix}",
+        rules=copy.deepcopy(ROWS["time window, dashboard"][1]),
+        status=ModelSegmentStatus.ACTIVE,
+        owner_id=admin_user.id,
+    )
+    db_session.add(segment)
+    db_session.commit()
+    first = "groups[0].conditions[0]"
+    expected = {
+        f"feature_flag\t{between.id}\t{between.key}\t{_AT}.value\t{BETWEEN_VALUE}",
+        f"feature_flag\t{window.id}\t{window.key}\t{first}.value\t{DASH_WINDOW}",
+        f"feature_flag\t{geo.id}\t{geo.key}\t{first}.value\t{DASH_NOT_VALID}",
+        f"experiment\t{experiment.id}\t{experiment.key}\tACTIVE\t{_AT}\tnot valid",
+        f"segment\t{segment.id}\t{segment.name}\t{first}.value\t{DASH_WINDOW}",
     }
     experiment_id = experiment.id
 

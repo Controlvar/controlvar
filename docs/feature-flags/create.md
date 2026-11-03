@@ -93,7 +93,8 @@ match no targeting rule:
 | `100%` | Everyone |
 
 Each user always lands on the same side of the percentage. Raising it adds users, and
-takes none away.
+takes none away. Lowering it takes users away and adds none, and returning to an earlier
+percentage gives back the same users.
 
 ### Step 5: Create the flag, then turn it on
 
@@ -254,7 +255,9 @@ update, and nothing is saved. That is:
   that cannot be read as a whole number (or `between` without whole-number `min` and `max`), a
   native `gt`, `gte`, `lt` or `lte` value that cannot be read as a number, a `geo_distance`
   radius that is missing, below 0 or not a number, and a comparison on a dashboard
-  `geo_within_radius` rule, which the dashboard shape does not read;
+  `geo_within_radius` rule, which the dashboard shape does not read; a `between` whose bounds
+  are not two numbers or two dates, a dashboard `time_window` the engine cannot read, and a geo
+  number, or a dashboard number comparison, too large for a floating-point number;
 - in the native shape, a `time_window` the engine cannot read: it needs `days`,
   `start_time` with `end_time`, or `start_date` with `end_date`, and needs no `start` or
   `end`;

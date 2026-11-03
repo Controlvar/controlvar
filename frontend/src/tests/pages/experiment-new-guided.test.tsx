@@ -8,7 +8,7 @@
 import fs from 'fs';
 import path from 'path';
 import React from 'react';
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import axe from 'axe-core';
 import NewExperimentPage, { ROLE_CANNOT_CREATE } from '@/pages/experiments/new';
@@ -21,9 +21,12 @@ import {
   validateForm,
 } from '@/components/experiments/new/formState';
 import { ESTIMATE_PROBLEMS, POWER_OPTIONS } from '@/components/experiments/new/estimate';
-import { CONFIDENCE_OPTIONS } from '@/components/results/shared/analysisSettings';
+import { CONFIDENCE_OPTIONS, CORRECTION_OPTIONS } from '@/components/results/shared/analysisSettings';
 import {
+  appliedCorrection,
+  INITIAL_ESTIMATE_PANEL,
   NO_USABLE_ESTIMATE,
+  SampleSizeEstimate,
   SESSION_EXPIRED_ESTIMATE,
 } from '@/components/experiments/new/SampleSizeEstimate';
 import { apiError, makeRouter, routedApi, Route } from './helpers/apiMock';
@@ -57,6 +60,7 @@ const mockedApiFetch = apiFetch as jest.MockedFunction<typeof apiFetch>;
 const mockedNavigateHard = navigateHard as jest.MockedFunction<typeof navigateHard>;
 
 const SAMPLE_SIZE_PATH = '/api/v1/experiments/analysis/sample-size';
+/** Two variants at 95% (94,072 = 47,036 x 2), as an API older than #820 answers: no echo. */
 const ESTIMATE_47036 = {
   baseline_rate: 0.12,
   minimum_detectable_effect: 0.05,
@@ -67,6 +71,41 @@ const ESTIMATE_47036 = {
   total_samples: 94072,
   estimated_duration_days: null,
   notes: null,
+};
+/** The same two variants from an API that echoes the correction (#820): one comparison, at 5%. */
+const ESTIMATE_47036_BH_TWO = { ...ESTIMATE_47036, correction_method: 'benjamini_hochberg', comparisons: 1, alpha: 0.05 };
+/** Three variants at 95% with Benjamini-Hochberg (#820): each of 2 comparisons at 2.5%. */
+const ESTIMATE_56961_BH = {
+  ...ESTIMATE_47036,
+  samples_per_variant: 56961,
+  total_samples: 170883,
+  correction_method: 'benjamini_hochberg',
+  comparisons: 2,
+  alpha: 0.025,
+};
+/** Four variants at 95% with Bonferroni: each of 3 comparisons at 0.05 / 3. */
+const ESTIMATE_62739_BONFERRONI = {
+  ...ESTIMATE_47036,
+  samples_per_variant: 62739,
+  total_samples: 250956,
+  correction_method: 'bonferroni',
+  comparisons: 3,
+  alpha: 0.016666666666666666,
+};
+/** Three variants at 95% with None: no correction, echoed. */
+const ESTIMATE_47036_NONE_THREE = {
+  ...ESTIMATE_47036,
+  total_samples: 141108,
+  correction_method: 'none',
+  comparisons: 2,
+  alpha: 0.05,
+};
+/** Three variants at 90% from an older API that ignored the correction: no echo. */
+const ESTIMATE_37050_OLD_API = {
+  ...ESTIMATE_47036,
+  significance_level: 0.1,
+  samples_per_variant: 37050,
+  total_samples: 111150,
 };
 
 function routerAt(query: Record<string, string> = {}, isReady = true) {
@@ -79,15 +118,19 @@ function routerAt(query: Record<string, string> = {}, isReady = true) {
   });
 }
 
+/** The page's API. A route in `extra` is matched before the defaults, so it can replace one. */
 function api(extra: Route[] = []) {
   mockedApiFetch.mockImplementation(
     routedApi([
+      ...extra,
       { method: 'POST', path: '/api/v1/experiments', handler: () => ({ id: 'exp-9', status: 'draft' }) },
       { method: 'GET', path: SAMPLE_SIZE_PATH, handler: () => ESTIMATE_47036 },
-      ...extra,
     ]) as unknown as typeof apiFetch,
   );
 }
+
+/** The page's API, with this answer from the sample-size endpoint. */
+const apiAnswering = (estimate: object) => api([{ method: 'GET', path: SAMPLE_SIZE_PATH, handler: () => estimate }]);
 
 const setValue = (testId: string, value: string) =>
   fireEvent.change(screen.getByTestId(testId), { target: { value } });
@@ -640,6 +683,7 @@ describe('the Estimate step', () => {
         statistical_power: 0.8,
         significance_level: 0.05,
         variant_count: 2,
+        correction_method: 'benjamini_hochberg',
       },
       redirectOn401: false,
     });
@@ -666,7 +710,7 @@ describe('the Estimate step', () => {
   });
 
   it('sends the number of variants on the Variants step', async () => {
-    api();
+    apiAnswering(ESTIMATE_56961_BH);
     await toEstimate(() => {
       fireEvent.click(screen.getByTestId('add-variant'));
       setValue('variant-allocation-0', '20');
@@ -699,6 +743,7 @@ describe('the Estimate step', () => {
     ['no effect', { 'estimate-baseline': '12' }, ESTIMATE_PROBLEMS.mde],
     ['an effect past 100%', { 'estimate-baseline': '60', 'estimate-mde': '80' }, ESTIMATE_PROBLEMS.ceiling],
     ['fractional daily users', { 'estimate-baseline': '12', 'estimate-mde': '5', 'estimate-daily-users': '1.5' }, ESTIMATE_PROBLEMS.dailyUsers],
+    ['more than 1,000,000,000,000 daily users', { 'estimate-baseline': '12', 'estimate-mde': '5', 'estimate-daily-users': '1000000000001' }, ESTIMATE_PROBLEMS.dailyUsers],
     ['a share of 0%', { 'estimate-baseline': '12', 'estimate-mde': '5', 'estimate-daily-users': '10', 'estimate-share': '0' }, ESTIMATE_PROBLEMS.share],
   ])('refuses %s in its own alert, without a request', async (_label, fields, problem) => {
     api();
@@ -845,7 +890,7 @@ describe('the minimum detectable effect is saved with the experiment (#1257)', (
       'The minimum detectable effect you enter is saved with the experiment, and its results page plans the ' +
         'sample for it. The rest of this estimate is a guide and is not saved: the results page plans from the ' +
         "control variant's own conversion rate, at 80% power. This estimate plans at 5% significance, from the " +
-        'confidence level above.',
+        'confidence level above, before any correction.',
     );
     expect(document.getElementById('estimate-mde-help')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
       '5% means 12% → 12.6%, not 17%. Saved with the experiment; leave it blank and the results page plans for 5%.',
@@ -1168,8 +1213,8 @@ describe('how results will be judged', () => {
     expect(hint).not.toHaveAttribute('role');
   });
 
-  it('says the estimate makes no correction, and plans at 1 minus the chosen level (PE condition 9)', async () => {
-    api();
+  it('with an API that applied no correction, says so, and sends 1 minus the chosen level (PE condition 9)', async () => {
+    apiAnswering(ESTIMATE_37050_OLD_API);
     await toEstimate(() => {
       fireEvent.click(screen.getByTestId('add-variant'));
       setValue('variant-allocation-0', '34');
@@ -1181,8 +1226,8 @@ describe('how results will be judged', () => {
     setValue('estimate-mde', '5');
     fireEvent.click(screen.getByTestId('estimate-calculate'));
     await screen.findByTestId('estimate-per-variant');
-    // 0.1 is inside the endpoint's 0.01-0.1 bound; a divided 0.05 would not
-    // be what the copy says, and 0.1 / 2 is never sent.
+    // 0.1 is inside the endpoint's 0.01-0.1 bound; the endpoint divides it
+    // when it applies the correction, so 0.1 / 2 is never sent.
     expect((estimateCalls()[0][1]?.query as Record<string, unknown>).significance_level).toBe(0.1);
     expect(screen.getByTestId('estimate-many-variants')).toHaveTextContent(
       'With 3 variants, this estimate plans each comparison with the control at 10% significance and makes no correction for comparing several variants. The results will use the Benjamini-Hochberg correction chosen above, so the experiment needs more users than this.'
@@ -1212,6 +1257,194 @@ describe('how results will be judged', () => {
     setValue('analysis-confidence', '0.9');
     setValue('analysis-correction', 'bonferroni');
     expect(summary).toHaveTextContent('Analysis settings: 90% confidence, Bonferroni correction');
+  });
+});
+
+// #820: the estimate plans each comparison with the experiment's correction,
+// and every count, comparison and significance in its result block comes from
+// the answer shown, never from the live inputs.
+describe('the estimate plans with the experiment\'s correction (#820)', () => {
+  const threeVariants = () => {
+    fireEvent.click(screen.getByTestId('add-variant'));
+    setValue('variant-allocation-0', '34');
+    setValue('variant-allocation-1', '33');
+    setValue('variant-allocation-2', '33');
+  };
+  const fourVariants = () => {
+    fireEvent.click(screen.getByTestId('add-variant'));
+    fireEvent.click(screen.getByTestId('add-variant'));
+    for (let i = 0; i < 4; i += 1) setValue(`variant-allocation-${i}`, '25');
+  };
+  const calculate = async () => {
+    setValue('estimate-baseline', '12');
+    setValue('estimate-mde', '5');
+    fireEvent.click(screen.getByTestId('estimate-calculate'));
+    await screen.findByTestId('estimate-per-variant');
+  };
+
+  it.each(CORRECTION_OPTIONS)('sends the correction chosen above: %s', async (method) => {
+    api();
+    await toEstimate(threeVariants);
+    setValue('analysis-correction', method);
+    await calculate();
+    expect((estimateCalls()[0][1]?.query as Record<string, unknown>).correction_method).toBe(method);
+  });
+
+  it('marks the estimate out of date when the correction changes, and Review drops its number', async () => {
+    apiAnswering(ESTIMATE_56961_BH);
+    await toEstimate(threeVariants);
+    await calculate();
+    expect(screen.queryByTestId('estimate-stale')).not.toBeInTheDocument();
+    setValue('analysis-correction', 'none');
+    expect(screen.getByTestId('estimate-stale')).toBeInTheDocument();
+    next();
+    expect(screen.getByTestId('review-estimate').textContent).toBe(
+      'Minimum detectable effect: 5% (saved). No estimate calculated for these inputs.',
+    );
+  });
+
+  it('with Benjamini-Hochberg applied, says each comparison is planned at the corrected level, and no Power Calculator sentence', async () => {
+    apiAnswering(ESTIMATE_56961_BH);
+    await toEstimate(threeVariants);
+    await calculate();
+    expect(screen.getByTestId('estimate-per-variant')).toHaveTextContent('56,961 users per variant');
+    expect(screen.getByTestId('estimate-total').textContent).toBe(
+      '170,883 users in total across 3 variants, at 80% power and 5% significance.',
+    );
+    expect(screen.getByTestId('estimate-even-split').textContent).toBe(
+      'This assumes users are split evenly across the 3 variants.',
+    );
+    const many = screen.getByTestId('estimate-many-variants');
+    expect(many.textContent).toBe(
+      'With 3 variants, this estimate uses the Benjamini-Hochberg correction: each of the 2 comparisons with the ' +
+        'control is planned at 2.5% significance. Benjamini-Hochberg is planned as strictly as Bonferroni, so this ' +
+        'may be more users than it needs.',
+    );
+    expect(within(many).queryByRole('link')).toBeNull();
+  });
+
+  it('with Bonferroni applied at 4 variants, says so in one sentence', async () => {
+    apiAnswering(ESTIMATE_62739_BONFERRONI);
+    await toEstimate(fourVariants);
+    setValue('analysis-correction', 'bonferroni');
+    await calculate();
+    expect(screen.getByTestId('estimate-total')).toHaveTextContent('250,956 users in total across 4 variants');
+    expect(screen.getByTestId('estimate-many-variants').textContent).toBe(
+      'With 4 variants, this estimate uses the Bonferroni correction: each of the 3 comparisons with the control is ' +
+        'planned at 1.667% significance.',
+    );
+  });
+
+  it('with None chosen and applied, says no correction is made, as the results will not make one', async () => {
+    apiAnswering(ESTIMATE_47036_NONE_THREE);
+    await toEstimate(threeVariants);
+    setValue('analysis-correction', 'none');
+    await calculate();
+    const many = screen.getByTestId('estimate-many-variants');
+    expect(many.textContent?.replace(/\s+/g, ' ')).toBe(
+      'With 3 variants, this estimate plans each comparison with the control at 5% significance and makes no ' +
+        'correction for comparing several variants, the same as the results will, because no correction is chosen ' +
+        'above. The Power Calculator applies a Bonferroni correction, so its number is higher.',
+    );
+    expect(within(many).getByRole('link', { name: 'Power Calculator' })).toHaveAttribute('href', '/power-calculator');
+  });
+
+  it('an uncorrected estimate gone out of date says only that it made no correction', async () => {
+    // Made under None, then Benjamini-Hochberg is chosen: "because no
+    // correction is chosen above" would now be false, and "the results will use
+    // the Benjamini-Hochberg correction" is the stale banner's to say.
+    apiAnswering(ESTIMATE_47036_NONE_THREE);
+    await toEstimate(threeVariants);
+    setValue('analysis-correction', 'none');
+    await calculate();
+    setValue('analysis-correction', 'benjamini_hochberg');
+    expect(screen.getByTestId('estimate-stale')).toBeInTheDocument();
+    expect(screen.getByTestId('estimate-many-variants').textContent?.replace(/\s+/g, ' ')).toBe(
+      'With 3 variants, this estimate plans each comparison with the control at 5% significance and makes no ' +
+        'correction for comparing several variants. The Power Calculator applies a Bonferroni correction, so its ' +
+        'number is higher.',
+    );
+  });
+
+  it.each([
+    ['Benjamini-Hochberg', 'benjamini_hochberg', ESTIMATE_56961_BH, 'is planned at 2.5% significance.'],
+    ['None', 'none', ESTIMATE_47036_NONE_THREE, 'with the control at 5% significance and makes no correction'],
+  ])(
+    'an estimate gone out of date keeps the significance it was planned at (%s)',
+    async (_label, method, estimate, levelText) => {
+      apiAnswering(estimate);
+      await toEstimate(threeVariants);
+      setValue('analysis-correction', method);
+      await calculate();
+      setValue('analysis-confidence', '0.9');
+      expect(screen.getByTestId('estimate-stale')).toBeInTheDocument();
+      expect(screen.getByTestId('estimate-total')).toHaveTextContent('at 80% power and 5% significance.');
+      expect(screen.getByTestId('estimate-many-variants')).toHaveTextContent(levelText);
+    },
+  );
+
+  it('an estimate made at 2 variants, shown after a third is added, counts 2 variants and claims no correction (PB-1)', async () => {
+    apiAnswering(ESTIMATE_47036_BH_TWO);
+    await toEstimate();
+    await calculate();
+    back();
+    threeVariants();
+    next();
+    expect(heading()).toHaveTextContent(STEP_HEADINGS.estimate);
+    expect(screen.getByTestId('estimate-variant-count')).toHaveTextContent('Variants: 3');
+    expect(screen.getByTestId('estimate-stale')).toBeInTheDocument();
+    expect(screen.getByTestId('estimate-total')).toHaveTextContent('94,072 users in total across 2 variants');
+    expect(screen.getByTestId('estimate-even-split').textContent).toBe(
+      'This assumes users are split evenly across the 2 variants.',
+    );
+    expect(screen.getByTestId('estimate-uneven-split')).toBeInTheDocument();
+    expect(screen.queryByTestId('estimate-many-variants')).not.toBeInTheDocument();
+    const block = screen.getByTestId('estimate-result').textContent ?? '';
+    expect(block).not.toContain('3 variants');
+    expect(block).not.toContain('2 comparisons');
+    expect(block).not.toContain('uses the');
+  });
+
+  it('refuses more than 100 variants in its own alert, without a request', () => {
+    // The Variants step refuses a 0% variant, so 101 variants cannot add up to
+    // 100% there; the panel refuses them anyway, as it refuses every input the
+    // endpoint would (variant_count le=100).
+    api();
+    function Panel() {
+      const [panel, setPanel] = React.useState(INITIAL_ESTIMATE_PANEL);
+      const [mdePct, setMdePct] = React.useState('5');
+      return (
+        <SampleSizeEstimate
+          value={panel}
+          onChange={setPanel}
+          mdePct={mdePct}
+          onMdePctChange={setMdePct}
+          allocations={[100, ...Array<number>(100).fill(0)]}
+          confidenceLevel={0.95}
+          correctionMethod="benjamini_hochberg"
+        />
+      );
+    }
+    render(<Panel />);
+    expect(screen.getByTestId('estimate-variant-count')).toHaveTextContent('Variants: 101');
+    setValue('estimate-baseline', '12');
+    fireEvent.click(screen.getByTestId('estimate-calculate'));
+    expect(screen.getByTestId('estimate-error')).toHaveAttribute('role', 'alert');
+    expect(screen.getByTestId('estimate-error')).toHaveTextContent(
+      'The estimate plans for at most 100 variants. Remove some on the Variants step to see one.',
+    );
+    expect(mockedApiFetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['a correction and two or more comparisons', { correction_method: 'benjamini_hochberg', comparisons: 2 }, 'benjamini_hochberg'],
+    ['Bonferroni and three comparisons', { correction_method: 'bonferroni', comparisons: 3 }, 'bonferroni'],
+    ['a correction at one comparison', { correction_method: 'benjamini_hochberg', comparisons: 1 }, 'none'],
+    ['a correction and no comparisons', { correction_method: 'bonferroni' }, 'none'],
+    ['no echo (an older API)', {}, 'none'],
+    ['none', { correction_method: 'none', comparisons: 2 }, 'none'],
+  ])('treats an answer with %s (%j) as applying %s', (_label, echo, applied) => {
+    expect(appliedCorrection({ ...ESTIMATE_47036, ...echo } as Parameters<typeof appliedCorrection>[0])).toBe(applied);
   });
 });
 
@@ -1289,6 +1522,21 @@ describe('accessibility of /experiments/new (axe-core in jsdom; colour contrast 
       setValue('variant-allocation-2', '33');
     });
     setValue('analysis-correction', 'none');
+    expect(await violations()).toEqual([]);
+  });
+
+  it('the Estimate step, after a 3-variant Benjamini-Hochberg estimate, has no axe violations', async () => {
+    apiAnswering(ESTIMATE_56961_BH);
+    await toEstimate(() => {
+      fireEvent.click(screen.getByTestId('add-variant'));
+      setValue('variant-allocation-0', '34');
+      setValue('variant-allocation-1', '33');
+      setValue('variant-allocation-2', '33');
+    });
+    setValue('estimate-baseline', '12');
+    setValue('estimate-mde', '5');
+    fireEvent.click(screen.getByTestId('estimate-calculate'));
+    await screen.findByTestId('estimate-many-variants');
     expect(await violations()).toEqual([]);
   });
 

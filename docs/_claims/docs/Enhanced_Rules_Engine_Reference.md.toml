@@ -115,7 +115,7 @@ by = [
 ]
 
 [[unit]]
-text = "greater_than, greater_than_or_equal, less_than, less_than_or_equal | gt, gte, lt, lte | the attribute compares so with the value, both read as numbers: text that is a number (\"21\") counts. A value that cannot be read as a number, such as \"abc\", null, a list or an object, is refused when the rules are saved."
+text = "greater_than, greater_than_or_equal, less_than, less_than_or_equal | gt, gte, lt, lte | the attribute compares so with the value, both read as numbers: text that is a number (\"21\") counts. A value that cannot be read as a number, such as \"abc\", null, a list or an object, is refused when the rules are saved. So is NaN, or an integer too large for a floating-point number, in either shape."
 by = [
     "test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_simple_operator_map",
     "test:backend/tests/unit/core/test_targeting_adapter.py::TestNumericCoercion::test_comparisons_evaluate_against_numeric_context",
@@ -123,7 +123,10 @@ by = [
     "test:backend/tests/unit/core/test_targeting_values.py::test_every_value_is_refused_or_can_match",
     "test:backend/tests/unit/core/test_targeting_values.py::test_every_usable_value_is_accepted",
     "test:backend/tests/unit/core/test_targeting_values.py::test_a_value_is_refused_with_fixed_text",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_readable_value_whose_range_is_empty_is_accepted",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_stored_dashboard_number_too_large_for_a_float_keeps_its_answer",
     "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_create_refuses_the_word",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_segment_create_update_and_preview_refuse_an_unreadable_value",
 ]
 
 [[unit]]
@@ -222,10 +225,16 @@ by = [
 ]
 
 [[unit]]
-text = "none | between | the attribute is a number, or a date, from value to additional_value, both included."
+text = "none | between | the attribute is a number, or a date, from value to additional_value, both included. Both bounds are numbers (a JSON number, or text of digits with at most one dot) or both dates (ISO 8601 text, or a Unix timestamp in seconds, which has no time zone). Two dates must both have a time zone or both lack one. Any other pair is refused when the rules are saved (422), and so is a JSON integer too large for a floating-point number. A range whose value is above its additional_value matches nobody and is accepted."
 by = [
     "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_between_includes_both_bounds_for_numbers",
     "test:backend/tests/unit/core/test_targeting_operator_semantics.py::test_between_includes_both_bounds_for_dates",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_every_value_is_refused_or_can_match",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_every_usable_value_is_accepted",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_value_is_refused_with_fixed_text",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_readable_value_whose_range_is_empty_is_accepted",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_create_refuses_the_word",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_experiment_create_refuses_the_word",
 ]
 
 [[unit]]
@@ -501,6 +510,16 @@ by = [
 ]
 
 [[unit]]
+text = "A latitude, longitude or radius must fit in a floating-point number; a larger integer is refused like any value that is not a number (422)."
+by = [
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_value_is_refused_with_fixed_text",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_every_request_model_is_total_over_json_types",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_stored_geo_number_too_large_for_a_float_keeps_its_answer",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_create_refuses_the_word",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_segment_create_update_and_preview_refuse_an_unreadable_value",
+]
+
+[[unit]]
 text = "Dashboard: {\"lat\": 37.7749, \"lon\": -122.4194, \"radius\": 15, \"unit\": \"km\"}, the list [37.7749, -122.4194, 15, \"km\"] or the text \"37.7749,-122.4194,15,km\"."
 by = ["test:backend/tests/unit/core/test_targeting_adapter.py::TestOperatorMapping::test_geo_within_radius_shapes"]
 
@@ -665,10 +684,15 @@ by = [
 ]
 
 [[unit]]
-text = "A window in the dashboard shape is not checked when it is saved."
+text = "A window in the dashboard shape that cannot be read is refused when the rules of a flag, an experiment or a segment are saved (422, unreadable time window; give start and end as HH:MM ...); one saved before that is evaluated as above."
 by = [
-    "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_accepted",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_dashboard_window_the_engine_cannot_read_is_refused",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_dashboard_window_is_refused_exactly_when_its_evaluation_abandons",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_readable_dashboard_window_is_accepted",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_stored_dashboard_window_a_save_refuses_still_answers_error",
     "test:backend/tests/unit/core/test_flag_targeting_validation.py::test_the_ruleset_vectors_split_exactly",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_create_refuses_the_word",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_segment_create_update_and_preview_refuse_an_unreadable_value",
 ]
 
 [[unit]]
@@ -829,11 +853,13 @@ by = [
 ]
 
 [[unit]]
-text = "A native time_window that cannot be read is refused when the rules are saved, and one stored before that abandons the ruleset as above."
+text = "A time_window that cannot be read, in either shape, is now refused when the rules are saved, and one stored before that still abandons the ruleset as above."
 by = [
     "test:backend/tests/unit/core/test_targeting_vocabulary.py::test_refused_with_fixed_text",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_dashboard_window_the_engine_cannot_read_is_refused",
     "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_create_refuses_the_word",
     "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_an_unreadable_window_abandons_the_whole_ruleset",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_stored_dashboard_window_a_save_refuses_still_answers_error",
     "test:backend/tests/unit/core/test_time_window_without_start_end.py::test_a_stored_unreadable_window_still_answers_error",
 ]
 

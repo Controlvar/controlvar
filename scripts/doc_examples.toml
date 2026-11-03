@@ -13,7 +13,7 @@
 
 [meta]
 documents = 57
-exec = 325
+exec = 326
 universe = [
     ".github/pull_request_template.md",
     ".github/qa-templates/README.md",
@@ -295,9 +295,9 @@ expects = 15
 [[document]]
 path = "docs/guides/experiment-wizard.md"
 environment = "stack"
-exec = 11
+exec = 12
 skip = 0
-expects = 19
+expects = 22
 
 [[document]]
 path = "docs/llm-evaluation/quickstart.md"

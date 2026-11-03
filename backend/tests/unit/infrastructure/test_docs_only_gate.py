@@ -115,7 +115,8 @@ PLATFORM_STEPS: Dict[str, str] = {
     "Make the core profile real": "${{ !inputs.skip && inputs.profile == 'core' }}",
     "Set up Python": "${{ !inputs.skip }}",
     "Set up Node.js": (
-        "${{ !inputs.skip && (contains(inputs.sdks, 'js') || "
+        "${{ !inputs.skip && (inputs.suite == 'sdk-live-contract' || "
+        "contains(inputs.sdks, 'js') || "
         "contains(inputs.sdks, 'react') || contains(inputs.sdks, 'edge') || "
         "contains(inputs.sdks, 'openfeature')) }}"
     ),
@@ -138,6 +139,11 @@ PLATFORM_STEPS: Dict[str, str] = {
     "Start the API": "${{ !inputs.skip }}",
     "Assert the running profile": "${{ !inputs.skip }}",
     "Run suite": "${{ !inputs.skip }}",
+    # sdk-live-contract's second step, never in a fuzz pass (fuzz.yml calls
+    # this workflow three times; #1607).
+    "Run the MCP server's contract suite": (
+        "${{ !inputs.skip && inputs.suite == 'sdk-live-contract' }}"
+    ),
     # Not on a fuzz run: its API log quotes the requests, and the log is public.
     "Backend log (on failure)": (
         "${{ !inputs.skip && failure() && inputs.suite != 'fuzz' }}"
@@ -187,6 +193,9 @@ NOT_DOCS_TESTS = {
     "backend/tests/unit/scripts/test_makefile_guards.py": "docs/api only",
     # Reads only docs/api/openapi-v1.full.json (same reason as above).
     "backend/tests/unit/scripts/test_load_test_runner.py": "docs/api only",
+    # Reads only docs/api/openapi-v1.full.json, for the MCP contract suite's
+    # allow-list (same reason as above).
+    "backend/tests/unit/scripts/test_run_mcp_contract.py": "docs/api only",
     # Reads only docs/api/openapi-v1.stable.json (same reason as above).
     "backend/tests/unit/api/test_segment_preview_limits.py": "docs/api only",
     # Reads only the two docs/api/ OpenAPI snapshots (same reason as above).

@@ -18,8 +18,10 @@ the shell variables set by the ones before it.
 - **Server-to-server calls**: backend services that track conversions or evaluate flags.
 - **Event ingestion**: the tracking endpoints (`/api/v1/tracking/*`) take an API key.
 
-An API key authenticates as the user who created it, and only on the endpoints an SDK
-calls: tracking, flag evaluation and the flag ruleset. Creating or changing flags
+An API key authenticates as the user who created it, on the endpoints an SDK calls:
+tracking, flag evaluation and the flag ruleset. A key that carries the `mcp:read` scope also
+reads flags, experiments and results on four read operations (see [Scopes](#scopes)); a key
+without it is refused there with `403`. Creating or changing flags
 and experiments, and managing users, take a user login; an API key there is refused with
 `401` and `{"detail":"Not authenticated"}`, the answer to a request with no login at all.
 API keys are not for signing people in: user-facing applications use the login
@@ -84,10 +86,17 @@ The request takes:
 
 ### Scopes
 
-Scopes are stored with the key and returned when you list keys. **One scope is enforced:
-`sdk:ruleset`.** Every endpoint that accepts an API key, except the three below, accepts
-any active key, whatever its scopes. Names such as `read`, `write` or `admin` on existing
-keys are labels only; nothing checks them.
+Scopes are stored with the key and returned when you list keys. **Two scopes are enforced:
+`sdk:ruleset` and `mcp:read`.** Every endpoint that accepts an API key, except the ones
+listed below for each, accepts any active key, whatever its scopes. Names such as `read`,
+`write` or `admin` on existing keys are labels only; nothing checks them.
+
+Scope names are matched exactly and case-sensitively: the stored list is split on commas and
+each entry is trimmed, so `"read, sdk:ruleset "` carries `sdk:ruleset`, while `SDK:RULESET`,
+`xsdk:ruleset` and `sdk:ruleset-ro` do not. In the same way `MCP:READ`, `xmcp:read` and
+`mcp:read-only` do not carry `mcp:read`.
+
+#### `sdk:ruleset`
 
 `sdk:ruleset` is for a server: one that evaluates flags locally, or one that assigns lists
 of users to an experiment. These routes answer `403` to a key that does not carry it:
@@ -126,9 +135,33 @@ VIEWER, or a grant revoked or expired) is refused with `403` from then on.
 `POST /api/v1/tracking/assign/batch` also needs the owner to be able to change experiments;
 otherwise it answers `403` and assigns nobody.
 
-Scope names are matched exactly and case-sensitively: the stored list is split on commas and
-each entry is trimmed, so `"read, sdk:ruleset "` carries `sdk:ruleset`, while `SDK:RULESET`,
-`xsdk:ruleset` and `sdk:ruleset-ro` do not.
+#### `mcp:read`
+
+`mcp:read` lets a key read flags, experiments and results. These four operations accept a
+key that carries it, as well as a user login:
+
+- `GET /api/v1/feature-flags/`, which lists the feature flags;
+- `GET /api/v1/experiments/`, which lists the experiments;
+- `GET /api/v1/experiments/{experiment_id}`, which reads one experiment;
+- `GET /api/v1/experiments/{experiment_id}/results`, which reads its results.
+
+The request reads as the user who created the key, and the operation checks that user's
+role as it does for a login. Every role may read all four, so anyone holding the key reads
+everything its owner can there: every flag, with its targeting rules and the values it
+serves, every experiment, and every experiment's results. Keep such a key out of browsers,
+mobile apps and code repositories. A key without the scope is refused on these four with
+`403`:
+
+`This API key does not have the 'mcp:read' scope. Create a key with the 'mcp:read' scope to read flags, experiments and results with it.`
+
+The scope opens nothing else. The routes that create, change or delete flags or experiments,
+and the routes that manage users, still take a user login, and a request that carries a bearer
+token is judged on the token alone.
+
+Every role can create a key with `mcp:read`: through the API, send `"scopes": ["mcp:read"]`.
+Keys already labelled `mcp:read` gain that access when the instance is upgraded to a
+version that enforces the scope. An ADMIN lists every user's keys, with their scopes, with
+`GET /api/v1/api-keys?all=true`.
 
 ---
 
@@ -319,3 +352,5 @@ integration without touching the others.
 
 A key authenticates as the user who created it. Create keys from an account whose role is
 no broader than the services need, and delete the keys of a user who leaves.
+Removing a user from the identity provider does not revoke their API keys: deactivate the
+Controlvar user or delete the keys.

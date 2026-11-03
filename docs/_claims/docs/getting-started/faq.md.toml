@@ -781,7 +781,7 @@ by = [
 ]
 
 [[unit]]
-text = "Any active key authenticates every API-key route (flag evaluation, tracking) as the user who created it; its scopes do not narrow that."
+text = "Any active key authenticates every SDK route (flag evaluation, tracking) as the user who created it; its scopes do not narrow that."
 by = [
     "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these",
     "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_every_route_under_the_sdk_prefix_requires_the_scope",
@@ -798,6 +798,13 @@ by = [
     "journey:api-key-first-assignment#ruleset-scope",
     "journey:api-key-first-assignment#assign",
     "journey:api-key-first-assignment#track",
+]
+
+[[unit]]
+text = "A key that carries the mcp:read scope can also list feature flags and experiments and read an experiment and its results, as the user who created it."
+by = [
+    "test:backend/tests/smoke/test_mcp_read_routes.py::test_the_mcp_read_routes_are_exactly_these",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_each_role_reads_the_four_operations_with_an_mcp_read_key",
 ]
 
 [[unit]]

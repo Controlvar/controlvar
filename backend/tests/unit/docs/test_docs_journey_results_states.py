@@ -18,8 +18,9 @@ can fail is pure, and is tested here, in the unit job:
 * every results read of an experiment comes after its traffic, so the
   five-minute results cache cannot hold an answer from before it (the two
   revenue experiments at the end are the fourth and fifth with traffic);
-* the key is refused on the management route and the ruleset between a call
-  that accepts it and its deletion, and each refusal's body is in the guide.
+* the key is refused on the management route (it has no ``mcp:read``) and the
+  ruleset between a call that accepts it and its deletion, and each refusal's
+  body is in the guide.
 
 Temporary files only; no network, no browser, no git.
 """
@@ -303,7 +304,7 @@ def test_the_refusals_come_while_the_key_is_valid():
     """Between an SDK call the key passes and the key's deletion."""
     steps = _steps("api-key-first-assignment")
     deleted = _index(steps, "confirm-delete")
-    for refusal, status in (("management-route", 401), ("ruleset-scope", 403)):
+    for refusal, status in (("management-route", 403), ("ruleset-scope", 403)):
         at = _index(steps, refusal)
         step = steps[at]
         assert _sends_the_key(step) and step["expect"]["status"] == status
@@ -319,12 +320,19 @@ def test_the_refusals_come_while_the_key_is_valid():
         assert accepted_before and accepted_after, refusal
 
 
-def test_the_management_route_takes_a_user_login_and_is_no_sdk_route():
+def test_the_management_route_needs_mcp_read_and_is_no_sdk_route():
+    """The step's route takes a user login, or a key with mcp:read (which the
+    journey's key, made with no scopes, does not carry); it is no SDK route.
+    The route set is pinned by backend/tests/smoke/test_mcp_read_routes.py."""
     step = _step(_steps("api-key-first-assignment"), "management-route")
-    path = step["do"]["api"]["path"]
-    assert path.startswith("/api/v1/experiments")
+    call = step["do"]["api"]
+    path = call["path"]
+    assert (call["method"], path) == ("GET", "/api/v1/experiments/")
     for sdk in ("/api/v1/tracking/", "/feature-flags/evaluate/", "/api/v1/sdk/"):
         assert sdk not in path
+    # The key the journey sends was created with no scopes.
+    create_form = _step(_steps("api-key-first-assignment"), "create-form")
+    assert "[checked=false]" in create_form["expect"]["aria"]
 
 
 @pytest.mark.parametrize(
