@@ -16,11 +16,13 @@ from pydantic import (
     Field,
     StringConstraints,
     ValidationError,
+    ValidationInfo,
     field_validator,
     model_validator,
 )
 from pydantic_core import InitErrorDetails, PydanticCustomError
 
+from backend.app.core.context_limits import nested_deeper_than
 from backend.app.schemas.storable_text import StorableTextModel
 
 #: The longest ``event_id`` an event may carry (#1543).
@@ -80,7 +82,7 @@ class EventFields(BaseModel):
 
     @field_validator("properties", "metadata", mode="before")
     @classmethod
-    def parse_json_string(cls, v: Any) -> Any:
+    def parse_json_string(cls, v: Any, info: ValidationInfo) -> Any:
         """Accept a JSON-encoded string for the free-form attribute fields."""
         if isinstance(v, str):
             import json
@@ -89,7 +91,41 @@ class EventFields(BaseModel):
                 return json.loads(v) if v.strip() else None
             except json.JSONDecodeError as exc:
                 raise ValueError(f"must be a JSON object: {exc}") from exc
+            except RecursionError:
+                # Nested past the parser's own limit: far past the depth
+                # limit, so the same refusal as any other over-deep value.
+                raise ValueError(
+                    f"{info.field_name} must not be nested more than "
+                    f"{EVENT_METADATA_MAX_DEPTH} levels deep"
+                ) from None
         return v
+
+
+#: The deepest an event's ``metadata`` / ``properties`` may nest (#1685). Every
+#: JSON object and array is a level, the attribute object itself the first, so
+#: ``{"a": {"b": 1}}`` is 2 levels. Far above any real attribute set, and far
+#: below the ~255 levels at which building the response overflowed the
+#: serialiser after the event was already stored.
+EVENT_METADATA_MAX_DEPTH = 64
+
+
+class BoundedEventMetadata(BaseModel):
+    """Refuses ``metadata`` / ``properties`` nested deeper than the limit.
+
+    For the schemas an event is built from before it is stored (``EventCreate``
+    and ``UntaggedEventCreate``), so the refusal comes before any write. The
+    message names the field and never the value.
+    """
+
+    @field_validator("properties", "metadata", mode="after", check_fields=False)
+    @classmethod
+    def _refuse_deep_metadata(cls, value: Any, info: ValidationInfo) -> Any:
+        if nested_deeper_than(value, EVENT_METADATA_MAX_DEPTH):
+            raise ValueError(
+                f"{info.field_name} must not be nested more than "
+                f"{EVENT_METADATA_MAX_DEPTH} levels deep"
+            )
+        return value
 
 
 class EventBase(EventFields):
@@ -103,13 +139,13 @@ class EventBase(EventFields):
         return self
 
 
-class EventCreate(StorableTextModel, EventBase):
+class EventCreate(StorableTextModel, BoundedEventMetadata, EventBase):
     """Model for creating a new event."""
 
     event_id: EventId = None
 
 
-class UntaggedEventCreate(StorableTextModel, EventFields):
+class UntaggedEventCreate(StorableTextModel, BoundedEventMetadata, EventFields):
     """An event that names no experiment and no flag (#217).
 
     ``/tracking/track`` and ``/tracking/batch`` build this one when the

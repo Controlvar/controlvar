@@ -926,6 +926,18 @@ by = [
 ]
 
 [[unit]]
+text = "POST /api/v1/tracking/track, POST /api/v1/tracking/batch, POST /api/v1/tracking/events | #1684, #1685 | An event timestamp at the very edge of the date range whose UTC offset moves it past 0001-01-01 or 9999-12-31 once converted to UTC (9999-12-31T23:59:59-01:00, 0001-01-01T00:00:00+01:00) is refused: /track and /events answer 422, and /batch reports the entry in errors; they answered 500 (\"Could not store the event\"), and /batch reported \"Could not store this event\". Event metadata (properties on /events) nested more than 64 levels deep, every JSON object and array a level and the object itself the first, is refused the same way, where it was stored and answered 200 on /batch and, from about 255 levels, answered 500 on /track and /events after the event was stored. In /batch one such entry is reported in errors and the others are stored. Nothing is stored for a refused event. The same edges with an offset that stays in range, and metadata at 64 levels or fewer, are stored as before. The OpenAPI document does not change. See Track Event."
+by = [
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_edge_timestamp_is_refused_and_nothing_is_stored",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_the_same_edges_in_range_are_still_stored",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_over_deep_metadata_is_refused_and_nothing_is_stored",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_metadata_at_the_limit_is_stored",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_one_over_deep_item_does_not_fail_its_batch",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "GET /api/v1/mcp/manifest | #1607 | The tool list is the Controlvar MCP server's: list_feature_flags, get_feature_flag, evaluate_feature_flag, list_experiments, get_experiment and get_experiment_results. It used to list five tools that no server offered: create_experiment, get_results, toggle_feature_flag, suggest_experiment and interpret_results. The response schema does not change, and name is still controlvar. The OpenAPI document changes only in this operation's description and the MCP tag's. See The MCP Server and the AI Endpoints."
 by = [
     "test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_the_manifest_lists_the_tools_the_mcp_server_offers",

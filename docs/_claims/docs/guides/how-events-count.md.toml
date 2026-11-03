@@ -320,8 +320,12 @@ by = [
 ]
 
 [[unit]]
-text = "Any timestamp is stored, however far in the past or the future."
-by = ["test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp"]
+text = "Any timestamp is stored, however far in the past or the future, with one exception: a value at the very edge of the date range whose UTC offset moves it past 0001-01-01 or 9999-12-31 (9999-12-31T23:59:59-01:00, say) is refused with 422, or reported in a batch's errors, and nothing is stored."
+by = [
+    "test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_edge_timestamp_is_refused_and_nothing_is_stored",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_the_same_edges_in_range_are_still_stored",
+]
 
 [[unit]]
 text = "GET /api/v1/results/{experiment_id} does not read it."
