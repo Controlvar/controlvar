@@ -175,6 +175,9 @@ DOCS_TESTS = (
     # Video 9's claims check (CLAIMS) holds a sentence to the pages of docs/
     # that state it, and imports no module it did not before.
     "backend/tests/unit/showcase/test_showcase_quoted_docs.py",
+    # The event contract's rules quote docs/guides/how-events-count.md and the
+    # pages beside it (#1544); reads the library as text, stdlib only.
+    "backend/tests/unit/ground_truth/test_contract_citations.py",
 )
 
 #: Python tests that name docs/ but are deliberately NOT in DOCS_TESTS.

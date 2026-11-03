@@ -147,9 +147,11 @@ jobs:
       # only bash and jq, and they live outside backend/tests/unit so that
       # core-build, which runs that directory, does not take their minutes.
       # On this full checkout nothing under any of these directories skips.
-      # The SMTP certificate tests must also run.
+      # The SMTP certificate tests must also run, and so must the ground-truth
+      # library's gates (backend/tests/unit/ground_truth, #1544): a skipped
+      # cross-check would pass the library's answers unchecked.
       - name: No required test was skipped
-        run: python3 scripts/check_junit_skips.py unit-junit.xml backend/tests/unit/infrastructure backend/tests/unit/stats_validation backend/tests/realistic backend/tests/unit/showcase backend/tests/unit/docs backend/tests/installer_sweeps backend/tests/unit/services/test_email_notifier_tls
+        run: python3 scripts/check_junit_skips.py unit-junit.xml backend/tests/unit/infrastructure backend/tests/unit/stats_validation backend/tests/realistic backend/tests/unit/showcase backend/tests/unit/docs backend/tests/installer_sweeps backend/tests/unit/services/test_email_notifier_tls backend/tests/unit/ground_truth
 
       # The Lambda functions (event processor, flag evaluation) and their
       # shared package carry tests of their own (240 collected) that ran
@@ -653,6 +655,7 @@ jobs:
           backend/tests/unit/db/test_alembic_plan.py
           modules/backend/tests/unit/services/test_sso_docs_messages.py
           backend/tests/unit/showcase/test_showcase_quoted_docs.py
+          backend/tests/unit/ground_truth/test_contract_citations.py
 
       # On a docs-only change this is where the docs tests run, Unit Tests
       # being skipped, so a docs test that skipped would read as a pass on
