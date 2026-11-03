@@ -487,26 +487,36 @@ GEO_UNITS = frozenset(
 # answers 422, which is loud, not silent.
 
 
+def _date_or_none(value: Any) -> Optional[datetime]:
+    """``value`` read as a date the way ``before``, ``after`` and ``between``'s
+    date path read a rule's value, or ``None`` where that fails.
+
+    Text is read with ``datetime.fromisoformat`` once every ``Z`` is
+    ``+00:00``, and a number (a boolean is one) with
+    ``datetime.fromtimestamp``. Anything else is not a date. A timestamp no
+    date can hold raises, and the exception depends on its size; all of them
+    are caught here.
+    """
+    try:
+        if isinstance(value, str):
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if isinstance(value, (int, float)):
+            return datetime.fromtimestamp(value)
+    except (ValueError, TypeError, OverflowError, OSError):
+        return None
+    return value if isinstance(value, datetime) else None
+
+
 def date_value_readable(value: Any) -> bool:
     """Whether ``before`` and ``after`` read ``value`` as a date.
 
     The branch reads text with ``datetime.fromisoformat`` once every ``Z`` is
     ``+00:00``, and a number (a boolean is one) with
-    ``datetime.fromtimestamp``. Anything else is not a date. A timestamp no
-    date can hold raises, and the exception depends on its size; all of them
-    are caught here. If the branch came to read more (another format), this
-    would still refuse it, and the value tests would not say so.
+    ``datetime.fromtimestamp`` (``_date_or_none``). Anything else is not a
+    date. If the branch came to read more (another format), this would still
+    refuse it, and the value tests would not say so.
     """
-    try:
-        if isinstance(value, str):
-            datetime.fromisoformat(value.replace("Z", "+00:00"))
-        elif isinstance(value, (int, float)):
-            datetime.fromtimestamp(value)
-        elif not isinstance(value, datetime):
-            return False
-    except (ValueError, TypeError, OverflowError, OSError):
-        return False
-    return True
+    return _date_or_none(value) is not None
 
 
 def length_value_readable(value: Any) -> bool:
@@ -577,6 +587,60 @@ def percentage_value_readable(value: Any) -> bool:
     except (ValueError, TypeError, OverflowError):
         return False
     return not math.isnan(number)
+
+
+def _between_numeric(value: Any) -> bool:
+    """Whether ``between``'s numeric path takes ``value``: a number (a boolean
+    is one), or text of digits with at most one dot."""
+    return isinstance(value, (int, float)) or (
+        isinstance(value, str) and value.replace(".", "", 1).isdigit()
+    )
+
+
+def _has_time_zone(moment: datetime) -> bool:
+    return moment.tzinfo is not None and moment.utcoffset() is not None
+
+
+def between_bounds_problem(lower: Any, upper: Any) -> Optional[str]:
+    """Why ``between`` cannot read the bounds ``lower`` (``value``) and
+    ``upper`` (``additional_value``) whatever the user's value is, or
+    ``None`` when it can (#1666).
+
+    The branch takes its numeric path when the user's value and both bounds
+    are numbers (a boolean is one) or text of digits with at most one dot,
+    and its date path otherwise. The user's value decides, so the bounds are
+    readable when either path reads both of them:
+
+    * the numeric path, when each bound is so spelt, ``float()`` reads it and
+      it is not NaN, which no comparison holds for. Infinity is read, so
+      ``-inf`` to ``65`` is a range open at one end;
+    * the date path, which reads each bound as ``before`` and ``after`` read
+      a value (``_date_or_none``), and compares the user's date with both:
+      a date with a time zone and one without cannot be compared, so when
+      exactly one bound has a zone no date is ever between them.
+
+    Answers ``"value"`` when neither path reads ``lower``, then
+    ``"additional_value"`` for ``upper``, then ``"time zone"``. A lower bound
+    above the upper one is readable: the range is empty, like a 0% rollout.
+    A ``None`` ``additional_value`` never gets here (the ``Condition`` model
+    refuses it). Like the predicates above, this catches the branch reading
+    less, not more.
+    """
+    if _between_numeric(lower) and _between_numeric(upper):
+        try:
+            if not math.isnan(float(lower)) and not math.isnan(float(upper)):
+                return None
+        except (ValueError, TypeError, OverflowError):
+            pass
+    lower_date = _date_or_none(lower)
+    if lower_date is None:
+        return "value"
+    upper_date = _date_or_none(upper)
+    if upper_date is None:
+        return "additional_value"
+    if _has_time_zone(lower_date) != _has_time_zone(upper_date):
+        return "time zone"
+    return None
 
 
 def apply_operator(

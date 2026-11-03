@@ -10,7 +10,8 @@ it never matches it:
   flags, experiments and segments;
 * in the native shape, a ``time_window`` that ``rules_engine.check_time_window``
   cannot read, such as one given only as ``start`` and ``end`` (plan D211,
-  ruling 1). The dashboard shape is not checked.
+  ruling 1). Since #1669 a dashboard window is checked too, on the converted
+  window, with its own reason (``test_targeting_values.py``).
 
 The words the engine reads are taken from its source here (``ENGINE_WORDS``),
 not from the constants the write path uses, so the tests below hold the
@@ -110,6 +111,12 @@ UNIT = "unknown distance unit; use km, mi or m, or leave it out for km"
 WINDOW = (
     "unreadable time window; see the time_window example on the Targeting Rules: "
     "Operator Reference page"
+)
+# Plan D211 v1.4-B3-1666's reason for a dashboard window (#1669), verbatim.
+DASHBOARD_WINDOW = (
+    "unreadable time window; give start and end as HH:MM such as 09:00 and 17:00, "
+    "days as numbers 0 to 6, start_date and end_date as YYYY-MM-DD in order, a "
+    "timezone as a name such as Europe/Paris"
 )
 
 FLAG, EXPERIMENT, SEGMENT = "flag", "experiment", "segment"
@@ -421,6 +428,19 @@ REFUSED: Dict[str, Tuple[FrozenSet[str], Any, str]] = {
         ),
         f"default_rule.rule.conditions[0].value: {WINDOW}",
     ),
+    # Accepted until #1669, then abandoned when it was evaluated; refused now
+    # with the dashboard's own reason (test_targeting_values.py has the rest).
+    "dashboard time_window ISO": (
+        frozenset({FLAG, EXPERIMENT, SEGMENT}),
+        dashboard(
+            {
+                "attribute": "t",
+                "operator": "time_window",
+                "value": {"start": "2024-01-01T09:00:00", "end": "2024-01-31T17:00:00"},
+            }
+        ),
+        f"groups[0].conditions[0].value: {DASHBOARD_WINDOW}",
+    ),
 }
 
 
@@ -525,8 +545,9 @@ ACCEPTED: Dict[str, Tuple[FrozenSet[str], Any]] = {
             ),
         )
     },
-    # (1j) The dashboard shape is not checked: its {"start", "end"} window is
-    # what the builder saves and what the vectors' op-time-window stores.
+    # (1j) The dashboard {"start", "end"} window of HH:MM times is what the
+    # builder saves and what the vectors' op-time-window stores; the engine
+    # reads it, so the check of #1669 accepts it.
     "dashboard time_window HH:MM": (
         frozenset({FLAG, EXPERIMENT, SEGMENT}),
         dashboard(
@@ -534,18 +555,6 @@ ACCEPTED: Dict[str, Tuple[FrozenSet[str], Any]] = {
                 "attribute": "t",
                 "operator": "time_window",
                 "value": {"start": "09:00", "end": "17:00"},
-            }
-        ),
-    ),
-    # Not checked either (ruling 1: the dashboard shape is not touched); it is
-    # still abandoned when it is evaluated, as the reference page says.
-    "dashboard time_window ISO": (
-        frozenset({FLAG, EXPERIMENT, SEGMENT}),
-        dashboard(
-            {
-                "attribute": "t",
-                "operator": "time_window",
-                "value": {"start": "2024-01-01T09:00:00", "end": "2024-01-31T17:00:00"},
             }
         ),
     ),
@@ -594,8 +603,8 @@ def test_the_reference_pages_example_window_is_accepted(kind):
 
 def test_the_reasons_are_the_plans():
     """The write path's constants are plan D211's text, verbatim (EMD-1), the
-    values' reasons (#1525, #1526: plan v1.4-B3, test_targeting_values.py)
-    first."""
+    values' reasons (#1525, #1526: plan v1.4-B3; #1666, #1669: its addendum;
+    test_targeting_values.py) first."""
     from backend.tests.unit.core import test_targeting_values as values
 
     assert targeting_adapter.VOCABULARY_REASONS == (
@@ -607,6 +616,9 @@ def test_the_reasons_are_the_plans():
         values.PERCENTAGE,
         values.NUMBER,
         values.DASH_COMPARISON,
+        values.BETWEEN_VALUE,
+        values.BETWEEN_ZONE,
+        values.DASH_WINDOW,
         NOT_ON_FLAGS,
         VERSION,
         LENGTH,
@@ -1018,6 +1030,12 @@ def test_the_walker_is_called_from_write_paths_only():
     assert _callers("check_segment_vocabulary") == {
         ("backend/app/schemas/segment.py", "_checked_segment_rules"),
         ("backend/scripts/check_targeting_rules.py", "segment_finding_for"),
+    }
+    # #1672: the OverflowError of the shape step is answered by the two
+    # write-only callers, around that step alone, never by a read gate.
+    assert _callers("overflow_refusal") == {
+        (adapter, "_validate_targeting"),
+        ("backend/app/schemas/segment.py", "_checked_segment_rules"),
     }
     # _validate_targeting runs only for the request schemas (the wizard
     # launch builds an ExperimentCreate) and the check script.

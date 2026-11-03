@@ -541,6 +541,114 @@ def test_a_segment_with_a_comparison_or_a_negative_radius_has_a_line_without_not
     )
 
 
+# --- #1666, #1669, #1672, #1673 (plan D211 v1.4-B3-1666) ----------------------
+
+HUGE = 10**400
+BETWEEN_TEXT = {
+    "attribute": "age",
+    "operator": "between",
+    "value": "-5",
+    "additional_value": 5,
+}
+BETWEEN_ZONE = {
+    "attribute": "signup",
+    "operator": "between",
+    "value": 18,
+    "additional_value": "2030-01-01T00:00:00Z",
+}
+WINDOW_9AM = {
+    "attribute": "now",
+    "operator": "time_window",
+    "value": {"start": "9am", "end": "5pm"},
+}
+GEO_HUGE = {
+    "attribute": "loc",
+    "operator": "geo_within_radius",
+    "value": {"lat": 37.7749, "lon": -122.4194, "radius": HUGE},
+}
+NATIVE_GEO_HUGE = {
+    "attribute": "loc",
+    "operator": "geo_distance",
+    "value": [HUGE, -122.4194],
+    "additional_value": 10,
+}
+GT_HUGE = {"attribute": "age", "operator": "greater_than", "value": HUGE}
+BETWEEN_VALUE_REASON = (
+    "not a number or a date; between needs two numbers such as 18 and 65 (text "
+    "must be digits, with at most one dot), or two dates, each ISO 8601 such as "
+    "2030-01-31 or a Unix timestamp in seconds"
+)
+WINDOW_REASON = (
+    "unreadable time window; give start and end as HH:MM such as 09:00 and 17:00, "
+    "days as numbers 0 to 6, start_date and end_date as YYYY-MM-DD in order, a "
+    "timezone as a name such as Europe/Paris"
+)
+
+
+@pytest.mark.regression
+def test_a_flag_with_a_between_a_window_or_a_number_too_large_has_a_line():
+    """(V8, W6, Z5) The API's own path and reason. A geo number too large for
+    a float gets a precise line, where it was "could not be checked"."""
+    rows = [
+        ("id-1", "ages", _native({"operator": "and", "conditions": [BETWEEN_TEXT]})),
+        ("id-2", "hours", _dash(US, WINDOW_9AM)),
+        ("id-3", "far", _dash(US, GEO_HUGE)),
+        ("id-4", "old", _dash(US, GT_HUGE)),
+    ]
+    assert [f.line() for f in check.findings_for(rows)] == [
+        f"feature_flag\tid-1\tages\t{_AT}.value\t{BETWEEN_VALUE_REASON}",
+        f"feature_flag\tid-2\thours\tgroups[0].conditions[1].value\t{WINDOW_REASON}",
+        "feature_flag\tid-3\tfar\tgroups[0].conditions[1].value\tvalue is not valid "
+        "for the operator",
+        "feature_flag\tid-4\told\tgroups[0].conditions[1].value\tnot a number; use a "
+        "number such as 5",
+    ]
+
+
+@pytest.mark.regression
+def test_an_experiment_with_a_between_zone_or_a_native_geo_number_too_large_has_a_line():
+    rows = [
+        (
+            "e-1",
+            "k1",
+            "ACTIVE",
+            _native({"operator": "and", "conditions": [BETWEEN_ZONE]}),
+        ),
+        (
+            "e-2",
+            "k2",
+            "DRAFT",
+            _native({"operator": "and", "conditions": [NATIVE_GEO_HUGE]}),
+        ),
+    ]
+    assert [f.line() for f in check.experiment_findings_for(rows)] == [
+        f"experiment\te-1\tk1\tACTIVE\t{_AT}.additional_value\tone bound has a time "
+        "zone and the other does not, so no date is ever between them; give both a "
+        "zone, such as Z, or neither (a Unix timestamp has none)",
+        f"experiment\te-2\tk2\tDRAFT\t{_AT}\tnot valid",
+    ]
+
+
+@pytest.mark.regression
+def test_a_segment_with_an_unreadable_window_has_a_line_without_not_valid():
+    """(W6) Still evaluated (the window abandons it, as before), so not "rules
+    not valid": a save now refuses it."""
+    found = check.segment_finding_for("id", "Office hours", _dash(US, WINDOW_9AM))
+    assert found.line() == (
+        f"segment\tid\tOffice hours\tgroups[0].conditions[1].value\t{WINDOW_REASON}"
+    )
+
+
+def test_a_segment_with_a_geo_number_too_large_still_could_not_be_checked():
+    """The script reads segments through ``validate_segment_rules``, which
+    this change leaves alone (it also gates reads), so that line is as it
+    was; the segment schema answers 422 for such a value."""
+    found = check.segment_finding_for("id", "Far", _dash(US, GEO_HUGE))
+    assert (
+        found.line() == "segment\tid\tFar\trules\trules not valid: could not be checked"
+    )
+
+
 @pytest.mark.regression
 def test_an_unreadable_database_exits_2(monkeypatch, capsys):
     """Not 0: a report that cannot read the database must not look clean."""

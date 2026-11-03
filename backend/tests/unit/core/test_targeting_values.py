@@ -13,6 +13,15 @@ that carries a comparison is refused too: the converter drops it, so the rule
 means "within the radius" whatever it says. A readable value whose range is
 empty (a length below 0, a percentage of 0) stays accepted.
 
+Plan D211 v1.4-B3-1666 (PR-3) adds: a native ``between`` whose bounds neither
+of its paths can read, or two dates only one of which has a time zone
+(#1666); a dashboard ``time_window`` the engine cannot read, judged on the
+converted window (#1669); a geo coordinate, or a dashboard radius, holding an
+integer too large for a float, which answered 500 (#1672); and a dashboard
+``greater_than``, ``greater_than_or_equal``, ``less_than`` or
+``less_than_or_equal`` value that is such an integer, or NaN (#1673). The
+groups, rows and guards below carry them (V1-V7, W1-W4, Z1-Z4).
+
 Pinned, without a database:
 
 * (B1) every value of the corpus below, for each operator and kind it applies
@@ -41,6 +50,7 @@ import hashlib
 import uuid
 from types import SimpleNamespace
 from typing import Any, Callable, Dict, FrozenSet, List, NamedTuple, Optional, Tuple
+from unittest import mock
 from unittest.mock import MagicMock, Mock
 
 import pytest
@@ -57,14 +67,17 @@ from backend.app.core.targeting_adapter import (
     match_targeting_rule,
     validate_segment_rules,
 )
+from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.models.segment import SegmentStatus
 from backend.app.schemas.experiment import ExperimentCreate
 from backend.app.schemas.feature_flag import FeatureFlagCreate
 from backend.app.schemas.segment import SegmentCreate
 from backend.app.schemas.targeting_rule import TargetingRules
-from backend.app.services import segment_membership
+from backend.app.services import feature_flag_service, segment_membership
 from backend.app.services.assignment_service import AssignmentService
+from backend.app.services.feature_flag_service import FeatureFlagService
 from backend.app.services.rules_evaluation_service import RulesEvaluationService
+from backend.app.services.sdk_ruleset import build_flag_entry
 from backend.tests.unit.core.test_targeting_vocabulary import (
     DASH_US,
     DISTANCE,
@@ -106,6 +119,24 @@ DASH_COMPARISON = (
     "comparison is not read in the dashboard shape, so the rule would mean within "
     "the radius; to use gt, lt, gte or eq, write the rule in the native shape"
 )
+# Plan D211 v1.4-B3-1666's texts (#1666, #1669), verbatim.
+BETWEEN_VALUE = (
+    "not a number or a date; between needs two numbers such as 18 and 65 (text "
+    "must be digits, with at most one dot), or two dates, each ISO 8601 such as "
+    "2030-01-31 or a Unix timestamp in seconds"
+)
+BETWEEN_ZONE = (
+    "one bound has a time zone and the other does not, so no date is ever between "
+    "them; give both a zone, such as Z, or neither (a Unix timestamp has none)"
+)
+DASH_WINDOW = (
+    "unreadable time window; give start and end as HH:MM such as 09:00 and 17:00, "
+    "days as numbers 0 to 6, start_date and end_date as YYYY-MM-DD in order, a "
+    "timezone as a name such as Europe/Paris"
+)
+#: The converter's answer for a dashboard value it cannot read; #1672 gives an
+#: integer too large for a float the same answer.
+DASH_NOT_VALID = "value is not valid for the operator"
 
 ALL_KINDS = frozenset({FLAG, EXPERIMENT, SEGMENT})
 NAN, INF = float("nan"), float("inf")
@@ -125,6 +156,16 @@ def dash_geo(value: Any, attribute: str = "a") -> Dict[str, Any]:
 def at_sf(radius: Any, **more: Any) -> Dict[str, Any]:
     """The dashboard object form of a point at ``SF``."""
     return {"lat": SF[0], "lon": SF[1], "radius": radius, **more}
+
+
+def dash_number(operator: str, value: Any) -> Dict[str, Any]:
+    """A dashboard number comparison on ``a`` (#1673)."""
+    return {"attribute": "a", "operator": operator, "value": value}
+
+
+def dash_window(value: Any) -> Dict[str, Any]:
+    """A dashboard ``time_window`` on ``t`` (#1669)."""
+    return {"attribute": "t", "operator": "time_window", "value": value}
 
 
 def _show(value: Any) -> str:
@@ -150,6 +191,15 @@ LENGTH_WITNESSES = [{"a": [0] * n} for n in range(13)]
 GEO_WITNESSES = [{"a": SF}, {"a": OAK}, {"a": FAR}]
 NUMBER_WITNESSES = [
     {"a": n} for n in (-1e9, -100, -5.5, -5, 0, 0.5, 1, 5, 5.5, 10, 1000, 1e9)
+]
+#: between reads a number or a date (#1666): the numbers above; 30 and its
+#: digit text, inside 18 to 65; and an ISO date, naive and aware, inside 2020
+#: to 2030.
+BETWEEN_WITNESSES = NUMBER_WITNESSES + [
+    {"a": 30},
+    {"a": "30"},
+    {"a": "2025-06-01T00:00:00"},
+    {"a": "2025-06-01T00:00:00+00:00"},
 ]
 
 
@@ -344,6 +394,91 @@ NUMBERS = (
     (5, 5.5, -5, 0, "5", " 5 ", "5.0", "1e3", "1_0", True),
     ("abc", "", "nan", "five", NAN, None, [5], {}, {"n": 5}, HUGE),
 )
+#: (#1666) ``(value, additional_value)``, at least one accepted pair per
+#: input form (PE-B3-7): numbers, digit text (``"18"`` to ``"65"``, which the
+#: engine-side plant needs, PE-B3P3-6), a float and its text, a boolean, a
+#: range open at one end, a 400-digit text (read as infinity), a numeric
+#: range with a bound no date holds (F2: accepted), a non-ASCII digit, ISO
+#: dates naive and aware, and a number beside a naive date (Unix time, S13).
+BETWEENS = (
+    (
+        (-5, 5),
+        (18, 65),
+        ("18", "65"),
+        (18.5, "65.5"),
+        (".5", 1000),
+        (True, 5),
+        (-INF, 65),
+        (18, INF),
+        (0, "1" * 400),
+        (0, 1e20),
+        (0, 1e17),
+        (0, 1e12),
+        ("٣", 65),
+        ("2020-01-01", "2030-01-01"),
+        ("2020-01-01T00:00:00Z", "2030-01-01T00:00:00+00:00"),
+        (18, "2030-01-01"),
+        (1700000000, "2030-01-01"),
+        (1.6e9, 1.8e9),
+    ),
+    # The addendum's refused rows and spellings. Against a date, 1e12, -1e12,
+    # 1e17 and 1e20 are timestamps no date holds (PE-B3-6).
+    (
+        ("-5", 5),
+        ("18", "2030-01-01"),
+        (18, "2030-01-01T00:00:00Z"),
+        ("2030-01-01T00:00:00Z", "2031-01-01"),
+        (None, 5),
+        (NAN, 5),
+        (5, NAN),
+        ("nan", 5),
+        (-INF, "2030-01-01"),
+        ("inf", 65),
+        (HUGE, 5),
+        (0, HUGE),
+        (1e20, "2030-01-01"),
+        (1e17, "2030-01-01"),
+        (1e12, "2030-01-01"),
+        (-1e12, "2030-01-01"),
+        ("2030-13-01", "2031-01-01"),
+        ("2020-01-01", "next year"),
+        *(
+            (spelling, 65)
+            for spelling in (
+                " 18",
+                "+5",
+                "1e3",
+                "1_0",
+                "1.2.3",
+                "",
+                "abc",
+                [18],
+                {"n": 18},
+                "²",
+            )
+        ),
+    ),
+)
+#: (#1673) A dashboard number comparison, read on the converted value. An
+#: integer too large for a float and NaN pass the converter and are refused;
+#: text that is not a number, ``null`` and a boolean stay the converter's
+#: refusal. Every accepted value is the bound of a range some number is in;
+#: infinity and a 400-digit text (read as infinity) where no number is, such
+#: as ``greater_than`` infinity, are accepted and pinned in EMPTY_OR_EDGE.
+DASH_NUMBERS_BELOW = (
+    (18, "18", 18.5, " 18 ", INF, "1" * 400),
+    (HUGE, -HUGE, NAN, "abc", None, True),
+)
+DASH_NUMBERS_ABOVE = (
+    (18, "18", 18.5, " 18 ", -INF, "-" + "1" * 400),
+    (HUGE, -HUGE, NAN, "abc", None, True),
+)
+DASH_NUMBER_OPERATORS = (
+    "greater_than",
+    "greater_than_or_equal",
+    "less_than",
+    "less_than_or_equal",
+)
 
 
 def _groups() -> Dict[str, Group]:
@@ -389,6 +524,23 @@ def _groups() -> Dict[str, Group]:
             lambda v, o=operator: native(cond(o, v)),
             NUMBER_WITNESSES,
             *NUMBERS,
+        )
+    groups["between"] = Group(
+        frozenset(NATIVE_KINDS),
+        lambda v: native(cond("between", v[0], v[1])),
+        BETWEEN_WITNESSES,
+        *BETWEENS,
+    )
+    for operator in DASH_NUMBER_OPERATORS:
+        groups[f"dashboard {operator}"] = Group(
+            ALL_KINDS,
+            lambda v, o=operator: dashboard(dash_number(o, v)),
+            NUMBER_WITNESSES,
+            *(
+                DASH_NUMBERS_ABOVE
+                if operator.startswith("greater")
+                else DASH_NUMBERS_BELOW
+            ),
         )
     return groups
 
@@ -479,6 +631,12 @@ CORPUS_SIZE = {
     **{("geo_within_radius radius", k): (12, 13) for k in sorted(ALL_KINDS)},
     ("percentage_bucket", EXPERIMENT): (11, 9),
     **{(o, k): (10, 10) for o in ("gt", "gte", "lt", "lte") for k in NATIVE_KINDS},
+    **{("between", k): (18, 28) for k in NATIVE_KINDS},
+    **{
+        (f"dashboard {o}", k): (6, 6)
+        for o in DASH_NUMBER_OPERATORS
+        for k in sorted(ALL_KINDS)
+    },
 }
 
 
@@ -562,6 +720,22 @@ def _three_groups(geo_value: Any) -> Dict[str, Any]:
             },
         ],
     }
+
+
+def _second_group(condition: Dict[str, Any]) -> Dict[str, Any]:
+    """``condition`` at ``groups[1].conditions[1]``, in a ``NOT`` group."""
+    return {
+        "logical_operator": "OR",
+        "groups": [
+            {"conditions": [DASH_US]},
+            {"logical_operator": "NOT", "conditions": [DASH_US, condition]},
+        ],
+    }
+
+
+def _geo_at(point: List[Any]) -> Dict[str, Any]:
+    """A native ``geo_distance`` condition around ``point``, radius 10."""
+    return cond("geo_distance", point, 10)
 
 
 NATIVE = frozenset(NATIVE_KINDS)
@@ -727,6 +901,143 @@ VALUE_REFUSED: Dict[str, Tuple[FrozenSet[str], Any, str]] = {
         dashboard(dash_geo({"lat": SF[0], "lon": SF[1]})),
         "groups[0].conditions[0].value: value is not valid for the operator",
     ),
+    # (V3, #1666) between, at either bound, with the zone text at
+    # additional_value; inside NOT and default_rule.
+    "between text '-5' and 5": (
+        NATIVE,
+        native(US, cond("between", "-5", 5)),
+        f"{_RULE}.conditions[1].value: {BETWEEN_VALUE}",
+    ),
+    "between 0 and 10**400": (
+        NATIVE,
+        native(cond("between", 0, HUGE)),
+        f"{_FIRST}.additional_value: {BETWEEN_VALUE}",
+    ),
+    "between a number and an aware date": (
+        NATIVE,
+        native(cond("between", 18, "2030-01-01T00:00:00Z")),
+        f"{_FIRST}.additional_value: {BETWEEN_ZONE}",
+    ),
+    "between null and 5, inside NOT": (
+        NATIVE,
+        _in_not(cond("between", None, 5)),
+        f"{_RULE}.groups[0].conditions[0].value: {BETWEEN_VALUE}",
+    ),
+    "between an aware and a naive date, in default_rule": (
+        NATIVE,
+        _in_default_rule(cond("between", "2030-01-01T00:00:00Z", "2031-01-01")),
+        f"default_rule.rule.conditions[0].additional_value: {BETWEEN_ZONE}",
+    ),
+    # A missing or null additional_value is refused by the Condition model
+    # first, as before (PE-B3-4).
+    "between without additional_value": (
+        NATIVE,
+        native(cond("between", 18)),
+        f"{_FIRST}: not valid",
+    ),
+    "between with a null additional_value": (
+        NATIVE,
+        native(cond("between", 18, None)),
+        f"{_FIRST}: not valid",
+    ),
+    # (#1673) A dashboard number comparison, at the condition's value.
+    "dashboard greater_than 10**400": (
+        ALL_KINDS,
+        dashboard(dash_number("greater_than", HUGE)),
+        f"groups[0].conditions[0].value: {NUMBER}",
+    ),
+    "dashboard greater_than_or_equal -10**400, second condition": (
+        ALL_KINDS,
+        dashboard(DASH_US, dash_number("greater_than_or_equal", -HUGE)),
+        f"groups[0].conditions[1].value: {NUMBER}",
+    ),
+    "dashboard less_than_or_equal NaN at groups[1].conditions[1], in a NOT group": (
+        ALL_KINDS,
+        _second_group(dash_number("less_than_or_equal", NAN)),
+        f"groups[1].conditions[1].value: {NUMBER}",
+    ),
+    # (Z2, #1672) An integer too large for a float in a geo condition gets the
+    # answer a value that is not a number gets at that place.
+    "dashboard radius 10**400": (
+        ALL_KINDS,
+        dashboard(dash_geo(at_sf(HUGE))),
+        f"groups[0].conditions[0].value: {DASH_NOT_VALID}",
+    ),
+    "dashboard latitude 10**400 in a list, second condition": (
+        ALL_KINDS,
+        dashboard(DASH_US, dash_geo([HUGE, SF[1], 10])),
+        f"groups[0].conditions[1].value: {DASH_NOT_VALID}",
+    ),
+    "dashboard lng -10**400 at groups[1].conditions[1], in a NOT group": (
+        ALL_KINDS,
+        _second_group(dash_geo({"lat": SF[0], "lng": -HUGE, "radius": 10})),
+        f"groups[1].conditions[1].value: {DASH_NOT_VALID}",
+    ),
+    "native latitude 10**400": (
+        NATIVE,
+        native(_geo_at([HUGE, SF[1]])),
+        f"{_FIRST}: not valid",
+    ),
+    "native longitude -10**400, second condition": (
+        NATIVE,
+        native(US, _geo_at([SF[0], -HUGE])),
+        f"{_RULE}.conditions[1]: not valid",
+    ),
+    "native latitude 10**400 in a nested group": (
+        NATIVE,
+        native(
+            US, groups=[{"operator": "and", "conditions": [US, _geo_at([HUGE, 0])]}]
+        ),
+        f"{_RULE}.groups[0].conditions[1]: not valid",
+    ),
+    "native latitude 10**400, inside NOT": (
+        NATIVE,
+        _in_not(_geo_at([HUGE, SF[1]])),
+        f"{_RULE}.groups[0].conditions[0]: not valid",
+    ),
+    "native latitude 10**400, in default_rule": (
+        NATIVE,
+        _in_default_rule(_geo_at([HUGE, SF[1]])),
+        "default_rule.rule.conditions[0]: not valid",
+    ),
+    # PE-B3P3-2: the first condition, in document order, that cannot be read.
+    # In the native shape that is the one the model refuses, before the one
+    # that overflows; the dashboard converter stops at the first either way.
+    "native latitude 'abc' then 10**400": (
+        NATIVE,
+        native(_geo_at(["abc", SF[1]]), _geo_at([HUGE, SF[1]])),
+        f"{_FIRST}: not valid",
+    ),
+    "native latitude 10**400 then 'abc'": (
+        NATIVE,
+        native(_geo_at([HUGE, SF[1]]), _geo_at(["abc", SF[1]])),
+        f"{_FIRST}: not valid",
+    ),
+    "dashboard radius 'abc' then 10**400": (
+        ALL_KINDS,
+        dashboard(dash_geo(at_sf("abc")), dash_geo(at_sf(HUGE))),
+        f"groups[0].conditions[0].value: {DASH_NOT_VALID}",
+    ),
+    "dashboard radius 10**400 then 'abc'": (
+        ALL_KINDS,
+        dashboard(dash_geo(at_sf(HUGE)), dash_geo(at_sf("abc"))),
+        f"groups[0].conditions[0].value: {DASH_NOT_VALID}",
+    ),
+    # (W3, #1669) A window the converter refuses keeps its answer: the
+    # converter comes before the window check.
+    **{
+        f"dashboard time_window {name}, refused by the converter": (
+            ALL_KINDS,
+            dashboard(DASH_US, dash_window(window)),
+            f"groups[0].conditions[1].value: {DASH_NOT_VALID}",
+        )
+        for name, window in (
+            ("days only", {"days": [0, 1]}),
+            ("dates only", {"start_date": "2024-01-01", "end_date": "2024-01-31"}),
+            ("days and a timezone", {"days": [0], "timezone": "Europe/Paris"}),
+            ("text that is not JSON", "9am-5pm"),
+        )
+    },
 }
 
 
@@ -783,6 +1094,13 @@ ECHO = [
         dashboard(dash_geo(f"{SF_TEXT},10,km,{SECRET}")),
         "groups[0].conditions[0].value",
     ),
+    (NATIVE, native(cond("between", SECRET, 65)), f"{_FIRST}.value"),
+    (NATIVE, native(cond("between", 18, SECRET)), f"{_FIRST}.additional_value"),
+    (
+        ALL_KINDS,
+        dashboard(dash_window({"start": SECRET, "end": SECRET})),
+        "groups[0].conditions[0].value",
+    ),
 ]
 
 
@@ -812,9 +1130,20 @@ def test_the_reasons_are_one_line_of_at_most_200_characters():
         PERCENTAGE,
         NUMBER,
         DASH_COMPARISON,
+        BETWEEN_VALUE,
+        BETWEEN_ZONE,
+        DASH_WINDOW,
     ):
         assert reason in targeting_adapter.VOCABULARY_REASONS
         assert "\n" not in reason and len(reason) <= 200, reason
+
+
+def test_the_new_texts_are_the_addendums():
+    """(X3) PR-3's three texts are in ``VALUE_REASONS``, and their lengths are
+    the addendum's: 190, 150 and 190 characters."""
+    texts = (BETWEEN_VALUE, BETWEEN_ZONE, DASH_WINDOW)
+    assert targeting_adapter.VALUE_REASONS[-3:] == texts
+    assert [len(text) for text in texts] == [190, 150, 190]
 
 
 # ---------------------------------------------------------------------------
@@ -965,6 +1294,57 @@ EMPTY_OR_EDGE: Dict[str, Tuple[FrozenSet[str], Any, Optional[List[Dict]]]] = {
         native(cond("time_window", {"start": "x", "end": "y", "days": []})),
         [{"a": "2024-01-10T12:00:00"}, {"a": "2024-01-13T12:00:00"}],
     ),
+    # (V4, #1666) A between whose lower bound is above the upper one.
+    "between 65 and 18": (
+        NATIVE,
+        native(cond("between", 65, 18)),
+        BETWEEN_WITNESSES,
+    ),
+    "between reversed dates": (
+        NATIVE,
+        native(cond("between", "2030-01-01", "2020-01-01")),
+        BETWEEN_WITNESSES,
+    ),
+    # (#1669) The dashboard window of days [] is readable and open on no day.
+    "dashboard time_window days []": (
+        ALL_KINDS,
+        dashboard(dash_window({"start": "09:00", "end": "17:00", "days": []})),
+        [{"t": "2024-01-10T12:00:00"}, {"t": "2024-01-13T12:00:00"}],
+    ),
+    # (#1673) Infinity, and a 400-digit text the converter reads as infinity,
+    # are accepted on all four dashboard comparisons; where no number is in
+    # the range they hold for no witness, and greater_than_or_equal infinity
+    # (less_than_or_equal -infinity) holds only for an infinite attribute.
+    "dashboard greater_than infinity": (
+        ALL_KINDS,
+        dashboard(dash_number("greater_than", INF)),
+        NUMBER_WITNESSES,
+    ),
+    "dashboard greater_than a 400-digit text": (
+        ALL_KINDS,
+        dashboard(dash_number("greater_than", "1" * 400)),
+        NUMBER_WITNESSES,
+    ),
+    "dashboard less_than -infinity": (
+        ALL_KINDS,
+        dashboard(dash_number("less_than", -INF)),
+        NUMBER_WITNESSES,
+    ),
+    "dashboard greater_than_or_equal infinity": (
+        ALL_KINDS,
+        dashboard(dash_number("greater_than_or_equal", INF)),
+        None,
+    ),
+    "dashboard greater_than_or_equal a 400-digit text": (
+        ALL_KINDS,
+        dashboard(dash_number("greater_than_or_equal", "1" * 400)),
+        None,
+    ),
+    "dashboard less_than_or_equal -infinity": (
+        ALL_KINDS,
+        dashboard(dash_number("less_than_or_equal", -INF)),
+        None,
+    ),
 }
 
 
@@ -1017,9 +1397,9 @@ JSON_VALUES: Tuple[Any, ...] = (
     1e20,
 )
 
-#: (name, kinds, build): each position a #1525 or #1526 check reads. A
-#: dashboard geo value's numbers are read by the converter first, which this
-#: change does not touch; its comparison and fifth item are read here.
+#: (name, kinds, build): each position a #1525, #1526, #1666, #1669 or #1673
+#: check reads, and the geo numbers the shape step reads first (#1672: an
+#: integer too large for a float made it raise OverflowError there).
 POSITIONS: List[Tuple[str, FrozenSet[str], Callable[[Any], Dict[str, Any]]]] = [
     ("before value", NATIVE, lambda v: native(cond("before", v))),
     ("after value", NATIVE, lambda v: native(cond("after", v))),
@@ -1059,6 +1439,36 @@ POSITIONS: List[Tuple[str, FrozenSet[str], Callable[[Any], Dict[str, Any]]]] = [
         ALL_KINDS,
         lambda v: dashboard(dash_geo([SF[0], SF[1], 10, "km", v])),
     ),
+    ("between value", NATIVE, lambda v: native(cond("between", v, 65))),
+    ("between additional_value", NATIVE, lambda v: native(cond("between", 18, v))),
+    (
+        "dashboard time_window start",
+        ALL_KINDS,
+        lambda v: dashboard(dash_window({"start": v, "end": "17:00"})),
+    ),
+    (
+        "dashboard greater_than value",
+        ALL_KINDS,
+        lambda v: dashboard(dash_number("greater_than", v)),
+    ),
+    (
+        "dashboard geo lat",
+        ALL_KINDS,
+        lambda v: dashboard(dash_geo({"lat": v, "lon": SF[1], "radius": 10})),
+    ),
+    (
+        "dashboard geo lon",
+        ALL_KINDS,
+        lambda v: dashboard(dash_geo({"lat": SF[0], "lon": v, "radius": 10})),
+    ),
+    ("dashboard geo radius", ALL_KINDS, lambda v: dashboard(dash_geo(at_sf(v)))),
+    (
+        "dashboard geo radius in a list",
+        ALL_KINDS,
+        lambda v: dashboard(dash_geo([SF[0], SF[1], v])),
+    ),
+    ("geo_distance latitude", NATIVE, lambda v: native(_geo_at([v, SF[1]]))),
+    ("geo_distance longitude", NATIVE, lambda v: native(_geo_at([SF[0], v]))),
 ]
 
 #: For each position, rules with a readable value there, which every kind
@@ -1081,6 +1491,18 @@ CONTROLS: Dict[str, Dict[str, Any]] = {
     **{f"{o} value": native(cond(o, 5)) for o in ("gt", "gte", "lt", "lte")},
     "dashboard comparison": dashboard(dash_geo(at_sf(10, comparison="lte"))),
     "dashboard fifth item": dashboard(dash_geo([SF[0], SF[1], 10, "km"])),
+    "between value": native(cond("between", 18, 65)),
+    "between additional_value": native(cond("between", 18, 65)),
+    "dashboard time_window start": dashboard(
+        dash_window({"start": "09:00", "end": "17:00"})
+    ),
+    "dashboard greater_than value": dashboard(dash_number("greater_than", 5)),
+    "dashboard geo lat": dashboard(dash_geo(at_sf(10))),
+    "dashboard geo lon": dashboard(dash_geo(at_sf(10))),
+    "dashboard geo radius": dashboard(dash_geo(at_sf(10))),
+    "dashboard geo radius in a list": dashboard(dash_geo([SF[0], SF[1], 10])),
+    "geo_distance latitude": native(_geo_at(SF)),
+    "geo_distance longitude": native(_geo_at(SF)),
 }
 
 _VARIANTS = [
@@ -1176,12 +1598,14 @@ READ_IN_A = {
     "gte": 5,
     "lt": 5,
     "lte": 5,
+    "between": 0,
 }
 
 #: The stored values whose evaluation abandons the whole ruleset, today: a
 #: timestamp no date can hold, and an integer no float can hold for gt, gte,
-#: lt and lte (and, on an experiment, for percentage_bucket). Every other
-#: refused value never holds.
+#: lt and lte (and, on an experiment, for percentage_bucket); for between
+#: (user value 0), a bound either path raises on. Every other refused value
+#: never holds.
 _ABANDONED = {
     *{
         (o, _show(v))
@@ -1189,6 +1613,16 @@ _ABANDONED = {
         for v in (1e17, 1e20, INF, -INF, HUGE)
     },
     *{(o, _show(HUGE)) for o in ("gt", "gte", "lt", "lte", "percentage_bucket")},
+    *{
+        ("between", _show(pair))
+        for pair in (
+            (-INF, "2030-01-01"),
+            (HUGE, 5),
+            (0, HUGE),
+            (1e20, "2030-01-01"),
+            (1e17, "2030-01-01"),
+        )
+    },
 }
 
 
@@ -1208,6 +1642,7 @@ def _native_refused() -> List[Tuple[str, str, Any, str]]:
         ("gte", "gte", "value"),
         ("lt", "lt", "value"),
         ("lte", "lte", "value"),
+        ("between", "between", "value"),
     ):
         group = GROUPS[name]
         for value in group.refused:
@@ -1389,3 +1824,234 @@ def test_a_stored_unreadable_window_still_answers_error():
 def test_the_witnesses_cover_every_bucket():
     """S4: percentage_bucket's witnesses reach bucket 0 and bucket 99."""
     assert sorted(_bucket(w["a"]) for w in BUCKET_WITNESSES) == list(range(100))
+
+
+# ---------------------------------------------------------------------------
+# (W1-W3, #1669) A dashboard time window, judged on the converted window
+# ---------------------------------------------------------------------------
+
+_HOURS = {"start": "09:00", "end": "17:00"}
+
+#: Windows the converter passes and the engine cannot read: each raised
+#: TimeWindowUnreadable for every user before this change (plan premise 6).
+UNREADABLE_WINDOWS: Dict[str, Any] = {
+    "9am to 5pm": {"start": "9am", "end": "5pm"},
+    "9am to 5pm, as JSON text": '{"start": "9am", "end": "5pm"}',
+    "ISO start and end": {"start": "2024-01-01T09:00:00", "end": "2024-01-31T17:00:00"},
+    "0900 to 1700": {"start": "0900", "end": "1700"},
+    "numbers": {"start": 900, "end": 1700},
+    "null start and end": {"start": None, "end": None},
+    "25:00": {"start": "25:00", "end": "17:00"},
+    "end 5pm": {"start": "09:00", "end": "5pm"},
+    # The converter keeps a submitted start_time, which is what is read.
+    "start 09:00, start_time 9am": {**_HOURS, "start_time": "9am"},
+    "days [7]": {**_HOURS, "days": [7]},
+    "days [-1]": {**_HOURS, "days": [-1]},
+    "days as text": {**_HOURS, "days": "0,1"},
+    "days a number": {**_HOURS, "days": 1},
+    "days names": {**_HOURS, "days": ["mon"]},
+    "an unknown timezone": {**_HOURS, "timezone": "Mars/Olympus"},
+    "start_date alone": {**_HOURS, "start_date": "2024-01-01"},
+    "end_date alone": {**_HOURS, "end_date": "2024-01-31"},
+    "reversed dates": {**_HOURS, "start_date": "2024-02-01", "end_date": "2024-01-01"},
+    "slashed dates": {**_HOURS, "start_date": "2024/01/01", "end_date": "2024/01/31"},
+    "a timezone that is not text": {**_HOURS, "timezone": 5},
+}
+
+#: Windows the engine reads, which stay accepted.
+READABLE_WINDOWS: Dict[str, Any] = {
+    "HH:MM": _HOURS,
+    "HH:MM:SS": {"start": "09:00:00", "end": "17:00:30"},
+    "start_time and end_time only": {"start_time": "09:00", "end_time": "17:00"},
+    "as JSON text": '{"start": "09:00", "end": "17:00"}',
+    "days [0, 6]": {**_HOURS, "days": [0, 6]},
+    "days []": {**_HOURS, "days": []},
+    "Europe/Paris": {**_HOURS, "timezone": "Europe/Paris"},
+    "dates in order": {**_HOURS, "start_date": "2024-01-01", "end_date": "2024-01-31"},
+}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("name", sorted(UNREADABLE_WINDOWS))
+@pytest.mark.parametrize("kind", sorted(ALL_KINDS))
+def test_a_dashboard_window_the_engine_cannot_read_is_refused(kind, name):
+    """(W1) Beside ``country equals US``, at the window's place, with the
+    dashboard text, on flags, experiments and segments."""
+    rules = dashboard(DASH_US, dash_window(UNREADABLE_WINDOWS[name]))
+    assert refusal(kind, rules) == f"groups[0].conditions[1].value: {DASH_WINDOW}"
+
+
+@pytest.mark.parametrize("name", sorted(READABLE_WINDOWS))
+@pytest.mark.parametrize("kind", sorted(ALL_KINDS))
+def test_a_readable_dashboard_window_is_accepted(kind, name):
+    """(W3) The windows the engine reads are saved as before."""
+    assert (
+        refusal(kind, dashboard(DASH_US, dash_window(READABLE_WINDOWS[name]))) is None
+    )
+
+
+def _abandons(rules: TargetingRules, context: Dict[str, Any]) -> bool:
+    try:
+        match_targeting_rule(rules, dict(context))
+    except TimeWindowUnreadable:
+        return True
+    return False
+
+
+#: A US user, a DE user, and one who sends no moment at all.
+_WINDOW_USERS = (
+    {"country": "US", "t": "2024-01-10T12:00:00"},
+    {"country": "DE", "t": "2024-01-10T12:00:00"},
+    {"country": "US"},
+)
+
+
+@pytest.mark.regression
+def test_a_dashboard_window_is_refused_exactly_when_its_evaluation_abandons():
+    """(W2) For each window above, a save refuses it on every kind exactly
+    when the stored rules abandon the evaluation for every user: the check
+    reads the converted window, which is what the evaluators read."""
+    problems = []
+    for name, value in {**UNREADABLE_WINDOWS, **READABLE_WINDOWS}.items():
+        rules = dashboard(DASH_US, dash_window(value))
+        stored = _stored(rules)
+        assert stored is not None, name  # the converter passes every one
+        abandons = [_abandons(stored, user) for user in _WINDOW_USERS]
+        for kind in sorted(ALL_KINDS):
+            refused = refusal(kind, rules) is not None
+            if refused and not all(abandons):
+                problems.append(f"{name}: refused on a {kind}, evaluation reads it")
+            if not refused and any(abandons):
+                problems.append(f"{name}: accepted, evaluation abandons")
+    assert problems == []
+
+
+# ---------------------------------------------------------------------------
+# (V7, W4, Z4, #1673) Stored rules keep their answers on every reader
+# ---------------------------------------------------------------------------
+
+
+def _sdk_evaluation(raw: Any) -> str:
+    """``local`` or ``remote``: how the SDK ruleset serves an active flag
+    whose stored rules are ``raw``."""
+    flag = FeatureFlag(
+        key="b5",
+        name="b5",
+        status=FeatureFlagStatus.ACTIVE,
+        rollout_percentage=100,
+        targeting_rules=copy.deepcopy(raw),
+    )
+    return build_flag_entry(flag)["evaluation"]
+
+
+def _flag_answer(raw: Any, context: Dict[str, Any], rollout: int) -> Dict[str, Any]:
+    """The flag service's answer, as ``flag_detailed`` gives it but without
+    its no-error-log assertion: rules the reader cannot parse are answered by
+    the service's generic handler, which writes one (#1674, outside this
+    change)."""
+    flag = SimpleNamespace(
+        id="00000000-0000-0000-0000-000000001672",
+        key="z4",
+        status=FeatureFlagStatus.ACTIVE,
+        rollout_percentage=rollout,
+        targeting_rules=copy.deepcopy(raw),
+    )
+    with mock.patch.object(feature_flag_service, "MetricsService"):
+        return FeatureFlagService(db=MagicMock()).evaluate_flag_detailed(
+            flag, USER, context
+        )
+
+
+def _or_us(condition: Dict[str, Any]) -> Dict[str, Any]:
+    """``country equals US OR condition``, in the dashboard shape."""
+    return {
+        "logical_operator": "OR",
+        "groups": [{"conditions": [DASH_US]}, {"conditions": [condition]}],
+    }
+
+
+#: (V7) ``country equals US OR between "-5" and 5``, as stored.
+STORED_BETWEEN = {
+    "rules": [
+        {
+            "id": "r",
+            "rule": {"operator": "or", "conditions": [US, cond("between", "-5", 5)]},
+            "rollout_percentage": 100,
+            "priority": 0,
+        }
+    ]
+}
+
+
+@pytest.mark.regression
+def test_a_stored_between_keeps_its_answer_on_every_reader():
+    """(V7) The between never holds, so at rollout 0 the US user is matched by
+    the sibling and a DE user is not, on the flag and on the experiment, and
+    the SDK ruleset leaves the flag to the server. A guard: it passes before
+    this change too, and fails when the check reaches the read model."""
+    us, de = {"country": "US", "a": 0}, {"country": "DE", "a": 0}
+    assert flag_detailed(STORED_BETWEEN, us, rollout=0) == {
+        "enabled": True,
+        "reason": "targeting_rule",
+        "rule_id": "r",
+    }
+    assert flag_detailed(STORED_BETWEEN, de, rollout=0) == ROLLOUT_OFF
+    assert _experiment(STORED_BETWEEN, us) == (True, "Matched targeting rule: r")
+    assert _experiment(STORED_BETWEEN, de) == NOT_MATCHED
+    assert _sdk_evaluation(STORED_BETWEEN) == "remote"
+
+
+#: (W4) ``country equals US OR`` a window the engine cannot read, as stored.
+STORED_WINDOW = _or_us(dash_window({"start": "9am", "end": "5pm"}))
+
+
+@pytest.mark.regression
+def test_a_stored_dashboard_window_a_save_refuses_still_answers_error():
+    """(W4) At rollout 100 the window abandons the ruleset for every user, so
+    the flag answers off with reason error for US and DE, the experiment
+    enrols neither, and the SDK ruleset leaves the flag to the server. A
+    guard: a check in ``_time_window_value`` would turn the flag ON for
+    everyone and enrol everyone."""
+    for country in ("US", "DE"):
+        user = {"country": country, "t": "2024-01-10T12:00:00"}
+        assert flag_detailed(STORED_WINDOW, user, rollout=100) == ERROR_OFF
+        assert _experiment(STORED_WINDOW, user) == NOT_MATCHED
+    assert _sdk_evaluation(STORED_WINDOW) == "remote"
+
+
+#: (Z4) ``country equals US OR`` a dashboard radius no float can hold.
+STORED_GEO_HUGE = _or_us(dash_geo(at_sf(HUGE)))
+
+
+@pytest.mark.regression
+def test_a_stored_geo_number_too_large_for_a_float_keeps_its_answer():
+    """(Z4) The read paths are not touched: at rollout 100 the flag still
+    answers off with reason error for US and DE, and the experiment still
+    answers a targeting evaluation error. A guard: catching OverflowError in
+    the converter instead would turn the flag ON and enrol everyone."""
+    for country in ("US", "DE"):
+        user = {"country": country, "a": SF}
+        assert _flag_answer(STORED_GEO_HUGE, user, rollout=100) == ERROR_OFF
+        assert _experiment(STORED_GEO_HUGE, user) == (
+            False,
+            "Targeting evaluation error",
+        )
+
+
+#: (#1673) ``country equals US OR age greater_than`` an integer no float holds.
+STORED_NUMBER_HUGE = _or_us(
+    {"attribute": "age", "operator": "greater_than", "value": HUGE}
+)
+
+
+@pytest.mark.regression
+def test_a_stored_dashboard_number_too_large_for_a_float_keeps_its_answer():
+    """(#1673) At rollout 100 the comparison abandons the ruleset, as before:
+    the flag answers off with reason error, the experiment enrols nobody, and
+    the SDK ruleset leaves the flag to the server. A guard: a check in
+    ``_numeric_value`` would turn the flag ON and enrol everyone."""
+    for country in ("US", "DE"):
+        user = {"country": country, "age": 30}
+        assert flag_detailed(STORED_NUMBER_HUGE, user, rollout=100) == ERROR_OFF
+        assert _experiment(STORED_NUMBER_HUGE, user) == NOT_MATCHED
+    assert _sdk_evaluation(STORED_NUMBER_HUGE) == "remote"

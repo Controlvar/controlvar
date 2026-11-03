@@ -32,7 +32,7 @@ A condition on an attribute the request's context does not carry does not hold, 
 |---|---|---|
 | `equals` | `eq` | the attribute equals the value. Text and a number or boolean are compared as that type (`"17"` equals `17`, `"true"` equals `true`); two texts are compared as they are. |
 | `not_equals` | `neq` | the attribute does not equal the value, compared as `equals` compares. |
-| `greater_than`, `greater_than_or_equal`, `less_than`, `less_than_or_equal` | `gt`, `gte`, `lt`, `lte` | the attribute compares so with the value, both read as numbers: text that is a number (`"21"`) counts. A value that cannot be read as a number, such as `"abc"`, `null`, a list or an object, is refused when the rules are saved. |
+| `greater_than`, `greater_than_or_equal`, `less_than`, `less_than_or_equal` | `gt`, `gte`, `lt`, `lte` | the attribute compares so with the value, both read as numbers: text that is a number (`"21"`) counts. A value that cannot be read as a number, such as `"abc"`, `null`, a list or an object, is refused when the rules are saved. So is NaN, or an integer too large for a floating-point number, in either shape. |
 | `in` | `in` | the attribute equals one of the values, compared as `equals` compares. |
 | `not_in` | `not_in` | the attribute equals none of the values. |
 | `contains`, `not_contains` | `contains`, `not_contains` | the attribute, as text, contains the value, or does not. |
@@ -46,7 +46,7 @@ A condition on an attribute the request's context does not carry does not hold, 
 | `geo_within_radius` | `geo_distance` | the attribute is a point within the radius ([below](#geo_distance-geo_distance)). |
 | `time_window` | `time_window` | the attribute is a moment inside the window ([below](#time_window-time_window)). |
 | `in_segment`, `not_in_segment` | `in_segment`, `not_in_segment` | the user is, or is not, a member of the segment ([below](#in_segment-in_segment-not_in_segment-not_in_segment)). |
-| none | `between` | the attribute is a number, or a date, from `value` to `additional_value`, both included. |
+| none | `between` | the attribute is a number, or a date, from `value` to `additional_value`, both included. Both bounds are numbers (a JSON number, or text of digits with at most one dot) or both dates (ISO 8601 text, or a Unix timestamp in seconds, which has no time zone). Two dates must both have a time zone or both lack one. Any other pair is refused when the rules are saved (`422`). A range whose `value` is above its `additional_value` matches nobody and is accepted. |
 | none | `before`, `after` | the attribute is a date before, or after, the value ([below](#before-before-after-after)). |
 | none | `array_length` | the attribute is a list, text or object whose length compares with the value as `additional_value` says: `eq` (the default), `gt`, `gte`, `lt`, `lte`, or `between` a `{"min", "max"}` value, both included. A number or `null` has no length and does not match. A value that is not a whole number, such as `"abc"`, `"3.0"` or `null` (a number with a fraction, `3.7`, is read as `3`), or for `between` one without whole-number `min` and `max`, is refused when the rules are saved. |
 
@@ -116,7 +116,8 @@ Any other unit or comparison is refused when the rules are saved. The radius mus
 of 0 or more, and a rule without one is refused. In the dashboard shape `comparison` is not
 read: a rule that carries one, in the object or as a fifth item of the list or the text, is
 refused, because it would be applied as "within the radius". Write the rule in the native shape
-to use `gt`, `lt`, `gte` or `eq`.
+to use `gt`, `lt`, `gte` or `eq`. A latitude, longitude or radius must fit in a floating-point
+number; a larger integer is refused like any value that is not a number (`422`).
 
 - Dashboard: `{"lat": 37.7749, "lon": -122.4194, "radius": 15, "unit": "km"}`, the list
   `[37.7749, -122.4194, 15, "km"]` or the text `"37.7749,-122.4194,15,km"`. The unit is
@@ -172,9 +173,11 @@ earlier rule never reaches it, and a window in `default_rule` is never read. So
 a window with ISO datetimes in `start` and `end` is refused, in either shape
 (accepting them is #1156). In the native shape, a window that cannot be read is
 also refused when the rules of a flag or an experiment are saved (`422`); one
-saved before that is evaluated as above. A window in the dashboard shape is not
-checked when it is saved. For a window between two moments, use `after` and
-`before` (below) in an `AND` group.
+saved before that is evaluated as above. A window in the dashboard shape that
+cannot be read is refused when the rules of a flag, an experiment or a segment
+are saved (`422`, `unreadable time window; give start and end as HH:MM ...`);
+one saved before that is evaluated as above. For a window between two moments,
+use `after` and `before` (below) in an `AND` group.
 
 Flag targeting and experiment targeting read a window the same way.
 
@@ -225,8 +228,8 @@ no `default_rule` applies, and a `NOT` around the condition does not turn it int
 - a flag or an experiment that names a segment whose rules hold the condition answers as
   above, because the user's membership of that segment cannot be decided.
 
-A native `time_window` that cannot be read is now refused when the rules are saved, and one
-stored before that still abandons the ruleset as above.
+A `time_window` that cannot be read, in either shape, is now refused when the rules are saved,
+and one stored before that still abandons the ruleset as above.
 
 ## Usage examples
 

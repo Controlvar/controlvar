@@ -47,6 +47,7 @@ from backend.app.core.rules_engine import (
     SEGMENT_OPERATORS,
     SEMVER_COMPARISONS,
     TimeWindowUnreadable,
+    between_bounds_problem,
     check_time_window,
     date_value_readable,
     evaluate_rule,
@@ -412,7 +413,10 @@ def validate_flag_targeting(value: Any) -> Optional[TargetingRules]:
       evaluation does not implement, are refused (#1204; experiments accept
       them). Both validators refuse the other words the engine does not know,
       the values it cannot read and a dashboard geo comparison it ignores
-      (:func:`_check_supported_vocabulary`; #1204, #1525, #1526).
+      (:func:`_check_supported_vocabulary`; #1204, #1525, #1526, #1666,
+      #1669, #1673), and an integer too large for a float that the shape
+      step cannot read is refused as a value that is not a number
+      (:func:`overflow_refusal`, #1672).
 
     For every value it accepts, what it returns is what
     :func:`normalise_targeting_rules` gives the flag evaluator (``None`` and
@@ -567,10 +571,21 @@ def _validate_targeting(value: Any, *, kind: str) -> Optional[TargetingRules]:
     if not value:
         return None
 
+    # An integer too large for a float makes the shape step raise
+    # OverflowError (#1672); it is answered as a value that is not a number,
+    # around the shape step only (the read paths keep their behaviour).
     if _is_dashboard_rules_shape(value):
-        rules, groups_base = _validated_dashboard(value, kind), "groups"
+        groups_base = "groups"
+        try:
+            rules = _validated_dashboard(value, kind)
+        except OverflowError:
+            raise overflow_refusal(value, dashboard=True) from None
     else:
-        rules, groups_base = _validated_native(value, kind), None
+        groups_base = None
+        try:
+            rules = _validated_native(value, kind)
+        except OverflowError:
+            raise overflow_refusal(value, dashboard=False) from None
 
     if not rules.rules and rules.default_rule is None:
         return None
@@ -580,6 +595,110 @@ def _validate_targeting(value: Any, *, kind: str) -> Optional[TargetingRules]:
     # Last, so a value refused before #1204 keeps its message.
     _check_supported_vocabulary(rules, groups_base, kind, value)
     return rules
+
+
+#: The answer for a dashboard condition the converter cannot read, and for a
+#: native condition the ``Condition`` model refuses.
+_DASHBOARD_VALUE_NOT_VALID = "value is not valid for the operator"
+_NATIVE_NOT_VALID = "not valid"
+
+
+def overflow_refusal(
+    raw: Any, *, dashboard: bool, subject: str = ""
+) -> TargetingRulesError:
+    """The refusal for submitted rules whose shape step raised
+    ``OverflowError`` (#1672).
+
+    ``float()`` raises ``OverflowError`` for an integer too large for a
+    float, such as a 400-digit JSON integer, and neither the dashboard
+    converter (``_geo_value``) nor the ``Condition`` model catches it, so a
+    geo coordinate, or a dashboard radius, that large answered 500. Only the
+    write paths turn it into this: :func:`_validate_targeting` around
+    :func:`_validated_dashboard` and :func:`_validated_native`, and the
+    segment schema around :func:`validate_segment_rules`. Those two are also
+    read gates, and are not changed: stored rules answer as before.
+
+    The answer is the one a value that is not a number gets at the same
+    place, at the first condition in document order that cannot be read
+    (a group's conditions, then its nested groups; ``rules``, then
+    ``default_rule``):
+
+    * dashboard (``raw["groups"]``): the first condition whose conversion
+      overflows, ``groups[i].conditions[j].value: value is not valid for the
+      operator``. The converter stops at the first condition it cannot
+      convert, so no earlier condition failed;
+    * native: the first condition the ``Condition`` model refuses or
+      overflows on, ``<path>.conditions[k]: not valid``, the model's own
+      answer for a coordinate that is not a number. The model goes on past a
+      condition it refuses, so that condition comes before a later one that
+      overflowed.
+
+    When no condition is found the path is empty (``not valid``, read with
+    ``subject``). The submitted value is read with type checks and an
+    explicit stack, and nothing here raises.
+    """
+    if dashboard:
+        path, code = _first_dashboard_overflow(raw), _DASHBOARD_VALUE_NOT_VALID
+    else:
+        path, code = _first_native_refusal(raw), _NATIVE_NOT_VALID
+    if path is None:
+        return TargetingRulesError("", _NATIVE_NOT_VALID, subject=subject)
+    return TargetingRulesError(path, code, subject=subject)
+
+
+def _first_dashboard_overflow(raw: Any) -> Optional[str]:
+    groups = raw.get("groups") if isinstance(raw, dict) else None
+    if not isinstance(groups, list):
+        return None
+    for gi, group in enumerate(groups):
+        conditions = group.get("conditions") if isinstance(group, dict) else None
+        if not isinstance(conditions, list):
+            continue
+        for ci, condition in enumerate(conditions):
+            try:
+                convert_dashboard_condition(condition)
+            except OverflowError:
+                return f"groups[{gi}].conditions[{ci}].value"
+            except Exception:  # refused another way: not this one
+                continue
+    return None
+
+
+def _first_native_refusal(raw: Any) -> Optional[str]:
+    if not isinstance(raw, dict):
+        return None
+    roots: List[Tuple[Any, str]] = []
+    rules = raw.get("rules")
+    if isinstance(rules, list):
+        roots.extend(
+            (rule.get("rule"), f"rules[{index}].rule")
+            for index, rule in enumerate(rules)
+            if isinstance(rule, dict)
+        )
+    default_rule = raw.get("default_rule")
+    if isinstance(default_rule, dict):
+        roots.append((default_rule.get("rule"), "default_rule.rule"))
+    for root, root_path in roots:
+        stack = [(root, root_path)]
+        while stack:
+            group, path = stack.pop()
+            if not isinstance(group, dict):
+                continue
+            conditions = group.get("conditions")
+            for ci, condition in enumerate(
+                conditions if isinstance(conditions, list) else ()
+            ):
+                try:
+                    Condition.model_validate(condition)
+                except Exception:  # ValidationError, or the OverflowError
+                    return f"{path}.conditions[{ci}]"
+            children = group.get("groups")
+            if isinstance(children, list):
+                stack.extend(
+                    (child, f"{path}.groups[{gi}]")
+                    for gi, child in reversed(list(enumerate(children)))
+                )
+    return None
 
 
 def _validated_dashboard(raw: Dict[str, Any], kind: str) -> TargetingRules:
@@ -1031,6 +1150,23 @@ DASHBOARD_COMPARISON_REASON = (
     "comparison is not read in the dashboard shape, so the rule would mean within "
     "the radius; to use gt, lt, gte or eq, write the rule in the native shape"
 )
+#: A ``between`` bound neither of its paths reads (#1666), and two dates one of
+#: which has a time zone; and a dashboard window the engine cannot read
+#: (#1669). Plan D211 v1.4-B3-1666's texts.
+BETWEEN_VALUE_REASON = (
+    "not a number or a date; between needs two numbers such as 18 and 65 (text "
+    "must be digits, with at most one dot), or two dates, each ISO 8601 such as "
+    "2030-01-31 or a Unix timestamp in seconds"
+)
+BETWEEN_ZONE_REASON = (
+    "one bound has a time zone and the other does not, so no date is ever between "
+    "them; give both a zone, such as Z, or neither (a Unix timestamp has none)"
+)
+DASHBOARD_TIME_WINDOW_REASON = (
+    "unreadable time window; give start and end as HH:MM such as 09:00 and 17:00, "
+    "days as numbers 0 to 6, start_date and end_date as YYYY-MM-DD in order, a "
+    "timezone as a name such as Europe/Paris"
+)
 VALUE_REASONS = (
     DATE_VALUE_REASON,
     LENGTH_VALUE_REASON,
@@ -1040,6 +1176,9 @@ VALUE_REASONS = (
     PERCENTAGE_REASON,
     NUMBER_REASON,
     DASHBOARD_COMPARISON_REASON,
+    BETWEEN_VALUE_REASON,
+    BETWEEN_ZONE_REASON,
+    DASHBOARD_TIME_WINDOW_REASON,
 )
 
 #: The reason for each word :func:`_check_supported_vocabulary` refuses. Each is
@@ -1113,16 +1252,18 @@ def _unreadable_value(
     condition: Condition, dashboard: bool, raw_condition: Any
 ) -> Optional[Tuple[str, str]]:
     """``(field, reason)`` for a value in ``condition`` its evaluator cannot
-    read (#1525), or a dashboard geo comparison it ignores (#1526); ``None``
-    otherwise. Run after :func:`_unsupported_word` found nothing, so a word
-    is known when its value is looked at.
+    read (#1525, #1666, #1673), or a dashboard geo comparison it ignores
+    (#1526); ``None`` otherwise. Run after :func:`_unsupported_word` found
+    nothing, so a word is known when its value is looked at.
 
     ``raw_condition`` is the condition as submitted, for the dashboard shape
     (``None`` for the native shape): the converter drops a geo comparison,
     so only the submitted value shows it. Each value is judged by the
     ``rules_engine`` predicate that mirrors its branch. ``gt``, ``gte``,
-    ``lt`` and ``lte`` are judged in the native shape only; the dashboard
-    converter already refuses text that is not a number.
+    ``lt`` and ``lte`` are judged in both shapes, on the converted value:
+    the dashboard converter refuses text that is not a number, but passes an
+    integer too large for a float and NaN, which are refused here (#1673).
+    ``between`` exists in the native shape only.
     """
     operator = condition.operator
     value = condition.value
@@ -1151,9 +1292,15 @@ def _unreadable_value(
     elif operator == OperatorType.PERCENTAGE_BUCKET:
         if not percentage_value_readable(value):
             return "value", PERCENTAGE_REASON
-    elif operator in _NUMERIC_OPERATORS and not dashboard:
+    elif operator in _NUMERIC_OPERATORS:
         if not number_value_readable(value):
             return "value", NUMBER_REASON
+    elif operator == OperatorType.BETWEEN:
+        problem = between_bounds_problem(value, extra)
+        if problem == "time zone":
+            return "additional_value", BETWEEN_ZONE_REASON
+        if problem is not None:
+            return problem, BETWEEN_VALUE_REASON
     return None
 
 
@@ -1189,14 +1336,19 @@ def _unsupported_word(
                 return ("value" if dashboard else "additional_value"), (
                     DISTANCE_UNIT_REASON
                 )
-    if operator == OperatorType.TIME_WINDOW and not dashboard:
-        # Native shape only (#1204, ruling 1): the engine's own check, so the
-        # two cannot drift. A dashboard window is converted first
-        # (``_time_window_value``), and that shape is not checked here.
+    if operator == OperatorType.TIME_WINDOW:
+        # The engine's own check, so the two cannot drift (#1204), in both
+        # shapes (#1669). ``condition`` is the converted one, and for the
+        # dashboard shape its value is the window every reader evaluates:
+        # ``_time_window_value`` copies the submitted window and adds
+        # ``start_time``/``end_time``, so a submitted ``start_time`` is read,
+        # not the ``start`` beside it.
         try:
             check_time_window(operator, condition.value, note=_silent)
         except TimeWindowUnreadable:
-            return "value", TIME_WINDOW_REASON
+            return "value", (
+                DASHBOARD_TIME_WINDOW_REASON if dashboard else TIME_WINDOW_REASON
+            )
     return None
 
 
@@ -1218,23 +1370,28 @@ def _check_supported_vocabulary(
     * a ``geo_distance`` ``comparison`` outside ``GEO_COMPARISONS`` (absent or
       ``null`` is ``lte``), and a ``unit`` that is not text in ``GEO_UNITS``
       once lowercased (absent is ``km``; an explicit ``null`` matches nothing);
-    * in the native shape (``groups_base`` ``None``), a ``time_window`` value
-      ``rules_engine.check_time_window`` cannot read;
+    * a ``time_window`` value ``rules_engine.check_time_window`` cannot read,
+      in either shape: for the dashboard shape (``groups_base`` set), the
+      converted window, with its own reason (#1669);
     * then, for the same condition, a value the evaluator cannot read
       (#1525, :func:`_unreadable_value`): a ``before`` or ``after`` value that
       is not a date, an ``array_length`` value that is not a whole number (or,
       for ``between``, not ``min`` and ``max``), a ``geo_distance`` radius
       that is missing, below 0 or not a number, a ``percentage_bucket`` value
-      that is not a number, and a native ``gt``, ``gte``, ``lt`` or ``lte``
-      value that is not a number; and a dashboard ``geo_within_radius`` that
-      carries a comparison, which the converter drops (#1526).
+      that is not a number, a ``gt``, ``gte``, ``lt`` or ``lte`` value that is
+      not a number (in the dashboard shape, an integer too large for a float
+      or NaN, which the converter passes, #1673), and a native ``between``
+      whose bounds are not two numbers or two dates with the same time-zone
+      form (#1666); and a dashboard ``geo_within_radius`` that carries a
+      comparison, which the converter drops (#1526).
 
     Such a condition is accepted by the schema and never holds, holds where
     it says it does not (a dashboard comparison), or abandons the whole
-    ruleset (the window, a timestamp no date can hold). The path is in the
-    submitted value's terms: ``rules[i].rule.conditions[k].operator`` (or
-    ``.additional_value``, ``.value``) for the native shape,
-    ``groups[i].conditions[j].value`` for the dashboard shape.
+    ruleset (the window, a timestamp no date can hold, an integer no float
+    can hold). The path is in the submitted value's terms:
+    ``rules[i].rule.conditions[k].operator`` (or ``.additional_value``,
+    ``.value``) for the native shape, ``groups[i].conditions[j].value`` for
+    the dashboard shape.
 
     ``raw`` is the value as submitted. For the dashboard shape, the
     submitted condition at ``groups[i].conditions[j]`` is read beside the
@@ -1292,14 +1449,17 @@ def _submitted(raw_group: Any, key: str, index: int) -> Any:
 
 def check_segment_vocabulary(rules: TargetingRules, raw: Any) -> None:
     """Refuse segment rules with a word membership never matches (#1204), or a
-    value it cannot read (#1525, #1526).
+    value it cannot read (#1525, #1526, #1669, #1673).
 
     ``rules`` are what :func:`validate_segment_rules` returned for ``raw``,
     the rules as submitted or stored. Segment rules are in the dashboard
     shape and evaluated as a flag's are, so what can be refused is a
     ``geo_within_radius`` with a distance unit membership does not know, a
     comparison (which the converter drops) or a radius below 0 or not a
-    number. Called on a segment's write path (``schemas.segment``) and by
+    number; a ``time_window`` the engine cannot read; and a
+    ``greater_than``, ``greater_than_or_equal``, ``less_than`` or
+    ``less_than_or_equal`` value that is an integer too large for a float, or
+    NaN. Called on a segment's write path (``schemas.segment``) and by
     ``check_targeting_rules``; never from :func:`validate_segment_rules`,
     which also decides at read time whether a stored segment can be
     evaluated.
