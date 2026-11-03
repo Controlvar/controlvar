@@ -262,6 +262,13 @@ Helm, AWS). Downgrading this revision (to `modules_0003_lower_is_better`)
 drops both columns, and any activation time stored in them; upgrading
 afterwards adds them empty.
 
+Since the release in which custom roles took effect, assigning a role or making
+a grant records an activation time, and only assignments and grants that have
+one take effect (see [RBAC](../api/rbac.md)). Downgrading below this revision
+after that release drops every activation time: every assignment and grant is
+inactive again, and stays inactive after upgrading; assign the roles and make
+the grants again.
+
 ### `1ab99332f0ba` rewrites stored event times to UTC
 
 `events.created_at` is stored as text, so time windows, ordering and "the
