@@ -145,8 +145,8 @@ def main() -> None:
     #     it once: the runner counts the rows for this user and event name.
     dedup_name = f"contract_dedup_{uuid.uuid4()}"
     dedup_id = f"contract-{uuid.uuid4()}"
-    for _ in range(2):
-        if not client.track(user_id, dedup_name, experiment_key=experiment_key, event_id=dedup_id):
+    for i in range(2):
+        if not client.track(user_id, dedup_name, experiment_key=experiment_key, event_id=f"{dedup_id}-{i}"):
             fail("track(contract_dedup) with an event_id was not accepted")
 
     # 5. The exposure hook (#1499): a NEW client with on_exposure assigns the same user twice,
