@@ -125,12 +125,15 @@ such a key on a server and never ship it to a browser or a mobile app.
 - Through the API, send `"scopes": ["sdk:ruleset"]`.
 
 **Only users who can change feature flags can create a key with the `sdk:ruleset` scope:**
-the ADMIN and DEVELOPER roles, and superusers. For anyone else (ANALYST or VIEWER) the
-request is refused with `403 Forbidden`, whose message names the roles that may create such
-a key, and no key is created. Keys without that scope can be created by every role, as
-before. Using such a key follows the same rule: both routes above accept a key with
-`sdk:ruleset` only while its owner can change feature flags, checked on every request, so a
-key whose owner is moved to ANALYST or VIEWER is refused with `403` from then on.
+the ADMIN and DEVELOPER roles, superusers, and in the full profile anyone whose custom role or
+direct grant gives `feature_flag (update)`. For anyone else the request is refused with
+`403 Forbidden`, whose message says who may create such a key, and no key is created. Keys
+without that scope can be created by every role, as before. Using such a key follows the same
+rule: the three routes above accept a key with `sdk:ruleset` only while its owner can change
+feature flags, checked on every request, so a key whose owner loses that (moved to ANALYST or
+VIEWER, or a grant revoked or expired) is refused with `403` from then on.
+`POST /api/v1/tracking/assign/batch` also needs the owner to be able to change experiments;
+otherwise it answers `403` and assigns nobody.
 
 #### `mcp:read`
 

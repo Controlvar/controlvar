@@ -195,8 +195,8 @@ full-build: $(VENV)/bin/pip-licenses $(VENV)/bin/reuse ## The same sequence on t
 
 .PHONY: lint
 lint: lint-boundary ## Everything the `lint` CI job runs: ruff, import-linter, reuse, lock check, eslint, tsc, hadolint, actionlint
-	$(VENV)/bin/ruff check backend/ scripts/ tests/acceptance/ $$(test -d modules && echo modules/)
-	$(VENV)/bin/ruff format --check backend/ scripts/ tests/acceptance/ $$(test -d modules && echo modules/)
+	$(VENV)/bin/ruff check backend/ scripts/ tests/acceptance/ tests/ground_truth/ $$(test -d modules && echo modules/)
+	$(VENV)/bin/ruff format --check backend/ scripts/ tests/acceptance/ tests/ground_truth/ $$(test -d modules && echo modules/)
 	cd frontend && npm run lint && npx tsc --noEmit
 	@if command -v hadolint >/dev/null; then \
 		hadolint backend/Dockerfile frontend/Dockerfile \
@@ -235,9 +235,9 @@ lint-boundary: $(VENV)/bin/lint-imports $(VENV)/bin/reuse ## The core/modules bo
 	$(PY) scripts/check_legacy_name.py
 
 .PHONY: format
-format: ## Format and auto-fix backend/, scripts/, tests/acceptance/ and modules/ in place (ruff replaces black + isort)
-	$(VENV)/bin/ruff format backend/ scripts/ tests/acceptance/ $$(test -d modules && echo modules/)
-	$(VENV)/bin/ruff check backend/ scripts/ tests/acceptance/ $$(test -d modules && echo modules/) --fix
+format: ## Format and auto-fix backend/, scripts/, tests/acceptance/, tests/ground_truth/ and modules/ in place (ruff replaces black + isort)
+	$(VENV)/bin/ruff format backend/ scripts/ tests/acceptance/ tests/ground_truth/ $$(test -d modules && echo modules/)
+	$(VENV)/bin/ruff check backend/ scripts/ tests/acceptance/ tests/ground_truth/ $$(test -d modules && echo modules/) --fix
 
 .PHONY: openapi
 # Three fixtures from one tool: the dashboard's URL-guard dump (every route the

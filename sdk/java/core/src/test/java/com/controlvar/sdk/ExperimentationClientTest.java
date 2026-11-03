@@ -12,6 +12,7 @@ import okhttp3.mockwebserver.Dispatcher;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
+import okhttp3.mockwebserver.SocketPolicy;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -24,9 +25,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -658,6 +662,212 @@ class ExperimentationClientTest {
             assertEquals("f", entries.get(0).get("feature_flag_key"));
             assertEquals("checkout_flow", entries.get(1).get("experiment_key"));
             assertEquals("page_view", entries.get(1).get("event_name"));
+        }
+    }
+
+    // =========================================================================
+    // event_id (#1543)
+    // =========================================================================
+
+    /** A lowercase random (version 4) UUID, as {@code UUID.randomUUID().toString()} writes it. */
+    private static final Pattern UUID_V4 =
+            Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}");
+
+    private static String eventIdOf(Map<String, Object> body) {
+        Object id = body.get("event_id");
+        assertNotNull(id, "event_id missing from " + body);
+        return (String) id;
+    }
+
+    /** Caches one assignment and two flags for {@code user-1}: three fan-out targets. */
+    private void cacheThreeTargets() throws InterruptedException {
+        routeByPath();
+        User user = User.builder("user-1").build();
+        client.getExperimentAssignment(user, "checkout_flow");
+        client.evaluateFeatureFlag(user, "new_search");
+        client.evaluateFeatureFlag(user, "dark_mode");
+        for (int i = 0; i < 3; i++) takeRequest();
+    }
+
+    @Nested
+    @DisplayName("event_id")
+    class EventIds {
+
+        @Test
+        @DisplayName("a tracked event carries a generated lowercase UUID v4 as event_id")
+        void trackSendsAGeneratedEventId() throws Exception {
+            mockServer.enqueue(trackOk());
+
+            client.trackEventSync(TrackEvent.builder("u1", "purchase").experimentKey("e").build());
+
+            RecordedRequest request = takeRequest();
+            assertEquals("/api/v1/tracking/track", request.getPath());
+            String id = eventIdOf(bodyOf(request));
+            assertTrue(UUID_V4.matcher(id).matches(), "not a lowercase UUID v4: " + id);
+        }
+
+        @Test
+        @DisplayName("two track calls carry different ids, even for the same TrackEvent")
+        void twoTrackCallsCarryDifferentEventIds() throws Exception {
+            routeByPath();
+            TrackEvent event = TrackEvent.builder("u1", "purchase").experimentKey("e").build();
+
+            client.trackEventSync(event);
+            client.trackEventSync(event);
+            client.trackEvent("u1", "purchase", null, "e", null, null);
+
+            Set<String> ids = new HashSet<>();
+            for (int i = 0; i < 3; i++) ids.add(eventIdOf(bodyOf(takeRequest())));
+            assertEquals(3, ids.size(), "one new id per call: " + ids);
+        }
+
+        @Test
+        @DisplayName("every fan-out entry carries event_id, and all of one event's entries share it")
+        void fanOutEntriesShareOneEventId() throws Exception {
+            cacheThreeTargets();
+
+            client.trackEventSync(TrackEvent.builder("user-1", "page_view").build());
+
+            List<Map<String, Object>> entries = events(bodyOf(takeRequest()));
+            assertEquals(3, entries.size(), "one assignment + two flags");
+            Set<String> ids = new HashSet<>();
+            for (Map<String, Object> entry : entries) ids.add(eventIdOf(entry));
+            assertEquals(1, ids.size(), "one id per event, shared by its fan-out entries: " + ids);
+            assertTrue(UUID_V4.matcher(ids.iterator().next()).matches(), ids.toString());
+        }
+
+        @Test
+        @DisplayName("in trackBatch each TrackEvent has its own id, shared by its own fan-out entries")
+        void eachEventInABatchHasItsOwnEventId() throws Exception {
+            cacheThreeTargets();
+
+            client.trackBatchSync(Arrays.asList(
+                    TrackEvent.builder("user-1", "page_view").build(),                // 3 entries
+                    TrackEvent.builder("user-1", "purchase").experimentKey("e").build(), // 1 entry
+                    TrackEvent.builder("user-1", "page_view").build()));              // 3 entries
+
+            List<Map<String, Object>> entries = events(bodyOf(takeRequest()));
+            assertEquals(7, entries.size());
+            List<String> ids = new ArrayList<>();
+            for (Map<String, Object> entry : entries) ids.add(eventIdOf(entry));
+            assertEquals(1, new HashSet<>(ids.subList(0, 3)).size(), "first event: " + ids);
+            assertEquals(1, new HashSet<>(ids.subList(4, 7)).size(), "third event: " + ids);
+            assertEquals(3, new HashSet<>(Arrays.asList(ids.get(0), ids.get(3), ids.get(4))).size(),
+                    "three events, three ids: " + ids);
+        }
+
+        @Test
+        @DisplayName("the caller's eventId wins: on /track, on every fan-out entry, and on every call")
+        void callersEventIdWins() throws Exception {
+            cacheThreeTargets();
+            TrackEvent keyed = TrackEvent.builder("user-1", "purchase").experimentKey("e")
+                    .eventId("order-42").build();
+            TrackEvent unkeyed = TrackEvent.builder("user-1", "page_view").eventId("view-7").build();
+
+            client.trackEventSync(keyed);
+            client.trackEventSync(keyed);
+            client.trackEventSync(unkeyed);
+
+            assertEquals("order-42", eventIdOf(bodyOf(takeRequest())));
+            assertEquals("order-42", eventIdOf(bodyOf(takeRequest())), "the same id on a second call");
+            List<Map<String, Object>> entries = events(bodyOf(takeRequest()));
+            assertEquals(3, entries.size());
+            for (Map<String, Object> entry : entries) assertEquals("view-7", eventIdOf(entry));
+        }
+
+        /**
+         * The connection drops after the server has read the whole request; OkHttp, configured
+         * as the public constructor configures it, sends the request again on a new connection
+         * by itself, and both requests carry the same {@code event_id}. The first request seeds
+         * the connection pool: OkHttp sends a request again when it failed on a pooled
+         * connection, the way a kept-alive connection a server or a proxy has closed fails.
+         */
+        @Test
+        @DisplayName("OkHttp's re-send of a written POST carries the same event_id, on /track and /batch")
+        void okHttpResendCarriesTheSameEventId() throws Exception {
+            SdkConfig config = SdkConfig.builder("test-api-key", mockServer.url("/").toString())
+                    .timeoutMs(5000)
+                    .build();
+            try (ExperimentationClient production = new ExperimentationClient(config)) {
+                // /track
+                mockServer.enqueue(trackOk());
+                mockServer.enqueue(new MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST));
+                mockServer.enqueue(trackOk());
+
+                production.trackEventSync(TrackEvent.builder("u1", "seed").experimentKey("e").build());
+                production.trackEventSync(TrackEvent.builder("u1", "purchase").experimentKey("e").build());
+
+                takeRequest(); // the seed
+                RecordedRequest dropped = takeRequest();
+                RecordedRequest resent = takeRequest();
+                assertEquals("/api/v1/tracking/track", dropped.getPath());
+                assertEquals("/api/v1/tracking/track", resent.getPath());
+                assertEquals(1, dropped.getSequenceNumber(), "the dropped request reused the pooled connection");
+                assertEquals(0, resent.getSequenceNumber(), "the re-send came on a new connection");
+                String droppedBody = dropped.getBody().readUtf8();
+                String resentBody = resent.getBody().readUtf8();
+                @SuppressWarnings("unchecked")
+                Map<String, Object> first = objectMapper.readValue(droppedBody, Map.class);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> second = objectMapper.readValue(resentBody, Map.class);
+                assertEquals(eventIdOf(first), eventIdOf(second), "the re-send must carry the same event_id");
+                assertEquals(droppedBody, resentBody);
+                assertEquals(3, mockServer.getRequestCount());
+
+                // /batch: an unkeyed event fanned out to a cached assignment and a flag
+                mockServer.setDispatcher(new Dispatcher() {
+                    private int batches;
+
+                    @Override
+                    public MockResponse dispatch(RecordedRequest request) {
+                        String path = request.getPath() == null ? "" : request.getPath();
+                        if (path.equals("/api/v1/tracking/assign")) return json(200, ASSIGN_JSON);
+                        if (path.startsWith("/api/v1/feature-flags/evaluate/")) return flagResponse("f", true, "null");
+                        if (path.equals("/api/v1/tracking/batch") && ++batches == 1) {
+                            return new MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST);
+                        }
+                        return batchOk();
+                    }
+                });
+                User user = User.builder("user-1").build();
+                production.getExperimentAssignment(user, "checkout_flow");
+                production.evaluateFeatureFlag(user, "f");
+                takeRequest();
+                takeRequest();
+
+                production.trackEventSync(TrackEvent.builder("user-1", "page_view").build());
+
+                List<Map<String, Object>> droppedEntries = events(bodyOf(takeRequest()));
+                List<Map<String, Object>> resentEntries = events(bodyOf(takeRequest()));
+                assertEquals(2, droppedEntries.size());
+                assertEquals(2, resentEntries.size());
+                String id = eventIdOf(droppedEntries.get(0));
+                for (Map<String, Object> entry : droppedEntries) assertEquals(id, eventIdOf(entry));
+                for (Map<String, Object> entry : resentEntries) {
+                    assertEquals(id, eventIdOf(entry), "the re-sent batch must carry the same event_id");
+                }
+                assertEquals(7, mockServer.getRequestCount());
+            }
+        }
+
+        @Test
+        @DisplayName("a request that times out is not sent again, and trackEventSync throws")
+        void timedOutRequestIsNotSentAgain() throws Exception {
+            SdkConfig config = SdkConfig.builder("test-api-key", mockServer.url("/").toString())
+                    .timeoutMs(300)
+                    .build();
+            try (ExperimentationClient production = new ExperimentationClient(config)) {
+                mockServer.enqueue(new MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE));
+                mockServer.enqueue(trackOk());
+
+                ExperimentationException e = assertThrows(ExperimentationException.class,
+                        () -> production.trackEventSync(TrackEvent.builder("u1", "purchase").experimentKey("e").build()));
+
+                assertEquals(0, e.getStatusCode());
+                takeRequest();
+                assertNull(mockServer.takeRequest(500, TimeUnit.MILLISECONDS), "a timed-out request was sent again");
+                assertEquals(1, mockServer.getRequestCount());
+            }
         }
     }
 

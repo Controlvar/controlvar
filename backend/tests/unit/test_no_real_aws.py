@@ -126,6 +126,9 @@ _ROOTS = [
     # Run by hand (no CI job runs them); loading their conftest, as here,
     # needs no browser.
     ("tests/acceptance/showcase_browser", []),
+    # The ground-truth replay (#1544): its own pytest root, loading the plugin
+    # with `-p` from its pytest.ini (it has no conftest). No CI job runs it yet.
+    ("tests/ground_truth", []),
 ]
 
 

@@ -585,6 +585,9 @@ def seed_feature_flags(db, admin_user) -> Dict[str, FeatureFlag]:
                     trigger_type=TriggerType.TIME_BASED,
                     start_date=days_ago(2),
                     status=RolloutStageStatus.IN_PROGRESS,
+                    # Started when seeded: the instant the scheduler measured
+                    # its duration from before #1528 (the row's updated_at).
+                    started_at=now_utc(),
                 ),
                 RolloutStage(
                     rollout_schedule_id=schedule.id,

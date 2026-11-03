@@ -222,7 +222,7 @@ def test_the_ruleset_scope_and_its_owner_rule(scopes, owner, refusal):
     ],
 )
 def test_the_users_api_keys_and_safety_pages_need_a_superuser(page):
-    # The Roles page is the rbac module's: test_rbac_layers_are_display_only.py.
+    # The Roles page is the rbac module's: test_rbac_layers_take_effect.py.
     source = (REPO / page).read_text()
     assert "export default withAdminGuard(" in source
     # The guard's default audience is superusers; only an explicit

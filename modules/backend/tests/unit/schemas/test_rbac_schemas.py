@@ -173,8 +173,23 @@ def test_exactly_the_eleven_pairs_are_accepted(model):
 
 
 def test_the_set_is_the_eleven_pairs():
-    assert set(GRANTABLE) == ELEVEN
+    assert set(GRANTABLE) == ELEVEN, (
+        "Widening GRANTABLE activates, at once, every pair already stored in an "
+        "active role or grant. Widening needs its own plan."
+    )
     assert len(GRANTABLE) == 11
+
+
+def test_the_validators_use_the_cores_own_set():
+    """One Python definition of the eleven pairs (#891): the 422 refuses
+    exactly what the permission checks drop, because both read the same
+    object, not an equal copy."""
+    from backend.app.core import permissions
+    from modules.backend.app.schemas import rbac
+
+    assert rbac.GRANTABLE is permissions.GRANTABLE
+    # The validator's own lookup reads the module global, which is that object.
+    assert rbac.not_grantable_message.__globals__["GRANTABLE"] is permissions.GRANTABLE
 
 
 def test_the_message_names_only_the_refused_actions_in_request_order():

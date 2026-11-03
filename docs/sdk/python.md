@@ -103,7 +103,7 @@ every experiment the user is in.
 | `get_feature_flag(flag_key, user_id, user_attributes=None)` | `FlagEvaluation(key, enabled, config, reason)` | raises `ExperimentationError` (`status == 404` when the flag key is unknown; a flag that is not ACTIVE returns `enabled=False`, `reason="inactive"`) |
 | `is_feature_enabled(flag_key, user_id, user_attributes=None)` | `bool` | returns `False` |
 | `get_all_flags(user_id, user_attributes=None)` | `dict[str, bool]` (not cached) | raises `ExperimentationError` |
-| `track(user_id, event_name, event_value=None, properties=None, experiment_key=None, feature_flag_key=None, event_type=None, timestamp=None)` | `bool` — `True` when it was sent and the server answered 2xx | never raises; `False` on failure |
+| `track(user_id, event_name, event_value=None, properties=None, experiment_key=None, feature_flag_key=None, event_type=None, timestamp=None, event_id=None)` | `bool` — `True` when it was sent and the server answered 2xx | never raises; `False` on failure |
 | `track_batch(events)` | `BatchResult(success_count, failure_count, errors)`, `.ok` | never raises; sends chunks of 100, a failed chunk counts all its events as failures |
 | `report_error(error_type, message, *, feature_flag_key=None, experiment_key=None, user_id=None, stack_trace=None, metadata=None, timestamp=None)` | `bool` — `True` when the server stored the report (201); see [Reporting errors](#reporting-errors) | never raises; `False` and a logged warning otherwise |
 | `get_assignments(user_id, active_only=True)` | `list[dict]` — the user's assignments from the server (not cached) | raises `ExperimentationError` |
@@ -186,6 +186,31 @@ only, so call `clear_cache()` after changing a user's attributes.
 `datetime` (naive values are treated as UTC) or an ISO-8601 string. Conversions are matched to
 experiment metrics by **event name**.
 
+### Event ids
+
+`event_id` is your id for one event. The server stores an event sent again with the same
+`event_id`, user, experiment, flag and event name only once (see
+[How events count](../guides/how-events-count.md#sending-an-event-again)). Use this option from
+the next published version of this package, not from the version on PyPI now. It also needs a
+Controlvar server that includes the `event_id` change ([#1640](https://github.com/Controlvar/controlvar/pull/1640)),
+which the platform release after 0.39.0 is to carry; an older server ignores the field and stores
+an event sent again a second time.
+
+- `track(..., event_id=None)` sends it as `event_id`. The SDK makes no id. An event without an
+  `event_id` is sent without one, and one sent again is stored and counted again. Make the id
+  once, when the event happens, for example with `str(uuid.uuid4())`, and give the same one each
+  time you send that event.
+- `event_id=None` and `""` send no `event_id`. The SDK does not check the id: the server refuses
+  (`422`) one of more than 255 characters or one holding NUL, and in a batch one such event
+  refuses the whole request.
+- An event fanned out to several experiments and flags carries the same `event_id` in every entry,
+  so it counts once in each of them.
+- `track_batch` sends the events it is given as they are, so an `event_id` key in an event's dict
+  is sent as it is. Each event keeps its own.
+- A `429` that is retried sends the same request again, so the same `event_id`.
+- A request that fails on the network or times out is not sent again by the SDK, and the server may
+  have stored it. Send it again with the same `event_id` and it is stored once.
+
 ### Reporting errors
 
 `report_error(error_type, message, ...)` sends one `POST /api/v1/tracking/errors` for an error
@@ -218,7 +243,7 @@ Every request carries `X-API-Key: <key>`, `Content-Type: application/json` and
 | `get_assignment`, `get_variant` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `get_feature_flag`, `is_feature_enabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON>` | `context` = `user_attributes` (omitted when empty) | `{key, enabled, config, reason}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
 | `get_all_flags` | `GET /api/v1/feature-flags/user/{user_id}?context=<url-encoded JSON>` | `context` = `user_attributes` (omitted when empty) | `{"<flag_key>": bool, …}` |
-| `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
+| `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id?}` | ignored |
 | `track` without keys | `POST /api/v1/tracking/batch`, one entry per experiment and flag it reaches; with none, `POST /api/v1/tracking/track` | `{events: [<track body>, …]}` (max 100 per request); with none, the track body with no key | ignored |
 | `track_batch` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | `{success_count, failure_count, errors}` |
 | `get_assignments` | `GET /api/v1/tracking/assignments/{user_id}?active_only=true` | — | list of dicts |

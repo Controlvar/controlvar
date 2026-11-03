@@ -77,15 +77,20 @@ on for that user: `"new_dashboard_ui": true` and `"beta_features": true`.
    - Can access their own data
    - Cannot access admin endpoints
 
-   - Feature flags are by role, not ownership: ADMIN and DEVELOPER may read, create,
-     change and delete any flag; ANALYST and VIEWER may read any flag and change none
+   - Feature flags are by permission, not ownership: ADMIN and DEVELOPER may read, create,
+     change and delete any flag; ANALYST and VIEWER may read any flag and, by their role,
+     change none. In the full profile a custom role or direct grant can add
+     `feature_flag (create)`, `(update)` or `(delete)`, and then admits any flag
    - Experiments: reading an experiment and its results under
      `/api/v1/experiments/{experiment_id}` needs the role's READ on experiments (all four
      roles hold it); who owns the experiment is not considered. ADMIN and DEVELOPER may create
      experiments, clone any experiment, and update, start, pause, complete, archive or
      annotate (`metadata`) any experiment, schedule any experiment, and delete any
-     experiment in DRAFT. ANALYST and VIEWER change no experiment, including one they
-     own
+     experiment in DRAFT. ANALYST and VIEWER change no experiment by their role, including
+     one they own. In the full profile a custom role or direct grant can add these:
+     `experiment (create)` creates and clones, `experiment (update)` updates, starts,
+     pauses, completes, archives, annotates and schedules, and `experiment (delete)` deletes
+     a draft
 
 2. **Superusers**:
    - Can access all user data
@@ -964,7 +969,8 @@ Each 400 carries the detail `This flag is archived. Unarchive it before turning 
   separately. A flag that is not archived is returned unchanged. Written to the audit
   log as `feature_flag_update` (`ARCHIVED` to `INACTIVE`).
 - **Headers**: Authorization: Bearer {token}
-- **Permissions**: ADMIN and DEVELOPER; ANALYST and VIEWER get 403
+- **Permissions**: ADMIN and DEVELOPER, and in the full profile anyone whose custom role or
+  direct grant gives `feature_flag (update)`; anyone else gets 403
 - **Response**: 200 OK, the flag (the same shape as `GET /api/v1/feature-flags/{flag_id}`)
 - **Errors**: 403 without permission to change flags, 404 for an unknown flag
 
@@ -1020,8 +1026,10 @@ their public `key`, except `POST /api/v1/tracking/events`, which takes ids. They
   they actually see the experiment) records the view. Assigned users count in the experiment's
   results from the moment they are assigned, and for a bandit experiment they count as pulls.
   See [Assign a customer list to an experiment](../guides/assign-customer-list.md).
-- **Headers**: `X-API-Key: {api_key}`, a key with the `sdk:ruleset` scope whose owner is an ADMIN,
-  a DEVELOPER or a superuser. That scope also lets the key download every feature flag's targeting
+- **Headers**: `X-API-Key: {api_key}`, a key with the `sdk:ruleset` scope whose owner can change
+  feature flags and experiments: an ADMIN, a DEVELOPER, a superuser, or in the full profile anyone
+  whose custom roles or direct grants give `feature_flag (update)` and `experiment (update)`.
+  That scope also lets the key download every feature flag's targeting
   rules (`GET /api/v1/sdk/ruleset`), so keep the key on a server; see
   [Scopes](../security/api-keys.md#scopes).
 - **Body**: `{"experiment_key": string, "users": [{"user_id": string, "context": object?}]}`
@@ -1063,7 +1071,8 @@ their public `key`, except `POST /api/v1/tracking/events`, which takes ids. They
 | 401 | no key | `API key missing` |
 | 401 | an unknown, expired or revoked key | `Invalid API Key` |
 | 403 | the key lacks the scope | `This API key does not have the 'sdk:ruleset' scope. Create a key with the 'sdk:ruleset' scope for server-side SDK use.` |
-| 403 | the key's owner is no longer an active ADMIN, DEVELOPER or superuser | `This key's owner can no longer change feature flags or experiments, so the key is refused for server-side SDK use.` |
+| 403 | the key's owner can no longer change feature flags: inactive, or given `feature_flag (update)` neither by their role nor, in the full profile, by a custom role or direct grant | `This key's owner can no longer change feature flags, so the key is refused for server-side SDK use.` |
+| 403 | the key's owner can change feature flags but not experiments; nobody is assigned | `This key's owner cannot change experiments, so the key cannot assign users in a batch, and nobody was assigned. Use a server-side key whose owner can change experiments.` |
 | 404 | no ACTIVE experiment has that key | `Active experiment with key 'spring-email' not found` |
 | 409 | the experiment was paused, completed or deleted (or its variants changed) during the request | `The experiment changed during the request. Users earlier in the list may already be assigned; resending the same request is safe.` |
 | 422 | `users` is empty | loc `["body","users"]`, msg `List should have at least 1 item after validation, not 0` |
@@ -1903,8 +1912,9 @@ POST /api/v1/feature-flags/bulk-toggle    — Bulk enable/disable/archive (DEVEL
 GET  /api/v1/feature-flags/{id}/history   — Flag change history
 ```
 
-ADMIN and ANALYST read every audit entry; DEVELOPER and VIEWER read only their
-own entries on the list, user, stream and history routes. See
+ADMIN and ANALYST, and in the full profile anyone whose custom role or direct grant gives
+`audit_log (read)`, read other users' audit entries too; anyone else reads only their own
+entries on the list, user, stream and history routes. See
 [Permissions](audit-logging.md#permissions).
 
 ---
@@ -2067,7 +2077,9 @@ POST /api/v1/segments/{id}/members/remove   {"remove": ["user-123", "user-999"]}
   most 1,000,000` and adds nothing. A rules segment answers 409 `members can be added only
   to an id_list segment` (`removed only from` on remove), an archived one 409 `this
   segment is archived; its members cannot be changed`, an unknown one 404.
-- **Who.** DEVELOPER and ADMIN; ANALYST and VIEWER get 403. Each change writes one
+- **Who.** Users who may change experiments: DEVELOPER and ADMIN, and in the full profile
+  anyone whose custom role or direct grant gives `experiment (update)`; anyone else gets 403.
+  Each change writes one
   `segment_update` audit entry with the counts, never the IDs.
 
 `POST /api/v1/segments/{id}/evaluate` answers an id list on `user_context.user_id`: the user

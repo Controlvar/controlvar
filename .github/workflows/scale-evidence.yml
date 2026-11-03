@@ -1,0 +1,289 @@
+name: Scale evidence
+
+# The shipped Compose stack under k6 on a GitHub-hosted runner (#1608).
+#
+# Dispatched (on main), it measures the release images compose.yml names:
+# the `plan` job turns the inputs into a matrix of request type x run (all
+# six x 3 by default: 18 jobs, at most 7 at once); each `measure` job starts
+# the harness's own stack (scripts/scale_stack.py up), loads the fixtures,
+# and runs one repetition (scripts/scale_run.py run), which refuses unless
+# compose.yml is byte for byte the release tag's and the api and web images'
+# revision labels are the tag's commit; `merge` combines the jobs into the one
+# results file (tests/scale/scale_evidence.py merge) and uploads it as the
+# `scale-results` artifact, which a person commits verbatim.
+#
+# On a pull request that touches the harness it runs the smoke: the mixed
+# workload at the method file's smoke rates, through the same loader in smoke
+# mode (never publishable), then reads the latency calibration against a
+# stalling stub (V18) without being failed by it. A dispatch with mode=smoke runs the same one job, so a branch
+# that is never a pull request head can run it (the live tampers).
+# `provenance` verifies any results file the pull request adds or changes
+# against the artifact of the run it names.
+#
+# No secrets: the token reads (contents; actions for provenance's download),
+# nothing is pushed and no pull request is opened. Every job runs on
+# ubuntu-24.04 and nothing else: a larger, self-hosted or cloud runner bills,
+# and is the founder's decision with its own plan. Never a required check.
+# Inputs and step outputs reach a script only through env:, and the uploads
+# are exact files: never a directory, a glob, the env file or fixtures.json
+# (which hold the stack's secrets and API keys).
+# backend/tests/unit/scripts/test_scale_workflow.py pins this shape (V30).
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'measure: the matrix below; smoke: the pull request smoke and calibration (one job)'
+        type: choice
+        options:
+          - measure
+          - smoke
+        default: measure
+      scenarios:
+        description: 'Request types to measure, space-separated (default: all six)'
+        type: string
+        required: false
+        default: 'evaluate_get assign assign_returning track batch ruleset'
+      repetitions:
+        description: 'Runs of each request type, 1 to 9 (publication needs the method file''s 3)'
+        type: string
+        required: false
+        default: '3'
+  pull_request:
+    paths:
+      - 'tests/scale/**'
+      - 'scripts/scale_stack.py'
+      - 'scripts/scale_run.py'
+      - '.github/workflows/scale-evidence.yml'
+      - 'docs/self-hosting/capacity.md'
+      - 'docs/performance/scale-results/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scale-evidence-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+# bash -eo pipefail: a failing command in a pipe fails the step.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  plan:
+    name: plan
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'measure'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      dispatched_at: ${{ steps.plan.outputs.dispatched_at }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: The jobs to run
+        id: plan
+        env:
+          SCENARIOS: ${{ inputs.scenarios }}
+          REPETITIONS: ${{ inputs.repetitions }}
+        run: |
+          plan="$(python3 scripts/scale_run.py plan --scenarios "$SCENARIOS" --repetitions "$REPETITIONS")"
+          printf '%s\n' "$plan"
+          printf '%s\n' "$plan" >> "$GITHUB_OUTPUT"
+
+  measure:
+    name: measure (${{ matrix.scenario }}, run ${{ matrix.rep }})
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 7
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Fetch the measured release's tag
+        run: |
+          tag="$(python3 scripts/scale_run.py tag)"
+          git fetch --no-tags --depth=1 origin "+refs/tags/${tag}:refs/tags/${tag}"
+
+      - name: Start the harness's own stack
+        run: python3 scripts/scale_stack.py up --work "$RUNNER_TEMP/scale-work"
+
+      - name: Load the fixtures
+        run: python3 scripts/scale_run.py fixtures --work "$RUNNER_TEMP/scale-work"
+
+      - name: Measure
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+          REP: ${{ matrix.rep }}
+          SCALE_DISPATCHED_AT: ${{ needs.plan.outputs.dispatched_at }}
+        run: >-
+          python3 scripts/scale_run.py run --work "$RUNNER_TEMP/scale-work"
+          --scenario "$SCENARIO" --rep "$REP" --out "$RUNNER_TEMP/scale-out"
+
+      - name: Upload the job's results and rows
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: scale-job-${{ matrix.scenario }}-${{ matrix.rep }}
+          path: |
+            ${{ runner.temp }}/scale-out/results.json
+            ${{ runner.temp }}/scale-out/rows.csv.gz
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Take the stack down
+        if: always()
+        run: python3 scripts/scale_stack.py down --work "$RUNNER_TEMP/scale-work"
+
+  # V18 for a publication dispatch: the generator must show a planted stall,
+  # or `merge` does not run and nothing is published.
+  calibrate:
+    name: calibrate
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Fetch the measured release's tag
+        run: |
+          tag="$(python3 scripts/scale_run.py tag)"
+          git fetch --no-tags --depth=1 origin "+refs/tags/${tag}:refs/tags/${tag}"
+
+      - name: Start the harness's own stack
+        run: python3 scripts/scale_stack.py up --work "$RUNNER_TEMP/scale-work"
+
+      - name: Load the fixtures
+        run: python3 scripts/scale_run.py fixtures --work "$RUNNER_TEMP/scale-work"
+
+      - name: Calibrate the latency against a stalling stub (V18)
+        run: >-
+          python3 scripts/scale_run.py calibrate --work "$RUNNER_TEMP/scale-work"
+          --out "$RUNNER_TEMP/scale-calibration"
+
+      - name: Take the stack down
+        if: always()
+        run: python3 scripts/scale_stack.py down --work "$RUNNER_TEMP/scale-work"
+
+  merge:
+    name: merge
+    needs: [plan, measure, calibrate]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.calibrate.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: scale-job-*
+          path: ${{ runner.temp }}/scale-jobs
+
+      - name: Merge the jobs into one results file
+        run: |
+          shopt -s nullglob
+          jobs=("$RUNNER_TEMP"/scale-jobs/scale-job-*/results.json)
+          if [ "${#jobs[@]}" -eq 0 ]; then
+            printf '%s\n' '::error title=Scale evidence::no measure job produced a results file'
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/scale-results"
+          python3 tests/scale/scale_evidence.py merge "${jobs[@]}" --out "$RUNNER_TEMP/scale-results/results.json"
+
+      - name: Upload the results file
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: scale-results
+          path: ${{ runner.temp }}/scale-results/results.json
+          if-no-files-found: error
+          retention-days: 90
+
+  smoke:
+    name: smoke
+    if: github.event_name == 'pull_request' || inputs.mode == 'smoke'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Fetch the measured release's tag
+        run: |
+          tag="$(python3 scripts/scale_run.py tag)"
+          git fetch --no-tags --depth=1 origin "+refs/tags/${tag}:refs/tags/${tag}"
+
+      - name: Start the harness's own stack
+        run: python3 scripts/scale_stack.py up --work "$RUNNER_TEMP/scale-work"
+
+      - name: Load the fixtures
+        run: python3 scripts/scale_run.py fixtures --work "$RUNNER_TEMP/scale-work"
+
+      - name: Smoke (the mixed workload, smoke mode)
+        run: >-
+          python3 scripts/scale_run.py run --work "$RUNNER_TEMP/scale-work"
+          --mode smoke --scenario mix --rep 1 --out "$RUNNER_TEMP/scale-out"
+
+      # A pull request reads the calibration and is never failed by it (PLAN
+      # 3.9); a dispatch with mode=smoke fails on it, which is the V18 live
+      # tamper. The measure dispatch refuses to publish through the
+      # `calibrate` job below.
+      - name: Calibrate the latency against a stalling stub (V18, report only)
+        if: github.event_name == 'pull_request'
+        run: >-
+          python3 scripts/scale_run.py calibrate --report-only
+          --work "$RUNNER_TEMP/scale-work" --out "$RUNNER_TEMP/scale-calibration"
+
+      - name: Calibrate the latency against a stalling stub (V18)
+        if: github.event_name != 'pull_request'
+        run: >-
+          python3 scripts/scale_run.py calibrate --work "$RUNNER_TEMP/scale-work"
+          --out "$RUNNER_TEMP/scale-calibration"
+
+      - name: Upload the smoke's results and rows
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: scale-smoke
+          path: |
+            ${{ runner.temp }}/scale-out/results.json
+            ${{ runner.temp }}/scale-out/rows.csv.gz
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Take the stack down
+        if: always()
+        run: python3 scripts/scale_stack.py down --work "$RUNNER_TEMP/scale-work"
+
+  provenance:
+    name: provenance
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      # The pull request's merge commit and its first parent, the base.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Verify each results file this pull request adds or changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/scale_run.py provenance --base HEAD^1 --head HEAD

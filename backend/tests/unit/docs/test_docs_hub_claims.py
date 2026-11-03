@@ -403,16 +403,15 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("No API edits or deletes an entry"),
         lede("It records the changes people make through the API"),
     ),
-    "Admin, Developer, Analyst and Viewer decide what a user can do; custom roles (full profile) are stored but not applied yet": (
+    "Admin, Developer, Analyst and Viewer decide what a user can do; in the full profile, custom roles and direct grants add to them": (
         lede(
             "Custom roles is one of the optional modules -- present in the full profile"
         ),
+        says("One of four roles every user has (admin, developer, analyst, viewer)"),
         says(
-            "One of four built-in system roles assigned to every user (admin, developer, analyst, viewer)"
+            "A user may do what their built-in role allows, plus what their custom roles and unexpired direct grants hold"
         ),
-        says("Only the base role decides what a user can do"),
-        says("Custom roles and direct grants are stored"),
-        says("no permission check reads them"),
+        says("Roles and grants only add"),
     ),
     "Create, expire and delete keys; the sdk:ruleset scope for local evaluation": (
         lede("an API key lasts until you delete it or it reaches its own expires_at"),

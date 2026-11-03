@@ -126,6 +126,10 @@ SYSTEM_UNDER_TEST: Tuple[str, ...] = ("api", "postgres", "web", "redis")
 #: The hardware threads the samplers read from /proc/stat, as the VM numbers
 #: them. A hardware thread is what the VM calls a CPU; it is not a core.
 THREADS: Tuple[str, ...] = ("cpu0", "cpu1", "cpu2", "cpu3")
+#: What the samplers read for each hardware thread from /proc/stat, each in
+#: per-mille of the window's ticks: busy (user, nice, system, irq and
+#: softirq), steal, and irq and softirq on their own.
+THREAD_FIELDS: Tuple[str, ...] = ("busy", "steal", "irq", "softirq")
 #: How the page names each container.
 NAMES: Dict[str, str] = {
     "api": "the API",
@@ -157,6 +161,7 @@ ROW_ERRORS: Tuple[str, ...] = ("timeout", "connection")
 INVALID_REASONS: Tuple[str, ...] = (
     "none",
     "sent-identity",
+    "nothing-measured",
     "start-lag",
     "not-sampled",
     "foreign-cpu",
@@ -212,6 +217,11 @@ ROW_FIELDS: Tuple[str, ...] = (
     "error",
     "latency_us",
     "start_lag_us",
+    # When the request was sent, in microseconds after the step's start (the
+    # script's clock, 1 ms resolution). The measure window is decided by this,
+    # not by ``iteration``: k6 numbers the iterations that STARTED, so once one
+    # is dropped the number is no longer the scheduled slot (#1667).
+    "sent_offset_us",
     "rate_limit",
     "flag_class",
     "reason",
@@ -539,12 +549,14 @@ STEP_SPEC = obj(
     samples=Int(0),
     # Each container's cgroup CPU, in per-mille of one hardware thread.
     **{f"{name}_cpu_permille": Int(0) for name in CONTAINERS},
-    # Each hardware thread's /proc/stat busy and steal, and the foreign CPU
-    # computed from them: busy minus the containers pinned to the thread.
+    # Each hardware thread's /proc/stat busy and steal, its irq and softirq
+    # (part of busy, recorded apart so the foreign-CPU limit can be calibrated
+    # against them: PE SMT condition 8), and the foreign CPU computed from
+    # them: busy minus the containers pinned to the thread.
     **{
         f"{thread}_{what}_permille": PERMILLE
         for thread in THREADS
-        for what in ("busy", "steal", "foreign")
+        for what in THREAD_FIELDS + ("foreign",)
     },
     active_backend_samples_by_count=ListOf(Int(0), 0, 1000),
     active_backend_share_permille=PERMILLE,
@@ -1137,6 +1149,14 @@ def judge_step(
                 f"!= scheduled {step['scheduled']}",
             )
         )
+    if step["measured"] == 0:
+        failed.append(
+            (
+                "nothing-measured",
+                f"step {number}: no request was sent in the measure window, so "
+                "nothing was measured",
+            )
+        )
     lag = validity["max_start_lag_p99_us"]
     if step["dropped"] == 0 and step["start_lag_p99_us"] > lag:
         failed.append(
@@ -1333,7 +1353,7 @@ def summarise_step(
         )
     window = ranges(method)
     scheduled = scheduled_count(rate, unit, window["settle_s"] + window["measure_s"])
-    first = first_measured(rate, unit, window["settle_s"])
+    settle_us = window["settle_s"] * 1_000_000
     allowed = set(method["smoke"]["mix"]) if scenario == SMOKE_ONLY else {scenario}
     expect = expectations(method, observation["variants"])
     seen: set = set()
@@ -1361,10 +1381,18 @@ def summarise_step(
         client_429 += status == 429
         if 200 <= status < 400 and row["rate_limit"] != limit:
             mismatches += 1
-        if iteration >= first:
+        # Measured: sent after the settle, by the send time, never by the
+        # iteration number (which counts started iterations, not slots).
+        if _number(row, "sent_offset_us") >= settle_us:
             measured.append((row, verdict))
     latencies = sorted(_number(row, "latency_us") for row, _ in measured)
-    lags = sorted(_number(row, "start_lag_us") for row, _ in measured)
+    # The start lag is the distance from the iteration's scheduled slot, which
+    # the iteration number only names while nothing was dropped: with drops it
+    # is not computed (judge_step ignores it then, too).
+    dropped = observation["dropped"]
+    lags = (
+        [] if dropped else sorted(_number(row, "start_lag_us") for row, _ in measured)
+    )
     reasons: Dict[str, int] = {}
     if scenario == "evaluate_get":
         for row, _ in measured:
@@ -1387,7 +1415,7 @@ def summarise_step(
         f"{name}_cpu_permille": cpu[name] if sampled else 0 for name in CONTAINERS
     }
     for thread in THREADS:
-        for what in ("busy", "steal"):
+        for what in THREAD_FIELDS:
             key = f"{what}_permille"
             cpu_fields[f"{thread}_{key}"] = threads[thread][key] if sampled else 0
         cpu_fields[f"{thread}_foreign_permille"] = 0
@@ -1457,10 +1485,10 @@ OBSERVATION_SPEC = obj(
     samples=Int(0),
     # Each container's cgroup CPU over the window.
     cpu_permille=obj(**{name: Int(0) for name in CONTAINERS}),
-    # Every hardware thread's /proc/stat busy and steal over the window.
+    # Every hardware thread's /proc/stat THREAD_FIELDS over the window.
     threads=obj(
         **{
-            thread: obj(busy_permille=PERMILLE, steal_permille=PERMILLE)
+            thread: obj(**{f"{what}_permille": PERMILLE for what in THREAD_FIELDS})
             for thread in THREADS
         }
     ),
@@ -2129,7 +2157,9 @@ def _topology(host: Mapping[str, Any]) -> Tuple[int, Tuple[Tuple[int, ...], ...]
 def _topology_text(
     nproc: int, cores: Sequence[Sequence[int]], split: Mapping[str, str]
 ) -> str:
-    """The topology as the VM reported it, naming what ran on each core."""
+    """The topology as the VM reported it, naming what the harness pinned to
+    each core. "Pinned", not "ran": the Docker daemon, the runner's agent and
+    the harness's own process run there too, unrecorded (#1616 review N1)."""
     sizes = {len(core) for core in cores}
     if sizes == {1}:
         shape = f"{len(cores)} cores of one hardware thread each"
@@ -2139,10 +2169,12 @@ def _topology_text(
         shape = f"{len(cores)} cores"
     parts = []
     for core in cores:
-        ran = _on_threads(split, core)
+        pinned = _on_threads(split, core)
         where = f"the core of {_threads_text(set(core))}"
         parts.append(
-            f"{where} ran {_and(ran)}" if ran else f"{where} ran nothing pinned"
+            f"{where} had pinned to it {_and(pinned)}"
+            if pinned
+            else f"{where} had nothing pinned to it"
         )
     return f"{nproc} vCPUs, which the VM reports as {shape}: " + "; ".join(parts)
 
@@ -2521,10 +2553,29 @@ def verify(
         problems.append(
             f"the file names run {results.get('run', {}).get('run_id')}, not {run_id}"
         )
-    view = runner(["run", "view", str(run_id), "--repo", repo, "--json", "headSha"])
+    view = runner(
+        [
+            "run",
+            "view",
+            str(run_id),
+            "--repo",
+            repo,
+            "--json",
+            "headSha,event,headBranch",
+        ]
+    )
     if view.returncode != 0:
         return problems + [f"run {run_id} cannot be read: {view.stderr.strip()[:200]}"]
-    built = json.loads(view.stdout).get("headSha", "")
+    viewed = json.loads(view.stdout)
+    built = viewed.get("headSha", "")
+    if viewed.get("event") != "workflow_dispatch":
+        problems.append(
+            f"run {run_id} was event {viewed.get('event')}, not a workflow_dispatch"
+        )
+    if viewed.get("headBranch") != "main":
+        problems.append(
+            f"run {run_id} ran on branch {viewed.get('headBranch')}, not main"
+        )
     stated = results.get("run", {}).get("harness_commit")
     if built != stated:
         problems.append(f"run {run_id} built {built}, the file says {stated}")

@@ -213,6 +213,24 @@ public class UserKeyCache<TValue> where TValue : class
         }
     }
 
+    /// <summary>
+    /// Stores <paramref name="value"/> exactly as <see cref="Set"/> does, and reports, in the same
+    /// locked step, whether the user + key held no live entry before: <c>true</c> when it was
+    /// absent or expired, <c>false</c> when an unexpired entry was replaced. Expiry is judged as
+    /// <see cref="Get"/> judges it. Two threads that store the same user + key one after the other
+    /// therefore get <c>true</c> and then <c>false</c>, which is how the client calls
+    /// <see cref="SdkConfig.OnExposure"/> once per stored answer.
+    /// </summary>
+    internal bool Fill(string userId, string key, TValue value)
+    {
+        lock (_lock)
+        {
+            bool empty = !_store.TryGet(StorageKey(userId, key), out _);
+            Set(userId, key, value); // the same lock again: Monitor is re-entrant
+            return empty;
+        }
+    }
+
     /// <summary>All live (non-expired) entries of a user, in insertion order.</summary>
     public IReadOnlyList<KeyValuePair<string, TValue>> Entries(string userId)
     {

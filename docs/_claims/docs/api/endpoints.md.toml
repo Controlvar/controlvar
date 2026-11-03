@@ -163,8 +163,16 @@ text = "Cannot access admin endpoints"
 by = ["test:backend/tests/integration/api/test_admin_users_api.py::TestAdminUserList::test_a_non_superuser_is_refused"]
 
 [[unit]]
-text = "Feature flags are by role, not ownership: ADMIN and DEVELOPER may read, create, change and delete any flag; ANALYST and VIEWER may read any flag and change none"
+text = "Feature flags are by permission, not ownership: ADMIN and DEVELOPER may read, create, change and delete any flag; ANALYST and VIEWER may read any flag and, by their role, change none."
 by = ["test:backend/tests/unit/core/test_feature_flag_access_rule.py::test_the_shipped_table_on_someone_elses_flag"]
+
+[[unit]]
+text = "In the full profile a custom role or direct grant can add feature_flag (create), (update) or (delete), and then admits any flag"
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_bulk_toggle_follows_a_flag_update_grant",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
 text = "Experiments: reading an experiment and its results under /api/v1/experiments/{experiment_id} needs the role's READ on experiments (all four roles hold it); who owns the experiment is not considered."
@@ -175,8 +183,15 @@ text = "ADMIN and DEVELOPER may create experiments, clone any experiment, and up
 by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller"]
 
 [[unit]]
-text = "ANALYST and VIEWER change no experiment, including one they own"
+text = "ANALYST and VIEWER change no experiment by their role, including one they own."
 by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller"]
+
+[[unit]]
+text = "In the full profile a custom role or direct grant can add these: experiment (create) creates and clones, experiment (update) updates, starts, pauses, completes, archives, annotates and schedules, and experiment (delete) deletes a draft"
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
 text = "Superusers:"
@@ -1472,8 +1487,11 @@ text = "Written to the audit log as feature_flag_update (ARCHIVED to INACTIVE)."
 by = ["test:backend/tests/smoke/test_audit_inventory.py"]
 
 [[unit]]
-text = "Permissions: ADMIN and DEVELOPER; ANALYST and VIEWER get 403"
-by = ["test:backend/tests/integration/api/test_archived_flag_verbs.py::test_unarchive_is_permission_checked"]
+text = "Permissions: ADMIN and DEVELOPER, and in the full profile anyone whose custom role or direct grant gives feature_flag (update); anyone else gets 403"
+by = [
+    "test:backend/tests/integration/api/test_archived_flag_verbs.py::test_unarchive_is_permission_checked",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
 text = "Response: 200 OK, the flag (the same shape as GET /api/v1/feature-flags/{flag_id})"
@@ -1613,8 +1631,12 @@ text = "See Assign a customer list to an experiment."
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "Headers: X-API-Key: {api_key}, a key with the sdk:ruleset scope whose owner is an ADMIN, a DEVELOPER or a superuser."
-by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_key_without_the_scope_is_403"]
+text = "Headers: X-API-Key: {api_key}, a key with the sdk:ruleset scope whose owner can change feature flags and experiments: an ADMIN, a DEVELOPER, a superuser, or in the full profile anyone whose custom roles or direct grants give feature_flag (update) and experiment (update)."
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_key_without_the_scope_is_403",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_a_built_in_developer_key_assigns_in_a_batch_as_before",
+]
 
 [[unit]]
 text = "That scope also lets the key download every feature flag's targeting rules (GET /api/v1/sdk/ruleset), so keep the key on a server; see Scopes."
@@ -1699,8 +1721,18 @@ text = "403 | the key lacks the scope | This API key does not have the 'sdk:rule
 by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_key_without_the_scope_is_403"]
 
 [[unit]]
-text = "403 | the key's owner is no longer an active ADMIN, DEVELOPER or superuser | This key's owner can no longer change feature flags or experiments, so the key is refused for server-side SDK use."
-by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_scoped_key_whose_owner_lost_the_role_is_403"]
+text = "403 | the key's owner can no longer change feature flags: inactive, or given feature_flag (update) neither by their role nor, in the full profile, by a custom role or direct grant | This key's owner can no longer change feature flags, so the key is refused for server-side SDK use."
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_scoped_key_whose_owner_lost_the_role_is_403",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+]
+
+[[unit]]
+text = "403 | the key's owner can change feature flags but not experiments; nobody is assigned | This key's owner cannot change experiments, so the key cannot assign users in a batch, and nobody was assigned. Use a server-side key whose owner can change experiments."
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+    "test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_owner_experiment_text",
+]
 
 [[unit]]
 text = "404 | no ACTIVE experiment has that key | Active experiment with key 'spring-email' not found"
@@ -2914,8 +2946,12 @@ text = "See Audit Logging Guide for full documentation."
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "ADMIN and ANALYST read every audit entry; DEVELOPER and VIEWER read only their own entries on the list, user, stream and history routes."
-by = ["test:backend/tests/integration/api/test_audit_log_reads.py::test_developer_and_viewer_read_only_their_own_entries"]
+text = "ADMIN and ANALYST, and in the full profile anyone whose custom role or direct grant gives audit_log (read), read other users' audit entries too; anyone else reads only their own entries on the list, user, stream and history routes."
+by = [
+    "test:backend/tests/integration/api/test_audit_log_reads.py::test_developer_and_viewer_read_only_their_own_entries",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
 text = "See Permissions."
@@ -3178,8 +3214,11 @@ text = "Who."
 by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_roles_analyst_cannot_change_members"]
 
 [[unit]]
-text = "DEVELOPER and ADMIN; ANALYST and VIEWER get 403."
-by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_roles_analyst_cannot_change_members"]
+text = "Users who may change experiments: DEVELOPER and ADMIN, and in the full profile anyone whose custom role or direct grant gives experiment (update); anyone else gets 403."
+by = [
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_roles_analyst_cannot_change_members",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
 text = "Each change writes one segment_update audit entry with the counts, never the IDs."

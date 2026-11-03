@@ -740,17 +740,25 @@ by = [
 
 [[unit]]
 text = "Beyond the four base roles, admins can create custom roles with specific per-resource and per-action permissions."
-by = ["test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_expired_direct_grant_not_included"]
+by = [
+    "test:modules/backend/tests/unit/services/test_rbac_service.py::TestCreateCustomRole::test_persists_permissions",
+    "test:backend/tests/unit/core/test_built_in_roles_decide.py::test_a_custom_role_or_a_grant_adds_only_grantable_pairs",
+]
 
 [[unit]]
 text = "They can also grant direct permission to a user for a specific resource, with an optional expiry timestamp for temporary access."
-by = ["test:modules/backend/tests/unit/services/test_rbac_service.py::TestGetEffectivePermissions::test_expired_direct_grant_not_included"]
+by = [
+    "test:modules/backend/tests/unit/api/test_rbac_endpoints.py::TestGrantRevokePermission::test_grant_permission_returns_201",
+    "test:modules/backend/tests/integration/rbac/test_rbac_provider.py::test_a_grant_yields_its_pairs_only_when_activated_active_and_unexpired",
+]
 
 [[unit]]
-text = "Both are stored and shown by GET /api/v1/rbac/users/{user_id}/permissions, but no permission check reads them yet: what a user can do is decided by their base role (#891)."
+text = "Both add to what the user's base role allows, from their next request; they never remove a permission and never give administration."
 by = [
-    "test:modules/backend/tests/unit/services/test_rbac_service.py::TestCreateCustomRole::test_creates_role_with_name",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_only_the_built_in_role",
+    "test:backend/tests/unit/core/test_built_in_roles_decide.py::test_a_custom_role_or_a_grant_adds_only_grantable_pairs",
+    "test:modules/backend/tests/integration/rbac/test_rbac_revocation.py",
+    "test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_layers_only_add_and_actions_are_sorted",
+    "test:modules/backend/tests/integration/rbac/test_rbac_no_escalation.py::test_all_forty_pairs_reach_no_administration",
 ]
 
 [[unit]]

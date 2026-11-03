@@ -130,7 +130,7 @@ def test_make_format_formats_and_fixes_the_python_in_place():
         for line in _make_n("format").splitlines()
         if line.strip()
     ]
-    paths = "backend/ scripts/ tests/acceptance/ modules/"
+    paths = "backend/ scripts/ tests/acceptance/ tests/ground_truth/ modules/"
     assert lines == [
         f"venv/bin/ruff format {paths}",
         f"venv/bin/ruff check {paths} --fix",

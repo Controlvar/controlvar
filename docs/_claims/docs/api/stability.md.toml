@@ -621,26 +621,24 @@ by = [
 ]
 
 [[unit]]
-text = "POST /api/v1/rollout-schedules/, POST /api/v1/rollout-schedules/{schedule_id}/stages, PUT /api/v1/rollout-schedules/stages/{stage_id} | #1462 | A stage start_date sent with a zone (Z or an offset) is stored as that moment in UTC, whatever the database session's time zone; one sent with no zone is taken as UTC, as before. On a session that was not in UTC, such a date used to be stored and served back shifted by the session's offset, and so were the times the scheduler records for a stage (completed_date, and the start it measures a stage's duration from): time-based stages started and completed early on a session west of UTC, and late east of it. Deployments whose database sessions run in UTC, as the ones this repository ships do, see no change. Dates stored before the upgrade are not changed; send a pending stage's start_date again to correct it. Editing an in-progress stage, a rename included, still restarts the clock the scheduler measures its duration from. The OpenAPI document does not change. See Time-Based Triggers."
+text = "POST /api/v1/rollout-schedules/, POST /api/v1/rollout-schedules/{schedule_id}/stages, PUT /api/v1/rollout-schedules/stages/{stage_id} | #1462 | A stage start_date sent with a zone (Z or an offset) is stored as that moment in UTC, whatever the database session's time zone; one sent with no zone is taken as UTC, as before. On a session that was not in UTC, such a date used to be stored and served back shifted by the session's offset, and so were the times the scheduler records for a stage (completed_date, and the start it measures a stage's duration from): time-based stages started and completed early on a session west of UTC, and late east of it. Deployments whose database sessions run in UTC, as the ones this repository ships do, see no change. Dates stored before the upgrade are not changed; send a pending stage's start_date again to correct it. The OpenAPI document does not change. See Time-Based Triggers."
 by = [
     "test:backend/tests/integration/api/test_rollout_stage_dates_utc.py::test_the_route_session_is_in_los_angeles",
     "test:backend/tests/integration/api/test_rollout_stage_dates_utc.py::test_a_stage_start_date_is_stored_and_served_in_utc",
     "test:backend/tests/integration/api/test_rollout_stage_dates_utc.py::test_the_scheduler_starts_a_time_based_stage_at_its_utc_instant",
     "test:backend/tests/integration/api/test_rollout_stage_dates_utc.py::test_min_stage_duration_and_completion_are_recorded_in_utc",
-    "test:backend/tests/integration/api/test_rollout_stage_dates_utc.py::test_editing_an_in_progress_stage_restarts_its_clock",
     "test:backend/tests/unit/models/test_rollout_stage_column_types.py::test_a_stage_time_is_still_timestamp_without_time_zone",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
 ]
 
 [[unit]]
-text = "POST /api/v1/rollout-schedules/, PUT /api/v1/rollout-schedules/{schedule_id}, POST /api/v1/rollout-schedules/{schedule_id}/activate, POST /api/v1/rollout-schedules/{schedule_id}/stages, PUT /api/v1/rollout-schedules/stages/{stage_id}, POST /api/v1/rollout-schedules/stages/{stage_id}/advance | #1460, #1536 | Every change keeps a schedule's stage targets from decreasing in stage_order and within its max_percentage, a flag has at most one active schedule, and stages start in order. Create checks the targets in stage_order order, where it checked them in list order, and still answers 422. Adding a stage, or changing a pending stage's target or order, that would make a target decrease or exceed max_percentage answers 409, and so does lowering max_percentage below a stage's target; these used to be accepted. Adding a stage, or moving a pending stage, at or before a stage that has started answers 409; this used to be accepted and shifted the started stages down. A stage that has completed or failed accepts no change, and a stage in progress accepts no change to target_percentage or stage_order: each answers 409 (stage_order on a stage in progress answered 400). An in-progress stage still accepts a new trigger_type, trigger_configuration, start_date, name and description; editing it, a rename included, restarts the clock the scheduler measures its duration from. Activating a schedule, or resuming a paused one, while another schedule of the same flag is active answers 409. Advancing a pending stage answers 409 while another stage is in progress or an earlier one has not completed; advancing the manual stage in progress still completes it and starts the next. A refused request changes nothing. Schedules stored before the upgrade are not changed, and the scheduler runs them as before. The OpenAPI document does not change. See Gradual Rollouts."
+text = "POST /api/v1/rollout-schedules/, PUT /api/v1/rollout-schedules/{schedule_id}, POST /api/v1/rollout-schedules/{schedule_id}/activate, POST /api/v1/rollout-schedules/{schedule_id}/stages, PUT /api/v1/rollout-schedules/stages/{stage_id}, POST /api/v1/rollout-schedules/stages/{stage_id}/advance | #1460, #1536 | Every change keeps a schedule's stage targets from decreasing in stage_order and within its max_percentage, a flag has at most one active schedule, and stages start in order. Create checks the targets in stage_order order, where it checked them in list order, and still answers 422. Adding a stage, or changing a pending stage's target or order, that would make a target decrease or exceed max_percentage answers 409, and so does lowering max_percentage below a stage's target; these used to be accepted. Adding a stage, or moving a pending stage, at or before a stage that has started answers 409; this used to be accepted and shifted the started stages down. A stage that has completed or failed accepts no change, and a stage in progress accepts no change to target_percentage or stage_order: each answers 409 (stage_order on a stage in progress answered 400). An in-progress stage still accepts a new trigger_type, trigger_configuration, start_date, name and description. Activating a schedule, or resuming a paused one, while another schedule of the same flag is active answers 409. Advancing a pending stage answers 409 while another stage is in progress or an earlier one has not completed; advancing the manual stage in progress still completes it and starts the next. A refused request changes nothing. Schedules stored before the upgrade are not changed, and the scheduler runs them as before. The OpenAPI document does not change. See Gradual Rollouts."
 by = [
     "test:backend/tests/integration/api/test_rollout_rule_conflict_routes.py::test_a_rule_conflict_answers_409_and_a_value_error_400",
     "test:backend/tests/integration/api/test_rollout_stage_targets_api.py",
     "test:backend/tests/integration/api/test_rollout_one_active_schedule_api.py",
     "test:backend/tests/integration/api/test_rollout_stage_advance_order_api.py",
     "test:backend/tests/unit/schemas/test_rollout_create_targets_in_stage_order.py",
-    "test:backend/tests/integration/api/test_rollout_stage_dates_utc.py::test_editing_an_in_progress_stage_restarts_its_clock",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
 ]
 
@@ -741,6 +739,26 @@ by = [
 ]
 
 [[unit]]
+text = "POST /api/v1/rollout-schedules/, PUT /api/v1/rollout-schedules/{schedule_id} | #962, #1086, #1529, #1534 | min_stage_duration accepts a whole number of hours from 0 to 8760, or null for no minimum (null on a PUT still clears it); anything else answers 422, where a negative value or one above 8760 was stored, and 2147483648 or more answered 500. A PUT that makes the end date not after the start date, or sends one date that falls on the wrong side of the stored one, answers 422 with End date must be after start date, where it answered 500. A date with no zone is read as UTC, so a start and an end that mix zoned and unzoned values no longer answer 500. A PUT that contains stages, with any value including null and [], answers 422 naming the stage routes, where it answered 200 without applying the stages; this is deliberately wider than \"a non-empty list\" so a client cannot believe a list was applied. Schedules already stored with a value outside 0 to 8760 are read back unchanged, and the scheduler treats a negative one as no minimum; a PUT that sends such a value back answers 422 until it is corrected. The OpenAPI document changes: min_stage_duration has a minimum and a maximum on both requests, and stages is marked deprecated on the update. See Rollout schedules."
+by = [
+    "test:backend/tests/integration/api/test_rollout_schedule_input_api.py",
+    "test:backend/tests/unit/schemas/test_rollout_schedule_input.py",
+    "test:backend/tests/unit/core/test_rollout_min_stage_duration.py::test_a_stored_negative_min_stage_duration_is_no_minimum",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/rollout-schedules/, POST /api/v1/rollout-schedules/{schedule_id}/stages, PUT /api/v1/rollout-schedules/stages/{stage_id} | #1535 | When a stage's trigger_configuration has a duration, it must be a number of hours from 0 to 8760, not a string, null, a boolean, NaN or a larger number; anything else answers 422 at trigger_configuration, where a string, null or a number above 8760 was accepted and the stage then never completed, a negative number or false was accepted and the stage completed at once, true was read as one hour, and NaN answered 500. A stage without duration keeps the 24-hour default, and the rest of trigger_configuration is not checked. Stages already stored with a bad duration are read back unchanged. See Trigger types."
+by = [
+    "test:backend/tests/integration/api/test_rollout_stage_duration_api.py",
+    "test:backend/tests/unit/schemas/test_rollout_stage_duration.py",
+    "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_is_not_completed_before_24_hours",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "GET /api/v1/experiments/{experiment_id}/split-url/preview | #1615 | The preview answers what POST /api/v1/tracking/split-url/assign gives the visitor id now, without recording anything: their stored assignment's variant if they have one, else the variant a new visitor with that id gets, by the bandit weights for a bandit experiment and otherwise by the hash of the id and the experiment's key that POST /api/v1/tracking/assign uses. It used to answer an MD5 hash of the id and the experiment's id, which matched the variant a visitor is assigned for only about half of the ids. It checks no eligibility rule. A stored configuration that does not match the experiment's variants answers 409 with the detail split_url_config is not valid; update it with PUT /api/v1/experiments/{id}, where it answered 200. The fields of the answer are unchanged. The OpenAPI document changes only in the operation's description, its response description and the description of user_id. See Split URL preview."
 by = [
     "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_the_preview_agrees_with_the_route_and_records_nothing",
@@ -790,4 +808,48 @@ by = [
     "test:backend/tests/integration/api/test_metrics_errors_dates.py::test_an_offset_of_16_hours_or_more_answers_422",
     "test:backend/tests/integration/api/test_metrics_errors_dates.py::test_offsets_under_16_hours_utc_and_naive_dates_are_answered",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/rollout-schedules/, GET /api/v1/rollout-schedules/, GET/PUT /api/v1/rollout-schedules/{schedule_id}, POST /api/v1/rollout-schedules/{schedule_id}/activate, POST /api/v1/rollout-schedules/{schedule_id}/pause, POST /api/v1/rollout-schedules/{schedule_id}/cancel, POST /api/v1/rollout-schedules/{schedule_id}/stages, PUT /api/v1/rollout-schedules/stages/{stage_id}, POST /api/v1/rollout-schedules/stages/{stage_id}/advance | #1528 | A stage in a response carries started_at, the time it started (UTC; null for a stage that has not started, for one that finished before the upgrade, and for one the previous release started during the upgrade, while it runs and after). The scheduler measures a time-based stage's duration and the schedule's min_stage_duration from it, so editing a stage in progress, a rename included, no longer restarts its clock; changing its trigger_configuration.duration moves its completion time. started_at is read-only: a request that sends it is ignored. The OpenAPI document changes: the stage in each response gains started_at. See Time-Based Triggers."
+by = [
+    "test:backend/tests/integration/api/test_rollout_stage_started_at.py",
+    "test:backend/tests/integration/api/test_rollout_stage_dates_utc.py::test_editing_an_in_progress_stage_keeps_its_clock",
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_a_database_at_the_previous_release_gains_the_column_and_each_start",
+    "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_previous_release_starts_stages_and_this_release_completes_them",
+    "test:backend/tests/unit/core/test_rollout_stage_started_at.py",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "Every operation that checks permission on experiments or feature flags, or reads other users' audit entries (full profile) | #891 | A user is admitted by their built-in role, as before, or by an active custom role or unexpired direct grant of the permission the operation checks; such a user used to be answered 403. A role or grant gives only experiment and feature_flag create, read, update, delete and list, and audit_log read, and never administration. For the four built-in roles and the core profile nothing changes. See RBAC."
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+    "test:modules/backend/tests/integration/rbac/test_rbac_no_escalation.py::test_all_forty_pairs_reach_no_administration",
+]
+
+[[unit]]
+text = "GET /api/v1/rbac/users/{user_id}/permissions, GET /api/v1/rbac/roles, GET /api/v1/rbac/roles/{role_name} (full profile) | #891 | The response shapes do not change; the values do. permissions lists only experiment and feature_flag (the actions the permission checks admit) and audit_log ([\"read\"] when the user may read other users' entries), where it listed every resource the built-in role names and every pair a role or grant stored; custom_roles and user_count count only assignments that take effect, not those recorded before custom roles took effect. See RBAC."
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_effective_permissions_display.py::test_the_display_equals_the_rules",
+    "test:modules/backend/tests/integration/rbac/test_rbac_activation.py::test_user_count_counts_only_assignments_that_take_effect",
+]
+
+[[unit]]
+text = "POST /api/v1/tracking/assign/batch (beta), GET /api/v1/sdk/ruleset (beta), POST /api/v1/tracking/evaluations (beta), POST /api/v1/api-keys | #891 | An sdk:ruleset key works while its owner can change feature flags, which in the full profile a custom role or direct grant of feature_flag (update) also gives. Batch assignment also needs the owner to be able to change experiments, and otherwise answers 403 with This key's owner cannot change experiments, so the key cannot assign users in a batch, and nobody was assigned. Use a server-side key whose owner can change experiments. before anyone is assigned. The 403 for an owner who cannot change feature flags now reads This key's owner can no longer change feature flags, so the key is refused for server-side SDK use., and the key-creation 403 reads Only users who can change feature flags can create an API key with the sdk:ruleset scope; the ADMIN and DEVELOPER roles and superusers can. Create the key without that scope, or ask someone who can. For the four built-in roles who is admitted does not change."
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+    "test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_owner_role_text",
+    "test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_owner_experiment_text",
+    "test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_key_creation_refusal_text",
+]
+
+[[unit]]
+text = "DELETE /api/v1/feature-flags/{flag_id}, POST /api/v1/feature-flags/{flag_id}/toggle, GET /api/v1/feature-flags/{flag_id}/history, GET /api/v1/audit-logs/, GET /api/v1/audit-logs/stream, POST /api/v1/bandit/{experiment_id}/update, POST /api/v1/mutual-exclusion-groups, PUT /api/v1/mutual-exclusion-groups/{group_id}, POST /api/v1/mutual-exclusion-groups/{group_id}/experiments, DELETE /api/v1/mutual-exclusion-groups/{group_id}/experiments/{experiment_id}, POST /api/v1/segments, PUT /api/v1/segments/{segment_id}, DELETE /api/v1/segments/{segment_id} and, in the full profile, POST /api/v1/counters/{experiment_id}/increment, POST /api/v1/counters/bulk, POST /api/v1/rbac/roles/assign and GET /api/v1/rbac/users/{user_id}/permissions | #891 | The OpenAPI document changes in the descriptions of these operations: they name the custom role or direct grant that also admits a user (the two RBAC operations describe what they now do). The 403 of POST /api/v1/bandit/{experiment_id}/update now reads Triggering a bandit update needs permission to change experiments, which the DEVELOPER and ADMIN roles have."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/unit/api/test_bandit_endpoints.py::TestTriggerBanditUpdate::test_viewer_gets_403_on_post_update",
 ]

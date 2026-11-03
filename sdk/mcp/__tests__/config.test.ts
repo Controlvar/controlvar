@@ -256,3 +256,149 @@ describe("V-OPT: CONTROLVAR_ALLOW_INSECURE_HTTP=1", () => {
     expect(line).toContain("which has a path");
   });
 });
+
+describe("configuration errors never echo a value shaped like a key", () => {
+  const local = { CONTROLVAR_API_KEY: KEY };
+  const keyShaped = `eptk_${"a1b2c3d4".repeat(4)}`;
+  const signInShaped = "eyJhbGciOiJIUzI1NiJ9-canary";
+  const dottedSignInShaped = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2ln";
+  const both = [[keyShaped], [signInShaped]];
+  const run = (url: string, extra: Record<string, string> = {}) =>
+    readConfig([], { ...local, CONTROLVAR_API_URL: url, ...extra }, []);
+  const message = (result: ReturnType<typeof readConfig>): string => {
+    if (result.ok) throw new Error("accepted");
+    return result.message;
+  };
+  const warnings = (result: ReturnType<typeof readConfig>): string => {
+    if (!result.ok) throw new Error(result.message);
+    return result.config.warnings.join("\n");
+  };
+  // No part of the value (its first 8 characters, in either case) may appear.
+  const hides = (text: string, value: string) => {
+    expect(text).not.toContain(value);
+    expect(text.toLowerCase()).not.toContain(value.slice(0, 8).toLowerCase());
+  };
+
+  // Refused at once, with a fixed message, wherever the value sits in the address.
+  test.each([
+    ["https://<v>"],
+    ["http://<v>"],
+    ["https:<v>"],
+    ["https://<v>/x"],
+    ["http://<v>:8000"],
+    ["http://cv.<v>"],
+    ["https://cv.<v>/x"],
+    ["ftp://<v>"],
+  ])("a key in the host is refused with a fixed message: %s", (shape) => {
+    for (const value of [keyShaped, keyShaped.toUpperCase(), signInShaped.toLowerCase()]) {
+      const text = message(run(shape.replace("<v>", value)));
+      expect(text).toContain("looks like an API key, not an address");
+      hides(text, value);
+    }
+  });
+
+  test.each([[dottedSignInShaped], [`  ${dottedSignInShaped}`]])("a dotted sign-in token as the host: %j", (value) => {
+    for (const url of [`http://${value.trim()}`, `https://${value.trim()}/x`]) {
+      const text = message(run(url));
+      expect(text).toContain("looks like an API key, not an address");
+      hides(text, value.trim());
+    }
+  });
+
+  // The API-key shape is refused anywhere in the host, not only at the start of a label.
+  test.each([["https://x<v>"], ['https://"<v>"'], ["https://cv.x<v>.com"]])(
+    "an API-key shape inside a label is refused with a fixed message: %s",
+    (shape) => {
+      const text = message(run(shape.replace("<v>", keyShaped)));
+      expect(text).toContain("looks like an API key, not an address");
+      hides(text, keyShaped);
+    },
+  );
+
+  // A sign-in shape in the middle of a label is accepted as a host name, but never printed.
+  test("E2d and W1: a sign-in shape in the middle of a label is not echoed", () => {
+    const url = `http://a.x${signInShaped}.com`;
+    hides(message(run(url)), signInShaped);
+    hides(warnings(run(url, { CONTROLVAR_ALLOW_INSECURE_HTTP: "1" })), signInShaped);
+  });
+
+  // E2a: the address is not http(s) and has no host to refuse.
+  test.each(both)("E2a: %s is not echoed", (value) => {
+    hides(message(run(value)), value);
+  });
+
+  test.each([[`Bearer ${keyShaped}`], [`CONTROLVAR_API_KEY=${keyShaped}`], [`  ${keyShaped}`], [`\t${signInShaped}`]])(
+    "E2a: a key inside or after other text is not echoed: %j",
+    (value) => {
+      const text = message(run(value));
+      expect(text).toContain("not an http:// or https:// address");
+      hides(text, keyShaped.slice(0, 8));
+      hides(text, signInShaped);
+    },
+  );
+
+  test("E2a and E3: the match is case-insensitive", () => {
+    for (const value of [signInShaped.toLowerCase(), signInShaped.toUpperCase(), keyShaped.toUpperCase()]) {
+      hides(message(run(`  ${value}`)), value);
+      hides(message(run(`https://controlvar.example.com/${value}`)), value);
+    }
+  });
+
+  test("E2a: an ordinary value is still echoed", () => {
+    expect(message(run("ftp://controlvar.example.com"))).toContain('"ftp://controlvar.example.com"');
+  });
+
+  // E3: a path.
+  test.each([[`https://controlvar.example.com/${keyShaped}`], [`https://controlvar.example.com/a/${signInShaped}`]])(
+    "E3: a path containing a key is not echoed: %s",
+    (value) => {
+      const text = message(run(value));
+      expect(text).toContain("has a path");
+      hides(text, keyShaped.slice(0, 8));
+      hides(text, signInShaped);
+    },
+  );
+
+  test("E3: an ordinary path is still echoed", () => {
+    expect(message(run("https://h/prefix"))).toContain('"https://h/prefix"');
+  });
+
+  // E2d: plain http:// on another computer.
+  test("E2d: a host with neither . nor : is not echoed", () => {
+    const text = message(run("http://intranet-canary"));
+    expect(text).toContain("a plain http:// address on another computer");
+    expect(text).not.toContain("intranet-canary");
+  });
+
+  test("E2d: an ordinary host is still echoed", () => {
+    expect(message(run("http://controlvar.example.com"))).toContain('"http://controlvar.example.com"');
+    expect(message(run("http://10.0.0.5:8000"))).toContain('"http://10.0.0.5:8000"');
+  });
+
+  test("E2d through a proxy: the names of this computer are echoed, a bare host is not", () => {
+    const proxy = { NODE_USE_ENV_PROXY: "1" };
+    expect(message(run("http://localhost:8000", proxy))).toContain('"http://localhost:8000"');
+    expect(message(run("http://localhost", proxy))).toContain('"http://localhost"');
+    expect(message(run("http://intranet-canary", proxy))).not.toContain("intranet-canary");
+  });
+
+  // W1: the opt-in warning.
+  const optIn = { CONTROLVAR_ALLOW_INSECURE_HTTP: "1" };
+  test("W1: a host with neither . nor : is not echoed", () => {
+    const text = warnings(run("http://intranet-canary", optIn));
+    expect(text).toContain("CONTROLVAR_ALLOW_INSECURE_HTTP=1");
+    expect(text).not.toContain("intranet-canary");
+  });
+
+  test("W1: an ordinary host is still echoed, with and without a proxy", () => {
+    expect(warnings(run("http://10.0.0.5:8000", optIn))).toContain("10.0.0.5:8000");
+    expect(warnings(run("http://localhost:8000", { ...optIn, NODE_USE_ENV_PROXY: "1" }))).toContain("localhost:8000");
+  });
+
+  test("a key-shaped value is never in a warning, the only success output", () => {
+    for (const value of [keyShaped, signInShaped, dottedSignInShaped]) {
+      const result = run(`http://${value}`, optIn);
+      expect(result.ok).toBe(false);
+    }
+  });
+});

@@ -59,6 +59,14 @@ EXPOSURE = {
 #: What the smoke of an SDK in ATTRIBUTE_SDKS adds (#1520): the seed's targeted
 #: flag on for plan=pro through its rule, off for plan=free.
 TARGETED = {"pro": True, "free": False, "reason": "targeting_rule"}
+#: What the smoke of an SDK in EVENT_ID_SDKS adds (#1543, C4): the user and
+#: event name the database is asked about, the one id, and two sends.
+EVENT_ID = {
+    "user_id": "smoke-user",
+    "event_name": "contract_dedup_1",
+    "id": "contract-1",
+    "sends": 2,
+}
 PR_QA_GATE = REPO_ROOT / ".github" / "workflows" / "pr-qa-gate.yml"
 PLATFORM = REPO_ROOT / ".github" / "workflows" / "_platform.yml"
 
@@ -73,6 +81,8 @@ def good(runner, sdk: str, experiment_key: str = "sdk_contract_ab") -> dict:
         report["exposure"] = {**EXPOSURE, "payload": hook}
     if sdk in runner.ATTRIBUTE_SDKS:
         report["targeted"] = dict(TARGETED)
+    if sdk in runner.EVENT_ID_SDKS:
+        report["event_id"] = dict(EVENT_ID)
     return report
 
 
@@ -95,6 +105,9 @@ def runner(monkeypatch, tmp_path):
     ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("CONTROLVAR_API_KEY", "contract-key")
+    # No database here: the one event sent twice is one stored row, unless a
+    # test says otherwise.
+    monkeypatch.setattr(module, "_event_rows", lambda user_id, event_name: 1)
     return module
 
 
@@ -246,10 +259,118 @@ def test_each_wrong_exposure_report_gives_exactly_its_problem(
     """The gate's own planted reports, with "js" listed and "python" not."""
     monkeypatch.setattr(runner, "EXPOSURE_SDKS", frozenset({"js"}))
     monkeypatch.setattr(runner, "ATTRIBUTE_SDKS", frozenset())  # exposure alone here
+    monkeypatch.setattr(runner, "EVENT_ID_SDKS", frozenset())  # exposure alone here
     report = {"sdk": sdk, **GOOD}
     if exposure is not None:
         report["exposure"] = exposure
     assert runner.validate(sdk, report) == [problem]
+
+
+def test_java_js_and_python_are_the_sdks_that_send_one_event_twice_with_one_id(runner):
+    assert runner.EVENT_ID_SDKS == frozenset({"java", "js", "python"})
+    for sdk in sorted(runner.EVENT_ID_SDKS):
+        assert good(runner, sdk)["event_id"] == EVENT_ID
+        assert runner.validate(sdk, good(runner, sdk)) == []
+
+
+@pytest.mark.parametrize(
+    ("sdk", "report", "problems"),
+    [
+        pytest.param(
+            "java", None, ["event_id missing (java is in EVENT_ID_SDKS)"], id="missing"
+        ),
+        pytest.param(
+            "java",
+            {**EVENT_ID, "sends": 1},
+            ["event_id.sends=1 (the same event is to be sent twice)"],
+            id="sent-once",
+        ),
+        pytest.param(
+            "java",
+            {**EVENT_ID, "sends": True},
+            ["event_id.sends=True (the same event is to be sent twice)"],
+            id="sends-true",
+        ),
+        pytest.param(
+            "java",
+            {**EVENT_ID, "id": ""},
+            ["event_id.id='' (expected a non-empty string)"],
+            id="no-id",
+        ),
+        pytest.param(
+            "go",
+            EVENT_ID,
+            ["event_id reported but go is not in EVENT_ID_SDKS"],
+            id="unlisted",
+        ),
+    ],
+)
+def test_each_wrong_event_id_report_gives_exactly_its_problems(
+    monkeypatch, runner, sdk, report, problems
+):
+    """The gate's own planted reports, with "java" listed and "go" not."""
+    monkeypatch.setattr(runner, "EVENT_ID_SDKS", frozenset({"java"}))
+    payload = {**good(runner, sdk)}
+    payload.pop("event_id", None)
+    if report is not None:
+        payload["event_id"] = report
+    assert runner.validate(sdk, payload) == problems
+
+
+def test_the_event_sent_twice_must_be_one_stored_row(monkeypatch, runner):
+    asked = []
+
+    def rows(user_id, event_name):
+        asked.append((user_id, event_name))
+        return 1
+
+    monkeypatch.setattr(runner, "_event_rows", rows)
+    monkeypatch.setattr(
+        runner, "_run_command", lambda c, e, t: ("PASS", "0.1s", good(runner, "java"))
+    )
+    env = {"CONTRACT_EXPERIMENT_KEY": "sdk_contract_ab"}
+    assert runner.run_one("java", "cmd", env, 5) == ("PASS", "control in 0.1s")
+    assert asked == [("smoke-user", "contract_dedup_1")]
+
+
+def test_two_stored_rows_for_the_one_event_fail_the_sdk(monkeypatch, runner):
+    """The planted defect: a fresh id per send, or a server that does not dedupe."""
+    monkeypatch.setattr(runner, "_event_rows", lambda user_id, event_name: 2)
+    monkeypatch.setattr(
+        runner, "_run_command", lambda c, e, t: ("PASS", "0.1s", good(runner, "java"))
+    )
+    env = {"CONTRACT_EXPERIMENT_KEY": "sdk_contract_ab"}
+    status, detail = runner.run_one("java", "cmd", env, 5)
+    assert status == "FAIL"
+    assert "left 2 stored row(s)" in detail and "expected 1" in detail
+
+
+def test_no_stored_row_or_no_database_fails_the_sdk(monkeypatch, runner):
+    monkeypatch.setattr(
+        runner, "_run_command", lambda c, e, t: ("PASS", "0.1s", good(runner, "java"))
+    )
+    env = {"CONTRACT_EXPERIMENT_KEY": "sdk_contract_ab"}
+    monkeypatch.setattr(runner, "_event_rows", lambda user_id, event_name: 0)
+    assert runner.run_one("java", "cmd", env, 5)[0] == "FAIL"
+
+    def unreachable(user_id, event_name):
+        raise RuntimeError("no database")
+
+    monkeypatch.setattr(runner, "_event_rows", unreachable)
+    status, detail = runner.run_one("java", "cmd", env, 5)
+    assert status == "FAIL" and "cannot count the stored events: no database" in detail
+
+
+def test_an_sdk_that_is_not_listed_is_not_asked_of_the_database(monkeypatch, runner):
+    def never(user_id, event_name):
+        raise AssertionError("the database was read for an unlisted SDK")
+
+    monkeypatch.setattr(runner, "_event_rows", never)
+    monkeypatch.setattr(
+        runner, "_run_command", lambda c, e, t: ("PASS", "0.1s", good(runner, "go"))
+    )
+    env = {"CONTRACT_EXPERIMENT_KEY": "sdk_contract_ab"}
+    assert runner.run_one("go", "cmd", env, 5)[0] == "PASS"
 
 
 def test_js_and_react_native_must_show_their_attributes_reach_flag_evaluation(runner):
@@ -731,3 +852,220 @@ def test_a_release_that_cannot_read_the_ruleset_fails_before_any_change(
     assert "did not load the ruleset the server serves (v1)" in detail
     assert '"source": "server"' in detail
     assert turned == []
+
+
+# ---------------------------------------------------------------------------
+# The React SDK's bootstrap (#1518)
+# ---------------------------------------------------------------------------
+
+#: A bootstrap as the live server builds it for the contract seed.
+LIVE_BOOTSTRAP = {
+    "userId": "bootstrap-user",
+    "flags": {
+        "sdk_contract_flag": {
+            "key": "sdk_contract_flag",
+            "enabled": True,
+            "value": True,
+            "value_type": "boolean",
+            "config": None,
+            "reason": "rollout",
+        }
+    },
+    "experiments": {
+        "sdk_contract_ab": {
+            "experiment_key": "sdk_contract_ab",
+            "user_id": "bootstrap-user",
+            "variant_id": "v-control",
+            "variant_name": "control",
+            "is_control": True,
+            "configuration": None,
+            "assigned": True,
+            "reason": "assigned",
+        }
+    },
+}
+#: The page's example: other keys and values, the live fields.
+DOCUMENTED = {
+    "userId": "9f1c",
+    "flags": {
+        "new_search": {
+            **LIVE_BOOTSTRAP["flags"]["sdk_contract_flag"],
+            "key": "new_search",
+        }
+    },
+    "experiments": {
+        "checkout_flow": {
+            **LIVE_BOOTSTRAP["experiments"]["sdk_contract_ab"],
+            "experiment_key": "checkout_flow",
+        }
+    },
+}
+
+
+def _server_report(user_id: str = "bootstrap-user") -> dict:
+    bootstrap = json.loads(
+        json.dumps(LIVE_BOOTSTRAP).replace("bootstrap-user", user_id)
+    )
+    return {
+        "sdk": "react",
+        "step": "server",
+        "bootstrap": bootstrap,
+        "html": "<span>on|control|ready</span>",
+        "requests_during_render": 0,
+    }
+
+
+def _problems(runner, counts, server=None, client=None, documented=DOCUMENTED):
+    return runner.bootstrap_problems(
+        server or _server_report(),
+        client or {"sdk": "react", "step": "client", "variant_name": "control"},
+        counts,
+        "bootstrap-user",
+        "sdk_contract_flag",
+        "sdk_contract_ab",
+        documented,
+    )
+
+
+def test_a_bootstrap_run_passes_with_one_exposure_row_per_step(runner):
+    assert _problems(runner, (1, 2)) == []
+
+
+def test_each_wrong_exposure_count_gives_exactly_its_problem(runner):
+    """5i's planted defect, in memory: a server step that assigns twice stores
+    two rows; a client step that does not assign stores none."""
+    assert _problems(runner, (2, 3)) == [
+        "exposure rows after the server step: 2, expected 1"
+    ]
+    assert _problems(runner, (1, 1)) == [
+        "exposure rows added by the client step: 0, expected 1"
+    ]
+    assert _problems(runner, (0, 1)) == [
+        "exposure rows after the server step: 0, expected 1"
+    ]
+
+
+def test_a_client_step_that_adds_two_rows_gives_exactly_its_problem(runner):
+    """The count is exact, not a lower bound: a client step that records two
+    exposures is as wrong as one that records none (#1653)."""
+    assert _problems(runner, (1, 3)) == [
+        "exposure rows added by the client step: 2, expected 1"
+    ]
+
+
+def test_a_client_assigned_another_variant_than_the_bootstrap_fails(runner):
+    client = {"sdk": "react", "step": "client", "variant_name": "treatment"}
+    assert _problems(runner, (1, 2), client=client) == [
+        "the client step was assigned 'treatment', the bootstrap 'control'"
+        " (assignment is sticky)"
+    ]
+
+
+def test_a_flag_that_is_not_on_in_the_bootstrap_fails(runner):
+    server = _server_report()
+    server["bootstrap"]["flags"]["sdk_contract_flag"]["enabled"] = False
+    (problem,) = _problems(runner, (1, 2), server=server)
+    assert problem.startswith("bootstrap.flags['sdk_contract_flag'] is {")
+    assert problem.endswith("(seeded flag is 100% on)")
+    server["bootstrap"]["flags"] = {}
+    # (The page-example comparison also notices the empty flags; only the first
+    # problem is this check's.)
+    assert _problems(runner, (1, 2), server=server)[0] == (
+        "bootstrap.flags['sdk_contract_flag'] is None (seeded flag is 100% on)"
+    )
+
+
+def test_a_page_example_with_other_top_level_keys_than_the_live_bootstrap_fails(
+    runner,
+):
+    extra = {**DOCUMENTED, "extra": 1}
+    assert _problems(runner, (1, 2), documented=extra) == [
+        "the page's example has the keys ['experiments', 'extra', 'flags', 'userId'],"
+        " the live one ['experiments', 'flags', 'userId']"
+    ]
+    short = {k: v for k, v in DOCUMENTED.items() if k != "experiments"}
+    (problem,) = [p for p in _problems(runner, (1, 2), documented=short) if "keys" in p]
+    assert problem.startswith("the page's example has the keys ['flags', 'userId']")
+
+
+def test_a_server_render_that_made_a_request_fails(runner):
+    server = {**_server_report(), "requests_during_render": 1}
+    assert _problems(runner, (1, 2), server=server) == [
+        "the server render made 1 request(s), expected 0"
+    ]
+
+
+def test_the_pages_example_must_have_the_live_fields(runner):
+    old_body = json.loads(json.dumps(DOCUMENTED))
+    del old_body["flags"]["new_search"]["value_type"]
+    problems = _problems(runner, (1, 2), documented=old_body)
+    assert len(problems) == 1
+    assert problems[0].startswith("the page's example flags entries have the fields")
+    assert "regenerate the example" in problems[0]
+    (missing,) = _problems(runner, (1, 2), documented=None)
+    assert missing.endswith("/react.md has no JSON example of a bootstrap")
+
+
+def test_the_pages_example_is_the_json_fence_holding_a_bootstrap(runner):
+    page = (
+        'text\n```json\n{"not": "it"}\n```\nmore\n```json\n'
+        + json.dumps(DOCUMENTED, indent=2)
+        + "\n```\n"
+    )
+    assert runner.documented_bootstrap(page) == DOCUMENTED
+    assert runner.documented_bootstrap("```json\n{broken\n```\n") is None
+
+
+def test_react_runs_its_bootstrap_after_its_row_for_one_new_user(
+    monkeypatch, runner, tmp_path, capsys
+):
+    """main() --sdk react: the react smoke, then the bootstrap's server and
+    client steps for one user, the rows read after each."""
+    page = tmp_path / "react.md"
+    page.write_text("```json\n" + json.dumps(DOCUMENTED) + "\n```\n", encoding="utf-8")
+    monkeypatch.setattr(runner, "REACT_PAGE", page)
+    monkeypatch.setattr(runner, "REPO_ROOT", tmp_path)
+    ran: List[Tuple[str, Dict[str, str]]] = []
+    rows = iter([1, 2])
+
+    def fake_run(command, env, timeout):
+        ran.append((command, env))
+        if command == runner.BOOTSTRAP_SMOKE:
+            step = env["CONTRACT_BOOTSTRAP_STEP"]
+            if step == "server":
+                return "PASS", "0.1s", _server_report(env["CONTRACT_USER_ID"])
+            return (
+                "PASS",
+                "0.1s",
+                {"sdk": "react", "step": "client", "variant_name": "control"},
+            )
+        return "PASS", "0.1s", good(runner, "react")
+
+    read: List[Tuple[str, str]] = []
+    monkeypatch.setattr(runner, "_run_command", fake_run)
+    monkeypatch.setattr(
+        runner,
+        "_exposure_rows",
+        lambda user, key: read.append((user, key)) or next(rows),
+    )
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: f"/usr/bin/{tool}")
+    monkeypatch.setattr(sys, "argv", ["run_live_contract.py", "--sdk", "react"])
+    assert runner.main() == 0
+    assert [command for command, _ in ran] == [
+        runner.MANIFEST["react"][0],
+        runner.BOOTSTRAP_SMOKE,
+        runner.BOOTSTRAP_SMOKE,
+    ]
+    steps = [
+        (env["CONTRACT_BOOTSTRAP_STEP"], env["CONTRACT_USER_ID"]) for _, env in ran[1:]
+    ]
+    assert [step for step, _ in steps] == ["server", "client"]
+    user = steps[0][1]
+    assert user.startswith("bootstrap-") and steps[1][1] == user
+    assert read == [(user, "sdk_contract_ab"), (user, "sdk_contract_ab")]
+    out = " ".join(capsys.readouterr().out.split())
+    assert (
+        "PASS react (bootstrap) exposure rows 1 after the server render, +1 after hydration"
+        in out
+    )
+    assert '"value_type": "boolean"' in out

@@ -24,7 +24,7 @@ export interface UserTableProps {
   /** Opens the Edit dialog for a row. Without it the row has no Edit button. */
   onEdit?: (user: AdminUser) => void;
   /**
-   * Opens the user's recorded permissions. Without it the row has no
+   * Opens the user's effective permissions. Without it the row has no
    * Permissions button (the core profile, which has no rbac routes). The
    * button is passed so focus can go back to it when the dialog closes.
    */

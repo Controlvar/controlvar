@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
 import { isApiError } from '@/services/api';
 import { EligibilityService } from '@/services/eligibility';
 import { GlobalHoldout, MutualExclusionGroup } from '@/types/eligibility';
@@ -10,7 +11,8 @@ import { canReadEligibility } from '@/utils/experimentPermissions';
  * - `loading`: not answered yet, or the session has not resolved.
  * - `present`: the group, or the active holdout.
  * - `absent`: the experiment is in no group; no holdout is active.
- * - `refused`: the role may not read it (decided from the role, or a 403).
+ * - `refused`: the user may not read it (decided from the role and the
+ *   effective map, or a 403).
  * - `error`: anything else, a 404 included, and an answer of the wrong shape.
  */
 export type EligibilityRead<T> =
@@ -75,9 +77,12 @@ export function holdoutAnswer(body: unknown): Answer<GlobalHoldout> {
  * experiment did not load reads neither.
  *
  * It sends a request only once the user has resolved and `canReadEligibility`
- * admits them (ADMIN, DEVELOPER, a superuser): ANALYST and VIEWER, and a user
- * not yet resolved, send none. The role is read again at every render, so a
- * user who loses the role sees the refused state, not what was read before.
+ * admits them (ADMIN, DEVELOPER, a superuser, or the effective map's
+ * `experiment: create`): anyone else, and a user not yet resolved, sends
+ * none. While the effective map is on its way for a user the role does not
+ * admit, both rows are `loading`, never `refused`. The decision is made again
+ * at every render, so a user who loses the permission sees the refused state,
+ * not what was read before.
  *
  * The group is read once per group id, and only the answer for the current id
  * is shown; the holdout once per mount (again only if the role stops and then
@@ -87,8 +92,11 @@ export function useExperimentEligibility(
   groupId: string | null | undefined,
   user: EligibilityUser | null | undefined,
 ): { group: EligibilityRead<MutualExclusionGroup>; holdout: EligibilityRead<GlobalHoldout> } {
-  const resolved = user !== null && user !== undefined;
-  const mayRead = resolved && canReadEligibility(user);
+  const { effective, loading } = useEffectivePermissions();
+  const known = user !== null && user !== undefined;
+  const mayRead = known && canReadEligibility(user, effective);
+  // Resolved: the user is known, and so is the answer (#891).
+  const resolved = known && (mayRead || !loading);
   const id = groupId || null;
 
   const [groupState, setGroupState] = useState<{

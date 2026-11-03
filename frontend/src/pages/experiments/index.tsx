@@ -12,6 +12,7 @@ import { useApi } from '@/hooks/useApi';
 import { PageTitle } from '@/components/PageTitle';
 import { FirstRunChecklist } from '@/components/experiments/FirstRunChecklist';
 import { useOptionalAuth } from '@/contexts/AuthContext';
+import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
 import { canCreateExperiment, canReadEligibility } from '@/utils/experimentPermissions';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
@@ -25,15 +26,18 @@ const STATUS_FILTERS: Array<{ label: string; value: ExperimentStatus | 'all' }> 
 
 export default function ExperimentsPage() {
   const [statusFilter, setStatusFilter] = useState<ExperimentStatus | 'all'>('all');
-  // Analysts and viewers are refused by the API, so they are not offered the
-  // button; the page is otherwise identical for every role.
+  // A user the API would refuse (no EXPERIMENT CREATE by role, custom role or
+  // direct grant) is not offered the button; the page is otherwise identical
+  // for every user. While the effective map is on its way the button is not
+  // shown, and appears once it admits the user.
   const auth = useOptionalAuth();
-  const canCreate = canCreateExperiment(auth?.user);
+  const { effective } = useEffectivePermissions();
+  const canCreate = canCreateExperiment(auth?.user, effective);
   // Intent, not a second check: today canReadEligibility answers exactly as
   // canCreateExperiment does, so inside `canCreate &&` this is always true. It
   // names the group routes' own question, so the link follows them if the two
   // ever differ.
-  const canManageEligibility = canReadEligibility(auth?.user);
+  const canManageEligibility = canReadEligibility(auth?.user, effective);
 
   const { data, loading: isLoading, error } = useApi<ExperimentListResponse>(
     () => ExperimentsService.list(statusFilter !== 'all' ? { status: statusFilter } : undefined),

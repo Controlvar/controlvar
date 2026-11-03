@@ -117,6 +117,7 @@ def row(
     status: int = 200,
     latency_us: int = 4000,
     start_lag_us: int = 1000,
+    sent_offset_us: int = 0,
     rate_limit: str = "10000000",
     error: str = "",
     **facts: str,
@@ -131,6 +132,7 @@ def row(
         error=error,
         latency_us=str(latency_us),
         start_lag_us=str(start_lag_us),
+        sent_offset_us=str(sent_offset_us),
         rate_limit="" if error else rate_limit,
     )
     out.update(facts)
@@ -163,8 +165,15 @@ def step_rows(
     scheduled = se.scheduled_count(rate, unit, window["settle_s"] + window["measure_s"])
     count = scheduled - dropped - missing_tail
     # Latencies spread 1..2x so the percentiles are distinct.
+    # Nothing is dropped before the tail, so each request goes out in its slot:
+    # iteration i is due i x time_unit_ms / rate ms into the step.
     return [
-        row(scenario, i, latency_us=latency_us + (i * 7919) % latency_us)
+        row(
+            scenario,
+            i,
+            latency_us=latency_us + (i * 7919) % latency_us,
+            sent_offset_us=i * unit * 1000 // rate,
+        )
         for i in range(count)
     ]
 
@@ -202,10 +211,13 @@ def observation(
             "generator": 120,
         },
         "threads": {
-            "cpu0": {"busy_permille": 420, "steal_permille": 5},
-            "cpu1": {"busy_permille": 360, "steal_permille": 5},
-            "cpu2": {"busy_permille": 50, "steal_permille": 5},
-            "cpu3": {"busy_permille": 140, "steal_permille": 5},
+            thread: {
+                "busy_permille": busy,
+                "steal_permille": 5,
+                "irq_permille": 1,
+                "softirq_permille": 4,
+            }
+            for thread, busy in zip(se.THREADS, (420, 360, 50, 140))
         },
         "pg": {
             "active_backend_samples_by_count": [10, 15, 5],
@@ -285,6 +297,8 @@ def step_facts(
             {
                 f"{thread}_busy_permille": 0,
                 f"{thread}_steal_permille": steal,
+                f"{thread}_irq_permille": 1,
+                f"{thread}_softirq_permille": 2 + steal,
                 f"{thread}_foreign_permille": 0,
             }
         )

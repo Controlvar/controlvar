@@ -237,14 +237,14 @@ describe('EditUserModal', () => {
     expect(screen.queryByTestId('edit-role-help-sso')).not.toBeInTheDocument();
   });
 
-  it('full profile: says custom roles and grants do not change access yet (#891), and what SSO does to the role', () => {
+  it('full profile: says custom roles and grants add to the role (#891), and what SSO does to the role', () => {
     render(
       <ModulesProvider initial={{ profile: 'full', modules: ['rbac', 'sso'], version: '' }}>
         <EditUserModal {...defaultProps} />
       </ModulesProvider>,
     );
     expect(screen.getByTestId('edit-role-help-custom')).toHaveTextContent(
-      'Custom roles and direct permission grants (full edition) are recorded, but they do not change what anyone can do yet: the role set here decides.',
+      'Custom roles and direct permission grants (full profile) add to the role set here. Assign them through the RBAC API.',
     );
     expect(screen.getByTestId('edit-role-help-sso')).toHaveTextContent(
       'If this user signs in with SSO and one of their groups is mapped to a role, that sign-in replaces the role set here.',

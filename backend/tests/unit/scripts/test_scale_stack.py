@@ -169,6 +169,8 @@ class World:
                 capture_output=True,
                 check=False,
             )
+        if argv[:3] == ["docker", "rm", "-f"]:
+            return subprocess.CompletedProcess(argv, 1, b"", b"No such container")
         if argv[:2] == ["docker", "compose"]:
             if "exec" in argv:
                 return subprocess.CompletedProcess(argv, self.psql_rc, b"loaded\n")
@@ -257,6 +259,8 @@ def _call_name(argv) -> str:
     """generate-env.sh, or docker compose and its command."""
     if argv[:2] == ["sh", str(ss.GENERATE_ENV)]:
         return "generate-env.sh"
+    if argv[:3] == ["docker", "rm", "-f"]:
+        return "docker rm"
     command = next((a for a in argv[2:] if a in {"up", "exec", "down"}), "?")
     return f"docker compose {command}"
 
@@ -301,6 +305,7 @@ def test_every_compose_call_carries_the_project_and_its_own_env_file(work):
     assert calls[-1][0][10:] == ["down", "-v"]
     # Every process is either compose or generate-env.sh: nothing else runs.
     assert {tuple(c[0][:2]) for c in world.calls} == {
+        ("docker", "rm"),
         ("docker", "compose"),
         ("sh", str(ss.GENERATE_ENV)),
     }
@@ -318,11 +323,34 @@ def test_the_child_environment_carries_nothing_from_the_shell(work, monkeypatch,
         "generate-env.sh",
         "docker compose up",
         "docker compose exec",
+        "docker rm",
+        "docker rm",
+        "docker rm",
         "docker compose down",
     ]
     for call, (_, env, _) in zip(calls, world.calls):
         assert name not in env, f"child environment of {call} carries {name}"
         assert env.get("DOCKER_HOST") == "unix:///var/run/docker.sock", call
+
+
+def test_down_removes_the_harness_s_own_fixed_name_containers_before_the_network(work):
+    """N8: the k6, database-sampler and stub containers sit on the project's
+    network under fixed names; a killed run leaves them, and compose down
+    cannot remove the network from under them."""
+    assert ss.HARNESS_CONTAINERS == (
+        "controlvar-scale-k6",
+        "controlvar-scale-pg-sampler",
+        "controlvar-scale-stub",
+    )
+    world = World()
+    assert _up(world, work) == 0
+    _with_api(world, work)
+    before = len(world.calls)
+    assert world.main("down", "--work", work) == 0
+    down = [argv for argv, _, _ in world.calls[before:]]
+    assert down[:3] == [["docker", "rm", "-f", n] for n in ss.HARNESS_CONTAINERS]
+    assert down[3][:2] == ["docker", "compose"] and down[3][10:] == ["down", "-v"]
+    assert len(down) == 4
 
 
 def test_a_child_environment_is_the_keep_list_and_only_what_the_harness_sets(

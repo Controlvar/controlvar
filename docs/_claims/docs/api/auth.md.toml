@@ -286,10 +286,19 @@ by = [
 ]
 
 [[unit]]
-text = "sdk:ruleset is for server-side SDK use: GET /api/v1/sdk/ruleset, POST /api/v1/tracking/evaluations and POST /api/v1/tracking/assign/batch (all beta) refuse a key without it, or whose owner can no longer change feature flags or experiments."
+text = "sdk:ruleset is for server-side SDK use: GET /api/v1/sdk/ruleset, POST /api/v1/tracking/evaluations and POST /api/v1/tracking/assign/batch (all beta) refuse a key without it, or whose owner can no longer change feature flags; batch assignment also refuses a key whose owner cannot change experiments."
 by = [
     "test:backend/tests/unit/api/test_route_surface_rules.py::test_the_ruleset_scope_and_its_owner_rule",
     "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+]
+
+[[unit]]
+text = "Only users who can change feature flags (ADMIN, DEVELOPER, a superuser, or in the full profile anyone whose custom role or direct grant gives feature_flag (update)) can create a key with it; anyone else gets 403 and no key is created."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_ruleset_scope_by_role",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_experiment_update_alone_gives_no_server_key",
 ]
 
 [[unit]]
@@ -299,10 +308,6 @@ by = [
     "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_each_role_reads_the_four_operations_with_an_mcp_read_key",
     "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_the_scope_carries_no_role_rule_on_creation",
 ]
-
-[[unit]]
-text = "Only users who can change feature flags (ADMIN, DEVELOPER, or a superuser) can create a key with it; anyone else gets 403 and no key is created."
-by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_ruleset_scope_by_role"]
 
 [[unit]]
 text = "Every other endpoint that takes an API key accepts any active key, whatever its scopes; see Scopes."
@@ -370,8 +375,12 @@ text = "Every user has one of four built-in roles."
 by = ["test:backend/tests/unit/core/test_permissions.py"]
 
 [[unit]]
-text = "The role decides which operations are available."
-by = ["test:backend/tests/unit/api/test_sign_in_and_account_rules.py::test_the_role_decides_which_operations_are_available"]
+text = "The role decides which operations are available; in the full profile a custom role or direct grant can add more."
+by = [
+    "test:backend/tests/unit/api/test_sign_in_and_account_rules.py::test_the_role_decides_which_operations_are_available",
+    "test:backend/tests/unit/core/test_built_in_roles_decide.py::test_a_custom_role_or_a_grant_adds_only_grantable_pairs",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+]
 
 [[unit]]
 text = "Role | Description | Typical Users"
@@ -449,10 +458,12 @@ text = "Manage users | — | — | — | Only with the superuser flag"
 by = ["test:backend/tests/integration/api/test_own_password_change.py::test_admin_role_without_superuser_cannot_reset_another"]
 
 [[unit]]
-text = "Access to a feature flag is by role, not by who created it: a DEVELOPER can change any flag, and a VIEWER can change none, not even one they created."
+text = "Access to a feature flag is by permission, not by who created it: a DEVELOPER can change any flag, and a VIEWER can change none, not even one they created, unless a custom role or direct grant (full profile) gives them feature_flag (update)."
 by = [
     "test:backend/tests/smoke/test_flag_change_routes_guarded.py",
     "test:backend/tests/integration/api/test_feature_flag_ownership.py",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_bulk_toggle_follows_a_flag_update_grant",
 ]
 
 [[unit]]
@@ -558,10 +569,12 @@ by = [
 ]
 
 [[unit]]
-text = "These are stored and shown, but no permission check reads them yet; routes check the base role (#891)."
+text = "They add permissions to the base role in every permission check, from the user's next request, and never remove any."
 by = [
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_no_permission_check_reads_custom_roles_or_direct_grants",
-    "test:modules/backend/tests/unit/services/test_rbac_layers_are_display_only.py::test_a_custom_role_or_grant_is_shown_and_changes_nothing_the_user_can_do",
+    "test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_permission_checks_read_custom_roles_and_grants_through_one_capability",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+    "test:modules/backend/tests/integration/rbac/test_rbac_revocation.py",
+    "test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_layers_only_add_and_actions_are_sorted",
 ]
 
 [[unit]]
@@ -573,8 +586,15 @@ text = "Example Authenticated Requests"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Create an Experiment (DEVELOPER or ADMIN)"
-by = ["exempt:baseline"]
+text = "Create an Experiment"
+by = ["exempt:label"]
+
+[[unit]]
+text = "This takes permission to create experiments, such as the DEVELOPER or ADMIN role."
+by = [
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+]
 
 [[unit]]
 text = "An experiment needs at least one variant and one metric:"

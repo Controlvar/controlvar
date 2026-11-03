@@ -442,10 +442,11 @@ text = "ADMIN | Full access: user management, global settings, compliance export
 by = ["test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_admin_has_permission"]
 
 [[unit]]
-text = "Custom roles and direct permission grants are stored and shown alongside the base role, but no permission check reads them yet: routes check the base role (#891)."
+text = "In the full profile, custom roles and direct permission grants add permissions to the base role in every permission check."
 by = [
-    "test:modules/backend/tests/unit/services/test_rbac_service.py::TestCreateCustomRole::test_creates_role_with_name",
-    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_only_the_built_in_role",
+    "test:modules/backend/tests/unit/services/test_rbac_layers_take_effect.py::test_the_permission_checks_read_custom_roles_and_grants_through_one_capability",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_grants_only_through_the_capability",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
 ]
 
 [[unit]]

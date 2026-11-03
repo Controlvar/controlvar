@@ -16,7 +16,8 @@ import { CreateFeatureFlagRequest, FeatureFlagsService } from '@/services/featur
 import { PageTitle } from '@/components/PageTitle';
 import { FlagTypeChoice, FlagValueFields, useFlagValueFields } from '@/components/feature-flags/FlagValueFields';
 import { useOptionalAuth } from '@/contexts/AuthContext';
-import { FLAG_ROLE_NOTE, canChangeFeatureFlags } from '@/utils/experimentPermissions';
+import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
+import { FLAG_ROLE_NOTE, canCreateFeatureFlags } from '@/utils/experimentPermissions';
 import {
   FlagValueType,
   ROLLOUT_VALUE_HINT,
@@ -37,6 +38,8 @@ function generateKey(name: string): string {
 export default function NewFeatureFlagPage() {
   const router = useRouter();
   const auth = useOptionalAuth();
+  const { effective, loading: permissionsLoading } = useEffectivePermissions();
+  const canCreate = canCreateFeatureFlags(auth?.user, effective);
   const [name, setName] = useState('');
   const [key, setKey] = useState('');
   const [keyEdited, setKeyEdited] = useState(false);
@@ -143,10 +146,21 @@ export default function NewFeatureFlagPage() {
     }
   };
 
-  // The page asks the API's own create question (#917): an ANALYST or VIEWER
-  // sees a notice instead of a form that could only earn a 403, and no
-  // request can be sent from it.
-  if (!canChangeFeatureFlags(auth?.user)) {
+  // The page asks the API's own create question (#917): a user without
+  // FEATURE_FLAG CREATE (by role, custom role or direct grant) sees a notice
+  // instead of a form that could only earn a 403, and no request can be sent
+  // from it. While the effective map is on its way, neither (#891).
+  if (!canCreate && permissionsLoading) {
+    return (
+      <div className="flex-1 bg-slate-50">
+        <PageTitle title="New Feature Flag" />
+        <p className="sr-only" role="status" data-testid="flag-new-loading">
+          Loading
+        </p>
+      </div>
+    );
+  }
+  if (!canCreate) {
     return (
       <div className="flex-1 bg-slate-50">
         <PageTitle title="New Feature Flag" />

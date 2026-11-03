@@ -132,112 +132,95 @@ class TestAssignRevoke:
 
 
 class TestGetEffectivePermissions:
-    def test_superuser_gets_all_permissions(self):
-        db = MagicMock()
-        db.query.return_value.filter.return_value.all.return_value = []
+    """What ``GET /rbac/users/{id}/permissions`` lists is built on the checks
+    themselves (#891): the actions ``check_permission`` admits on experiments
+    and feature flags, and ``audit_log: ["read"]`` when
+    ``can_read_all_audit_logs`` says yes. ``granted_permissions`` (what the
+    user's custom roles and grants hold) is patched here; the provider and the
+    route are tested on Postgres in ``test_rbac_effective_permissions_display.py``.
+    """
+
+    @staticmethod
+    def _user(role, superuser=False):
         user = MagicMock()
-        user.is_superuser = True
+        user.is_superuser = superuser
         user.id = uuid4()
-        user.username = "admin"
-        user.role = UserRole.ADMIN
-        result = RBACService.get_effective_permissions(db, user)
+        user.username = "u1"
+        user.role = role
+        return user
+
+    @staticmethod
+    def _granted(monkeypatch, pairs):
+        monkeypatch.setattr(
+            "backend.app.core.permissions.granted_permissions",
+            lambda user: frozenset(pairs),
+        )
+
+    def test_superuser_gets_every_grantable_pair(self):
+        result = RBACService.get_effective_permissions(
+            MagicMock(), self._user(UserRole.ADMIN, superuser=True)
+        )
         assert result.is_superuser is True
-        assert "create" in result.permissions.get("experiment", [])
+        assert result.permissions == {
+            "experiment": ["create", "delete", "list", "read", "update"],
+            "feature_flag": ["create", "delete", "list", "read", "update"],
+            "audit_log": ["read"],
+        }
 
-    def test_viewer_gets_read_only(self):
-        db = MagicMock()
-        db.query.return_value.filter.return_value.all.return_value = []
-        user = MagicMock()
-        user.is_superuser = False
-        user.id = uuid4()
-        user.username = "viewer1"
-        user.role = UserRole.VIEWER
-        result = RBACService.get_effective_permissions(db, user)
-        assert "read" in result.permissions.get("experiment", [])
-        assert "create" not in result.permissions.get("experiment", [])
-
-    def test_custom_role_permissions_merged(self):
-        db = MagicMock()
-        mock_role = MagicMock()
-        mock_role.permissions = [{"resource": "export", "actions": ["read", "list"]}]
-        mock_assignment = MagicMock()
-        mock_assignment.role = mock_role
-        mock_assignment.role.name = "exporter"
-        db.query.return_value.filter.return_value.all.side_effect = [
-            [mock_assignment],  # UserCustomRole query
-            [],  # DirectPermissionGrant query
-            [mock_assignment],  # second UserCustomRole query for names
-        ]
-        user = MagicMock()
-        user.is_superuser = False
-        user.id = uuid4()
-        user.username = "dev1"
-        user.role = UserRole.DEVELOPER
-        result = RBACService.get_effective_permissions(db, user)
-        assert "read" in result.permissions.get("export", [])
-
-    def test_expired_direct_grant_not_included(self):
-        db = MagicMock()
-        expired_grant = MagicMock()
-        expired_grant.is_valid = False
-        expired_grant.resource = "report"
-        expired_grant.actions = ["delete"]
-        db.query.return_value.filter.return_value.all.side_effect = [
-            [],  # UserCustomRole
-            [expired_grant],  # DirectPermissionGrant
-            [],  # for custom_role_names
-        ]
-        user = MagicMock()
-        user.is_superuser = False
-        user.id = uuid4()
-        user.username = "user1"
-        user.role = UserRole.VIEWER
-        result = RBACService.get_effective_permissions(db, user)
-        assert "delete" not in result.permissions.get("report", [])
-
-    def test_valid_direct_grant_included(self):
-        db = MagicMock()
-        valid_grant = MagicMock()
-        valid_grant.is_valid = True
-        valid_grant.resource = "report"
-        valid_grant.actions = ["create"]
-        db.query.return_value.filter.return_value.all.side_effect = [
-            [],  # UserCustomRole
-            [valid_grant],  # DirectPermissionGrant
-            [],  # custom_role_names
-        ]
-        user = MagicMock()
-        user.is_superuser = False
-        user.id = uuid4()
-        user.username = "user1"
-        user.role = UserRole.VIEWER
-        result = RBACService.get_effective_permissions(db, user)
-        assert "create" in result.permissions.get("report", [])
-
-
-class TestCheckEffectivePermission:
-    def test_superuser_always_true(self):
-        db = MagicMock()
-        db.query.return_value.filter.return_value.all.return_value = []
-        user = MagicMock()
-        user.is_superuser = True
-        user.id = uuid4()
-        user.username = "su"
-        user.role = UserRole.ADMIN
-        assert (
-            RBACService.check_effective_permission(db, user, "experiment", "delete")
-            is True
+    def test_viewer_gets_read_and_list_only(self):
+        result = RBACService.get_effective_permissions(
+            MagicMock(), self._user(UserRole.VIEWER)
         )
+        assert result.permissions == {
+            "experiment": ["list", "read"],
+            "feature_flag": ["list", "read"],
+        }
 
-    def test_viewer_cannot_create(self):
-        db = MagicMock()
-        db.query.return_value.filter.return_value.all.return_value = []
-        user = MagicMock()
-        user.is_superuser = False
-        user.id = uuid4()
-        user.username = "viewer"
-        user.role = UserRole.VIEWER
-        assert (
-            RBACService.check_effective_permission(db, user, "experiment", "create")
-            is False
+    def test_an_admin_who_is_not_a_superuser_is_shown_the_three_resources_only(self):
+        """ADMIN holds user, role and permission actions in ROLE_PERMISSIONS, but
+        no check admits them to a non-superuser; they are not shown."""
+        result = RBACService.get_effective_permissions(
+            MagicMock(), self._user(UserRole.ADMIN)
         )
+        assert set(result.permissions) == {"experiment", "feature_flag", "audit_log"}
+
+    def test_a_custom_role_or_grant_adds_the_pairs_the_checks_admit(self, monkeypatch):
+        self._granted(
+            monkeypatch,
+            {
+                ("experiment", "create"),
+                ("feature_flag", "update"),
+                ("audit_log", "read"),
+            },
+        )
+        result = RBACService.get_effective_permissions(
+            MagicMock(), self._user(UserRole.VIEWER)
+        )
+        assert result.permissions == {
+            "experiment": ["create", "list", "read"],
+            "feature_flag": ["list", "read", "update"],
+            "audit_log": ["read"],
+        }
+
+    def test_a_pair_no_check_reads_is_never_shown(self, monkeypatch):
+        # granted_permissions never returns these (it filters by GRANTABLE);
+        # even if it did, the display asks the checks, which name no "export".
+        self._granted(monkeypatch, {("export", "read"), ("report", "create")})
+        result = RBACService.get_effective_permissions(
+            MagicMock(), self._user(UserRole.DEVELOPER)
+        )
+        assert "export" not in result.permissions
+        assert "report" not in result.permissions
+
+    def test_custom_roles_are_read_from_the_activated_assignments(self):
+        db = MagicMock()
+        chain = db.query.return_value.join.return_value.filter.return_value
+        chain.order_by.return_value.all.return_value = [("exporter",)]
+        result = RBACService.get_effective_permissions(
+            db, self._user(UserRole.DEVELOPER)
+        )
+        assert result.custom_roles == ["exporter"]
+        (condition_user, condition_active) = (
+            db.query.return_value.join.return_value.filter.call_args.args
+        )
+        assert "activated_at IS NOT NULL" in str(condition_active)

@@ -672,7 +672,7 @@ def test_mix_is_smoke_only():
     smoke = se.load_config(mode="smoke")
     # 5 requests a second for 5 + 20 s: 125 requests, of the mix's five kinds.
     rows = [
-        fx.row(kind, i)
+        fx.row(kind, i, sent_offset_us=i * 200_000)
         for i, kind in enumerate(
             ["evaluate_get", "track", "assign", "batch", "ruleset"] * 25
         )
@@ -688,6 +688,78 @@ def test_mix_is_smoke_only():
         fx.metrics("a"),
     )
     assert step["valid"] and step["keeps_up"] and step["scheduled"] == 125
+
+
+def _dropped_step(sent_at_s, dropped, row_changes=None):
+    """A smoke step (5 requests a second, 5 s settle, 20 s window) that dropped
+    ``dropped`` iterations, as the V16 tamper produced it: the rows are numbered
+    by START order (0, 1, 2, ...), whatever slot each was due in, and carry the
+    time each was sent. Returns the step record and its messages."""
+    smoke = se.load_config(mode="smoke")
+    kinds = ["evaluate_get", "track", "assign", "batch", "ruleset"]
+    row_changes = row_changes or {}
+    rows = [
+        fx.row(
+            kinds[i % 5],
+            i,
+            sent_offset_us=int(at * 1_000_000),
+            **row_changes.get(i, {}),
+        )
+        for i, at in enumerate(sent_at_s)
+    ]
+    observation = fx.observation(smoke, "mix", 1, rows=len(rows), samples=20)
+    observation.update(scenario="mix", dropped=dropped)
+    return se.summarise_step(
+        smoke,
+        "mix",
+        se.read_rows(fx.csv_text(rows)),
+        observation,
+        fx.metrics("a"),
+        fx.metrics("a"),
+    )
+
+
+@pytest.mark.regression
+def test_a_dropped_step_measures_the_requests_sent_in_its_window():
+    """#1667. 20 of the 125 scheduled requests were sent, one every 1.25 s, so
+    the iteration numbers 0..19 are START order and only 5..24 of the slots
+    were ever reached. The first four went out in the 5 s settle; the other
+    sixteen in the window. Windowing on the iteration number (``iteration >=
+    125 - 100``) found none of them."""
+    sent = [i * 1.25 for i in range(20)]
+    step, _ = _dropped_step(
+        sent,
+        dropped=105,
+        row_changes={
+            # A failure and a slow answer in the settle: not measured.
+            1: {"status": 503, "latency_us": 9_000_000},
+            # A failure in the window: measured.
+            7: {"status": 503, "latency_us": 12_000},
+            # Start lag is not computed once iterations were dropped.
+            19: {"start_lag_us": 7_000_000},
+        },
+    )
+    assert step["rows"] == 20 and step["dropped"] == 105
+    assert step["measured"] == 16
+    assert step["errors"] == 1
+    assert step["p99_us"] == 12_000
+    assert step["start_lag_p99_us"] == 0
+    assert step["fail_reason"] == "dropped" and step["valid"]
+    assert step["percentiles_are_lower_bounds"]
+
+
+@pytest.mark.regression
+def test_a_step_that_dropped_everything_in_its_window_is_invalid_and_says_so():
+    """#1667. Four requests, all sent in the settle: nothing was measured, and
+    the step does not offer a percentile or an '<e> of <m> failed' for it."""
+    step, messages = _dropped_step([0, 1.0, 2.0, 3.0], dropped=121)
+    assert step["measured"] == 0
+    assert not step["valid"] and not step["keeps_up"]
+    assert step["invalid_reason"] == "nothing-measured"
+    assert (
+        "step 1: no request was sent in the measure window, so nothing was measured"
+        in messages
+    )
 
 
 def test_the_observation_carries_every_container_and_every_thread():
@@ -1393,9 +1465,9 @@ NEW_LAYOUT_ROWS = [
     "PostgreSQL, nginx and Redis on cpu1; the database sampler on cpu2; the load "
     "generator on cpu3 |",
     "| Hardware threads in 18 of 18 runs | 4 vCPUs, which the VM reports as 2 cores "
-    "of 2 hardware threads: the core of cpu0 and cpu1 ran the API on cpu0 and "
-    "PostgreSQL, nginx and Redis on cpu1; the core of cpu2 and cpu3 ran the "
-    "database sampler on cpu2 and the load generator on cpu3 |",
+    "of 2 hardware threads: the core of cpu0 and cpu1 had pinned to it the API on "
+    "cpu0 and PostgreSQL, nginx and Redis on cpu1; the core of cpu2 and cpu3 had "
+    "pinned to it the database sampler on cpu2 and the load generator on cpu3 |",
 ]
 
 
@@ -1437,7 +1509,10 @@ def test_each_service_s_thread_is_rendered_from_the_split():
         "cpu0; PostgreSQL and nginx on cpu1; the database sampler on cpu2; the load "
         "generator on cpu3 |" in block
     )
-    assert "ran the API and Redis on cpu0 and PostgreSQL and nginx on cpu1" in block
+    assert (
+        "had pinned to it the API and Redis on cpu0 and PostgreSQL and nginx on cpu1"
+        in block
+    )
 
 
 def test_each_distinct_topology_is_rendered_with_its_count():
@@ -1450,10 +1525,10 @@ def test_each_distinct_topology_is_rendered_with_its_count():
     assert rows == [
         NEW_LAYOUT_ROWS[1].replace("18 of 18", "17 of 18"),
         "| Hardware threads in 1 of 18 runs | 4 vCPUs, which the VM reports as 4 "
-        "cores of one hardware thread each: the core of cpu0 ran the API on cpu0; "
-        "the core of cpu1 ran PostgreSQL, nginx and Redis on cpu1; the core of cpu2 "
-        "ran the database sampler on cpu2; the core of cpu3 ran the load generator "
-        "on cpu3 |",
+        "cores of one hardware thread each: the core of cpu0 had pinned to it the "
+        "API on cpu0; the core of cpu1 had pinned to it PostgreSQL, nginx and Redis "
+        "on cpu1; the core of cpu2 had pinned to it the database sampler on cpu2; "
+        "the core of cpu3 had pinned to it the load generator on cpu3 |",
     ]
 
 
@@ -1709,11 +1784,15 @@ def test_the_leak_guard_names_a_planted_path_or_environment_in_the_fixture():
 # ---------------------------------------------------------------------------
 # verify: the committed file is the run's artifact (V3)
 # ---------------------------------------------------------------------------
-def _gh(head_sha, artifact):
+def _gh(head_sha, artifact, event="workflow_dispatch", branch="main"):
     def run(argv):
         if argv[:2] == ["run", "view"]:
+            assert argv[argv.index("--json") + 1] == "headSha,event,headBranch"
             return subprocess.CompletedProcess(
-                argv, 0, json.dumps({"headSha": head_sha}), ""
+                argv,
+                0,
+                json.dumps({"headSha": head_sha, "event": event, "headBranch": branch}),
+                "",
             )
         if argv[:2] == ["run", "download"]:
             if artifact is None:
@@ -1772,6 +1851,23 @@ def test_verify_refuses_a_run_of_another_commit(tmp_path):
         _gh(results["run"]["harness_commit"], path.read_bytes()),
     )
     assert problems[0] == "the file names run 40999123456, not 41000000001"
+
+
+@pytest.mark.parametrize(
+    "event, branch, words",
+    [
+        ("workflow_dispatch", "ci/tampered-harness", "branch ci/tampered-harness"),
+        ("pull_request", "main", "event pull_request"),
+    ],
+    ids=["another-branch", "not-a-dispatch"],
+)
+def test_verify_refuses_a_run_not_dispatched_on_main(tmp_path, event, branch, words):
+    """N2: a measure dispatch from any branch, edited harness included, makes an
+    artifact with the same name; only a dispatch on main is publishable."""
+    results, path = _committed(tmp_path)
+    runner = _gh(results["run"]["harness_commit"], path.read_bytes(), event, branch)
+    problems = se.verify(path, 40999123456, "Controlvar/controlvar", runner)
+    assert len(problems) == 1 and words in problems[0], problems
 
 
 def test_verify_fails_on_an_expired_artifact_never_skips(tmp_path):
@@ -1922,11 +2018,26 @@ def test_the_generator_s_tags_carry_no_url(script, problems):
     assert all(want in got for want, got in zip(problems, found))
 
 
+#: Every JavaScript file under tests/scale: the one k6 entry script, and the
+#: library it imports, which is no entry script (a new file fails here until
+#: it is classified).
+K6_ENTRY_SCRIPTS = ["k6/scenarios.js"]
+K6_LIBRARIES = ["k6/lib.js"]
+
+
 def test_every_k6_script_under_tests_scale_keeps_the_url_out():
-    """The scenario script arrives with the harness; from then on every script
-    there is held to the rule above."""
-    for script in sorted(SCALE_DIR.rglob("*.js")):
-        assert se.system_tags_problems(script.read_text("utf-8")) == [], script
+    """The entry script is held to the rule above. The library sets no k6
+    options and imports nothing, so it cannot change which tags k6 writes."""
+    found = sorted(p.relative_to(SCALE_DIR).as_posix() for p in SCALE_DIR.rglob("*.js"))
+    assert found == sorted(K6_ENTRY_SCRIPTS + K6_LIBRARIES)
+    for name in K6_ENTRY_SCRIPTS:
+        script = (SCALE_DIR / name).read_text("utf-8")
+        assert se.system_tags_problems(script) == [], name
+    for name in K6_LIBRARIES:
+        text = (SCALE_DIR / name).read_text("utf-8")
+        assert not re.search(
+            r"^\s*import\b|\brequire\s*\(|\boptions\b|\bsystemTags\b", text, re.M
+        ), name
 
 
 # ---------------------------------------------------------------------------

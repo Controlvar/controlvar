@@ -698,12 +698,17 @@ class ExperimentationClient:
         properties: Optional[Mapping[str, Any]],
         event_type: Optional[str],
         timestamp: Union[datetime, str, None],
+        event_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         body: Dict[str, Any] = {
             "event_type": event_type or event_name,
             "event_name": event_name,
             "user_id": user_id,
         }
+        # The caller's id, copied into every fan-out entry. None is made here, and
+        # None and "" mean no id (the server reads them that way too).
+        if event_id is not None and event_id != "":
+            body["event_id"] = event_id
         if event_value is not None:
             body["value"] = float(event_value)
         if properties is not None:
@@ -723,6 +728,7 @@ class ExperimentationClient:
         feature_flag_key: Optional[str] = None,
         event_type: Optional[str] = None,
         timestamp: Union[datetime, str, None] = None,
+        event_id: Optional[str] = None,
     ) -> bool:
         """Record an event. Never raises.
 
@@ -737,14 +743,20 @@ class ExperimentationClient:
           ``POST /api/v1/tracking/track`` with no key, which the server stores as
           history.
 
-        ``event_type`` defaults to ``event_name``. Returns ``True`` when the
+        ``event_type`` defaults to ``event_name``. ``event_id`` is your id for
+        this event, sent as ``event_id`` on every request this call makes (and
+        so on every fan-out entry): the server stores an event sent again with
+        the same ``event_id``, user, experiment, flag and event name only once.
+        The SDK makes no id, and sends none for ``None`` or ``""``; the server
+        refuses (422) an id of more than 255 characters or one holding NUL, and
+        the SDK does not check it. Returns ``True`` when the
         event was sent and the server answered 2xx (every request, when a
         fan-out takes more than one); ``False`` otherwise. A 2xx batch can still
         report a failed entry, for example a key the server no longer has; use
         :meth:`track_batch` to read the per-entry results.
         """
         try:
-            base = self._event_body(user_id, event_name, event_value, properties, event_type, timestamp)
+            base = self._event_body(user_id, event_name, event_value, properties, event_type, timestamp, event_id)
             if experiment_key or feature_flag_key:
                 body = dict(base)
                 if experiment_key:
@@ -783,7 +795,9 @@ class ExperimentationClient:
 
         Each event is a dict with the ``/tracking/track`` fields
         (``event_type``/``event_name``, ``user_id``, optional ``experiment_key``,
-        ``feature_flag_key``, ``value``, ``metadata``, ``timestamp``). An event
+        ``feature_flag_key``, ``value``, ``metadata``, ``timestamp``, ``event_id``;
+        an ``event_id`` is sent as given, and the same chunk is sent again with
+        the same ids on a 429). An event
         with no key is stored as history and counts in no experiment's results;
         tag outcome events.
         ``event_type`` defaults to ``event_name`` when missing. A chunk that

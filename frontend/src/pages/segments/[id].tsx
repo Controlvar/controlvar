@@ -21,7 +21,8 @@ import {
   segmentInUse,
   usageCount,
 } from '@/utils/segmentErrors';
-import { canChangeSegments } from '@/utils/segmentPermissions';
+import { canArchiveSegments, canChangeSegments } from '@/utils/segmentPermissions';
+import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
 import { segmentRulesAreValid } from '@/utils/segmentRules';
 import { SEGMENT_RULES_OPERATOR_OPTIONS, createEmptyGroup } from '@/utils/targeting';
 
@@ -494,7 +495,12 @@ export default function SegmentDetailPage() {
   const rawId = router.query.id;
   const id = typeof rawId === 'string' ? rawId : undefined;
   const auth = useOptionalAuth();
-  const canChange = canChangeSegments(auth?.user);
+  const { effective, loading: permissionsLoading } = useEffectivePermissions();
+  // Rules and members ask EXPERIMENT UPDATE, Archive EXPERIMENT DELETE, each
+  // from the role or the effective map (#891). The note waits for the map.
+  const canChange = canChangeSegments(auth?.user, effective);
+  const canArchive = canArchiveSegments(auth?.user, effective);
+  const changePending = !canChange && permissionsLoading;
   const [segment, setSegment] = useState<Segment | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -520,6 +526,7 @@ export default function SegmentDetailPage() {
 
   const archived = segment?.status === 'archived';
   const canEdit = canChange && !archived;
+  const mayArchive = canArchive && !archived;
 
   return (
     <div className="flex-1 bg-slate-50">
@@ -560,7 +567,7 @@ export default function SegmentDetailPage() {
                 </span>
               </div>
               {segment.description && <p className="mt-2 text-sm text-slate-700">{segment.description}</p>}
-              {!canChange && (
+              {!canChange && !changePending && (
                 <p className="mt-2 text-sm text-slate-600" data-testid="segment-role-note">
                   {ROLE_NOTE}
                 </p>
@@ -595,7 +602,7 @@ export default function SegmentDetailPage() {
 
             <UsageSection segmentId={segment.id} />
 
-            {canEdit && <ArchiveSection segment={segment} onArchived={() => void load()} />}
+            {mayArchive && <ArchiveSection segment={segment} onArchived={() => void load()} />}
           </>
         )}
       </div>

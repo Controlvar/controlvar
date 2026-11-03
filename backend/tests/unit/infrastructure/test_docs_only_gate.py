@@ -175,6 +175,9 @@ DOCS_TESTS = (
     # Video 9's claims check (CLAIMS) holds a sentence to the pages of docs/
     # that state it, and imports no module it did not before.
     "backend/tests/unit/showcase/test_showcase_quoted_docs.py",
+    # The event contract's rules quote docs/guides/how-events-count.md and the
+    # pages beside it (#1544); reads the library as text, stdlib only.
+    "backend/tests/unit/ground_truth/test_contract_citations.py",
 )
 
 #: Python tests that name docs/ but are deliberately NOT in DOCS_TESTS.
@@ -260,6 +263,10 @@ NOT_DOCS_TESTS = {
     "backend/tests/unit/scripts/test_docs_journeys_workflow.py": (
         "fixture strings only"
     ),
+    # Pins scale-evidence.yml's pull_request path filter, two of whose entries
+    # name docs/ paths (the capacity page, the results directory); opens no
+    # file under docs/.
+    "backend/tests/unit/scripts/test_scale_workflow.py": "fixture strings only",
     # Hands stub `git` and `python3` path STRINGS such as "docs/a.md" to the
     # classifier step's script; opens no file under docs/.
     "backend/tests/unit/infrastructure/test_ci_classification.py": (
