@@ -767,6 +767,28 @@ by = [
 ]
 
 [[unit]]
+text = "POST /api/v1/feature-flags/, PUT /api/v1/feature-flags/{flag_id}, POST /api/v1/experiments/, PUT /api/v1/experiments/{experiment_id}, POST /api/v1/segments, PUT /api/v1/segments/{segment_id}, POST /api/v1/segments/{segment_id}/preview, POST /api/v1/wizard/drafts/{draft_id}/submit | #1666, #1669, #1672, #1673 | Targeting rules answer 422 at [\"body\", \"targeting_rules\"] (segments and the preview: [\"body\", \"rules\"]; the wizard's submit answers 200 with success: false and the message in errors) for a native between whose bounds are not two numbers or two dates with the same time-zone form (flags and experiments), and, in the dashboard shape (flags, experiments, the wizard, segments and the preview), for a time_window the engine cannot read and for a greater_than, greater_than_or_equal, less_than or less_than_or_equal value that is NaN or an integer too large for a floating-point number, where they used to be accepted and then never matched or answered error. A geo latitude, longitude or dashboard radius holding an integer too large for a floating-point number answers 422 with the same message a value that is not a number gets, where it answered 500. The msg names the place and the reason, and nothing is written. A request that sends back such stored rules answers 422 until they are corrected; stored rules are evaluated as before, and python -m backend.scripts.check_targeting_rules lists them. A between with no additional_value still answers not valid. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_create_refuses_the_word",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_flag_update_refuses_the_word_and_writes_nothing",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_experiment_create_refuses_the_word",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_experiment_update_refuses_the_word_and_writes_nothing",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_segment_create_update_and_preview_refuse_an_unreadable_value",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_the_wizard_launch_reports_the_addendums_refusals_and_creates_nothing",
+    "test:backend/tests/integration/api/test_targeting_vocabulary_refused.py::test_the_check_script_lists_the_addendums_refusals",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_value_is_refused_with_fixed_text",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_every_value_is_refused_or_can_match",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_every_request_model_is_total_over_json_types",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_dashboard_window_the_engine_cannot_read_is_refused",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_stored_between_keeps_its_answer_on_every_reader",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_stored_dashboard_window_a_save_refuses_still_answers_error",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_stored_geo_number_too_large_for_a_float_keeps_its_answer",
+    "test:backend/tests/unit/core/test_targeting_values.py::test_a_stored_dashboard_number_too_large_for_a_float_keeps_its_answer",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
 text = "POST /api/v1/experiments/, PUT /api/v1/experiments/{experiment_id} | #1461 | Two metrics with the same name answer 422 at [\"body\", \"metrics\"] on create and on update, naming the two positions; create used to answer 400 Something went wrong while creating the experiment, and update answered 500. Names are compared exactly, so Revenue and revenue are different metrics, as before. metrics: [] on update answers 422 as create does, where it removed every metric; metrics absent or null still leaves the metrics unchanged. An experiment already left with no metrics stays so, and cannot be started. The OpenAPI document changes: metrics has a minimum of one item on update, and the descriptions of metrics on both requests and of the update operation say what is refused."
 by = [
     "test:backend/tests/integration/api/test_experiment_metric_names.py::test_create_and_update_answer_the_same_list_alike",

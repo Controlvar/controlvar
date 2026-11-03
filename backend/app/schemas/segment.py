@@ -18,8 +18,10 @@ from pydantic import (
 )
 
 from backend.app.core.targeting_adapter import (
+    SEGMENT_RULES_SUBJECT,
     TargetingRulesError,
     check_segment_vocabulary,
+    overflow_refusal,
     validate_segment_rules,
 )
 from backend.app.schemas.storable_text import StorableTextModel
@@ -48,12 +50,22 @@ def _checked_segment_rules(value: Any) -> Any:
     ``validate_segment_rules``). A word membership never matches, such as an
     unknown distance unit (#1204), or a value it cannot read, such as a
     negative radius or a geo comparison the converter drops (#1525, #1526),
-    is refused here too: on the write path only, because
-    ``validate_segment_rules`` also decides whether a stored segment can be
-    evaluated.
+    a time window the engine cannot read (#1669) or a number comparison with
+    an integer too large for a float (#1673), is refused here too: on the
+    write path only, because ``validate_segment_rules`` also decides whether
+    a stored segment can be evaluated. For the same reason an integer too
+    large for a float in a geo value, which makes ``validate_segment_rules``
+    raise ``OverflowError``, is answered here, around that call only, as a
+    value that is not a number is (``overflow_refusal``, #1672).
     """
     try:
-        check_segment_vocabulary(validate_segment_rules(value), value)
+        try:
+            rules = validate_segment_rules(value)
+        except OverflowError:
+            raise overflow_refusal(
+                value, dashboard=True, subject=SEGMENT_RULES_SUBJECT
+            ) from None
+        check_segment_vocabulary(rules, value)
     except TargetingRulesError as err:
         raise ValueError(str(err)) from None
     return value

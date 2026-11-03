@@ -74,6 +74,27 @@ dashboard comparison is read as "within the radius", and a timestamp no date
 can hold, or an integer too large for a floating-point number compared with
 ``gt``, ``gte``, ``lt`` or ``lte``, abandons the whole ruleset.
 
+Since #1666, #1669, #1672 and #1673 the lines also include:
+
+* a native ``between`` whose bounds are not two numbers or two dates, or are
+  two dates only one of which has a time zone;
+* in the dashboard shape, a ``time_window`` the engine cannot read, and a
+  ``greater_than``, ``greater_than_or_equal``, ``less_than`` or
+  ``less_than_or_equal`` value that is NaN or an integer too large for a
+  floating-point number::
+
+    feature_flag  3f0c...  office-hours  groups[0].conditions[1].value  unreadable time window; give start and end as HH:MM such as 09:00 and 17:00, days as numbers 0 to 6, start_date and end_date as YYYY-MM-DD in order, a timezone as a name such as Europe/Paris
+
+* a geo coordinate, or a dashboard radius, that is an integer too large for
+  a floating-point number: on a flag or an experiment with the API's path and
+  reason (``value is not valid for the operator``, or in the native shape
+  ``not valid``), where it was ``could not be checked``. A segment's line for
+  it is still ``rules not valid: could not be checked``.
+
+Such a stored rule keeps answering as it did: a ``between`` that cannot be
+read does not hold, or, with a bound no number or date can hold, abandons
+the ruleset, as a window or a number that cannot be read does.
+
 Segments get the same treatment (#440). Segment rules use the targeting
 rule format and are checked when saved; a segment stored before that whose
 rules fail the check is left as it is, and is never evaluated:
@@ -86,9 +107,10 @@ its name in place of a key and a reason starting ``rules not valid``::
 A problem that belongs to a segment's rules as a whole has the path ``rules``.
 A segment whose rules pass that check but use a distance unit membership
 never matches (#1204), a geo comparison or a radius below 0 or not a number
-(#1525, #1526) is evaluated as before: the condition never holds, or, with a
-comparison, holds within the radius. It gets a line with the API's own path
-and reason, without that prefix::
+(#1525, #1526), a window or a number comparison that cannot be read (#1669,
+#1673) is evaluated as before: the condition never holds, or, with a
+comparison, holds within the radius, or the window or number abandons it. It
+gets a line with the API's own path and reason, without that prefix::
 
     segment  9a1e...  Bay Area  groups[0].conditions[0].value  unknown distance unit; use km, mi or m, or leave it out for km
 
