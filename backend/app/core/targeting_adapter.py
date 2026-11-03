@@ -48,7 +48,13 @@ from backend.app.core.rules_engine import (
     SEMVER_COMPARISONS,
     TimeWindowUnreadable,
     check_time_window,
+    date_value_readable,
     evaluate_rule,
+    length_bounds_readable,
+    length_value_readable,
+    number_value_readable,
+    percentage_value_readable,
+    radius_readable,
 )
 from backend.app.schemas.targeting_rule import (
     Condition,
@@ -404,8 +410,9 @@ def validate_flag_targeting(value: Any) -> Optional[TargetingRules]:
       text are refused;
     * the operators ``json_path`` and ``percentage_bucket``, which flag
       evaluation does not implement, are refused (#1204; experiments accept
-      them). Both validators refuse the other words the engine does not know
-      (:func:`_check_supported_vocabulary`).
+      them). Both validators refuse the other words the engine does not know,
+      the values it cannot read and a dashboard geo comparison it ignores
+      (:func:`_check_supported_vocabulary`; #1204, #1525, #1526).
 
     For every value it accepts, what it returns is what
     :func:`normalise_targeting_rules` gives the flag evaluator (``None`` and
@@ -571,7 +578,7 @@ def _validate_targeting(value: Any, *, kind: str) -> Optional[TargetingRules]:
     _check_segment_conditions(rules, groups_base)
     _check_rule_validator(rules, groups_base)
     # Last, so a value refused before #1204 keeps its message.
-    _check_supported_vocabulary(rules, groups_base, kind)
+    _check_supported_vocabulary(rules, groups_base, kind, value)
     return rules
 
 
@@ -1007,6 +1014,34 @@ def _check_rule_validator(rules: TargetingRules, groups_base: Optional[str]) -> 
 # Words the evaluator never matches (#1204)
 # ---------------------------------------------------------------------------
 
+#: The reason for each value :func:`_unreadable_value` refuses (#1525, #1526):
+#: plan D211 v1.4-B3's texts, with the principal engineer's wording for a
+#: number. The same limits as the words' reasons below apply.
+DATE_VALUE_REASON = (
+    "not a date; use an ISO 8601 date such as 2030-01-31 or 2030-01-31T09:00:00Z, "
+    "or a Unix timestamp"
+)
+LENGTH_VALUE_REASON = "not a whole number; use a number such as 3"
+LENGTH_BOUNDS_REASON = "between needs a value with min and max, both whole numbers"
+RADIUS_REASON = "radius must be a number of 0 or more"
+NO_RADIUS_REASON = "a radius is required; use a number of 0 or more"
+PERCENTAGE_REASON = "not a number; use a percentage from 0 to 100"
+NUMBER_REASON = "not a number; use a number such as 5"
+DASHBOARD_COMPARISON_REASON = (
+    "comparison is not read in the dashboard shape, so the rule would mean within "
+    "the radius; to use gt, lt, gte or eq, write the rule in the native shape"
+)
+VALUE_REASONS = (
+    DATE_VALUE_REASON,
+    LENGTH_VALUE_REASON,
+    LENGTH_BOUNDS_REASON,
+    RADIUS_REASON,
+    NO_RADIUS_REASON,
+    PERCENTAGE_REASON,
+    NUMBER_REASON,
+    DASHBOARD_COMPARISON_REASON,
+)
+
 #: The reason for each word :func:`_check_supported_vocabulary` refuses. Each is
 #: one line of at most 200 characters, the most the dashboard shows as one
 #: condition's problem (``describeTargetingIssue``), and none repeats a value.
@@ -1026,8 +1061,9 @@ DISTANCE_COMPARISON_REASON = (
 )
 DISTANCE_UNIT_REASON = "unknown distance unit; use km, mi or m, or leave it out for km"
 TIME_WINDOW_REASON = (
-    "unreadable time window; see the time_window example on the Targeting "
-    "Rules: Operator Reference page"
+    "unreadable time window; give days (0 to 6), start_time and end_time "
+    "(HH:MM), or start_date and end_date (YYYY-MM-DD); a timezone must be a "
+    "name such as Europe/Paris"
 )
 VOCABULARY_REASONS = (
     NOT_ON_FLAGS_REASON,
@@ -1044,10 +1080,82 @@ def _silent(_operator: Any, _reason: str) -> None:
     evaluation)."""
 
 
+#: Every reason the walker gives, the values' first: the words' limits hold
+#: for both.
+VOCABULARY_REASONS = VALUE_REASONS + VOCABULARY_REASONS
+
+
 def _known_comparison(word: Any, known: frozenset) -> bool:
     """Whether the engine reads ``word`` as one of ``known``: a false-y word is
     read as ``eq``, any other must be one of the strings."""
     return not word or (isinstance(word, str) and word in known)
+
+
+def _carries_a_comparison(raw_condition: Any) -> bool:
+    """Whether a dashboard ``geo_within_radius`` condition, as submitted,
+    carries a comparison the converter drops (#1526).
+
+    ``_geo_value`` reads ``lat``, ``lon``, ``radius`` and ``unit`` only, so
+    the rule means "within the radius" whatever else it says. That is: in
+    the object, a ``comparison`` other than absent, ``null`` or ``"lte"``;
+    in the list or the text, any fifth item or part, even an empty one.
+    """
+    value = raw_condition.get("value") if isinstance(raw_condition, dict) else None
+    if isinstance(value, dict):
+        return value.get("comparison") not in (None, "lte")
+    if isinstance(value, str):
+        return len(value.split(",")) > 4
+    if isinstance(value, (list, tuple)):
+        return len(value) > 4
+    return False
+
+
+def _unreadable_value(
+    condition: Condition, dashboard: bool, raw_condition: Any
+) -> Optional[Tuple[str, str]]:
+    """``(field, reason)`` for a value in ``condition`` its evaluator cannot
+    read (#1525), or a dashboard geo comparison it ignores (#1526); ``None``
+    otherwise. Run after :func:`_unsupported_word` found nothing, so a word
+    is known when its value is looked at.
+
+    ``raw_condition`` is the condition as submitted, for the dashboard shape
+    (``None`` for the native shape): the converter drops a geo comparison,
+    so only the submitted value shows it. Each value is judged by the
+    ``rules_engine`` predicate that mirrors its branch. ``gt``, ``gte``,
+    ``lt`` and ``lte`` are judged in the native shape only; the dashboard
+    converter already refuses text that is not a number.
+    """
+    operator = condition.operator
+    value = condition.value
+    extra = condition.additional_value
+    if operator in (OperatorType.BEFORE, OperatorType.AFTER):
+        if not date_value_readable(value):
+            return "value", DATE_VALUE_REASON
+    elif operator == OperatorType.ARRAY_LENGTH:
+        if extra == "between":
+            if not length_bounds_readable(value):
+                return "value", LENGTH_BOUNDS_REASON
+        elif not length_value_readable(value):
+            return "value", LENGTH_VALUE_REASON
+    elif operator == OperatorType.GEO_DISTANCE:
+        if dashboard and _carries_a_comparison(raw_condition):
+            return "value", DASHBOARD_COMPARISON_REASON
+        # The engine reads the radius from an object's ``radius``, or takes
+        # additional_value itself as the radius.
+        field = "value" if dashboard else "additional_value"
+        if isinstance(extra, dict):
+            if "radius" not in extra:
+                return field, NO_RADIUS_REASON
+            extra = extra["radius"]
+        if not radius_readable(extra):
+            return field, RADIUS_REASON
+    elif operator == OperatorType.PERCENTAGE_BUCKET:
+        if not percentage_value_readable(value):
+            return "value", PERCENTAGE_REASON
+    elif operator in _NUMERIC_OPERATORS and not dashboard:
+        if not number_value_readable(value):
+            return "value", NUMBER_REASON
+    return None
 
 
 def _unsupported_word(
@@ -1094,7 +1202,7 @@ def _unsupported_word(
 
 
 def _check_supported_vocabulary(
-    rules: TargetingRules, groups_base: Optional[str], kind: str
+    rules: TargetingRules, groups_base: Optional[str], kind: str, raw: Any
 ) -> None:
     """Refuse a word the evaluator that will read the rules never matches (#1204).
 
@@ -1112,13 +1220,31 @@ def _check_supported_vocabulary(
       ``null`` is ``lte``), and a ``unit`` that is not text in ``GEO_UNITS``
       once lowercased (absent is ``km``; an explicit ``null`` matches nothing);
     * in the native shape (``groups_base`` ``None``), a ``time_window`` value
-      ``rules_engine.check_time_window`` cannot read.
+      ``rules_engine.check_time_window`` cannot read;
+    * then, for the same condition, a value the evaluator cannot read
+      (#1525, :func:`_unreadable_value`): a ``before`` or ``after`` value that
+      is not a date, an ``array_length`` value that is not a whole number (or,
+      for ``between``, not ``min`` and ``max``), a ``geo_distance`` radius
+      that is missing, below 0 or not a number, a ``percentage_bucket`` value
+      that is not a number, and a native ``gt``, ``gte``, ``lt`` or ``lte``
+      value that is not a number; and a dashboard ``geo_within_radius`` that
+      carries a comparison, which the converter drops (#1526).
 
-    Such a condition is accepted by the schema and never holds, or (the
-    window) abandons the whole ruleset. The path is in the submitted value's
-    terms: ``rules[i].rule.conditions[k].operator`` (or ``.additional_value``,
-    ``.value``) for the native shape, ``groups[i].conditions[j].value`` for a
-    dashboard unit. Called from :func:`_validate_targeting` and, for segments,
+    Such a condition is accepted by the schema and never holds, holds where
+    it says it does not (a dashboard comparison), or abandons the whole
+    ruleset (the window, a timestamp no date can hold). The path is in the
+    submitted value's terms: ``rules[i].rule.conditions[k].operator`` (or
+    ``.additional_value``, ``.value``) for the native shape,
+    ``groups[i].conditions[j].value`` for the dashboard shape.
+
+    ``raw`` is the value as submitted. For the dashboard shape, the
+    submitted condition at ``groups[i].conditions[j]`` is read beside the
+    converted rule's condition at the same place: the converter maps each
+    condition to one condition in the same place, and
+    :func:`_validated_dashboard` has refused a group with no condition, the
+    one thing it skips. The native shape ignores ``raw``.
+
+    Called from :func:`_validate_targeting` and, for segments,
     :func:`check_segment_vocabulary`, both on the write path only. Never from
     :func:`validate_segment_rules` or :func:`_check_rule_validator`: those
     also gate reads, and a stored segment that failed there would become
@@ -1132,36 +1258,57 @@ def _check_supported_vocabulary(
     if rules.default_rule is not None:
         roots.append((rules.default_rule.rule, "default_rule.rule"))
     for root, root_path in roots:
-        stack = [(root, root_path)]
+        stack = [(root, root_path, raw if dashboard else None)]
         while stack:
-            group, path = stack.pop()
+            group, path, raw_group = stack.pop()
             for ci, condition in enumerate(group.conditions):
-                problem = _unsupported_word(condition, kind, dashboard)
+                problem = _unsupported_word(
+                    condition, kind, dashboard
+                ) or _unreadable_value(
+                    condition, dashboard, _submitted(raw_group, "conditions", ci)
+                )
                 if problem is not None:
                     field, reason = problem
                     raise TargetingRulesError(
                         _join(path, f"conditions[{ci}].{field}"), reason
                     )
             stack.extend(
-                (child, _join(path, f"groups[{gi}]"))
+                (
+                    child,
+                    _join(path, f"groups[{gi}]"),
+                    _submitted(raw_group, "groups", gi),
+                )
                 for gi, child in reversed(list(enumerate(group.groups or [])))
             )
 
 
-def check_segment_vocabulary(rules: TargetingRules) -> None:
-    """Refuse segment rules with a word membership never matches (#1204).
+def _submitted(raw_group: Any, key: str, index: int) -> Any:
+    """``raw_group[key][index]`` of the submitted dashboard value, or ``None``
+    (always, for the native shape, which passes no submitted group)."""
+    items = raw_group.get(key) if isinstance(raw_group, dict) else None
+    if isinstance(items, list) and 0 <= index < len(items):
+        return items[index]
+    return None
 
-    ``rules`` are what :func:`validate_segment_rules` returned. Segment rules
-    are in the dashboard shape and evaluated as a flag's are, so the only
-    word that can be refused is a distance unit. Called on a segment's write
-    path (``schemas.segment``) and by ``check_targeting_rules``; never from
-    :func:`validate_segment_rules`, which also decides at read time whether a
-    stored segment can be evaluated.
+
+def check_segment_vocabulary(rules: TargetingRules, raw: Any) -> None:
+    """Refuse segment rules with a word membership never matches (#1204), or a
+    value it cannot read (#1525, #1526).
+
+    ``rules`` are what :func:`validate_segment_rules` returned for ``raw``,
+    the rules as submitted or stored. Segment rules are in the dashboard
+    shape and evaluated as a flag's are, so what can be refused is a
+    ``geo_within_radius`` with a distance unit membership does not know, a
+    comparison (which the converter drops) or a radius below 0 or not a
+    number. Called on a segment's write path (``schemas.segment``) and by
+    ``check_targeting_rules``; never from :func:`validate_segment_rules`,
+    which also decides at read time whether a stored segment can be
+    evaluated.
 
     Raises:
         TargetingRulesError: with a fixed message keyed by path.
     """
-    _check_supported_vocabulary(rules, "groups", _FLAG)
+    _check_supported_vocabulary(rules, "groups", _FLAG, raw)
 
 
 # ---------------------------------------------------------------------------
@@ -1465,9 +1612,12 @@ def _time_window_value(value: Any) -> Dict[str, Any]:
     """
     Normalise ``time_window`` into the dict the engine reads.
 
-    The ``Condition`` schema requires ``start``/``end`` keys while the engine
-    reads ``start_time``/``end_time``; both spellings are kept so the value
-    validates and evaluates.
+    The dashboard shape gives a window as ``start``/``end`` (``HH:MM``), which
+    the engine does not read; it reads ``start_time``/``end_time``. Both
+    spellings are kept, so a window saved with either is read as times of
+    day. This shape still requires one of the two pairs: a dashboard window
+    given only as ``days`` or dates is refused here (``value is not valid for
+    the operator``), although the native shape accepts one (#1527).
     """
     if isinstance(value, str):
         try:
