@@ -7,18 +7,22 @@
  * answer, one JSON object with `ok` true or false, in order:
  *
  * - `hello`: `sdk`, `version` (sdk/js/package.json's), `module` (the file the SDK
- *   was loaded from, relative to the repository root) and `capabilities`.
+ *   was loaded from, relative to the repository root) and `capabilities`
+ *   (`local-eval`, `remote-eval`, `error-tally`).
  * - `init {api_url, api_key, mode, refresh_seconds?, cache_ttl_seconds?,
  *   timeout_ms?}`: the client, `mode` `server` or `local`. In local mode it waits
  *   up to `timeout_ms` (5,000 unless given) for the first ruleset and answers
- *   `ready`.
+ *   `ready`. `cache_ttl_seconds` is passed as it is (0 caches nothing). The client
+ *   always gets an `onError` that counts its calls per operation: the count only,
+ *   never the error or its message, which can carry a URL with a user's id.
  * - `evaluate {flag, user, context?, default}`: `enabled`, `value`, `reason`,
  *   `source`, `error` and `ms`. `source` is `local` (from the ruleset), `server`
  *   (the SDK's server path; in server mode the SDK does not say whether its cache
  *   answered, so the proxy's count is the authority) or `default` (the call threw:
  *   `enabled` and `value` are the default and `error` names the error's type and
  *   status). `error` is `null` otherwise; it is never left out.
- * - `status`: the SDK's `status()`.
+ * - `status`: the SDK's `status()`, and `errors`: the `onError` calls so far,
+ *   `{refresh, flush, evaluate, other}` (any other operation counts as `other`).
  * - `close`: closes the client, answers, and exits 0. End of input does the same
  *   without an answer.
  *
@@ -59,6 +63,18 @@ const NOT_THE_CHECKOUT = 3;
 /** Exit status on a Node below the SDK's engines floor. */
 const NODE_TOO_OLD = 4;
 const NODE_FLOOR = 18;
+/** The operations `errors` counts by name; any other counts as `other`. */
+const ERROR_OPERATIONS = ['refresh', 'flush', 'evaluate'];
+const CAPABILITIES = ['local-eval', 'remote-eval', 'error-tally'];
+
+/** The client's `onError`: counts its calls per operation, never keeping the error. */
+function errorTally() {
+  const counts = { refresh: 0, flush: 0, evaluate: 0, other: 0 };
+  const onError = (_error, operation) => {
+    counts[ERROR_OPERATIONS.includes(operation) ? operation : 'other'] += 1;
+  };
+  return { counts, onError };
+}
 
 // stdout carries only answers: every console method goes to stderr.
 for (const method of ['log', 'info', 'warn', 'error', 'debug', 'trace']) {
@@ -125,6 +141,7 @@ class Driver {
   constructor(loaded) {
     this.loaded = loaded;
     this.client = null;
+    this.errors = errorTally();
     this.closed = false;
   }
 
@@ -157,7 +174,7 @@ class Driver {
       sdk: 'js',
       version: this.loaded.version,
       module: this.loaded.module,
-      capabilities: ['local-eval', 'remote-eval'],
+      capabilities: [...CAPABILITIES],
     };
   }
 
@@ -167,7 +184,7 @@ class Driver {
     const apiKey = string(args, 'api_key');
     const mode = args.mode;
     if (mode !== 'server' && mode !== 'local') throw new Refused('bad_request');
-    const config = { apiUrl, apiKey, evaluation: mode };
+    const config = { apiUrl, apiKey, evaluation: mode, onError: this.errors.onError };
     const timeoutMs = number(args, 'timeout_ms');
     if (timeoutMs !== undefined) config.timeoutMs = timeoutMs;
     const cacheTtl = number(args, 'cache_ttl_seconds');
@@ -233,6 +250,7 @@ class Driver {
       last_refresh_at: status.lastRefreshAt ? status.lastRefreshAt.toISOString() : null,
       last_error: status.lastError ? errorOf(status.lastError) : null,
       server_evaluated_flags: [...status.serverEvaluatedFlags],
+      errors: { ...this.errors.counts },
     };
   }
 
