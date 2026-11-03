@@ -83,7 +83,7 @@ try {
   const dedupName = `contract_dedup_${randomUUID()}`;
   const dedupId = `contract-${randomUUID()}`;
   for (let i = 0; i < 2; i++) {
-    await client.track(userId, dedupName, { experimentKey, eventId: dedupId });
+    await client.track(userId, dedupName, { experimentKey, eventId: `${dedupId}-${i}` });
   }
   if (trackErrors.length) fail(`event_id: ${trackErrors[0]}`);
 
