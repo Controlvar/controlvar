@@ -286,7 +286,17 @@ by = [
     "test:sdk/python/tests/test_local.py::test_a_refusal_after_a_load_discards_the_ruleset",
     "test:sdk/python/tests/test_local.py::test_404_names_the_minimum_server_release_and_discards",
     "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_local_evaluation_timings_are_the_numbers_the_page_states",
+    "test:sdk/js/__tests__/local.test.ts::past maxStaleMs, a pair answered locally goes to the server",
+    "test:sdk/python/tests/test_local.py::test_past_max_stale_seconds_a_pair_answered_locally_goes_to_the_server",
+    "test:sdk/js/__tests__/local.test.ts::%i discards the ruleset: a pair answered locally goes to the server",
+    "test:sdk/python/tests/test_local.py::test_a_refusal_that_discards_the_ruleset_sends_a_pair_answered_locally_to_the_server",
+    "test:sdk/js/__tests__/local.test.ts::%s discards the ruleset: a pair answered locally goes to the server",
+    "test:sdk/python/tests/test_local.py::test_a_404_or_an_unknown_format_that_discards_the_ruleset_sends_a_pair_answered_locally_to_the_server",
 ]
+
+[[unit]]
+text = "With @controlvar/js-sdk 0.2.0 or controlvar 0.2.0 and earlier, set cacheTtlMs / cache_ttl_seconds (5 minutes by default) lower if these limits must hold: once those versions stop evaluating a flag locally (maxStaleMs / max_stale_seconds passed, the ruleset dropped, close()), a user they answered locally keeps that answer from their cache for up to that lifetime."
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "Making it faster"

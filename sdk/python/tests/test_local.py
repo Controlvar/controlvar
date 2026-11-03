@@ -645,6 +645,118 @@ def test_max_stale_seconds(no_thread):
     assert client.status().ready is False
 
 
+# ----------------------------------------------------------------------- after local evaluation stops answering a pair
+#
+# #1709: a local answer is kept in the evaluation cache (for cached_flags() and the OpenFeature
+# provider), and a call that local evaluation no longer answers read that cache first, so it kept
+# the local answer, with no request, for up to cache_ttl_seconds. Each test answers a user and flag
+# locally, stops local evaluation from answering that pair, and expects the server's answer from
+# exactly one evaluate request. No test here calls clear_cache(). The server answers off where
+# the ruleset answers on, so the answer shows which side gave it.
+
+EVALUATE = "/api/v1/feature-flags/evaluate/"
+
+
+def server_off(server: FakeServer, key: str = "all-on") -> FakeServer:
+    server.evaluate = lambda query: make_response(200, {"key": key, "enabled": False, "config": None, "reason": "rollout"})
+    return server
+
+
+def answers_locally(client: ExperimentationClient, key: str = "all-on", attributes: Any = None) -> None:
+    result = client.get_feature_flag(key, "user-1", attributes)
+    assert (result.enabled, result.source) == (True, "local")
+
+
+def asks_the_server_once(client: ExperimentationClient, server: FakeServer, key: str = "all-on", attributes: Any = None):
+    """Two calls: the first asks the server, the second reuses the server's answer from the cache."""
+    for _ in range(2):
+        result = client.get_feature_flag(key, "user-1", attributes)
+        assert (result.enabled, result.reason, result.source) == (False, "rollout", "server")
+    calls = server.calls(EVALUATE)
+    assert [c["path"] for c in calls] == [EVALUATE + key]
+    return calls[0]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("status", [401, 403])
+def test_a_refusal_that_discards_the_ruleset_sends_a_pair_answered_locally_to_the_server(no_thread, status):
+    server = server_off(FakeServer(ok(), make_response(status, {"detail": "nope"})))
+    client, _ = loaded(server)
+    answers_locally(client)
+    client._local.refresh_once()
+    assert client.status().ready is False
+    asks_the_server_once(client, server)
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "response",
+    [make_response(404), ok(dict(RULESET, schema=2), '"v9"'), ok(dict(RULESET, bucketing="md5-mod100-v2"), '"v9"')],
+    ids=["404", "schema", "bucketing"],
+)
+def test_a_404_or_an_unknown_format_that_discards_the_ruleset_sends_a_pair_answered_locally_to_the_server(
+    no_thread, response
+):
+    server = server_off(FakeServer(ok(), response))
+    client, _ = loaded(server)
+    answers_locally(client)
+    client._local.refresh_once()
+    assert client.status().ready is False
+    asks_the_server_once(client, server)
+
+
+@pytest.mark.regression
+def test_past_max_stale_seconds_a_pair_answered_locally_goes_to_the_server(no_thread):
+    now = [1000.0]
+    server = server_off(FakeServer(ok(), make_response(503)))
+    client, _ = local_client(server, max_stale_seconds=45)
+    client._local._clock = lambda: now[0]
+    client._local.refresh_once()
+    now[0] += 40
+    answers_locally(client)
+    now[0] += 10
+    assert client.status().ready is False
+    asks_the_server_once(client, server)
+
+
+@pytest.mark.regression
+def test_after_close_a_pair_answered_locally_goes_to_the_server(no_thread):
+    server = server_off(FakeServer(ok()))
+    client, _ = loaded(server)
+    answers_locally(client)
+    client.close()
+    asks_the_server_once(client, server)
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "entry", [{"key": "all-on", "active": True, "evaluation": "remote"}, None], ids=["made-remote", "removed"]
+)
+def test_a_new_ruleset_that_makes_the_flag_remote_or_removes_it_sends_a_pair_answered_locally_to_the_server(
+    no_thread, entry
+):
+    flags = [f for f in RULESET["flags"] if f["key"] != "all-on"] + ([entry] if entry else [])
+    server = server_off(FakeServer(ok(), ok(dict(RULESET, version="v2", flags=flags), '"v2"')))
+    client, _ = loaded(server)
+    answers_locally(client)
+    client._local.refresh_once()
+    assert (client.status().ready, client.status().ruleset_version) == (True, "v2")
+    asks_the_server_once(client, server)
+
+
+@pytest.mark.regression
+def test_a_call_that_defers_after_a_local_answer_for_the_same_pair_goes_to_the_server(no_thread):
+    server = server_off(FakeServer(ok()), key="us-only")
+    client, _ = loaded(server)
+    answers_locally(client, "us-only", US)
+    # A number against the rule's string: the SDK does not compare it, so this call defers.
+    numeric = {"country": 7}
+    assert asks_the_server_once(client, server, "us-only", numeric)["query"]["context"] == '{"country":7}'
+    # The ruleset still answers the attributes it can compare, with no request.
+    answers_locally(client, "us-only", US)
+    assert len(server.calls(EVALUATE)) == 1
+
+
 # ----------------------------------------------------------------------- the background thread
 
 

@@ -536,8 +536,11 @@ class ExperimentationClient:
                 self._flags.set(user_id, flag_key, local)
                 self._attributed.record_flag(user_id, flag_key)
                 return local
+        # Only a server answer is reused here. A local one is kept for cached_flags(), but it was
+        # computed from a ruleset that no longer answers this call (discarded, too stale, closed,
+        # the flag now remote or gone, or attributes it cannot compare), so the server is asked (#1709).
         cached = self._flags.get(user_id, flag_key)
-        if cached is not None:
+        if cached is not None and cached.source != "local":
             return cached
 
         query: Dict[str, str] = {"user_id": user_id}
