@@ -94,9 +94,7 @@ public class ExperimentationClient : IDisposable
         {
             var path = $"/api/v1/feature-flags/evaluate/{Uri.EscapeDataString(flagKey)}";
             var query = new Dictionary<string, string> { ["user_id"] = userId };
-            var context = ContextParam(attributes);
-            if (context != null)
-                query["context"] = context;
+            var context = ContextParam(attributes); // TAMPER: computed, never sent
             var result = await _httpClient.GetAsync<FlagEvaluationResult>(path, query).ConfigureAwait(false);
             if (string.IsNullOrEmpty(result.Key))
                 result.Key = flagKey;

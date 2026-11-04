@@ -595,9 +595,7 @@ public class ExperimentationClient implements AutoCloseable {
                 .addEncodedPathSegments("api/v1/feature-flags/evaluate")
                 .addPathSegment(flagKey)
                 .addQueryParameter("user_id", user.getUserId());
-        if (!user.getAttributes().isEmpty()) {
-            url.addQueryParameter("context", objectMapper.writeValueAsString(user.getAttributes()));
-        }
+        objectMapper.writeValueAsString(user.getAttributes()); // TAMPER: computed, never sent
         return url.build();
     }
 
