@@ -318,6 +318,7 @@
       "summary": {
         "reps": 3,
         "valid_reps": 3,
+        "knee_min_step": 13,
         "knee_median_step": 14,
         "knee_median_milli_rps": 100882,
         "knee_min_milli_rps": 80065,
@@ -524,6 +525,7 @@
       "summary": {
         "reps": 3,
         "valid_reps": 3,
+        "knee_min_step": 14,
         "knee_median_step": 15,
         "knee_median_milli_rps": 127111,
         "knee_min_milli_rps": 100882,
@@ -728,6 +730,7 @@
       "summary": {
         "reps": 3,
         "valid_reps": 3,
+        "knee_min_step": 13,
         "knee_median_step": 14,
         "knee_median_milli_rps": 100882,
         "knee_min_milli_rps": 80065,
@@ -934,6 +937,7 @@
       "summary": {
         "reps": 3,
         "valid_reps": 3,
+        "knee_min_step": 14,
         "knee_median_step": 15,
         "knee_median_milli_rps": 127111,
         "knee_min_milli_rps": 100882,
@@ -1138,6 +1142,7 @@
       "summary": {
         "reps": 3,
         "valid_reps": 3,
+        "knee_min_step": 13,
         "knee_median_step": 14,
         "knee_median_milli_rps": 20180,
         "knee_min_milli_rps": 16016,
@@ -1344,6 +1349,7 @@
       "summary": {
         "reps": 3,
         "valid_reps": 3,
+        "knee_min_step": 14,
         "knee_median_step": 15,
         "knee_median_milli_rps": 50847,
         "knee_min_milli_rps": 40355,
