@@ -382,9 +382,9 @@ describe('CreateApiKeyModal', () => {
 describe('CreateApiKeyModal accessibility (axe-core in jsdom; colour contrast is not computable here)', () => {
   const axeOptions: axe.RunOptions = { rules: { 'color-contrast': { enabled: false } } };
 
-  // Violations the dialog already has on main. They are bug #1613's and are not
-  // fixed here: the dialog (role="dialog") has no accessible name.
-  const KNOWN_DIALOG_VIOLATIONS = ['aria-dialog-name'];
+  // Violations the dialog is known to have. #1613 (the dialog had no accessible
+  // name) is fixed, so the list is empty: any violation is new.
+  const KNOWN_DIALOG_VIOLATIONS: string[] = [];
 
   // Selectors that are the mcp:read checkbox or its help text.
   const MCP_TARGETS = ['#api-key-mcp-read-scope', '#api-key-mcp-read-scope-help'];
@@ -413,8 +413,14 @@ describe('CreateApiKeyModal accessibility (axe-core in jsdom; colour contrast is
     const violations = await scan(container);
     expect(attributableToMcpCheckbox(violations).map((v) => v.id)).toStrictEqual([]);
     expect(newViolations(violations)).toStrictEqual([]);
-    // The known list is exact: if #1613 is fixed this fails, and the list shrinks.
+    // The known list is exact.
     expect(violations.map((v) => v.id).sort()).toStrictEqual(KNOWN_DIALOG_VIOLATIONS);
+  });
+
+  it('the dialog is named by its heading', () => {
+    global.fetch = jest.fn();
+    render(<CreateApiKeyModal {...defaultProps} />);
+    expect(screen.getByRole('dialog', { name: 'Create API Key' })).toBeInTheDocument();
   });
 
   it('the new-violation check fires on an unlabelled input beside the checkbox (positive control)', async () => {
@@ -433,5 +439,121 @@ describe('CreateApiKeyModal accessibility (axe-core in jsdom; colour contrast is
     container.querySelector('label[for="api-key-mcp-read-scope"]')?.removeAttribute('for');
     const violations = await scan(container);
     expect(attributableToMcpCheckbox(violations).map((v) => v.id)).toContain('label');
+  });
+});
+
+describe('CreateApiKeyModal keyboard and screen-reader behaviour (#1613)', () => {
+  const SECRET = 'plaintextkey-must-not-be-announced';
+
+  function Harness() {
+    const [open, setOpen] = React.useState(false);
+    return (
+      <>
+        <button data-testid="opener" onClick={() => setOpen(true)}>
+          New key
+        </button>
+        <CreateApiKeyModal isOpen={open} onClose={() => setOpen(false)} onSuccess={jest.fn()} />
+      </>
+    );
+  }
+
+  function mockCreate() {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'k1',
+        name: 'K',
+        key: SECRET,
+        prefix: 'plaintex',
+        created_at: '2024-06-15T10:00:00Z',
+        expires_at: null,
+      }),
+    });
+  }
+
+  it('moves focus to the name field on open', () => {
+    global.fetch = jest.fn();
+    render(<Harness />);
+    const opener = screen.getByTestId('opener');
+    opener.focus();
+    fireEvent.click(opener);
+    expect(screen.getByTestId('api-key-name-input')).toHaveFocus();
+  });
+
+  it('Escape closes the dialog', () => {
+    global.fetch = jest.fn();
+    render(<Harness />);
+    screen.getByTestId('opener').focus();
+    fireEvent.click(screen.getByTestId('opener'));
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    expect(screen.queryByTestId('create-api-key-modal')).not.toBeInTheDocument();
+  });
+
+  it('returns focus to the opener when it closes', () => {
+    global.fetch = jest.fn();
+    render(<Harness />);
+    const opener = screen.getByTestId('opener');
+    opener.focus();
+    fireEvent.click(opener);
+    expect(opener).not.toHaveFocus();
+    fireEvent.click(screen.getByTestId('modal-cancel-button'));
+    expect(opener).toHaveFocus();
+  });
+
+  it('keeps Tab inside the dialog', () => {
+    global.fetch = jest.fn();
+    render(<Harness />);
+    screen.getByTestId('opener').focus();
+    fireEvent.click(screen.getByTestId('opener'));
+    screen.getByTestId('create-api-key-submit').focus();
+    // Submit is disabled with an empty name, so the last focusable is Cancel.
+    screen.getByTestId('modal-cancel-button').focus();
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Tab' });
+    expect(screen.getByTestId('api-key-name-input')).toHaveFocus();
+  });
+
+  it('announces "Key created" then "Key copied" in a polite live region, never the key', async () => {
+    mockCreate();
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: jest.fn().mockResolvedValue(undefined) },
+      configurable: true,
+    });
+    render(<CreateApiKeyModal {...defaultProps} />);
+    const live = screen.getByTestId('api-key-live-region');
+    expect(live).toHaveAttribute('aria-live', 'polite');
+    expect(live).toHaveTextContent('');
+    fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'K' } });
+    fireEvent.click(screen.getByTestId('create-api-key-submit'));
+    await waitFor(() => expect(live).toHaveTextContent('Key created'));
+    fireEvent.click(screen.getByTestId('copy-key-button'));
+    await waitFor(() => expect(live).toHaveTextContent('Key copied'));
+    expect(live.textContent).not.toContain(SECRET);
+  });
+
+  it('puts the plaintext key in no accessible name, description or live region', async () => {
+    mockCreate();
+    render(<CreateApiKeyModal {...defaultProps} />);
+    fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'K' } });
+    fireEvent.click(screen.getByTestId('create-api-key-submit'));
+    await waitFor(() => expect(screen.getByTestId('masked-key-value')).toBeInTheDocument());
+    const dialog = screen.getByRole('dialog');
+    const ids = (el: Element, attr: string) =>
+      (el.getAttribute(attr) ?? '')
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((id) => document.getElementById(id)?.textContent ?? '');
+    const all = [dialog, ...Array.from(dialog.querySelectorAll('*'))];
+    for (const el of all) {
+      for (const attr of ['aria-label', 'title', 'aria-valuetext', 'aria-roledescription']) {
+        expect(el.getAttribute(attr) ?? '').not.toContain(SECRET);
+      }
+      expect(ids(el, 'aria-labelledby').join(' ')).not.toContain(SECRET);
+      expect(ids(el, 'aria-describedby').join(' ')).not.toContain(SECRET);
+      if (el.matches('[aria-live], [role="status"], [role="alert"], [role="log"]')) {
+        expect(el.textContent ?? '').not.toContain(SECRET);
+      }
+    }
+    expect(screen.getByRole('dialog', { name: 'API Key Created' })).toBeInTheDocument();
+    expect(dialog.textContent).not.toContain(SECRET);
   });
 });

@@ -277,6 +277,51 @@ test.describe("Accessibility Audits", () => {
     }
   });
 
+  // #1613: the API keys dialog (open) and the one-time key banner (colour
+  // contrast is computed here, where it is real). The key is created by a
+  // mocked POST, so nothing is written.
+  test("API keys dialog and new-key banner have no a11y violations", async ({
+    adminPage,
+  }) => {
+    const AxeBuilder = await getAxeBuilder();
+    if (!AxeBuilder) return;
+
+    await adminPage.route(/\/api\/v1\/api-keys\/?$/, async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "00000000-0000-0000-0000-000000000001",
+          name: "a11y",
+          key: "placeholder-key-for-axe-scan",
+          prefix: "placehol",
+          created_at: "2026-01-01T00:00:00Z",
+          expires_at: null,
+        }),
+      });
+    });
+    await adminPage.goto("/admin/api-keys");
+    await adminPage.getByTestId("create-api-key-button").click();
+    await expect(adminPage.getByRole("dialog", { name: "Create API Key" })).toBeVisible();
+    await expect(adminPage.getByTestId("api-key-name-input")).toBeFocused();
+
+    const open = await new AxeBuilder({ page: adminPage })
+      .withTags(["wcag2a", "wcag2aa"])
+      .analyze();
+    expect(open.violations, open.violations.map((v) => `[${v.impact}] ${v.id}`).join("\n")).toHaveLength(0);
+
+    await adminPage.getByTestId("api-key-name-input").fill("a11y");
+    await adminPage.getByTestId("create-api-key-submit").click();
+    await expect(adminPage.getByTestId("new-key-banner")).toBeVisible();
+
+    const banner = await new AxeBuilder({ page: adminPage })
+      .include('[data-testid="new-key-banner"]')
+      .withTags(["wcag2a", "wcag2aa"])
+      .analyze();
+    expect(banner.violations, banner.violations.map((v) => `[${v.impact}] ${v.id}`).join("\n")).toHaveLength(0);
+  });
+
   test("color contrast meets WCAG AA", async ({ adminPage }) => {
     const AxeBuilder = await getAxeBuilder();
     if (!AxeBuilder) return;

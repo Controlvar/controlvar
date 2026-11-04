@@ -22,6 +22,12 @@ export function ApiKeysPage() {
       <div data-testid="api-keys-page" className="flex flex-col gap-5">
         <h2 className="text-xl font-semibold text-slate-900">API Keys</h2>
 
+        {/* Always mounted so a screen reader announces the change. Never the
+            key itself: only that one was created, and that it was copied. */}
+        <div role="status" aria-live="polite" data-testid="new-key-live-region" className="sr-only">
+          {newKeyBanner ? (copied ? 'Key copied' : 'Key created') : ''}
+        </div>
+
         {/* Banner showing the newly created key (shown once) */}
         {newKeyBanner && (
           <div
@@ -53,7 +59,7 @@ export function ApiKeysPage() {
                     setCopied(false);
                   }
                 }}
-                className="px-3 py-1.5 rounded-md bg-amber-600 text-white text-sm font-medium hover:bg-amber-700"
+                className="px-3 py-1.5 rounded-md bg-amber-800 text-white text-sm font-medium hover:bg-amber-900"
               >
                 {copied ? 'Copied' : 'Copy'}
               </button>
@@ -63,7 +69,7 @@ export function ApiKeysPage() {
                   setNewKeyBanner(null);
                   setCopied(false);
                 }}
-                className="text-amber-600 hover:text-amber-800 text-sm font-medium"
+                className="text-amber-800 hover:text-amber-900 text-sm font-medium"
               >
                 Dismiss
               </button>
