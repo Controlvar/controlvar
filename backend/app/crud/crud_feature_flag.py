@@ -28,6 +28,9 @@ from backend.app.services.feature_flag_service import FlagVerb, transition
 class CRUDFeatureFlag(CRUDBase[FeatureFlag, FeatureFlagCreate, FeatureFlagUpdate]):
     """Feature flag CRUD operations."""
 
+    #: The list pages oldest first; ``id`` breaks a tie in ``created_at`` (#1612).
+    list_order = ("created_at", "id")
+
     def get_by_key(self, db: Session, *, key: str) -> Optional[FeatureFlag]:
         """
         Get a feature flag by key.
