@@ -741,6 +741,44 @@ MECHANISMS: Dict[str, Mechanism] = {
         "::test_each_description_is_true_of_its_page",
         quotes=True,
     ),
+    # The MCP server page's tool table against sdk/mcp/tools.json, the server's
+    # own answer to tools/list.
+    "mcp-page-tools": Mechanism(
+        "backend/tests/unit/docs/test_mcp_page_tools.py"
+        "::test_the_pages_tool_table_is_the_servers_tools",
+        holds=(
+            (
+                "docs/mcp-server.md",
+                r"^(?:list_feature_flags|get_feature_flag|evaluate_feature_flag"
+                r"|list_experiments|get_experiment|get_experiment_results)"
+                r" \| [^|]{1,100} \| (?:GET|POST) /api/v1/[^|]{1,100}$",
+            ),
+        ),
+    ),
+    # The sentences that introduce the page's client snippets, which that test
+    # parses: the environment variables they set, and how they start the server.
+    "mcp-page-snippets": Mechanism(
+        "backend/tests/unit/docs/test_mcp_page_config.py"
+        "::test_every_client_snippet_names_the_real_server",
+        holds=_whole(
+            "docs/mcp-server.md",
+            "Each assistant starts the server itself, with two settings: "
+            "CONTROLVAR_API_URL is your instance's address and "
+            "CONTROLVAR_API_KEY is the key.",
+            "Run this in the sdk/mcp directory you built, with the key in $KEY:",
+        ),
+    ),
+    # "Not yet published": while the page says so it names no npx command.
+    "mcp-page-state": Mechanism(
+        "backend/tests/unit/docs/test_mcp_page_config.py"
+        "::test_an_unpublished_page_names_no_install_by_npx",
+        holds=_whole(
+            "docs/mcp-server.md",
+            "Not yet published.",
+            "@controlvar/mcp-server is not on npm, so build it from a clone of "
+            "this repository:",
+        ),
+    ),
     "integrations-claims": Mechanism(
         "backend/tests/unit/docs/test_integrations_docs_claims.py"
         "::test_every_claim_about_what_the_platform_does_is_on_the_list",

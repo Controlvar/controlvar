@@ -139,10 +139,11 @@ by = [
 ]
 
 [[unit]]
-text = "A flag the caller may not change (an ANALYST or VIEWER changes none) fails with \"Not enough permissions to change this feature flag\" and is left as it was."
+text = "A flag the caller may not change (an ANALYST or VIEWER changes none, unless a custom role or direct grant gives them feature_flag (update)) fails with \"Not enough permissions to change this feature flag\" and is left as it was."
 by = [
     "test:backend/tests/unit/services/test_audit_log_rules.py::test_a_flag_the_caller_may_not_change_is_refused_and_left_as_it_was",
     "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_bulk_toggle_refuses_flags_the_user_cannot_update",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_bulk_toggle_follows_a_flag_update_grant",
 ]
 
 [[unit]]
@@ -333,10 +334,12 @@ text = "Entries written after the request arrived are not in it."
 by = ["test:backend/tests/integration/api/test_audit_export.py::test_an_entry_written_after_the_request_is_not_exported"]
 
 [[unit]]
-text = "Who sees what is the list's rule: ADMIN and ANALYST export every entry; DEVELOPER and VIEWER export only their own, whatever user_id they send."
+text = "Who sees what is the list's rule: ADMIN, ANALYST and, in the full profile, anyone whose custom role or direct grant gives audit_log (read) export other users' entries too; anyone else exports only their own, whatever user_id they send."
 by = [
     "test:backend/tests/integration/api/test_audit_export.py::test_developer_and_viewer_export_only_their_own_rows",
     "test:backend/tests/integration/api/test_audit_export.py::test_admin_and_analyst_export_every_row",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
 ]
 
 [[unit]]
@@ -407,8 +410,12 @@ by = [
 ]
 
 [[unit]]
-text = "It shows what GET /api/v1/audit-logs/ returns for that user: every entry for ADMIN, ANALYST and superusers, and their own entries for DEVELOPER and VIEWER, who see a note saying so."
-by = ["test:frontend/src/tests/admin/AuditLogAccess.test.tsx"]
+text = "It shows what GET /api/v1/audit-logs/ returns for that user: other users' entries too for ADMIN, ANALYST, superusers and, in the full profile, anyone whose custom role or direct grant gives audit_log (read); only their own entries for anyone else, who sees a note saying so."
+by = [
+    "test:frontend/src/tests/admin/AuditLogAccess.test.tsx",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
 text = "Its Download CSV and Download JSON buttons export the same entries, with the page's current filters."
@@ -1006,22 +1013,29 @@ text = "Permissions"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "ADMIN and ANALYST (and superusers) read every audit entry."
+text = "ADMIN and ANALYST (and superusers), and in the full profile anyone whose custom role or direct grant gives audit_log (read), read other users' audit entries too."
 by = [
     "test:backend/tests/integration/api/test_audit_log_reads.py::test_developer_and_viewer_read_only_their_own_entries",
     "test:backend/tests/integration/api/test_audit_log_reads.py::test_admin_and_analyst_read_every_entry",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
 ]
 
 [[unit]]
-text = "DEVELOPER and VIEWER read only the entries they made themselves."
+text = "Anyone else reads only the entries they made themselves."
 by = [
     "test:backend/tests/integration/api/test_audit_log_reads.py::test_developer_and_viewer_read_only_their_own_entries",
     "test:backend/tests/integration/api/test_audit_log_reads.py::test_admin_and_analyst_read_every_entry",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
 ]
 
 [[unit]]
-text = "Route | ADMIN, ANALYST | DEVELOPER, VIEWER"
-by = ["exempt:baseline"]
+text = "Route | ADMIN, ANALYST, or audit_log (read) | Anyone else"
+by = [
+    "test:backend/tests/integration/api/test_audit_log_reads.py::test_admin_and_analyst_read_every_entry",
+    "test:backend/tests/integration/api/test_audit_log_reads.py::test_developer_and_viewer_read_only_their_own_entries",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
 text = "GET /audit-logs/ | Every entry; user_id filters by any user | Own entries only; a user_id naming anyone else is replaced by their own"
@@ -1058,5 +1072,8 @@ text = "GET /feature-flags/{flag_id}/history | Every entry | Own entries only; t
 by = ["test:backend/tests/integration/api/test_audit_log_reads.py::test_developer_still_reads_own_entries"]
 
 [[unit]]
-text = "POST /feature-flags/bulk-toggle changes flags, so it follows the flag rule: ADMIN and DEVELOPER may use it, ANALYST and VIEWER may not."
-by = ["test:backend/tests/integration/api/test_flag_change_routes_access.py::test_bulk_toggle_refuses_flags_the_user_cannot_update"]
+text = "POST /feature-flags/bulk-toggle changes flags, so it follows the flag rule: ADMIN and DEVELOPER may use it, and in the full profile so may anyone whose custom role or direct grant gives feature_flag (update); anyone else may not."
+by = [
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_bulk_toggle_refuses_flags_the_user_cannot_update",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_bulk_toggle_follows_a_flag_update_grant",
+]

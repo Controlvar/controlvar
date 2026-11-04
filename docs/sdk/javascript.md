@@ -167,6 +167,7 @@ turn that into their safe default.
 | `fetchAssignments` | `(userId, { activeOnly?: boolean } = { activeOnly: true }) => Promise<AssignmentRecord[]>` | Server-side assignment rows (raw objects); not cached | Rejects |
 | `getAssignments` | `(userId) => Assignment[]` | Cached, unexpired assignments in assignment order (no network) | — |
 | `getEvaluatedFlags` | `(userId) => string[]` | Keys of cached, successfully evaluated flags (no network) | — |
+| `getCachedFlags` | `(userId) => FlagEvaluation[]` | Cached, unexpired flag evaluations for the user (no network); in local mode each carries `source` (`'local'` or `'server'`) | — |
 | `clearCache` | `() => void` | Drops both caches; keeps the keys a key-less `track` is sent to | — |
 | `ready` | `({ timeoutMs? }?) => Promise<ReadyResult>` | `{ ok: true, rulesetVersion }` or `{ ok: false, error }`; `{ ok: true, rulesetVersion: null }` at once in server mode | Never rejects |
 | `status` | `() => LocalEvaluationStatus` | `{ evaluation, ready, rulesetVersion, lastRefreshAt, lastError, serverEvaluatedFlags }` | — |
@@ -187,7 +188,8 @@ An experiment that is not ACTIVE answers every user with its control variant, `a
 
 `TrackOptions`: `value?` (number), `properties?` (sent as `metadata`), `experimentKey?`,
 `featureFlagKey?`, `eventType?` (defaults to the event name), `timestamp?` (`Date` or string, sent as
-ISO-8601). `TrackEvent` = `TrackOptions & { userId, eventName }`.
+ISO-8601), `eventId?` (sent as `event_id`, see [Event ids](#event-ids)). `TrackEvent` =
+`TrackOptions & { userId, eventName }`.
 
 ### Tracking and the fan-out rule
 
@@ -213,6 +215,28 @@ ISO-8601). `TrackEvent` = `TrackOptions & { userId, eventName }`.
   `success_count` / `failure_count` / `errors`.
 
 Conversions are matched to metrics by **event name**.
+
+### Event ids
+
+`eventId` is your id for one event. The server stores an event sent again with the same
+`event_id`, user, experiment, flag and event name only once (see
+[How events count](../guides/how-events-count.md#sending-an-event-again)). Use this option from
+the next published version of this package, not from the version on npm now. It also
+needs a Controlvar server that includes the `event_id` change ([#1640](https://github.com/Controlvar/controlvar/pull/1640)),
+which the platform release after 0.39.0 is to carry; an older server ignores the field and stores
+an event sent again a second time.
+
+- The SDK makes no id. An event without an `eventId` is sent without an `event_id`, and one sent
+  again is stored and counted again. Make the id once, when the event happens, for example with
+  `crypto.randomUUID()`, and give the same one each time you send that event.
+- `eventId: undefined`, `null` and `''` send no `event_id`. The SDK does not check the id: the
+  server refuses (`422`) one of more than 255 characters or one holding NUL, and in a batch one
+  such event refuses the whole request.
+- An event fanned out to several experiments and flags carries the same `event_id` in every entry,
+  so it counts once in each of them. In `trackBatch`, each event keeps its own `eventId`.
+- A `429` that is retried sends the same request again, so the same `event_id`.
+- A request that times out is not sent again by the SDK, and the server may have stored it. Send
+  it again with the same `eventId` and it is stored once.
 
 ### Reporting errors
 
@@ -280,7 +304,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 | `getAssignment`, `getVariant` | `POST /api/v1/tracking/assign` | `{"experiment_key","user_id","context"?: object}` | `{"experiment_key","user_id","variant_id","variant_name","is_control","configuration"}` |
 | `evaluateFlag`, `isFeatureEnabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<id>&context=<url-encoded JSON>` | `context` = `user.attributes` (omitted when empty) | `{"key","enabled","config","reason"}` |
 | `getAllFlags` | `GET /api/v1/feature-flags/user/{user_id}?context=<url-encoded JSON>` | `context` = `attributes` (omitted when empty) | `{"<flag_key>": bool, ...}` |
-| `track` with a key | `POST /api/v1/tracking/track` | `{"event_type","event_name","user_id","experiment_key"?,"feature_flag_key"?,"value"?,"metadata"?,"timestamp"?}` | stored event (ignored) |
+| `track` with a key | `POST /api/v1/tracking/track` | `{"event_type","event_name","user_id","experiment_key"?,"feature_flag_key"?,"value"?,"metadata"?,"timestamp"?,"event_id"?}` | stored event (ignored) |
 | `track` without a key | `POST /api/v1/tracking/batch`, one entry per experiment and flag it reaches; with none, `POST /api/v1/tracking/track` | `{"events":[<track body>...]}` (max 100); with none, the track body with no key | ignored |
 | `trackBatch` | `POST /api/v1/tracking/batch` | `{"events":[<track body>...]}` (max 100) | `{"success_count","failure_count","errors"}` |
 | `fetchAssignments` | `GET /api/v1/tracking/assignments/{user_id}?active_only=true` | — | list of assignment rows |

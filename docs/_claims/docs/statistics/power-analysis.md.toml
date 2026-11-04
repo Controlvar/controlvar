@@ -28,11 +28,16 @@ text = "For a conversion rate experiment, this might be 5% (0.05)."
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "This must be between 0 and 1 exclusive."
+text = "A rate must be between 0 and 1 exclusive."
 by = [
     "test:backend/tests/integration/api/test_power_calculator_api.py::TestSampleSizeEndpoint::test_baseline_rate_zero_returns_422",
     "test:backend/tests/integration/api/test_power_calculator_api.py::TestSampleSizeEndpoint::test_baseline_rate_one_returns_422",
+    "test:backend/tests/unit/api/test_power_mean_baseline.py::test_a_proportion_of_one_or_more_is_refused_by_the_schema_naming_metric_type",
 ]
+
+[[unit]]
+text = "Through the API you can also plan a metric that is an average per user, such as order value, from its mean: see Planning a mean."
+by = ["test:backend/tests/unit/api/test_power_mean_baseline.py::test_a_mean_above_one_is_planned_in_its_own_units"]
 
 [[unit]]
 text = "2. Minimum Detectable Effect (MDE)"
@@ -298,6 +303,10 @@ by = [
 ]
 
 [[unit]]
+text = "To plan the mean per user itself, send metric_type mean to POST /api/v1/power/sample-size: see Planning a mean."
+by = ["test:backend/tests/unit/api/test_power_mean_baseline.py::test_a_mean_above_one_is_planned_in_its_own_units"]
+
+[[unit]]
 text = "Nothing typed on the tab is saved."
 by = ["exempt:baseline"]
 
@@ -354,8 +363,11 @@ text = "A larger value answers 422 naming the field: the error's loc is [\"body\
 by = ["test:backend/tests/integration/api/test_power_calculator_api.py::TestVeryLargeIntegers"]
 
 [[unit]]
-text = "A calculation whose numbers still leave floating-point range, such as a mean metric with a very large baseline_std, answers 422 with the detail \"These values are too large or too small to calculate with."
-by = ["journey:power-calculator#api-mean-out-of-range"]
+text = "A calculation whose numbers still leave floating-point range, such as a mean metric with a very large or very small baseline_std, answers 422 with the detail \"These values are too large or too small to calculate with."
+by = [
+    "journey:power-calculator#api-mean-out-of-range",
+    "test:backend/tests/unit/api/test_power_mean_baseline.py::test_a_size_that_is_zero_or_not_finite_answers_the_fixed_422",
+]
 
 [[unit]]
 text = "Use values nearer those of a real experiment.\" A proportion sample size whose treatment rate (the baseline raised by the effect) is too close to the baseline for the size to be a finite number, such as a baseline_rate of 1e-300 or a minimum_detectable_effect of 1e-17, answers 422 with the detail \"This baseline raised by this effect changes too little to estimate a sample size."
@@ -377,18 +389,65 @@ text = "Compute the required sample size per variant."
 by = ["exempt:baseline"]
 
 [[unit]]
+text = "Planning a mean"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The dashboard's Power Calculator plans conversion rates only."
+by = ["test:frontend/src/tests/pages/power-calculator-names.test.tsx"]
+
+[[unit]]
+text = "Through the API, send \"metric_type\": \"mean\" to plan a metric that is an average per user, such as order value."
+by = ["test:backend/tests/unit/api/test_power_mean_baseline.py::test_a_mean_above_one_is_planned_in_its_own_units"]
+
+[[unit]]
+text = "baseline_rate is then the metric's mean before the change, in its own units, and baseline_std is required: the standard deviation of the metric across users, in the same units."
+by = ["test:backend/tests/unit/api/test_power_mean_baseline.py::test_a_mean_above_one_is_planned_in_its_own_units"]
+
+[[unit]]
+text = "Any finite mean above 0 is accepted; a mean of 0 or below cannot be planned with a relative effect and answers 422."
+by = [
+    "test:backend/tests/unit/api/test_power_mean_baseline.py::test_a_mean_is_accepted_at_any_size_above_zero",
+    "test:backend/tests/unit/api/test_power_mean_baseline.py::test_a_mean_of_zero_or_below_is_refused_at_the_field",
+]
+
+[[unit]]
+text = "minimum_detectable_effect is still relative: 0.05 on a mean of 45 plans for a change to 47.25."
+by = ["test:backend/tests/unit/api/test_power_mean_baseline.py::test_a_mean_above_one_is_planned_in_its_own_units"]
+
+[[unit]]
+text = "\"metric_type\": \"ratio\" is planned exactly as \"mean\"."
+by = ["test:backend/tests/unit/api/test_power_mean_baseline.py::test_a_ratio_is_planned_as_a_mean_and_a_large_mean_has_no_ceiling"]
+
+[[unit]]
+text = "The size is a two-sample z-test on means, rounded up, with the same Bonferroni correction over n_variants - 1 comparisons:"
+by = ["test:backend/tests/unit/api/test_power_mean_baseline.py::test_the_mean_answer_agrees_with_statsmodels"]
+
+[[unit]]
+text = "Here that is 447 users per variant, 894 in all."
+by = ["test:backend/tests/unit/api/test_power_mean_baseline.py::test_a_mean_above_one_is_planned_in_its_own_units"]
+
+[[unit]]
+text = "Without metric_type, a baseline_rate of 1 or more answers 422 with a message saying to send \"metric_type\": \"mean\"."
+by = ["test:backend/tests/unit/api/test_power_mean_baseline.py::test_a_proportion_of_one_or_more_is_refused_by_the_schema_naming_metric_type"]
+
+[[unit]]
 text = "Request body:"
 by = ["exempt:baseline"]
-count = 4
+count = 5
 
 [[unit]]
 text = "Response:"
 by = ["exempt:baseline"]
-count = 4
+count = 5
 
 [[unit]]
 text = "Given a fixed sample size per variant, compute the minimum detectable effect."
 by = ["exempt:baseline"]
+
+[[unit]]
+text = "It plans a conversion rate only: baseline_rate is a rate between 0 and 1, and a metric_type sent with the request is ignored."
+by = ["test:backend/tests/unit/api/test_power_mean_baseline.py::test_mde_ignores_a_metric_type_and_says_so"]
 
 [[unit]]
 text = "POST /api/v1/power/runtime"

@@ -8,7 +8,8 @@ import { UNREACHABLE } from '@/components/experiments/ExperimentManageSection';
  * failure reads as one of these sentences, chosen by its status alone.
  */
 export const GROUP_COPY = {
-  refused: 'Exclusion groups are managed by the ADMIN and DEVELOPER roles.',
+  refused:
+    'Seeing and changing exclusion groups needs permission to create experiments, which the ADMIN and DEVELOPER roles have.',
   empty: 'No exclusion groups yet. Create one so experiments that would interfere never share a user.',
   loadFailed: 'Could not load the exclusion groups. Reload the page to try again.',
   notFound: 'This group no longer exists.',

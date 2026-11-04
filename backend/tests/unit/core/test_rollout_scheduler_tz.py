@@ -66,11 +66,39 @@ class TestNaiveStageTimestamps:
             is False
         )
 
-    def test_naive_updated_at_completion_check_does_not_raise(self, scheduler):
+    def test_naive_started_at_completion_check_does_not_raise(self, scheduler):
         stage = MagicMock(spec=RolloutStage)
         stage.status = RolloutStageStatus.IN_PROGRESS
         stage.trigger_type = TriggerType.TIME_BASED
         stage.trigger_configuration = {"duration": 24}
+        # Edited a minute ago; started 30 hours ago (#1528).
+        stage.updated_at = _naive_utc(timedelta(minutes=-1))
+        stage.started_at = _naive_utc(timedelta(hours=-30))
+
+        assert (
+            scheduler._is_stage_eligible_for_completion(
+                stage, datetime.now(timezone.utc)
+            )
+            is True
+        )
+
+        stage.started_at = _naive_utc(timedelta(hours=-1))
+        stage.updated_at = _naive_utc(timedelta(hours=-30))
+        assert (
+            scheduler._is_stage_eligible_for_completion(
+                stage, datetime.now(timezone.utc)
+            )
+            is False
+        )
+
+    def test_naive_updated_at_completion_check_does_not_raise(self, scheduler):
+        """A stage with no ``started_at`` (one an older release started) is
+        measured from ``updated_at``, as before #1528."""
+        stage = MagicMock(spec=RolloutStage)
+        stage.status = RolloutStageStatus.IN_PROGRESS
+        stage.trigger_type = TriggerType.TIME_BASED
+        stage.trigger_configuration = {"duration": 24}
+        stage.started_at = None
         stage.updated_at = _naive_utc(timedelta(hours=-30))
 
         assert (
@@ -123,6 +151,7 @@ class TestNextStageRespectsItsOwnStartDate:
         active_stage.trigger_type = TriggerType.TIME_BASED
         active_stage.trigger_configuration = {"duration": 24}
         active_stage.updated_at = _naive_utc(timedelta(hours=-30))  # naive, from the DB
+        active_stage.started_at = _naive_utc(timedelta(hours=-30))
 
         future_stage = MagicMock(spec=RolloutStage)
         future_stage.id = "stage-2"

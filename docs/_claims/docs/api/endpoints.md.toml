@@ -33,7 +33,7 @@ by = ["docex:docs/api/endpoints.md#\"admin@demo.com\""]
 [[unit]]
 text = "OAuth2 Bearer tokens for user authentication"
 by = [
-    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_management_route_refuses_a_request_that_carries_only_an_api_key",
+    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_route_outside_the_sdk_and_mcp_read_sets_refuses_a_request_that_carries_only_an_api_key",
     "test:backend/tests/integration/api/test_api_keys_api.py::TestKeyAuthenticatesSdkTraffic::test_bearer_token_is_not_an_api_key",
 ]
 
@@ -103,6 +103,13 @@ by = [
 ]
 
 [[unit]]
+text = "A key that carries the mcp:read scope can also list feature flags and experiments and read an experiment and its results (see Scopes)."
+by = [
+    "test:backend/tests/smoke/test_mcp_read_routes.py::test_the_mcp_read_routes_are_exactly_these",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_key_with_the_scope_is_served",
+]
+
+[[unit]]
 text = "Obtain an API key."
 by = ["exempt:instruction"]
 
@@ -156,8 +163,16 @@ text = "Cannot access admin endpoints"
 by = ["test:backend/tests/integration/api/test_admin_users_api.py::TestAdminUserList::test_a_non_superuser_is_refused"]
 
 [[unit]]
-text = "Feature flags are by role, not ownership: ADMIN and DEVELOPER may read, create, change and delete any flag; ANALYST and VIEWER may read any flag and change none"
+text = "Feature flags are by permission, not ownership: ADMIN and DEVELOPER may read, create, change and delete any flag; ANALYST and VIEWER may read any flag and, by their role, change none."
 by = ["test:backend/tests/unit/core/test_feature_flag_access_rule.py::test_the_shipped_table_on_someone_elses_flag"]
+
+[[unit]]
+text = "In the full profile a custom role or direct grant can add feature_flag (create), (update) or (delete), and then admits any flag"
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:backend/tests/integration/api/test_flag_change_routes_access.py::test_bulk_toggle_follows_a_flag_update_grant",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
 text = "Experiments: reading an experiment and its results under /api/v1/experiments/{experiment_id} needs the role's READ on experiments (all four roles hold it); who owns the experiment is not considered."
@@ -168,8 +183,15 @@ text = "ADMIN and DEVELOPER may create experiments, clone any experiment, and up
 by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller"]
 
 [[unit]]
-text = "ANALYST and VIEWER change no experiment, including one they own"
+text = "ANALYST and VIEWER change no experiment by their role, including one they own."
 by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller"]
+
+[[unit]]
+text = "In the full profile a custom role or direct grant can add these: experiment (create) creates and clones, experiment (update) updates, starts, pauses, completes, archives, annotates and schedules, and experiment (delete) deletes a draft"
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
 text = "Superusers:"
@@ -684,7 +706,8 @@ by = ["exempt:label"]
 [[unit]]
 text = "Headers: Authorization: Bearer {token}"
 by = [
-    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_management_route_refuses_a_request_that_carries_only_an_api_key",
+    "test:backend/tests/unit/api/test_api_key_is_not_a_sign_in.py::test_a_route_outside_the_sdk_and_mcp_read_sets_refuses_a_request_that_carries_only_an_api_key",
+    "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_valid_bearer_does_not_read_the_key",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
 count = 16
@@ -1464,8 +1487,11 @@ text = "Written to the audit log as feature_flag_update (ARCHIVED to INACTIVE)."
 by = ["test:backend/tests/smoke/test_audit_inventory.py"]
 
 [[unit]]
-text = "Permissions: ADMIN and DEVELOPER; ANALYST and VIEWER get 403"
-by = ["test:backend/tests/integration/api/test_archived_flag_verbs.py::test_unarchive_is_permission_checked"]
+text = "Permissions: ADMIN and DEVELOPER, and in the full profile anyone whose custom role or direct grant gives feature_flag (update); anyone else gets 403"
+by = [
+    "test:backend/tests/integration/api/test_archived_flag_verbs.py::test_unarchive_is_permission_checked",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
 text = "Response: 200 OK, the flag (the same shape as GET /api/v1/feature-flags/{flag_id})"
@@ -1605,8 +1631,12 @@ text = "See Assign a customer list to an experiment."
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "Headers: X-API-Key: {api_key}, a key with the sdk:ruleset scope whose owner is an ADMIN, a DEVELOPER or a superuser."
-by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_key_without_the_scope_is_403"]
+text = "Headers: X-API-Key: {api_key}, a key with the sdk:ruleset scope whose owner can change feature flags and experiments: an ADMIN, a DEVELOPER, a superuser, or in the full profile anyone whose custom roles or direct grants give feature_flag (update) and experiment (update)."
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_key_without_the_scope_is_403",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_a_built_in_developer_key_assigns_in_a_batch_as_before",
+]
 
 [[unit]]
 text = "That scope also lets the key download every feature flag's targeting rules (GET /api/v1/sdk/ruleset), so keep the key on a server; see Scopes."
@@ -1691,8 +1721,18 @@ text = "403 | the key lacks the scope | This API key does not have the 'sdk:rule
 by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_key_without_the_scope_is_403"]
 
 [[unit]]
-text = "403 | the key's owner is no longer an active ADMIN, DEVELOPER or superuser | This key's owner can no longer change feature flags or experiments, so the key is refused for server-side SDK use."
-by = ["test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_scoped_key_whose_owner_lost_the_role_is_403"]
+text = "403 | the key's owner can no longer change feature flags: inactive, or given feature_flag (update) neither by their role nor, in the full profile, by a custom role or direct grant | This key's owner can no longer change feature flags, so the key is refused for server-side SDK use."
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestRefusals::test_a_scoped_key_whose_owner_lost_the_role_is_403",
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+]
+
+[[unit]]
+text = "403 | the key's owner can change feature flags but not experiments; nobody is assigned | This key's owner cannot change experiments, so the key cannot assign users in a batch, and nobody was assigned. Use a server-side key whose owner can change experiments."
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_server_keys.py::test_option_b_flag_update_gives_a_server_key_and_batch_needs_experiment_update",
+    "test:backend/tests/unit/api/test_assign_batch_contract.py::test_the_owner_experiment_text",
+]
 
 [[unit]]
 text = "404 | no ACTIVE experiment has that key | Active experiment with key 'spring-email' not found"
@@ -1810,6 +1850,36 @@ by = [
 ]
 
 [[unit]]
+text = "Event limits: metadata may nest at most 64 levels, every JSON object and array a level and the object itself the first, so {\"a\": {\"b\": 1}} is 2 levels."
+by = [
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_over_deep_metadata_is_refused_and_nothing_is_stored",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_metadata_at_the_limit_is_stored",
+]
+
+[[unit]]
+text = "Deeper answers 422 and nothing is stored."
+by = ["test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_over_deep_metadata_is_refused_and_nothing_is_stored"]
+
+[[unit]]
+text = "/tracking/events accepts properties as well as metadata, with the same limit."
+by = ["test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_events_route_refuses_over_deep_properties_too"]
+
+[[unit]]
+text = "A refusal on /tracking/track and /tracking/batch names properties, which is what the stored event calls metadata."
+by = ["test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_over_deep_metadata_is_refused_and_nothing_is_stored"]
+
+[[unit]]
+text = "A timestamp at the very edge of the date range whose UTC offset moves it past 0001-01-01 or 9999-12-31 answers 422 too."
+by = ["test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_edge_timestamp_is_refused_and_nothing_is_stored"]
+
+[[unit]]
+text = "/tracking/batch and /tracking/events hold events to the same limits; in a batch the entry is reported in errors and the others are stored."
+by = [
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_one_over_deep_item_does_not_fail_its_batch",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_events_route_refuses_over_deep_properties_too",
+]
+
+[[unit]]
 text = "Body: {\"event_type\": string, \"event_name\": string?, \"user_id\": string, \"experiment_key\": string?, \"feature_flag_key\": string?, \"value\": number?, \"metadata\": object?, \"timestamp\": datetime?, \"event_id\": string?}"
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
@@ -1856,11 +1926,17 @@ by = [
 ]
 
 [[unit]]
-text = "Response: 200 OK {\"success_count\": int, \"failure_count\": int, \"duplicate_count\": int, \"errors\": [...]|null}; 422 above 100 events, or one entry invalid (its event_id among them), and none is stored"
+text = "Response: 200 OK {\"success_count\": int, \"failure_count\": int, \"duplicate_count\": int, \"errors\": [...]|null}; 422 above 100 events, or one entry invalid (its event_id among them), and none is stored."
 by = [
     "test:backend/tests/integration/api/test_tracking_api.py::TestBatch::test_reports_success_and_failure_per_event",
     "test:backend/tests/integration/api/test_tracking_api.py::TestBatch::test_more_than_100_events_is_422_and_stores_nothing",
     "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r12_an_invalid_event_id_is_refused_and_a_batch_with_one_stores_nothing",
+]
+
+[[unit]]
+text = "An entry that is valid as a request but refused when its event is built (metadata nested too deep, an edge timestamp, a key not found) is reported in errors and the others are stored"
+by = [
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_one_over_deep_item_does_not_fail_its_batch",
 ]
 
 [[unit]]
@@ -2906,8 +2982,12 @@ text = "See Audit Logging Guide for full documentation."
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "ADMIN and ANALYST read every audit entry; DEVELOPER and VIEWER read only their own entries on the list, user, stream and history routes."
-by = ["test:backend/tests/integration/api/test_audit_log_reads.py::test_developer_and_viewer_read_only_their_own_entries"]
+text = "ADMIN and ANALYST, and in the full profile anyone whose custom role or direct grant gives audit_log (read), read other users' audit entries too; anyone else reads only their own entries on the list, user, stream and history routes."
+by = [
+    "test:backend/tests/integration/api/test_audit_log_reads.py::test_developer_and_viewer_read_only_their_own_entries",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
 text = "See Permissions."
@@ -3170,8 +3250,11 @@ text = "Who."
 by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_roles_analyst_cannot_change_members"]
 
 [[unit]]
-text = "DEVELOPER and ADMIN; ANALYST and VIEWER get 403."
-by = ["test:backend/tests/integration/api/test_segment_members_api.py::test_roles_analyst_cannot_change_members"]
+text = "Users who may change experiments: DEVELOPER and ADMIN, and in the full profile anyone whose custom role or direct grant gives experiment (update); anyone else gets 403."
+by = [
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_roles_analyst_cannot_change_members",
+    "test:backend/tests/unit/core/test_effective_permissions_matrix.py::test_the_decision_equals_the_spec_for_every_actor_state_and_decision",
+]
 
 [[unit]]
 text = "Each change writes one segment_update audit entry with the counts, never the IDs."
@@ -3206,12 +3289,22 @@ text = "AI Endpoints and the MCP Manifest"
 by = ["exempt:label"]
 
 [[unit]]
-text = "See AI Endpoints and the MCP Manifest for full documentation."
+text = "See The MCP Server and the AI Endpoints for full documentation."
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "The manifest describes these operations as tools in the vocabulary of the Model Context Protocol, but the platform runs no MCP server: an MCP client cannot connect to it or call a tool through it."
-by = ["test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_nothing_answers_an_mcp_client"]
+text = "The MCP server is a separate program on your computer that calls this API with your API key."
+by = [
+    "test:sdk/mcp/__tests__/surface.test.ts::initialize at %s",
+    "test:sdk/mcp/__tests__/tools.test.ts::list_feature_flags: the query, the projection, and only the configured key",
+]
+
+[[unit]]
+text = "Nothing on this API answers an MCP client, and the manifest only lists the server's tools."
+by = [
+    "test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_nothing_answers_an_mcp_client",
+    "test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_the_manifest_lists_the_tools_the_mcp_server_offers",
+]
 
 [[unit]]
 text = "Call the endpoints over HTTP."

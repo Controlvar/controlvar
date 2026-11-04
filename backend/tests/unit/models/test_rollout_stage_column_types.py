@@ -1,12 +1,14 @@
-"""``rollout_stages`` binds its three times as UTC, and nothing else moved (#1462).
+"""``rollout_stages`` binds its times as UTC, and nothing else moved (#1462, #1528).
 
 The behaviour on a session that is not in UTC is
 ``backend/tests/integration/api/test_rollout_stage_dates_utc.py``. These are the
 pins that need no database:
 
-- the three columns stay ``TIMESTAMP WITHOUT TIME ZONE`` (no migration). A type
-  change made only in the model is invisible to an autogenerate run against a
-  database built from the models, so the compiled DDL is asserted instead;
+- the three columns #1462 changed stay ``TIMESTAMP WITHOUT TIME ZONE`` (no
+  migration), and ``started_at`` (#1528) is that type too, the type migration
+  ``7b6b4b4fe246`` adds. A type change made only in the model is invisible to an
+  autogenerate run against a database built from the models, so the compiled
+  DDL is asserted instead;
 - ``UTCDateTime`` is on exactly the columns named below: ``BaseModel`` is not
   changed, so no other table's ``updated_at`` binds differently;
 - the dashboard's two comments about stage dates say what the API does.
@@ -26,7 +28,7 @@ pytestmark = [pytest.mark.unit]
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 
-STAGE_TIMES = ("start_date", "completed_date", "updated_at")
+STAGE_TIMES = ("start_date", "completed_date", "updated_at", "started_at")
 
 #: Every (table, column) bound through UTCDateTime. A new one is added here on
 #: purpose; one that appears without being listed (UTCDateTime put on
@@ -37,6 +39,7 @@ UTC_DATETIME_COLUMNS = {
     ("rollout_stages", "start_date"),
     ("rollout_stages", "completed_date"),
     ("rollout_stages", "updated_at"),
+    ("rollout_stages", "started_at"),
 }
 
 
@@ -49,7 +52,8 @@ def test_a_stage_time_is_still_timestamp_without_time_zone(column):
     )
     assert ddl == "TIMESTAMP WITHOUT TIME ZONE", (
         f"rollout_stages.{column} compiles to {ddl}: the database type must not "
-        "change (no migration ships with #1462)"
+        "change (no migration ships with #1462, and 7b6b4b4fe246 adds "
+        "started_at as timestamp without time zone)"
     )
 
 

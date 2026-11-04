@@ -41,6 +41,21 @@ To work on the SDK itself, see Development below.
 - With nothing to reach, a `track()` without a key is now sent once with no key and stored as
   history; before this version it sent nothing.
 
+## Event ids
+
+`track()` and `trackBatch()` take an `eventId`, sent as `event_id`. The server stores an event sent
+again with the same `event_id`, user, experiment, flag and event name only once. Use the option
+from the next published version, not from the version on npm now. It needs a
+Controlvar server that includes the `event_id` change (#1640, in the first platform release after it
+merged): an older server ignores the field.
+
+- The SDK makes no id: without an `eventId` none is sent, and an event sent again is counted
+  again. Make the id once, when the event happens, and give the same one each time you send it.
+- `undefined`, `null` and `''` send none. The server refuses an id of more than 255 characters or
+  one holding NUL with `422`; the SDK does not check it.
+- An event fanned out to several experiments and flags carries the same id in every entry. A `429`
+  that is retried sends the same id. A request that times out is not sent again by the SDK.
+
 ## Quick start
 
 ```ts
@@ -73,11 +88,12 @@ conversions.
 | `evaluateFlag(flagKey, user)` | `Promise<FlagEvaluation>` — `{ key, enabled, config, reason? }` | rejects with `ExperimentationError` |
 | `isFeatureEnabled(flagKey, user)` | `Promise<boolean>` | `false` |
 | `getAllFlags(userId, attributes?)` | `Promise<Record<string, boolean>>` (not cached) | rejects |
-| `track(userId, eventName, { value?, properties?, experimentKey?, featureFlagKey?, eventType?, timestamp? })` | `Promise<void>` | never rejects; `onError` |
+| `track(userId, eventName, { value?, properties?, experimentKey?, featureFlagKey?, eventType?, timestamp?, eventId? })` | `Promise<void>` | never rejects; `onError` |
 | `trackBatch(events)` | `Promise<{ successCount, failureCount, errors }>` (chunked at 100) | never rejects |
 | `reportError({ errorType, message, featureFlagKey?, experimentKey?, userId?, stackTrace?, metadata?, timestamp? })` | `Promise<boolean>`: `true` when the server stored the report (201) | `false`, never rejects; `onError` |
 | `fetchAssignments(userId, { activeOnly? })` | `Promise<AssignmentRecord[]>` from the server | rejects |
 | `getAssignments(userId)`, `getEvaluatedFlags(userId)`, `clearCache()` | in-memory cache access | — |
+| `getCachedFlags(userId)` | `FlagEvaluation[]`: cached, unexpired evaluations for the user; in local mode each carries `source` (`'local'` or `'server'`) | — |
 | `ready({ timeoutMs? })`, `status()`, `close()` | local mode: readiness, ruleset state, shutdown (sends evaluation counts) | never reject |
 | `consistentHash(userId, flagKey)`, `md5Hex(s)`, `md5Bytes(s)` | compatibility hash utilities (not the flag bucketing function) | — |
 

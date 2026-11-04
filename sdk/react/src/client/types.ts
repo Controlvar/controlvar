@@ -123,6 +123,20 @@ export interface FeatureFlagEvaluateResponse {
   reason?: string;
 }
 
+/**
+ * Answers the server already has for one user, to pass to
+ * `ExperimentationProvider` as `bootstrap`: what `ServerClient.bootstrap()`
+ * returns. Plain JSON, keyed by the flag and experiment keys asked for. The
+ * Provider uses it only when `userId` is its `user.userId`.
+ */
+export interface ExperimentationBootstrap {
+  userId: string;
+  /** Flag key -> the body of `GET /api/v1/feature-flags/evaluate/{key}` for this user. */
+  flags?: Record<string, FeatureFlagEvaluateResponse>;
+  /** Experiment key -> the body of `POST /api/v1/tracking/assign` for this user. */
+  experiments?: Record<string, ExperimentAssignResponse>;
+}
+
 /** `POST /api/v1/tracking/assign` */
 export interface ExperimentAssignResponse {
   experiment_key: string;

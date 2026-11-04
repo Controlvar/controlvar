@@ -34,6 +34,18 @@ The keys are the contract with ``modules.register(hooks)``
     registration, so the class is whatever the service module holds *now*
     (which is what lets a test patch it at its definition site).  Absent, the
     scheduler simply falls through to PostgreSQL.
+
+``rbac.granted_permissions``
+    A **provider**: ``(session, user_id) -> Iterable[(resource, action)]``,
+    the pairs the user's activated custom roles and activated, active,
+    unexpired direct grants hold, read on *session* (the request's own) and
+    compared with the database's clock.  It writes nothing and may yield pairs
+    outside ``permissions.GRANTABLE``; the core drops those.  Read through
+    :func:`granted_permissions_provider` by
+    ``backend.app.core.permissions.granted_permissions``.  Absent -- the core
+    profile -- every permission check answers from the built-in role and the
+    superuser flag alone, exactly as before custom roles took effect.  It is
+    not a route body, so its absence is not a 501.
 """
 
 from __future__ import annotations
@@ -86,3 +98,8 @@ def compliance_export_handler() -> Optional[Callable[..., Any]]:
 def realtime_counter_service() -> Optional[type]:
     """The counters module's ``DynamoDBCounterService`` class, or ``None``."""
     return _provided("counters.service")
+
+
+def granted_permissions_provider() -> Optional[Callable[..., Any]]:
+    """The RBAC module's ``rbac.granted_permissions`` provider, or ``None``."""
+    return hooks.get_capability("rbac.granted_permissions")

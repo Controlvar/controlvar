@@ -115,7 +115,8 @@ PLATFORM_STEPS: Dict[str, str] = {
     "Make the core profile real": "${{ !inputs.skip && inputs.profile == 'core' }}",
     "Set up Python": "${{ !inputs.skip }}",
     "Set up Node.js": (
-        "${{ !inputs.skip && (contains(inputs.sdks, 'js') || "
+        "${{ !inputs.skip && (inputs.suite == 'sdk-live-contract' || "
+        "contains(inputs.sdks, 'js') || "
         "contains(inputs.sdks, 'react') || contains(inputs.sdks, 'edge') || "
         "contains(inputs.sdks, 'openfeature')) }}"
     ),
@@ -138,6 +139,11 @@ PLATFORM_STEPS: Dict[str, str] = {
     "Start the API": "${{ !inputs.skip }}",
     "Assert the running profile": "${{ !inputs.skip }}",
     "Run suite": "${{ !inputs.skip }}",
+    # sdk-live-contract's second step, never in a fuzz pass (fuzz.yml calls
+    # this workflow three times; #1607).
+    "Run the MCP server's contract suite": (
+        "${{ !inputs.skip && inputs.suite == 'sdk-live-contract' }}"
+    ),
     # Not on a fuzz run: its API log quotes the requests, and the log is public.
     "Backend log (on failure)": (
         "${{ !inputs.skip && failure() && inputs.suite != 'fuzz' }}"
@@ -175,6 +181,9 @@ DOCS_TESTS = (
     # Video 9's claims check (CLAIMS) holds a sentence to the pages of docs/
     # that state it, and imports no module it did not before.
     "backend/tests/unit/showcase/test_showcase_quoted_docs.py",
+    # The event contract's rules quote docs/guides/how-events-count.md and the
+    # pages beside it (#1544); reads the library as text, stdlib only.
+    "backend/tests/unit/ground_truth/test_contract_citations.py",
 )
 
 #: Python tests that name docs/ but are deliberately NOT in DOCS_TESTS.
@@ -184,6 +193,9 @@ NOT_DOCS_TESTS = {
     "backend/tests/unit/scripts/test_makefile_guards.py": "docs/api only",
     # Reads only docs/api/openapi-v1.full.json (same reason as above).
     "backend/tests/unit/scripts/test_load_test_runner.py": "docs/api only",
+    # Reads only docs/api/openapi-v1.full.json, for the MCP contract suite's
+    # allow-list (same reason as above).
+    "backend/tests/unit/scripts/test_run_mcp_contract.py": "docs/api only",
     # Reads only docs/api/openapi-v1.stable.json (same reason as above).
     "backend/tests/unit/api/test_segment_preview_limits.py": "docs/api only",
     # Reads only the two docs/api/ OpenAPI snapshots (same reason as above).
@@ -260,6 +272,10 @@ NOT_DOCS_TESTS = {
     "backend/tests/unit/scripts/test_docs_journeys_workflow.py": (
         "fixture strings only"
     ),
+    # Pins scale-evidence.yml's pull_request path filter, two of whose entries
+    # name docs/ paths (the capacity page, the results directory); opens no
+    # file under docs/.
+    "backend/tests/unit/scripts/test_scale_workflow.py": "fixture strings only",
     # Hands stub `git` and `python3` path STRINGS such as "docs/a.md" to the
     # classifier step's script; opens no file under docs/.
     "backend/tests/unit/infrastructure/test_ci_classification.py": (
@@ -488,9 +504,11 @@ class TestBuildJobSteps:
         assert sorted(core_services) == ["postgres", "redis"], sorted(core_services)
         core_services.pop("redis")
         assert core_services == full["services"], "the Postgres services differ"
-        # 75, not 60: core-build's passing runs reached 59.6 minutes. A
-        # different number is a decision about the slowest required check.
-        assert core["timeout-minutes"] == 75
+        # 120, not 75: on 2026-11-03 core-build's passing runs reached about
+        # 75.5 minutes and four were cancelled at 75 (one 3 s after its script
+        # printed OK). A different number is a decision about the slowest
+        # required check.
+        assert core["timeout-minutes"] == 120
         assert core["needs"] == "changes"
 
     def test_the_steps_both_jobs_have_are_the_same_step(self, gate):

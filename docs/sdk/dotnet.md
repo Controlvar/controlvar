@@ -88,6 +88,7 @@ using var client2 = new ExperimentationClient(config, httpClient);
 | `CacheTtlSeconds` | `int` | `300` | How long a successful evaluation/assignment is reused per user + key |
 | `TimeoutSeconds` | `int` | `10` | `HttpClient.Timeout` for the client the SDK creates (an injected `HttpClient` keeps its own) |
 | `MaxCacheSize` | `int` | `1000` | Maximum entries in each of the two caches (evaluations, assignments) |
+| `OnExposure` | `Action<Exposure>?` | `null` | Called once each time the server enrols the user and the answer is not cached; see [Exposure hook](#exposure-hook) |
 
 `SdkConfig` throws `ArgumentException` for an empty `baseUrl`/`apiKey`. `ExperimentationClient`
 is thread-safe and meant to be shared (one instance per process). Dispose it to release the
@@ -99,10 +100,17 @@ is thread-safe and meant to be shared (one instance per process). Dispose it to 
 
 ### `Task<FlagEvaluationResult> EvaluateFlagAsync(string flagKey, string userId, Dictionary<string, object>? attributes = null)`
 
-Calls `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…` (both values percent-encoded) and
-returns a `FlagEvaluationResult`. `attributes` is accepted for source compatibility and not sent:
-the request carries the user id alone, so the server evaluates the flag's targeting rules
-against an empty context.
+Calls `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…&context=…` and returns a
+`FlagEvaluationResult`. `attributes` is sent as `context` on flag evaluation, so the flag's
+targeting rules are evaluated against them: compact JSON from the same `System.Text.Json` options
+as the assignment body (characters such as `+`, `&` and non-ASCII letters become `\uXXXX`
+escapes), then
+percent-encoded, as the key and the user id are. With `null` or an empty dictionary no `context`
+is sent and the request carries the user id alone.
+
+Attributes are assumed **stable per user**: an evaluation is cached by user + flag key only, so
+within `CacheTtlSeconds` a second call for the same user and flag returns the first answer,
+whatever its attributes. Call `ClearCache()` after changing a user's attributes.
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -131,7 +139,8 @@ cached, so the next call retries.
 
 Calls `POST /api/v1/tracking/assign` with `{experiment_key, user_id, context: attributes}`. The
 server buckets the user, keeps the assignment sticky and records the exposure. `context` is
-omitted when `attributes` is `null`.
+omitted when `attributes` is `null`. To send each exposure to your own analytics tool as well,
+see [Exposure hook](#exposure-hook).
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -182,7 +191,7 @@ per flag evaluated for the user (from the cache). If nothing is cached, nothing 
 `true` is returned. This is what makes a single `TrackAsync("purchase", …)` count as a conversion
 for every experiment the user is in.
 
-This SDK reads only the variant from an answer: an `assigned: false` answer (a user the
+This SDK returns only the variant from an answer: an `assigned: false` answer (a user the
 experiment did not enrol, or an experiment that is not ACTIVE) is cached and returned as the
 control variant, and an event tracked without a key after the user's cache entries have expired
 (`CacheTtlSeconds`, 300 by default) is not sent, so pass `experimentKey` on a conversion that can
@@ -226,6 +235,100 @@ entry evicted) and guarded by locks.
 
 ---
 
+## Exposure hook
+
+`OnExposure` is a function you give `SdkConfig` when you create it. The client calls it once each
+time the server enrols the user in an experiment and the answer did not come from the client's
+cache: the moment the server records the exposure. Use it to send the exposure to your analytics
+tool or warehouse.
+
+This code writes each exposure to a channel, and a task of its own sends them on:
+
+```csharp
+using System.Threading.Channels;
+using Controlvar;
+using Controlvar.Models;
+
+var exposures = Channel.CreateBounded<Exposure>(10_000);
+
+var config = new SdkConfig("http://localhost:8000", Environment.GetEnvironmentVariable("CONTROLVAR_API_KEY")!)
+{
+    OnExposure = e => exposures.Writer.TryWrite(e),   // never waits: drops the exposure when the channel is full
+};
+
+_ = Task.Run(async () =>
+{
+    await foreach (var e in exposures.Reader.ReadAllAsync())
+    {
+        // Your analytics tool's call goes here: it runs here, not inside GetAssignmentAsync.
+        Console.WriteLine($"exposure {e.ExperimentKey} {e.VariantName} {e.UserId}");
+    }
+});
+
+using var client = new ExperimentationClient(config);
+```
+
+In ASP.NET Core, read the channel in a `BackgroundService`.
+
+It receives an `Exposure`, a record in `Controlvar.Models`, new for each call:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `ExperimentKey` | `string` | The experiment key |
+| `UserId` | `string` | The user the server enrolled |
+| `VariantId` | `string?` | The variant's id, `null` when the server sends none |
+| `VariantName` | `string` | The variant's name |
+
+Nothing else: not the user's attributes and not the variant's configuration. Its positional
+order is `Assignment`'s: `new Exposure(experimentKey, userId, variantId, variantName)`.
+
+It is not called for:
+
+- an answer from the client's cache;
+- a user the experiment did not enrol (`assigned: false`, with `reason` `"holdout"`,
+  `"mutual_exclusion"` or `"targeting"`), or an experiment that is not running (`"draft"`,
+  `"paused"`, `"completed"` or `"archived"`): the server records no exposure for them, and the
+  client returns the control variant;
+- a call that fails, including one that times out after the server recorded the exposure;
+- a feature flag.
+
+This SDK's `Assignment` does not say whether the user was enrolled; `OnExposure` is not called for
+a user who was not. It is not called when the server does not send `assigned`; every Controlvar
+server release sends it.
+
+It is called again, and the server records another exposure, after the cache lifetime
+(`CacheTtlSeconds`, 300 by default), after `ClearCache()`, after the entry is evicted from the
+cache (`MaxCacheSize`, 1000 entries per cache by default), and in every new client, such as each
+process on a server. So your tool can receive several exposures for one user and experiment: count
+users, not events. It never receives one the server did not record.
+
+It is called when your code asks for the assignment, whether or not you then show the variant, so
+ask for it where the variant is shown.
+
+It runs inside `GetAssignmentAsync`, after the answer is cached and before its `Task` completes,
+usually on a thread-pool thread; do not assume a UI thread, and marshal to it yourself to touch
+UI. Its running time is added to that call, with no timeout. Calls for other users and experiments
+are not held up. Write the exposure to a channel, as above.
+
+It can run on several threads at once: make it safe for that. Two calls for the same new user and
+experiment at the same moment send two requests, and the server records two exposures;
+`OnExposure` is called once.
+
+If it throws, the client catches the exception and reports nothing: `GetAssignmentAsync` returns
+the answer, and a failing function looks like one that is never called. Catch and log inside your
+function if you need to know. When several functions are combined into one delegate (`+=`), each
+is called in turn, and one that throws does not stop the next.
+
+An async lambda or `async` method is refused with `ArgumentException` when you set `OnExposure`,
+alone or combined with other functions: it would run as `async void`, and an exception after its
+first `await` would end the process. A synchronous lambda that itself calls an `async void` method
+is not detected. `OnExposure = null` sets none.
+
+In a test, the `/assign` answer your `HttpMessageHandler` returns must include `"assigned": true`,
+or `OnExposure` is not called.
+
+---
+
 ## Backend endpoints used
 
 Every request carries `X-API-Key` and `Accept: application/json`; POSTs carry
@@ -233,8 +336,8 @@ Every request carries `X-API-Key` and `Accept: application/json`; POSTs carry
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `EvaluateFlagAsync` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
-| `GetAssignmentAsync` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
+| `EvaluateFlagAsync` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the attributes as URL-encoded JSON, only when there are any | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
+| `GetAssignmentAsync` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `TrackAsync` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `TrackAsync` without keys, `TrackBatchAsync` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored (status only) |
 
@@ -343,7 +446,7 @@ Assert.True((await client.EvaluateFlagAsync("new-checkout", "user-1")).Enabled);
 ## Contract smoke
 
 Runs the four contract steps (sticky assignment, flag evaluation, keyed track, key-less fan-out
-plus a 2-event batch) against a live backend and prints one JSON line:
+plus a 2-event batch) and the exposure hook against a live backend and prints one JSON line:
 
 ```bash
 CONTROLVAR_API_KEY=<key> dotnet run --project sdk/dotnet/examples/ContractSmoke
@@ -352,8 +455,13 @@ CONTROLVAR_API_KEY=<key> dotnet run --project sdk/dotnet/examples/ContractSmoke
 It prints:
 
 ```text
-{"sdk":"dotnet","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
+{"sdk":"dotnet","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true},"exposure":{"calls":1,"payload":{"experiment_key":"sdk_contract_ab","variant_name":"control","variant_id":"<variant id>","user_id":"smoke-<guid>"}}}
 ```
+
+After the four steps a new client with `OnExposure` assigns the user twice, and the smoke reports
+how often `OnExposure` was called and what it received (`exposure`); it exits 1 if `OnExposure`
+received another user's id. Last, a client whose `OnExposure` throws assigns once and must answer
+the same variant.
 
 Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),
 `CONTRACT_EXPERIMENT_KEY` (default `sdk_contract_ab`), `CONTRACT_FLAG_KEY` (default

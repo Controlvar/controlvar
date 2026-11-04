@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional
 
 from backend.app.core.logging import get_logger
-from backend.app.core.scheduler_tick import run_locked_tick
+from backend.app.core.scheduler_tick import run_in_worker, run_locked_tick
 from backend.app.db.session import SessionLocal
 from backend.app.models.metrics.metric import AggregationPeriod
 from backend.app.services.metrics_service import MetricsService
@@ -84,15 +84,35 @@ class MetricsScheduler:
 
     async def aggregate_metrics(self) -> Dict[str, int]:
         """
-        Aggregate raw metrics into summary data.
+        Aggregate raw metrics into summary data, off the event loop (#1690).
 
-        This aggregates data at different time periods:
+        The work is synchronous SQLAlchemy (the history purge and six GROUP BY
+        aggregations over ``raw_metrics``), so it runs in one worker thread
+        through ``run_in_worker``; on the loop it would stop the API from
+        answering anything else until it finished. ``run_in_worker`` does not
+        return before the thread does, when this tick is cancelled and when
+        the event loop is torn down, so ``run_locked_tick`` keeps the
+        scheduler's advisory lock until the aggregation has stopped.
+
+        Returns ``{"items_processed": n, "items_failed": m}`` for the run record.
+        """
+        # self._aggregate_sync is read here, at call time: the tests replace
+        # it on the instance.
+        return await run_in_worker(
+            self._aggregate_sync, label=f"{SCHEDULER_NAME} aggregation"
+        )
+
+    @staticmethod
+    def _aggregate_sync() -> Dict[str, int]:
+        """
+        The tick's synchronous body; runs in a worker thread.
+
+        Opens and closes its own session in that thread. This aggregates data
+        at different time periods:
         1. Last hour at minute granularity
         2. Last day at hour granularity
         3. Last month at day granularity
         4. All-time totals
-
-        Returns ``{"items_processed": n, "items_failed": m}`` for the run record.
         """
         logger.info("Aggregating metrics")
 

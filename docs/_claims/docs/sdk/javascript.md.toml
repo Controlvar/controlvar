@@ -196,7 +196,10 @@ by = [
 
 [[unit]]
 text = "maxStaleMs | number | none | Local mode: evaluate on the server once the ruleset has not been refreshed for this long"
-by = ["test:sdk/js/__tests__/local.test.ts::maxStaleMs: a ruleset older than that is not used"]
+by = [
+    "test:sdk/js/__tests__/local.test.ts::maxStaleMs: a ruleset older than that is not used",
+    "test:sdk/js/__tests__/local.test.ts::past maxStaleMs, a pair answered locally goes to the server",
+]
 
 [[unit]]
 text = "The constructor throws a plain Error (apiKey is required / apiUrl is required) when either required field is missing, when evaluation is not 'server' or 'local', and when evaluation: 'local' is used in a browser."
@@ -359,6 +362,10 @@ text = "getEvaluatedFlags | (userId) => string[] | Keys of cached, successfully 
 by = ["test:sdk/js/__tests__/client.test.ts::getEvaluatedFlags returns cached flag keys for the user only"]
 
 [[unit]]
+text = "getCachedFlags | (userId) => FlagEvaluation[] | Cached, unexpired flag evaluations for the user (no network); in local mode each carries source ('local' or 'server') | —"
+by = ["test:sdk/js/__tests__/local.test.ts::getCachedFlags returns the user's unexpired cached evaluations, each with its source"]
+
+[[unit]]
 text = "clearCache | () => void | Drops both caches; keeps the keys a key-less track is sent to | —"
 by = [
     "test:sdk/js/__tests__/client.test.ts::clearCache empties both caches",
@@ -382,6 +389,7 @@ text = "close | () => Promise<void> | Local mode: stops the ruleset refresh and 
 by = [
     "test:sdk/js/__tests__/local.test.ts::close() sends one entry per flag; deferred evaluations are not counted",
     "test:sdk/js/__tests__/local.test.ts::server mode is unchanged: no ruleset request, no source field",
+    "test:sdk/js/__tests__/local.test.ts::after close(), a pair answered locally goes to the server",
 ]
 
 [[unit]]
@@ -440,11 +448,15 @@ text = "(defaults to the event name), timestamp?"
 by = ["test:sdk/js/__tests__/client.test.ts::uses eventType as event_type and keeps eventName as event_name; omits optional fields"]
 
 [[unit]]
-text = "(Date or string, sent as ISO-8601)."
+text = "(Date or string, sent as ISO-8601), eventId?"
 by = [
     "test:sdk/js/__tests__/client.test.ts::POSTs one event to /api/v1/tracking/track with the exact body",
     "test:sdk/js/__tests__/client.test.ts::sends feature_flag_key (and no experiment_key) and accepts a string timestamp",
 ]
+
+[[unit]]
+text = "(sent as event_id, see Event ids)."
+by = ["test:sdk/js/__tests__/event-id.test.ts::sends event_id on a track with an explicit key"]
 
 [[unit]]
 text = "TrackEvent = TrackOptions & { userId, eventName }."
@@ -555,6 +567,81 @@ by = [
 [[unit]]
 text = "Conversions are matched to metrics by event name."
 by = ["test:backend/tests/integration/services/test_conversion_event_matching.py::TestConversionEventFilter::test_matches_both_producer_shapes_and_excludes_exposures"]
+
+[[unit]]
+text = "Event ids"
+by = ["exempt:label"]
+
+[[unit]]
+text = "eventId is your id for one event."
+by = ["test:sdk/js/__tests__/event-id.test.ts::sends event_id on a track with an explicit key"]
+
+[[unit]]
+text = "The server stores an event sent again with the same event_id, user, experiment, flag and event name only once (see How events count)."
+by = [
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r6_one_event_id_fanned_out_to_three_experiments_and_a_flag",
+]
+
+[[unit]]
+text = "Use this option from the next published version of this package, not from the version on npm now."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It also needs a Controlvar server that includes the event_id change (#1640), which the platform release after 0.39.0 is to carry; an older server ignores the field and stores an event sent again a second time."
+by = [
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r8_without_an_event_id_two_identical_purchases_are_both_stored",
+]
+
+[[unit]]
+text = "The SDK makes no id."
+by = ["test:sdk/js/__tests__/event-id.test.ts::makes no id of its own: two tracks without an eventId send none"]
+
+[[unit]]
+text = "An event without an eventId is sent without an event_id, and one sent again is stored and counted again."
+by = [
+    "test:sdk/js/__tests__/event-id.test.ts::sends no event_id on any entry when none is given",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r8_without_an_event_id_two_identical_purchases_are_both_stored",
+]
+
+[[unit]]
+text = "Make the id once, when the event happens, for example with crypto.randomUUID(), and give the same one each time you send that event."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "eventId: undefined, null and '' send no event_id."
+by = ["test:sdk/js/__tests__/event-id.test.ts::sends no event_id for undefined, null or an empty string"]
+
+[[unit]]
+text = "The SDK does not check the id: the server refuses (422) one of more than 255 characters or one holding NUL, and in a batch one such event refuses the whole request."
+by = ["test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r12_an_invalid_event_id_is_refused_and_a_batch_with_one_stores_nothing"]
+
+[[unit]]
+text = "An event fanned out to several experiments and flags carries the same event_id in every entry, so it counts once in each of them."
+by = [
+    "test:sdk/js/__tests__/event-id.test.ts::sends the same event_id on every fan-out entry",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r6_one_event_id_fanned_out_to_three_experiments_and_a_flag",
+]
+
+[[unit]]
+text = "In trackBatch, each event keeps its own eventId."
+by = ["test:sdk/js/__tests__/event-id.test.ts::trackBatch: each event keeps its own event_id on every entry, and one without has none"]
+
+[[unit]]
+text = "A 429 that is retried sends the same request again, so the same event_id."
+by = [
+    "test:sdk/js/__tests__/event-id.test.ts::sends the same event_id when a 429 is retried",
+    "test:sdk/js/__tests__/event-id.test.ts::sends the same event_id on every entry when a fanned-out 429 is retried",
+]
+
+[[unit]]
+text = "A request that times out is not sent again by the SDK, and the server may have stored it."
+by = ["test:sdk/js/__tests__/event-id.test.ts::does not send a request that timed out again, and reports it through onError"]
+
+[[unit]]
+text = "Send it again with the same eventId and it is stored once."
+by = ["test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once"]
 
 [[unit]]
 text = "Reporting errors"
@@ -755,9 +842,10 @@ by = [
 ]
 
 [[unit]]
-text = "track with a key | POST /api/v1/tracking/track | {\"event_type\",\"event_name\",\"user_id\",\"experiment_key\"?,\"feature_flag_key\"?,\"value\"?,\"metadata\"?,\"timestamp\"?} | stored event (ignored)"
+text = "track with a key | POST /api/v1/tracking/track | {\"event_type\",\"event_name\",\"user_id\",\"experiment_key\"?,\"feature_flag_key\"?,\"value\"?,\"metadata\"?,\"timestamp\"?,\"event_id\"?} | stored event (ignored)"
 by = [
     "test:sdk/js/__tests__/client.test.ts::POSTs one event to /api/v1/tracking/track with the exact body",
+    "test:sdk/js/__tests__/event-id.test.ts::sends event_id on a track with an explicit key",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
 
@@ -864,6 +952,7 @@ by = [
     "test:sdk/js/__tests__/local.test.ts::after ready, evaluations make no request and follow the attributes passed",
     "test:sdk/js/__tests__/local.test.ts::an unknown key and a remote flag are evaluated by the server",
     "test:sdk/js/__tests__/local.test.ts::getAllFlags: one remote flag sends the whole call to the server",
+    "test:sdk/js/__tests__/local.test.ts::a call that defers after a local answer for the same pair goes to the server",
 ]
 
 [[unit]]
@@ -883,6 +972,7 @@ text = "A change made in the dashboard reaches the process at its next successfu
 by = [
     "test:sdk/js/__tests__/local.test.ts::polls send the ETag, and a 304 keeps the ruleset",
     "test:sdk/js/__tests__/local.test.ts::5xx after a load keeps serving the last ruleset and reports each failure",
+    "test:sdk/js/__tests__/local.test.ts::a new ruleset that %s: a pair answered locally goes to the server",
 ]
 
 [[unit]]
@@ -891,6 +981,8 @@ by = [
     "test:sdk/js/__tests__/local.test.ts::5xx after a load keeps serving the last ruleset and reports each failure",
     "test:sdk/js/__tests__/local.test.ts::maxStaleMs: a ruleset older than that is not used",
     "test:sdk/js/__tests__/local.test.ts::404 names the minimum server release; after a load it discards",
+    "test:sdk/js/__tests__/local.test.ts::past maxStaleMs, a pair answered locally goes to the server",
+    "test:sdk/js/__tests__/local.test.ts::%i discards the ruleset: a pair answered locally goes to the server",
 ]
 
 [[unit]]

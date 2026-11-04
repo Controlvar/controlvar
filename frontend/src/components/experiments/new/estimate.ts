@@ -13,16 +13,22 @@
  * (#1257). The rest of the estimate is never sent with the experiment.
  */
 import { SampleSizeQuery } from '@/services/experiments';
-import { DEFAULT_CONFIDENCE_LEVEL } from '@/components/results/shared/analysisSettings';
+import { CorrectionMethod } from '@/types/results';
 
 /** Statistical power offered, as fractions; the first is the default. */
 export const POWER_OPTIONS = [0.8, 0.9, 0.95] as const;
 
+/** The most variants the endpoint plans for (its `variant_count` maximum). */
+export const MAX_ESTIMATE_VARIANTS = 100;
+
+/** The most daily users the endpoint takes (its `daily_traffic` maximum, 10**12). */
+export const MAX_DAILY_USERS = 1000000000000;
+
 /**
- * The two-sided significance the estimate plans at: 1 - the experiment's
- * confidence level, chosen in "How results will be judged" on the same step.
- * The estimate plans each comparison at this level and makes no correction for
- * comparing several variants with the control (#820 would add one).
+ * The two-sided significance the estimate sends: 1 - the experiment's
+ * confidence level, chosen in "How results will be judged" on the same step;
+ * the endpoint divides it between the comparisons with the control when
+ * correction_method asks for a correction.
  */
 export function estimateSignificance(confidenceLevel: number): number {
   return Number((1 - confidenceLevel).toFixed(4));
@@ -52,12 +58,13 @@ export type EstimateQueryResult = { ok: true; query: SampleSizeQuery } | { ok: f
 
 export const ESTIMATE_PROBLEMS = {
   variants: 'The estimate needs at least two variants. Add one on the Variants step.',
+  tooManyVariants: 'The estimate plans for at most 100 variants. Remove some on the Variants step to see one.',
   baseline: 'Enter a baseline conversion rate between 0.01% and 99.99%.',
   mde: 'Enter a minimum detectable effect of at least 0.1%.',
   mdeHigh: 'Enter a minimum detectable effect below 100%.',
   ceiling:
     'This baseline raised by this effect reaches 100% or more. Lower the baseline rate or the effect.',
-  dailyUsers: 'Daily users must be a whole number of at least 1.',
+  dailyUsers: 'Daily users must be a whole number of at least 1 and at most 1,000,000,000,000.',
   share: 'The share of users must be more than 0% and at most 100%.',
   shareWithoutUsers: 'Enter daily users as well, or leave the share blank.',
 } as const;
@@ -106,17 +113,24 @@ export function formatEffect(fraction: number): string {
 }
 
 /**
- * The sample-size query for these inputs and this many variants, or the first
- * problem with them. A refused input never reaches the API. The endpoint also
- * refuses a treatment rate of 100% or more itself, with a 422 carrying the
- * `ceiling` sentence word for word (a backend test reads it from this file).
+ * The sample-size query for these inputs, this many variants, the
+ * experiment's confidence level and its correction, or the first problem with
+ * them. A refused input never reaches the API. The endpoint also refuses a
+ * treatment rate of 100% or more itself, with a 422 carrying the `ceiling`
+ * sentence word for word (a backend test reads it from this file).
+ *
+ * The confidence level and the correction have no default, so a call site
+ * that forgets one does not compile: the query is the estimate's key, and a
+ * missing correction would show a number planned under another one.
  */
 export function buildEstimateQuery(
   inputs: EstimateInputs,
   variantCount: number,
-  confidenceLevel: number = DEFAULT_CONFIDENCE_LEVEL,
+  confidenceLevel: number,
+  correctionMethod: CorrectionMethod,
 ): EstimateQueryResult {
   if (variantCount < 2) return { ok: false, problem: ESTIMATE_PROBLEMS.variants };
+  if (variantCount > MAX_ESTIMATE_VARIANTS) return { ok: false, problem: ESTIMATE_PROBLEMS.tooManyVariants };
 
   const baselinePct = readNumber(inputs.baselinePct);
   if (baselinePct === null || baselinePct < 0.01 || baselinePct > 99.99) {
@@ -138,13 +152,19 @@ export function buildEstimateQuery(
     statistical_power: inputs.power,
     significance_level: estimateSignificance(confidenceLevel),
     variant_count: variantCount,
+    correction_method: correctionMethod,
   };
 
   const dailyUsersText = inputs.dailyUsers.trim();
   const shareText = inputs.sharePct.trim();
   if (dailyUsersText !== '') {
     const dailyUsers = readNumber(dailyUsersText);
-    if (dailyUsers === null || !Number.isInteger(dailyUsers) || dailyUsers < 1) {
+    if (
+      dailyUsers === null ||
+      !Number.isInteger(dailyUsers) ||
+      dailyUsers < 1 ||
+      dailyUsers > MAX_DAILY_USERS
+    ) {
       return { ok: false, problem: ESTIMATE_PROBLEMS.dailyUsers };
     }
     query.daily_traffic = dailyUsers;

@@ -10,7 +10,8 @@ it never matches it:
   flags, experiments and segments;
 * in the native shape, a ``time_window`` that ``rules_engine.check_time_window``
   cannot read, such as one given only as ``start`` and ``end`` (plan D211,
-  ruling 1). The dashboard shape is not checked.
+  ruling 1). Since #1669 a dashboard window is checked too, on the converted
+  window, with its own reason (``test_targeting_values.py``).
 
 The words the engine reads are taken from its source here (``ENGINE_WORDS``),
 not from the constants the write path uses, so the tests below hold the
@@ -108,8 +109,15 @@ DISTANCE = (
 )
 UNIT = "unknown distance unit; use km, mi or m, or leave it out for km"
 WINDOW = (
-    "unreadable time window; see the time_window example on the Targeting Rules: "
-    "Operator Reference page"
+    "unreadable time window; give days (0 to 6), start_time and end_time "
+    "(HH:MM), or start_date and end_date (YYYY-MM-DD); a timezone must be a "
+    "name such as Europe/Paris"
+)
+# Plan D211 v1.4-B3-1666's reason for a dashboard window (#1669), verbatim.
+DASHBOARD_WINDOW = (
+    "unreadable time window; give start and end as HH:MM such as 09:00 and 17:00, "
+    "days as numbers 0 to 6, start_date and end_date as YYYY-MM-DD in order, a "
+    "timezone as a name such as Europe/Paris"
 )
 
 FLAG, EXPERIMENT, SEGMENT = "flag", "experiment", "segment"
@@ -388,21 +396,14 @@ REFUSED: Dict[str, Tuple[FrozenSet[str], Any, str]] = {
                 "ISO start and end",
                 {"start": "2024-01-01T09:00:00", "end": "2024-01-31T17:00:00"},
             ),
-            ("days outside 0-6", {"start": "x", "end": "y", "days": [7]}),
-            ("start_time alone", {"start": "x", "end": "y", "start_time": "09:00"}),
-            (
-                "an unknown timezone",
-                {"start": "x", "end": "y", "days": [1], "timezone": "Mars/Olympus"},
-            ),
+            ("days outside 0-6", {"days": [7]}),
+            ("start_time alone", {"start_time": "09:00"}),
+            ("an unknown timezone", {"days": [1], "timezone": "Mars/Olympus"}),
             (
                 "start_date after end_date",
-                {
-                    "start": "x",
-                    "end": "y",
-                    "start_date": "2024-02-01",
-                    "end_date": "2024-01-01",
-                },
+                {"start_date": "2024-02-01", "end_date": "2024-01-01"},
             ),
+            ("no key", {}),
         )
     },
     "native time_window in default_rule": (
@@ -420,6 +421,19 @@ REFUSED: Dict[str, Tuple[FrozenSet[str], Any, str]] = {
             },
         ),
         f"default_rule.rule.conditions[0].value: {WINDOW}",
+    ),
+    # Accepted until #1669, then abandoned when it was evaluated; refused now
+    # with the dashboard's own reason (test_targeting_values.py has the rest).
+    "dashboard time_window ISO": (
+        frozenset({FLAG, EXPERIMENT, SEGMENT}),
+        dashboard(
+            {
+                "attribute": "t",
+                "operator": "time_window",
+                "value": {"start": "2024-01-01T09:00:00", "end": "2024-01-31T17:00:00"},
+            }
+        ),
+        f"groups[0].conditions[0].value: {DASHBOARD_WINDOW}",
     ),
 }
 
@@ -500,33 +514,19 @@ ACCEPTED: Dict[str, Tuple[FrozenSet[str], Any]] = {
             native(cond("time_window", window)),
         )
         for name, window in (
+            ("with times", {"start_time": "09:00", "end_time": "17:00"}),
+            ("with days", {"days": [0, 1, 2, 3, 4]}),
+            ("with dates", {"start_date": "2024-01-01", "end_date": "2024-01-31"}),
+            ("with a timezone", {"days": [5, 6], "timezone": "Europe/Paris"}),
             (
-                "with times",
-                {
-                    "start": "09:00",
-                    "end": "17:00",
-                    "start_time": "09:00",
-                    "end_time": "17:00",
-                },
-            ),
-            ("with days", {"start": "x", "end": "y", "days": [0, 1, 2, 3, 4]}),
-            (
-                "with dates",
-                {
-                    "start": "x",
-                    "end": "y",
-                    "start_date": "2024-01-01",
-                    "end_date": "2024-01-31",
-                },
-            ),
-            (
-                "with a timezone",
-                {"start": "x", "end": "y", "days": [5, 6], "timezone": "Europe/Paris"},
+                "with start and end besides",
+                {"start": "09:00", "end": "17:00", "days": [0]},
             ),
         )
     },
-    # (1j) The dashboard shape is not checked: its {"start", "end"} window is
-    # what the builder saves and what the vectors' op-time-window stores.
+    # (1j) The dashboard {"start", "end"} window of HH:MM times is what the
+    # builder saves and what the vectors' op-time-window stores; the engine
+    # reads it, so the check of #1669 accepts it.
     "dashboard time_window HH:MM": (
         frozenset({FLAG, EXPERIMENT, SEGMENT}),
         dashboard(
@@ -534,18 +534,6 @@ ACCEPTED: Dict[str, Tuple[FrozenSet[str], Any]] = {
                 "attribute": "t",
                 "operator": "time_window",
                 "value": {"start": "09:00", "end": "17:00"},
-            }
-        ),
-    ),
-    # Not checked either (ruling 1: the dashboard shape is not touched); it is
-    # still abandoned when it is evaluated, as the reference page says.
-    "dashboard time_window ISO": (
-        frozenset({FLAG, EXPERIMENT, SEGMENT}),
-        dashboard(
-            {
-                "attribute": "t",
-                "operator": "time_window",
-                "value": {"start": "2024-01-01T09:00:00", "end": "2024-01-31T17:00:00"},
             }
         ),
     ),
@@ -583,8 +571,8 @@ def test_accepted(name, kind):
 @pytest.mark.regression
 @pytest.mark.parametrize("kind", [FLAG, EXPERIMENT, SEGMENT])
 def test_the_reference_pages_example_window_is_accepted(kind):
-    """(1n) The window the time_window reason sends a writer to is accepted on
-    flags and experiments (both shapes) and on segments (the dashboard shape)."""
+    """(1n) The reference page's example window is accepted on flags and
+    experiments (both shapes) and on segments (the dashboard shape)."""
     example = reference_example()
     condition = {**example, "operator": example["operator"].value}
     assert refusal(kind, dashboard(condition)) is None
@@ -593,8 +581,23 @@ def test_the_reference_pages_example_window_is_accepted(kind):
 
 
 def test_the_reasons_are_the_plans():
-    """The write path's constants are plan D211's text, verbatim (EMD-1)."""
+    """The write path's constants are plan D211's text, verbatim (EMD-1), the
+    values' reasons (#1525, #1526: plan v1.4-B3; #1666, #1669: its addendum;
+    test_targeting_values.py) first."""
+    from backend.tests.unit.core import test_targeting_values as values
+
     assert targeting_adapter.VOCABULARY_REASONS == (
+        values.DATE,
+        values.LENGTH_VALUE,
+        values.BETWEEN,
+        values.RADIUS,
+        values.NO_RADIUS,
+        values.PERCENTAGE,
+        values.NUMBER,
+        values.DASH_COMPARISON,
+        values.BETWEEN_VALUE,
+        values.BETWEEN_ZONE,
+        values.DASH_WINDOW,
         NOT_ON_FLAGS,
         VERSION,
         LENGTH,
@@ -690,28 +693,18 @@ GEO_CONTEXTS = [CENTRE, OAKLAND]
 WINDOW_CONTEXTS = [{"a": MOMENT}]
 
 #: (label, window): the first three match MOMENT; the engine cannot read the
-#: others.
+#: others. None carries ``start`` or ``end`` it does not need (#1527).
 WINDOWS = [
-    (
-        "times",
-        {"start": "00:00", "end": "23:59", "start_time": "00:00", "end_time": "23:59"},
-    ),
-    ("days", {"start": "x", "end": "y", "days": [2]}),
-    (
-        "dates",
-        {
-            "start": "x",
-            "end": "y",
-            "start_date": "2024-01-01",
-            "end_date": "2024-01-31",
-        },
-    ),
+    ("times", {"start_time": "00:00", "end_time": "23:59"}),
+    ("days", {"days": [2]}),
+    ("dates", {"start_date": "2024-01-01", "end_date": "2024-01-31"}),
     ("start and end only", {"start": "09:00", "end": "17:00"}),
     (
         "ISO start and end",
         {"start": "2024-01-01T09:00:00", "end": "2024-01-31T17:00:00"},
     ),
-    ("days 7", {"start": "x", "end": "y", "days": [7]}),
+    ("days 7", {"days": [7]}),
+    ("no key", {}),
 ]
 
 
@@ -843,7 +836,11 @@ def test_the_refusals_are_exercised():
     assert ("geo_distance", "unit None", EXPERIMENT) in refused
     assert ("time_window", "start and end only", FLAG) in refused
     assert ("time_window", "start and end only", EXPERIMENT) in refused
+    assert ("time_window", "no key", EXPERIMENT) in refused
     assert ("time_window", "times", FLAG) not in refused
+    # Readable without start or end (#1527): accepted, so 1a must see it match.
+    assert ("time_window", "days", FLAG) not in refused
+    assert ("time_window", "dates", EXPERIMENT) not in refused
 
 
 # ---------------------------------------------------------------------------
@@ -1006,6 +1003,12 @@ def test_the_walker_is_called_from_write_paths_only():
     assert _callers("check_segment_vocabulary") == {
         ("backend/app/schemas/segment.py", "_checked_segment_rules"),
         ("backend/scripts/check_targeting_rules.py", "segment_finding_for"),
+    }
+    # #1672: the OverflowError of the shape step is answered by the two
+    # write-only callers, around that step alone, never by a read gate.
+    assert _callers("overflow_refusal") == {
+        (adapter, "_validate_targeting"),
+        ("backend/app/schemas/segment.py", "_checked_segment_rules"),
     }
     # _validate_targeting runs only for the request schemas (the wizard
     # launch builds an ExperimentCreate) and the check script.

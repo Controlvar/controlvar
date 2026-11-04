@@ -154,24 +154,42 @@ by = [
 ]
 
 [[unit]]
-text = "The estimate calls the sample-size endpoint shown below at a significance of 1 − the confidence level, treats the minimum detectable effect as a relative change (5% of a 12% baseline is 12.6%, not 17%), and assumes users are split evenly between the variants."
+text = "The estimate calls the sample-size endpoint shown below at a significance of 1 − the confidence level and with the correction chosen above, treats the minimum detectable effect as a relative change (5% of a 12% baseline is 12.6%, not 17%), and assumes users are split evenly between the variants."
 by = [
     "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::asks the sample-size endpoint only when the button is pressed, in fractions, without a login redirect",
     "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::sends each power option, and 1 minus each confidence level as the significance",
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::sends the correction chosen above: %s",
     "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::sends the number of variants on the Variants step",
     "test:backend/tests/unit/api/test_sample_size_pinned_answer.py::test_twelve_percent_baseline_five_percent_relative_mde",
 ]
 
 [[unit]]
-text = "It makes no correction for comparing several variants with the control, even when one is chosen above, so with three or more variants the experiment needs more users than it says; the Power Calculator applies a Bonferroni correction, so its number is higher."
+text = "With three or more variants and Bonferroni or Benjamini-Hochberg, each comparison with the control is planned at that significance ÷ (variants − 1), as the results page's Sample Size tab plans it, and the estimate says so under its number."
 by = [
-    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx",
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::with Benjamini-Hochberg applied, says each comparison is planned at the corrected level, and no Power Calculator sentence",
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::with Bonferroni applied at 4 variants, says so in one sentence",
+    "test:backend/tests/unit/api/test_sample_size_correction.py::test_the_estimate_plans_each_comparison_at_the_corrected_level",
+    "test:backend/tests/integration/api/test_results_sample_size_api.py::test_the_tab_and_the_guided_setup_agree",
+]
+
+[[unit]]
+text = "With None it makes no correction, the same as the results, and the Power Calculator, which applies a Bonferroni correction, gives a higher number."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::with None chosen and applied, says no correction is made, as the results will not make one",
+    "test:backend/tests/unit/api/test_sample_size_correction.py::test_without_correction_method_the_estimate_is_uncorrected",
     "journey:power-calculator#three-variants",
     "journey:power-calculator#api-three-variants",
 ]
 
 [[unit]]
-text = "Only ADMIN and DEVELOPER users (and superusers) can create experiments; anyone else sees a note saying so instead of the form."
+text = "Only users who may create experiments see the form: ADMIN and DEVELOPER users, superusers, and in the full profile anyone whose custom role or direct grant gives experiment (create)."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+]
+
+[[unit]]
+text = "Anyone else sees a note saying so instead."
 by = ["test:frontend/src/tests/pages/experiment-new-guided.test.tsx"]
 
 [[unit]]
@@ -570,8 +588,49 @@ text = "For a 12% baseline and a 5% relative change it needs 47036 users per var
 by = ["docex:docs/guides/experiment-wizard.md#\"samples_per_variant\": 47036"]
 
 [[unit]]
-text = "It also takes statistical_power, significance_level, is_one_sided, variant_count, and daily_traffic with traffic_allocation for a duration estimate."
-by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+text = "It also takes statistical_power, significance_level, is_one_sided, variant_count (2 to 100), correction_method, and daily_traffic (at most 1,000,000,000,000) with traffic_allocation for a duration estimate."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/unit/api/test_sample_size_correction.py::test_more_than_100_variants_is_refused",
+    "test:backend/tests/unit/api/test_sample_size_correction.py::test_more_than_10_to_the_12_daily_users_is_refused",
+    "test:backend/tests/unit/api/test_sample_size_correction.py::test_the_largest_counts_are_still_planned",
+]
+
+[[unit]]
+text = "With three or more variants, send the experiment's correction as correction_method: none (the default), bonferroni or benjamini_hochberg, the values an experiment's correction_method takes."
+by = [
+    "test:backend/tests/unit/api/test_sample_size_correction.py::test_the_estimate_plans_each_comparison_at_the_corrected_level",
+    "test:backend/tests/unit/api/test_sample_size_correction.py::test_without_correction_method_the_estimate_is_uncorrected",
+    "test:backend/tests/unit/api/test_sample_size_correction.py::test_an_unknown_correction_is_refused",
+]
+
+[[unit]]
+text = "With either correction, each of the variant_count − 1 comparisons with the control is planned at significance_level ÷ (variant_count − 1), as the results page's Sample Size tab does; Benjamini-Hochberg is planned at the same level as Bonferroni."
+by = [
+    "test:backend/tests/unit/api/test_sample_size_correction.py::test_the_estimate_plans_each_comparison_at_the_corrected_level",
+    "test:backend/tests/unit/api/test_sample_size_correction.py::test_bonferroni_and_benjamini_hochberg_give_the_same_estimate",
+    "test:backend/tests/integration/api/test_results_sample_size_api.py::test_the_tab_and_the_guided_setup_agree",
+]
+
+[[unit]]
+text = "Three variants at 5%:"
+by = ["exempt:example"]
+
+[[unit]]
+text = "That is 56961 users per variant, where no correction needs 47036."
+by = [
+    "docex:docs/guides/experiment-wizard.md#\"samples_per_variant\": 56961",
+    "test:backend/tests/unit/api/test_sample_size_correction.py::test_the_estimate_plans_each_comparison_at_the_corrected_level",
+    "test:backend/tests/unit/api/test_sample_size_correction.py::test_without_correction_method_the_estimate_is_uncorrected",
+]
+
+[[unit]]
+text = "The answer also carries correction_method, comparisons and alpha, the significance each comparison is planned at; significance_level is still the 0.05 you sent."
+by = [
+    "docex:docs/guides/experiment-wizard.md#\"comparisons\": 2",
+    "docex:docs/guides/experiment-wizard.md#\"alpha\": 0.025",
+    "test:backend/tests/unit/api/test_sample_size_correction.py::test_the_estimate_plans_each_comparison_at_the_corrected_level",
+]
 
 [[unit]]
 text = "The calculation is the standard one for two proportions (Fleiss), the same one the results page's Sample Size tab uses: the variance is pooled under the null hypothesis and unpooled under the alternative."
@@ -585,9 +644,16 @@ text = "Where p₁ = baseline rate, p₂ = baseline rate × (1 + MDE), p̄ = (p�
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "It is per variant, with no correction for comparing more than two variants; the total is n times the number of variants."
+text = "It is per variant: with a correction, α is significance_level ÷ (variant_count − 1)."
 by = [
     "test:backend/tests/unit/api/test_sample_size_critical_values.py::test_sample_size_matches_exact_critical_values",
+    "test:backend/tests/unit/api/test_sample_size_correction.py::test_the_estimate_plans_each_comparison_at_the_corrected_level",
+]
+
+[[unit]]
+text = "The total is n times the number of variants."
+by = [
+    "test:backend/tests/unit/api/test_sample_size_one_formula.py::test_both_routes_agree_with_the_service",
     "test:backend/tests/unit/api/test_sample_size_one_formula.py::test_documented_case_on_both_routes",
 ]
 

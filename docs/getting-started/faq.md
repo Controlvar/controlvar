@@ -203,7 +203,7 @@ The platform uses a layered role-based access control system with four built-in 
 | **DEVELOPER** | Create and manage experiments and feature flags; read integration settings, but not change them |
 | **ADMIN** | Full access: user management, compliance exports, global settings, integrations |
 
-Beyond the four base roles, admins can create **custom roles** with specific per-resource and per-action permissions. They can also grant **direct permission** to a user for a specific resource, with an optional expiry timestamp for temporary access. Both are stored and shown by `GET /api/v1/rbac/users/{user_id}/permissions`, but no permission check reads them yet: what a user can do is decided by their base role ([#891](https://github.com/Controlvar/controlvar/issues/891)).
+Beyond the four base roles, admins can create **custom roles** with specific per-resource and per-action permissions. They can also grant **direct permission** to a user for a specific resource, with an optional expiry timestamp for temporary access. Both add to what the user's base role allows, from their next request; they never remove a permission and never give administration.
 
 See [RBAC API Reference](../api/rbac.md) for the full role and permission management API.
 
@@ -211,7 +211,7 @@ See [RBAC API Reference](../api/rbac.md) for the full role and permission manage
 
 ### How do API keys work?
 
-API keys are used for SDK authentication and server-to-server calls. Unlike JWT tokens, which sign a user in, API keys do not expire unless they are created with an expiry (`expires_at`). Any active key authenticates every API-key route (flag evaluation, tracking) as the user who created it; its `scopes` do not narrow that. The one exception is the server-side SDK routes (`GET /api/v1/sdk/ruleset`, `POST /api/v1/tracking/evaluations`, `POST /api/v1/tracking/assign/batch`), which require the `sdk:ruleset` scope.
+API keys are used for SDK authentication and server-to-server calls. Unlike JWT tokens, which sign a user in, API keys do not expire unless they are created with an expiry (`expires_at`). Any active key authenticates every SDK route (flag evaluation, tracking) as the user who created it; its `scopes` do not narrow that. The one exception is the server-side SDK routes (`GET /api/v1/sdk/ruleset`, `POST /api/v1/tracking/evaluations`, `POST /api/v1/tracking/assign/batch`), which require the `sdk:ruleset` scope. A key that carries the `mcp:read` scope can also list feature flags and experiments and read an experiment and its results, as the user who created it.
 
 Create an API key via `POST /api/v1/api-keys` with a name. The full key value is shown only once at creation time — store it securely. To use it, pass the key in the `X-API-Key: <key>` header on all SDK requests.
 

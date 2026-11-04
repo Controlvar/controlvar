@@ -12,6 +12,8 @@ Tests cover:
 All endpoints are tested with mocked auth and mocked AI service.
 """
 
+import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -27,6 +29,8 @@ from backend.app.services.ai_design_service import (
     SampleSizeEstimate,
 )
 from backend.app.services.experiment_template_service import ExperimentTemplateService
+
+REPO_ROOT = Path(__file__).resolve().parents[4]
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -411,12 +415,35 @@ class TestMCPManifestEndpoint:
         response = client_no_auth.get("/api/v1/mcp/manifest")
         assert response.json()["name"] == "controlvar"
 
-    def test_mcp_manifest_has_at_least_three_tools(self, client_no_auth):
-        """MCP manifest includes at least 3 tools."""
-        response = client_no_auth.get("/api/v1/mcp/manifest")
-        data = response.json()
-        assert "tools" in data
-        assert len(data["tools"]) >= 3
+    @pytest.mark.regression
+    def test_the_manifest_lists_the_tools_the_mcp_server_offers(self, client_no_auth):
+        """The manifest equals ``sdk/mcp/tools.json``, the server's own answer to
+        ``tools/list``: the same tools in the same order, each with the same
+        description and the same parameter names, types and descriptions.
+
+        The manifest used to list five tools the server never offered, three of
+        them writes (create_experiment, toggle_feature_flag) or AI endpoints.
+        """
+        served = json.loads(
+            (REPO_ROOT / "sdk" / "mcp" / "tools.json").read_text(encoding="utf-8")
+        )["tools"]
+        expected = [
+            {
+                "name": tool["name"],
+                "description": tool["description"],
+                "parameters": {
+                    name: {"type": prop["type"], "description": prop["description"]}
+                    for name, prop in tool["inputSchema"]["properties"].items()
+                },
+            }
+            for tool in served
+        ]
+        listed = client_no_auth.get("/api/v1/mcp/manifest").json()["tools"]
+        assert [tool["name"] for tool in listed] == [t["name"] for t in expected], (
+            f"manifest lists {[t['name'] for t in listed]}; "
+            f"the MCP server offers {[t['name'] for t in expected]}"
+        )
+        assert listed == expected
 
     def test_mcp_manifest_tools_have_name_and_description(self, client_no_auth):
         """Each MCP tool has a 'name' and 'description' field."""

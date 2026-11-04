@@ -15,10 +15,11 @@ Commands (``python tests/scale/scale_evidence.py <command> --help``):
     One step of one run: the generator's per-request rows (CSV, ``ROW_FIELDS``)
     and the step's observation (JSON: the rate pair, the drops, each container's
     recorded cpuset, the samplers' readings) and the API's ``/metrics`` before
-    and after, judged by the method in ``config.json``. Writes the step's
-    record. Exit 0 when the step is VALID (whether or not it kept up), 1 when
-    it is INVALID (the record is still written, with its reason), 2 on a
-    refusal (nothing written).
+    and after (and, for a step after the first, the previous step's after-step
+    ``/metrics`` and the gap's width), judged by the method in ``config.json``.
+    Writes the step's record. Exit 0 when the step is VALID (whether or not it
+    kept up), 1 when it is INVALID (the record is still written, with its
+    reason), 2 on a refusal (nothing written).
 ``merge``
     The per-job results files of one run (one scenario, one repetition each)
     into the one results file, with each scenario's summary computed from its
@@ -126,6 +127,10 @@ SYSTEM_UNDER_TEST: Tuple[str, ...] = ("api", "postgres", "web", "redis")
 #: The hardware threads the samplers read from /proc/stat, as the VM numbers
 #: them. A hardware thread is what the VM calls a CPU; it is not a core.
 THREADS: Tuple[str, ...] = ("cpu0", "cpu1", "cpu2", "cpu3")
+#: What the samplers read for each hardware thread from /proc/stat, each in
+#: per-mille of the window's ticks: busy (user, nice, system, irq and
+#: softirq), steal, and irq and softirq on their own.
+THREAD_FIELDS: Tuple[str, ...] = ("busy", "steal", "irq", "softirq")
 #: How the page names each container.
 NAMES: Dict[str, str] = {
     "api": "the API",
@@ -153,10 +158,28 @@ EVALUATE_REASONS: Tuple[str, ...] = ("targeting_rule", "rollout", "inactive", "e
 FLAG_CLASSES: Tuple[str, ...] = ("rule", "plain")
 ROW_ERRORS: Tuple[str, ...] = ("timeout", "connection")
 
+#: The API's background schedulers, by the ``name`` label of their tick metrics
+#: (each scheduler module's ``SCHEDULER_NAME``; a test holds the two equal).
+SCHEDULERS: Tuple[str, ...] = ("bandit", "experiment", "metrics", "rollout", "safety")
+#: A tick's outcomes, the ``status`` label (``backend/app/core/scheduler_tick.py``'s
+#: ``STATUS_*``; a test holds the two equal).
+TICK_STATUSES: Tuple[str, ...] = ("success", "partial", "failed", "skipped")
+#: Whether the API's /metrics exported the two tick families (see
+#: ``scheduler_ticks``): an API from before they existed is "absent".
+TICK_METRICS: Tuple[str, ...] = ("present", "absent")
+#: Step 1's ``gap_metrics``: the gap before step 1 is not measured, because the
+#: warm-up before it takes no scrape. Its ``gap_ticks`` is ``{}`` and its
+#: ``gap_ms`` null: absent is said, never written as zeros.
+FIRST_STEP = "first-step"
+#: Whether a step's ``gap_ticks`` were read: TICK_METRICS, or FIRST_STEP.
+GAP_METRICS: Tuple[str, ...] = (*TICK_METRICS, FIRST_STEP)
+
 #: Why a step is INVALID, in the order the rules are checked (A3).
 INVALID_REASONS: Tuple[str, ...] = (
     "none",
+    "api-unresponsive",
     "sent-identity",
+    "nothing-measured",
     "start-lag",
     "not-sampled",
     "foreign-cpu",
@@ -212,6 +235,11 @@ ROW_FIELDS: Tuple[str, ...] = (
     "error",
     "latency_us",
     "start_lag_us",
+    # When the request was sent, in microseconds after the step's start (the
+    # script's clock, 1 ms resolution). The measure window is decided by this,
+    # not by ``iteration``: k6 numbers the iterations that STARTED, so once one
+    # is dropped the number is no longer the scheduled slot (#1667).
+    "sent_offset_us",
     "rate_limit",
     "flag_class",
     "reason",
@@ -441,6 +469,17 @@ class MapOf(Spec):
                 self.item.check(item, _join(path, key), problems)
 
 
+@dataclasses.dataclass(frozen=True)
+class Nullable(Spec):
+    """``item``, or null for a value the record says was not measured."""
+
+    item: Spec
+
+    def check(self, value: Any, path: str, problems: List[str]) -> None:
+        if value is not None:
+            self.item.check(value, path, problems)
+
+
 def _join(path: str, key: str) -> str:
     return f"{path}.{key}" if path else key
 
@@ -508,6 +547,16 @@ CONFIG_SPEC = obj(
     ),
 )
 
+#: A step's ticks by scheduler: each outcome's count, and the timed ticks'
+#: count and summed duration (``scheduler_ticks``' shape).
+TICKS_BY_SCHEDULER = MapOf(
+    SCHEDULERS,
+    obj(
+        **{status: Int(0) for status in TICK_STATUSES},
+        duration_count=Int(0),
+        duration_sum_us=Int(0),
+    ),
+)
 COUNTS = obj(
     flags=Int(0),
     rule_flags=Int(0),
@@ -539,12 +588,14 @@ STEP_SPEC = obj(
     samples=Int(0),
     # Each container's cgroup CPU, in per-mille of one hardware thread.
     **{f"{name}_cpu_permille": Int(0) for name in CONTAINERS},
-    # Each hardware thread's /proc/stat busy and steal, and the foreign CPU
-    # computed from them: busy minus the containers pinned to the thread.
+    # Each hardware thread's /proc/stat busy and steal, its irq and softirq
+    # (part of busy, recorded apart so the foreign-CPU limit can be calibrated
+    # against them: PE SMT condition 8), and the foreign CPU computed from
+    # them: busy minus the containers pinned to the thread.
     **{
         f"{thread}_{what}_permille": PERMILLE
         for thread in THREADS
-        for what in ("busy", "steal", "foreign")
+        for what in THREAD_FIELDS + ("foreign",)
     },
     active_backend_samples_by_count=ListOf(Int(0), 0, 1000),
     active_backend_share_permille=PERMILLE,
@@ -556,9 +607,40 @@ STEP_SPEC = obj(
     fallback_log_lines=Int(0),
     server_count=Int(0),
     server_499=Int(0),
+    # 0 and 0 for a step whose after-step /metrics scrape answered at once. A
+    # confirming step (one after a step that did not keep up) whose scrape
+    # timed out records the bound it waited under and how long the API took to
+    # answer again; such a step is INVALID ("api-unresponsive") and so FAILING.
+    scrape_recovery_bound_s=Int(0),
+    scrape_recovery_ms=Int(0),
     assignments_delta=Int(0),
     reasons=MapOf((*EVALUATE_REASONS, "other"), Int(0)),
     not_modified=Int(0),
+    # Each background scheduler's ticks during the step, from the API's
+    # /metrics before and after it: scheduler_ticks_total's growth by outcome,
+    # and scheduler_tick_duration_seconds' count and sum (a histogram; a
+    # skipped tick is not timed), the sum in microseconds. Data only: no rule
+    # reads them. "absent", with no scheduler, when the API does not export the
+    # two families; never zeros. "present" names every scheduler.
+    scheduler_metrics=Enum(TICK_METRICS),
+    scheduler_ticks=TICKS_BY_SCHEDULER,
+    # The ticks that ended in the gap BEFORE the step: from the previous step's
+    # after-scrape to this step's before-scrape (scheduler_ticks over those two
+    # scrapes, the same shape; a tick ending there is in no step's
+    # scheduler_ticks). gap_ms is that gap's width, from the previous step's
+    # last send (k6's record of it: its scenario start plus the largest send
+    # offset, rounded down, so at or before the real one) to this step's
+    # before-scrape (the clock read once that scrape has answered, so at or
+    # after the moment it read the counters): both ends err outward, so gap_ms
+    # is never less than the time from the end of sending to the scrape, and a
+    # gap tick that took longer than gap_ms started before that sending ended.
+    # Data only: no rule reads them. Step 1's gap is not measured (the warm-up
+    # before it takes no scrape): gap_metrics "first-step", gap_ticks {},
+    # gap_ms null; never zeros. Every later step has a gap_ms, and its
+    # gap_metrics is its scheduler_metrics (the before-scrape is in both).
+    gap_metrics=Enum(GAP_METRICS),
+    gap_ticks=TICKS_BY_SCHEDULER,
+    gap_ms=Nullable(Int(1)),
     valid=Bool(),
     invalid_reason=Enum(INVALID_REASONS),
     keeps_up=Bool(),
@@ -901,6 +983,218 @@ def counter_delta(
 
 
 # ---------------------------------------------------------------------------
+# The background schedulers' ticks during a step: data, never a rule
+# ---------------------------------------------------------------------------
+#: The two families (``backend/app/core/metrics.py``) and their ``# TYPE``: the
+#: ticks by scheduler and outcome, and their durations by scheduler. The API
+#: writes a family's ``# TYPE`` line in every scrape, before anything ticks.
+TICKS_FAMILY = "scheduler_ticks_total"
+DURATION_FAMILY = "scheduler_tick_duration_seconds"
+_TICK_FAMILIES: Dict[str, str] = {TICKS_FAMILY: "counter", DURATION_FAMILY: "histogram"}
+#: The samples read, each with the labels it must carry. The histogram's
+#: buckets and the ``_created`` samples are not read.
+_TICK_SAMPLES: Dict[str, Tuple[str, ...]] = {
+    TICKS_FAMILY: ("name", "status"),
+    DURATION_FAMILY + "_count": ("name",),
+    DURATION_FAMILY + "_sum": ("name",),
+}
+_LABEL = re.compile(r'([A-Za-z_][A-Za-z0-9_]{0,100})="((?:[^"\\]|\\.){0,200})"')
+
+
+def _tick_key(sample: str, scheduler: str, status: str = "") -> str:
+    """One tick series, written as its sample's name and labels."""
+    labels = f'name="{scheduler}"' + (f',status="{status}"' if status else "")
+    return f"{sample}{{{labels}}}"
+
+
+def _label_values(text: str, number: int) -> Dict[str, str]:
+    """A sample's labels: ``name="value"`` pairs, comma-separated. A value is
+    kept as written (escapes are not undone); the values read are plain words."""
+    labels: Dict[str, str] = {}
+    position = 0
+    while position < len(text):
+        match = _LABEL.match(text, position)
+        if not match:
+            raise Refused(f'metrics line {number}: its labels are not name="value"')
+        labels[match.group(1)] = match.group(2)
+        position = match.end()
+        if position < len(text):
+            if text[position] != ",":
+                raise Refused(
+                    f"metrics line {number}: its labels are not comma-separated"
+                )
+            position += 1
+    return labels
+
+
+def _tick_series(text: str, when: str) -> Tuple[set, Dict[str, decimal.Decimal]]:
+    """The tick families a scrape exports (by their ``# TYPE`` lines) and its
+    tick samples, keyed by ``_tick_key``."""
+    exported: set = set()
+    values: Dict[str, decimal.Decimal] = {}
+    for number, raw in enumerate(text.splitlines(), 1):
+        line = raw.strip()
+        if line.startswith("# TYPE "):
+            fields = line.split()
+            if len(fields) == 4 and fields[2] in _TICK_FAMILIES:
+                wanted = _TICK_FAMILIES[fields[2]]
+                if fields[3] != wanted:
+                    raise Refused(
+                        f"the metrics {when}: {fields[2]} is a {fields[3][:20]}, not a "
+                        f"{wanted}"
+                    )
+                exported.add(fields[2])
+            continue
+        if not line or line.startswith("#"):
+            continue
+        name, rest = _sample(line, number)
+        needed = _TICK_SAMPLES.get(name)
+        if needed is None:
+            continue
+        family = TICKS_FAMILY if name == TICKS_FAMILY else DURATION_FAMILY
+        if family not in exported:
+            raise Refused(
+                f"the metrics {when}, line {number}: {name} before its family's "
+                "# TYPE line"
+            )
+        labelled = line[len(name) : len(name) + 1] == "{"
+        labels = _label_values(
+            line[len(name) + 1 : len(line) - len(rest) - 1] if labelled else "",
+            number,
+        )
+        missing = [label for label in needed if label not in labels]
+        if missing:
+            raise Refused(f"metrics line {number}: {name} has no {missing[0]} label")
+        scheduler, status = labels["name"], labels.get("status", "")
+        if scheduler not in SCHEDULERS:
+            raise Refused(
+                f"the metrics {when}: a tick of a scheduler named {scheduler[:40]!r}, "
+                f"not one of {', '.join(SCHEDULERS)} (add it to SCHEDULERS)"
+            )
+        if name == TICKS_FAMILY and status not in TICK_STATUSES:
+            raise Refused(
+                f"the metrics {when}: a tick whose outcome is {status[:40]!r}, not one "
+                f"of {', '.join(TICK_STATUSES)}"
+            )
+        fields = rest.split()
+        try:
+            value = decimal.Decimal(fields[0]) if len(fields) == 1 else None
+        except decimal.InvalidOperation:
+            value = None
+        if value is None or not value.is_finite():
+            raise Refused(
+                f"metrics line {number}: {name} is not `name{{labels}} value`"
+            )
+        key = _tick_key(name, scheduler, status if name == TICKS_FAMILY else "")
+        values[key] = values.get(key, decimal.Decimal(0)) + value
+    return exported, values
+
+
+def scheduler_ticks(
+    metrics_before: str, metrics_after: str
+) -> Tuple[str, Dict[str, Dict[str, int]]]:
+    """Each background scheduler's ticks during a step, from the API's /metrics
+    before and after it.
+
+    ``("present", {scheduler: {each outcome: ticks, "duration_count": ticks
+    timed, "duration_sum_us": their duration}})`` naming every scheduler, or
+    ``("absent", {})`` when neither scrape exports the two families (an API from
+    before they existed): absent is said, never written as zeros. Once a
+    family is exported, a scheduler or an outcome with no sample has not ticked
+    yet: a count of 0. A tick is counted when it ends, so it is in the step
+    whose two scrapes it ends between; one that ends after a step's
+    after-scrape and before the next step's before-scrape is in no step.
+    """
+    exported_before, before = _tick_series(metrics_before, "before the step")
+    exported_after, after = _tick_series(metrics_after, "after the step")
+    if not exported_before and not exported_after:
+        return "absent", {}
+    families = set(_TICK_FAMILIES)
+    if exported_before != families or exported_after != families:
+        raise Refused(
+            "the scheduler tick metrics are not in both scrapes: before the step "
+            f"{', '.join(sorted(exported_before)) or 'neither'}, after it "
+            f"{', '.join(sorted(exported_after)) or 'neither'}"
+        )
+    ticks: Dict[str, Dict[str, int]] = {}
+    for scheduler in SCHEDULERS:
+        record = {
+            status: counter_delta(
+                before, after, _tick_key(TICKS_FAMILY, scheduler, status)
+            )
+            for status in TICK_STATUSES
+        }
+        record["duration_count"] = counter_delta(
+            before, after, _tick_key(DURATION_FAMILY + "_count", scheduler)
+        )
+        key = _tick_key(DURATION_FAMILY + "_sum", scheduler)
+        first = before.get(key, decimal.Decimal(0))
+        last = after.get(key, decimal.Decimal(0))
+        if last < first:
+            raise Refused(
+                f"metrics: {key} went from {first} to {last}; a sum of durations only "
+                "grows (did the API restart during the step?)"
+            )
+        micro = ((last - first) * 1_000_000).to_integral_value(decimal.ROUND_HALF_EVEN)
+        record["duration_sum_us"] = int(micro)
+        ticks[scheduler] = record
+    return "present", ticks
+
+
+def scheduler_problem(step: Mapping[str, Any]) -> str:
+    """A step's two tick fields agree, or why not: no scheduler when the
+    metrics were absent, every scheduler when they were present."""
+    ticks = step["scheduler_ticks"]
+    if step["scheduler_metrics"] == "absent":
+        if ticks:
+            names = ", ".join(ticks)
+            return f"scheduler_ticks names {names} with scheduler_metrics absent"
+        return ""
+    missing = ", ".join(name for name in SCHEDULERS if name not in ticks)
+    if missing:
+        return f"scheduler_ticks has no {missing} with scheduler_metrics present"
+    return ""
+
+
+def gap_problem(step: Mapping[str, Any]) -> str:
+    """A step's three gap fields agree, or why not: step 1 and only step 1 is
+    "first-step", with no tick and no width; every later step has a width, the
+    before-scrape's presence (its scheduler_metrics), and every scheduler when
+    present, none when absent."""
+    number, presence = step["step"], step["gap_metrics"]
+    ticks, width = step["gap_ticks"], step["gap_ms"]
+    if number == 1 or presence == FIRST_STEP:
+        if number != 1:
+            return f"gap_metrics {FIRST_STEP} on step {number}: only step 1 has one"
+        if presence != FIRST_STEP:
+            return (
+                f"step 1 has gap_metrics {presence}: its gap is not measured (the "
+                f"warm-up takes no scrape), which is {FIRST_STEP}"
+            )
+        if ticks or width is not None:
+            return (
+                f"step 1 records gap_ticks {sorted(ticks)} and gap_ms {width}: its "
+                "gap is not measured (the warm-up takes no scrape)"
+            )
+        return ""
+    if width is None:
+        return f"gap_ms is null on step {number}: only step 1's gap is not measured"
+    if presence != step["scheduler_metrics"]:
+        return (
+            f"gap_metrics {presence} with scheduler_metrics "
+            f"{step['scheduler_metrics']}: the scrape before the step is in both"
+        )
+    if presence == "absent":
+        if ticks:
+            return f"gap_ticks names {', '.join(ticks)} with gap_metrics absent"
+        return ""
+    missing = ", ".join(name for name in SCHEDULERS if name not in ticks)
+    if missing:
+        return f"gap_ticks has no {missing} with gap_metrics present"
+    return ""
+
+
+# ---------------------------------------------------------------------------
 # The per-request rows, and what passed
 # ---------------------------------------------------------------------------
 _VARIANT = re.compile(r"[A-Za-z0-9_.-]{0,64}")
@@ -1128,6 +1422,15 @@ def judge_step(
     window = ranges(method)
     failed: List[Tuple[str, str]] = []
 
+    if step["scrape_recovery_bound_s"]:
+        failed.append(
+            (
+                "api-unresponsive",
+                f"step {number}: the API did not answer /metrics for "
+                f"{step['scrape_recovery_ms']} ms after the load stopped: the "
+                "step ran past saturation and is recorded as failing",
+            )
+        )
     tolerance = validity["sent_identity_tolerance"]
     if abs(step["rows"] + step["dropped"] - step["scheduled"]) > tolerance:
         failed.append(
@@ -1135,6 +1438,14 @@ def judge_step(
                 "sent-identity",
                 f"step {number}: rows {step['rows']} + dropped {step['dropped']} "
                 f"!= scheduled {step['scheduled']}",
+            )
+        )
+    if step["measured"] == 0:
+        failed.append(
+            (
+                "nothing-measured",
+                f"step {number}: no request was sent in the measure window, so "
+                "nothing was measured",
             )
         )
     lag = validity["max_start_lag_p99_us"]
@@ -1303,8 +1614,14 @@ def summarise_step(
     observation: Mapping[str, Any],
     metrics_before: str,
     metrics_after: str,
+    gap: Optional[Tuple[str, int]] = None,
 ) -> Tuple[Dict[str, Any], List[str]]:
-    """One step's record from its rows, its observation and its metrics."""
+    """One step's record from its rows, its observation and its metrics.
+
+    ``gap`` is the gap before the step: the previous step's after-scrape and
+    the gap's width in milliseconds (see STEP_SPEC's gap fields). Every step
+    after the first needs one; step 1 has none (the warm-up before it takes no
+    scrape), and one given for it is refused rather than recorded."""
     if scenario == SMOKE_ONLY and method["mode"] != "smoke":
         raise Refused("mix is smoke only: refusing a mix row")
     if scenario not in SCENARIOS and scenario != SMOKE_ONLY:
@@ -1333,7 +1650,7 @@ def summarise_step(
         )
     window = ranges(method)
     scheduled = scheduled_count(rate, unit, window["settle_s"] + window["measure_s"])
-    first = first_measured(rate, unit, window["settle_s"])
+    settle_us = window["settle_s"] * 1_000_000
     allowed = set(method["smoke"]["mix"]) if scenario == SMOKE_ONLY else {scenario}
     expect = expectations(method, observation["variants"])
     seen: set = set()
@@ -1361,10 +1678,18 @@ def summarise_step(
         client_429 += status == 429
         if 200 <= status < 400 and row["rate_limit"] != limit:
             mismatches += 1
-        if iteration >= first:
+        # Measured: sent after the settle, by the send time, never by the
+        # iteration number (which counts started iterations, not slots).
+        if _number(row, "sent_offset_us") >= settle_us:
             measured.append((row, verdict))
     latencies = sorted(_number(row, "latency_us") for row, _ in measured)
-    lags = sorted(_number(row, "start_lag_us") for row, _ in measured)
+    # The start lag is the distance from the iteration's scheduled slot, which
+    # the iteration number only names while nothing was dropped: with drops it
+    # is not computed (judge_step ignores it then, too).
+    dropped = observation["dropped"]
+    lags = (
+        [] if dropped else sorted(_number(row, "start_lag_us") for row, _ in measured)
+    )
     reasons: Dict[str, int] = {}
     if scenario == "evaluate_get":
         for row, _ in measured:
@@ -1379,6 +1704,28 @@ def summarise_step(
                 "the API always exports: an empty or failed scrape, or not the "
                 "API's /metrics"
             )
+    tick_metrics, ticks = scheduler_ticks(metrics_before, metrics_after)
+    if number == 1 and gap is not None:
+        raise Refused(
+            "step 1 has no gap before it to record: the warm-up takes no scrape"
+        )
+    if number > 1 and gap is None:
+        raise Refused(
+            f"step {number} needs the gap before it: the previous step's "
+            "after-scrape and the gap's width"
+        )
+    gap_metrics, gap_ticks, gap_ms = FIRST_STEP, {}, None
+    if gap is not None:
+        previous_after, gap_ms = gap
+        if not isinstance(gap_ms, int) or isinstance(gap_ms, bool) or gap_ms < 1:
+            raise Refused(
+                f"the gap before step {number} is {gap_ms!r} ms: a gap's width is "
+                "a positive number of milliseconds (did the clock go back?)"
+            )
+        try:
+            gap_metrics, gap_ticks = scheduler_ticks(previous_after, metrics_before)
+        except Refused as error:
+            raise Refused(f"the gap before step {number}: {error}") from None
     sampled = observation["sampled"]
     cpu = observation["cpu_permille"]
     threads = observation["threads"]
@@ -1387,10 +1734,13 @@ def summarise_step(
         f"{name}_cpu_permille": cpu[name] if sampled else 0 for name in CONTAINERS
     }
     for thread in THREADS:
-        for what in ("busy", "steal"):
+        for what in THREAD_FIELDS:
             key = f"{what}_permille"
             cpu_fields[f"{thread}_{key}"] = threads[thread][key] if sampled else 0
         cpu_fields[f"{thread}_foreign_permille"] = 0
+    why = recovery_problem(observation)
+    if why:
+        raise Refused(f"step {number}: {why}")
     delta = observation["assignments_after"] - observation["assignments_before"]
     if delta < 0:
         raise Refused(f"step {number}: the assignments count went down by {-delta}")
@@ -1433,9 +1783,16 @@ def summarise_step(
         "fallback_log_lines": observation["fallback_log_lines"],
         "server_count": observation["server_count"],
         "server_499": observation["server_499"],
+        "scrape_recovery_bound_s": observation["scrape_recovery_bound_s"],
+        "scrape_recovery_ms": observation["scrape_recovery_ms"],
         "assignments_delta": delta,
         "reasons": reasons,
         "not_modified": sum(1 for row, _ in measured if row["status"] == "304"),
+        "scheduler_metrics": tick_metrics,
+        "scheduler_ticks": ticks,
+        "gap_metrics": gap_metrics,
+        "gap_ticks": gap_ticks,
+        "gap_ms": gap_ms,
     }
     step.update(_derived(step, method, split))
     fields, messages = judge_step(method, scenario, step, split)
@@ -1457,10 +1814,10 @@ OBSERVATION_SPEC = obj(
     samples=Int(0),
     # Each container's cgroup CPU over the window.
     cpu_permille=obj(**{name: Int(0) for name in CONTAINERS}),
-    # Every hardware thread's /proc/stat busy and steal over the window.
+    # Every hardware thread's /proc/stat THREAD_FIELDS over the window.
     threads=obj(
         **{
-            thread: obj(busy_permille=PERMILLE, steal_permille=PERMILLE)
+            thread: obj(**{f"{what}_permille": PERMILLE for what in THREAD_FIELDS})
             for thread in THREADS
         }
     ),
@@ -1471,9 +1828,25 @@ OBSERVATION_SPEC = obj(
     fallback_log_lines=Int(0),
     server_count=Int(0),
     server_499=Int(0),
+    scrape_recovery_bound_s=Int(0),
+    scrape_recovery_ms=Int(0),
     assignments_before=Int(0),
     assignments_after=Int(0),
 )
+
+
+def recovery_problem(step: Mapping[str, Any]) -> str:
+    """The step's scrape-recovery pair is consistent, or why not: no bound
+    means no recovery time, and a recovery time is within its bound."""
+    bound, took = step["scrape_recovery_bound_s"], step["scrape_recovery_ms"]
+    if bound == 0 and took != 0:
+        return f"scrape_recovery_ms {took} with no scrape_recovery_bound_s"
+    if bound and not 0 < took <= bound * 1000:
+        return (
+            f"scrape_recovery_ms {took} is not within the {bound} s bound "
+            "(a recovery that did not happen in the bound is a failed run)"
+        )
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -1681,6 +2054,13 @@ def recompute_problems(results: Mapping[str, Any]) -> List[str]:
                     problems.append(f"{where} step {step['step']}: {error}")
                     continue
                 number = step["step"]
+                for why in (
+                    recovery_problem(step),
+                    scheduler_problem(step),
+                    gap_problem(step),
+                ):
+                    if why:
+                        problems.append(f"{where} step {number}: {why}")
                 planned = rates[number - 1] if number <= len(rates) else "none"
                 if derived["milli_rps"] != planned:
                     problems.append(
@@ -2129,7 +2509,9 @@ def _topology(host: Mapping[str, Any]) -> Tuple[int, Tuple[Tuple[int, ...], ...]
 def _topology_text(
     nproc: int, cores: Sequence[Sequence[int]], split: Mapping[str, str]
 ) -> str:
-    """The topology as the VM reported it, naming what ran on each core."""
+    """The topology as the VM reported it, naming what the harness pinned to
+    each core. "Pinned", not "ran": the Docker daemon, the runner's agent and
+    the harness's own process run there too, unrecorded (#1616 review N1)."""
     sizes = {len(core) for core in cores}
     if sizes == {1}:
         shape = f"{len(cores)} cores of one hardware thread each"
@@ -2139,10 +2521,12 @@ def _topology_text(
         shape = f"{len(cores)} cores"
     parts = []
     for core in cores:
-        ran = _on_threads(split, core)
+        pinned = _on_threads(split, core)
         where = f"the core of {_threads_text(set(core))}"
         parts.append(
-            f"{where} ran {_and(ran)}" if ran else f"{where} ran nothing pinned"
+            f"{where} had pinned to it {_and(pinned)}"
+            if pinned
+            else f"{where} had nothing pinned to it"
         )
     return f"{nproc} vCPUs, which the VM reports as {shape}: " + "; ".join(parts)
 
@@ -2521,10 +2905,29 @@ def verify(
         problems.append(
             f"the file names run {results.get('run', {}).get('run_id')}, not {run_id}"
         )
-    view = runner(["run", "view", str(run_id), "--repo", repo, "--json", "headSha"])
+    view = runner(
+        [
+            "run",
+            "view",
+            str(run_id),
+            "--repo",
+            repo,
+            "--json",
+            "headSha,event,headBranch",
+        ]
+    )
     if view.returncode != 0:
         return problems + [f"run {run_id} cannot be read: {view.stderr.strip()[:200]}"]
-    built = json.loads(view.stdout).get("headSha", "")
+    viewed = json.loads(view.stdout)
+    built = viewed.get("headSha", "")
+    if viewed.get("event") != "workflow_dispatch":
+        problems.append(
+            f"run {run_id} was event {viewed.get('event')}, not a workflow_dispatch"
+        )
+    if viewed.get("headBranch") != "main":
+        problems.append(
+            f"run {run_id} ran on branch {viewed.get('headBranch')}, not main"
+        )
     stated = results.get("run", {}).get("harness_commit")
     if built != stated:
         problems.append(f"run {run_id} built {built}, the file says {stated}")
@@ -2571,6 +2974,16 @@ def _say(lines: Sequence[str]) -> None:
 def _cmd_summarise(args: argparse.Namespace) -> int:
     method = load_config(pathlib.Path(args.method), args.mode)
     observation = loads(_read(args.observation))
+    if (args.metrics_previous_after is None) != (args.gap_ms is None):
+        raise Refused(
+            "--metrics-previous-after and --gap-ms go together: the gap before a "
+            "step after the first"
+        )
+    gap = (
+        None
+        if args.gap_ms is None
+        else (_read(args.metrics_previous_after), args.gap_ms)
+    )
     step, messages = summarise_step(
         method,
         args.scenario,
@@ -2578,6 +2991,7 @@ def _cmd_summarise(args: argparse.Namespace) -> int:
         observation,
         _read(args.metrics_before),
         _read(args.metrics_after),
+        gap,
     )
     _write(args.out, json.dumps(step, indent=1) + "\n")
     _say(messages)
@@ -2649,6 +3063,10 @@ def parser() -> argparse.ArgumentParser:
     one.add_argument("--observation", required=True)
     one.add_argument("--metrics-before", required=True)
     one.add_argument("--metrics-after", required=True)
+    # The gap before a step after the first: the previous step's after-scrape
+    # and the gap's width (STEP_SPEC). Step 1 takes neither.
+    one.add_argument("--metrics-previous-after")
+    one.add_argument("--gap-ms", type=int)
     one.add_argument("--out", required=True)
     one.set_defaults(handler=_cmd_summarise)
 

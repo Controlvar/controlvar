@@ -12,6 +12,7 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -98,6 +99,12 @@ def test_it_runs_from_the_source_tree_with_its_defaults(environment, capsys):
         "flag": {"enabled": True},
         "track": {"ok": True},
         "fanout": {"ok": True},
+        "event_id": {
+            "user_id": assign["user_id"],
+            "event_name": mock.ANY,
+            "id": mock.ANY,
+            "sends": 2,
+        },
         "exposure": {
             "calls": 1,
             "payload": {
@@ -127,6 +134,8 @@ def test_it_runs_the_four_contract_steps(environment, capsys):
         "POST /api/v1/tracking/track",  # purchase, with the experiment's key
         "POST /api/v1/tracking/batch",  # page_view without a key: fanned out
         "POST /api/v1/tracking/batch",  # the 2-event batch
+        "POST /api/v1/tracking/track",  # C4: one keyed event sent twice with one event_id
+        "POST /api/v1/tracking/track",
         "POST /api/v1/tracking/assign",  # the exposure hook's new client: two assigns, the second cached
         "POST /api/v1/tracking/assign",  # the client whose hook raises
     ]
@@ -139,11 +148,24 @@ def test_it_runs_the_four_contract_steps(environment, capsys):
         ("page_view", None, "flag_a"),
     }
     assert len(transport.requests[5].json()["events"]) == 2
-    assert [(r.json()["experiment_key"], r.json()["user_id"]) for r in transport.requests[6:]] == [
+    # C4: both sends carry the same event_id, the report names it, and the event name is fresh.
+    out = capsys.readouterr().out.strip()
+    report = json.loads(out)["event_id"]
+    assert report["event_name"].startswith("contract_dedup_") and report["id"].startswith("contract-")
+    assert [r.json() for r in transport.requests[6:8]] == [
+        {
+            "event_type": report["event_name"],
+            "event_name": report["event_name"],
+            "user_id": "user-a",
+            "event_id": report["id"],
+            "experiment_key": "exp_a",
+        }
+    ] * 2
+    assert [(r.json()["experiment_key"], r.json()["user_id"]) for r in transport.requests[8:]] == [
         ("exp_a", "user-a"),
         ("exp_a", "user-a"),
     ]
-    assert len(capsys.readouterr().out.strip().splitlines()) == 1
+    assert len(out.splitlines()) == 1
 
 
 def test_it_fails_when_the_raising_hook_is_not_logged(environment, capsys):

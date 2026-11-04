@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import deps
 from backend.app.api.enum_filters import enum_filter
+from backend.app.api.read_scope import get_current_reader
 from backend.app.api.segment_rules import refuse_unusable_segments
 from backend.app.core.context_limits import (
     CONTEXT_TOO_DEEP,
@@ -269,7 +270,8 @@ async def list_feature_flags(
         None, alias="status", description=FLAG_STATUS_FILTER_DESCRIPTION
     ),
     search: Optional[str] = None,
-    current_user=Depends(deps.get_current_active_user),
+    # A sign-in, or an API key with the mcp:read scope (read_scope.py).
+    current_user=Depends(get_current_reader),
 ) -> FeatureFlagListResponse:
     """
     Retrieve feature flags.
@@ -713,8 +715,10 @@ async def delete_feature_flag(
     """
     Delete a feature flag.
 
-    This endpoint deletes an existing feature flag. Access is by role:
-    ADMIN and DEVELOPER may delete any flag; ANALYST and VIEWER may not.
+    This endpoint deletes an existing feature flag. Access is by permission,
+    not ownership: ADMIN and DEVELOPER may delete any flag, and in the full
+    profile so may anyone whose custom role or direct grant gives
+    feature_flag (delete); anyone else gets 403.
 
     Deleting a feature flag has the following effects:
     - The feature flag and its related data are permanently removed, except
@@ -960,8 +964,9 @@ async def unarchive_feature_flag(
 
     A flag that is not archived is returned unchanged.
 
-    **Permissions**: ADMIN and DEVELOPER may unarchive any flag; ANALYST and
-    VIEWER may not.
+    **Permissions**: ADMIN and DEVELOPER may unarchive any flag, and in the full
+    profile so may anyone whose custom role or direct grant gives
+    feature_flag (update); anyone else gets 403.
 
     Returns:
         FeatureFlagRead: The feature flag
@@ -1285,8 +1290,9 @@ async def toggle_feature_flag(
     - Response with new status and audit log ID
 
     **Authentication**: Requires valid user authentication.
-    **Permissions**: ADMIN and DEVELOPER may toggle any flag; ANALYST and
-    VIEWER may not.
+    **Permissions**: ADMIN and DEVELOPER may toggle any flag, and in the full
+    profile so may anyone whose custom role or direct grant gives
+    feature_flag (update); anyone else gets 403.
 
     Returns:
         ToggleResponse: Updated feature flag details with audit log ID

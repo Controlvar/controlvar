@@ -7,8 +7,13 @@ import com.controlvar.sdk.model.Exposure;
 import com.controlvar.sdk.model.FlagEvaluation;
 import com.controlvar.sdk.model.TrackEvent;
 import com.controlvar.sdk.model.User;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import okhttp3.OkHttpClient;
+import okhttp3.Response;
 
+import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -16,15 +21,18 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 /**
- * Contract smoke: exercises the Java SDK against a live backend using only its public
- * API and prints exactly one JSON line on success (exit 0); on failure prints one line
- * to stderr and exits 1.
+ * Contract smoke: exercises the Java SDK against a live backend using its public API
+ * (step 4c also builds one client through the package-private constructor the SDK's own
+ * tests use; see there) and prints exactly one JSON line on success (exit 0); on failure
+ * prints one line to stderr and exits 1.
  *
  * <p>Environment: {@code CONTROLVAR_API_URL} (default {@code http://localhost:8000}),
  * {@code CONTROLVAR_API_KEY} (required), {@code CONTRACT_EXPERIMENT_KEY} (default
  * {@code sdk_contract_ab}), {@code CONTRACT_FLAG_KEY} (default {@code sdk_contract_flag}),
+ * {@code CONTRACT_TARGETED_FLAG_KEY} (default {@code sdk_contract_targeted}),
  * {@code CONTRACT_USER_ID} (default {@code smoke-<uuid>}).
  *
  * <p>Run from the repo root with {@code bash sdk/java/examples/contract_smoke.sh}.
@@ -51,6 +59,7 @@ public final class ContractSmoke {
         String baseUrl = env("CONTROLVAR_API_URL", env("EXPERIMENTLY_API_URL", "http://localhost:8000"));
         String experimentKey = env("CONTRACT_EXPERIMENT_KEY", "sdk_contract_ab");
         String flagKey = env("CONTRACT_FLAG_KEY", "sdk_contract_flag");
+        String targetedKey = env("CONTRACT_TARGETED_FLAG_KEY", "sdk_contract_targeted");
         String userId = env("CONTRACT_USER_ID", "smoke-" + UUID.randomUUID());
 
         SdkConfig config = SdkConfig.builder(apiKey, baseUrl).timeoutMs(10_000).build();
@@ -103,6 +112,52 @@ public final class ContractSmoke {
                         .build());
             }
 
+            // 4c. The attributes reach flag evaluation (#1520, #1718). The seeded targeted flag is
+            //     at 0% with one rule, plan equals pro, at 100%. A NEW client (so the fan-out above
+            //     is untouched) asks for it with plan=pro, then, after clearCache() (the cache key
+            //     is user + flag), with plan=free. FlagEvaluation carries no reason, so the
+            //     server's reason is read from the answer to the client's own request: the client
+            //     is built through the package-private constructor the SDK's own tests use, with
+            //     the public constructor's three timeouts and an interceptor that only reads the
+            //     targeted flag's answers. The runner requires on with targeting_rule, then off.
+            List<String> reasons = Collections.synchronizedList(new ArrayList<>());
+            ObjectMapper answers = new ObjectMapper();
+            OkHttpClient recording = new OkHttpClient.Builder()
+                    .connectTimeout(config.getTimeoutMs(), TimeUnit.MILLISECONDS)
+                    .readTimeout(config.getTimeoutMs(), TimeUnit.MILLISECONDS)
+                    .writeTimeout(config.getTimeoutMs(), TimeUnit.MILLISECONDS)
+                    .addInterceptor(chain -> {
+                        Response response = chain.proceed(chain.request());
+                        List<String> path = chain.request().url().pathSegments();
+                        int last = path.size() - 1;
+                        if (last >= 1 && "evaluate".equals(path.get(last - 1)) && targetedKey.equals(path.get(last))) {
+                            String reason = null;
+                            try {
+                                JsonNode answer = answers.readTree(response.peekBody(1 << 20).string());
+                                JsonNode value = answer == null ? null : answer.get("reason");
+                                reason = (value != null && value.isTextual()) ? value.asText() : null;
+                            } catch (JsonProcessingException e) {
+                                // Not JSON: no reason.
+                            }
+                            reasons.add(reason);
+                        }
+                        return response;
+                    })
+                    .build();
+            Constructor<ExperimentationClient> withHttpClient =
+                    ExperimentationClient.class.getDeclaredConstructor(SdkConfig.class, OkHttpClient.class);
+            withHttpClient.setAccessible(true);
+            FlagEvaluation pro;
+            FlagEvaluation free;
+            try (ExperimentationClient targeting = withHttpClient.newInstance(config, recording)) {
+                pro = targeting.evaluateFeatureFlag(User.builder(userId).attribute("plan", "pro").build(), targetedKey);
+                targeting.clearCache();
+                free = targeting.evaluateFeatureFlag(User.builder(userId).attribute("plan", "free").build(), targetedKey);
+            }
+            if (reasons.size() != 2) {
+                fail("the targeted flag was asked " + reasons.size() + " time(s), expected 2");
+            }
+
             // 5. The exposure listener (#1499): a NEW client with a listener assigns the same
             //    user twice, with no clearCache() in between. The server records an exposure for
             //    the first request (assigned: true) and the second answer comes from the cache,
@@ -148,6 +203,11 @@ public final class ContractSmoke {
             report.put("flag", Map.of("enabled", flag.isEnabled()));
             report.put("track", Map.of("ok", true));
             report.put("fanout", Map.of("ok", true));
+            Map<String, Object> targeted = new LinkedHashMap<>(); // LinkedHashMap: reason may be null
+            targeted.put("pro", pro.isEnabled());
+            targeted.put("free", free.isEnabled());
+            targeted.put("reason", reasons.get(0));
+            report.put("targeted", targeted);
 
             Map<String, Object> payload = null;
             if (!exposures.isEmpty()) {

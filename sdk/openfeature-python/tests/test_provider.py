@@ -724,6 +724,29 @@ class TestLocalClient:
         ]
         assert len(transport.requests) == before  # every answer came from the ruleset
 
+    def test_once_the_client_stops_evaluating_locally_the_servers_first_answer_is_not_cached(self, monkeypatch):
+        """#1709: the client keeps its local answer in its cache but no longer answers from it, so
+        the server's first answer is a new one, not CACHED; the next call reuses it, CACHED."""
+        monkeypatch.setattr(LocalEvaluation, "_start_thread", lambda self: None)
+        transport = FakeTransport()
+        transport.route("GET", "/api/v1/sdk/ruleset", json=LOCAL_RULESET, headers={"ETag": '"v1"'})
+        transport.route("POST", "/api/v1/tracking/evaluations", status=201, json={"accepted": 1, "errors": []})
+        flag(transport, "us-only", enabled=False, reason="rollout")
+        client = ExperimentationClient("http://test", "k", transport=transport, evaluation="local")
+        client._local.refresh_once()
+        provider = ExperimentationProvider(client=client)
+        us = EvaluationContext("u1", {"country": "US"})
+
+        local = provider.resolve_boolean_details("us-only", False, us)
+        assert (local.value, local.reason, local.variant) == (True, Reason.TARGETING_MATCH, "on")
+        client.close()  # from here on every flag is evaluated by the server
+        first = provider.resolve_boolean_details("us-only", True, us)
+        second = provider.resolve_boolean_details("us-only", True, us)
+
+        assert (first.value, first.reason, first.variant) == (False, Reason.SPLIT, "off")
+        assert (second.value, second.reason, second.variant) == (False, Reason.CACHED, "off")
+        assert [r.path for r in transport.requests if r.path.startswith(EVALUATE)] == [f"{EVALUATE}/us-only"]
+
 
 # ---------------------------------------------------------------------------
 # Cache behaviour

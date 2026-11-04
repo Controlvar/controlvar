@@ -44,11 +44,13 @@ pytest backend/tests/unit/  # Unit tests only
 pytest backend/tests/integration/  # Integration tests only
 
 # Code quality (ruff replaces black, isort and flake8). The scope is
-# `backend/ modules/ scripts/ tests/acceptance/` -- exactly what `make format` /
-# `make lint` and the lint CI job pass; linting backend/ alone leaves the
-# modules, the repository tooling and the acceptance runner unchecked.
-ruff format backend/ modules/ scripts/ tests/acceptance/        # Format code
-ruff check backend/ modules/ scripts/ tests/acceptance/ --fix   # Lint and auto-fix (includes import sorting)
+# `backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/
+# tests/usecases/` -- exactly what `make format` / `make lint` and the lint CI
+# job pass; linting backend/ alone leaves the modules, the repository tooling,
+# the acceptance runner, the ground-truth library and the use-case harness
+# unchecked.
+ruff format backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/        # Format code
+ruff check backend/ modules/ scripts/ tests/acceptance/ tests/ground_truth/ tests/usecases/ --fix   # Lint and auto-fix (includes import sorting)
 mypy backend/app/                             # Type checking: NOT gated, NOT clean (#788)
 make format                 # The two ruff commands above
 make lint                   # Everything the `lint` CI job runs (see below)
@@ -390,11 +392,17 @@ The `core/permissions.py` module implements a comprehensive RBAC system with fou
 #### Feature Flag Permissions
 - **Access to a flag is by role, not ownership** (founder decision D11): ADMIN and
   DEVELOPER read, create, change and delete any flag; ANALYST and VIEWER read any flag
-  and change none, not even one they own. The creator is recorded as `owner_id` (a
-  UUID) and shown, but it is not an access rule.
+  and change none, not even one they own, unless (full profile) a custom role or direct
+  grant gives them feature_flag update or delete, which admits any flag, or create,
+  which lets them create flags. The creator is recorded as `owner_id` (a UUID) and
+  shown, but it is not an access rule.
 - **The one decision is `can_act_on_feature_flag(user, owner_id, action)`** in
-  `backend/app/core/permissions.py`: the role matrix first, then `FEATURE_FLAG_SCOPE`
-  (all "any flag" today; per-flag locks or approvals would go there). Every route that
+  `backend/app/core/permissions.py`: a superuser always; then, if the built-in role
+  holds the action, `FEATURE_FLAG_SCOPE` decides whose flags (all "any flag" today);
+  if it does not, a custom role or direct grant of that action admits any flag and the
+  table is never read. So a per-flag lock or approval added to `FEATURE_FLAG_SCOPE`
+  binds the built-in roles only: it must be checked on the grant path too, or grant
+  holders bypass it. Every route that
   changes a flag calls it -- the per-flag routes, bulk-toggle, and every rollout
   schedule and stage change (against the schedule's flag).
   `backend/tests/smoke/test_flag_change_routes_guarded.py` pins the exact set of
@@ -1271,12 +1279,14 @@ python -m alembic -c backend/app/db/alembic.ini current
 
 ### Code Quality Checks
 ```bash
-# Format and auto-fix backend/, modules/, scripts/ and tests/acceptance/ in
-# place (ruff: format + lint + import order)
+# Format and auto-fix backend/, modules/, scripts/, tests/acceptance/,
+# tests/ground_truth/ and tests/usecases/ in place (ruff: format + lint +
+# import order)
 make format
 
 # The full lint gate, in this order:
 #   ruff check / ruff format --check   backend/ modules/ scripts/ tests/acceptance/
+#                                      tests/ground_truth/ tests/usecases/
 #   lint-imports                       the core/modules import boundary
 #                                      ([tool.importlinter] in pyproject.toml,
 #                                      backend/lambda/.importlinter)

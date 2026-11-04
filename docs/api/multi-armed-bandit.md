@@ -34,7 +34,8 @@ the other variants `0.1 / n`, for `n` variants: epsilon is 0.1, and it is not a 
 
 Run the commands on this page in one terminal, in order, against the stack from the
 [Quick Start](../getting-started/quick-start.md). Each uses the shell variables set by the
-ones before it. Log in first; creating an experiment takes the DEVELOPER or ADMIN role:
+ones before it. Log in first; creating an experiment takes permission to create experiments,
+such as the DEVELOPER or ADMIN role:
 
 ```{.bash exec}
 TOKEN=$(curl -s -X POST localhost:8000/api/v1/auth/login \
@@ -170,8 +171,8 @@ An experiment whose `optimization_type` is `fixed` answers `404` here.
 
 ### POST /api/v1/bandit/{experiment_id}/update
 
-Recalculates the weights now, outside the scheduler cycle. Requires the DEVELOPER or ADMIN
-role:
+Recalculates the weights now, outside the scheduler cycle. Requires permission to change
+experiments, such as the DEVELOPER or ADMIN role:
 
 ```{.bash exec}
 curl -s -X POST localhost:8000/api/v1/bandit/$EXP_ID/update \

@@ -36,6 +36,9 @@ DOCS = "backend/tests/unit/docs"
 #: The AWS installer beta's harness and sweep tests: they need only bash and jq,
 #: so a skip there is a gate that did not run.
 INSTALLER = "backend/tests/installer_sweeps"
+#: The ground-truth library's gates (#1544): its cross-checks need nothing a
+#: full checkout lacks, so a skip there is an answer left unchecked.
+GROUND_TRUTH = "backend/tests/unit/ground_truth"
 
 
 def _report(tmp_path: Path, cases: str) -> Path:
@@ -117,6 +120,31 @@ def test_a_module_skipped_while_collected_fails(tmp_path):
     )
 
 
+#: Written by a real pytest run (``--junit-prefix=tests.ground_truth``) over a
+#: directory holding one module that calls ``pytest.skip(...,
+#: allow_module_level=True)`` and one passing test. The skipped file's classname
+#: is the prefix itself, with no trailing dot.
+PREFIXED_COLLECTION_SKIP = (
+    '<testcase classname="tests.ground_truth" name="tests.ground_truth.test_faults"'
+    ' time="0.000"><skipped message="collection skipped">'
+    "('test_faults.py', 2, 'Skipped: planted')</skipped></testcase>"
+    '<testcase classname="tests.ground_truth.tests.ground_truth.test_replay"'
+    ' name="test_ok" time="0.024" />'
+)
+
+
+@pytest.mark.regression
+def test_a_file_skipped_at_collection_under_a_junit_prefix_fails(tmp_path):
+    """The scope was "tests.ground_truth." with a dot, and pytest writes the
+    whole-file skip with classname "tests.ground_truth" -- so it was never seen
+    and one test passed over a wholly skipped file."""
+    result = _check(_report(tmp_path, PREFIXED_COLLECTION_SKIP), "tests/ground_truth")
+    assert result.returncode == 1, result.stdout
+    assert "tests.ground_truth::tests.ground_truth.test_faults was skipped" in (
+        result.stdout
+    )
+
+
 @pytest.mark.regression
 def test_a_module_skipped_while_collected_is_a_test_found(tmp_path):
     """A scope whose only module skipped itself is a skip, not "nothing found"."""
@@ -161,6 +189,7 @@ def _job_steps(workflow: str, job_name: str) -> list[dict]:
         ("pr-qa-gate.yml", "Unit Tests", SHOWCASE),
         ("pr-qa-gate.yml", "Unit Tests", DOCS),
         ("pr-qa-gate.yml", "Unit Tests", INSTALLER),
+        ("pr-qa-gate.yml", "Unit Tests", GROUND_TRUTH),
         (
             "pr-qa-gate.yml",
             "Unit Tests",

@@ -528,6 +528,7 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
                       state.plannedEffectPct,
                       state.variants.length,
                       state.confidenceLevel,
+                      state.correctionMethod,
                     )?.samples_per_variant ?? null,
                   )}
                 </p>

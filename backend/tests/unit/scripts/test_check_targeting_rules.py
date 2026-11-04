@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from typing import Any, Dict, List
 from unittest.mock import MagicMock
 
 import pytest
 
+from backend.app.core.log_once import EVALUATION_NOTES
 from backend.app.models.feature_flag import FeatureFlagStatus
 from backend.app.services import feature_flag_service as ffs
 from backend.scripts import check_targeting_rules as check
@@ -373,8 +375,9 @@ NOT_ON_FLAGS = (
     "experiments only"
 )
 UNREADABLE_WINDOW = (
-    "unreadable time window; see the time_window example on the Targeting Rules: "
-    "Operator Reference page"
+    "unreadable time window; give days (0 to 6), start_time and end_time "
+    "(HH:MM), or start_date and end_date (YYYY-MM-DD); a timezone must be a "
+    "name such as Europe/Paris"
 )
 UNKNOWN_UNIT = "unknown distance unit; use km, mi or m, or leave it out for km"
 
@@ -442,6 +445,213 @@ def test_a_segment_with_an_unknown_unit_has_a_line_without_not_valid():
     )
 
 
+# --- #1525, #1526: values the evaluator cannot read ---------------------------
+
+NOT_A_DATE = {"attribute": "signup", "operator": "before", "value": "not-a-date"}
+LENGTH_ABC = {"attribute": "tags", "operator": "array_length", "value": "abc"}
+NEGATIVE_RADIUS = {
+    "attribute": "loc",
+    "operator": "geo_distance",
+    "value": [37.7749, -122.4194],
+    "additional_value": -1,
+}
+BUCKET_ABC = {"attribute": "user_id", "operator": "percentage_bucket", "value": "abc"}
+GT_ABC = {"attribute": "age", "operator": "gt", "value": "abc"}
+DASH_COMPARISON = {
+    "attribute": "loc",
+    "operator": "geo_within_radius",
+    "value": {"lat": 37.7749, "lon": -122.4194, "radius": 10, "comparison": "gt"},
+}
+DASH_NEGATIVE = {
+    "attribute": "loc",
+    "operator": "geo_within_radius",
+    "value": "37.7749,-122.4194,-1",
+}
+_AT = "rules[0].rule.conditions[0]"
+
+
+@pytest.mark.regression
+def test_a_flag_with_a_value_the_evaluator_cannot_read_has_a_line():
+    """(B7) The API's own path and reason; a readable value has no line."""
+    rows = [
+        (
+            "id-1",
+            "signup-gate",
+            _native({"operator": "and", "conditions": [NOT_A_DATE]}),
+        ),
+        ("id-2", "tags", _native({"operator": "and", "conditions": [LENGTH_ABC]})),
+        ("id-3", "near", _native({"operator": "and", "conditions": [NEGATIVE_RADIUS]})),
+        ("id-4", "adults", _native({"operator": "and", "conditions": [GT_ABC]})),
+        ("id-5", "bay", _dash(US, DASH_COMPARISON)),
+        ("id-6", "clean", _native({"operator": "and", "conditions": [EQ]})),
+    ]
+    assert [f.line() for f in check.findings_for(rows)] == [
+        f"feature_flag\tid-1\tsignup-gate\t{_AT}.value\tnot a date; use an ISO 8601 "
+        "date such as 2030-01-31 or 2030-01-31T09:00:00Z, or a Unix timestamp",
+        f"feature_flag\tid-2\ttags\t{_AT}.value\tnot a whole number; use a number "
+        "such as 3",
+        f"feature_flag\tid-3\tnear\t{_AT}.additional_value\tradius must be a number "
+        "of 0 or more",
+        f"feature_flag\tid-4\tadults\t{_AT}.value\tnot a number; use a number such "
+        "as 5",
+        "feature_flag\tid-5\tbay\tgroups[0].conditions[1].value\tcomparison is not "
+        "read in the dashboard shape, so the rule would mean within the radius; to "
+        "use gt, lt, gte or eq, write the rule in the native shape",
+    ]
+
+
+@pytest.mark.regression
+def test_an_experiment_with_a_value_it_cannot_read_has_a_line():
+    """(B7) percentage_bucket is checked on experiments, which implement it."""
+    rows = [
+        (
+            "e-1",
+            "k1",
+            "ACTIVE",
+            _native({"operator": "and", "conditions": [BUCKET_ABC]}),
+        ),
+        ("e-2", "k2", "DRAFT", _dash(US, DASH_NEGATIVE)),
+    ]
+    assert [f.line() for f in check.experiment_findings_for(rows)] == [
+        f"experiment\te-1\tk1\tACTIVE\t{_AT}.value\tnot a number; use a percentage "
+        "from 0 to 100",
+        "experiment\te-2\tk2\tDRAFT\tgroups[0].conditions[1].value\tradius must be "
+        "a number of 0 or more",
+    ]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "condition, reason",
+    [
+        (
+            DASH_COMPARISON,
+            "comparison is not read in the dashboard shape, so the rule would mean "
+            "within the radius; to use gt, lt, gte or eq, write the rule in the "
+            "native shape",
+        ),
+        (DASH_NEGATIVE, "radius must be a number of 0 or more"),
+    ],
+)
+def test_a_segment_with_a_comparison_or_a_negative_radius_has_a_line_without_not_valid(
+    condition, reason
+):
+    """(B7) Still evaluated, so not "rules not valid": the segment schema
+    passes the stored value to the check, as a save does."""
+    found = check.segment_finding_for("id", "Bay Area", _dash(US, condition))
+    assert found.line() == (
+        f"segment\tid\tBay Area\tgroups[0].conditions[1].value\t{reason}"
+    )
+
+
+# --- #1666, #1669, #1672, #1673 (plan D211 v1.4-B3-1666) ----------------------
+
+HUGE = 10**400
+BETWEEN_TEXT = {
+    "attribute": "age",
+    "operator": "between",
+    "value": "-5",
+    "additional_value": 5,
+}
+BETWEEN_ZONE = {
+    "attribute": "signup",
+    "operator": "between",
+    "value": 18,
+    "additional_value": "2030-01-01T00:00:00Z",
+}
+WINDOW_9AM = {
+    "attribute": "now",
+    "operator": "time_window",
+    "value": {"start": "9am", "end": "5pm"},
+}
+GEO_HUGE = {
+    "attribute": "loc",
+    "operator": "geo_within_radius",
+    "value": {"lat": 37.7749, "lon": -122.4194, "radius": HUGE},
+}
+NATIVE_GEO_HUGE = {
+    "attribute": "loc",
+    "operator": "geo_distance",
+    "value": [HUGE, -122.4194],
+    "additional_value": 10,
+}
+GT_HUGE = {"attribute": "age", "operator": "greater_than", "value": HUGE}
+BETWEEN_VALUE_REASON = (
+    "not a number or a date; between needs two numbers such as 18 and 65 (text "
+    "must be digits, with at most one dot), or two dates, each ISO 8601 such as "
+    "2030-01-31 or a Unix timestamp in seconds"
+)
+WINDOW_REASON = (
+    "unreadable time window; give start and end as HH:MM such as 09:00 and 17:00, "
+    "days as numbers 0 to 6, start_date and end_date as YYYY-MM-DD in order, a "
+    "timezone as a name such as Europe/Paris"
+)
+
+
+@pytest.mark.regression
+def test_a_flag_with_a_between_a_window_or_a_number_too_large_has_a_line():
+    """(V8, W6, Z5) The API's own path and reason. A geo number too large for
+    a float gets a precise line, where it was "could not be checked"."""
+    rows = [
+        ("id-1", "ages", _native({"operator": "and", "conditions": [BETWEEN_TEXT]})),
+        ("id-2", "hours", _dash(US, WINDOW_9AM)),
+        ("id-3", "far", _dash(US, GEO_HUGE)),
+        ("id-4", "old", _dash(US, GT_HUGE)),
+    ]
+    assert [f.line() for f in check.findings_for(rows)] == [
+        f"feature_flag\tid-1\tages\t{_AT}.value\t{BETWEEN_VALUE_REASON}",
+        f"feature_flag\tid-2\thours\tgroups[0].conditions[1].value\t{WINDOW_REASON}",
+        "feature_flag\tid-3\tfar\tgroups[0].conditions[1].value\tvalue is not valid "
+        "for the operator",
+        "feature_flag\tid-4\told\tgroups[0].conditions[1].value\tnot a number; use a "
+        "number such as 5",
+    ]
+
+
+@pytest.mark.regression
+def test_an_experiment_with_a_between_zone_or_a_native_geo_number_too_large_has_a_line():
+    rows = [
+        (
+            "e-1",
+            "k1",
+            "ACTIVE",
+            _native({"operator": "and", "conditions": [BETWEEN_ZONE]}),
+        ),
+        (
+            "e-2",
+            "k2",
+            "DRAFT",
+            _native({"operator": "and", "conditions": [NATIVE_GEO_HUGE]}),
+        ),
+    ]
+    assert [f.line() for f in check.experiment_findings_for(rows)] == [
+        f"experiment\te-1\tk1\tACTIVE\t{_AT}.additional_value\tone bound has a time "
+        "zone and the other does not, so no date is ever between them; give both a "
+        "zone, such as Z, or neither (a Unix timestamp has none)",
+        f"experiment\te-2\tk2\tDRAFT\t{_AT}\tnot valid",
+    ]
+
+
+@pytest.mark.regression
+def test_a_segment_with_an_unreadable_window_has_a_line_without_not_valid():
+    """(W6) Still evaluated (the window abandons it, as before), so not "rules
+    not valid": a save now refuses it."""
+    found = check.segment_finding_for("id", "Office hours", _dash(US, WINDOW_9AM))
+    assert found.line() == (
+        f"segment\tid\tOffice hours\tgroups[0].conditions[1].value\t{WINDOW_REASON}"
+    )
+
+
+def test_a_segment_with_a_geo_number_too_large_still_could_not_be_checked():
+    """The script reads segments through ``validate_segment_rules``, which
+    this change leaves alone (it also gates reads), so that line is as it
+    was; the segment schema answers 422 for such a value."""
+    found = check.segment_finding_for("id", "Far", _dash(US, GEO_HUGE))
+    assert (
+        found.line() == "segment\tid\tFar\trules\trules not valid: could not be checked"
+    )
+
+
 @pytest.mark.regression
 def test_an_unreadable_database_exits_2(monkeypatch, capsys):
     """Not 0: a report that cannot read the database must not look clean."""
@@ -451,3 +661,344 @@ def test_an_unreadable_database_exits_2(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "could not read the database" in captured.err
+
+
+# --- #1527: --time-window-changes ---------------------------------------------
+
+#: The four reasons, written out so a changed text fails.
+NOW_APPLY_FLAG = (
+    "answer changes on upgrade: the flag's rules were ignored (it served its "
+    "global rollout) because this time_window has no start or end; they now apply"
+)
+ANSWERS_ERROR_FLAG = (
+    "answer changes on upgrade: the flag's rules were ignored (it served its "
+    "global rollout); now this time_window cannot be read, so the flag answers "
+    "off, reason error, for each user whose evaluation reaches it"
+)
+NOW_APPLY_EXPERIMENT = (
+    "answer changes on upgrade: the experiment's rules made no new user eligible "
+    "because this time_window has no start or end; they now apply"
+)
+UNREADABLE_EXPERIMENT = (
+    "answer may change on upgrade: the experiment's rules made no new user "
+    "eligible; they now apply, and this time_window cannot be read, so each new "
+    "user whose evaluation reaches it is still not eligible"
+)
+
+
+def _window(value: Any) -> Dict[str, Any]:
+    return {"attribute": "now", "operator": "time_window", "value": value}
+
+
+#: label -> stored rules. PE-B3-3's rows: the first four are listed (their
+#: rules were ignored and are now read), the others are not.
+WINDOW_ROWS = {
+    "days only": _native({"operator": "and", "conditions": [_window({"days": [2]})]}),
+    "times only": _native(
+        {
+            "operator": "and",
+            "conditions": [_window({"start_time": "09:00", "end_time": "17:00"})],
+        }
+    ),
+    "no key": _native({"operator": "and", "conditions": [_window({})]}),
+    "start only": _native(
+        {"operator": "and", "conditions": [_window({"start": "09:00"})]}
+    ),
+    "start and end": _native(
+        {"operator": "and", "conditions": [_window({"start": "09:00", "end": "17:00"})]}
+    ),
+    "start, end and days": _native(
+        {
+            "operator": "and",
+            "conditions": [_window({"start": "x", "end": "y", "days": [2]})],
+        }
+    ),
+    "dashboard start and end": _dash(_window({"start": "09:00", "end": "17:00"})),
+    "dashboard days only": _dash(_window({"days": [0, 1]})),
+    "not an object": _native({"operator": "and", "conditions": [_window("09-17")]}),
+}
+LISTED_WINDOWS = {"days only", "times only", "no key", "start only"}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("entity", ["feature_flag", "experiment"])
+def test_time_window_changes_lists_exactly_the_windows_without_start_or_end(entity):
+    """(PE-B3-3, EMB3-4) Exact sets, for flags and for experiments."""
+    listed = {
+        label
+        for label, rules in WINDOW_ROWS.items()
+        if check.time_window_change_for("id", "k", rules, entity, "ACTIVE")
+    }
+    assert listed == LISTED_WINDOWS
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "label, entity, line",
+    [
+        (
+            "days only",
+            "feature_flag",
+            f"feature_flag\tid\tk\tACTIVE\t{{at}}\t{NOW_APPLY_FLAG}",
+        ),
+        (
+            "times only",
+            "feature_flag",
+            f"feature_flag\tid\tk\tACTIVE\t{{at}}\t{NOW_APPLY_FLAG}",
+        ),
+        (
+            "no key",
+            "feature_flag",
+            f"feature_flag\tid\tk\tACTIVE\t{{at}}\t{ANSWERS_ERROR_FLAG}",
+        ),
+        (
+            "start only",
+            "feature_flag",
+            f"feature_flag\tid\tk\tACTIVE\t{{at}}\t{ANSWERS_ERROR_FLAG}",
+        ),
+        (
+            "days only",
+            "experiment",
+            f"experiment\tid\tk\tPAUSED\t{{at}}\t{NOW_APPLY_EXPERIMENT}",
+        ),
+        (
+            "no key",
+            "experiment",
+            f"experiment\tid\tk\tPAUSED\t{{at}}\t{UNREADABLE_EXPERIMENT}",
+        ),
+    ],
+)
+def test_a_time_window_change_says_how_the_answer_changes(label, entity, line):
+    """(EMB3-4 b) A readable window: the rules start applying; one the engine
+    cannot read: the flag answers ``error``."""
+    status = "ACTIVE" if entity == "feature_flag" else "PAUSED"
+    found = check.time_window_change_for("id", "k", WINDOW_ROWS[label], entity, status)
+    assert found.line() == line.format(at="rules[0].rule.conditions[0].value")
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "status, reason",
+    [
+        ("ACTIVE", NOW_APPLY_FLAG),
+        ("INACTIVE", NOW_APPLY_FLAG + " (inactive: no change while it stays inactive)"),
+        ("ARCHIVED", NOW_APPLY_FLAG + " (archived: no change while it stays archived)"),
+    ],
+)
+def test_a_flag_that_is_not_active_is_listed_with_its_status(status, reason):
+    """(N2) An INACTIVE or ARCHIVED flag answers off, reason ``inactive``, before
+    and after, so its line carries the status and says nothing changes while it
+    stays so. It is still listed: hiding one that is switched on later would be
+    the unsafe mistake. The status can arrive as the enum, too."""
+    at = "rules[0].rule.conditions[0].value"
+    expected = f"feature_flag\tid\tk\t{status}\t{at}\t{reason}"
+    found = check.time_window_change_for(
+        "id", "k", WINDOW_ROWS["days only"], "feature_flag", status
+    )
+    assert found.line() == expected
+    from backend.app.models.feature_flag import FeatureFlagStatus
+
+    as_enum = check.time_window_change_for(
+        "id",
+        "k",
+        WINDOW_ROWS["days only"],
+        "feature_flag",
+        FeatureFlagStatus[status],
+    )
+    assert as_enum.line() == expected
+    # An experiment's reason never takes the suffix.
+    experiment = check.time_window_change_for(
+        "id", "k", WINDOW_ROWS["days only"], "experiment", status
+    )
+    assert "no change while" not in experiment.reason
+
+
+DAYS_WINDOW = _window({"days": [2]})
+EMPTY_WINDOW = _window({})
+
+
+@pytest.mark.parametrize(
+    "rules, path, reason",
+    [
+        (
+            _native(
+                {
+                    "operator": "and",
+                    "conditions": [EQ],
+                    "groups": [{"operator": "not", "conditions": [EQ, DAYS_WINDOW]}],
+                }
+            ),
+            "rules[0].rule.groups[0].conditions[1].value",
+            NOW_APPLY_FLAG,
+        ),
+        (
+            {
+                "rules": [
+                    {"id": "a", "rule": {"operator": "and", "conditions": [EQ]}},
+                    {
+                        "id": "b",
+                        "rule": {
+                            "operator": "and",
+                            "groups": [
+                                {"operator": "and", "conditions": [EQ]},
+                                {"operator": "or", "conditions": [EMPTY_WINDOW]},
+                            ],
+                        },
+                    },
+                ]
+            },
+            "rules[1].rule.groups[1].conditions[0].value",
+            ANSWERS_ERROR_FLAG,
+        ),
+        # default_rule's conditions are never evaluated: a window there that
+        # cannot be read decides only that the rules are now read.
+        (
+            _native(
+                {"operator": "and", "conditions": [EQ]},
+                default={"operator": "and", "conditions": [EMPTY_WINDOW]},
+            ),
+            "default_rule.rule.conditions[0].value",
+            NOW_APPLY_FLAG,
+        ),
+        # A window that has start and end but cannot be read is the one that
+        # answers error once the rules are read.
+        (
+            _native(
+                {
+                    "operator": "and",
+                    "conditions": [
+                        DAYS_WINDOW,
+                        _window({"start": "09:00", "end": "17:00"}),
+                    ],
+                }
+            ),
+            "rules[0].rule.conditions[1].value",
+            ANSWERS_ERROR_FLAG,
+        ),
+    ],
+    ids=["inside-not", "second-rule", "default-rule", "start-end-beside"],
+)
+def test_a_time_window_change_is_found_at_any_depth(rules, path, reason):
+    found = check.time_window_change_for("id", "k", rules)
+    assert found.line() == f"feature_flag\tid\tk\t{path}\t{reason}"
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "rules, context, answer",
+    [
+        (
+            WINDOW_ROWS["days only"],
+            {"now": "2024-01-10T12:00:00"},
+            {"enabled": True, "reason": "targeting_rule", "rule_id": "r"},
+        ),
+        (
+            WINDOW_ROWS["no key"],
+            {"now": "2024-01-10T12:00:00"},
+            {"enabled": False, "reason": "error", "rule_id": None},
+        ),
+        (
+            _native(
+                {"operator": "and", "conditions": [EQ]},
+                default={"operator": "and", "conditions": [EMPTY_WINDOW]},
+            ),
+            {"plan": "pro"},
+            {"enabled": True, "reason": "targeting_rule", "rule_id": "r"},
+        ),
+    ],
+    ids=["days-apply", "empty-error", "default-rule-apply"],
+)
+def test_the_reason_is_what_the_flag_now_answers(rules, context, answer, monkeypatch):
+    """The report's claim, held to the flag service: at a 0% rollout the rules
+    the report says apply turn the flag on, and the window it says answers
+    error turns it off with reason error."""
+    found = check.time_window_change_for("id", "k", rules)
+    said = {NOW_APPLY_FLAG: "targeting_rule", ANSWERS_ERROR_FLAG: "error"}
+    assert said[found.reason] == answer["reason"]
+    assert _served(rules, context, monkeypatch) == answer
+
+
+def test_rules_still_ignored_or_never_native_are_not_listed():
+    """Their answer does not change, so they are not listed."""
+    typo = {"attribute": "plan", "operator": "equal", "value": "pro"}
+    beside_a_typo = _native({"operator": "and", "conditions": [DAYS_WINDOW, typo]})
+    both_keys = {**WINDOW_ROWS["days only"], "groups": [{"conditions": [US]}]}
+    for entity in ("feature_flag", "experiment"):
+        assert check.time_window_change_for("id", "k", beside_a_typo, entity) is None
+        assert check.time_window_change_for("id", "k", "{not json", entity) is None
+        assert check.time_window_change_for("id", "k", None, entity) is None
+        assert check.time_window_change_for("id", "k", [DAYS_WINDOW], entity) is None
+    # A flag reads text never, and a dict with groups as the dashboard shape;
+    # assignment parses text, and reads a dict with rules as native.
+    text = json.dumps(WINDOW_ROWS["days only"])
+    assert check.time_window_change_for("id", "k", text) is None
+    assert check.time_window_change_for("id", "k", both_keys) is None
+    for rules in (text, both_keys):
+        found = check.time_window_change_for("id", "k", rules, "experiment", "DRAFT")
+        assert found.reason == NOW_APPLY_EXPERIMENT
+
+
+def test_the_report_uses_up_no_once_only_warning(caplog):
+    """A report is not an evaluation: a stored window's warning stays unused."""
+    EVALUATION_NOTES.clear()
+    with caplog.at_level("WARNING"):
+        assert check.time_window_change_for("id", "k", WINDOW_ROWS["no key"])
+    assert EVALUATION_NOTES.seen == set()
+    assert not [r for r in caplog.records if "time_window" in r.getMessage()]
+
+
+def test_time_window_changes_reads_flags_then_experiments():
+    seen = []
+    rows = {
+        "feature_flags": [
+            ("f-1", "weekdays", "ACTIVE", WINDOW_ROWS["days only"]),
+            ("f-2", "office", "ACTIVE", WINDOW_ROWS["start and end"]),
+            ("f-3", "dormant", "INACTIVE", WINDOW_ROWS["days only"]),
+        ],
+        "experiments": [("e-1", "exp", "ACTIVE", WINDOW_ROWS["no key"])],
+    }
+
+    class Result:
+        def __init__(self, table):
+            self.table = table
+
+        def all(self):
+            return rows[self.table]
+
+    class Connection:
+        def execute(self, statement):
+            seen.append(str(statement))
+            table = next(name for name in rows if f'"{name}"' in str(statement))
+            return Result(table)
+
+    found = check.scan_time_window_changes(Connection(), "exp")
+    at = "rules[0].rule.conditions[0].value"
+    assert [f.line() for f in found] == [
+        f"feature_flag\tf-1\tweekdays\tACTIVE\t{at}\t{NOW_APPLY_FLAG}",
+        f"feature_flag\tf-3\tdormant\tINACTIVE\t{at}\t{NOW_APPLY_FLAG}"
+        " (inactive: no change while it stays inactive)",
+        f"experiment\te-1\texp\tACTIVE\t{at}\t{UNREADABLE_EXPERIMENT}",
+    ]
+    assert seen == [
+        'SELECT id, "key", "status", "targeting_rules" FROM "exp"."feature_flags" '
+        'WHERE "targeting_rules" IS NOT NULL ORDER BY id',
+        'SELECT id, "key", "status", "targeting_rules" FROM "exp"."experiments" '
+        'WHERE "targeting_rules" IS NOT NULL ORDER BY id',
+    ]
+
+
+@pytest.mark.regression
+def test_time_window_changes_with_an_unreadable_database_exits_2(monkeypatch, capsys):
+    monkeypatch.setenv("POSTGRES_SERVER", "127.0.0.1")
+    monkeypatch.setenv("POSTGRES_PORT", "1")
+    assert check.main(["--time-window-changes"]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "could not read the database" in captured.err
+
+
+def test_the_two_change_reports_are_one_at_a_time(capsys):
+    with pytest.raises(SystemExit) as exited:
+        check.main(["--enrolment-changes", "--time-window-changes"])
+    assert exited.value.code == 2
+    assert "not allowed with argument" in capsys.readouterr().err

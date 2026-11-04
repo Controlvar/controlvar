@@ -35,8 +35,8 @@ if the two ever disagree.
 ### Python lint and format (`astral-sh/ruff-pre-commit`)
 
 `ruff --fix` and `ruff-format`, both scoped to
-`^(backend|modules|scripts|tests/acceptance)/` — the same four trees as
-`make lint` and the `lint` CI job.
+`^(backend|modules|scripts|tests/acceptance|tests/ground_truth|tests/usecases)/` —
+the same six trees as `make lint` and the `lint` CI job.
 
 **Keep the versions in step.** The hook's `rev:` and the `ruff==` pin in
 `backend/requirements.txt` must match, or a commit that passes locally fails

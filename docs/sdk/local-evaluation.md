@@ -35,8 +35,9 @@ If you set `EXPERIMENTLY_SERVER_KEY` or `EXPERIMENTLY_API_URL` from an earlier v
   `POST /api/v1/tracking/evaluations` (both are beta). A server without the ruleset answers 404,
   and the SDK then evaluates on the server (see [Freshness](#freshness)).
 - An API key with the **`sdk:ruleset`** scope, created by a user who can change feature flags
-  (ADMIN or DEVELOPER). The scope works only while its owner can change flags: it is checked on
-  every request.
+  (ADMIN, DEVELOPER, a superuser, or in the full profile anyone whose custom role or direct grant
+  gives `feature_flag (update)`). The scope works only while its owner can change flags: it is
+  checked on every request.
 - Node 18 or later (the JavaScript SDK), or Python 3.9 or later (the Python SDK).
 
 ## JavaScript
@@ -192,6 +193,15 @@ granted later is picked up without a restart. The backoff doubles from the refre
 exactly 5 minutes. Only the regular refresh interval is jittered: backoff steps, `Retry-After` and
 the 10-minute retry are not.
 
+<!-- #1709: the versions in the next paragraph are the last ones without the fix. When a release
+moves the SDK manifests and test_sdk_doc_versions.py refuses them, reword the paragraph; do not
+move its versions with the manifests. -->
+
+With `@controlvar/js-sdk` 0.2.0 or `controlvar` 0.2.0 and earlier, set `cacheTtlMs` /
+`cache_ttl_seconds` (5 minutes by default) lower if these limits must hold: once those versions
+stop evaluating a flag locally (`maxStaleMs` / `max_stale_seconds` passed, the ruleset dropped,
+`close()`), a user they answered locally keeps that answer from their cache for up to that lifetime.
+
 ## Safety monitoring and the dashboard
 
 The server cannot see local evaluations, so the SDK reports how many it made: per flag, every 60
@@ -329,7 +339,7 @@ It prints `{"enabled":true,"reason":"targeting_rule"}`: `country` in the context
 |---|---|---|
 | Constructor throws "evaluation: 'local' downloads every flag's targeting rules, …" | `evaluation: 'local'` in a browser (JavaScript) | Leave the browser client in server mode. |
 | `refresh` error: "The API key was refused (403) fetching the flag ruleset: This API key does not have the 'sdk:ruleset' scope …" | The key lacks the scope | Create a key with the `sdk:ruleset` scope. |
-| The same, with "This key's owner can no longer change feature flags or experiments …" | The key's owner is ANALYST or VIEWER | Use a key created by an ADMIN or DEVELOPER. |
+| The same, with "This key's owner can no longer change feature flags …" | The key's owner can no longer change feature flags: an inactive user, or an ANALYST or VIEWER with no custom role or direct grant giving `feature_flag (update)` | Use a key created by a user who can change feature flags. |
 | "The server has no /api/v1/sdk/ruleset (404). Local evaluation needs Controlvar 0.11.0 or later …" | The server predates the ruleset | Upgrade the server, or leave evaluation at `server`. |
 | "… a format this SDK does not understand …" | The server is newer than the SDK | Upgrade the SDK. |
 | `status()` lists server-evaluated flags | Those flags use rules that are evaluated on the server | Nothing to fix; they keep working with a request each. |

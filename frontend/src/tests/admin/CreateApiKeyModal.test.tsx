@@ -2,6 +2,13 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { CreateApiKeyModal } from '@/components/admin/api-keys/CreateApiKeyModal';
 import type { Role } from '@/services/api';
+import userEvent from '@testing-library/user-event';
+import axe from 'axe-core';
+import {
+  MCP_READ_SCOPE,
+  MCP_READ_SCOPE_HELP,
+  MCP_READ_SCOPE_LABEL,
+} from '@/components/admin/api-keys/mcpReadScope';
 
 // The modal reads the signed-in user to decide whether to offer sdk:ruleset.
 const mockAuth = jest.fn();
@@ -29,7 +36,7 @@ beforeEach(() => {
 });
 
 const ROLE_REASON =
-  'Only users who can change feature flags (the ADMIN and DEVELOPER roles, or a superuser) can create a key with this scope.';
+  'Only users who can change feature flags can create a key with this scope; the ADMIN and DEVELOPER roles and superusers can.';
 
 const HELP_TEXT =
   "For server-side SDKs that evaluate flags locally, and for a server that forwards error reports: reports sent with this key count toward automatic rollback. A key with this scope will be able to download every flag's targeting rules, so keep it on a server.";
@@ -74,7 +81,7 @@ describe('CreateApiKeyModal', () => {
       name: 'Server-side local evaluation (sdk:ruleset)',
     });
     expect(box).not.toBeChecked();
-    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2);
 
     // The warning is visible before anything is submitted, and a screen
     // reader hears it with the control.
@@ -204,6 +211,109 @@ describe('CreateApiKeyModal', () => {
     });
   });
 
+  describe('the mcp:read option', () => {
+    const mcpBox = () => screen.getByRole('checkbox', { name: MCP_READ_SCOPE_LABEL });
+    const okFetch = () =>
+      jest.fn().mockResolvedValue({
+        ok: true,
+        status: 201,
+        json: async () => ({ id: 'k', name: 'n', key: 'eptk_x', prefix: 'eptk_x', created_at: '' }),
+      });
+    const submitWith = async (fetchMock: jest.Mock) => {
+      fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'n' } });
+      fireEvent.click(screen.getByTestId('create-api-key-submit'));
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      return JSON.parse(fetchMock.mock.calls[0][1].body);
+    };
+
+    it('is the literal scope string the server expects', () => {
+      expect(MCP_READ_SCOPE).toBe('mcp:read');
+    });
+
+    it('is an unchecked checkbox, labelled by a <label for> and described by the exported help text', () => {
+      global.fetch = jest.fn();
+      render(<CreateApiKeyModal {...defaultProps} />);
+      const box = mcpBox();
+      expect(box).not.toBeChecked();
+      // Programmatic association: the label element points at the input's id.
+      const label = screen.getByText(MCP_READ_SCOPE_LABEL);
+      expect(label.tagName).toBe('LABEL');
+      expect(label).toHaveAttribute('for', box.id);
+      expect(box.id).not.toBe('');
+      // The visible help text is the exported constant, and the input points at it.
+      const help = screen.getByTestId('api-key-mcp-read-scope-help');
+      expect(help).toBeVisible();
+      expect(help.textContent).toBe(MCP_READ_SCOPE_HELP);
+      expect(box).toHaveAttribute('aria-describedby', help.id);
+      expect(box).toHaveAccessibleDescription(MCP_READ_SCOPE_HELP);
+      expect(help.className).toContain('text-slate-600');
+    });
+
+    it('says what the key reads and that its holder reads everything its owner can', () => {
+      expect(MCP_READ_SCOPE_HELP).toMatch(/flags/);
+      expect(MCP_READ_SCOPE_HELP).toMatch(/experiments/);
+      expect(MCP_READ_SCOPE_HELP).toMatch(/everything its owner can read/);
+      // No install or connect steps.
+      expect(MCP_READ_SCOPE_HELP).not.toMatch(/install|npm|connect to|config/i);
+    });
+
+    it('is keyboard operable: Space toggles it', async () => {
+      global.fetch = jest.fn();
+      const user = userEvent.setup();
+      render(<CreateApiKeyModal {...defaultProps} />);
+      mcpBox().focus();
+      expect(mcpBox()).toHaveFocus();
+      await user.keyboard(' ');
+      expect(mcpBox()).toBeChecked();
+    });
+
+    it.each(['ADMIN', 'DEVELOPER', 'ANALYST', 'VIEWER'] as Role[])('is enabled for %s', (role) => {
+      mockAuth.mockReturnValue(signedInAs(role));
+      global.fetch = jest.fn();
+      render(<CreateApiKeyModal {...defaultProps} />);
+      expect(mcpBox()).toBeEnabled();
+    });
+
+    it('sends scopes ["mcp:read"] when ticked', async () => {
+      const fetchMock = okFetch();
+      global.fetch = fetchMock;
+      render(<CreateApiKeyModal {...defaultProps} />);
+      fireEvent.click(mcpBox());
+      expect(mcpBox()).toBeChecked();
+      expect(await submitWith(fetchMock)).toEqual({ name: 'n', scopes: ['mcp:read'] });
+    });
+
+    it('sends no scopes when unticked, and not mcp:read after a tick and an untick', async () => {
+      const fetchMock = okFetch();
+      global.fetch = fetchMock;
+      render(<CreateApiKeyModal {...defaultProps} />);
+      fireEvent.click(mcpBox());
+      fireEvent.click(mcpBox());
+      expect(await submitWith(fetchMock)).toEqual({ name: 'n' });
+    });
+
+    it('sends both scopes when both are ticked', async () => {
+      const fetchMock = okFetch();
+      global.fetch = fetchMock;
+      render(<CreateApiKeyModal {...defaultProps} />);
+      fireEvent.click(screen.getByTestId('api-key-ruleset-scope'));
+      fireEvent.click(mcpBox());
+      expect(await submitWith(fetchMock)).toEqual({
+        name: 'n',
+        scopes: ['sdk:ruleset', 'mcp:read'],
+      });
+    });
+
+    it('still sends mcp:read, and only it, for a role that cannot take sdk:ruleset', async () => {
+      mockAuth.mockReturnValue(signedInAs('VIEWER'));
+      const fetchMock = okFetch();
+      global.fetch = fetchMock;
+      render(<CreateApiKeyModal {...defaultProps} />);
+      fireEvent.click(mcpBox());
+      expect(await submitWith(fetchMock)).toEqual({ name: 'n', scopes: ['mcp:read'] });
+    });
+  });
+
   it('still accepts the legacy key_value field', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
@@ -266,5 +376,62 @@ describe('CreateApiKeyModal', () => {
     global.fetch = jest.fn();
     render(<CreateApiKeyModal {...defaultProps} />);
     expect(screen.getByTestId('create-api-key-modal')).toBeInTheDocument();
+  });
+});
+
+describe('CreateApiKeyModal accessibility (axe-core in jsdom; colour contrast is not computable here)', () => {
+  const axeOptions: axe.RunOptions = { rules: { 'color-contrast': { enabled: false } } };
+
+  // Violations the dialog already has on main. They are bug #1613's and are not
+  // fixed here: the dialog (role="dialog") has no accessible name.
+  const KNOWN_DIALOG_VIOLATIONS = ['aria-dialog-name'];
+
+  // Selectors that are the mcp:read checkbox or its help text.
+  const MCP_TARGETS = ['#api-key-mcp-read-scope', '#api-key-mcp-read-scope-help'];
+
+  async function scan(container: Element) {
+    const result = await axe.run(container, axeOptions);
+    return result.violations;
+  }
+
+  /** Violations that are neither known (#1613) nor attributable to the checkbox: any here is new. */
+  function newViolations(violations: axe.Result[]) {
+    return violations.filter((v) => !KNOWN_DIALOG_VIOLATIONS.includes(v.id)).map((v) => v.id);
+  }
+
+  /** Violations that touch the mcp:read checkbox or its help text. */
+  function attributableToMcpCheckbox(violations: axe.Result[]) {
+    return violations.filter((v) =>
+      v.nodes.some((n) => n.target.some((t) => MCP_TARGETS.includes(String(t)))),
+    );
+  }
+
+  it('the open dialog has only the known violations, and none touches the mcp:read checkbox', async () => {
+    global.fetch = jest.fn();
+    const { container } = render(<CreateApiKeyModal {...defaultProps} />);
+    expect(screen.getByRole('checkbox', { name: MCP_READ_SCOPE_LABEL })).toBeInTheDocument();
+    const violations = await scan(container);
+    expect(attributableToMcpCheckbox(violations).map((v) => v.id)).toStrictEqual([]);
+    expect(newViolations(violations)).toStrictEqual([]);
+    // The known list is exact: if #1613 is fixed this fails, and the list shrinks.
+    expect(violations.map((v) => v.id).sort()).toStrictEqual(KNOWN_DIALOG_VIOLATIONS);
+  });
+
+  it('the new-violation check fires on an unlabelled input beside the checkbox (positive control)', async () => {
+    global.fetch = jest.fn();
+    const { container } = render(<CreateApiKeyModal {...defaultProps} />);
+    const stray = document.createElement('input');
+    stray.type = 'checkbox';
+    container.appendChild(stray);
+    const violations = await scan(container);
+    expect(newViolations(violations)).toContain('label');
+  });
+
+  it('the attribution check fires when the mcp:read checkbox loses its label (positive control)', async () => {
+    global.fetch = jest.fn();
+    const { container } = render(<CreateApiKeyModal {...defaultProps} />);
+    container.querySelector('label[for="api-key-mcp-read-scope"]')?.removeAttribute('for');
+    const violations = await scan(container);
+    expect(attributableToMcpCheckbox(violations).map((v) => v.id)).toContain('label');
   });
 });

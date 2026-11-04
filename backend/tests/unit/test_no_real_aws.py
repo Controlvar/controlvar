@@ -126,6 +126,14 @@ _ROOTS = [
     # Run by hand (no CI job runs them); loading their conftest, as here,
     # needs no browser.
     ("tests/acceptance/showcase_browser", []),
+    # The ground-truth replay (#1544): its own pytest root, loading the plugin
+    # with `-p` from its pytest.ini (its conftest shares the live session).
+    # Run by ground-truth.yml and nightly-qa.yml (_platform.yml).
+    ("tests/ground_truth", []),
+    # The over-the-wire use cases (D210 v3): their own pytest root, loading the
+    # plugin with `-p` from its pytest.ini (no conftest). Run nightly by
+    # nightly-qa.yml's flags-over-time job (_platform.yml, suite usecases-flags).
+    ("tests/usecases", []),
 ]
 
 

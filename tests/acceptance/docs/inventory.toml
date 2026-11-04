@@ -266,7 +266,7 @@ reason = "needs a React Native toolchain and a simulator, emulator or device; th
 
 [pages."mcp-server.md"]
 class = "exec"
-reason = "its manifest and AI endpoint steps run on a stack in Doc Examples; the platform serves no MCP server, and the page says so"
+reason = "its key, manifest and AI endpoint steps run on a stack in Doc Examples; the MCP server is built from a clone and started by an AI assistant on your computer, so its install steps are skipped"
 
 [pages."sdk/openfeature.md"]
 class = "reference"

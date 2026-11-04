@@ -9,8 +9,9 @@ import {
 /**
  * The exclusion-group pages' calls (#1455), `/api/v1/mutual-exclusion-groups`.
  *
- * Every route checks EXPERIMENT CREATE first (`_require_developer`): ADMIN,
- * DEVELOPER and superusers. Archiving (`DELETE`) and any status change
+ * Every route checks EXPERIMENT CREATE first (`_require_developer`):
+ * superusers, ADMIN, DEVELOPER, or a custom role or grant of it. Archiving
+ * (`DELETE`) and any status change
  * through `PUT` need the ADMIN role or a superuser (`_require_admin`). A name
  * another group has answers 409, compared exactly, case included.
  *

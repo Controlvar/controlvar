@@ -25,6 +25,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.exc import ProgrammingError
 
 from backend.app.api import deps
+from backend.app.api.read_scope import get_current_reader
 from backend.app.core import health
 
 pytestmark = [pytest.mark.unit, pytest.mark.regression]
@@ -96,7 +97,9 @@ def test_a_request_that_needs_a_table_answers_500_and_logs_an_error(caplog):
         id=1, is_active=True, is_superuser=True, role="admin", email="a@example.com"
     )
     app.dependency_overrides[deps.get_db] = schema_less_db
-    app.dependency_overrides[deps.get_current_active_user] = lambda: user
+    # The experiments list takes its user from get_current_reader (a sign-in,
+    # or an mcp:read key).
+    app.dependency_overrides[get_current_reader] = lambda: user
     app.dependency_overrides[deps.get_cache_control] = lambda: SimpleNamespace(
         enabled=False, redis=None
     )

@@ -195,8 +195,9 @@ by = [
 ]
 
 [[unit]]
-text = "track(userId, eventName, { value?, properties?, experimentKey?, featureFlagKey?, eventType?, timestamp? }) | Promise<void> | never rejects; onError"
+text = "track(userId, eventName, { value?, properties?, experimentKey?, featureFlagKey?, eventType?, timestamp?, eventId? }) | Promise<void> | never rejects; onError"
 by = [
+    "test:sdk/js/__tests__/event-id.test.ts::sends event_id on a track with an explicit key",
     "test:sdk/js/__tests__/client.test.ts::POSTs one event to /api/v1/tracking/track with the exact body",
     "test:sdk/js/__tests__/client.test.ts::reports swallowed failures through onError",
     "test:sdk/js/__tests__/client.test.ts::never rejects when the batch request fails",
@@ -228,6 +229,10 @@ by = [
     "test:sdk/js/__tests__/client.test.ts::getEvaluatedFlags returns cached flag keys for the user only",
     "test:sdk/js/__tests__/client.test.ts::clearCache empties both caches",
 ]
+
+[[unit]]
+text = "getCachedFlags(userId) | FlagEvaluation[]: cached, unexpired evaluations for the user; in local mode each carries source ('local' or 'server') | —"
+by = ["test:sdk/js/__tests__/local.test.ts::getCachedFlags returns the user's unexpired cached evaluations, each with its source"]
 
 [[unit]]
 text = "ready({ timeoutMs? }), status(), close() | local mode: readiness, ruleset state, shutdown (sends evaluation counts) | never reject"
@@ -459,3 +464,62 @@ by = ["test:sdk/js/__tests__/package.test.ts::builds CommonJS with type declarat
 [[unit]]
 text = "If you installed @getexperimently/js-sdk, the name this package had before the project was renamed, uninstall it and install @controlvar/js-sdk."
 by = ["exempt:instruction"]
+
+[[unit]]
+text = "Event ids"
+by = ["exempt:label"]
+
+[[unit]]
+text = "track() and trackBatch() take an eventId, sent as event_id."
+by = [
+    "test:sdk/js/__tests__/event-id.test.ts::sends event_id on a track with an explicit key",
+    "test:sdk/js/__tests__/event-id.test.ts::trackBatch: each event keeps its own event_id on every entry, and one without has none",
+]
+
+[[unit]]
+text = "The server stores an event sent again with the same event_id, user, experiment, flag and event name only once."
+by = [
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r6_one_event_id_fanned_out_to_three_experiments_and_a_flag",
+]
+
+[[unit]]
+text = "Use the option from the next published version, not from the version on npm now."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It needs a Controlvar server that includes the event_id change (#1640, in the first platform release after it merged): an older server ignores the field."
+by = [
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r8_without_an_event_id_two_identical_purchases_are_both_stored",
+]
+
+[[unit]]
+text = "The SDK makes no id: without an eventId none is sent, and an event sent again is counted again."
+by = [
+    "test:sdk/js/__tests__/event-id.test.ts::makes no id of its own: two tracks without an eventId send none",
+    "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r8_without_an_event_id_two_identical_purchases_are_both_stored",
+]
+
+[[unit]]
+text = "Make the id once, when the event happens, and give the same one each time you send it."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "undefined, null and '' send none."
+by = ["test:sdk/js/__tests__/event-id.test.ts::sends no event_id for undefined, null or an empty string"]
+
+[[unit]]
+text = "The server refuses an id of more than 255 characters or one holding NUL with 422; the SDK does not check it."
+by = ["test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r12_an_invalid_event_id_is_refused_and_a_batch_with_one_stores_nothing"]
+
+[[unit]]
+text = "An event fanned out to several experiments and flags carries the same id in every entry."
+by = ["test:sdk/js/__tests__/event-id.test.ts::sends the same event_id on every fan-out entry"]
+
+[[unit]]
+text = "A 429 that is retried sends the same id."
+by = ["test:sdk/js/__tests__/event-id.test.ts::sends the same event_id when a 429 is retried"]
+
+[[unit]]
+text = "A request that times out is not sent again by the SDK."
+by = ["test:sdk/js/__tests__/event-id.test.ts::does not send a request that timed out again, and reports it through onError"]

@@ -133,7 +133,7 @@ text = "useFlag and useExperiment hooks, Provider, AsyncStorage offline support.
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Describes the API's tools for AI assistants."
+text = "Connect Claude Code, Claude Desktop or Cursor to your instance: read flags and experiment results."
 by = ["mechanism:docs-hub"]
 
 [[unit]]
@@ -229,7 +229,7 @@ text = "Who changed what through the API; no API edits or deletes an entry"
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Admin, Developer, Analyst and Viewer decide what a user can do; custom roles (full profile) are stored but not applied yet"
+text = "Admin, Developer, Analyst and Viewer decide what a user can do; in the full profile, custom roles and direct grants add to them"
 by = ["mechanism:docs-hub"]
 
 [[unit]]

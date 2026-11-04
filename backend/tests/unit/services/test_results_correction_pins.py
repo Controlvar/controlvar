@@ -39,6 +39,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.api.deps import get_current_user, get_db
+from backend.app.api.read_scope import get_current_reader
 from backend.app.api.v1.endpoints import results as results_endpoints
 from backend.app.core.stats_engine import ENGINE_VERSION
 from backend.app.main import app
@@ -418,11 +419,15 @@ def superuser_results_client(
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = override_get_current_user
+    # The experiments alias takes its user from get_current_reader (a sign-in,
+    # or an mcp:read key), which the override above does not reach.
+    app.dependency_overrides[get_current_reader] = override_get_current_user
     try:
         yield TestClient(app)
     finally:
         app.dependency_overrides.pop(get_db, None)
         app.dependency_overrides.pop(get_current_user, None)
+        app.dependency_overrides.pop(get_current_reader, None)
 
 
 _EXPERIMENT_ID = characterisation._experiment().id

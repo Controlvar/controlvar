@@ -6,7 +6,9 @@
  * one line for stderr, exit code 2, and `initialize` is never answered.
  *
  *   0. no command-line argument at all (an argument may be a key);
- *   1. CONTROLVAR_API_URL is set, parses, and is http:// or https://;
+ *   1. CONTROLVAR_API_URL is set and parses; its host is not shaped like an
+ *      API key or a sign-in token (a fixed message, nothing echoed); and it
+ *      is http:// or https://;
  *   2. it has no user name, password, query or fragment;
  *   3. it is an origin only: no path beyond one trailing `/`;
  *   4. CONTROLVAR_ALLOW_INSECURE_HTTP, when present, is exactly `1`;
@@ -63,8 +65,40 @@ function echoable(value: string): boolean {
   return (
     value.length <= MAX_ECHO_LENGTH &&
     /^[\x20-\x7E]*$/.test(value) &&
-    !/[@?#]/.test(value)
+    !/[@?#]/.test(value) &&
+    !keyShaped(value)
   );
+}
+
+/** What is printed in place of a value that is not shown. */
+export const NOT_SHOWN = "(not shown)";
+
+/** A value with an API key's prefix (`eptk_`) or a sign-in token's (`eyJ`) anywhere in it, in any letter case. */
+function keyShaped(value: string): boolean {
+  return /eptk_|eyj/i.test(value);
+}
+
+/** A host name that is, or has a dot-separated label that is, shaped like a key (`eyJ` only at a label's start). */
+function keyShapedHost(hostname: string): boolean {
+  return /eptk_|(^|\.)eyj/i.test(hostname);
+}
+
+/**
+ * The one guard every configuration message that would echo a host goes
+ * through: a key-shaped value, or a host with neither a `.` nor a `:`, is
+ * replaced by a fixed placeholder, never printed. The three names of this
+ * computer are ordinary and always shown.
+ */
+function shownHost(url: URL): string {
+  if (keyShaped(url.host)) return NOT_SHOWN;
+  if (LOCAL_HOSTS.has(url.hostname)) return url.host;
+  return /[.:]/.test(url.host) ? url.host : NOT_SHOWN;
+}
+
+/** The origin for a message, built from the guarded host, or the placeholder. */
+function shownOrigin(url: URL): string {
+  const host = shownHost(url);
+  return host === NOT_SHOWN ? NOT_SHOWN : `"${url.protocol}//${host}"`;
 }
 
 /**
@@ -103,6 +137,11 @@ export function readConfig(
     url = new URL(raw);
   } catch {
     return refuse(`${notHttp} Set it to your instance's address, for example http://localhost:8000.`);
+  }
+  // A key or token where the address goes: refused with a fixed message, so
+  // it is never echoed here, by a later message, or by an HTTP error.
+  if (keyShapedHost(url.hostname)) {
+    return refuse(`${ENV_URL} looks like an API key, not an address; put the key in ${ENV_KEY}.`);
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     return refuse(`${notHttp} Set it to your instance's address, for example http://localhost:8000.`);
@@ -146,14 +185,14 @@ export function readConfig(
       if (!optedIn) {
         if (throughProxy) {
           return refuse(
-            `${ENV_URL} is "${url.origin}", a plain http:// address, and NODE_USE_ENV_PROXY ` +
+            `${ENV_URL} is ${shownOrigin(url)}, a plain http:// address, and NODE_USE_ENV_PROXY ` +
               "(or --use-env-proxy) makes Node send requests through a proxy, so your API key would " +
               "cross the network unencrypted. Set NODE_USE_ENV_PROXY to an empty value in this " +
               "server's settings, or use your instance's https:// address.",
           );
         }
         return refuse(
-          `${ENV_URL} is "${url.origin}", a plain http:// address on another computer, so your API key ` +
+          `${ENV_URL} is ${shownOrigin(url)}, a plain http:// address on another computer, so your API key ` +
             "would cross the network unencrypted. Use your instance's https:// address. If it runs on " +
             `a private network you trust and has no HTTPS, set ${ENV_INSECURE}=1 in this server's settings.`,
         );
@@ -161,14 +200,14 @@ export function readConfig(
       if (throughProxy) {
         warnings.push(
           `Warning: ${ENV_INSECURE}=1 and NODE_USE_ENV_PROXY (or --use-env-proxy) is set: this server ` +
-            `sends your API key and the answers over plain HTTP to ${url.host} through a proxy, where ` +
+            `sends your API key and the answers over plain HTTP to ${shownHost(url)} through a proxy, where ` +
             "anyone who can watch that network can read them. Set NODE_USE_ENV_PROXY to an empty value " +
             "in this server's settings.",
         );
       } else {
         warnings.push(
           `Warning: ${ENV_INSECURE}=1: this server sends your API key and the answers over plain HTTP ` +
-            `to ${url.host}, where anyone who can watch that network can read them. Use https:// when ` +
+            `to ${shownHost(url)}, where anyone who can watch that network can read them. Use https:// when ` +
             "your instance offers it.",
         );
       }

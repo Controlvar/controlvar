@@ -229,8 +229,127 @@ public class ExperimentationClientTests
     }
 
     // -----------------------------------------------------------------------
+    // EvaluateFlagAsync — attributes are sent as `context` (#1719)
+    // -----------------------------------------------------------------------
+
+    // An attribute value holding every character a query string treats specially
+    // ('+', '&', '=', '#' and a space) and a non-ASCII letter (U+00E9).
+    private const string Awkward = "a+b&c=d#e fé";
+
+    /// <summary>The <c>context</c> query parameter of a request, percent-decoded; null when absent.</summary>
+    private static string? ContextOf(RecordedRequest request)
+    {
+        foreach (var pair in request.Query.TrimStart('?').Split('&'))
+        {
+            if (pair.StartsWith("context=", StringComparison.Ordinal))
+                return Uri.UnescapeDataString(pair.Substring("context=".Length));
+        }
+        return null;
+    }
+
+    [Fact]
+    public async Task EvaluateFlagAsync_SendsAttributesAsUrlEncodedJsonContext()
+    {
+        var (client, handler) = BuildClient();
+        handler.Respond(HttpStatusCode.OK, FlagJson);
+
+        await client.EvaluateFlagAsync("new-ui", "user-1",
+            new Dictionary<string, object> { ["note"] = Awkward });
+
+        Assert.Equal(1, handler.CallCount);
+        // The JSON is System.Text.Json's, with the options the assignment body uses: its default
+        // encoder writes '+', '&' and the non-ASCII letter as \uXXXX escapes. Uri.EscapeDataString
+        // then percent-encodes it, after user_id.
+        Assert.Equal(
+            "http://test-api/api/v1/feature-flags/evaluate/new-ui?user_id=user-1" +
+            "&context=%7B%22note%22%3A%22a%5Cu002Bb%5Cu0026c%3Dd%23e%20f%5Cu00E9%22%7D",
+            handler.Last.Url);
+        // ...and it reads back as the attributes that were passed.
+        var raw = ContextOf(handler.Last);
+        Assert.NotNull(raw);
+        var context = JsonDocument.Parse(raw!).RootElement;
+        Assert.Equal(Awkward, context.GetProperty("note").GetString());
+        Assert.Single(context.EnumerateObject());
+    }
+
+    [Fact]
+    public async Task EvaluateFlagAsync_SendsNoContextForNullOrEmptyAttributes()
+    {
+        var (client, handler) = BuildClient();
+        handler.Respond(HttpStatusCode.OK, FlagJson);
+
+        await client.EvaluateFlagAsync("new-ui", "user-1", null);
+        await client.EvaluateFlagAsync("new-ui", "user-2", new Dictionary<string, object>());
+
+        Assert.Equal(2, handler.CallCount);
+        Assert.Equal("http://test-api/api/v1/feature-flags/evaluate/new-ui?user_id=user-1", handler.Requests[0].Url);
+        Assert.Equal("http://test-api/api/v1/feature-flags/evaluate/new-ui?user_id=user-2", handler.Requests[1].Url);
+    }
+
+    [Fact]
+    public async Task EvaluateFlagAsync_ContextCarriesStringsNumbersAndBooleansAsJson()
+    {
+        var (client, handler) = BuildClient();
+        handler.Respond(HttpStatusCode.OK, FlagJson);
+
+        await client.EvaluateFlagAsync("new-ui", "user-1",
+            new Dictionary<string, object> { { "plan", "pro" }, { "age", 30 }, { "beta", true } });
+
+        Assert.StartsWith("?user_id=user-1&context=", handler.Last.Query);
+        var raw = ContextOf(handler.Last);
+        Assert.NotNull(raw);
+        var context = JsonDocument.Parse(raw!).RootElement;
+        Assert.Equal("pro", context.GetProperty("plan").GetString());
+        Assert.Equal(30, context.GetProperty("age").GetInt32());
+        Assert.True(context.GetProperty("beta").GetBoolean());
+    }
+
+    [Fact]
+    public async Task EvaluateFlagAsync_UnserialisableAttributesSendNothingAndAreNotCached()
+    {
+        var (client, handler) = BuildClient();
+        handler.Respond(HttpStatusCode.OK, FlagJson);
+        var cyclic = new Dictionary<string, object>();
+        cyclic["self"] = cyclic; // System.Text.Json refuses a cycle with a JsonException
+
+        var result = await client.EvaluateFlagAsync("new-ui", "user-1", cyclic);
+
+        Assert.False(result.Enabled);
+        Assert.Equal("new-ui", result.Key);
+        Assert.Equal(0, handler.CallCount);
+        Assert.Empty(client.GetEvaluatedFlags("user-1"));
+
+        var next = await client.EvaluateFlagAsync("new-ui", "user-1");
+        Assert.True(next.Enabled);
+        Assert.Equal(1, handler.CallCount);
+    }
+
+    // -----------------------------------------------------------------------
     // EvaluateFlagAsync — caching
     // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task EvaluateFlagAsync_CacheKeyIgnoresAttributesUntilClearCache()
+    {
+        var (client, handler) = BuildClient();
+        handler.Respond(HttpStatusCode.OK, FlagJson);
+
+        await client.EvaluateFlagAsync("new-ui", "user-1", new Dictionary<string, object> { ["country"] = "US" });
+        handler.Respond(HttpStatusCode.OK, "{\"key\":\"new-ui\",\"enabled\":false,\"config\":null}");
+        var second = await client.EvaluateFlagAsync("new-ui", "user-1", new Dictionary<string, object> { ["country"] = "DE" });
+
+        // The same user and flag within the TTL: the first answer, whatever the attributes.
+        Assert.True(second.Enabled);
+        Assert.Equal(1, handler.CallCount);
+        Assert.Equal("{\"country\":\"US\"}", ContextOf(handler.Last));
+
+        client.ClearCache();
+        var third = await client.EvaluateFlagAsync("new-ui", "user-1", new Dictionary<string, object> { ["country"] = "DE" });
+
+        Assert.False(third.Enabled);
+        Assert.Equal(2, handler.CallCount);
+        Assert.Equal("{\"country\":\"DE\"}", ContextOf(handler.Last));
+    }
 
     [Fact]
     public async Task EvaluateFlagAsync_SecondCallIsServedFromCache()

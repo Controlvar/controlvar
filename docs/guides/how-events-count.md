@@ -45,7 +45,11 @@ makes, a random UUID, or, for events you send from your server with a server-sid
 or message id. From a browser or an app, let the SDK make the id. Send revenue events from your
 server. Make the id once, when the event happens, and send that same id each time.
 
-The Java SDK gives every event an `event_id` ([Event ids](../sdk/java.md#event-ids)). No other
+The Java SDK gives every event an `event_id` ([Event ids](../sdk/java.md#event-ids)). The
+JavaScript SDK sends the `eventId` you give it, from its next published version, and makes none
+itself ([Event ids](../sdk/javascript.md#event-ids)). The Python SDK sends the `event_id` you give
+it, from its next published version, and makes none itself ([Event ids](../sdk/python.md#event-ids)).
+No other
 SDK has an `event_id` option yet ([Limitations](../getting-started/limitations.md#sdks)): send an
 event that may be sent again to `POST /api/v1/tracking/track` or `POST /api/v1/tracking/batch`
 yourself.
@@ -61,17 +65,20 @@ long as its key is kept.
 
 ## When an event counts
 
-An event counts for the variant the user is assigned to when the server receives it. Its
-`timestamp` does not change that.
+An event sent to `POST /api/v1/tracking/track` or `POST /api/v1/tracking/batch` counts for the
+variant the user is assigned to when the server receives it. Its `timestamp` does not change
+that.
 
-- An event received before the user's assignment is stored with no variant, and counts in no
-  variant's results, even after the user is assigned. Track a user's events for an experiment
-  once its assignment has answered.
+- An event received by `/track` or `/batch` before the user's assignment is stored with no
+  variant, and counts in no variant's results, even after the user is assigned. Track a user's
+  events for an experiment once its assignment has answered.
 - An event received while the experiment is a draft, paused, completed or archived is stored
   with no variant, and counts in no variant's results, even after the experiment is started
   again.
 - `POST /api/v1/tracking/events` stores the `variant_id` it is sent, whatever the experiment's
-  status; the event counts only for a user assigned to that variant.
+  status; the event counts for that variant once the user is assigned to it, whether the
+  assignment came before or after the event, and in no variant while the user is assigned to
+  another or to none.
 - The results summary's Total Events counts every stored event of the experiment, the ones that
   count in no variant included.
 - Holdout results and CUPED history have their own rules: see
@@ -82,7 +89,10 @@ An event counts for the variant the user is assigned to when the server receives
 - `timestamp` is when the event happened, by the sender's clock. Without one it is the time the
   server received the event. The Ruby, PHP and Elixir SDKs send the host's clock when you give
   none.
-- Any `timestamp` is stored, however far in the past or the future.
+- Any `timestamp` is stored, however far in the past or the future, with one exception: a value
+  at the very edge of the date range whose UTC offset moves it past 0001-01-01 or 9999-12-31
+  (`9999-12-31T23:59:59-01:00`, say) is refused with `422`, or reported in a batch's `errors`,
+  and nothing is stored.
 - `GET /api/v1/results/{experiment_id}` does not read it.
 - `GET /api/v1/results/{experiment_id}/daily` puts each user's first conversion on the UTC day
   of its `timestamp`. A day before the experiment's first day counts on that first day, and a
