@@ -1286,7 +1286,8 @@ async def toggle_feature_flag(
     The toggle operation includes:
     - Status change (ACTIVE ↔ INACTIVE). An archived flag would be turned on,
       so it answers 400 and stays archived: unarchive it first
-    - Complete audit logging with user information and optional reason
+    - One audit entry with user information and optional reason; a failed
+      audit write does not fail the request
     - Response with new status and audit log ID
 
     **Authentication**: Requires valid user authentication.
@@ -1400,10 +1401,13 @@ async def enable_feature_flag(
 
     This endpoint explicitly enables a feature flag. An archived flag answers
     400 and stays archived: unarchive it first.
-    Includes complete audit logging with user information and optional reason.
+    Writes one audit entry with user information and optional reason, also
+    when the flag already has that status; a failed audit write does not fail
+    the request.
 
     **Authentication**: Requires valid user authentication.
-    **Permissions**: User must own the feature flag or be a superuser.
+    **Permissions**: ADMIN and DEVELOPER may enable any flag; ANALYST and
+    VIEWER may enable none.
 
     Returns:
         ToggleResponse: Updated feature flag details with audit log ID
@@ -1495,10 +1499,13 @@ async def disable_feature_flag(
 
     This endpoint explicitly disables a feature flag. An archived flag is
     already off: it answers 200 and stays archived.
-    Includes complete audit logging with user information and optional reason.
+    Writes one audit entry with user information and optional reason, also
+    when the flag already has that status; a failed audit write does not fail
+    the request.
 
     **Authentication**: Requires valid user authentication.
-    **Permissions**: User must own the feature flag or be a superuser.
+    **Permissions**: ADMIN and DEVELOPER may disable any flag; ANALYST and
+    VIEWER may disable none.
 
     Returns:
         ToggleResponse: Updated feature flag details with audit log ID

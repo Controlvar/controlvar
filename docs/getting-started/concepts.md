@@ -118,7 +118,7 @@ User bucketing is the process of assigning each user to a variant. The platform 
 
 The assignment is computed as a deterministic hash of `experiment_key + user_id`. This means:
 
-- The same user always gets the same variant for a given experiment (sticky assignment)
+- The same `user_id` always gets the same variant for a given experiment (sticky assignment). A person known by two ids, such as a visitor who signs in, is two users: see [Limitations](limitations.md).
 - The API stores each assignment, and a user who already has one gets it back unchanged, even if the weights have changed since
 - Sticky assignment survives server restarts, cache clears, and SDK reinitializations
 
