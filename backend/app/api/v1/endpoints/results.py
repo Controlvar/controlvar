@@ -599,7 +599,9 @@ def _record_results_snapshots(db: Session, response: ExperimentResultsResponse) 
     try:
         payload = response.model_dump(mode="json")
     except Exception as exc:
-        logger.warning("Could not serialise results for snapshot: %s", exc)
+        logger.warning(
+            "Could not serialise results for snapshot: %s", type(exc).__name__
+        )
         return
 
     record_snapshot(
@@ -1420,7 +1422,11 @@ def get_sequential_results(
             response.model_dump(mode="json"),
         )
     except Exception as exc:
-        logger.warning("Sequential snapshot failed for %s: %s", experiment_id, exc)
+        logger.warning(
+            "Sequential snapshot failed for %s: %s",
+            experiment_id,
+            type(exc).__name__,
+        )
 
     return response
 
@@ -1729,7 +1735,9 @@ def get_cuped_results(
             as_of=response.computed_at,
         )
     except Exception as exc:
-        logger.warning("CUPED snapshot failed for %s: %s", experiment_id, exc)
+        logger.warning(
+            "CUPED snapshot failed for %s: %s", experiment_id, type(exc).__name__
+        )
 
     return response
 
@@ -1790,6 +1798,8 @@ def get_bayesian_results(
             n_samples=response.n_samples,
         )
     except Exception as exc:
-        logger.warning("Bayesian snapshot failed for %s: %s", experiment_id, exc)
+        logger.warning(
+            "Bayesian snapshot failed for %s: %s", experiment_id, type(exc).__name__
+        )
 
     return response
