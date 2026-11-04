@@ -876,6 +876,18 @@ text = "It compares your account with the record made before the install."
 by = ["test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_kept_list_is_exactly_the_residue_both_ways"]
 
 [[unit]]
+text = "If step 2 stops because a target group is \"in use by a listener\", which can follow a blue/green deploy, run uninstall again."
+by = [
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_a_failure_is_named_and_a_run_again_completes",
+]
+
+[[unit]]
+text = "The message says \"run uninstall again; it continues where it stopped\", and the second run completes (#1618 tracks the cause)."
+by = [
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_a_failure_is_named_and_a_run_again_completes",
+]
+
+[[unit]]
 text = "At the end it prints what the account holds now that it did not hold before."
 by = [
     "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_kept_list_is_exactly_the_residue_both_ways",
