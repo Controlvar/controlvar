@@ -81,6 +81,7 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
   const nameRef = useRef<HTMLInputElement>(null);
   const doneRef = useRef<HTMLButtonElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
+  const sessionRef = useRef(0);
 
   // Move focus into the dialog when it opens, and give it back to whatever
   // opened it when it closes (or unmounts).
@@ -98,8 +99,11 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
   // Whenever the dialog is closed (by this component or by its parent, which
   // closes it as soon as a key is created) drop everything it held, so the
   // next open is a fresh dialog and no earlier key stays in memory.
+  // The same reset runs when it opens, so a stale view can never be the first
+  // thing a new open shows. Each open or close starts a new "session"; a create
+  // that was submitted in an earlier one must not write into this one.
   useEffect(() => {
-    if (isOpen) return;
+    sessionRef.current += 1;
     setName('');
     setRulesetScope(false);
     setMcpReadScope(false);
@@ -120,6 +124,7 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
     e.preventDefault();
     if (!name.trim()) return;
 
+    const session = sessionRef.current;
     setSubmitting(true);
     setError(null);
 
@@ -132,16 +137,20 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
         method: 'POST',
         json: scopes.length > 0 ? { name: name.trim(), scopes } : { name: name.trim() },
       });
-      setCreatedKey(data);
+      // Closed since the submit: the page still gets the key, the dialog does not.
+      if (session === sessionRef.current) setCreatedKey(data);
       onSuccess(plaintextKey(data));
     } catch (err) {
-      setError((err as Error).message || 'Failed to create API key');
+      if (session === sessionRef.current) {
+        setError((err as Error).message || 'Failed to create API key');
+      }
     } finally {
-      setSubmitting(false);
+      if (session === sessionRef.current) setSubmitting(false);
     }
   };
 
   const handleClose = () => {
+    sessionRef.current += 1;
     setName('');
     setRulesetScope(false);
     setMcpReadScope(false);

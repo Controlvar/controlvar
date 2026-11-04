@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { CreateApiKeyModal } from '@/components/admin/api-keys/CreateApiKeyModal';
 import type { Role } from '@/services/api';
 import userEvent from '@testing-library/user-event';
@@ -470,6 +470,64 @@ describe('CreateApiKeyModal keyboard and screen-reader behaviour (#1613)', () =>
       }),
     });
   }
+
+  describe('a create that resolves after the dialog closed', () => {
+    function setup() {
+      let resolveJson: (v: unknown) => void = () => {};
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: () => new Promise((resolve) => { resolveJson = resolve; }),
+      });
+      const onSuccess = jest.fn();
+      function Page() {
+        const [open, setOpen] = React.useState(false);
+        return (
+          <>
+            <button data-testid="opener" onClick={() => setOpen(true)}>New key</button>
+            <CreateApiKeyModal isOpen={open} onClose={() => setOpen(false)} onSuccess={onSuccess} />
+          </>
+        );
+      }
+      render(<Page />);
+      fireEvent.click(screen.getByTestId('opener'));
+      fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'K' } });
+      fireEvent.click(screen.getByTestId('create-api-key-submit'));
+      const created = {
+        id: 'k1', name: 'K', key: SECRET, prefix: 'plaintex', created_at: '2024-06-15T10:00:00Z',
+      };
+      return { onSuccess, resolveCreate: () => resolveJson(created) };
+    }
+
+    it.each(['Escape', 'Cancel'])('%s, then the create resolves: the next open is an empty form', async (how) => {
+      const { onSuccess, resolveCreate } = setup();
+      await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+      if (how === 'Escape') fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+      else fireEvent.click(screen.getByTestId('modal-cancel-button'));
+      expect(screen.queryByTestId('create-api-key-modal')).not.toBeInTheDocument();
+
+      await act(async () => { resolveCreate(); });
+      await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+      expect(onSuccess).toHaveBeenCalledWith(SECRET);
+
+      fireEvent.click(screen.getByTestId('opener'));
+      expect(screen.getByTestId('api-key-name-input')).toHaveValue('');
+      expect(screen.queryByTestId('masked-key-value')).not.toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'Create API Key' })).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain(SECRET);
+      expect(document.body.textContent).not.toContain('plaintex');
+    });
+
+    it('resolving after a reopen does not put the key into the new dialog', async () => {
+      const { onSuccess, resolveCreate } = setup();
+      await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+      fireEvent.click(screen.getByTestId('opener'));
+      await act(async () => { resolveCreate(); });
+      await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+      expect(screen.queryByTestId('masked-key-value')).not.toBeInTheDocument();
+      expect(document.body.textContent).not.toContain('plaintex');
+    });
+  });
 
   it('moves focus to the name field on open', () => {
     global.fetch = jest.fn();
