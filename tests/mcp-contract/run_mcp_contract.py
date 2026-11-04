@@ -59,8 +59,8 @@ Rows (PLAN-v1 VERIFICATION, as the v1.1 delta amends it)
     Q12  every stdout line is JSON-RPC
     Q14  ``list_feature_flags``' ``total`` equals the database's count, so a
          page shorter than it says it is partial (more than 100 flags exist).
-         Distinct keys across pages is not asserted until #1612 gives the
-         list an order.
+         The list is ordered by creation time (#1612); the backend test
+         test_flag_list_order.py pins the order, so this check does not.
     Q15  ``get_feature_flag`` answers the exact key past decoys seeded before
          it; with more than 100 matches and no exact one it refuses
     Q16  evaluation answers are exact: rollout, inactive, targeting rule with
@@ -1212,7 +1212,7 @@ def _json_shape(result: ToolResult) -> Any:
 
 
 def _list_shape(result: ToolResult) -> Any:
-    """Q14's page: only its total and length; the page's rows have no order (#1612)."""
+    """Q14's page: only its total and length; the order of the rows is pinned elsewhere (#1612)."""
     try:
         data = json.loads(result.text)
     except ValueError:

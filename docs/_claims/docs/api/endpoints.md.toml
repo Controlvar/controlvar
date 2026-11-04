@@ -581,6 +581,10 @@ text = "List endpoints that page take skip and limit parameters"
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
+text = "The feature flags list is ordered by creation time, oldest first (ties by id), so paging with skip reads each flag once unless flags are created or deleted meanwhile"
+by = ["test:backend/tests/integration/api/test_flag_list_order.py::test_walking_the_pages_returns_every_flag_exactly_once_oldest_first"]
+
+[[unit]]
 text = "The default and the largest limit differ by route (the experiments list: 100, at most 500; the feature flags list: 100, with no maximum)."
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 

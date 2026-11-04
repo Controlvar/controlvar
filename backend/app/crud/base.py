@@ -6,7 +6,7 @@ that can be extended for specific models.
 """
 
 from enum import Enum
-from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union
+from typing import Any, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union
 from uuid import UUID
 
 from fastapi.encoders import jsonable_encoder
@@ -32,6 +32,9 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
     * `model`: A SQLAlchemy model class
     * `schema`: A Pydantic model (schema) class
     """
+
+    #: Columns ``get_multi`` orders by, in turn; empty leaves the order undefined.
+    list_order: Tuple[str, ...] = ()
 
     def __init__(self, model: Type[ModelType]):
         """
@@ -113,6 +116,11 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
 
             if search_conditions:
                 query = query.filter(or_(*search_conditions))
+
+        # A subclass that pages for a caller names its order (``list_order``):
+        # LIMIT/OFFSET without ORDER BY follows heap order, which an UPDATE moves.
+        for column in self.list_order:
+            query = query.order_by(getattr(self.model, column))
 
         return query.offset(skip).limit(limit).all()
 
