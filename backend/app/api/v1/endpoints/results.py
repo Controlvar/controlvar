@@ -1699,7 +1699,8 @@ def get_cuped_results(
     - ``none``          — No adjustment: the unadjusted effect, θ exactly 0.
     - ``cuped``         — CUPED adjustment.
     - ``cuped_plus``    — Computed as ``cuped`` (each row's ``method`` says so).
-    - ``winsorization`` — Clipping, for mean metrics.
+    - ``winsorization`` — Accepted and stored, applied by no results view (a
+      conversion metric is listed with ``unavailable_reason``).
 
     Returns 404 if the experiment does not exist.
     """

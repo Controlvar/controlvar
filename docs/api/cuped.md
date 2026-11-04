@@ -126,15 +126,16 @@ create it (`POST /api/v1/experiments/`) or change it (`PUT /api/v1/experiments/{
 | `method` | string | `none` | `none`, `cuped`, `cuped_plus` or `winsorization` |
 | `covariate_metric_id` | string | `null` | The id of one of the experiment's metrics whose `event_name` is the history to read. By default each metric's own `event_name` |
 | `covariate_lookback_days` | int | `7` | Days of history before each user's assignment, 1–90 |
-| `winsorization_percentile` | float | `99.0` | The percentile above which values are clipped, 50–100 |
+| `winsorization_percentile` | float | `99.0` | Reserved: stored and validated (50–100), but no results view clips values with it. A mean metric's numbers are the unclipped ones |
 
 - `none` applies no adjustment: `theta` is `0` and the numbers are the unadjusted ones.
 - `cuped` adjusts as described above.
 - `cuped_plus` is currently computed as `cuped`: the response's top-level `method` says
   `cuped_plus`, and each row's `method` says `cuped`.
-- `winsorization` clips values above a percentile, which only means something for a mean
-  metric (revenue, say). This view does not apply it: a conversion metric is listed with
-  `unavailable_reason: "winsorization_needs_mean_metric"`.
+- `winsorization` is accepted and stored, but nothing clips values: a revenue metric's
+  `/results` numbers are the same as with `none`, a whale included. A conversion metric is
+  listed with `unavailable_reason: "winsorization_needs_mean_metric"`. To limit a whale's
+  effect today, cap or filter the value before you send the event.
 
 This sets the demo experiment's method to `cuped` with a 7-day lookback:
 
