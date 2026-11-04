@@ -26,7 +26,10 @@
  * string. The SDK's cache key is user + flag, not the attributes: within
  * `cacheTtlMs` a user's answer is reused whatever attributes come with the
  * next call. A client with local evaluation answers each call it can from its
- * ruleset, with that call's attributes, and such an answer is never CACHED.
+ * ruleset, with that call's attributes, and such an answer is never CACHED. A
+ * call it cannot answer gets the server's answer: CACHED when the client
+ * already held one for that user and flag, the server's reason otherwise. A
+ * local answer in its cache is never reused, so it does not count.
  *
  * Experiments and event tracking are not OpenFeature concepts; use
  * `provider.client` (the underlying JS SDK client) for `getAssignment`,
@@ -350,12 +353,13 @@ export class ExperimentationProvider implements Provider {
       };
     }
 
-    const held = this.client.getEvaluatedFlags(userId).includes(flagKey);
+    const held = this.holdsServerAnswer(userId, flagKey);
     try {
       const attributes = attributesOf(context ?? {});
       const evaluation = await this.client.evaluateFlag(flagKey, { userId, attributes });
-      // A client with local evaluation keeps its local answers in the same cache, but computes
-      // each one afresh from this call's attributes: only an answer it did not compute is a hit.
+      // A hit is the server's answer, held before this call, returned again. A local answer is
+      // computed afresh from this call's attributes, so it is never one, even when the cache
+      // also holds a server answer for the flag.
       const cached = held && evaluation.source !== 'local';
       return { ok: true, evaluation, cached };
     } catch (err) {
@@ -374,6 +378,24 @@ export class ExperimentationProvider implements Provider {
       }
       return { ok: false, errorCode: ErrorCode.GENERAL, errorMessage: message };
     }
+  }
+
+  /**
+   * Whether the client holds an answer of the server's for this user and flag, which its next
+   * `evaluateFlag` returns unless the ruleset answers the call. A local answer in its cache does
+   * not count: the client never reuses one (a call the ruleset defers asks the server).
+   *
+   * This runs outside `evaluate`'s try, where calling a missing method would reject every
+   * resolution. A client without `getCachedFlags` (another copy of `@controlvar/js-sdk`, from
+   * before it) is asked `getEvaluatedFlags` instead, which cannot tell the two apart.
+   */
+  private holdsServerAnswer(userId: string, flagKey: string): boolean {
+    if (typeof (this.client as { getCachedFlags?: unknown }).getCachedFlags !== 'function') {
+      return this.client.getEvaluatedFlags(userId).includes(flagKey);
+    }
+    return this.client
+      .getCachedFlags(userId)
+      .some(entry => entry.key === flagKey && entry.source !== 'local');
   }
 
   private metadataFor(evaluation: FlagEvaluation): ExperimentationFlagMetadata {

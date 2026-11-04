@@ -1,14 +1,17 @@
 """The JavaScript SDK's driver, with no server: this checkout's built
 ``sdk/js`` (not an installed copy), the API key never written to its raw
-stdout or stderr, and a round trip in server and in local mode through the
+stdout or stderr, a round trip in server and in local mode through the
 recording proxy to the harness's fake upstream (``usecases/fake_upstream.py``,
-the one the Python driver's gates use).
+the one the Python driver's gates use), the ``onError`` tally counting one
+refresh per request the proxy faulted, and ``cache_ttl_seconds`` 0 reaching
+the SDK as "cache nothing".
 
 These need Node, so they run here, beside the cases, in ``_platform.yml``'s
 ``usecases-flags`` arm (which builds ``sdk/js`` first), not in the unit job,
-which has no Node. No Node, a Node below 18 or no ``sdk/js/dist`` fails them;
-nothing here skips. The Node floor and the identity check themselves are
-checked without Node in the unit job (``backend/tests/unit/usecases/test_sdks.py``).
+which has no Node. No Node, a Node below 18 or no ``sdk/js/dist`` fails them
+(``conftest.py``'s ``node``); nothing here skips. The Node floor and the
+identity check themselves are checked without Node in the unit job
+(``backend/tests/unit/usecases/test_sdks.py``).
 """
 
 from __future__ import annotations
@@ -21,7 +24,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from usecases import proxy, runner, sdks
+from usecases import gates, proxy, runner, sdks
 from usecases.fake_upstream import FLAG_KEY, Upstream, closed_port
 
 #: A stand-in with no entropy, so no secret scanner mistakes it for one.
@@ -30,13 +33,8 @@ EVALUATE = f"/api/v1/feature-flags/evaluate/{FLAG_KEY}"
 EVALUATIONS = "/api/v1/tracking/evaluations"
 #: A module that is not the checkout's SDK, as an installed copy would be.
 DECOY = "exports.ExperimentationClient = class {};\n"
-
-
-@pytest.fixture(scope="module")
-def node() -> sdks.Node:
-    found = sdks.require_node(os.environ.get("PATH", ""))
-    sdks.require_dist()
-    return found
+#: ``status()["errors"]`` before anything failed.
+NO_ERRORS = dict.fromkeys(gates.ERROR_KEYS, 0)
 
 
 @pytest.fixture(autouse=True)
@@ -77,7 +75,7 @@ def test_hello_names_this_checkout_s_built_sdk(node):
         "sdk": "js",
         "version": _sdk_version(),
         "module": "sdk/js/dist/index.js",
-        "capabilities": ["local-eval", "remote-eval"],
+        "capabilities": ["local-eval", "remote-eval", "error-tally"],
     }
     assert sdks.identity_problem("js", answer) is None
 
@@ -207,6 +205,7 @@ def test_local_mode_round_trip_behind_the_proxy(driver, relay):
         "v1",
     )
     assert status["last_error"] is None and status["last_refresh_at"]
+    assert status["errors"] == NO_ERRORS
     assert driver.call("close") == {"ok": True}
     records = relay.records()
     ruleset = [r for r in records if r.path == proxy.RULESET_PATH]
@@ -219,3 +218,50 @@ def test_local_mode_round_trip_behind_the_proxy(driver, relay):
     assert [(r.method, r.status) for r in records if r.path == EVALUATIONS] == [
         ("POST", 202)
     ]
+
+
+# -- the error tally and the cache lifetime -----------------------------------------------
+def test_on_error_counts_one_refresh_per_ruleset_request_the_proxy_faulted(
+    driver, relay, upstream
+):
+    """Started while the proxy answers the ruleset 503: the first refresh
+    fails, ``init`` answers ``ready`` false, and ``errors`` counts that one
+    refresh, as many as the proxy faulted (the next attempt is a backoff step,
+    5 s, away). The upstream never saw the faulted request."""
+    relay.inject(proxy.Fault("status", paths=(proxy.RULESET_PATH,)))
+    init = driver.call(
+        "init",
+        api_url=relay.origin,
+        api_key=KEY,
+        mode="local",
+        refresh_seconds=5,
+        timeout_ms=2000,
+    )
+    assert init == {"ok": True, "mode": "local", "ready": False}
+    status = driver.call("status")
+    records = relay.records()
+    assert [(r.path, r.status, r.fault) for r in records] == [
+        (proxy.RULESET_PATH, 503, "status:503")
+    ]
+    assert gates.error_tally_findings(status["errors"], records, "the js driver") == []
+    assert status["errors"] == {**NO_ERRORS, "refresh": 1}
+    assert upstream.requests_to(proxy.RULESET_PATH) == []
+    relay.clear()
+    assert driver.call("close") == {"ok": True}
+
+
+def test_cache_ttl_zero_reaches_the_server_on_every_call(driver, relay, upstream):
+    init = driver.call(
+        "init", api_url=relay.origin, api_key=KEY, mode="server", cache_ttl_seconds=0
+    )
+    assert init == {"ok": True, "mode": "server"}
+    answers = [
+        driver.call("evaluate", flag=FLAG_KEY, user="u-1", default=False)
+        for _ in range(2)
+    ]
+    assert [(a["enabled"], a["source"], a["error"]) for a in answers] == [
+        (True, "server", None)
+    ] * 2
+    assert driver.call("close") == {"ok": True}
+    # 0 caches nothing: the same user's second call asked the API again.
+    assert len(upstream.requests_to(EVALUATE)) == 2

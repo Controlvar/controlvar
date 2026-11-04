@@ -4,6 +4,11 @@ the same check on the clean plan, a fault planted short, or a fault placed
 where it moves no number, fails, as a failure (never a skip) that names the
 fault and says the TEST is broken.
 
+Every fault placed together (``faults.combine``) passes the combined check,
+each row an exact sum of the definitions' named integers; placed as
+``inject`` would stack them (F3 before the faults it must enclose, or each
+fault free to take another's users), it fails.
+
 And the pin: only ``sensitivity()`` passes ``without=`` to ``valid_events``.
 A gate compared with a reference missing a rule would pass a server missing
 it too.
@@ -58,6 +63,7 @@ SMALL = {
     ),
     "F7": faults.ExposureLoss(lost_users=150),
     "F9": faults.Hostile(per_class=1),
+    "F2": faults.BotTraffic(bots=4, events_per_bot=30, huge_values=6),
     "F4": faults.ClockSkew(future_users_per_arm=2),
 }
 #: What each fault's check says when the fault touched nothing.
@@ -73,6 +79,9 @@ NOTHING = {
     "F7": "F7: the definition plants 150 users never assigned; the ledger shows 0"
     " (the fault touched nothing)",
     "F9": "F9: class 'emoji-user-id': the definition plants 1 sends; the run shows 0",
+    "F2": "F2 (R5): the definition plants 6 values beyond the bound on counting"
+    " events (counted only without R5); the ledger shows 0 (the fault touched"
+    " nothing)",
 }
 
 
@@ -137,8 +146,12 @@ def test_a_fault_that_touched_nothing_fails_and_says_the_test_is_broken(name):
         ),
         (faults.ExposureLoss(lost_users=150), faults.ExposureLoss(lost_users=151)),
         (faults.Hostile(per_class=1), faults.Hostile(per_class=2)),
+        (
+            faults.BotTraffic(bots=4, events_per_bot=30, huge_values=6),
+            faults.BotTraffic(bots=4, events_per_bot=30, huge_values=7),
+        ),
     ],
-    ids=["F5", "F1", "F6-controls", "F7", "F9"],
+    ids=["F5", "F1", "F6-controls", "F7", "F9", "F2"],
 )
 def test_a_count_other_than_the_definition_s_fails(planted, claimed):
     """P-a: the ledger shows exactly what the definition plants, not more and
@@ -238,6 +251,101 @@ def test_no_fault_planted_fails():
         check.sensitivity(
             [], CLEAN, faults.expected_records(faults.inject(CLEAN)), where="x"
         )
+
+
+# ---------------------------------------------------------------------------
+# Every fault at once
+# ---------------------------------------------------------------------------
+ALL = tuple(SMALL.values())
+
+
+def combined_message(plan, planted=ALL, *, combined=True) -> str:
+    """The check of *plan* with every fault, as a failure's message."""
+    with pytest.raises(pytest.fail.Exception) as raised:
+        check.sensitivity(
+            planted,
+            plan,
+            faults.expected_records(plan, faults.DECLARED),
+            where=f"scenario FX, seed {SEED}",
+            hostile_sends=faults.hostile_counts(plan),
+            combined=combined,
+        )
+    message = str(raised.value)
+    assert message.startswith(f"sensitivity failed: scenario FX, seed {SEED}:")
+    return message
+
+
+def test_every_fault_placed_together_passes_the_combined_check():
+    plan = faults.combine(CLEAN, *ALL)
+    check.sensitivity(
+        ALL,
+        plan,
+        faults.expected_records(plan, faults.DECLARED),
+        where="scenario FX",
+        hostile_sends=faults.hostile_counts(plan),
+        combined=True,
+    )
+
+
+def test_the_r4_row_is_f1_s_drops_plus_f3_s_paused_resends():
+    """F3's paused events resent are R4 drops too: each fault's own row
+    misses them, the combined row sums them, and a definition claiming one
+    drop more is named with both integers."""
+    plan = faults.combine(CLEAN, *ALL)
+    alone = combined_message(plan, combined=False)
+    assert (
+        "F1 (R4): the definition plants 12 R4 drops (repeats not stored); the ledger"
+        " shows 14" in alone
+    ), alone
+    claimed = tuple(
+        faults.Duplicates(r4_drops=13, no_id_repeats=3) if f.NAME == "F1" else f
+        for f in ALL
+    )
+    message = combined_message(plan, claimed)
+    assert (
+        "F1 + F3 (R4): the definitions plant 15 R4 drops (repeats not stored)"
+        " (F1 r4_drops 13 + F3 paused_resends 2); the ledger shows 14" in message
+    ), message
+
+
+def test_f3_placed_before_the_faults_it_must_enclose_fails(monkeypatch):
+    """``inject``'s order: F1, F2 and F9 placed after F3, so their sends land
+    after its ``complete``, in no variant."""
+    monkeypatch.setattr(faults, "COMBINED_ORDER", faults.ORDER)
+    message = combined_message(faults.combine(CLEAN, *ALL))
+    assert (
+        "F3 (R2-status): the definition plants 8 events R2 untags by status; the"
+        " ledger shows" in message
+    ), message
+    assert (
+        "F9: the definition plants 6 hostile but valid users (per_class 1, one per"
+        " send of each valid class); 0 count in a variant" in message
+    ), message
+
+
+def test_faults_free_to_take_each_other_s_users_fail(monkeypatch):
+    """Each fault picking from every user, as when stacked: F3 takes F5's
+    first early event, so F5's count comes up one short."""
+    for kind in (
+        faults.Duplicates,
+        faults.LateEvents,
+        faults.EarlyEvents,
+        faults.VariantMismatch,
+        faults.ExposureLoss,
+        faults.Hostile,
+        faults.BotTraffic,
+        faults.ClockSkew,
+    ):
+
+        def free(self, plan, taken, _place=kind.place):
+            return _place(self, plan, faults.NOTHING_TAKEN)
+
+        monkeypatch.setattr(kind, "place", free)
+    message = combined_message(faults.combine(CLEAN, *ALL))
+    assert (
+        "F5 (R2-order): the definition plants 8 events R2 untags by order; the ledger"
+        " shows 7" in message
+    ), message
 
 
 # ---------------------------------------------------------------------------

@@ -100,10 +100,17 @@ is thread-safe and meant to be shared (one instance per process). Dispose it to 
 
 ### `Task<FlagEvaluationResult> EvaluateFlagAsync(string flagKey, string userId, Dictionary<string, object>? attributes = null)`
 
-Calls `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…` (both values percent-encoded) and
-returns a `FlagEvaluationResult`. `attributes` is accepted for source compatibility and not sent:
-the request carries the user id alone, so the server evaluates the flag's targeting rules
-against an empty context.
+Calls `GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=…&context=…` and returns a
+`FlagEvaluationResult`. `attributes` is sent as `context` on flag evaluation, so the flag's
+targeting rules are evaluated against them: compact JSON from the same `System.Text.Json` options
+as the assignment body (characters such as `+`, `&` and non-ASCII letters become `\uXXXX`
+escapes), then
+percent-encoded, as the key and the user id are. With `null` or an empty dictionary no `context`
+is sent and the request carries the user id alone.
+
+Attributes are assumed **stable per user**: an evaluation is cached by user + flag key only, so
+within `CacheTtlSeconds` a second call for the same user and flag returns the first answer,
+whatever its attributes. Call `ClearCache()` after changing a user's attributes.
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -329,7 +336,7 @@ Every request carries `X-API-Key` and `Accept: application/json`; POSTs carry
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `EvaluateFlagAsync` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…` | — | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
+| `EvaluateFlagAsync` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=…` | `context`: the attributes as URL-encoded JSON, only when there are any | `{key, enabled, config}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
 | `GetAssignmentAsync` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `TrackAsync` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?}` | ignored |
 | `TrackAsync` without keys, `TrackBatchAsync` | `POST /api/v1/tracking/batch` | `{events: [<track body>, …]}` (max 100 per request) | ignored (status only) |

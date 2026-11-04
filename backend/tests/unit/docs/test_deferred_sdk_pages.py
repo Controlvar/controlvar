@@ -983,7 +983,6 @@ DELEGATES: Dict[str, Tuple[str, "re.Pattern[str]"]] = {
 #: source reads. When one starts sending it, change this set with its pages.
 SENDS_NO_CONTEXT = {
     "android",
-    "dotnet",
     "edge",
     "elixir",
     "flutter",
@@ -1136,6 +1135,19 @@ def test_the_claim_patterns_find_the_true_sentences_on_the_java_pages():
     assert "sent as context on flag evaluation" in attribute_claims(
         text("sdk/java/README.md")
     )
+
+
+def test_the_claim_patterns_find_the_true_sentence_on_the_dotnet_pages():
+    # .NET sends the context since #1719, and both its pages say so: the
+    # patterns must see it, so that dotnet put back in SENDS_NO_CONTEXT fails
+    # test_a_page_claims_no_attribute_targeting_its_client_does_not_send on
+    # docs/sdk/dotnet.md and sdk/dotnet/README.md as well as here.
+    assert "dotnet" not in SENDS_NO_CONTEXT
+    assert sends_context("dotnet")
+    for page in ("docs/sdk/dotnet.md", "sdk/dotnet/README.md"):
+        assert "sent as context on flag evaluation" in attribute_claims(text(page)), (
+            page
+        )
 
 
 def test_the_react_native_readme_says_the_attributes_are_sent_and_cites_no_438():

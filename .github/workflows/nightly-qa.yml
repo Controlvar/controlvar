@@ -491,6 +491,20 @@ jobs:
       suite: ground-truth-nightly
       timeout-minutes: 45
 
+  # FX (#1544 part D3): one scenario with every fault of the ground-truth
+  # replay combined, at the nightly scale (tests/ground_truth/nightly_fx.py),
+  # against the core profile with no seed data. A job of its own beside the
+  # clean replay's (its own runner, database and rate limiter). 45 minutes
+  # until its first scheduled run is measured; then twice that run, at most 45.
+  ground-truth-faults:
+    name: Ground-truth faults combined
+    uses: ./.github/workflows/_platform.yml
+    with:
+      profile: core
+      seed: ''
+      suite: ground-truth-faults-nightly
+      timeout-minutes: 45
+
   # The over-the-wire flag use cases (D210 use cases #1 and #2): this
   # checkout's Python and JS SDKs follow a percentage ramp user by user, and
   # turn a flag off within their cache and refresh bounds
@@ -512,7 +526,7 @@ jobs:
   nightly-failure-issue:
     name: File an issue on failure
     runs-on: ubuntu-latest
-    needs: [unit-tests, integration-tests, benchmarks, smoke-tests, sdk-contract-tests, frontend-tests, e2e-tests, synthetic-freshness, ground-truth, flags-over-time]
+    needs: [unit-tests, integration-tests, benchmarks, smoke-tests, sdk-contract-tests, frontend-tests, e2e-tests, synthetic-freshness, ground-truth, ground-truth-faults, flags-over-time]
     # A job that hits its timeout-minutes ends `cancelled`, not `failure`, so
     # failure() alone stayed false on 2026-11-02 and 2026-11-03 and no issue was
     # filed. A person cancelling the run files one too; that fails closed.
