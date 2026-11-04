@@ -13,7 +13,8 @@ session factory pointed at a QueuePool engine on the test database. A pool
 counts the ones made on the event loop's thread. For the flag evaluate and
 the tracking assign routes, a request whose key use is recorded must make no
 more of those checkouts than the next request with the same key, which
-records nothing. Nothing here measures time.
+records nothing. The ruleset route, with a key carrying ``sdk:ruleset``, must
+make none in either case. Nothing here measures time.
 """
 
 import asyncio
@@ -95,6 +96,21 @@ def api_key(db_session, developer_user):
 
 
 @pytest.fixture
+def ruleset_api_key(db_session, developer_user):
+    """A key with ``sdk:ruleset`` of an active developer, and its plaintext."""
+    row, plaintext = APIKey.create_for_user(
+        db_session,
+        developer_user.id,
+        f"connection-{uuid.uuid4().hex[:8]}",
+        scopes="sdk:ruleset",
+    )
+    yield row.id, plaintext
+    db_session.rollback()
+    db_session.query(APIKey).filter(APIKey.id == row.id).delete()
+    db_session.commit()
+
+
+@pytest.fixture
 def active_flag(db_session, make_feature_flag):
     flag = make_feature_flag(
         key=f"connection-{uuid.uuid4().hex[:8]}",
@@ -157,17 +173,21 @@ def _last_used(db_session, key_id):
 
 
 @pytest.mark.regression
-@pytest.mark.parametrize("route", ["evaluate", "assign"])
+@pytest.mark.parametrize("route", ["evaluate", "assign", "ruleset"])
 async def test_recording_the_key_use_adds_no_checkout_on_the_event_loop(
-    route, checkouts, api_key, active_flag, active_experiment, db_session
+    route, checkouts, request, active_flag, active_experiment, db_session
 ):
     asyncio.get_running_loop()
     loop_thread = threading.get_ident()
-    key_id, plaintext = api_key
+    key_id, plaintext = request.getfixturevalue(
+        "ruleset_api_key" if route == "ruleset" else "api_key"
+    )
     headers = {"X-API-Key": plaintext}
 
     async def send(http: httpx.AsyncClient) -> httpx.Response:
         user_id = f"u-{uuid.uuid4().hex[:12]}"
+        if route == "ruleset":
+            return await http.get("/api/v1/sdk/ruleset", headers=headers)
         if route == "evaluate":
             return await http.get(
                 f"/api/v1/feature-flags/evaluate/{active_flag.key}",
@@ -216,11 +236,18 @@ async def test_recording_the_key_use_adds_no_checkout_on_the_event_loop(
                 f"the second {route} request recorded the key's use again "
                 f"({after_recorded!r} -> {after_not_recorded!r})"
             )
-            # The listener counts on the loop's thread in both runs.
-            assert recorded >= 1 and not_recorded >= 1, (
-                f"no checkout seen on the event loop's thread "
-                f"({recorded=}, {not_recorded=})"
-            )
+            if route == "ruleset":
+                assert recorded == 0 and not_recorded == 0, (
+                    f"checkouts on the event loop's thread by the ruleset "
+                    f"request that recorded the key's use, then by the next "
+                    f"one: {recorded} then {not_recorded}, want 0 then 0"
+                )
+            else:
+                # The listener counts on the loop's thread in both runs.
+                assert recorded >= 1 and not_recorded >= 1, (
+                    f"no checkout seen on the event loop's thread "
+                    f"({recorded=}, {not_recorded=})"
+                )
             counts.append((stored, recorded, not_recorded))
 
     assert all(recorded - not_recorded == 0 for _, recorded, not_recorded in counts), (
