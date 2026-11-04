@@ -53,7 +53,7 @@ EXPECTED = {
     "test_replay_gates.py": 37,
     "test_replay_workflow.py": 32,
     "test_sensitivity.py": 33,
-    "test_targeting_use_cases.py": 26,
+    "test_targeting_use_cases.py": 27,
 }
 
 # Assembled so that this file does not match its own check.

@@ -130,3 +130,9 @@ def test_a_semantic_version_row_answered_locally_is_refused():
     planted = _planted(targeting.SEM_ROWS, "s2", local="local")
     with pytest.raises(ValueError, match="s2: a semantic-version row is answered"):
         targeting.check(targeting.DOC_ROWS, planted)
+
+
+def test_an_unknown_basis_kind_is_refused():
+    planted = _planted(targeting.DOC_ROWS, "d4", basis_kind="doc")
+    with pytest.raises(ValueError, match="d4: basis kind 'doc' is unknown"):
+        targeting.check(planted, targeting.SEM_ROWS)
