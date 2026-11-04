@@ -6,7 +6,8 @@
 //
 // Environment: CONTROLVAR_API_URL (default http://localhost:8000), CONTROLVAR_API_KEY
 // (required), CONTRACT_EXPERIMENT_KEY (default sdk_contract_ab), CONTRACT_FLAG_KEY (default
-// sdk_contract_flag), CONTRACT_USER_ID (default smoke-<guid>).
+// sdk_contract_flag), CONTRACT_TARGETED_FLAG_KEY (default sdk_contract_targeted),
+// CONTRACT_USER_ID (default smoke-<guid>).
 //
 // Prints exactly one JSON line on stdout and exits 0; on failure prints one line to stderr and
 // exits 1. Only the SDK's public API is used. (`dotnet run` itself may print restore/build
@@ -46,6 +47,7 @@ static async Task<int> RunAsync()
         return Fail("CONTROLVAR_API_KEY is required");
     var experimentKey = Env("CONTRACT_EXPERIMENT_KEY", "sdk_contract_ab");
     var flagKey = Env("CONTRACT_FLAG_KEY", "sdk_contract_flag");
+    var targetedKey = Env("CONTRACT_TARGETED_FLAG_KEY", "sdk_contract_targeted");
     var userId = Env("CONTRACT_USER_ID", "smoke-" + Guid.NewGuid().ToString("D"));
 
     var config = new SdkConfig(apiUrl, apiKey);
@@ -106,6 +108,30 @@ static async Task<int> RunAsync()
     if (!batchOk)
         return Fail("batch track failed");
 
+    // 4c. The attributes reach flag evaluation (#1520, #1719). The seeded targeted flag is at 0%
+    //     with one rule, plan equals pro, at 100%. A NEW client (so the fan-out above is untouched)
+    //     asks for it with plan=pro, then, after ClearCache() (the cache key is user + flag), with
+    //     plan=free. FlagEvaluationResult carries no reason, so the server's reason is read from
+    //     the answer to the client's own request: the client is given an HttpClient (the public
+    //     constructor's optional argument, with the SDK's default timeout) whose handler only
+    //     reads the targeted flag's answers. The runner requires on with targeting_rule, then off.
+    var reasons = new ConcurrentQueue<string?>();
+    var targetedPath = $"/api/v1/feature-flags/evaluate/{Uri.EscapeDataString(targetedKey)}";
+    FlagEvaluationResult pro;
+    FlagEvaluationResult free;
+    using (var recording = new HttpClient(new ReasonRecorder(targetedPath, reasons)) { Timeout = TimeSpan.FromSeconds(config.TimeoutSeconds) })
+    using (var targeting = new ExperimentationClient(config, recording))
+    {
+        pro = await targeting.EvaluateFlagAsync(targetedKey, userId, new Dictionary<string, object> { ["plan"] = "pro" });
+        if (!targeting.GetEvaluatedFlags(userId).Contains(targetedKey))
+            return Fail($"flag evaluation failed for {targetedKey} (unknown flag key, bad key, or API unreachable)");
+        targeting.ClearCache();
+        free = await targeting.EvaluateFlagAsync(targetedKey, userId, new Dictionary<string, object> { ["plan"] = "free" });
+    }
+    var answered = reasons.ToArray();
+    if (answered.Length != 2)
+        return Fail($"the targeted flag was asked {answered.Length} time(s), expected 2");
+
     // 5. The exposure hook (#1499): a NEW client with OnExposure assigns the same user twice, with
     //    no ClearCache() in between. The server records an exposure for the first request
     //    (assigned: true) and the second answer comes from the cache, so OnExposure is called
@@ -161,8 +187,49 @@ static async Task<int> RunAsync()
         flag = new { enabled = flag.Enabled },
         track = new { ok = trackOk },
         fanout = new { ok = fanoutOk && batchOk },
+        targeted = new { pro = pro.Enabled, free = free.Enabled, reason = answered[0] },
         exposure = new { calls = seen.Length, payload }
     });
     Console.Out.WriteLine(line);
     return 0;
+}
+
+// The handler of step 4c's HttpClient: passes every request on unchanged and, for the targeted
+// flag's evaluations, records the `reason` of the server's answer (null when it has none).
+sealed class ReasonRecorder : DelegatingHandler
+{
+    private readonly string _path;
+    private readonly ConcurrentQueue<string?> _reasons;
+
+    public ReasonRecorder(string path, ConcurrentQueue<string?> reasons)
+        : base(new HttpClientHandler())
+    {
+        _path = path;
+        _reasons = reasons;
+    }
+
+    protected override async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        var response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        if (request.RequestUri?.AbsolutePath == _path)
+        {
+            string? reason = null;
+            try
+            {
+                var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using var answer = JsonDocument.Parse(body);
+                if (answer.RootElement.ValueKind == JsonValueKind.Object
+                    && answer.RootElement.TryGetProperty("reason", out var value)
+                    && value.ValueKind == JsonValueKind.String)
+                    reason = value.GetString();
+            }
+            catch (JsonException)
+            {
+                // Not JSON: no reason.
+            }
+            _reasons.Enqueue(reason);
+        }
+        return response;
+    }
 }
