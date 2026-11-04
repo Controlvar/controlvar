@@ -34,9 +34,10 @@
 #   name and key, the rule exactly, no rule share below 100, rollout 0, on,
 #   the string type and both values exactly, and its two audit entries by the
 #   signed-in user. The answers are what the API must answer each user after
-#   the last frame, each value following from its declared reason; until the
-#   tool reads them (#1512's second stage), gate 10 refuses a board that
-#   declares them rather than pass them unread.
+#   the last frame, each value following from its declared reason: gate 10
+#   asks the evaluate route for each user, with an API key it makes then
+#   (run.flag_answers), and compares the value and the reason; an answer
+#   it could not read is refused, never passed.
 # * Every sentence has its row of CLAIMS_10 in test_showcase_quoted_docs.py:
 #   what is drawn while it is said, and the pages that state it.
 # * Length cuts, in order, if the voiced length runs over 87.3 s (aim: at most

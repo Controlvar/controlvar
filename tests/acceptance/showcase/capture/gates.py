@@ -1309,6 +1309,7 @@ def flag_end(
     audit: Sequence[Mapping[str, Any]],
     actor: Mapping[str, Any],
     shown: Optional[str],
+    answered: Optional[Sequence[Mapping[str, Any]]] = None,
 ) -> Verdict:
     """Gate 10 for a flag the video made (``storyboard.FlagEnd``).
 
@@ -1325,8 +1326,11 @@ def flag_end(
     * the page showed them, when the storyboard names the reading
       (``shown``): the audit table's top rows are those entries, newest
       first, each with the user, the action and the flag's name;
-    * declared answers are not read here yet: a storyboard that declares them
-      is refused (the read after the last frame is #1512's second stage).
+    * each declared answer is the API's, as read after the last frame
+      (*answered*, ``run.flag_answers``): the value and the reason it gives
+      the declared user, both the ones the storyboard derived
+      (``answers_agree``); answers declared and not read are refused, never
+      passed.
 
     A field the storyboard leaves unset is not read and not compared, and puts
     nothing in the numbers: video 3's verdict is the one it always had.
@@ -1483,13 +1487,78 @@ def flag_end(
                 f"the audit log's top rows showed {drawn}; the API says {wanted}",
             )
     if end.answers:
+        ok, made, why = answers_agree(end.answers, answered)
+        numbers["answers"] = made
+        if not ok:
+            return False, numbers, why
+    return True, numbers, ""
+
+
+def answers_agree(
+    declared: Sequence[Any], answered: Optional[Sequence[Mapping[str, Any]]]
+) -> Tuple[bool, List[Dict[str, Any]], str]:
+    """A flag's declared answers (``storyboard.FlagAnswer``) against the API's,
+    read after the last frame (``run.flag_answers``: in the declared order, each
+    with the user and context it asked for and the evaluate route's answer).
+
+    For each declared user, the answer's ``value`` (compared as the API
+    compares values, ``storyboard.values_equal``) and its ``reason`` are both
+    the ones the storyboard derived from the reason it declares. Refused,
+    never passed: answers not read at all (*answered* None), fewer or more
+    read than declared, one read for another user or context, and a user the
+    API answered with an error or without a value or a reason.
+    """
+    from showcase.capture.storyboard import values_equal
+
+    made: List[Dict[str, Any]] = []
+    if answered is None or len(answered) != len(declared):
+        count = "none" if answered is None else len(answered)
         return (
             False,
-            numbers,
-            f"the storyboard declares {len(end.answers)} answers, and this tool does"
-            " not read a flag's answers yet: an unread answer is never passed",
+            made,
+            f"the storyboard declares {len(declared)} answers and the API was asked"
+            f" for {count}: an unread answer is never passed",
         )
-    return True, numbers, ""
+    for answer, read in zip(declared, answered):
+        where = f"{answer.user} {answer.context}"
+        wanted = (answer.value, answer.reason)
+        asked = (read.get("user"), read.get("context"))
+        if asked != (answer.user, answer.context):
+            return (
+                False,
+                made,
+                f"the answer for {where} was read for {asked[0]!r} {asked[1]!r}:"
+                " an unread answer is never passed",
+            )
+        reply = read.get("answer")
+        if not (isinstance(reply, Mapping) and "value" in reply and "reason" in reply):
+            made.append(
+                {"user": answer.user, "context": answer.context, "answer": reply}
+            )
+            got = read.get("error") or f"{reply!r}, with no value or no reason"
+            return (
+                False,
+                made,
+                f"the API answered {where} with {got}; the storyboard derives"
+                f" (value, reason) {wanted!r}: an unread answer is never passed",
+            )
+        said = (reply["value"], reply["reason"])
+        made.append(
+            {
+                "user": answer.user,
+                "context": answer.context,
+                "value": said[0],
+                "reason": said[1],
+            }
+        )
+        if not (values_equal(said[0], wanted[0]) and said[1] == wanted[1]):
+            return (
+                False,
+                made,
+                f"the API answers {where} with (value, reason) {said!r}; the"
+                f" storyboard derives {wanted!r}",
+            )
+    return True, made, ""
 
 
 def rule_admits_all(rules: Any) -> bool:

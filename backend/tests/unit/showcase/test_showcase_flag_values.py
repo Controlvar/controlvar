@@ -12,6 +12,11 @@ value fields, and the claims it makes that no frame can prove.
 * Gate 10's ``flag`` end state for a flag that serves a value: every new field
   refused at load or at the gate on one planted defect, and the answers the
   board declares are the server's own for that rule.
+* Gate 10 reads each declared answer after the last frame (``run.flag_answers``)
+  against a fake server: all right passes; a wrong value or a wrong reason
+  fails naming the user, the derived answer and the API's; an answer missing
+  or not read as declared is refused, never passed; a flag that declares none
+  reads nothing and makes no key.
 * PE1512-2: video 3's verdict and its end state's dump are main's, byte for
   byte, on the row a pre-values API answers.
 
@@ -23,12 +28,16 @@ that changes only the docs.
 from __future__ import annotations
 
 import copy
+import io
+import json
 import re
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 from unittest import mock
 from unittest.mock import MagicMock
+from urllib.error import HTTPError
+from urllib.parse import parse_qs, unquote, urlsplit
 
 import pytest
 import yaml
@@ -643,10 +652,15 @@ def test_a_correct_answer_passes_gate_10_and_reads_no_segment_or_audit_table():
 
 
 def test_declared_answers_are_never_passed_unread():
-    """Stage 1 builds no read of the answers, so the board that declares them
-    is refused at the gate, whatever else agrees."""
-    ok, _numbers, why = gate(end=board().end_state.flag)
-    assert not ok and "does not read a flag's answers yet" in why
+    """A board that declares answers is refused at the gate when they were not
+    read (the read is ``run.flag_answers``, after the last frame), whatever
+    else agrees."""
+    ok, numbers, why = gate(end=board().end_state.flag)
+    assert not ok and why == (
+        "the storyboard declares 2 answers and the API was asked for none: an"
+        " unread answer is never passed"
+    )
+    assert numbers["answers"] == []
 
 
 def _rule(**condition: Any) -> Dict[str, Any]:
@@ -850,6 +864,278 @@ def test_the_declared_answers_are_the_servers_for_the_declared_rule():
 def test_a_rule_or_rollout_that_answers_otherwise_is_caught(rules, end_changes):
     end = board().end_state.flag.model_copy(update=end_changes)
     assert wrong_answers(end, rules) != []
+
+
+# ---------------------------------------------------------------------------
+# Gate 10 reads the declared answers after the last frame (#1512 stage 2)
+# ---------------------------------------------------------------------------
+
+API = "http://127.0.0.1:28401"
+TOKEN = "made-up-session-token-0123456789"
+GATE_KEY = "made-up-gate-key-0123456789abcdef"
+
+
+class Kept:
+    """The run's redactor, as far as the read uses it: the values kept."""
+
+    def __init__(self) -> None:
+        self.values: List[str] = []
+
+    def add(self, value: str) -> None:
+        self.values.append(value)
+
+
+def refused(url: str, code: int) -> HTTPError:
+    return HTTPError(url, code, "refused", {}, io.BytesIO(b"{}"))
+
+
+class FakeServer:
+    """The stack's API as gate 10 reads it after the last frame, with no
+    network: the flag list, its audit log, who is signed in, the API-key route
+    and the evaluate route. The evaluate route answers as the flag service
+    does for the stored row, in process (``server_answer``), unless a test
+    gives a user another reply (a dict) or an HTTP status (an int)."""
+
+    def __init__(self, replies: Optional[Dict[str, Any]] = None):
+        self.row = api_flag()
+        self.replies = replies or {}
+        #: The names of the API keys made, in order.
+        self.keys: List[str] = []
+        #: Each evaluate request: (flag key, user, context, the X-API-Key sent).
+        self.asked: List[Any] = []
+
+    def api(
+        self,
+        url: str,
+        token: Optional[str] = None,
+        body: Optional[Dict[str, Any]] = None,
+    ) -> Any:
+        assert token == TOKEN, url
+        path = urlsplit(url).path
+        if path == "/api/v1/api-keys":
+            self.keys.append(body["name"])
+            return {"id": "k-1", "name": body["name"], "key": GATE_KEY}
+        if path == "/api/v1/feature-flags/":
+            return {"items": [self.row]}
+        if path == "/api/v1/audit-logs/":
+            return {"items": entries()}
+        if path == "/api/v1/auth/me":
+            return dict(ADMIN)
+        raise AssertionError(f"gate 10 asked for {url}")
+
+    def with_key(self, url: str, key: str) -> Any:
+        parts = urlsplit(url)
+        query = parse_qs(parts.query, strict_parsing=True)
+        assert sorted(query) == ["context", "user_id"], url
+        flag_key = unquote(parts.path.rsplit("/", 1)[1])
+        user, context = query["user_id"][0], json.loads(query["context"][0])
+        self.asked.append((flag_key, user, context, key))
+        assert parts.path.startswith("/api/v1/feature-flags/evaluate/"), url
+        if key != GATE_KEY:
+            raise refused(url, 401)
+        if flag_key != self.row["key"]:
+            raise refused(url, 404)
+        reply = self.replies.get(user)
+        if isinstance(reply, int):
+            raise refused(url, reply)
+        if reply is not None:
+            return reply
+        stored = SimpleNamespace(
+            **{
+                name: self.row[name]
+                for name in (
+                    "key",
+                    "status",
+                    "rollout_percentage",
+                    "value_type",
+                    "on_value",
+                    "off_value",
+                )
+            }
+        )
+        value, reason = server_answer(
+            stored,
+            SimpleNamespace(user=user, context=context),
+            self.row["targeting_rules"],
+        )
+        return {
+            "key": flag_key,
+            "enabled": value == stored.on_value,
+            "value": value,
+            "value_type": stored.value_type,
+            "config": None,
+            "reason": reason,
+        }
+
+
+def read_gate(monkeypatch, server: FakeServer, end: Any = None):
+    """Gate 10's flag half, as the run calls it after the last frame, against
+    *server*: ``(ok, numbers, why)`` and the values the redactor kept."""
+    monkeypatch.setattr(run, "_api", server.api)
+    monkeypatch.setattr(run, "_api_with_key", server.with_key)
+    kept = Kept()
+    verdict = run.flag_state(
+        end if end is not None else board().end_state.flag, API, TOKEN, {}, kept
+    )
+    return verdict, kept.values
+
+
+def test_gate_10_reads_each_declared_answer_after_the_last_frame(monkeypatch):
+    server = FakeServer()
+    (ok, numbers, why), kept = read_gate(monkeypatch, server)
+    assert ok, why
+    # One key, made for the read, a needle from then on; every answer asked
+    # with it, for the declared user and context, in order.
+    assert server.keys == [run.GATE_KEY_NAME] == ["showcase-gate"]
+    assert kept == [GATE_KEY]
+    assert server.asked == [
+        ("checkout-button-label", "user-123", {"plan": "pro"}, GATE_KEY),
+        ("checkout-button-label", "user-456", {"plan": "business"}, GATE_KEY),
+    ]
+    assert numbers["answers"] == [
+        {
+            "user": "user-123",
+            "context": {"plan": "pro"},
+            "value": "Complete purchase",
+            "reason": "targeting_rule",
+        },
+        {
+            "user": "user-456",
+            "context": {"plan": "business"},
+            "value": "Buy now",
+            "reason": "rollout",
+        },
+    ]
+
+
+def answer(value: Any, reason: str) -> Dict[str, Any]:
+    return {
+        "key": "checkout-button-label",
+        "enabled": value == "Complete purchase",
+        "value": value,
+        "value_type": "string",
+        "config": None,
+        "reason": reason,
+    }
+
+
+def without(reply: Dict[str, Any], name: str) -> Dict[str, Any]:
+    return {key: value for key, value in reply.items() if key != name}
+
+
+@pytest.mark.parametrize(
+    "replies, why",
+    [
+        pytest.param(
+            {"user-456": answer("Complete purchase", "rollout")},
+            "the API answers user-456 {'plan': 'business'} with (value, reason)"
+            " ('Complete purchase', 'rollout'); the storyboard derives ('Buy now',"
+            " 'rollout')",
+            id="a-wrong-value",
+        ),
+        pytest.param(
+            {"user-123": answer("Complete purchase", "rollout")},
+            "the API answers user-123 {'plan': 'pro'} with (value, reason)"
+            " ('Complete purchase', 'rollout'); the storyboard derives"
+            " ('Complete purchase', 'targeting_rule')",
+            id="a-wrong-reason-rollout-for-targeting_rule",
+        ),
+        pytest.param(
+            {"user-456": answer("Buy now", "targeting_rule")},
+            "the API answers user-456 {'plan': 'business'} with (value, reason)"
+            " ('Buy now', 'targeting_rule'); the storyboard derives ('Buy now',"
+            " 'rollout')",
+            id="a-wrong-reason-targeting_rule-for-rollout",
+        ),
+    ],
+)
+def test_an_answer_the_api_gives_otherwise_fails_gate_10_naming_the_user(
+    monkeypatch, replies, why
+):
+    (ok, _numbers, said), _kept = read_gate(monkeypatch, FakeServer(replies))
+    assert not ok and said == why
+
+
+@pytest.mark.parametrize(
+    "replies, words",
+    [
+        pytest.param({"user-456": 404}, "with HTTP 404;", id="refused-404"),
+        pytest.param({"user-123": 500}, "with HTTP 500;", id="refused-500"),
+        pytest.param(
+            {"user-456": without(answer("Buy now", "rollout"), "value")},
+            "with no value or no reason;",
+            id="no-value",
+        ),
+        pytest.param(
+            {
+                "user-123": without(
+                    answer("Complete purchase", "targeting_rule"), "reason"
+                )
+            },
+            "with no value or no reason;",
+            id="no-reason",
+        ),
+        pytest.param({"user-456": []}, "with [], with no value", id="not-an-object"),
+    ],
+)
+def test_a_missing_answer_is_refused_never_passed(monkeypatch, replies, words):
+    (ok, _numbers, why), _kept = read_gate(monkeypatch, FakeServer(replies))
+    assert (
+        not ok and words in why and why.endswith(": an unread answer is never passed")
+    ), why
+
+
+@pytest.mark.parametrize(
+    "answered, words",
+    [
+        pytest.param(None, "asked for none", id="not-read"),
+        pytest.param("first-only", "asked for 1", id="the-second-user-skipped"),
+        pytest.param("twice", "asked for 3", id="one-read-twice"),
+        pytest.param("another-user", "was read for 'user-999'", id="another-user"),
+        pytest.param("another-context", "was read for 'user-456' {}", id="no-context"),
+    ],
+)
+def test_answers_not_read_as_declared_are_refused_never_passed(answered, words):
+    end = board().end_state.flag
+    read = [
+        {
+            "user": a.user,
+            "context": dict(a.context),
+            "answer": answer(a.value, a.reason),
+        }
+        for a in end.answers
+    ]
+    changed_read = {
+        None: None,
+        "first-only": read[:1],
+        "twice": [*read, read[1]],
+        "another-user": [read[0], {**read[1], "user": "user-999"}],
+        "another-context": [read[0], {**read[1], "context": {}}],
+    }[answered]
+    ok, _numbers, why = gate(end=end, answered=changed_read)
+    assert (
+        not ok and words in why and why.endswith(": an unread answer is never passed")
+    ), why
+    # The control: the same reading, as declared, passes.
+    ok, _numbers, why = gate(end=end, answered=read)
+    assert ok, why
+
+
+def test_a_flag_with_no_declared_answers_reads_none_and_makes_no_key(monkeypatch):
+    """PE1512-2: unset answers read nothing, make no key, add no numbers."""
+    server = FakeServer()
+    end = board().end_state.flag.model_copy(update={"answers": []})
+    (ok, numbers, why), kept = read_gate(monkeypatch, server, end)
+    assert ok, why
+    assert server.keys == [] and server.asked == [] and kept == []
+    assert "answers" not in numbers
+
+    def no_call(*_args, **_kwargs):
+        raise AssertionError("an unset answer was read")
+
+    monkeypatch.setattr(run, "_api", no_call)
+    monkeypatch.setattr(run, "_api_with_key", no_call)
+    assert run.flag_answers(v3.board().end_state.flag, API, TOKEN, Kept()) is None
 
 
 # ---------------------------------------------------------------------------
