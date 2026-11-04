@@ -232,7 +232,7 @@ _KEY_RESPONSES: Dict[int | str, Dict[str, Any]] = {
     openapi_extra={"x-stability": "beta"},
     responses=_KEY_RESPONSES,
 )
-def get_split_url_routes(
+async def get_split_url_routes(
     response: Response,
     db: Session = Depends(deps.get_db),
     api_key_info: Dict[str, Any] = Depends(deps.get_api_key),
