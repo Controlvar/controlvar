@@ -876,13 +876,11 @@ text = "It compares your account with the record made before the install."
 by = ["test:backend/tests/installer_sweeps/test_uninstall_run.py::test_the_kept_list_is_exactly_the_residue_both_ways"]
 
 [[unit]]
-text = "If step 2 stops because a target group is \"in use by a listener\", which can follow a blue/green deploy, run uninstall again."
-by = [
-    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_a_failure_is_named_and_a_run_again_completes",
-]
+text = "If step 2 stops with a target group \"in use by a listener\" (#1618), run uninstall again."
+by = ["exempt:instruction"]
 
 [[unit]]
-text = "The message says \"run uninstall again; it continues where it stopped\", and the second run completes (#1618 tracks the cause)."
+text = "The message says \"run uninstall again; it continues where it stopped\", and a second run completes."
 by = [
     "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_a_failure_is_named_and_a_run_again_completes",
 ]

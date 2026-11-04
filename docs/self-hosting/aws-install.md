@@ -327,7 +327,7 @@ Uninstall then runs six steps:
 5. It checks the CDK's setup stack, which uninstall keeps: it deletes neither the stack nor its bucket, whether the install made them or the account had them before.
 6. It compares your account with the record made before the install.
 
-If step 2 stops because a target group is "in use by a listener", which can follow a blue/green deploy, run `uninstall` again. The message says "run uninstall again; it continues where it stopped", and the second run completes ([#1618](https://github.com/Controlvar/controlvar/issues/1618) tracks the cause).
+If step 2 stops with a target group "in use by a listener" ([#1618](https://github.com/Controlvar/controlvar/issues/1618)), run `uninstall` again. The message says "run uninstall again; it continues where it stopped", and a second run completes.
 
 At the end it prints what the account holds now that it did not hold before. These are the things AWS keeps, and nothing else, when the report says `Not explained: none`. The report below is made from the lines of the runs on 2026-10-27, with the counts as examples. The line that starts `Kept by the installer` is printed when this install made the CDK's setup stack:
 

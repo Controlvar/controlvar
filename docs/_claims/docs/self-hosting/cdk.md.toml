@@ -1201,7 +1201,11 @@ text = "In a script, add --force, which deletes without asking."
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "If deleting a stack fails because a target group is \"in use by a listener\", which can follow a blue/green deploy, run the teardown again; the installer's own message says \"run uninstall again; it continues where it stopped\", and the second run completes (#1618 tracks the cause)."
+text = "If deleting a stack fails with a target group \"in use by a listener\" (#1618), run the teardown again."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The installer's message says \"run uninstall again; it continues where it stopped\", and a second run completes."
 by = [
     "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_a_failure_is_named_and_a_run_again_completes",
 ]

@@ -728,11 +728,10 @@ The glue, analytics and counters stacks exist only in a full deployment; skip
 their lines in a core one, a full checkout deployed with the core profile
 included.
 
-If deleting a stack fails because a target group is "in use by a listener",
-which can follow a blue/green deploy, run the teardown again; the installer's
-own message says "run uninstall again; it continues where it stopped", and the
-second run completes ([#1618](https://github.com/Controlvar/controlvar/issues/1618)
-tracks the cause).
+If deleting a stack fails with a target group "in use by a listener"
+([#1618](https://github.com/Controlvar/controlvar/issues/1618)), run the
+teardown again. The installer's message says "run uninstall again; it continues
+where it stopped", and a second run completes.
 
 The buckets outside `prod` are emptied before they are deleted:
 `auto_delete_objects=True` adds a custom resource backed by a CDK-provided
