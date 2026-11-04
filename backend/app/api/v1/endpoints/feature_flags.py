@@ -1406,8 +1406,9 @@ async def enable_feature_flag(
     the request.
 
     **Authentication**: Requires valid user authentication.
-    **Permissions**: ADMIN and DEVELOPER may enable any flag; ANALYST and
-    VIEWER may enable none.
+    **Permissions**: Needs the feature_flag (update) permission, which ADMIN
+    and DEVELOPER hold; in the full profile a custom role or direct grant can
+    add it, and a superuser always has it. Anyone else gets 403.
 
     Returns:
         ToggleResponse: Updated feature flag details with audit log ID
@@ -1504,8 +1505,9 @@ async def disable_feature_flag(
     the request.
 
     **Authentication**: Requires valid user authentication.
-    **Permissions**: ADMIN and DEVELOPER may disable any flag; ANALYST and
-    VIEWER may disable none.
+    **Permissions**: Needs the feature_flag (update) permission, which ADMIN
+    and DEVELOPER hold; in the full profile a custom role or direct grant can
+    add it, and a superuser always has it. Anyone else gets 403.
 
     Returns:
         ToggleResponse: Updated feature flag details with audit log ID
