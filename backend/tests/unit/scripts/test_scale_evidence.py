@@ -83,6 +83,10 @@ def test_the_method_file_holds_the_named_values():
         "cpu_permille": 900,
         "io_wait_permille": 500,
         "pool_permille": 900,
+        "stalled": {
+            "min_failed_permille": 250,
+            "max_api_cpu_of_previous_permille": 750,
+        },
         "serialised": {
             "max_cpu_permille": 900,
             "max_active_backends": 1,
@@ -146,6 +150,15 @@ DELETE = object()
         ({"keeps_up__max_p99_ms": 0}, "keeps_up.max_p99_ms: must be at least 1"),
         ({"repetitions": 4}, "repetitions: 4 is even"),
         ({"cpu_split": dict(fx.SPLIT)}, "cpu_split: unknown key"),
+        ({"bottleneck__stalled": DELETE}, "bottleneck.stalled: missing key"),
+        (
+            {"bottleneck__stalled__min_failed_permille": 0},
+            "bottleneck.stalled.min_failed_permille: must be at least 1",
+        ),
+        (
+            {"bottleneck__stalled__max_api_cpu_of_previous_permille": 1001},
+            "bottleneck.stalled.max_api_cpu_of_previous_permille: must be at most 1000",
+        ),
     ],
 )
 def test_the_loader_refuses_a_wrong_method_file_and_names_the_key(changes, named):
@@ -981,6 +994,143 @@ def test_the_issue_is_linked_only_when_serialised_is_the_result():
     )
     assert se.TRACKING_ISSUE not in hot
     assert "#823" not in hot
+
+
+#: V29's stall: ruleset run 2's steps 15 and 16 of workflow run 41732112985,
+#: as the job recorded them (scale_fixtures/ruleset_stall_steps.json).
+STALL = fx.FIXTURES / "ruleset_stall_steps.json"
+
+
+def _stall():
+    data = se.loads(STALL.read_text(encoding="utf-8"))
+    before, step = data["steps"]
+    return data["cpu_split"], before, step
+
+
+def _stalled_rep(meth, number):
+    """A ruleset run whose steps 1-14 kept up and whose steps 15 and 16 are the
+    recorded ones."""
+    split, before, step = _stall()
+    steps = [fx.step_facts(meth, "ruleset", n) for n in range(1, 15)]
+    return fx.rep(meth, "ruleset", number, [*steps, before, step], split)
+
+
+@pytest.mark.regression
+def test_a_step_whose_answers_collapse_while_the_api_s_cpu_falls_is_stalled():
+    """V29, recorded: 9 of the 1,557 measured requests answered (1,549 timed
+    out), the API's CPU fell from 652 to 172 per-mille, and the database
+    sampler saw no active connection in 30 of 30 samples. The step also meets
+    serialised's signature, which is what it was attributed before (and what
+    linked #823): it is stalled only because stalled is checked first."""
+    split, before, step = _stall()
+    method = se.load_config()
+    assert split == fx.SPLIT
+    for record in (before, step):
+        problems = []
+        se.STEP_SPEC.check(record, "step", problems)
+        assert problems == []
+        # the record is what the rules give under the committed method
+        recomputed = {**record, **se._derived(record, method, split)}
+        recomputed.update(se.judge_step(method, "ruleset", recomputed, split)[0])
+        assert recomputed == record
+    assert (step["measured"] - step["errors"], step["timeouts"]) == (9, 1549)
+    assert (before["api_cpu_permille"], step["api_cpu_permille"]) == (652, 172)
+    assert step["active_backend_samples_by_count"] == [30]
+    assert se.attribute(method, step, split, before) == "stalled"
+    # with no step before it, no fall in CPU is known: serialised, as before
+    assert se.attribute(method, step, split) == "serialised"
+
+
+@pytest.mark.parametrize(
+    "changes, before_cpu, expected",
+    [
+        ({}, 652, "stalled"),
+        # 1000 x 390 >= 250 x 1,557; 389 is not
+        ({"errors": 390}, 652, "stalled"),
+        ({"errors": 389}, 652, "serialised"),
+        # 1000 x 489 <= 750 x 652; 490 is not
+        ({"api_cpu_permille": 489}, 652, "stalled"),
+        ({"api_cpu_permille": 490}, 652, "serialised"),
+        # the API's CPU rose, or did not move: answers collapsing is not enough
+        ({}, 172, "serialised"),
+        ({}, 100, "serialised"),
+        ({}, 0, "serialised"),
+        # nothing measured: no share of failed requests
+        ({"measured": 0, "errors": 0}, 652, "serialised"),
+    ],
+    ids=[
+        "recorded",
+        "failed-share-at-the-limit",
+        "failed-share-under-the-limit",
+        "cpu-at-the-limit",
+        "cpu-over-the-limit",
+        "cpu-unchanged",
+        "cpu-rose",
+        "previous-cpu-zero",
+        "nothing-measured",
+    ],
+)
+def test_stalled_fires_at_its_limits_and_not_past_them(changes, before_cpu, expected):
+    """Each limit at its boundary: a comparison written the other way, or a
+    limit one per-mille off, moves one of each pair."""
+    split, before, step = _stall()
+    method = se.load_config()
+    step = {**step, **changes}
+    before = {**before, "api_cpu_permille": before_cpu}
+    assert se.attribute(method, step, split, before) == expected
+
+
+def test_a_hot_resource_is_named_before_a_stall():
+    """A step whose answers collapsed while the API's CPU fell, but whose
+    database connections were all waiting on disk, is postgres-io: stalled
+    only replaces serialised and none-at-limit."""
+    split, before, step = _stall()
+    method = se.load_config()
+    step = {
+        **step,
+        "active_backend_samples_by_count": [0, 0, 30],
+        "io_wait_observations": 40,
+    }
+    assert se.attribute(method, step, split, before) == "postgres-io"
+
+
+def test_a_run_is_attributed_from_its_first_failing_step_and_the_step_before():
+    meth = fx.method()
+    rep = _stalled_rep(meth, 1)
+    assert (rep["knee_step"], rep["first_failing_step"]) == (15, 16)
+    assert (rep["first_failing_reason"], rep["bottleneck"], rep["valid"]) == (
+        "dropped",
+        "stalled",
+        True,
+    )
+
+
+@pytest.mark.regression
+def test_a_stalled_run_is_never_published_and_never_links_the_database_issue():
+    """Render refuses a stall exactly as it refuses an invalid run: the
+    scenario is blocked (stalled-rep), so the page is never written, and the
+    bottleneck has no words of its own to write."""
+    meth = fx.method()
+    results = fx.small()
+    ruleset = next(s for s in results["scenarios"] if s["name"] == "ruleset")
+    ruleset["reps"] = [_stalled_rep(meth, n) for n in (1, 2, 3)]
+    ruleset["summary"] = se.summarise_scenario(meth, ruleset["reps"])
+    assert se.results_problems(results) == []
+    summary = ruleset["summary"]
+    assert (summary["bottleneck"], summary["publishable"]) == ("stalled", False)
+    assert summary["not_publishable"] == ["stalled-rep"]
+    assert "GET /api/v1/sdk/ruleset: not publishable (stalled-rep)" in (
+        se.publication_problems(results)
+    )
+    message = refused(se.render_block, results, LINK)
+    assert "stalled-rep" in message
+    assert se.TRACKING_ISSUE not in message and "#823" not in message
+    assert "no words for the bottleneck 'stalled'" in refused(
+        se._stopped, meth, "stalled", fx.SPLIT
+    )
+    # one stalled run of three is enough
+    mixed = [_stalled_rep(meth, 1), *fx.small()["scenarios"][5]["reps"][1:]]
+    assert "stalled-rep" in se.summarise_scenario(meth, mixed)["not_publishable"]
 
 
 # ---------------------------------------------------------------------------

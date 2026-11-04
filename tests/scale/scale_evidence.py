@@ -194,10 +194,13 @@ INVALID_REASONS: Tuple[str, ...] = (
 #: Why a step did not keep up.
 FAIL_REASONS: Tuple[str, ...] = ("none", "invalid", "dropped", "errors", "p99")
 #: What stopped a run (A3), plus "not-reached" for a run that never failed.
+#: "stalled" and "invalid" have no page words: a run stopped by either is not
+#: a capacity measurement, and render refuses it.
 BOTTLENECKS: Tuple[str, ...] = (
     *CPU_GROUPS,
     "postgres-io",
     "db-pool",
+    "stalled",
     "serialised",
     "none-at-limit",
     "invalid",
@@ -207,6 +210,7 @@ BOTTLENECKS: Tuple[str, ...] = (
 NOT_PUBLISHABLE: Tuple[str, ...] = (
     "reps",
     "invalid-rep",
+    "stalled-rep",
     "below-the-series",
     "above-the-cap",
     "unstable",
@@ -523,6 +527,12 @@ CONFIG_SPEC = obj(
         cpu_permille=PERMILLE,
         io_wait_permille=PERMILLE,
         pool_permille=PERMILLE,
+        # A first failing step whose answers collapsed while the API's CPU fell
+        # from the step before (see ``attribute``).
+        stalled=obj(
+            min_failed_permille=Int(1, 1000),
+            max_api_cpu_of_previous_permille=PERMILLE,
+        ),
         serialised=obj(
             max_cpu_permille=PERMILLE,
             max_active_backends=Int(0, 1000),
@@ -1853,12 +1863,25 @@ def recovery_problem(step: Mapping[str, Any]) -> str:
 # A repetition, and what stopped it
 # ---------------------------------------------------------------------------
 def attribute(
-    method: Mapping[str, Any], step: Mapping[str, Any], split: Mapping[str, str]
+    method: Mapping[str, Any],
+    step: Mapping[str, Any],
+    split: Mapping[str, str],
+    previous: Optional[Mapping[str, Any]] = None,
 ) -> str:
     """What stopped a run, from its first failing step; first match wins (A3).
 
     A CPU group is a hardware thread's pinned containers, from the recorded
     split: their CPU is added up, because on one thread they compete for it.
+
+    ``stalled``, from the step's own record and ``previous`` (the step before
+    it; None for step 1, which is never ``stalled``): at least
+    ``min_failed_permille`` of the measured requests failed, and the API's CPU
+    fell to at most ``max_api_cpu_of_previous_permille`` of the previous step's
+    although this step offered more. A run at its limit is expected to keep the
+    API at least as busy as the step before; one whose answers stop while the
+    API goes quiet has not measured a capacity. It is checked before
+    ``serialised``, whose signature (the API's thread under its limit, at most
+    one active database connection, a failure on latency) a stall also meets.
     """
     if not step["valid"]:
         return "invalid"
@@ -1883,6 +1906,16 @@ def attribute(
     pool = POOL_CONNECTIONS_PER_WORKER * method["expected_web_concurrency"]
     if 1000 * step["max_active_backends"] >= rule["pool_permille"] * pool:
         return "db-pool"
+    stall = rule["stalled"]
+    if (
+        previous is not None
+        and step["measured"] > 0
+        and 1000 * step["errors"] >= stall["min_failed_permille"] * step["measured"]
+        and step["api_cpu_permille"] < previous["api_cpu_permille"]
+        and 1000 * step["api_cpu_permille"]
+        <= stall["max_api_cpu_of_previous_permille"] * previous["api_cpu_permille"]
+    ):
+        return "stalled"
     serial = rule["serialised"]
     samples = sum(histogram)
     within = sum(histogram[: serial["max_active_backends"] + 1])
@@ -1926,12 +1959,13 @@ def assess_rep(
             "first_failing_reason": "none",
             "bottleneck": "not-reached",
         }
+    previous = steps[failing["step"] - 2] if failing["step"] > 1 else None
     return {
         "valid": bool(failing["valid"]),
         "knee_step": failing["step"] - 1,
         "first_failing_step": failing["step"],
         "first_failing_reason": failing["fail_reason"],
-        "bottleneck": attribute(method, failing, split),
+        "bottleneck": attribute(method, failing, split, previous),
     }
 
 
@@ -1976,6 +2010,8 @@ def summarise_scenario(
         blocked.append("reps")
     if not all(rep["valid"] for rep in reps):
         blocked.append("invalid-rep")
+    if any(rep["bottleneck"] == "stalled" for rep in reps):
+        blocked.append("stalled-rep")
     if 0 in knees:
         blocked.append("below-the-series")
     if 0 in fails:
@@ -2426,6 +2462,9 @@ def _stopped(method: Mapping[str, Any], code: str, split: Mapping[str, str]) -> 
         "database samples, and the step failed on latency",
         "none-at-limit": "no resource the samplers measure had reached its limit",
     }
+    # "stalled" and "invalid" have no words, so a run stopped by either can
+    # never be written as a capacity: summarise_scenario blocks its scenario
+    # (stalled-rep, invalid-rep), and this refuses it if one ever got here.
     if code not in words:
         raise Refused(f"no words for the bottleneck {code!r}: it is not publishable")
     return words[code]

@@ -108,6 +108,10 @@
       "cpu_permille": 900,
       "io_wait_permille": 500,
       "pool_permille": 900,
+      "stalled": {
+        "min_failed_permille": 250,
+        "max_api_cpu_of_previous_permille": 750
+      },
       "serialised": {
         "max_cpu_permille": 900,
         "max_active_backends": 1,
