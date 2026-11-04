@@ -102,9 +102,21 @@ def _user(exp, arm, i):
     return f"rpu-{exp.key}-{arm}-{i}"
 
 
-def _make(db_session, make_experiment, users, metric_type=MetricType.REVENUE):
+def _make(
+    db_session,
+    make_experiment,
+    users,
+    metric_type=MetricType.REVENUE,
+    variance_reduction_config=None,
+):
     suffix = uuid.uuid4().hex[:8]
+    extra = (
+        {}
+        if variance_reduction_config is None
+        else {"variance_reduction_config": variance_reduction_config}
+    )
     exp = make_experiment(
+        **extra,
         name=f"Checkout total {suffix}",
         key=f"checkout-total-{suffix}",
         status=ExperimentStatus.ACTIVE,
@@ -407,17 +419,65 @@ def test_the_other_analyses_of_a_revenue_metric_stay_on_the_share_of_buyers(
 NOT_COUNTED = [math.nan, math.inf, -math.inf, 1e308, math.nextafter(1e12, math.inf)]
 
 
-@pytest.fixture
-def unusual_values(admin_client, db_session, make_experiment):
-    exp = _make(db_session, make_experiment, len(NOT_COUNTED) + 1)
+def _seed_unusual_values(admin_client, exp):
     for i, value in enumerate(NOT_COUNTED):
         _track(admin_client, exp, _user(exp, "control", i), value)
     # The bound itself counts.
     _track(admin_client, exp, _user(exp, "treatment", 0), 1e12)
     _track(admin_client, exp, _user(exp, "treatment", 1), 10.0)
     _track(admin_client, exp, _user(exp, "treatment", 1), None)
+
+
+@pytest.fixture
+def unusual_values(admin_client, db_session, make_experiment):
+    exp = _make(db_session, make_experiment, len(NOT_COUNTED) + 1)
+    _seed_unusual_values(admin_client, exp)
     yield exp
     _cleanup(db_session, exp)
+
+
+@pytest.fixture
+def unusual_values_winsorized(admin_client, db_session, make_experiment):
+    """The same experiment, whose stored config asks for winsorization."""
+    exp = _make(
+        db_session,
+        make_experiment,
+        len(NOT_COUNTED) + 1,
+        variance_reduction_config={
+            "method": "winsorization",
+            "winsorization_percentile": 50,
+        },
+    )
+    _seed_unusual_values(admin_client, exp)
+    yield exp
+    _cleanup(db_session, exp)
+
+
+@pytest.mark.regression
+def test_winsorization_in_the_stored_config_changes_no_number(
+    admin_client, unusual_values_winsorized
+):
+    """``winsorization`` is stored and applied by no results view (#1735).
+
+    At percentile 50 the treatment's 10^12 would be cut down to its median, 0,
+    if any view applied it; the numbers are the ones the unconfigured
+    experiment gets, 10^12 included.  Adding an outlier cut that reads the
+    config turns this red, and the docs and the limitations row with it.
+    """
+    exp = unusual_values_winsorized
+    assert exp.variance_reduction_config["method"] == "winsorization"
+
+    metric, control, treatment = _arms(_results(admin_client, exp))
+    users = len(NOT_COUNTED) + 1
+    assert metric["analysis"] == "mean"
+    assert control["conversions"] == len(NOT_COUNTED)
+    assert control["mean"] == 0.0
+    assert treatment["conversions"] == 2
+    assert treatment["mean"] == pytest.approx((1e12 + 10.0) / users, rel=1e-12)
+    y = np.array([1e12, 10.0] + [0.0] * (users - 2))
+    assert treatment["std_dev"] == pytest.approx(np.std(y, ddof=1), rel=1e-9)
+    welch = stats.ttest_ind(y, np.zeros(users), equal_var=False)
+    assert treatment["p_value"] == pytest.approx(welch.pvalue, rel=1e-9)
 
 
 def test_values_that_are_not_finite_or_too_large_add_nothing(
