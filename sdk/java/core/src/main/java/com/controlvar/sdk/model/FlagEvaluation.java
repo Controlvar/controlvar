@@ -8,7 +8,8 @@ import java.util.Objects;
 
 /**
  * The server's evaluation of one feature flag for one user, as returned by
- * {@code GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=...} and by
+ * {@code GET /api/v1/feature-flags/evaluate/{flagKey}?user_id=...&context=...} (the user's
+ * attributes are sent as {@code context}) and by
  * {@link com.controlvar.sdk.ExperimentationClient#evaluateFeatureFlag}.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)

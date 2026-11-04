@@ -373,10 +373,13 @@ def test_an_sdk_that_is_not_listed_is_not_asked_of_the_database(monkeypatch, run
     assert runner.run_one("go", "cmd", env, 5)[0] == "PASS"
 
 
-def test_js_and_react_native_must_show_their_attributes_reach_flag_evaluation(runner):
-    """#1520 (plan D211 gate 4f): the two SDKs whose smokes report the targeted
-    flag, and each passes with exactly TARGETED."""
-    assert runner.ATTRIBUTE_SDKS == frozenset({"js", "react-native"})
+def test_js_react_native_java_and_dotnet_must_show_their_attributes_reach_flag_evaluation(
+    runner,
+):
+    """#1520 (plan D211 gate 4f), with java (#1718) and dotnet (#1719) since
+    D253: the four SDKs whose smokes report the targeted flag, and each passes
+    with exactly TARGETED."""
+    assert runner.ATTRIBUTE_SDKS == frozenset({"js", "react-native", "java", "dotnet"})
     assert runner.TARGETED_FLAG_KEY == "sdk_contract_targeted"
     for sdk in sorted(runner.ATTRIBUTE_SDKS):
         report = good(runner, sdk)

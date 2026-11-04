@@ -195,6 +195,8 @@ ATTRIBUTE_SDKS: frozenset[str] = frozenset(
         # One line per SDK, in the form "js",
         "js",
         "react-native",
+        "java",
+        "dotnet",
     ]
 )
 TARGETED_FLAG_KEY = "sdk_contract_targeted"
