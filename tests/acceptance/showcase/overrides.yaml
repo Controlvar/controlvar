@@ -47,6 +47,8 @@
 
 09-design-in-depth: {}
 
+10-serve-a-value: {}
+
 90-app-probe:
   CORS_ORIGINS:
     value: "{dashboard},{shoplab},{streampulse}"

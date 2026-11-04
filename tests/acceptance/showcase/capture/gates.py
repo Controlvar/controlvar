@@ -1313,14 +1313,26 @@ def flag_end(
     """Gate 10 for a flag the video made (``storyboard.FlagEnd``).
 
     * exactly one flag has the name, with the storyboard's key;
-    * its rules are one group of one condition, ``segment`` ``in_segment`` the
-      id of the one active segment with the storyboard's segment name;
+    * its rules are one group of one condition: ``segment`` ``in_segment`` the
+      id of the one active segment with the storyboard's segment name, or the
+      storyboard's ``rule`` exactly, admitting every user it matches (no
+      ``rollout_percentage`` of its own below 100, ``rule_admits_all``);
     * its rollout percentage and status are the ones the video left it at;
+    * a flag that declares its values has that type and serves exactly those
+      two values (numbers compared as numbers, ``storyboard.values_equal``);
     * its audit entries, oldest first, are exactly the storyboard's, every one
       by the signed-in user (*actor*: their email and id);
-    * the page showed them: the audit table's top rows are those entries,
-      newest first, each with the user, the action and the flag's name.
+    * the page showed them, when the storyboard names the reading
+      (``shown``): the audit table's top rows are those entries, newest
+      first, each with the user, the action and the flag's name;
+    * declared answers are not read here yet: a storyboard that declares them
+      is refused (the read after the last frame is #1512's second stage).
+
+    A field the storyboard leaves unset is not read and not compared, and puts
+    nothing in the numbers: video 3's verdict is the one it always had.
     """
+    from showcase.capture.storyboard import values_equal
+
     numbers: Dict[str, Any] = {"flags_named": len(named)}
     if len(named) != 1:
         return False, numbers, f"{len(named)} flags are named {end.name!r}"
@@ -1337,19 +1349,20 @@ def flag_end(
             numbers,
             f"{end.name!r} has key {flag.get('key')!r}, not {end.key!r}",
         )
-    matching = [
-        s
-        for s in segments
-        if s.get("name") == end.segment and str(s.get("status")).lower() == "active"
-    ]
-    numbers["segments_named"] = len(matching)
-    if len(matching) != 1:
-        return (
-            False,
-            numbers,
-            f"{len(matching)} active segments are named {end.segment!r}",
-        )
-    segment_id = str(matching[0].get("id"))
+    if end.segment is not None:
+        matching = [
+            s
+            for s in segments
+            if s.get("name") == end.segment and str(s.get("status")).lower() == "active"
+        ]
+        numbers["segments_named"] = len(matching)
+        if len(matching) != 1:
+            return (
+                False,
+                numbers,
+                f"{len(matching)} active segments are named {end.segment!r}",
+            )
+        segment_id = str(matching[0].get("id"))
     rules = flag.get("targeting_rules") or {}
     groups = rules.get("groups") if isinstance(rules, dict) else None
     conditions = (
@@ -1357,25 +1370,50 @@ def flag_end(
         if isinstance(groups, list) and len(groups) == 1 and isinstance(groups[0], dict)
         else None
     )
-    if not (isinstance(conditions, list) and len(conditions) == 1):
+    if not (isinstance(conditions, list) and len(conditions) == 1) or (
+        end.segment is None and not isinstance(conditions[0], dict)
+    ):
         return (
             False,
             numbers,
             f"the flag's rules are not one group of one condition: {rules!r}",
         )
     condition = conditions[0]
-    said = (
-        condition.get("attribute"),
-        condition.get("operator"),
-        str(condition.get("value")),
-    )
-    if said != ("segment", "in_segment", segment_id):
-        return (
-            False,
-            numbers,
-            f"the flag's rule is {said[0]!r} {said[1]!r} {said[2]!r}, not 'segment'"
-            f" 'in_segment' {end.segment!r} ({segment_id})",
+    if end.segment is not None:
+        said = (
+            condition.get("attribute"),
+            condition.get("operator"),
+            str(condition.get("value")),
         )
+        if said != ("segment", "in_segment", segment_id):
+            return (
+                False,
+                numbers,
+                f"the flag's rule is {said[0]!r} {said[1]!r} {said[2]!r}, not 'segment'"
+                f" 'in_segment' {end.segment!r} ({segment_id})",
+            )
+    else:
+        said = (
+            condition.get("attribute"),
+            condition.get("operator"),
+            condition.get("value"),
+        )
+        wanted = (end.rule.attribute, end.rule.operator, end.rule.value)
+        if said != wanted:
+            return (
+                False,
+                numbers,
+                f"the flag's rule is {said[0]!r} {said[1]!r} {said[2]!r}, not"
+                f" {wanted[0]!r} {wanted[1]!r} {wanted[2]!r}",
+            )
+        if not rule_admits_all(rules):
+            return (
+                False,
+                numbers,
+                "the flag's rule admits only part of the users it matches"
+                f" (rollout_percentage {rules.get('rollout_percentage')!r}): who"
+                " it serves would depend on their bucket",
+            )
     if flag.get("rollout_percentage") != end.rollout_percentage:
         return (
             False,
@@ -1389,6 +1427,26 @@ def flag_end(
             numbers,
             f"the flag is {flag.get('status')!r}, not {end.status!r}",
         )
+    if end.value_type is not None:
+        numbers.update(
+            value_type=flag.get("value_type"),
+            on_value=flag.get("on_value"),
+            off_value=flag.get("off_value"),
+        )
+        if flag.get("value_type") != end.value_type:
+            return (
+                False,
+                numbers,
+                f"the flag's type is {flag.get('value_type')!r}, not {end.value_type!r}",
+            )
+        for field in ("on_value", "off_value"):
+            if not values_equal(flag.get(field), getattr(end, field)):
+                return (
+                    False,
+                    numbers,
+                    f"the flag's {field} is {flag.get(field)!r}, not"
+                    f" {getattr(end, field)!r}",
+                )
     oldest_first = list(reversed(list(audit)))
     actions = [str(e.get("action_type")) for e in oldest_first]
     numbers["audit"] = actions
@@ -1410,20 +1468,48 @@ def flag_end(
             numbers,
             f"not every entry is by the signed-in {email!r}: {others[0]}",
         )
-    rows = audit_rows(shown or "")
-    wanted = [
-        [email, AUDIT_LABELS[action], FLAG_ENTITY_LABEL, end.name]
-        for action in reversed(list(end.audit))
-    ]
-    drawn = [row[1:5] for row in rows[: len(wanted)]]
-    numbers["shown_rows"] = drawn
-    if drawn != wanted:
+    if end.shown is not None:
+        rows = audit_rows(shown or "")
+        wanted = [
+            [email, AUDIT_LABELS[action], FLAG_ENTITY_LABEL, end.name]
+            for action in reversed(list(end.audit))
+        ]
+        drawn = [row[1:5] for row in rows[: len(wanted)]]
+        numbers["shown_rows"] = drawn
+        if drawn != wanted:
+            return (
+                False,
+                numbers,
+                f"the audit log's top rows showed {drawn}; the API says {wanted}",
+            )
+    if end.answers:
         return (
             False,
             numbers,
-            f"the audit log's top rows showed {drawn}; the API says {wanted}",
+            f"the storyboard declares {len(end.answers)} answers, and this tool does"
+            " not read a flag's answers yet: an unread answer is never passed",
         )
     return True, numbers, ""
+
+
+def rule_admits_all(rules: Any) -> bool:
+    """Stored dashboard rules admit every user they match: no top-level
+    ``rollout_percentage``, an empty one, or a number of at least 100.
+
+    The server buckets a matching user only below 100
+    (backend/app/core/targeting_adapter.py ``buckets_on_rule_id``); anything
+    else here, a string or an unreadable value included, is refused rather
+    than read the server's way (a unit test holds that every rule passed here
+    is one the server does not bucket on)."""
+    if not isinstance(rules, dict) or rules.get("rollout_percentage") in (None, ""):
+        return True
+    value = rules["rollout_percentage"]
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value >= 100
+    )
 
 
 # ---------------------------------------------------------------------------

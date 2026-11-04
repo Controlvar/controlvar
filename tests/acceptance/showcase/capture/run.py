@@ -344,13 +344,19 @@ def flag_state(
             token,
         )["items"]
     me = _api(f"{api_url}/api/v1/auth/me", token)
+    # A flag whose rule is not a segment's reads no segments (PE1512-2: what
+    # the storyboard leaves unset is not read).
     return judge.flag_end(
         end,
         named=named,
-        segments=_api(f"{api_url}/api/v1/segments?limit=200", token),
+        segments=(
+            _api(f"{api_url}/api/v1/segments?limit=200", token)
+            if end.segment is not None
+            else []
+        ),
         audit=audit,
         actor={"email": me.get("email"), "id": me.get("id")},
-        shown=readings.get(end.shown),
+        shown=readings.get(end.shown) if end.shown is not None else None,
     )
 
 

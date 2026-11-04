@@ -1,0 +1,191 @@
+# Video 10, Serve a value with a feature flag (#1512): a flag that serves a
+# string instead of on or off, made in the dashboard, then the lines of the Go
+# SDK's docs that read it. On the `demo` seed; nothing is set up, simulated,
+# skipped or masked.
+#
+# * The one departure from a new user's path is the sign-in, done off camera
+#   and said in the first caption.
+# * The key the form fills in from the name is `checkout_button_label`; the
+#   docs' and the card's is `checkout-button-label`. So the key is cleared and
+#   typed on camera, and the caption and the narration of that beat say it is
+#   changed (EM1512-3). test_showcase_flag_values.py holds the card's key, the
+#   typed key and the end state's key equal (QA row 8).
+# * The type is chosen by its radio's role and name, and the two values are
+#   typed into the fields by their labels ("On value", "Off value"): the
+#   value fields' test ids are built at run time, and no board finds them by
+#   test id (QA). The values said are the values typed, and the end state's
+#   (QA row 9). The page's note that every application can read both values
+#   is in frame while they are typed; it is not said.
+# * The rule is `user.plan` equals `pro` (the builder's default operator).
+#   "enterprise" and "free" are words the narration never says.
+# * The rollout is left at its 0%, and the beat looks at the hint under it:
+#   users no rule matches get the off value, so the answers gate 10 reads are
+#   exact, never a bucket's (A's SPEC S1). "0%" is drawn while it is said (G2).
+# * The flag is created switched off, then switched on; the narration says the
+#   page's own words for each state ("Everyone gets the off value", "Rules and
+#   rollout decide who gets the on value"). The switch-on beat is the payoff.
+# * The card quotes docs/sdk/go.md's "Flag values" block, checked against the
+#   recorded release's docs (C10) and against this tree's
+#   (test_showcase_quoted_docs.py). Its note says what go.md says: the module
+#   has no tagged release, so `go get` takes the head of main. The default
+#   line is held by sdk/go/value_test.go (NilReceiver,
+#   ServerWithoutFlagValues). No sentence names the JavaScript SDK.
+# * Gate 10 ("flag") reads the flag back through the API: one flag with this
+#   name and key, the rule exactly, no rule share below 100, rollout 0, on,
+#   the string type and both values exactly, and its two audit entries by the
+#   signed-in user. The answers are what the API must answer each user after
+#   the last frame, each value following from its declared reason; until the
+#   tool reads them (#1512's second stage), gate 10 refuses a board that
+#   declares them rather than pass them unread.
+# * Every sentence has its row of CLAIMS_10 in test_showcase_quoted_docs.py:
+#   what is drawn while it is said, and the pages that state it.
+# * Length cuts, in order, if the voiced length runs over 87.3 s (aim: at most
+#   84 s). Each drops a whole sentence, so none needs a new clip: (1) "Choose
+#   New Flag."; (2) "Choose Create Feature Flag."; (3) "Here, a string: the
+#   checkout button label." Never the value lines, the rollout line, the two
+#   states or the default line.
+slug: 10-serve-a-value
+title: Serve a value with a feature flag
+seed: demo
+seed_counts: {experiments: 3, feature_flags: 2, users: 4}
+end_state:
+  signed_in_as: admin@demo.com
+  flag:
+    name: Checkout button label
+    key: checkout-button-label
+    rule: {attribute: user.plan, operator: equals, value: pro}
+    rollout_percentage: 0
+    status: active
+    audit: [feature_flag_create, toggle_enable]
+    value_type: string
+    on_value: Complete purchase
+    off_value: Buy now
+    answers:
+      # The Go quick start's user (docs/sdk/go.md): plan pro.
+      - user: user-123
+        context: {plan: pro}
+        value: Complete purchase
+        reason: targeting_rule
+      - user: user-456
+        context: {plan: business}
+        value: Buy now
+        reason: rollout
+
+scenes:
+  - id: flag
+    open: /feature-flags
+    signed_in: true
+    departures:
+      - kind: off-camera setup
+        says: Signed in off camera
+    beats:
+      - cue: Signed in off camera. A flag can serve a value.
+        focus: {testid: new-flag-btn}
+        say:
+          - A flag can serve a value instead of on or off.
+          - Choose New Flag.
+        steps:
+          - move: {testid: new-flag-btn}
+        exit:
+          - click: {testid: new-flag-btn}
+
+      - before:
+          - wait_for: {testid: flag-name-input}
+        cue: Name it. The key fills in, and you can change it.
+        focus: {testid: flag-key-input}
+        say:
+          - Name it, and the key your code uses fills itself in.
+          - "You can change it: here, to the key the docs use."
+        steps:
+          - type: {testid: flag-name-input}
+            text: Checkout button label
+          - look: {testid: flag-key-input}
+            ms: 1200
+          - type: {testid: flag-key-input}
+            text: checkout-button-label
+            clear: true
+
+      - cue: "Choose its type: String, Number or JSON."
+        focus: {testid: flag-value-type-choice}
+        say:
+          - "Choose its type: a string, a number, or JSON."
+          - "Here, a string: the checkout button label."
+        steps:
+          - click: {role: radio, name: String, exact: true}
+          - look: {testid: flag-value-type-choice}
+            ms: 1000
+
+      - cue: An on value, and an off value for everyone else.
+        focus: {testid: flag-value-fields}
+        say:
+          - "Users it's on for get the on value: Complete purchase."
+          - "Everyone else gets the off value: Buy now."
+        steps:
+          - type: {label: On value, exact: true}
+            text: Complete purchase
+          - type: {label: Off value, exact: true}
+            text: Buy now
+
+      - cue: "A rule: pro plan users get the on value."
+        focus: {testid: flag-targeting-section}
+        say:
+          - "Add a rule: users on the pro plan get the on value."
+        steps:
+          - click: {testid: add-group}
+          - type: {testid: condition-attribute}
+            text: user.plan
+          - type: {testid: condition-value}
+            text: pro
+
+      - cue: "Rollout at 0%: no one else gets the on value."
+        focus: {css: "section:has(#rollout-percentage)"}
+        say:
+          - With the rollout at 0%, no one else gets the on value.
+          - Choose Create Feature Flag.
+        steps:
+          - look: {testid: rollout-value-hint}
+            ms: 2000
+        exit:
+          - click: {testid: submit-flag}
+
+      - before:
+          - wait_for: {testid: flag-toggle}
+        cue: "It starts off: everyone gets the off value."
+        focus: {text: Everyone gets the off value, exact: true}
+        say:
+          - It's created switched off, so everyone gets the off value.
+        steps:
+          - look: {testid: flag-value-type}
+            ms: 1000
+          - look: {text: Everyone gets the off value, exact: true}
+            ms: 1500
+
+      - cue: Switch it on when your code is ready.
+        focus: {testid: flag-toggle}
+        payoff: true
+        say:
+          - "Switch it on: rules and rollout decide who gets the on value."
+        steps:
+          - click: {testid: flag-toggle}
+          - wait_for: {css: "[data-testid=flag-status][data-status=active]"}
+          - look: {text: Rules and rollout decide who gets the on value, exact: true}
+            ms: 1500
+
+  - id: sdk
+    card:
+      label: From the Go SDK docs
+      code:
+        doc: docs/sdk/go.md
+        section: Flag values
+        lines:
+          - 'label, _ := client.EvaluateFlag(ctx, "checkout-button-label", user) // a string flag'
+          - 'fmt.Println(label.StringValue("Buy now"))'
+      note: >-
+        As the docs give it, for the flag made above. The Go SDK has no tagged
+        release yet: go get takes the head of the main branch.
+    beats:
+      - cue: Your app reads the value, with a default.
+        focus: {css: "#code"}
+        say:
+          - In your app, the Go SDK reads the value for each user.
+          - Without an answer, it returns the default you give it.
