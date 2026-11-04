@@ -93,6 +93,7 @@ def test_the_scan_reads_every_module():
         "reference",
         "faults",
         "seed",
+        "targeting",
     }
 
 
@@ -124,7 +125,7 @@ class Refuse(importlib.abc.MetaPathFinder):
 sys.meta_path.insert(0, Refuse())
 sys.path.insert(0, {root!r})
 
-from ground_truth import contract, faults, generator, hashing, ledger, reference, seed
+from ground_truth import contract, faults, generator, hashing, ledger, reference, seed, targeting
 
 assert seed.SEED >= 0
 scenario = generator.Scenario(
