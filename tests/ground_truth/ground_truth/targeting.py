@@ -98,6 +98,11 @@ class Row:
     local: str
     basis_file: str
     basis_quote: str
+    #: ``"docs"``: ``basis_quote`` is a sentence on ``basis_file``.
+    #: ``"behaviour"``: no docs sentence states the case; ``basis_file`` is a
+    #: server test file and ``basis_quote`` the name of the test in it that
+    #: pins the behaviour.
+    basis_kind: str = "docs"
 
 
 #: Rows for ``DOCUMENTED_RULES``.
@@ -211,6 +216,8 @@ DOC_ROWS: tuple[Row, ...] = (
         "targeting_rule",
         "local",
         RULES_REFERENCE,
+        # No docs sentence says an attribute no condition names is ignored, and
+        # no server test pins it alone; this is the nearest sentence.
         "Each level combines its conditions and groups with `AND` (all of them "
         "hold), `OR` (at least one holds) or `NOT` (not all of them hold).",
     ),
@@ -234,16 +241,19 @@ SEM_ROWS: tuple[Row, ...] = (
         "targeting_rule",
         "server",
         RULES_REFERENCE,
-        "Users on iOS 15 or later, on an iPhone or an iPad:",
+        "the attribute is a version that compares so with the value",
     ),
+    # The docs never say versions compare by numeric parts, so s3's basis is a
+    # server test with the same shape (1.10.0 above 1.9.0).
     Row(
         "s3",
         {"app_version": "3.10.0"},
         True,
         "targeting_rule",
         "server",
-        RULES_REFERENCE,
-        "the attribute is a version that compares so with the value",
+        "backend/tests/unit/core/test_rules_engine_semver.py",
+        "test_minor_version_greater",
+        "behaviour",
     ),
     Row(
         "s4",
@@ -256,6 +266,8 @@ SEM_ROWS: tuple[Row, ...] = (
         "`1.2.3`), and `eq` ignores build metadata (`1.0.0+build.1` equals "
         "`1.0.0+build.2`).",
     ),
+    # s5 relies on s4's sentence for the ordering (a pre-release sorts below its
+    # release); its own quote only shows a pre-release is a valid version.
     Row(
         "s5",
         {"app_version": "3.2.1-beta.1"},
@@ -343,6 +355,8 @@ def check(doc_rows: Sequence[Row], sem_rows: Sequence[Row]) -> None:
             raise ValueError(
                 f"{row.id}: reason {row.reason!r} is not one of {', '.join(REASONS)}"
             )
+        if row.basis_kind not in ("docs", "behaviour"):
+            raise ValueError(f"{row.id}: basis kind {row.basis_kind!r} is unknown")
         if row.enabled and row.reason == "rollout":
             raise ValueError(
                 f"{row.id}: enabled with reason rollout, which a global rollout of "

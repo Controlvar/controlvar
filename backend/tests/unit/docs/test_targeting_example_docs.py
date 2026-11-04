@@ -21,6 +21,7 @@ changes the docs alone (``test_docs_only_gate.py``).
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 import sys
@@ -67,11 +68,34 @@ def test_the_documented_rules_are_the_pages_example():
     )
 
 
-@pytest.mark.parametrize("row", targeting.ROWS, ids=lambda row: row.id)
+_DOCS_ROWS = [row for row in targeting.ROWS if row.basis_kind == "docs"]
+_BEHAVIOUR_ROWS = [row for row in targeting.ROWS if row.basis_kind == "behaviour"]
+
+
+@pytest.mark.parametrize("row", _DOCS_ROWS, ids=lambda row: row.id)
 def test_the_rows_sentence_is_still_on_its_page(row):
     page = _flat((REPO_ROOT / row.basis_file).read_text(encoding="utf-8"))
     on_page = _flat(row.basis_quote) in page
     assert on_page, f"{row.id}: {row.basis_file} no longer says: {row.basis_quote}"
+
+
+@pytest.mark.parametrize("row", _BEHAVIOUR_ROWS, ids=lambda row: row.id)
+def test_the_rows_pinning_test_still_exists(row):
+    """A behaviour row names a server test: the file exists and defines it.
+
+    Read as text and parsed (no import, no git), so it runs anywhere.
+    """
+    path = REPO_ROOT / row.basis_file
+    assert path.is_file(), f"{row.id}: {row.basis_file} does not exist"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    names = {
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    assert row.basis_quote in names, (
+        f"{row.id}: {row.basis_file} defines no test named {row.basis_quote}"
+    )
 
 
 @pytest.mark.parametrize(
