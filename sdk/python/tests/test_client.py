@@ -1493,6 +1493,17 @@ class TestNaNAndInfinityAreNotSent:
         assert client.cached_assignments("user-1") == []
 
     @pytest.mark.regression
+    def test_a_cached_assignment_is_returned_before_the_attributes_are_encoded(self, client, transport):
+        """A user with a cached assignment gets the cached variant, with no request, even when
+        the attributes passed now hold NaN: the cache check comes before the encoding."""
+        assign_route(transport)
+        assert client.get_variant("checkout_flow", "user-1") == "treatment"
+        assert len(transport.requests) == 1
+        assert client.get_variant("checkout_flow", "user-1", {"score": NAN}) == "treatment"
+        assert client.get_assignment("checkout_flow", "user-1", {"score": NAN}).variant_name == "treatment"
+        assert len(transport.requests) == 1
+
+    @pytest.mark.regression
     def test_report_error_returns_false_and_sends_nothing(self, client, transport):
         transport.route("POST", "/api/v1/tracking/errors", status=201, json={"id": "err-1"})
         result = client.report_error("crash", "boom", feature_flag_key="f", metadata={"latency_ms": INF})
@@ -1532,7 +1543,10 @@ class TestNaNAndInfinityAreNotSent:
 
     def test_is_feature_enabled_still_sends_the_attribute_in_its_query(self, client, transport):
         """The flag routes carry the attributes in the query string, not in a body, and that
-        encoding is unchanged: one GET whose ``context`` holds ``NaN``, and the server's answer."""
+        encoding is unchanged: one GET whose ``context`` holds ``NaN``, and the server's answer.
+
+        Why it is pinned: the evaluate ``context`` parameter is left as it is so that local and
+        remote evaluation agree on the same attributes. Changing it is out of scope for #1630."""
         flag_route(transport, key="on", enabled=True)
         assert client.is_feature_enabled("on", "user-1", {"score": NAN}) is True
         assert transport.calls() == ["GET /api/v1/feature-flags/evaluate/on"]

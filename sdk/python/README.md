@@ -162,8 +162,9 @@ another process does not have them. In a server, pass `experiment_key` on conver
 `datetime` (naive values are treated as UTC) or an ISO-8601 string.
 
 From the next published version, `track` returns `False`, and sends nothing, when `event_value`
-or `properties` holds NaN or an infinite number; `get_variant` returns the default and
-`get_assignment` raises `ExperimentationError` for the same reason.
+or `properties` holds NaN or an infinite number. `get_assignment` raises `ExperimentationError`
+for the same in `user_attributes`, and `get_variant` returns the default for a user with no
+cached assignment (a cached assignment is returned as before).
 
 ## Backend endpoints used
 
