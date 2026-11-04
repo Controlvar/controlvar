@@ -38,7 +38,7 @@ INSTALLED_COPY = (
     "sys.stdin.readline()\n"
     "print(json.dumps({'ok': True, 'sdk': 'js', 'version': '0.2.0',\n"
     "    'module': 'node_modules/@controlvar/js-sdk/dist/index.js',\n"
-    "    'capabilities': ['local-eval', 'remote-eval']}), flush=True)\n"
+    "    'capabilities': ['local-eval', 'remote-eval', 'error-tally']}), flush=True)\n"
     "sys.stdin.readline()\n"
 )
 

@@ -18,6 +18,11 @@ it, naming the fault and saying that the TEST is broken:
   often as planted and a hostile but valid event counted in a variant; F4,
   nothing at run time (its sensitivity is its planted defect).
 
+With ``combined=True`` the faults were placed together (``faults.combine``,
+the nightly FX scenario) and every row is an exact sum of their named
+integers (``faults.combined_findings``): R4 is F1's drops plus F3's paused
+events resent, and every hostile but valid user of F9 counts.
+
 This is the one caller of ``valid_events`` that passes ``without=``
 (``backend/tests/unit/ground_truth/test_sensitivity.py`` pins it): a gate
 compared with a reference missing a rule would pass a server missing it too.
@@ -57,21 +62,32 @@ def sensitivity(
     where: str,
     hostile_sends: Mapping[str, int] | None = None,
     reproduce: str = "",
+    combined: bool = False,
 ) -> None:
     """Fail unless every fault in *planted* reached *records* (the ledger of
     *plan*) as its definition plants it. *where* names the scenario and the
     seed; *hostile_sends* counts the sends of each ``faults.F9_HOSTILE`` class
-    the driver made and had answered."""
+    the driver made and had answered; *combined* says the faults were placed
+    together by ``faults.combine``."""
     if not planted:
         pytest.fail(failure(where, ["no fault is planted"], reproduce), pytrace=False)
     expected = contract.valid_events(records)
+    rules = sorted({fault.RULE for fault in planted if fault.RULE is not None})
+    without = {rule: contract.valid_events(records, without={rule}) for rule in rules}
     findings: list[str] = []
-    for fault in planted:
-        without = None
-        if fault.RULE is not None:
-            without = contract.valid_events(records, without={fault.RULE})
-        findings += faults.sensitivity_findings(
-            fault, plan, records, expected, without, hostile_sends=hostile_sends
+    if combined:
+        findings = faults.combined_findings(
+            planted, plan, records, expected, without, hostile_sends=hostile_sends
         )
+    else:
+        for fault in planted:
+            findings += faults.sensitivity_findings(
+                fault,
+                plan,
+                records,
+                expected,
+                None if fault.RULE is None else without[fault.RULE],
+                hostile_sends=hostile_sends,
+            )
     if findings:
         pytest.fail(failure(where, findings, reproduce), pytrace=False)

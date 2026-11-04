@@ -16,8 +16,9 @@ the run in flight; at most 15 minutes; never a required check; the pinned
 paths-filter and the ``e2e`` label; the suite, profile and seed it hands
 ``_platform.yml``; that ``_platform.yml`` runs each suite in its own arm, the
 pull-request suite every test file under tests/ground_truth with its JUnit
-skip check and the nightly suite the clean scenarios alone; and the nightly
-job, in the failure issue's ``needs``.
+skip check, the nightly suite the clean scenarios alone, and the nightly
+faults suite FX alone (``nightly_fx.py``) with its JUnit skip check; and the
+two nightly jobs, in the failure issue's ``needs``.
 """
 
 from __future__ import annotations
@@ -288,6 +289,15 @@ NIGHTLY_ARM = [
     "GROUND_TRUTH_SCALE='nightly' python -m pytest tests/ground_truth/test_replay.py"
     " -p no:cov -v --tb=short",
 ]
+#: The ``ground-truth-faults-nightly`` arm: FX alone, a file the pull-request
+#: arm's ``pytest tests/ground_truth`` does not collect, with its own JUnit
+#: report and the skip check over it.
+FX_JUNIT = '"$RUNNER_TEMP/ground-truth-fx-junit.xml"'
+FX_ARM = [
+    "GROUND_TRUTH_SCALE='nightly' python -m pytest tests/ground_truth/nightly_fx.py"
+    f" -p no:cov -v --tb=short --junitxml={FX_JUNIT} --junit-prefix=tests.ground_truth",
+    f"python scripts/check_junit_skips.py {FX_JUNIT} tests/ground_truth",
+]
 
 
 def _run_suite() -> str:
@@ -315,12 +325,13 @@ def _arms(run: str) -> dict[str, list[tuple[list[str], list[str]]]]:
 
 
 def arm_problems(run: str) -> list[str]:
-    """What is wrong with the two ground-truth arms of *run*."""
+    """What is wrong with the three ground-truth arms of *run*."""
     found = []
     arms = _arms(run)
     for suite, want in (
         ("ground-truth", PR_ARM),
         ("ground-truth-nightly", NIGHTLY_ARM),
+        ("ground-truth-faults-nightly", FX_ARM),
     ):
         branches = arms.get(suite, [])
         if len(branches) != 1:
@@ -337,14 +348,28 @@ def arm_problems(run: str) -> list[str]:
 def test_the_platform_runs_each_ground_truth_suite_in_its_own_arm():
     """The pull-request arm runs every file under tests/ground_truth with its
     skip check; the nightly arm runs the clean scenarios alone, so the fault
-    scenarios never join the nightly job."""
+    scenarios never join the nightly job; the nightly faults arm runs FX
+    alone, with its skip check."""
     assert arm_problems(_run_suite()) == []
 
 
 def _planted(run: str, plant: str) -> str:
     nightly_path = "tests/ground_truth/test_replay.py -p no:cov"
     pr_check = f"python scripts/check_junit_skips.py {JUNIT} tests/ground_truth\n"
+    fx_check = f"python scripts/check_junit_skips.py {FX_JUNIT} tests/ground_truth\n"
     edits = {
+        # The FX arm pointed at the directory: FX would not run (the
+        # directory does not collect nightly_fx.py) and the PR tier would.
+        "fx-runs-the-directory": (
+            "tests/ground_truth/nightly_fx.py -p",
+            "tests/ground_truth -p",
+        ),
+        "fx-shared-with-the-nightly-arm": (
+            "ground-truth-nightly)\n",
+            "ground-truth-nightly|ground-truth-faults-nightly)\n",
+        ),
+        "fx-no-junit-report": (f" --junitxml={FX_JUNIT}", ""),
+        "fx-no-skip-check": (fx_check, "\n"),
         # The nightly arm pointed at the whole directory: the fault scenarios
         # would join the nightly job.
         "nightly-runs-the-directory": (nightly_path, "tests/ground_truth -p no:cov"),
@@ -371,6 +396,10 @@ def _planted(run: str, plant: str) -> str:
         "no-junit-prefix",
         "no-skip-check",
         "pr-arm-runs-one-file",
+        "fx-runs-the-directory",
+        "fx-shared-with-the-nightly-arm",
+        "fx-no-junit-report",
+        "fx-no-skip-check",
     ],
 )
 def test_the_arm_pin_fires_on_a_planted_form(plant):
@@ -423,3 +452,19 @@ def test_the_nightly_job_runs_it_and_a_red_night_files_the_issue():
     assert jobs["ground-truth"]["with"]["profile"] == "core"
     assert jobs["ground-truth"]["with"]["seed"] == ""
     assert "ground-truth" in jobs["nightly-failure-issue"]["needs"]
+
+
+def test_the_nightly_faults_job_runs_fx_on_its_own_and_a_red_night_files_the_issue():
+    """Core, no seed data, 45 minutes until its first run is measured; no
+    ``needs`` and no ``if``, so nothing else holds it back or skips it."""
+    jobs = wg.load(NIGHTLY)["jobs"]
+    job = jobs["ground-truth-faults"]
+    assert job["uses"] == "./.github/workflows/_platform.yml"
+    assert job["with"] == {
+        "profile": "core",
+        "seed": "",
+        "suite": "ground-truth-faults-nightly",
+        "timeout-minutes": 45,
+    }
+    assert "needs" not in job and "if" not in job
+    assert "ground-truth-faults" in jobs["nightly-failure-issue"]["needs"]

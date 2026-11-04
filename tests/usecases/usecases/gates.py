@@ -25,6 +25,37 @@ traces, the defect it exists to catch included, with no server and no SDK.
 * ``local_kill_findings`` (G2-2): a local-mode SDK answers a flag turned off
   as off from the first ruleset that carries the change, and only from it.
 
+``local_proxy_findings`` and ``local_kill_findings`` look only at ruleset 200s
+the proxy relayed (``fault is None``): a corrupt fault is a 200 too, and is
+neither the SDK being behind the proxy nor a ruleset the server served.
+
+Use case #4 (local evaluation through an outage; the proxy's faults, counted
+from ``Record.fault``):
+
+* ``outage_findings``: the refreshes during a 503 outage follow the
+  documented backoff: exactly ``expected`` faulted ruleset requests, all
+  answered the outage's status, consecutive among the ruleset requests; each
+  gap from a failure's answer to the next request at least the backoff step
+  (R, 2R, 4R, ...; ``SLACK`` for the clock), and the first unfaulted ruleset
+  request after them at least the next step after the last. Lower bounds
+  only: a timer never fires early, and a runner may be slow. None faulted is
+  void.
+* ``error_tally_findings``: the driver's ``on_error`` count for an operation
+  equals the requests the proxy faulted on its path.
+* ``last_known_findings``: every answer of every round is A0's (the answers
+  before the outage), local, with no error.
+* ``deferral_findings``: evaluate requests per flag key are the distinct users
+  asked, for a flag the server evaluates, and 0 for a local one (the proxy
+  keeps no query string, so per key over chosen users stands in for per pair).
+* ``kept_etag_findings``: the first unfaulted ruleset request after the
+  faulted ones is a 304 sent with ``If-None-Match``: the SDK kept the last
+  good ruleset's ETag. A failing gate, never a report.
+* ``hung_refresh_findings``: while a ruleset request was held (a blackhole),
+  the SDK gave it up itself (``client_closed``), and at least ``minimum``
+  polls were sent and answered inside the hold, each A0's answer, local.
+* ``upstream_failure_findings``: no unfaulted 502 (the proxy's own answer
+  when the upstream cannot be reached): an injected fault is always tagged.
+
 ``status()`` gives the ruleset's version as the document has it; the ruleset
 route sends it as the ETag in double quotes (``ETag: "<version>"``), which is
 what the proxy records. ``etag_of`` is the one place that turns one into the
@@ -33,7 +64,8 @@ other: compared raw, "the ETag differs from the old version" is always true.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections import Counter
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -43,6 +75,16 @@ from usecases.proxy import RULESET_PATH, Record
 EVALUATE_PREFIX = "/api/v1/feature-flags/evaluate/"
 #: Users named in a finding, at most.
 SHOWN = 5
+#: The keys of a driver's ``status()["errors"]``: ``on_error`` calls per
+#: operation, any other operation counted as ``other``.
+ERROR_KEYS = ("refresh", "flush", "evaluate", "other")
+#: Both SDKs' local-mode backoff ceiling, in seconds.
+BACKOFF_CAP = 300.0
+#: How much earlier than its step a retry may seem to come on the runner's
+#: clock before a gate calls it early.
+SLACK = 0.05
+#: A pair: (flag key, user id).
+Pair = tuple[str, str]
 
 
 @dataclass(frozen=True)
@@ -77,10 +119,13 @@ def pacing_findings(records: Sequence[Record], label: str) -> list[str]:
 
 
 def local_proxy_findings(records: Sequence[Record], label: str) -> list[str]:
-    """A local-mode driver's proxy: at least one ruleset 200 (else the SDK is
-    not behind the proxy, and nothing it did was seen), no evaluate call."""
+    """A local-mode driver's proxy: at least one relayed ruleset 200 (else the
+    SDK is not behind the proxy, and nothing it did was seen), no evaluate
+    call."""
     found = []
-    if not any(r.path == RULESET_PATH and r.status == 200 for r in records):
+    if not any(
+        r.path == RULESET_PATH and r.status == 200 and r.fault is None for r in records
+    ):
         found.append(
             f"void: {label} is not behind its proxy (no ruleset 200 went through it)"
         )
@@ -222,7 +267,8 @@ def local_kill_findings(
     """G2-2. Before the toggle the driver's ``status()`` said
     *version_before*; the toggle was written at *toggle_sent*; then the server
     served *version_after* (read straight from it), and *polls* followed until
-    the first false. Then:
+    the first false. Only the ruleset requests the proxy relayed count
+    (``fault is None``). Then:
 
     * the last ruleset 200 the proxy answered before the toggle carries
       ``etag_of(version_before)``: status() and the wire agree on V1;
@@ -235,7 +281,11 @@ def local_kill_findings(
     """
     found = []
     v1, v2 = etag_of(version_before), etag_of(version_after)
-    ruleset = [record for record in records if record.path == RULESET_PATH]
+    ruleset = [
+        record
+        for record in records
+        if record.path == RULESET_PATH and record.fault is None
+    ]
     before = [r for r in ruleset if r.status == 200 and r.t_answer < toggle_sent]
     if not before:
         found.append("void: no ruleset 200 went through the proxy before the toggle")
@@ -280,3 +330,316 @@ def local_kill_findings(
             " through the proxy"
         )
     return found
+
+
+# ---------------------------------------------------------------------------
+# Use case #4: local evaluation through an outage
+# ---------------------------------------------------------------------------
+def _ruleset_requests(records: Sequence[Record]) -> list[Record]:
+    return sorted(
+        (record for record in records if record.path == RULESET_PATH),
+        key=lambda record: record.seq,
+    )
+
+
+def backoff_step(refresh: float, failures: int) -> float:
+    """The delay both SDKs wait after *failures* failed refreshes in a row:
+    ``refresh * 2 ** (failures - 1)``, at most ``BACKOFF_CAP``, counted from
+    the end of the failed request."""
+    return min(refresh * 2 ** (failures - 1), BACKOFF_CAP)
+
+
+def outage_findings(
+    records: Sequence[Record],
+    label: str,
+    *,
+    refresh: float = 5.0,
+    expected: int = 5,
+    status: int = 503,
+) -> list[str]:
+    """One proxy's records over a ``status`` outage on every path, the SDK
+    refreshing every *refresh* seconds: exactly *expected* faulted ruleset
+    requests, all answered *status*, with no relayed ruleset request between
+    them; after the k-th failure the next request at least
+    ``backoff_step(refresh, k) - SLACK`` after that failure's answer; and the
+    first relayed ruleset request after the last failure at least the step
+    after it. None faulted is void: the outage never met the SDK."""
+    ruleset = _ruleset_requests(records)
+    faulted_at = [i for i, record in enumerate(ruleset) if record.fault is not None]
+    if not faulted_at:
+        return [f"void: {label}: the outage met no ruleset request (0 faulted)"]
+    faulted = [ruleset[i] for i in faulted_at]
+    found = []
+    if len(faulted) != expected:
+        found.append(
+            f"{label}: {len(faulted)} faulted ruleset requests during the cut,"
+            f" expected {expected}"
+        )
+    tag = f"status:{status}"
+    wrong = sorted({(r.status, str(r.fault)) for r in faulted if r.fault != tag})
+    if wrong:
+        found.append(
+            f"{label}: faulted ruleset requests were answered {wrong}, expected"
+            f" every one {status} ({tag})"
+        )
+    between = [r for r in ruleset[faulted_at[0] : faulted_at[-1]] if r.fault is None]
+    if between:
+        found.append(
+            f"{label}: {len(between)} relayed ruleset requests came between the"
+            f" faulted ones (the first seq {between[0].seq}): not one outage"
+        )
+    early = []
+    for k, (failed, retry) in enumerate(zip(faulted, faulted[1:]), start=1):
+        gap = retry.t_recv - failed.t_answer
+        step = backoff_step(refresh, k)
+        if gap < step - SLACK:
+            early.append((k, gap, step))
+    if early:
+        k, gap, step = early[0]
+        found.append(
+            f"{label}: {len(early)} retries came before their backoff step:"
+            f" retry {k + 1} came {gap:.2f} s after failure {k}, expected at"
+            f" least {step:g} s"
+        )
+    after = ruleset[faulted_at[-1] + 1 :]
+    if not after:
+        found.append(
+            f"{label}: no relayed ruleset request after the outage: recovery was"
+            " not seen"
+        )
+    else:
+        wait = after[0].t_recv - faulted[-1].t_answer
+        step = backoff_step(refresh, len(faulted))
+        if wait < step - SLACK:
+            found.append(
+                f"{label}: the first ruleset request after the outage came"
+                f" {wait:.2f} s after the last failure, expected at least {step:g} s"
+            )
+    return found
+
+
+def outage_report(
+    records: Sequence[Record], *, t_cut: float, refresh: float = 5.0
+) -> str:
+    """Wall clock, reported and never gated: the first faulted ruleset
+    request's time after the cut (f), each retry's excess over its backoff
+    step, and the wait from the last failure to the next request."""
+    ruleset = _ruleset_requests(records)
+    faulted = [record for record in ruleset if record.fault is not None]
+    if not faulted:
+        return "no faulted ruleset request"
+    excess = [
+        f"{retry.t_recv - failed.t_answer - backoff_step(refresh, k):+.2f}"
+        for k, (failed, retry) in enumerate(zip(faulted, faulted[1:]), start=1)
+    ]
+    later = [r for r in ruleset if r.seq > faulted[-1].seq]
+    recovery = (
+        f"{later[0].t_recv - faulted[-1].t_answer:.2f} s"
+        if later
+        else "no request after"
+    )
+    return (
+        f"f {faulted[0].t_recv - t_cut:.2f} s after the cut; retry excess over"
+        f" the step [{', '.join(excess)}] s; next request after the last failure"
+        f" {recovery}"
+    )
+
+
+def error_tally_findings(
+    errors: Any,
+    records: Sequence[Record],
+    label: str,
+    *,
+    operation: str = "refresh",
+    path: str = RULESET_PATH,
+) -> list[str]:
+    """*errors*, a driver's ``status()["errors"]``, has exactly ``ERROR_KEYS``,
+    and its count for *operation* equals the requests the proxy faulted on
+    *path*. None faulted is void: the tally would compare nothing."""
+    if not isinstance(errors, Mapping) or sorted(errors) != sorted(ERROR_KEYS):
+        keys = sorted(errors) if isinstance(errors, Mapping) else errors
+        return [
+            f"{label}: the driver's status() carries no error tally ({keys!r}),"
+            f" expected the keys {', '.join(ERROR_KEYS)}"
+        ]
+    faulted = sum(1 for r in records if r.path == path and r.fault is not None)
+    if faulted == 0:
+        return [f"void: {label}: the proxy faulted no request on {path}"]
+    counted = errors[operation]
+    if isinstance(counted, bool) or counted != faulted:
+        return [
+            f"{label}: on_error({operation}) {counted!r}, the proxy faulted {faulted}"
+        ]
+    return []
+
+
+def last_known_findings(
+    a0: Mapping[Pair, Any], rounds: Sequence[Mapping[Pair, Poll]], label: str
+) -> list[str]:
+    """Every round asked exactly A0's pairs, and every answer is A0's (the
+    answer before the outage), local, with no error."""
+    if not a0 or not rounds:
+        return [f"void: {label}: {len(a0)} pairs in A0, {len(rounds)} rounds polled"]
+    found = []
+    for number, answers in enumerate(rounds, start=1):
+        missing = [pair for pair in a0 if pair not in answers]
+        extra = [pair for pair in answers if pair not in a0]
+        if missing or extra:
+            found.append(
+                f"{label}: round {number} asked {len(answers)} pairs, A0 has"
+                f" {len(a0)} ({len(missing)} missing, {len(extra)} not in A0)"
+            )
+        changed = [
+            (pair, poll.enabled)
+            for pair, poll in answers.items()
+            if pair in a0 and poll.enabled is not a0[pair]
+        ]
+        if changed:
+            shown = ", ".join(
+                f"{pair!r} answered {enabled!r}" for pair, enabled in changed[:SHOWN]
+            )
+            found.append(
+                f"{label}: round {number}: {len(changed)} of {len(a0)} answers"
+                f" differ from A0 ({shown})"
+            )
+        remote = [
+            poll
+            for poll in answers.values()
+            if poll.source != "local" or poll.error is not None
+        ]
+        if remote:
+            found.append(
+                f"{label}: round {number}: {len(remote)} answers were not local or"
+                f" carried an error (sources {sorted({str(p.source) for p in remote})})"
+            )
+    return found
+
+
+def deferral_findings(
+    records: Sequence[Record],
+    label: str,
+    *,
+    remote: Mapping[str, Iterable[str]],
+    local: Collection[str],
+) -> list[str]:
+    """Evaluate requests per flag key: for each key in *remote* (the flags
+    the server evaluates, each with the users the case asked about it),
+    exactly the number of distinct users; for each key in *local*, none; and
+    none for a flag the case did not name. Keys are compared as the path
+    carries them (the cases' keys need no encoding)."""
+    if not remote and not local:
+        return [f"void: {label}: no flag to count evaluate requests for"]
+    counts = Counter(
+        r.path[len(EVALUATE_PREFIX) :]
+        for r in records
+        if r.path.startswith(EVALUATE_PREFIX)
+    )
+    found = []
+    for key, users in sorted(remote.items()):
+        want = len(set(users))
+        if counts.get(key, 0) != want:
+            found.append(
+                f"{label}: {counts.get(key, 0)} evaluate requests for the remote flag"
+                f" {key!r}, expected {want} (one per distinct user asked)"
+            )
+    for key in sorted(set(local)):
+        if counts.get(key, 0):
+            found.append(
+                f"{label}: {counts[key]} evaluate requests for the local flag"
+                f" {key!r}, expected 0"
+            )
+    unnamed = sorted(set(counts) - set(remote) - set(local))
+    if unnamed:
+        found.append(
+            f"{label}: evaluate requests for flags the case did not name: {unnamed}"
+        )
+    return found
+
+
+def kept_etag_findings(records: Sequence[Record], label: str) -> list[str]:
+    """The first relayed ruleset request after the last faulted one is a 304
+    to a request that carried ``If-None-Match``: the SDK kept the last good
+    ruleset's ETag through the faults. A failing gate: with a long cache a
+    discarded ruleset can hide in the answers, and this is what sees it."""
+    ruleset = _ruleset_requests(records)
+    faulted_at = [i for i, record in enumerate(ruleset) if record.fault is not None]
+    if not faulted_at:
+        return [f"void: {label}: no ruleset request was faulted"]
+    after = ruleset[faulted_at[-1] + 1 :]
+    if not after:
+        return [
+            f"{label}: no ruleset request after the faulted ones: whether the SDK"
+            " kept its ruleset was not seen"
+        ]
+    first = after[0]
+    if (first.status, first.if_none_match) != (304, True):
+        sent = "with" if first.if_none_match else "without"
+        return [
+            f"{label}: the first ruleset answer after the faulted ones was"
+            f" {first.status} to a request {sent} If-None-Match, expected a 304 to"
+            " If-None-Match: the SDK did not keep its last good ruleset's ETag"
+        ]
+    return []
+
+
+def hung_refresh_findings(
+    records: Sequence[Record],
+    a0: Mapping[Pair, Any],
+    polls: Sequence[tuple[Pair, Poll]],
+    label: str,
+    *,
+    minimum: int = 10,
+) -> list[str]:
+    """The first held (blackhole) ruleset request: the SDK gave it up itself
+    (``client_closed``), and at least *minimum* of *polls* were sent after it
+    arrived and answered before it ended, each A0's answer, local, with no
+    error: evaluation never waited on the refresh."""
+    held = [r for r in _ruleset_requests(records) if r.fault == "blackhole"]
+    if not held:
+        return [f"void: {label}: no ruleset request was held"]
+    hold = held[0]
+    found = []
+    if not hold.client_closed:
+        found.append(
+            f"{label}: the SDK did not give up the held ruleset request (it ended"
+            f" after {hold.t_answer - hold.t_recv:.2f} s with the hold or the"
+            " proxy): its timeout did not fire"
+        )
+    inside = [
+        (pair, poll)
+        for pair, poll in polls
+        if poll.sent >= hold.t_recv and poll.answered <= hold.t_answer
+    ]
+    if len(inside) < minimum:
+        found.append(
+            f"{label}: {len(inside)} polls were sent and answered while the ruleset"
+            f" request was held, expected at least {minimum}"
+        )
+    wrong = [
+        pair
+        for pair, poll in inside
+        if pair not in a0
+        or poll.enabled is not a0[pair]
+        or poll.source != "local"
+        or poll.error is not None
+    ]
+    if wrong:
+        found.append(
+            f"{label}: {len(wrong)} of the polls during the hold were not A0's local"
+            f" answer ({', '.join(map(repr, wrong[:SHOWN]))})"
+        )
+    return found
+
+
+def upstream_failure_findings(records: Sequence[Record], label: str) -> list[str]:
+    """No unfaulted 502: that is the proxy's own answer when the upstream
+    cannot be reached or breaks off, which a gate counting tagged faults
+    would otherwise not see."""
+    failed = [r for r in records if r.fault is None and r.status == 502]
+    if not failed:
+        return []
+    paths = sorted({r.path for r in failed})
+    return [
+        f"{label}: {len(failed)} unfaulted 502 answers ({', '.join(paths)}): the"
+        " upstream failed; an injected fault is always tagged"
+    ]
