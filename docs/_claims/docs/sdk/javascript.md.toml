@@ -362,6 +362,10 @@ text = "getEvaluatedFlags | (userId) => string[] | Keys of cached, successfully 
 by = ["test:sdk/js/__tests__/client.test.ts::getEvaluatedFlags returns cached flag keys for the user only"]
 
 [[unit]]
+text = "getCachedFlags | (userId) => FlagEvaluation[] | Cached, unexpired flag evaluations for the user (no network); in local mode each carries source ('local' or 'server') | —"
+by = ["test:sdk/js/__tests__/local.test.ts::getCachedFlags returns the user's unexpired cached evaluations, each with its source"]
+
+[[unit]]
 text = "clearCache | () => void | Drops both caches; keeps the keys a key-less track is sent to | —"
 by = [
     "test:sdk/js/__tests__/client.test.ts::clearCache empties both caches",

@@ -167,6 +167,7 @@ turn that into their safe default.
 | `fetchAssignments` | `(userId, { activeOnly?: boolean } = { activeOnly: true }) => Promise<AssignmentRecord[]>` | Server-side assignment rows (raw objects); not cached | Rejects |
 | `getAssignments` | `(userId) => Assignment[]` | Cached, unexpired assignments in assignment order (no network) | — |
 | `getEvaluatedFlags` | `(userId) => string[]` | Keys of cached, successfully evaluated flags (no network) | — |
+| `getCachedFlags` | `(userId) => FlagEvaluation[]` | Cached, unexpired flag evaluations for the user (no network); in local mode each carries `source` (`'local'` or `'server'`) | — |
 | `clearCache` | `() => void` | Drops both caches; keeps the keys a key-less `track` is sent to | — |
 | `ready` | `({ timeoutMs? }?) => Promise<ReadyResult>` | `{ ok: true, rulesetVersion }` or `{ ok: false, error }`; `{ ok: true, rulesetVersion: null }` at once in server mode | Never rejects |
 | `status` | `() => LocalEvaluationStatus` | `{ evaluation, ready, rulesetVersion, lastRefreshAt, lastError, serverEvaluatedFlags }` | — |
