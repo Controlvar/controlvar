@@ -109,6 +109,14 @@ by = [
 ]
 
 [[unit]]
+text = "A variant that is no better recommended to ship no more often than α says, whatever the split | On zero-inflated, right-skewed revenue (most users spend nothing, a few spend a lot), a lopsided split recommended shipping a variant that was no better more often than α says. Measured in 2,000 A/A experiments (both variants the same) at each split, at α = 0.05, with 5% of users buying, order values lognormal and repeat purchases: with 600 users in the control and 5,400 in the treatment, the treatment was recommended to ship in 150 (7.5%), where about 50 (2.5%) are expected in that direction, and there the larger variant was the one wrongly named; with 3,000 users in each, in 46, within the expected rate. These are the sizes measured; no size is known at which a lopsided split meets α."
+by = [
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_an_uneven_split_recommends_a_false_winner_above_the_band",
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_an_equal_split_recommends_a_false_winner_within_the_band",
+    "test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_the_band_is_the_central_99_9_percent_of_one_direction",
+]
+
+[[unit]]
 text = "Intervals on a treatment's difference adjusted for the experiment's correction | The intervals on a treatment's difference from the control, on its relative change and on its impact are not adjusted for comparing several treatments with the control, while is_significant is (Benjamini-Hochberg by default). With two or more treatments an interval can exclude 0 on a treatment that is not significant. For a metric analysed as a share of users, the interval and Fisher's exact test can also disagree near the threshold, either way."
 by = [
     "test:backend/tests/unit/services/test_difference_intervals.py::test_b5_an_adjusted_treatment_is_not_significant_although_its_interval_excludes_0",

@@ -61,6 +61,8 @@ Statistical significance tells you whether a difference between control and trea
 
 A result is statistically significant when p < your chosen alpha threshold (usually 0.05).
 
+On zero-inflated, right-skewed revenue with a lopsided split, these rates did not hold: A/A experiments (both variants the same) recommended shipping a variant that was no better more often than alpha says. See [Limitations](limitations.md#experiments-and-results) for what was measured.
+
 **Important**: statistical significance does not tell you the effect is large or meaningful. Always check effect size alongside p-value.
 
 ---
@@ -214,7 +216,7 @@ Your SDK client is initialized with an API key, which is stored in the database 
 |------|-----------|
 | **A/B test** | Experiment comparing two variants (control and treatment) |
 | **A/B/n test** | Experiment comparing more than two variants |
-| **Alpha (α)** | The significance threshold; probability of a false positive you are willing to accept (typically 0.05) |
+| **Alpha (α)** | The significance threshold; probability of a false positive you are willing to accept (typically 0.05). On revenue with a lopsided split, false positives were measured more often than α: see [Limitations](limitations.md#experiments-and-results) |
 | **Bucketing** | The process of assigning users to variants |
 | **Confidence interval** | Range of values within which the true effect size likely falls |
 | **Control** | The baseline variant; typically the existing experience |
