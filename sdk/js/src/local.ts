@@ -349,6 +349,7 @@ export class LocalEvaluation {
         // Retry-After is a floor: never earlier than the server asked, nor than the interval.
         return { ms: Math.max(retryAfterMs(response) ?? this.interval, this.interval), jitter: false };
       }
+      if (status >= 500) this.ruleset = null; // PLANT L-1 (throwaway branch, never merged): a 5xx discards the ruleset
       return this.transient(await this.transport.httpError(response, RULESET_PATH, method));
     } catch (err) {
       return this.transient(asExperimentationError(err));

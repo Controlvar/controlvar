@@ -440,6 +440,9 @@ class LocalEvaluation:
             wait = _retry_after(response)
             # Retry-After is a floor: never earlier than the server asked, nor than the interval.
             return max(wait if wait is not None else self._interval, self._interval)
+        if status >= 500:  # PLANT L-1 (throwaway branch, never merged): a 5xx discards the ruleset
+            with self._lock:
+                self._ruleset = None
         return self._transient(_http_error(response, RULESET_PATH))
 
     def _load(self, response: Response) -> float:
