@@ -630,6 +630,10 @@ class RecordingProxy:
         try:
             if fault is None:
                 self._forward_and_answer(handler, seq, t_recv, method, target, path)
+            elif fault.kind == "corrupt":  # PLANT L-2 (throwaway branch, never merged)
+                self._forward_and_answer(
+                    handler, seq, t_recv, method, target, path, fault
+                )
             else:
                 self._answer_fault(handler, fault, seq, t_recv, method, path)
         finally:
@@ -728,6 +732,7 @@ class RecordingProxy:
         method: str,
         target: str,
         path: str,
+        fault: Fault | None = None,
     ) -> None:
         if_none_match = "If-None-Match" in handler.headers
         body = _read_body(handler)
@@ -742,12 +747,26 @@ class RecordingProxy:
             )
         except (OSError, http.client.HTTPException):
             status, reason, headers, payload = 502, "Bad Gateway", [], b""
+        tag = None
+        if fault is not None and status == 200:
+            # PLANT L-2: only a forwarded 200 is corrupted; a 304 passes unfaulted.
+            assert fault.body is not None
+            tag, payload = fault.tag, CORRUPT_BODIES[fault.body]
+            headers = [("Content-Type", "application/json")]
         etag = None
         if path == RULESET_PATH:
             etag = next((v for n, v in headers if n.lower() == "etag"), None)
         self._store(
             Record(
-                seq, t_recv, self._clock(), method, path, status, etag, if_none_match
+                seq,
+                t_recv,
+                self._clock(),
+                method,
+                path,
+                status,
+                etag,
+                if_none_match,
+                tag,
             )
         )
         handler.send_response(status, reason)
