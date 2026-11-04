@@ -358,12 +358,26 @@ class ExperimentationClient:
 
         Retries exactly once on 429, sleeping for ``Retry-After`` (capped at
         :data:`MAX_RETRY_AFTER_SECONDS`). Raises :class:`ExperimentationError`
-        for a network failure, and ``TypeError`` for a body JSON cannot encode.
+        for a network failure. Sends nothing, and raises
+        :class:`ExperimentationError` with ``status`` ``None``, for a body
+        holding NaN or an infinite number, which JSON has no value for (and for
+        a circular reference: ``json.dumps`` refuses both with ``ValueError``).
+        Raises ``TypeError`` for a body holding an object JSON cannot encode.
         """
         url = self.api_url + path
         if query:
             url += "?" + urlencode(query, quote_via=quote)
-        data = None if body is None else json.dumps(body, default=_json_default).encode("utf-8")
+        data = None
+        if body is not None:
+            # Only json.dumps is in the try. A lone surrogate in the query makes urlencode above
+            # raise UnicodeEncodeError, also a ValueError, and that keeps its own path.
+            try:
+                encoded = json.dumps(body, default=_json_default, allow_nan=False)
+            except ValueError as exc:
+                raise ExperimentationError(
+                    f"{method} {path} was not sent: its body holds a value JSON cannot represent ({exc})"
+                ) from exc
+            data = encoded.encode("utf-8")
 
         response = self._send(method, url, data)
         if response.status == 429:
@@ -385,7 +399,8 @@ class ExperimentationClient:
 
         Retries exactly once on 429, sleeping for ``Retry-After`` (capped at
         :data:`MAX_RETRY_AFTER_SECONDS`). Raises :class:`ExperimentationError`
-        for any non-2xx response, network failure or undecodable body.
+        for any non-2xx response, network failure or undecodable body, and for a
+        request body :meth:`_exchange` does not send (``status`` ``None``).
         """
         response = self._exchange(method, path, body=body, query=query)
         if response.status < 200 or response.status >= 300:

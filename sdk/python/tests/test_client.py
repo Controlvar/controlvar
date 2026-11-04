@@ -1404,3 +1404,136 @@ class TestRequestErrorsNameThePathWithoutItsQuery:
             f"'/base path{EVALUATE}' (found at least ' ')"
         )
         assert_no_query(str(info.value))
+
+
+# ------------------------------------------------------------ numbers JSON cannot carry
+
+NAN = float("nan")
+INF = float("inf")
+
+
+class TestNaNAndInfinityAreNotSent:
+    """#1630: a request body holding NaN or an infinite number is not sent. Each method keeps
+    the failure path it already has: ``track`` returns False, ``track_batch`` counts the
+    chunk's events as failures, ``get_variant`` returns the default, ``get_assignment`` raises
+    ``ExperimentationError`` with ``status`` None, ``report_error`` returns False. Before,
+    each sent the request (JSON has no NaN or Infinity) and returned the server's answer."""
+
+    @pytest.mark.regression
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"event_value": NAN},
+            {"event_value": INF},
+            {"event_value": -INF},
+            {"properties": {"price": NAN}},
+            {"properties": {"items": [{"price": INF}]}},
+        ],
+        ids=["value-nan", "value-inf", "value-minus-inf", "properties-nan", "properties-nested-inf"],
+    )
+    def test_track_returns_false_and_sends_nothing(self, client, transport, kwargs):
+        transport.route("POST", "/api/v1/tracking/track", json={})
+        result = client.track("user-1", "purchase", experiment_key="checkout_flow", **kwargs)
+        assert (result, len(transport.requests)) == (False, 0)
+
+    @pytest.mark.regression
+    def test_a_key_less_track_with_nothing_to_attribute_sends_nothing(self, client, transport):
+        transport.route("POST", "/api/v1/tracking/track", json={})
+        result = client.track("user-1", "purchase", event_value=NAN)
+        assert (result, len(transport.requests)) == (False, 0)
+
+    @pytest.mark.regression
+    def test_a_key_less_track_fanned_out_sends_nothing(self, client, transport):
+        assign_route(transport)
+        batch_route(transport)
+        client.get_assignment("checkout_flow", "user-1")
+        assert client.track("user-1", "purchase", event_value=NAN) is False
+        assert transport.calls() == ["POST /api/v1/tracking/assign"]
+
+    @pytest.mark.regression
+    def test_track_batch_counts_the_whole_chunk_failed_and_sends_nothing(self, client, transport):
+        batch_route(transport, success_count=3)
+        events = [{"event_name": "purchase", "user_id": "u", "experiment_key": "x", "value": v} for v in (1, NAN, 2)]
+        result = client.track_batch(events)
+        assert (result.success_count, result.failure_count, len(transport.requests)) == (0, 3, 0)
+        [error] = result.errors
+        assert (error["index"], error["count"], error["status"]) == (0, 3, None)
+
+    @pytest.mark.regression
+    def test_track_batch_still_sends_the_other_chunks(self, client, transport):
+        events = [{"event_name": "click", "user_id": "u", "experiment_key": "x", "value": 1.0} for _ in range(150)]
+        events[120]["value"] = NAN
+        transport.respond(200, json={"success_count": 100, "failure_count": 0})
+        result = client.track_batch(events)
+        assert (result.success_count, result.failure_count, len(transport.requests)) == (100, 50, 1)
+        assert len(transport.last.json()["events"]) == 100
+        [error] = result.errors
+        assert (error["index"], error["count"], error["status"]) == (100, 50, None)
+
+    @pytest.mark.regression
+    def test_get_variant_returns_the_default_and_sends_nothing(self, client, transport):
+        assign_route(transport)
+        variant = client.get_variant("checkout_flow", "user-1", {"score": NAN})
+        assert (variant, len(transport.requests)) == ("control", 0)
+
+    @pytest.mark.regression
+    @pytest.mark.parametrize(
+        "attributes",
+        [{"score": NAN}, {"limits": {"max": INF}}, {"history": [1.0, -INF]}],
+        ids=["nan", "nested-inf", "list-minus-inf"],
+    )
+    def test_get_assignment_raises_with_no_status_and_sends_nothing(self, client, transport, attributes):
+        assign_route(transport)
+        with pytest.raises(ExperimentationError) as info:
+            client.get_assignment("checkout_flow", "user-1", attributes)
+        assert (info.value.status, info.value.body) == (None, None)
+        assert isinstance(info.value.__cause__, ValueError)
+        assert str(info.value).startswith("POST /api/v1/tracking/assign was not sent: ")
+        assert transport.requests == []
+        assert client.cached_assignments("user-1") == []
+
+    @pytest.mark.regression
+    def test_report_error_returns_false_and_sends_nothing(self, client, transport):
+        transport.route("POST", "/api/v1/tracking/errors", status=201, json={"id": "err-1"})
+        result = client.report_error("crash", "boom", feature_flag_key="f", metadata={"latency_ms": INF})
+        assert (result, len(transport.requests)) == (False, 0)
+
+    @pytest.mark.regression
+    def test_a_circular_body_takes_the_same_path(self, client, transport):
+        """``json.dumps`` refuses a circular reference with the same ``ValueError``."""
+        assign_route(transport)
+        attributes: dict = {}
+        attributes["self"] = attributes
+        assert client.get_variant("checkout_flow", "user-1", attributes) == "control"
+        with pytest.raises(ExperimentationError) as info:
+            client.get_assignment("checkout_flow", "user-1", attributes)
+        assert info.value.status is None
+        assert transport.requests == []
+
+    def test_a_large_finite_number_is_still_sent(self, client, transport):
+        transport.route("POST", "/api/v1/tracking/track", json={})
+        batch_route(transport, success_count=1)
+        assign_route(transport)
+        assert client.track("user-1", "purchase", event_value=1e308, experiment_key="checkout_flow") is True
+        assert transport.last.json()["value"] == 1e308
+        result = client.track_batch([{"event_name": "purchase", "user_id": "u", "experiment_key": "x", "value": 1e308}])
+        assert (result.success_count, result.failure_count) == (1, 0)
+        assert transport.last.json()["events"][0]["value"] == 1e308
+        assert client.get_variant("checkout_flow", "user-1", {"score": -1e308}) == "treatment"
+        assert transport.last.json()["context"] == {"score": -1e308}
+        assert len(transport.requests) == 3
+
+    def test_an_object_json_cannot_encode_still_raises_type_error(self, client, transport):
+        """Not a number: ``get_variant`` lets the ``TypeError`` through, as it always has."""
+        assign_route(transport)
+        with pytest.raises(TypeError):
+            client.get_variant("checkout_flow", "user-1", {"obj": object()})
+        assert transport.requests == []
+
+    def test_is_feature_enabled_still_sends_the_attribute_in_its_query(self, client, transport):
+        """The flag routes carry the attributes in the query string, not in a body, and that
+        encoding is unchanged: one GET whose ``context`` holds ``NaN``, and the server's answer."""
+        flag_route(transport, key="on", enabled=True)
+        assert client.is_feature_enabled("on", "user-1", {"score": NAN}) is True
+        assert transport.calls() == ["GET /api/v1/feature-flags/evaluate/on"]
+        assert transport.last.query == {"user_id": "user-1", "context": '{"score":NaN}'}

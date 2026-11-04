@@ -161,6 +161,10 @@ another process does not have them. In a server, pass `experiment_key` on conver
 `event_type` defaults to `event_name`; `properties` is sent as `metadata`; `timestamp` may be a
 `datetime` (naive values are treated as UTC) or an ISO-8601 string.
 
+From the next published version, `track` returns `False`, and sends nothing, when `event_value`
+or `properties` holds NaN or an infinite number; `get_variant` returns the default and
+`get_assignment` raises `ExperimentationError` for the same reason.
+
 ## Backend endpoints used
 
 Every request carries `X-API-Key: <key>`, `Content-Type: application/json` and `Accept: application/json`.
