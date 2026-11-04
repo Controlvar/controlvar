@@ -1129,6 +1129,7 @@ by = ["exempt:label"]
 text = "Safety monitoring checks error rates and latency every 5 minutes by default."
 by = [
     "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_settings_have_scheduler_interval_defaults",
+    "test:backend/tests/unit/core/test_safety_scheduler_off_loop.py::test_the_safety_loop_checks_then_sleeps_the_interval_in_seconds",
     "test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetMetricValue::test_error_metric_name_uses_error_metrics",
     "test:backend/tests/integration/services/test_safety_service_coverage.py::TestGetMetricValue::test_latency_metric_name_maps_to_avg_latency",
 ]

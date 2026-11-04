@@ -309,6 +309,7 @@ by = [
 text = "Automated Safety: monitoring every 5 minutes by default, with automatic rollback capabilities"
 by = [
     "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_settings_have_scheduler_interval_defaults",
+    "test:backend/tests/unit/core/test_safety_scheduler_off_loop.py::test_the_safety_loop_checks_then_sleeps_the_interval_in_seconds",
     "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_rollback_uses_config_rollback_percentage",
 ]
 

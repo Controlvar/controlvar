@@ -34,6 +34,7 @@ text = "The safety monitor runs every 5 minutes by default (SAFETY_CHECK_INTERVA
 by = [
     "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_settings_have_scheduler_interval_defaults",
     "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_interval_defaults_come_from_settings",
+    "test:backend/tests/unit/core/test_safety_scheduler_off_loop.py::test_the_safety_loop_checks_then_sleeps_the_interval_in_seconds",
 ]
 
 [[unit]]
@@ -594,7 +595,10 @@ by = ["journey:feature-flag-safety#rollback-audit"]
 
 [[unit]]
 text = "Its new_value holds trigger_type (automatic), previous_percentage, new_percentage, deactivated and paused_schedules (see Audit Logging)"
-by = ["journey:feature-flag-safety#rollback-audit"]
+by = [
+    "journey:feature-flag-safety#rollback-audit",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p12_an_automatic_partial_rollback_keeps_rule_users_and_pauses_only_the_active_schedule",
+]
 
 [[unit]]
 text = "Sends a Slack alert to SLACK_DEFAULT_CHANNEL and a safety_rollback event to NOTIFICATION_WEBHOOK_URL, each when configured."
@@ -685,11 +689,17 @@ by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p4_
 
 [[unit]]
 text = "A user who matches a rule is bucketed by that rule's own rollout_percentage (100 unless the rule sets one), so the rollback does not change whether that user gets the flag."
-by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p4_a_partial_rollback_lowers_only_the_global_rollout"]
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p4_a_partial_rollback_lowers_only_the_global_rollout",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p12_an_automatic_partial_rollback_keeps_rule_users_and_pauses_only_the_active_schedule",
+]
 
 [[unit]]
 text = "Either way, the flag's active rollout schedules are paused, so a later stage cannot raise the percentage again; they stay paused until you resume them."
-by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p10_a_tick_and_a_stage_advance_after_a_rollback_leave_users_off"]
+by = [
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p10_a_tick_and_a_stage_advance_after_a_rollback_leave_users_off",
+    "test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p12_an_automatic_partial_rollback_keeps_rule_users_and_pauses_only_the_active_schedule",
+]
 
 [[unit]]
 text = "So the flag's off value is served to every user after a rollback to 0%, and after a partial rollback to the users it removes, while users matched by a targeting rule keep their rule's percentage."
