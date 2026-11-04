@@ -530,6 +530,17 @@ describe('CreateApiKeyModal keyboard and screen-reader behaviour (#1613)', () =>
     expect(live.textContent).not.toContain(SECRET);
   });
 
+  it('moves focus to Done once the key is shown', async () => {
+    mockCreate();
+    render(<Harness />);
+    screen.getByTestId('opener').focus();
+    fireEvent.click(screen.getByTestId('opener'));
+    fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'K' } });
+    fireEvent.click(screen.getByTestId('create-api-key-submit'));
+    await waitFor(() => expect(screen.getByTestId('masked-key-value')).toBeInTheDocument());
+    expect(screen.getByTestId('modal-done-button')).toHaveFocus();
+  });
+
   it('puts the plaintext key in no accessible name, description or live region', async () => {
     mockCreate();
     render(<CreateApiKeyModal {...defaultProps} />);

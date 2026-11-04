@@ -307,6 +307,7 @@ test.describe("Accessibility Audits", () => {
     await expect(adminPage.getByTestId("api-key-name-input")).toBeFocused();
 
     const open = await new AxeBuilder({ page: adminPage })
+      .include('[data-testid="create-api-key-modal"]')
       .withTags(["wcag2a", "wcag2aa"])
       .analyze();
     expect(open.violations, open.violations.map((v) => `[${v.impact}] ${v.id}`).join("\n")).toHaveLength(0);

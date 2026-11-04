@@ -95,6 +95,20 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
     };
   }, [isOpen]);
 
+  // Whenever the dialog is closed (by this component or by its parent, which
+  // closes it as soon as a key is created) drop everything it held, so the
+  // next open is a fresh dialog and no earlier key stays in memory.
+  useEffect(() => {
+    if (isOpen) return;
+    setName('');
+    setRulesetScope(false);
+    setMcpReadScope(false);
+    setSubmitting(false);
+    setError(null);
+    setCreatedKey(null);
+    setCopied(false);
+  }, [isOpen]);
+
   // The form is replaced by the key view: keep focus inside the dialog.
   useEffect(() => {
     if (createdKey) doneRef.current?.focus();
