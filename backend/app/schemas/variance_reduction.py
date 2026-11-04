@@ -36,8 +36,9 @@ class VarianceReductionMethod(str, Enum):
 class VarianceReductionConfig(BaseModel):
     """Configuration for variance reduction on an experiment.
 
-    This config is stored as JSONB in the experiments table and controls
-    which variance-reduction method is applied when computing results.
+    This config is stored as JSONB in the experiments table. Only the CUPED
+    results view reads it; ``winsorization`` is accepted and stored but
+    applied by no results view.
 
     Attributes:
         method: Which variance-reduction method to use.
@@ -47,8 +48,9 @@ class VarianceReductionConfig(BaseModel):
             assignment is the history.
         covariate_lookback_days: Number of days of pre-experiment data to use
             when building the covariate (1–90, default 7).
-        winsorization_percentile: Upper percentile for Winsorization clipping
-            (50–100, default 99.0).
+        winsorization_percentile: Upper percentile reserved for Winsorization
+            (50–100, default 99.0). Stored and validated; applied by no
+            results view.
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -81,8 +83,9 @@ class VarianceReductionConfig(BaseModel):
         ge=50.0,
         le=100.0,
         description=(
-            "Upper percentile threshold for Winsorization (50–100). "
-            "Values above this percentile are clipped to the threshold value."
+            "Upper percentile reserved for Winsorization (50–100). Stored and "
+            "validated, but applied by no results view: a metric's numbers are "
+            "the same whatever this is."
         ),
     )
 

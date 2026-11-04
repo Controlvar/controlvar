@@ -13,9 +13,12 @@ import that skips when CI happens to lack a package, a ``-m`` or
   them: ``python -P -m pytest tests/usecases`` through that root's own
   ``pytest.ini`` (no ``-o addopts``, no ``-c``), from a copy of the tree made
   with ``shutil`` (``scripts/core_build.sh``'s copy has no ``.git``, so no
-  ``git archive``), with nothing on ``PYTHONPATH``. ``-P`` keeps the working
-  directory off ``sys.path``, so only the ini's ``pythonpath`` can make the
-  imports work; dropping ``../ground_truth`` from it fails loading the root's
+  ``git archive``), with nothing on ``PYTHONPATH`` and without what an install
+  of this repository adds to the interpreter (the arm installs only the
+  requirements; the nightly's unit job also runs ``pip install -e .``, see
+  ``WITHOUT_AN_INSTALLED_COPY``). ``-P`` keeps the working directory off
+  ``sys.path``, so only the ini's ``pythonpath`` can make the imports work;
+  dropping ``../ground_truth`` from it fails loading the root's
   ``conftest.py`` (exit 4, pytest's usage error: it imports the admin helper,
   which imports the ground-truth driver) and dropping ``../..`` fails the
   ``-p backend.tests.no_real_aws`` plugin (exit 1), both checked here on the
@@ -68,8 +71,60 @@ COPIED_FILES = (
     ("backend", "tests", "no_real_aws.py"),
 )
 PYTHONPATH_LINE = "pythonpath = . ../ground_truth ../.."
+#: The module each entry provides, as the copy's collection names it when the
+#: entry is gone.
+MISSING_WITHOUT = {"../ground_truth": "driver", "../..": "backend"}
 #: The longest a collection may take.
 COLLECT_SECONDS = 120
+#: Run by the copy's interpreter in place of ``-m pytest`` (``python -P -c``
+#: this, then pytest through ``runpy`` as ``-m`` does), with the checkout and
+#: ``INSTALLED_COPY_STATUS`` as its first two arguments. ``pip install -e .``
+#: leaves the checkout's ``backend`` importable from any directory: today's
+#: setuptools puts a finder on ``sys.meta_path`` from a ``.pth`` file, and an
+#: older editable install put the checkout itself on ``sys.path`` from one.
+#: The nightly's unit job installs the repository that way and the arm does
+#: not, so the ``../..`` case collected without its entry there and only there
+#: (#1726). Both shapes are removed here, and nothing else: no finder or path
+#: entry that cannot reach the checkout's ``backend`` is touched
+#: (``PathFinder`` is kept, after the checkout is off the path). What
+#: ``../ground_truth`` provides (``driver`` and the library beside it) is in no
+#: distribution and is importable only from ``tests/ground_truth`` itself, so
+#: that case is unaffected. If the checkout's ``backend`` is still importable
+#: afterwards the run stops with ``INSTALLED_COPY_STATUS``, never 1, so a
+#: removal that misses cannot pass for the ``../..`` case.
+WITHOUT_AN_INSTALLED_COPY = """\
+import importlib.machinery, importlib.util, os, runpy, sys
+
+checkout, status = sys.argv.pop(1), int(sys.argv.pop(1))
+own = os.path.realpath(os.path.join(checkout, "backend"))
+
+
+def reaches_own(entry):
+    return os.path.realpath(os.path.join(entry, "backend")) == own
+
+
+def is_own(spec):
+    places = (spec and spec.submodule_search_locations) or ()
+    return any(os.path.realpath(place) == own for place in places)
+
+
+def finds_own(finder):
+    if finder is importlib.machinery.PathFinder:
+        return False
+    find_spec = getattr(finder, "find_spec", None)
+    return find_spec is not None and is_own(find_spec("backend", None))
+
+
+sys.path[:] = [entry for entry in sys.path if not reaches_own(entry)]
+sys.meta_path[:] = [finder for finder in sys.meta_path if not finds_own(finder)]
+left = importlib.util.find_spec("backend")
+if is_own(left):
+    print("the checkout's backend is still importable:", left, file=sys.stderr)
+    sys.exit(status)
+runpy.run_module("pytest", run_name="__main__", alter_sys=True)
+"""
+#: Not an exit status pytest uses (0-5), so it cannot pass for either case.
+INSTALLED_COPY_STATUS = 99
 
 # Assembled so that this file does not match its own check.
 _FORBIDDEN = tuple(
@@ -135,7 +190,8 @@ def _copy(tmp_path: Path) -> Path:
 
 def _collect(root: Path) -> subprocess.CompletedProcess[str]:
     """``python -P -m pytest tests/usecases --collect-only`` in *root*, as the
-    arm runs it, with nothing on PYTHONPATH and no PYTEST_ADDOPTS."""
+    arm runs it, with nothing on PYTHONPATH, no PYTEST_ADDOPTS and no
+    installed copy of the repository (``WITHOUT_AN_INSTALLED_COPY``)."""
     env = {
         name: value
         for name, value in os.environ.items()
@@ -145,8 +201,10 @@ def _collect(root: Path) -> subprocess.CompletedProcess[str]:
         [
             sys.executable,
             "-P",
-            "-m",
-            "pytest",
+            "-c",
+            WITHOUT_AN_INSTALLED_COPY,
+            str(REPO_ROOT),
+            str(INSTALLED_COPY_STATUS),
             "tests/usecases",
             "--collect-only",
             "-q",
@@ -168,11 +226,14 @@ def test_exactly_the_expected_cases_are_collected_from_a_copy(tmp_path):
     assert _counts(result.stdout) == EXPECTED_CASES, result.stdout
 
 
+@pytest.mark.regression
 @pytest.mark.parametrize(("entry", "status"), [("../ground_truth", 4), ("../..", 1)])
 def test_the_copy_collects_only_through_its_pythonpath(tmp_path, entry, status):
     """Each ``pythonpath`` entry is needed: without it the copy does not
-    collect. (Without ``-P`` the working directory would stand in for
-    ``../..`` and hide its loss.)"""
+    collect, for want of the module that entry provides. (Without ``-P`` the
+    working directory would stand in for ``../..`` and hide its loss; so would
+    an editable install of the repository, #1726, which ``_collect`` takes
+    away.)"""
     root = _copy(tmp_path)
     ini = root / "tests" / "usecases" / "pytest.ini"
     text = ini.read_text(encoding="utf-8")
@@ -181,7 +242,9 @@ def test_the_copy_collects_only_through_its_pythonpath(tmp_path, entry, status):
     ini.write_text(text.replace(PYTHONPATH_LINE, kept), encoding="utf-8")
     assert ini.read_text(encoding="utf-8") != text
     result = _collect(root)
-    assert result.returncode == status, result.stdout + result.stderr
+    output = result.stdout + result.stderr
+    assert result.returncode == status, output
+    assert f"No module named {MISSING_WITHOUT[entry]!r}" in output, output
 
 
 def test_no_gate_here_or_under_tests_usecases_can_skip():
