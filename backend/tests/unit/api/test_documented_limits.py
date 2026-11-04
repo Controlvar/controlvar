@@ -522,25 +522,14 @@ SENDS = {
         [("async ({ flag_key, user_id, context }) =>", "EVALUATION_FIELDS,")],
         "{ user_id, context }",
     ),
-}
-
-#: Every directory under sdk/ whose flag evaluation sends the user id alone, so
-#: a flag rule on attributes cannot match from it: the issue that tracks it, its
-#: file, and its code from the evaluate signature through the request call as
-#: (the line that starts it, the first line after the call) pairs.
-DOES_NOT_SEND = {
+    # Since #1723: the URL is built in evaluateUrl, which evaluateFeatureFlag calls.
     "java": (
-        1718,
         "sdk/java/core/src/main/java/com/controlvar/sdk/ExperimentationClient.java",
-        [
-            (
-                "public FlagEvaluation evaluateFeatureFlag(",
-                "if (!response.isSuccessful())",
-            )
-        ],
+        [("private HttpUrl evaluateUrl(", "private static String withoutQuery(")],
+        'addQueryParameter("context"',
     ),
+    # Since #1722.
     "dotnet": (
-        1719,
         "sdk/dotnet/src/Controlvar/ExperimentationClient.cs",
         [
             (
@@ -548,7 +537,15 @@ DOES_NOT_SEND = {
                 "if (string.IsNullOrEmpty(result.Key))",
             )
         ],
+        'query["context"]',
     ),
+}
+
+#: Every directory under sdk/ whose flag evaluation sends the user id alone, so
+#: a flag rule on attributes cannot match from it: the issue that tracks it, its
+#: file, and its code from the evaluate signature through the request call as
+#: (the line that starts it, the first line after the call) pairs.
+DOES_NOT_SEND = {
     "ruby": (
         1720,
         "sdk/ruby/lib/controlvar/client.rb",
@@ -598,6 +595,7 @@ _SENDS_A_CONTEXT = (
     "contextQuery",
     "_context_param",
     ":context",
+    "context:",
 )
 
 #: A whole-line ``#`` comment (Python, Ruby, Elixir). A ``#`` after code is
@@ -679,9 +677,15 @@ def test_every_sdk_directory_is_classified_by_whether_flag_evaluation_sends_attr
                 failures.append(f"{sdk}: {problem}")
                 continue
             if "feature-flags/evaluate" not in code:
-                failures.append(f"{sdk}: no evaluate request read in {rel}")
+                failures.append(
+                    f"{sdk}: no evaluate request read in {rel}"
+                    f" (#{issue}: if it now sends, move it to SENDS)"
+                )
             if "user_id" not in code:
-                failures.append(f"{sdk}: no user_id in its evaluate request in {rel}")
+                failures.append(
+                    f"{sdk}: no user_id in its evaluate request in {rel}"
+                    f" (#{issue}: if it now sends, move it to SENDS)"
+                )
             sent = [token for token in _SENDS_A_CONTEXT if token in code]
             if sent:
                 failures.append(
