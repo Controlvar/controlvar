@@ -962,3 +962,11 @@ by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
+
+[[unit]]
+text = "GET /api/v1/scheduler/{name}/history | #1485 | limit accepts 1 to 1,000; 0, a negative value or a value above 1,000 answers 422 and the history is not read. The OpenAPI document changes: limit has a minimum of 1 and a maximum of 1,000, and the operation's description names the bounds."
+by = [
+    "test:backend/tests/unit/api/test_scheduler_health_endpoints.py::TestGetSchedulerHistory::test_rejects_limit_outside_bounds",
+    "test:backend/tests/unit/api/test_scheduler_health_endpoints.py::TestGetSchedulerHistory::test_accepts_limit_at_bounds",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
