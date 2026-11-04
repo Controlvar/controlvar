@@ -194,22 +194,27 @@ INVALID_REASONS: Tuple[str, ...] = (
 #: Why a step did not keep up.
 FAIL_REASONS: Tuple[str, ...] = ("none", "invalid", "dropped", "errors", "p99")
 #: What stopped a run (A3), plus "not-reached" for a run that never failed.
+#: "stalled" and "invalid" have no page words: a run stopped by either is not
+#: a capacity measurement, and render refuses it.
 BOTTLENECKS: Tuple[str, ...] = (
     *CPU_GROUPS,
     "postgres-io",
     "db-pool",
+    "stalled",
     "serialised",
     "none-at-limit",
     "invalid",
     "not-reached",
 )
-#: Why a scenario cannot be published.
+#: Why a scenario cannot be published. A spread of knees wider than
+#: ``max_knee_spread_steps`` is not among them: it is disclosed beside the
+#: scenario's lowest knee, never a reason to withhold it.
 NOT_PUBLISHABLE: Tuple[str, ...] = (
     "reps",
     "invalid-rep",
+    "stalled-rep",
     "below-the-series",
     "above-the-cap",
-    "unstable",
     "preconditions",
 )
 TRACKING_ISSUE = "https://github.com/Controlvar/controlvar/issues/823"
@@ -523,6 +528,12 @@ CONFIG_SPEC = obj(
         cpu_permille=PERMILLE,
         io_wait_permille=PERMILLE,
         pool_permille=PERMILLE,
+        # A first failing step whose answers collapsed while the API's CPU fell
+        # from the step before (see ``attribute``).
+        stalled=obj(
+            min_failed_permille=Int(1, 1000),
+            max_api_cpu_of_previous_permille=PERMILLE,
+        ),
         serialised=obj(
             max_cpu_permille=PERMILLE,
             max_active_backends=Int(0, 1000),
@@ -687,6 +698,8 @@ SUMMARY_STEP_SPEC = obj(
 SUMMARY_SPEC = obj(
     reps=Int(1),
     valid_reps=Int(0),
+    # The lowest of the runs' knees: the step the page's headline is.
+    knee_min_step=Int(0),
     knee_median_step=Int(0),
     knee_median_milli_rps=Int(0),
     knee_min_milli_rps=Int(0),
@@ -795,8 +808,8 @@ def config_problems(config: Any) -> List[str]:
         )
     if config["repetitions"] % 2 == 0:
         problems.append(
-            f"repetitions: {config['repetitions']} is even; the page states the "
-            "median run's knee, which only an odd count has"
+            f"repetitions: {config['repetitions']} is even; the results record "
+            "the median run's knee, which only an odd count has"
         )
     lag = config["validity"]["max_start_lag_p99_us"]
     if lag % 1000:
@@ -1853,12 +1866,25 @@ def recovery_problem(step: Mapping[str, Any]) -> str:
 # A repetition, and what stopped it
 # ---------------------------------------------------------------------------
 def attribute(
-    method: Mapping[str, Any], step: Mapping[str, Any], split: Mapping[str, str]
+    method: Mapping[str, Any],
+    step: Mapping[str, Any],
+    split: Mapping[str, str],
+    previous: Optional[Mapping[str, Any]] = None,
 ) -> str:
     """What stopped a run, from its first failing step; first match wins (A3).
 
     A CPU group is a hardware thread's pinned containers, from the recorded
     split: their CPU is added up, because on one thread they compete for it.
+
+    ``stalled``, from the step's own record and ``previous`` (the step before
+    it; None for step 1, which is never ``stalled``): at least
+    ``min_failed_permille`` of the measured requests failed, and the API's CPU
+    fell to at most ``max_api_cpu_of_previous_permille`` of the previous step's
+    although this step offered more. A run at its limit is expected to keep the
+    API at least as busy as the step before; one whose answers stop while the
+    API goes quiet has not measured a capacity. It is checked before
+    ``serialised``, whose signature (the API's thread under its limit, at most
+    one active database connection, a failure on latency) a stall also meets.
     """
     if not step["valid"]:
         return "invalid"
@@ -1883,6 +1909,16 @@ def attribute(
     pool = POOL_CONNECTIONS_PER_WORKER * method["expected_web_concurrency"]
     if 1000 * step["max_active_backends"] >= rule["pool_permille"] * pool:
         return "db-pool"
+    stall = rule["stalled"]
+    if (
+        previous is not None
+        and step["measured"] > 0
+        and 1000 * step["errors"] >= stall["min_failed_permille"] * step["measured"]
+        and step["api_cpu_permille"] < previous["api_cpu_permille"]
+        and 1000 * step["api_cpu_permille"]
+        <= stall["max_api_cpu_of_previous_permille"] * previous["api_cpu_permille"]
+    ):
+        return "stalled"
     serial = rule["serialised"]
     samples = sum(histogram)
     within = sum(histogram[: serial["max_active_backends"] + 1])
@@ -1926,12 +1962,13 @@ def assess_rep(
             "first_failing_reason": "none",
             "bottleneck": "not-reached",
         }
+    previous = steps[failing["step"] - 2] if failing["step"] > 1 else None
     return {
         "valid": bool(failing["valid"]),
         "knee_step": failing["step"] - 1,
         "first_failing_step": failing["step"],
         "first_failing_reason": failing["fail_reason"],
-        "bottleneck": attribute(method, failing, split),
+        "bottleneck": attribute(method, failing, split, previous),
     }
 
 
@@ -1970,18 +2007,19 @@ def summarise_scenario(
     median_rate = rate_at(holder, median_step) if holder and median_step else 0
     bottlenecks = {rep["bottleneck"] for rep in reps}
     spread = max(knees) - min(knees)
+    # Disclosed on the page, never a block: the headline is the lowest knee.
     unstable = spread > method["max_knee_spread_steps"]
     blocked: List[str] = []
     if len(reps) != method["repetitions"]:
         blocked.append("reps")
     if not all(rep["valid"] for rep in reps):
         blocked.append("invalid-rep")
+    if any(rep["bottleneck"] == "stalled" for rep in reps):
+        blocked.append("stalled-rep")
     if 0 in knees:
         blocked.append("below-the-series")
     if 0 in fails:
         blocked.append("above-the-cap")
-    if unstable:
-        blocked.append("unstable")
     if any(precondition_problems(method, rep["counts_before"]) for rep in reps):
         blocked.append("preconditions")
     steps: List[Dict[str, Any]] = []
@@ -2011,6 +2049,7 @@ def summarise_scenario(
     return {
         "reps": len(reps),
         "valid_reps": sum(1 for rep in reps if rep["valid"]),
+        "knee_min_step": min(knees),
         "knee_median_step": median_step,
         "knee_median_milli_rps": median_rate,
         "knee_min_milli_rps": min(knee_rates),
@@ -2426,6 +2465,9 @@ def _stopped(method: Mapping[str, Any], code: str, split: Mapping[str, str]) -> 
         "database samples, and the step failed on latency",
         "none-at-limit": "no resource the samplers measure had reached its limit",
     }
+    # "stalled" and "invalid" have no words, so a run stopped by either can
+    # never be written as a capacity: summarise_scenario blocks its scenario
+    # (stalled-rep, invalid-rep), and this refuses it if one ever got here.
     if code not in words:
         raise Refused(f"no words for the bottleneck {code!r}: it is not publishable")
     return words[code]
@@ -2468,6 +2510,138 @@ def _stopped_line(
     if "serialised" in by_code:
         text += " " + SERIALISED_NOTE
     return f"- {label}: {text}"
+
+
+def _spread_factor(method: Mapping[str, Any], scenario: str) -> str:
+    """What a spread of knees over the limit means, as a factor: the least
+    ratio between two of the scenario's step rates more than
+    ``max_knee_spread_steps`` steps apart, rounded down to a tenth (so "or
+    more" holds at every pair of steps of the series)."""
+    rates = step_rates(method, scenario)
+    apart = method["max_knee_spread_steps"] + 1
+    least = min(
+        (1000 * rates[k + apart] // rates[k] for k in range(len(rates) - apart)),
+        default=1000,
+    )
+    whole, tenth = divmod(least // 100, 10)
+    return f"{whole}" if not tenth else f"{whole}.{tenth}"
+
+
+def _served_row(method: Mapping[str, Any], scenario: Mapping[str, Any]) -> str:
+    """One request type's row in "What it served": the lowest of its runs'
+    knees, the range of their knees (and how much they varied, where the
+    spread is over the limit), and the percentiles at the lowest knee."""
+    name = scenario["name"]
+    summary = scenario["summary"]
+    at = summary["steps"][summary["knee_min_step"] - 1]
+    kept = f"at least {rps(summary['knee_min_milli_rps'])}"
+    if name == "batch":
+        events = summary["knee_min_milli_rps"] * BATCH_EVENTS
+        kept += f" ({three_figures(events)} events a second)"
+    low, high = summary["knee_min_milli_rps"], summary["knee_max_milli_rps"]
+    spread = (
+        three_figures(low)
+        if low == high
+        else f"{three_figures(low)} to {three_figures(high)}"
+    )
+    if summary["unstable"]:
+        spread += (
+            f"; varied by a factor of {_spread_factor(method, name)} or more "
+            "across runners"
+        )
+    f_low = summary["first_failing_min_milli_rps"]
+    f_high = summary["first_failing_max_milli_rps"]
+    failed = (
+        rps(f_low) if f_low == f_high else f"{three_figures(f_low)} to {rps(f_high)}"
+    )
+    why = "; ".join(
+        dict.fromkeys(FAIL_WORDS[code] for code in summary["first_failing_reasons"])
+    )
+    bound = at["percentiles_are_lower_bounds"]
+    return (
+        f"| {LABELS[name]} | {kept} | {spread} | {failed} | {why} | "
+        f"{_percentile(at['p50_us'], bound)} | {_percentile(at['p95_us'], bound)} | "
+        f"{_percentile(at['p99_us'], bound)} | {at['errors']:,} of {at['measured']:,} |"
+    )
+
+
+def _ticked(step: Mapping[str, Any]) -> bool:
+    """Whether a background scheduler tick, of any outcome, was recorded during
+    the step (its ``scheduler_ticks``; a tick in the gap before it is not)."""
+    return any(
+        counts[status]
+        for counts in step["scheduler_ticks"].values()
+        for status in TICK_STATUSES
+    )
+
+
+def _tick_steps(rep: Mapping[str, Any]) -> Optional[List[int]]:
+    """The steps of a run during which a scheduler tick was recorded, or None
+    when the API did not export its tick metrics (absent is never none)."""
+    if any(step["scheduler_metrics"] != "present" for step in rep["steps"]):
+        return None
+    return [step["step"] for step in rep["steps"] if _ticked(step)]
+
+
+def _run_row(name: str, rep: Mapping[str, Any]) -> str:
+    """One run's row in "Each run": its CPU model, its knee, its first failing
+    step and why, and the steps that recorded a scheduler tick."""
+    knee = rep["steps"][rep["knee_step"] - 1]
+    failing = rep["steps"][rep["first_failing_step"] - 1]
+    failed = f"step {failing['step']}, {rps(failing['milli_rps'])}"
+    if _ticked(failing):
+        failed += ", a scheduler tick in it"
+    ticks = _tick_steps(rep)
+    listed = (
+        "not recorded"
+        if ticks is None
+        else (_and([str(number) for number in ticks]) if ticks else "none")
+    )
+    return (
+        f"| {LABELS[name]} | {rep['rep']} | {rep['host']['cpu_model']} | "
+        f"{rps(knee['milli_rps'])} (step {knee['step']}) | {failed} | "
+        f"{FAIL_WORDS[rep['first_failing_reason']]} | {listed} |"
+    )
+
+
+def _ticks_line(scenarios: Sequence[Mapping[str, Any]]) -> str:
+    """The steps any run recorded a scheduler tick in, and how many first
+    failing steps held one."""
+    reps = [rep for scenario in scenarios for rep in scenario["reps"]]
+    recorded = [(rep, _tick_steps(rep)) for rep in reps]
+    known = [(rep, steps) for rep, steps in recorded if steps is not None]
+    union = sorted({number for _, steps in known for number in steps})
+    held = sum(1 for rep, steps in known if rep["first_failing_step"] in steps)
+    text = (
+        "Across the runs, a background scheduler tick was recorded during "
+        + (f"steps {_and([str(n) for n in union])}" if union else "no step")
+        + f"; the first failing step held one in {held} of the {len(known)} runs "
+        "whose ticks were recorded."
+    )
+    missing = len(reps) - len(known)
+    if missing:
+        text += (
+            f" In {missing} of the {len(reps)} runs the API did not export its "
+            "scheduler ticks."
+        )
+    return text
+
+
+def _batch_line(scenario: Mapping[str, Any]) -> str:
+    """For batch: one request after another, each in the median time at the
+    run's knee, as a rate (1 / p50), per run."""
+    parts = []
+    for rep in scenario["reps"]:
+        p50 = rep["steps"][rep["knee_step"] - 1]["p50_us"]
+        parts.append(
+            f"{three_figures(1_000_000_000 // max(p50, 1))} in run {rep['rep']} "
+            f"(median {_ms(p50)})"
+        )
+    return (
+        f"For {LABELS['batch']}, requests answered one after another, each in the "
+        f"median time at the run's knee, would be, in requests a second, "
+        f"{_and(parts)}."
+    )
 
 
 def _starts(method: Mapping[str, Any]) -> str:
@@ -2556,36 +2730,7 @@ def render_block(results: Mapping[str, Any], results_link: str) -> str:
         "|---|---|---|---|---|---|---|---|---|",
     ]
     scenarios = {scenario["name"]: scenario for scenario in results["scenarios"]}
-    for scenario_name in SCENARIOS:
-        scenario = scenarios[scenario_name]
-        summary = scenario["summary"]
-        at = summary["steps"][summary["knee_median_step"] - 1]
-        kept = rps(summary["knee_median_milli_rps"])
-        if scenario_name == "batch":
-            events = summary["knee_median_milli_rps"] * BATCH_EVENTS
-            kept += f" ({three_figures(events)} events a second)"
-        low, high = summary["knee_min_milli_rps"], summary["knee_max_milli_rps"]
-        spread = (
-            three_figures(low)
-            if low == high
-            else f"{three_figures(low)} to {three_figures(high)}"
-        )
-        f_low = summary["first_failing_min_milli_rps"]
-        f_high = summary["first_failing_max_milli_rps"]
-        failed = (
-            rps(f_low)
-            if f_low == f_high
-            else f"{three_figures(f_low)} to {rps(f_high)}"
-        )
-        why = "; ".join(
-            dict.fromkeys(FAIL_WORDS[code] for code in summary["first_failing_reasons"])
-        )
-        bound = at["percentiles_are_lower_bounds"]
-        lines.append(
-            f"| {LABELS[scenario_name]} | {kept} | {spread} | {failed} | {why} | "
-            f"{_percentile(at['p50_us'], bound)} | {_percentile(at['p95_us'], bound)} | "
-            f"{_percentile(at['p99_us'], bound)} | {at['errors']:,} of {at['measured']:,} |"
-        )
+    lines += [_served_row(method, scenarios[name]) for name in SCENARIOS]
     reasons = method["evaluate_expected_reason"]
     lines += [
         "",
@@ -2605,11 +2750,14 @@ def render_block(results: Mapping[str, Any], results_link: str) -> str:
         f"stopped after {method['stop_after_failing_steps']} failing steps in a row or "
         f"at {rps(method['step_cap_milli_rps'])}. Each request type ran {reps} times, "
         f"each on a fresh runner and a fresh stack, after a {window['warmup_s']} s "
-        f"warm-up that is not counted. Kept up with is the median of the {reps} "
+        f"warm-up that is not counted. Kept up with is the lowest of the {reps} "
         "runs' knees, a run's knee being the last rate it kept up with before its "
-        "first failing step. Beside it, each percentile is the median of the runs "
-        "that reached that step, and Errors adds up those runs' failed and "
-        "measured requests.",
+        f"first failing step; Over {reps} runs is the range of their knees, and "
+        "Each run gives every run's. Where the knees were more than "
+        f"{method['max_knee_spread_steps']} steps apart, Over {reps} runs says how "
+        "much they varied across runners. Beside it, each percentile is the median "
+        "of the runs that reached that step, and Errors adds up those runs' failed "
+        "and measured requests.",
         "",
         "Each request's time runs from when it started to its last byte, including "
         "any wait for a connection. Each request's start lag was recorded: a step "
@@ -2641,6 +2789,20 @@ def render_block(results: Mapping[str, Any], results_link: str) -> str:
                 f"{_percentile(step['p99_us'], bound)} | {step['errors']:,} of "
                 f"{step['measured']:,} |"
             )
+    ordered = [scenarios[name] for name in SCENARIOS]
+    lines += [
+        "",
+        "## Each run",
+        "",
+        "| Request | Run | CPU | Kept up with | First failed at | Why | Steps with a "
+        "scheduler tick |",
+        "|---|---|---|---|---|---|---|",
+        *[_run_row(s["name"], rep) for s in ordered for rep in s["reps"]],
+        "",
+        _ticks_line(ordered),
+        "",
+        _batch_line(scenarios["batch"]),
+    ]
     split = sut["cpu_split"]
     lines += ["", "## What stopped it", ""]
     lines += [_stopped_line(method, scenarios[name], split) for name in SCENARIOS]
