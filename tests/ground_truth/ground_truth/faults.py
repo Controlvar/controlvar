@@ -1,10 +1,12 @@
-"""Faults planted in a seeded plan (#1544 part D): ``inject(plan, *faults)``.
+"""Faults planted in a seeded plan (#1544 part D): ``inject(plan, *faults)``
+and ``combine(plan, *faults)``.
 
-A fault is a ``Plan -> Plan`` injector. ``inject`` applies fault definitions
-to a plan ``generator.simulate`` made and returns the plan a driver sends; the
-clean plan is never changed, so ``simulate`` and the clean scenarios stay
-byte-for-byte what they were, and a fault scenario is a clean scenario plus
-its fault.
+A fault is a ``Plan -> Plan`` injector. ``inject`` applies one fault
+definition (and F4's timestamps) to a plan ``generator.simulate`` made and
+returns the plan a driver sends; ``combine`` places several in one plan (see
+"Every fault at once" below). The clean plan is never changed, so
+``simulate`` and the clean scenarios stay byte-for-byte what they were, and a
+fault scenario is a clean scenario plus its faults.
 
 **Every count a fault plants is a named integer of its definition**, never a
 share or a random draw. The definition says how many repeats, untagged events
@@ -33,11 +35,33 @@ F6     variant mismatch     R8         ``other_arm + never_assigned`` counted
                                        counted (positive controls)
 F7     exposure loss        none       ``lost_users``
 F9     hostile payloads     none       ``per_class`` sends of each class
+F2     bots                 R5         ``huge_values`` (``bots`` and
+                                       ``events_per_bot``: the volume)
 F4     clock skew           none (R7)  ``future_users_per_arm``
 =====  ===================  =========  =============================================
 
 Each count is exact when its fault is the only one in the plan besides F4,
-which adds timestamps and nothing else.
+which adds timestamps and nothing else; ``inject`` refuses two others.
+
+Every fault at once
+-------------------
+Stacked as ``inject`` places them, the counts stop being exact on a correct
+server: F3's paused events resent are R4 drops too, a fault takes another's
+event, and what is sent after F3's ``complete`` lands in no variant.
+``combine`` places them so each count stays an exact sum of the definitions'
+named integers (``combined_findings`` reads them):
+
+* each fault picks only users no fault placed before it touched
+  (``COMBINED_ORDER``), so no event or user carries two faults;
+* F3 is placed after every fault that sends, so its pause and its
+  ``complete`` enclose every other fault's sends: between the pause and the
+  resume, and after the ``complete``, only F3's own events and asks are sent;
+* F4 is placed last, on users no other fault touched.
+
+The R4 row is then F1's ``r4_drops`` plus F3's ``paused_resends``; F7 counts
+the users the scenario defines (``generator.user_ids``), not F9's; F9's
+hostile but valid users all count, one per send. Every other row is its own
+fault's, unchanged.
 
 Ops
 ---
@@ -70,7 +94,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from . import contract, hashing, ledger, reference
-from .generator import Op, Plan
+from .generator import Op, Plan, user_ids
 
 # ---------------------------------------------------------------------------
 # What an op expects
@@ -435,6 +459,25 @@ def _positive(fault: str, counts: Mapping[str, Any]) -> None:
             )
 
 
+#: Users no fault has touched yet: what ``combine`` passes each fault's
+#: ``place``; ``inject`` passes none.
+Taken = frozenset[str]
+NOTHING_TAKEN: Taken = frozenset()
+
+
+def _users_of(ops: Sequence[Op]) -> set[str]:
+    """Every user an op of *ops* names: assigned, or sending an event."""
+    found: set[str] = set()
+    for op in ops:
+        if op.kind == "assign":
+            found.add(op.body["user_id"])
+        elif op.kind == "assign_batch":
+            found.update(entry["user_id"] for entry in op.body["users"])
+        else:
+            found.update(body["user_id"] for body in _event_bodies(op))
+    return found
+
+
 # ---------------------------------------------------------------------------
 # The faults
 # ---------------------------------------------------------------------------
@@ -465,6 +508,11 @@ class Duplicates:
         )
 
     def apply(self, plan: Plan) -> Plan:
+        return self.place(plan, NOTHING_TAKEN)[0]
+
+    def place(self, plan: Plan, taken: Taken) -> tuple[Plan, Taken]:
+        """*plan* with F1 planted on events of users not in *taken*, and the
+        users it touched."""
         kinds = len(F1_KINDS)
         if self.r4_drops < kinds:
             raise ValueError(
@@ -479,7 +527,7 @@ class Duplicates:
         n = {
             kind: len(range(i, self.r4_drops, kinds)) for i, kind in enumerate(F1_KINDS)
         }
-        events = _events(plan)
+        events = [e for e in _events(plan) if e.user not in taken]
         singles = _spread(
             [e for e in events if e.single and e.body.get("event_id")],
             n["track"] + n["value"] + n["track-in-batch"],
@@ -533,7 +581,8 @@ class Duplicates:
             Op("events", EVENTS, _by_id(plan, e.body, _arm(plan, e.user)))
             for e in by_id
         ]
-        return replace(plan, ops=tuple(ops))
+        touched = frozenset(e.user for e in (*singles, *batched, *plain))
+        return replace(plan, ops=tuple(ops)), touched
 
     def findings(self, plan, records, expected, without, hostile_sends) -> list[str]:
         got = without.total_events - expected.total_events
@@ -572,8 +621,14 @@ class LateEvents:
         )
 
     def apply(self, plan: Plan) -> Plan:
+        return self.place(plan, NOTHING_TAKEN)[0]
+
+    def place(self, plan: Plan, taken: Taken) -> tuple[Plan, Taken]:
+        """*plan* with F3 planted on users not in *taken*, and the users it
+        touched. Every op of *plan* after its assignments is sent before the
+        pause or between the resume and the ``complete``."""
         late = _spread(
-            _one_event_users(plan, _events(plan)),
+            [e for e in _one_event_users(plan, _events(plan)) if e.user not in taken],
             self.r2_status_untags,
             "F3",
             "events whose user is assigned and sends no other",
@@ -586,7 +641,7 @@ class LateEvents:
             "events sent while paused that carry an event_id, to send again after the resume",
         )
         asking = _spread(
-            list(_assigned(plan)),
+            [u for u in _assigned(plan) if u not in taken],
             self.paused_assigns + self.completed_assigns,
             "F3",
             "assigned users, to ask for their assignment again",
@@ -615,7 +670,8 @@ class LateEvents:
             *_sends(completed, size),
             *[again(u) for u in asking[self.paused_assigns :]],
         ]
-        return replace(plan, ops=tuple(ops))
+        touched = frozenset({e.user for e in late} | set(asking))
+        return replace(plan, ops=tuple(ops)), touched
 
     def findings(self, plan, records, expected, without, hostile_sends) -> list[str]:
         got = expected.untagged_events - without.untagged_events
@@ -636,8 +692,13 @@ class EarlyEvents:
         _positive(self.NAME, {"r2_order_untags": self.r2_order_untags})
 
     def apply(self, plan: Plan) -> Plan:
+        return self.place(plan, NOTHING_TAKEN)[0]
+
+    def place(self, plan: Plan, taken: Taken) -> tuple[Plan, Taken]:
+        """*plan* with F5 planted on users not in *taken*, and the users it
+        touched."""
         early = _spread(
-            _one_event_users(plan, _events(plan)),
+            [e for e in _one_event_users(plan, _events(plan)) if e.user not in taken],
             self.r2_order_untags,
             "F5",
             "events whose user is assigned and sends no other",
@@ -645,7 +706,7 @@ class EarlyEvents:
         ops = _without(plan.ops, {(e.op, e.item) for e in early})
         at = _after_start(ops)
         ops[at:at] = _sends(early, plan.scenario.event_batch_size)
-        return replace(plan, ops=tuple(ops))
+        return replace(plan, ops=tuple(ops)), frozenset(e.user for e in early)
 
     def findings(self, plan, records, expected, without, hostile_sends) -> list[str]:
         got = expected.untagged_events - without.untagged_events
@@ -684,6 +745,11 @@ class VariantMismatch:
         )
 
     def apply(self, plan: Plan) -> Plan:
+        return self.place(plan, NOTHING_TAKEN)[0]
+
+    def place(self, plan: Plan, taken: Taken) -> tuple[Plan, Taken]:
+        """*plan* with F6 planted on users not in *taken*, and the users it
+        touched (its never-assigned users among them)."""
         scenario = plan.scenario
         name = scenario.event_name
         types = {m.type for m in scenario.metrics if m.event_name == name}
@@ -695,14 +761,14 @@ class VariantMismatch:
             )
         assigned = _assigned(plan)
         early = _spread(
-            [u for u, single in assigned.items() if not single],
+            [u for u, single in assigned.items() if not single and u not in taken],
             self.tagged_then_assigned,
             "F6",
             "users assigned in a batch, to name their arm before it",
         )
-        taken = set(early)
+        named_early = set(early)
         later = _spread(
-            [u for u in assigned if u not in taken],
+            [u for u in assigned if u not in taken and u not in named_early],
             self.other_arm + self.own_arm,
             "F6",
             "other assigned users, to name an arm after their assignment",
@@ -736,7 +802,7 @@ class VariantMismatch:
         at = _after_start(ops)
         ops[at:at] = before
         ops += after
-        return replace(plan, ops=tuple(ops))
+        return replace(plan, ops=tuple(ops)), frozenset(_users_of([*before, *after]))
 
     def findings(self, plan, records, expected, without, hostile_sends) -> list[str]:
         nowhere = expected.untagged_events - without.untagged_events
@@ -761,7 +827,9 @@ class VariantMismatch:
 class ExposureLoss:
     """F7: ``lost_users`` users of one arm (``arm``, the first after the
     control when None) never ask for an assignment; their events are still
-    sent, and stored with no variant. The sample-ratio check must fire."""
+    sent, and stored with no variant. The sample-ratio check must fire. The
+    loss is counted among the users the scenario defines
+    (``generator.user_ids``): a user another fault adds is not one of them."""
 
     lost_users: int = 1000
     arm: str | None = None
@@ -772,13 +840,18 @@ class ExposureLoss:
         _positive(self.NAME, {"lost_users": self.lost_users})
 
     def apply(self, plan: Plan) -> Plan:
+        return self.place(plan, NOTHING_TAKEN)[0]
+
+    def place(self, plan: Plan, taken: Taken) -> tuple[Plan, Taken]:
+        """*plan* with F7 planted on users not in *taken*, and the users it
+        lost."""
         arms = _arms(plan)
         arm = arms[1] if self.arm is None else self.arm
         if arm not in arms:
             raise ValueError(f"F7: the scenario has no arm {arm!r}; it has {arms}")
         lost = set(
             _spread(
-                [u for u in _assigned(plan) if _arm(plan, u) == arm],
+                [u for u in _assigned(plan) if _arm(plan, u) == arm and u not in taken],
                 self.lost_users,
                 "F7",
                 f"users assigned to {arm!r}",
@@ -795,10 +868,12 @@ class ExposureLoss:
                 if len(users) != len(op.body["users"]):
                     op = replace(op, body={**op.body, "users": users})
             ops.append(op)
-        return replace(plan, ops=tuple(ops))
+        return replace(plan, ops=tuple(ops)), frozenset(lost)
 
     def findings(self, plan, records, expected, without, hostile_sends) -> list[str]:
-        got = plan.scenario.users - expected.total_users
+        assigned = {user for users in expected.users.values() for user in users}
+        defined = user_ids(plan.seed, plan.scenario.users)
+        got = sum(1 for user in defined if user not in assigned)
         found = _planted(self, self.lost_users, got, "users never assigned")
         sizes = [expected.sample_size(v) for v in expected.variants]
         p = reference.srm_p(sizes, expected.allocations)
@@ -886,16 +961,38 @@ class Hostile:
     listed, storing nothing; the rest (``F9_HOSTILE``) are raw text outside
     the ledger. Every send names the scenario's experiment (but the two
     unknown keys of ``batch-with-unknown-keys``), so a stored one shows in its
-    counts, and its user (``gt-<seed>-f9~<class>~<n>``) names its class."""
+    counts, and its user (``gt-<seed>-f9~<class>~<n>``) names its class.
+
+    ``value``, when given, is the value each valid send carries (none when
+    None). Meant for a scenario with a revenue metric on the event: without
+    R5's bound in ``analysis_service.value_totals``, a user whose every event
+    has no value would be read as ``float(None)``, so with a value there such
+    a defect is meant to show as a wrong mean."""
 
     per_class: int = 1
+    value: float | None = None
     NAME = "F9"
     RULE = None
 
     def __post_init__(self) -> None:
         _positive(self.NAME, {"per_class": self.per_class})
+        if self.value is not None and (
+            isinstance(self.value, bool)
+            or not isinstance(self.value, (int, float))
+            or not math.isfinite(self.value)
+            or abs(self.value) > contract.VALUE_BOUND
+        ):
+            raise ValueError(
+                f"F9: value must be None or a finite number of at most"
+                f" {contract.VALUE_BOUND:g} in size, not {self.value!r}"
+            )
 
     def apply(self, plan: Plan) -> Plan:
+        return self.place(plan, NOTHING_TAKEN)[0]
+
+    def place(self, plan: Plan, taken: Taken) -> tuple[Plan, Taken]:
+        """*plan* with F9's sends after its ops, and the users they name
+        (F9 picks no user of the plan, so *taken* changes nothing)."""
         assigns: list[Op] = []
         tracks: list[Op] = []
         refused: list[Op] = []
@@ -918,7 +1015,9 @@ class Hostile:
                 )
                 for cls, text in self._hostile(plan, n)
             ]
-        return replace(plan, ops=(*plan.ops, *assigns, *tracks, *refused, *hostile))
+        touched = frozenset(_users_of([*assigns, *tracks, *refused]))
+        ops = (*plan.ops, *assigns, *tracks, *refused, *hostile)
+        return replace(plan, ops=ops), touched
 
     @staticmethod
     def _user(plan: Plan, cls: str, n: int) -> str:
@@ -928,12 +1027,10 @@ class Hostile:
         name, key = plan.scenario.event_name, plan.scenario.experiment_key
 
         def track(user: str, **extra: Any) -> tuple[str, dict[str, Any]]:
-            return user, {
-                "event_type": name,
-                "user_id": user,
-                "experiment_key": key,
-                **extra,
-            }
+            body = {"event_type": name, "user_id": user, "experiment_key": key, **extra}
+            if self.value is not None:
+                body["value"] = self.value
+            return user, body
 
         # One text in its two Unicode forms: NFC U+00E9, NFD U+0065 U+0301.
         forms = self._user(plan, "nfc-and-nfd-user-id", n) + "~caf"
@@ -1053,6 +1150,20 @@ class Hostile:
         ]
 
     def findings(self, plan, records, expected, without, hostile_sends) -> list[str]:
+        found = self.class_findings(records, hostile_sends)
+        if not self.valid_users_counted(expected):
+            found.append(
+                "F9: no hostile but valid event counts in a variant: the valid classes"
+                " did not reach the results"
+            )
+        return found
+
+    def class_findings(
+        self,
+        records: Sequence[Mapping[str, Any]],
+        hostile_sends: Mapping[str, int] | None,
+    ) -> list[str]:
+        """Every class sent, and answered, as often as planted."""
         sends: dict[str, set[tuple[Any, Any]]] = {}
         for number, record in enumerate(records):
             if record["kind"] != "event":
@@ -1072,18 +1183,23 @@ class Hostile:
                     f"F9: class {cls!r}: the definition plants {want} sends; the run"
                     f" shows {counts.get(cls, 0)}"
                 )
-        counted = {
-            user
-            for entries in expected.counting.values()
-            for user, (count, _) in entries.items()
-            if count and f9_class(user) in F9_VALID
-        }
-        if not counted:
-            found.append(
-                "F9: no hostile but valid event counts in a variant: the valid classes"
-                " did not reach the results"
-            )
         return found
+
+    def valid_users(self) -> int:
+        """The hostile but valid users: one per send of each valid class."""
+        return self.per_class * sum(F9_SENDS.get(cls, 1) for cls in F9_VALID)
+
+    @staticmethod
+    def valid_users_counted(expected: contract.ExperimentExpected) -> int:
+        """The hostile but valid users with a counting event in a variant."""
+        return len(
+            {
+                user
+                for entries in expected.counting.values()
+                for user, (count, _) in entries.items()
+                if count and f9_class(user) in F9_VALID
+            }
+        )
 
 
 #: The ``timestamp`` F4 gives every event of the users it picks.
@@ -1174,6 +1290,11 @@ class ClockSkew:
         _positive(self.NAME, {"future_users_per_arm": self.future_users_per_arm})
 
     def apply(self, plan: Plan) -> Plan:
+        return self.place(plan, NOTHING_TAKEN)[0]
+
+    def place(self, plan: Plan, taken: Taken) -> tuple[Plan, Taken]:
+        """*plan* with F4's timestamps, its future-dated users picked from
+        users not in *taken*, and those users."""
         order: dict[str, bool] = {}
         stamped: set[str] = set()
         for op in plan.ops:
@@ -1183,7 +1304,9 @@ class ClockSkew:
                     stamped.add(body["user_id"])
         chosen: set[str] = set()
         for arm, users in _counting_users(plan).items():
-            eligible = [u for u in order if u in users and u not in stamped]
+            eligible = [
+                u for u in order if u in users and u not in stamped and u not in taken
+            ]
             chosen.update(
                 _spread(
                     eligible,
@@ -1212,14 +1335,140 @@ class ClockSkew:
                     op, body={"events": [stamp(e, skew) for e in op.body["events"]]}
                 )
             ops.append(op)
-        return replace(plan, ops=tuple(ops))
+        return replace(plan, ops=tuple(ops)), frozenset(chosen)
 
     def findings(self, plan, records, expected, without, hostile_sends) -> list[str]:
         return []
 
 
-#: The order faults are applied in, whatever order they are given.
-ORDER = ("F7", "F5", "F6", "F3", "F1", "F9", "F4")
+#: The metric types that read an event's value (R5 decides which values add).
+VALUE_METRICS = ("revenue", "duration", "custom")
+#: The value of every bot event but the ones beyond the bound.
+BOT_VALUE = 1.0
+#: The values F2 plants beyond the bound, in turn. Finite (the ledger refuses
+#: NaN and infinity), of both signs (R5 bounds a value's size), and of two
+#: sizes no whole numbers of which cancel: ``a * 2e12 == b * (2e12 + 0.5)``
+#: only when ``b`` is a multiple of 4e12 (4e12 and 4e12 + 1 share no factor),
+#: so a variant's total without R5 moves wherever they land.
+BEYOND_BOUND = (2e12, -2000000000000.5)
+
+
+def _counted_only_without(
+    mine: contract.ExperimentExpected, theirs: contract.ExperimentExpected
+) -> int:
+    """The values counting events add in *theirs* and not in *mine*: per
+    user, the values of the one less those of the other, as multisets."""
+    found = 0
+    for key, entries in theirs.counting.items():
+        ours = mine.counting.get(key, {})
+        for user, (_, values) in entries.items():
+            kept = Counter(ours.get(user, (0, ()))[1])
+            found += sum((Counter(values) - kept).values())
+    return found
+
+
+@dataclass(frozen=True)
+class BotTraffic:
+    """F2: bots. ``bots`` users assigned in a batch each send
+    ``events_per_bot`` more events through ``/batch``, after every
+    assignment, each with its own ``event_id`` and a value: there is no bot
+    filter, so every one counts. ``huge_values`` of those events, spread
+    evenly over them, carry a value beyond 10^12 in size (``BEYOND_BOUND``,
+    in turn) instead of ``BOT_VALUE``: R5 adds none of them, and their user
+    still converts. The scenario needs a revenue, duration or custom metric
+    on its event, so a value R5 bounds moves a number the gates compare. The
+    volume, ``bots`` times ``events_per_bot``, is pinned on the plan
+    (``test_fault_library.py``); the sensitivity check reads
+    ``huge_values``."""
+
+    bots: int = 20
+    events_per_bot: int = 250
+    huge_values: int = 20
+    NAME = "F2"
+    RULE = "R5"
+
+    def __post_init__(self) -> None:
+        _positive(
+            self.NAME,
+            {
+                "bots": self.bots,
+                "events_per_bot": self.events_per_bot,
+                "huge_values": self.huge_values,
+            },
+        )
+        volume = self.bots * self.events_per_bot
+        if self.huge_values > volume:
+            raise ValueError(
+                f"F2: huge_values ({self.huge_values}) is more than the {volume} bot"
+                " events it is placed on"
+            )
+
+    def apply(self, plan: Plan) -> Plan:
+        return self.place(plan, NOTHING_TAKEN)[0]
+
+    def place(self, plan: Plan, taken: Taken) -> tuple[Plan, Taken]:
+        """*plan* with F2's bot events after its ops, the bots picked from
+        users not in *taken*, and the bots."""
+        scenario = plan.scenario
+        name, key = scenario.event_name, scenario.experiment_key
+        if not any(
+            m.event_name == name and m.type in VALUE_METRICS for m in scenario.metrics
+        ):
+            raise ValueError(
+                f"F2 needs a revenue, duration or custom metric on {name!r}: without"
+                " one a value R5 bounds moves no number"
+            )
+        bots = _spread(
+            [
+                u
+                for u, single in _assigned(plan).items()
+                if not single and u not in taken
+            ],
+            self.bots,
+            "F2",
+            "users assigned in a batch, to send as bots",
+        )
+        volume = self.bots * self.events_per_bot
+        beyond = {
+            at: BEYOND_BOUND[i % len(BEYOND_BOUND)]
+            for i, at in enumerate(
+                _spread(range(volume), self.huge_values, "F2", "bot events")
+            )
+        }
+        events = [
+            {
+                "event_type": name,
+                "user_id": bots[n % self.bots],
+                "experiment_key": key,
+                "value": beyond.get(n, BOT_VALUE),
+                "event_id": f"gt-{plan.seed}-f2-e{n:07d}",
+            }
+            for n in range(volume)
+        ]
+        size = scenario.event_batch_size
+        batches = [
+            Op("batch", ledger.BATCH, {"events": c}) for c in _chunks(events, size)
+        ]
+        return replace(plan, ops=(*plan.ops, *batches)), frozenset(bots)
+
+    def findings(self, plan, records, expected, without, hostile_sends) -> list[str]:
+        got = _counted_only_without(expected, without)
+        return _planted(
+            self,
+            self.huge_values,
+            got,
+            "values beyond the bound on counting events (counted only without R5)",
+        )
+
+
+#: The order ``inject`` applies a fault and F4 in, whatever order they are
+#: given: F4 last.
+ORDER = ("F7", "F5", "F6", "F3", "F1", "F2", "F9", "F4")
+#: The order ``combine`` places faults in. F7 first: it takes assignments
+#: away, so no later fault picks a user it lost. F3 after every fault that
+#: sends, so its pause and its ``complete`` enclose their sends. F4 last: it
+#: dates what the others sent.
+COMBINED_ORDER = ("F7", "F5", "F9", "F6", "F2", "F1", "F3", "F4")
 Fault = (
     Duplicates
     | LateEvents
@@ -1227,20 +1476,52 @@ Fault = (
     | VariantMismatch
     | ExposureLoss
     | Hostile
+    | BotTraffic
     | ClockSkew
 )
 
 
-def inject(plan: Plan, *faults: Fault) -> Plan:
-    """*plan* with each fault planted, in ``ORDER``, and every op's
-    ``expect`` set (its kind's default when a fault set none)."""
+def _set_expects(plan: Plan) -> Plan:
+    ops = tuple(replace(op, expect=check_expect(op)) for op in plan.ops)
+    return replace(plan, ops=ops)
+
+
+def _once(faults: Sequence[Fault]) -> None:
     names = [fault.NAME for fault in faults]
     if len(set(names)) != len(names):
         raise ValueError(f"a fault is given twice: {names}")
+
+
+def inject(plan: Plan, *faults: Fault) -> Plan:
+    """*plan* with a fault planted (and F4's timestamps, last), and every
+    op's ``expect`` set (its kind's default when a fault set none). Two faults
+    besides F4 are refused: stacked this way their counts are not exact
+    ("Every fault at once" above); ``combine`` places several."""
+    _once(faults)
+    others = sorted(fault.NAME for fault in faults if fault.NAME != "F4")
+    if len(others) > 1:
+        raise ValueError(
+            f"inject plants one fault besides F4, not {others}: stacked, their"
+            " counts are not exact; combine places several"
+        )
     for fault in sorted(faults, key=lambda f: ORDER.index(f.NAME)):
         plan = fault.apply(plan)
-    ops = tuple(replace(op, expect=check_expect(op)) for op in plan.ops)
-    return replace(plan, ops=ops)
+    return _set_expects(plan)
+
+
+def combine(plan: Plan, *faults: Fault) -> Plan:
+    """*plan* with every fault planted together, in ``COMBINED_ORDER``, each
+    on users no fault placed before it touched, and every op's ``expect``
+    set: each count stays an exact sum of the definitions' named integers
+    (``combined_findings``)."""
+    _once(faults)
+    if not faults:
+        raise ValueError("combine needs at least one fault")
+    taken = NOTHING_TAKEN
+    for fault in sorted(faults, key=lambda f: COMBINED_ORDER.index(f.NAME)):
+        plan, touched = fault.place(plan, taken)
+        taken = taken | touched
+    return _set_expects(plan)
 
 
 # ---------------------------------------------------------------------------
@@ -1304,11 +1585,108 @@ def sensitivity_findings(
         )
     found = fault.findings(plan, records, mine, theirs, hostile_sends)
     if theirs is not None and projection(mine, plan) == projection(theirs, plan):
-        found.append(
-            f"{fault.NAME} ({fault.RULE}) moves no number the gates compare: without"
-            f" {fault.RULE} the reference has the same sample sizes, converting users,"
-            " value totals and total events"
+        found.append(_moves_nothing(fault))
+    return found
+
+
+def _moves_nothing(fault: Fault) -> str:
+    return (
+        f"{fault.NAME} ({fault.RULE}) moves no number the gates compare: without"
+        f" {fault.RULE} the reference has the same sample sizes, converting users,"
+        " value totals and total events"
+    )
+
+
+def _summed(
+    rule: str, terms: Sequence[tuple[str, int]], got: int, what: str
+) -> list[str]:
+    """``_planted`` for a row whose count is a sum of named integers."""
+    want = sum(value for _, value in terms)
+    if got == want:
+        return []
+    owners = " + ".join(dict.fromkeys(name.split()[0] for name, _ in terms))
+    named = " + ".join(f"{name} {value}" for name, value in terms)
+    return [
+        f"{owners} ({rule}): the definitions plant {want} {what} ({named}); the"
+        f" ledger shows {got}" + (" (the fault touched nothing)" if got == 0 else "")
+    ]
+
+
+def combined_findings(
+    planted: Sequence[Fault],
+    plan: Plan,
+    records: Sequence[Mapping[str, Any]],
+    expected: contract.Expected,
+    without: Mapping[str, contract.Expected],
+    *,
+    hostile_sends: Mapping[str, int] | None = None,
+) -> list[str]:
+    """Why the faults *planted*, placed together by ``combine``, did not reach
+    the ledger as their definitions plant them; empty when they did.
+    *expected* is ``valid_events(records)``; *without* maps each planted
+    fault's rule to ``valid_events(records, without={rule})``.
+
+    Every row is an exact sum of the definitions' named integers:
+
+    =========  ==========================================  ==============================
+    Row        What the ledger shows                       Planted
+    =========  ==========================================  ==============================
+    R4         events stored without R4 and not with it    F1 ``r4_drops`` + F3
+                                                           ``paused_resends``
+    R2-status  events untagged with R2, tagged without     F3 ``r2_status_untags``
+               R2-status
+    R2-order   the same, without R2-order                  F5 ``r2_order_untags``
+    R8         ``/events`` events counted in no variant    F6 ``other_arm`` +
+                                                           ``never_assigned``
+    R8         ``/events`` events counted in a variant     F6 ``tagged_then_assigned``
+                                                           + ``own_arm``
+    R5         values counted only without R5              F2 ``huge_values``
+    F7         users the scenario defines, never assigned  F7 ``lost_users`` (and the
+                                                           sample-ratio p-value below
+                                                           0.001)
+    F9         sends of each class                         F9 ``per_class`` (twice for
+                                                           NFC and NFD)
+    F9         hostile but valid users counting            F9 ``per_class`` x 6
+    =========  ==========================================  ==============================
+
+    And for each rule, P-b: the reference without it differs in a number the
+    gates compare."""
+    key = plan.scenario.experiment_key
+    mine = expected.experiments[key]
+    theirs = {rule: other.experiments[key] for rule, other in without.items()}
+    _once(planted)
+    by_name = {fault.NAME: fault for fault in planted}
+    rules = {fault.RULE: fault for fault in planted if fault.RULE is not None}
+    if set(theirs) != set(rules):
+        raise ValueError(
+            f"without= is for the planted faults' rules {sorted(rules)}, not"
+            f" {sorted(theirs)}"
         )
+    found: list[str] = []
+    if "F1" in by_name:
+        terms = [("F1 r4_drops", by_name["F1"].r4_drops)]
+        if "F3" in by_name:
+            terms.append(("F3 paused_resends", by_name["F3"].paused_resends))
+        got = theirs["R4"].total_events - mine.total_events
+        found += _summed("R4", terms, got, "R4 drops (repeats not stored)")
+    for name in ("F3", "F5", "F6", "F2", "F7"):
+        if name in by_name:
+            fault = by_name[name]
+            other = None if fault.RULE is None else theirs[fault.RULE]
+            found += fault.findings(plan, records, mine, other, hostile_sends)
+    if "F9" in by_name:
+        hostile = by_name["F9"]
+        found += hostile.class_findings(records, hostile_sends)
+        want, got = hostile.valid_users(), Hostile.valid_users_counted(mine)
+        if got != want:
+            found.append(
+                f"F9: the definition plants {want} hostile but valid users (per_class"
+                f" {hostile.per_class}, one per send of each valid class); {got} count"
+                " in a variant"
+            )
+    for rule, fault in sorted(rules.items()):
+        if projection(mine, plan) == projection(theirs[rule], plan):
+            found.append(_moves_nothing(fault))
     return found
 
 

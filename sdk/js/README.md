@@ -93,6 +93,7 @@ conversions.
 | `reportError({ errorType, message, featureFlagKey?, experimentKey?, userId?, stackTrace?, metadata?, timestamp? })` | `Promise<boolean>`: `true` when the server stored the report (201) | `false`, never rejects; `onError` |
 | `fetchAssignments(userId, { activeOnly? })` | `Promise<AssignmentRecord[]>` from the server | rejects |
 | `getAssignments(userId)`, `getEvaluatedFlags(userId)`, `clearCache()` | in-memory cache access | — |
+| `getCachedFlags(userId)` | `FlagEvaluation[]`: cached, unexpired evaluations for the user; in local mode each carries `source` (`'local'` or `'server'`) | — |
 | `ready({ timeoutMs? })`, `status()`, `close()` | local mode: readiness, ruleset state, shutdown (sends evaluation counts) | never reject |
 | `consistentHash(userId, flagKey)`, `md5Hex(s)`, `md5Bytes(s)` | compatibility hash utilities (not the flag bucketing function) | — |
 

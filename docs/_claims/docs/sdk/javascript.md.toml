@@ -196,7 +196,10 @@ by = [
 
 [[unit]]
 text = "maxStaleMs | number | none | Local mode: evaluate on the server once the ruleset has not been refreshed for this long"
-by = ["test:sdk/js/__tests__/local.test.ts::maxStaleMs: a ruleset older than that is not used"]
+by = [
+    "test:sdk/js/__tests__/local.test.ts::maxStaleMs: a ruleset older than that is not used",
+    "test:sdk/js/__tests__/local.test.ts::past maxStaleMs, a pair answered locally goes to the server",
+]
 
 [[unit]]
 text = "The constructor throws a plain Error (apiKey is required / apiUrl is required) when either required field is missing, when evaluation is not 'server' or 'local', and when evaluation: 'local' is used in a browser."
@@ -359,6 +362,10 @@ text = "getEvaluatedFlags | (userId) => string[] | Keys of cached, successfully 
 by = ["test:sdk/js/__tests__/client.test.ts::getEvaluatedFlags returns cached flag keys for the user only"]
 
 [[unit]]
+text = "getCachedFlags | (userId) => FlagEvaluation[] | Cached, unexpired flag evaluations for the user (no network); in local mode each carries source ('local' or 'server') | —"
+by = ["test:sdk/js/__tests__/local.test.ts::getCachedFlags returns the user's unexpired cached evaluations, each with its source"]
+
+[[unit]]
 text = "clearCache | () => void | Drops both caches; keeps the keys a key-less track is sent to | —"
 by = [
     "test:sdk/js/__tests__/client.test.ts::clearCache empties both caches",
@@ -382,6 +389,7 @@ text = "close | () => Promise<void> | Local mode: stops the ruleset refresh and 
 by = [
     "test:sdk/js/__tests__/local.test.ts::close() sends one entry per flag; deferred evaluations are not counted",
     "test:sdk/js/__tests__/local.test.ts::server mode is unchanged: no ruleset request, no source field",
+    "test:sdk/js/__tests__/local.test.ts::after close(), a pair answered locally goes to the server",
 ]
 
 [[unit]]
@@ -944,6 +952,7 @@ by = [
     "test:sdk/js/__tests__/local.test.ts::after ready, evaluations make no request and follow the attributes passed",
     "test:sdk/js/__tests__/local.test.ts::an unknown key and a remote flag are evaluated by the server",
     "test:sdk/js/__tests__/local.test.ts::getAllFlags: one remote flag sends the whole call to the server",
+    "test:sdk/js/__tests__/local.test.ts::a call that defers after a local answer for the same pair goes to the server",
 ]
 
 [[unit]]
@@ -963,6 +972,7 @@ text = "A change made in the dashboard reaches the process at its next successfu
 by = [
     "test:sdk/js/__tests__/local.test.ts::polls send the ETag, and a 304 keeps the ruleset",
     "test:sdk/js/__tests__/local.test.ts::5xx after a load keeps serving the last ruleset and reports each failure",
+    "test:sdk/js/__tests__/local.test.ts::a new ruleset that %s: a pair answered locally goes to the server",
 ]
 
 [[unit]]
@@ -971,6 +981,8 @@ by = [
     "test:sdk/js/__tests__/local.test.ts::5xx after a load keeps serving the last ruleset and reports each failure",
     "test:sdk/js/__tests__/local.test.ts::maxStaleMs: a ruleset older than that is not used",
     "test:sdk/js/__tests__/local.test.ts::404 names the minimum server release; after a load it discards",
+    "test:sdk/js/__tests__/local.test.ts::past maxStaleMs, a pair answered locally goes to the server",
+    "test:sdk/js/__tests__/local.test.ts::%i discards the ruleset: a pair answered locally goes to the server",
 ]
 
 [[unit]]

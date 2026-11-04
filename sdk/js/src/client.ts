@@ -372,8 +372,11 @@ export class ExperimentationClient {
         return evaluation;
       }
     }
+    // Only a server answer is reused here. A local one stays in the cache (getCachedFlags), but
+    // it was computed from a ruleset that no longer answers this call (discarded, too stale, closed,
+    // the flag now remote or gone, or attributes it cannot compare), so the server is asked (#1709).
     const cached = this.flags.get(userId, flagKey);
-    if (cached) return cached;
+    if (cached && cached.source !== 'local') return cached;
 
     return this.dedupe(`flag\u0000${userId}\u0000${flagKey}`, async () => {
       const data = await this.requestJson<FlagEvaluateResponse>(
@@ -461,6 +464,17 @@ export class ExperimentationClient {
   /** Keys of flags successfully evaluated (and still cached) for the user. */
   getEvaluatedFlags(userId: string): string[] {
     return this.flags.entries(userId).map(([flagKey]) => flagKey);
+  }
+
+  /**
+   * The successful, unexpired flag evaluations cached for the user (no network); the twin of
+   * `getAssignments`. With `evaluation: 'local'` each carries its `source`. A `'local'` entry is
+   * never reused as an answer: a call the ruleset answers is computed afresh, and one it defers
+   * asks the server. A `'server'` entry is what `evaluateFlag` returns for that user and flag,
+   * until it expires, whenever the ruleset does not answer the call.
+   */
+  getCachedFlags(userId: string): FlagEvaluation[] {
+    return this.flags.entries(userId).map(([, evaluation]) => evaluation);
   }
 
   // ─── Tracking ──────────────────────────────────────────────────────────────

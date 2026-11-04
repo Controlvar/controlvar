@@ -396,11 +396,15 @@ class ExperimentationProvider(AbstractProvider):
             )
         try:
             attributes = _attributes_of(evaluation_context)
-            held = any(entry.key == flag_key for entry in self._client.cached_flags(user_id))
-            evaluation = self._client.get_feature_flag(flag_key, user_id, attributes)
             # A client with local evaluation keeps its local answers in the same cache, but
-            # computes each one afresh from this call's attributes: only an answer it did not
-            # compute came from the cache.
+            # computes each one afresh from this call's attributes and never answers from one: a
+            # call it cannot answer locally goes to the server (#1709). So only a server answer
+            # held before this call, and not computed by it, came from the cache.
+            held = any(
+                entry.key == flag_key and getattr(entry, "source", None) != "local"
+                for entry in self._client.cached_flags(user_id)
+            )
+            evaluation = self._client.get_feature_flag(flag_key, user_id, attributes)
             cached = held and getattr(evaluation, "source", None) != "local"
         except ExperimentationError as exc:
             code = ErrorCode.FLAG_NOT_FOUND if exc.status == 404 else ErrorCode.GENERAL
