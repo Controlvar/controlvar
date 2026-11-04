@@ -109,7 +109,7 @@ by = [
 ]
 
 [[unit]]
-text = "Outlier control on a revenue, duration or custom metric (winsorization, trimming) | None is applied. A revenue, duration or custom metric is each user's total, averaged; one very large user moves the mean and widens the interval. variance_reduction_config.method = winsorization is stored and clips nothing. Only a value that is not a number or exceeds 10^12 is dropped, as the first row of this section says."
+text = "Outlier control on a revenue, duration or custom metric (winsorization, trimming) | None is applied. A revenue, duration or custom metric is each user's total, averaged; one very large user moves the mean and widens the interval. variance_reduction_config.method = winsorization is stored and clips nothing. Only a value that is not a number or exceeds 10^12 in size is dropped, as the first row of this section says."
 by = [
     "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_values_that_are_not_finite_or_too_large_add_nothing",
     "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_winsorization_in_the_stored_config_changes_no_number",
@@ -126,7 +126,7 @@ by = [
 text = "A sample-ratio mismatch that stops the experiment or removes its winner | Under a mismatch, recommendation is INCONCLUSIVE in GET /api/v1/results/{experiment_id}, in the data export and in the report. winner_variant, has_winner, the Bayesian decision and the sequential panel are unchanged."
 by = [
     "test:backend/tests/integration/api/test_export_api.py::TestExportEqualsResults::test_failed_sample_ratio_check_is_inconclusive_in_results_and_export",
-    "test:frontend/src/tests/components/ExperimentSummary.impact.test.tsx::adds the SRM qualifier when the sample-ratio check failed",
+    "test:backend/tests/unit/services/test_srm.py::TestRecommendationUnderSrm::test_failed_check_is_inconclusive_whatever_the_engine_said",
 ]
 
 [[unit]]
