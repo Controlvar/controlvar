@@ -983,12 +983,10 @@ DELEGATES: Dict[str, Tuple[str, "re.Pattern[str]"]] = {
 #: source reads. When one starts sending it, change this set with its pages.
 SENDS_NO_CONTEXT = {
     "android",
-    "dotnet",
     "edge",
     "elixir",
     "flutter",
     "ios",
-    "java",
     "php",
     "ruby",
 }
@@ -1122,6 +1120,34 @@ def test_the_claim_patterns_find_the_true_sentence_on_the_react_native_page():
     assert "sent as context on flag evaluation" in attribute_claims(
         text("docs/sdk/react-native.md")
     )
+
+
+def test_the_claim_patterns_find_the_true_sentences_on_the_java_pages():
+    # The Java SDK sends the context since #1718, and both its pages say so:
+    # java put back in SENDS_NO_CONTEXT fails
+    # test_a_page_claims_no_attribute_targeting_its_client_does_not_send on
+    # them as well as here.
+    assert "java" not in SENDS_NO_CONTEXT
+    assert sends_context("java")
+    assert "flag evaluation sends the attributes" in attribute_claims(
+        text("docs/sdk/java.md")
+    )
+    assert "sent as context on flag evaluation" in attribute_claims(
+        text("sdk/java/README.md")
+    )
+
+
+def test_the_claim_patterns_find_the_true_sentence_on_the_dotnet_pages():
+    # .NET sends the context since #1719, and both its pages say so: the
+    # patterns must see it, so that dotnet put back in SENDS_NO_CONTEXT fails
+    # test_a_page_claims_no_attribute_targeting_its_client_does_not_send on
+    # docs/sdk/dotnet.md and sdk/dotnet/README.md as well as here.
+    assert "dotnet" not in SENDS_NO_CONTEXT
+    assert sends_context("dotnet")
+    for page in ("docs/sdk/dotnet.md", "sdk/dotnet/README.md"):
+        assert "sent as context on flag evaluation" in attribute_claims(text(page)), (
+            page
+        )
 
 
 def test_the_react_native_readme_says_the_attributes_are_sent_and_cites_no_438():
@@ -2093,3 +2119,127 @@ def test_the_react_native_refusal_the_page_quotes_is_the_one_the_source_throws()
     )
     assert "throw new Error(ON_EXPOSURE_REFUSAL)" in source
     assert "`ExperimentationClient: onExposure must be a function`" in text(RN_PAGE)
+
+
+# ---------------------------------------------------------------------------
+# 7. The Java SDK's targeting context (#1718)
+# ---------------------------------------------------------------------------
+
+JAVA_PAGE = "docs/sdk/java.md"
+#: The Java SDK's client tests: each Java test named below is one of its
+#: ``@DisplayName``s.
+JAVA_TESTS = (
+    SDK_DIR
+    / "java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java"
+)
+_EXACT_URL = (
+    "sends the attributes as context=<compact JSON>, percent-encoded: + & = # a space"
+    " and a non-ASCII character arrive intact"
+)
+_ROUND_TRIP = (
+    "isFeatureEnabled sends context too, and several and nested attributes arrive as"
+    " one JSON object"
+)
+_NO_ATTRIBUTES = (
+    "a user without attributes sends no context: the URL is the one sent before"
+    " attributes were"
+)
+_ASSIGN = "sends POST /api/v1/tracking/assign with experiment_key, user_id and context"
+#: One per java.time class the page names, each asserting the exact encoded
+#: context, and the assignment's context written the same way.
+_DATE_TIMES = (
+    "an Instant is sent in UTC: context={at: 2026-11-03T12:00:00Z}",
+    "a LocalDate is sent as a date: context={at: 2026-11-03}",
+    "a LocalDateTime is sent with seconds and no offset: context={at: 2026-11-03T12:00:00}",
+    "an OffsetDateTime is sent with its offset: context={at: 2026-11-03T12:00:00+01:00}",
+    "a ZonedDateTime is sent with its offset and without its zone ID:"
+    " context={at: 2026-11-03T12:00:00+01:00}",
+    "a java.util.Date is sent as an ISO-8601 UTC instant, not epoch milliseconds:"
+    " context={at: 2026-11-03T12:00:00Z}",
+    "a java.util.Date in the assignment context is sent as the same ISO-8601 string",
+    "getExperimentAssignment sends them in its context as the same strings",
+)
+_CACHE = (
+    "is keyed by user + key, not attributes: changed attributes get the cached answer"
+    " until invalidateCache or clearCache"
+)
+#: The server's half of "targeting rules match against them": the evaluate
+#: route matches a flag's rule against the context it is sent.
+_SERVER_MATCHES = (
+    "backend/tests/integration/api/test_feature_flag_evaluate_context.py"
+    "::TestGetEvaluateWithContext::test_matching_context_enables_flag_with_reason",
+)
+
+#: Each sentence docs/sdk/java.md states about the targeting context (as
+#: written, folded to one line), the JUnit tests that fail when it stops being
+#: true, and the backend tests that hold the server's part of it. The page is
+#: in ``CLAIMS_DEFERRED``, so no claims registry binds it; this does.
+JAVA_CONTEXT_SENTENCES: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...] = (
+    (
+        "Flag evaluation sends the user's attributes as `context`, so a flag's targeting"
+        " rules match against them.",
+        (_EXACT_URL, _ROUND_TRIP),
+        _SERVER_MATCHES,
+    ),
+    (
+        "`evaluateFeatureFlag` and `isFeatureEnabled` call"
+        " `GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=…`, where `context`"
+        ' is the attributes as compact JSON, percent-encoded: `{"plan":"pro"}` travels as'
+        " `context=%7B%22plan%22%3A%22pro%22%7D`.",
+        (_EXACT_URL, _ROUND_TRIP),
+        (),
+    ),
+    ("A user with no attributes sends no `context`.", (_NO_ATTRIBUTES,), ()),
+    ("`getExperimentAssignment` sends them as `context` in its body.", (_ASSIGN,), ()),
+    (
+        "Attribute values go into that JSON as follows: a string, number or boolean as"
+        " itself, a list or map as an array or object, and an `Instant`, `LocalDate`,"
+        " `LocalDateTime`, `OffsetDateTime` or `ZonedDateTime` as an ISO-8601 string"
+        " (`2026-11-03T12:00:00Z`, `2026-11-03`, `2026-11-03T12:00:00`,"
+        " `2026-11-03T12:00:00+01:00`; a `ZonedDateTime` with its offset and without its"
+        " zone ID), and a `java.util.Date` as an ISO-8601 UTC instant"
+        " (`2026-11-03T12:00:00Z`), never as epoch milliseconds.",
+        (_ROUND_TRIP,) + _DATE_TIMES,
+        (),
+    ),
+    (
+        "Attributes are assumed stable per user: evaluations and assignments are cached"
+        " by user + key only, so call `clearCache()`, or `invalidateCache(userId, key)`"
+        " for one key, after changing a user's attributes.",
+        (_CACHE,),
+        (),
+    ),
+)
+
+
+def _python_test_exists(node: str) -> bool:
+    """``path::Class::test`` (or ``path::test``) names a function in that file."""
+    path, *names = node.split("::")
+    scope = ast.parse((REPO_ROOT / path).read_text("utf-8")).body
+    for name in names:
+        found = [
+            n
+            for n in scope
+            if isinstance(n, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+            and n.name == name
+        ]
+        if not found:
+            return False
+        scope = found[0].body
+    return True
+
+
+@pytest.mark.parametrize(
+    "sentence, tests, server",
+    JAVA_CONTEXT_SENTENCES,
+    ids=[s[:60] for s, _, _ in JAVA_CONTEXT_SENTENCES],
+)
+def test_each_java_context_sentence_is_on_its_page_and_held_by_a_test(
+    sentence, tests, server
+):
+    assert sentence in fold(text(JAVA_PAGE)), f"no longer said there: {sentence}"
+    source = JAVA_TESTS.read_text("utf-8")
+    missing = [title for title in tests if f'@DisplayName("{title}")' not in source]
+    assert missing == [], f"no JUnit test in {JAVA_TESTS.name} has these display names"
+    gone = [node for node in server if not _python_test_exists(node)]
+    assert gone == [], "these backend tests are gone"

@@ -6,11 +6,14 @@ its answer, one JSON object with ``ok`` true or false, in order:
 
 * ``hello``: ``sdk``, ``version`` (the package's), ``module`` (the file the
   package was imported from, relative to the repository root) and
-  ``capabilities``.
+  ``capabilities`` (``local-eval``, ``remote-eval``, ``error-tally``).
 * ``init {api_url, api_key, mode, refresh_seconds?, cache_ttl_seconds?,
   timeout_ms?}``: the client, ``mode`` ``server`` or ``local``. In local mode
   it waits up to ``timeout_ms`` (5,000 unless given) for the first ruleset and
-  answers ``ready``.
+  answers ``ready``. ``cache_ttl_seconds`` is passed as it is (0 caches
+  nothing). The client always gets an ``on_error`` that counts its calls per
+  operation (``ErrorTally``): the count only, never the error or its message,
+  which can carry a URL with a user's id.
 * ``evaluate {flag, user, context?, default}``: ``enabled``, ``value``,
   ``reason``, ``source``, ``error`` and ``ms``. ``source`` is ``local`` (from
   the ruleset), ``server`` (the SDK's server path; in server mode the SDK does
@@ -18,7 +21,9 @@ its answer, one JSON object with ``ok`` true or false, in order:
   or ``default`` (the call raised: ``enabled`` and ``value`` are the default
   and ``error`` names the exception's type and status). ``error`` is ``null``
   otherwise; it is never left out.
-* ``status``: the SDK's ``status()``.
+* ``status``: the SDK's ``status()``, and ``errors``: the ``on_error`` calls
+  so far, ``{refresh, flush, evaluate, other}`` (any other operation counts as
+  ``other``).
 * ``close``: closes the client, answers, and exits 0. End of input does the
   same without an answer.
 
@@ -44,6 +49,7 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -56,6 +62,28 @@ MAX_LINE_BYTES = 64 * 1024
 DEFAULT_READY_MS = 5000
 #: Exit status when ``controlvar`` is not this checkout's.
 NOT_THE_CHECKOUT = 3
+#: The operations ``errors`` counts by name; any other counts as ``other``.
+ERROR_OPERATIONS = ("refresh", "flush", "evaluate")
+CAPABILITIES = ["local-eval", "remote-eval", "error-tally"]
+
+
+class ErrorTally:
+    """The client's ``on_error``: counts its calls per operation. Keeps the
+    counts only, never the error (its message can carry a URL with a user's
+    id). The SDK calls it from its refresh thread, so the counts are locked."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._counts = dict.fromkeys((*ERROR_OPERATIONS, "other"), 0)
+
+    def __call__(self, error: BaseException, operation: str) -> None:
+        key = operation if operation in ERROR_OPERATIONS else "other"
+        with self._lock:
+            self._counts[key] += 1
+
+    def counts(self) -> dict[str, int]:
+        with self._lock:
+            return dict(self._counts)
 
 
 class Refused(Exception):
@@ -110,6 +138,7 @@ class Driver:
     def __init__(self, sdk: Any) -> None:
         self._sdk = sdk
         self._client: Any = None
+        self._errors = ErrorTally()
         self.closed = False
 
     def handle(self, command: Any) -> dict[str, Any]:
@@ -135,7 +164,7 @@ class Driver:
             "sdk": "python",
             "version": self._sdk.__version__,
             "module": module.as_posix(),
-            "capabilities": ["local-eval", "remote-eval"],
+            "capabilities": list(CAPABILITIES),
         }
 
     def _cmd_init(self, args: dict[str, Any]) -> dict[str, Any]:
@@ -145,7 +174,7 @@ class Driver:
         mode = args.get("mode")
         if mode not in ("server", "local"):
             raise Refused("bad_request")
-        options: dict[str, Any] = {"evaluation": mode}
+        options: dict[str, Any] = {"evaluation": mode, "on_error": self._errors}
         timeout_ms = _number(args, "timeout_ms")
         if timeout_ms is not None:
             options["timeout_seconds"] = timeout_ms / 1000
@@ -207,6 +236,7 @@ class Driver:
             "last_refresh_at": refreshed.isoformat() if refreshed else None,
             "last_error": _error(status.last_error) if status.last_error else None,
             "server_evaluated_flags": list(status.server_evaluated_flags),
+            "errors": self._errors.counts(),
         }
 
     def _cmd_close(self, args: dict[str, Any]) -> dict[str, Any]:

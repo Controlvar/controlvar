@@ -7,16 +7,23 @@ The fake upstream (``harness.Upstream``) serves one flag, the ruleset with its
 ETag, and the evaluation counts. The SDK reaches it only through the proxy,
 whose records say what went over the wire: the positive control that the SDK
 is behind the proxy at all.
+
+The ``on_error`` tally (``status()["errors"]``) is checked against the proxy:
+a driver started while the proxy faults the ruleset counts one refresh per
+faulted request. The JS driver's tally is checked the same way beside the
+cases (``tests/usecases/test_js_driver.py``).
 """
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
 import subprocess
 import sys
 from collections.abc import Iterator
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -27,6 +34,7 @@ from backend.tests.unit.usecases.harness import (
     SDK_ROOT,
     Upstream,
     closed_port,
+    gates,
     proxy,
     runner,
 )
@@ -37,6 +45,22 @@ pytestmark = pytest.mark.unit
 KEY = "K" * 32
 EVALUATE = f"/api/v1/feature-flags/evaluate/{FLAG_KEY}"
 EVALUATIONS = "/api/v1/tracking/evaluations"
+#: ``status()["errors"]`` before anything failed.
+NO_ERRORS = dict.fromkeys(gates.ERROR_KEYS, 0)
+
+
+def _driver_module() -> ModuleType:
+    """The driver script as a module (it does nothing at import: the SDK is
+    loaded by ``main``)."""
+    spec = importlib.util.spec_from_file_location(
+        "usecases_python_driver", PYTHON_DRIVER
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 #: Runs the driver after another ``controlvar`` was imported first: argv is
 #: the decoy's directory, then the driver.
 PRELOADED = (
@@ -97,7 +121,7 @@ def test_hello_names_this_checkout_s_sdk(driver):
         "sdk": "python",
         "version": _sdk_version(),
         "module": "sdk/python/controlvar/__init__.py",
-        "capabilities": ["local-eval", "remote-eval"],
+        "capabilities": ["local-eval", "remote-eval", "error-tally"],
     }
 
 
@@ -171,6 +195,7 @@ def test_local_mode_round_trip_behind_the_proxy(driver, relay):
         "v1",
     )
     assert status["last_error"] is None and status["last_refresh_at"]
+    assert status["errors"] == NO_ERRORS
     assert driver.call("close") == {"ok": True}
     records = relay.records()
     ruleset = [r for r in records if r.path == proxy.RULESET_PATH]
@@ -183,6 +208,68 @@ def test_local_mode_round_trip_behind_the_proxy(driver, relay):
     assert [(r.method, r.status) for r in records if r.path == EVALUATIONS] == [
         ("POST", 202)
     ]
+
+
+# -- the error tally and the cache lifetime -----------------------------------------------
+def test_on_error_counts_one_refresh_per_ruleset_request_the_proxy_faulted(
+    driver, relay, upstream
+):
+    """Started while the proxy answers the ruleset 503: the first refresh
+    fails, ``init`` answers ``ready`` false, and ``errors`` counts that one
+    refresh, as many as the proxy faulted (the next attempt is a backoff step,
+    5 s, away). The upstream never saw the faulted request."""
+    relay.inject(proxy.Fault("status", paths=(proxy.RULESET_PATH,)))
+    init = driver.call(
+        "init",
+        api_url=relay.origin,
+        api_key=KEY,
+        mode="local",
+        refresh_seconds=5,
+        timeout_ms=2000,
+    )
+    assert init == {"ok": True, "mode": "local", "ready": False}
+    status = driver.call("status")
+    records = relay.records()
+    assert [(r.path, r.status, r.fault) for r in records] == [
+        (proxy.RULESET_PATH, 503, "status:503")
+    ]
+    assert (
+        gates.error_tally_findings(status["errors"], records, "the python driver") == []
+    )
+    assert status["errors"] == {**NO_ERRORS, "refresh": 1}
+    assert upstream.requests_to(proxy.RULESET_PATH) == []
+    relay.clear()
+    assert driver.call("close") == {"ok": True}
+
+
+def test_cache_ttl_zero_reaches_the_server_on_every_call(driver, relay, upstream):
+    init = driver.call(
+        "init", api_url=relay.origin, api_key=KEY, mode="server", cache_ttl_seconds=0
+    )
+    assert init == {"ok": True, "mode": "server"}
+    answers = [
+        driver.call("evaluate", flag=FLAG_KEY, user="u-1", default=False)
+        for _ in range(2)
+    ]
+    assert [(a["enabled"], a["source"], a["error"]) for a in answers] == [
+        (True, "server", None)
+    ] * 2
+    assert driver.call("close") == {"ok": True}
+    # 0 caches nothing: the same user's second call asked the API again.
+    assert len(upstream.requests_to(EVALUATE)) == 2
+
+
+def test_the_tally_counts_per_operation_and_keeps_no_error():
+    """Any operation other than refresh, flush and evaluate counts as other;
+    only counts are kept; the keys are the gates'."""
+    module = _driver_module()
+    tally = module.ErrorTally()
+    secret = RuntimeError("GET /api/v1/feature-flags/evaluate/x?user_id=someone")
+    for operation in ("refresh", "refresh", "flush", "evaluate", "value", "exposure"):
+        tally(secret, operation)
+    assert tally.counts() == {"refresh": 2, "flush": 1, "evaluate": 1, "other": 2}
+    assert tuple(tally.counts()) == gates.ERROR_KEYS
+    assert "someone" not in repr(vars(tally))
 
 
 # -- refusals and errors, read off the raw stdout --------------------------------------

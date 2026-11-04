@@ -9,7 +9,7 @@ namespace Controlvar;
 /// and tracking analytics events.
 ///
 /// <para><b>The server decides.</b> <see cref="EvaluateFlagAsync"/> calls
-/// <c>GET /api/v1/feature-flags/evaluate/{key}?user_id=…</c> and <see cref="GetAssignmentAsync"/>
+/// <c>GET /api/v1/feature-flags/evaluate/{key}?user_id=…&amp;context=…</c> and <see cref="GetAssignmentAsync"/>
 /// calls <c>POST /api/v1/tracking/assign</c>; no bucketing happens in the SDK.</para>
 ///
 /// <para><b>Caching.</b> Successful results are cached per user + key for
@@ -64,12 +64,17 @@ public class ExperimentationClient : IDisposable
 
     /// <summary>
     /// Evaluates a feature flag for a specific user via
-    /// <c>GET /api/v1/feature-flags/evaluate/{flagKey}?user_id={userId}</c>.
+    /// <c>GET /api/v1/feature-flags/evaluate/{flagKey}?user_id={userId}&amp;context={attributes}</c>.
     /// </summary>
     /// <param name="flagKey">The feature flag key.</param>
     /// <param name="userId">The user ID.</param>
     /// <param name="attributes">
-    /// Accepted for source compatibility and not sent: the evaluate endpoint takes a context, which this SDK does not send yet.
+    /// Optional user attributes, sent as <c>context</c> for the flag's targeting rules: compact
+    /// JSON, serialised with the options the assignment body is serialised with, then
+    /// percent-encoded. Nothing is sent for <c>null</c> or an empty dictionary. The cache key is
+    /// user + flag key only, so a cached answer is returned whatever the attributes; call
+    /// <see cref="ClearCache"/> after changing a user's attributes. Attributes that cannot be
+    /// serialised send no request and give the disabled result, which is not cached.
     /// </param>
     /// <returns>
     /// The server's decision (<c>Key</c>, <c>Enabled</c>, <c>Config</c>). Never throws: on failure
@@ -89,6 +94,9 @@ public class ExperimentationClient : IDisposable
         {
             var path = $"/api/v1/feature-flags/evaluate/{Uri.EscapeDataString(flagKey)}";
             var query = new Dictionary<string, string> { ["user_id"] = userId };
+            var context = ContextParam(attributes);
+            if (context != null)
+                query["context"] = context;
             var result = await _httpClient.GetAsync<FlagEvaluationResult>(path, query).ConfigureAwait(false);
             if (string.IsNullOrEmpty(result.Key))
                 result.Key = flagKey;
@@ -322,6 +330,20 @@ public class ExperimentationClient : IDisposable
     {
         [JsonPropertyName("events")]
         public List<TrackBody> Events { get; set; } = new();
+    }
+
+    /// <summary>
+    /// The <c>context</c> query value of a flag evaluation: <paramref name="attributes"/> as
+    /// compact JSON, serialised with the options of the assignment body, or <c>null</c> when there
+    /// are none (<c>null</c> or empty), so the URL is then the one sent without them.
+    /// <see cref="ExperimentationHttpClient.BuildUri"/> percent-encodes it. Throws what
+    /// <see cref="JsonSerializer"/> throws for attributes it cannot serialise.
+    /// </summary>
+    private static string? ContextParam(Dictionary<string, object>? attributes)
+    {
+        if (attributes == null || attributes.Count == 0)
+            return null;
+        return JsonSerializer.Serialize(attributes, ExperimentationHttpClient.JsonOptions);
     }
 
     /// <summary>

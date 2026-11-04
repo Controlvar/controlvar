@@ -277,6 +277,7 @@ const client = new ExperimentationClient({
 | `trackBatch(events)` | `Promise<BatchResult>` | never rejects; chunked at 100 |
 | `fetchAssignments(userId)` | server-side list from `/tracking/assignments/{userId}` | rejects |
 | `getAssignments(userId)`, `getEvaluatedFlags(userId)`, `clearCache()` | local cache access | — |
+| `getCachedFlags(userId)` | `FlagEvaluation[]`: cached, unexpired evaluations; with local evaluation each carries `source` (`'local'` or `'server'`) | — |
 | `consistentHash(userId, flagKey)`, `md5Hex(...)` (module exports) | compatibility hash utilities | — |
 
 Concurrent calls for the same user + key share one request; failures are never cached; a 429 is
@@ -361,7 +362,7 @@ ExperimentationClient client = new ExperimentationClient(config);
 
 User user = User.builder("user-123")
     .attribute("country", "US")
-    .attribute("plan", "pro")          // sent as `context` on assignment
+    .attribute("plan", "pro")          // sent as `context` on assignment and flag evaluation
     .build();
 
 // Sticky experiment assignment (POST /api/v1/tracking/assign)
@@ -370,7 +371,7 @@ assignment.getVariantName();       // "control" | "treatment"
 assignment.isControl();
 assignment.getConfiguration();     // Map<String,Object> or null
 
-// Feature flag (GET /api/v1/feature-flags/evaluate/{key}?user_id=...)
+// Feature flag (GET /api/v1/feature-flags/evaluate/{key}?user_id=...&context=..., the attributes as JSON)
 FlagEvaluation flag = client.evaluateFeatureFlag(user, "dark_mode");
 flag.isEnabled(); flag.getConfig();
 boolean on = client.isFeatureEnabled(user, "dark_mode");   // false on failure

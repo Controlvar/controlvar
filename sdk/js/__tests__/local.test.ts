@@ -166,6 +166,15 @@ describe('the vectors through evaluateFlag', () => {
     const cases = vectors.cases.filter((c: { context: unknown }) => !hasNonFinite(c.context));
     expect(vectors.cases.length - cases.length).toBe(42);
 
+    // The flags this ruleset sends to the server are exactly its active "remote" ones, computed from
+    // the file so the list cannot drift without this failing.
+    const remoteKeys: string[] = vectors.ruleset.flags
+      .filter((f: { active?: boolean; evaluation?: string }) => f.active && f.evaluation === 'remote')
+      .map((f: { key: string }) => f.key)
+      .sort();
+    expect(remoteKeys).toHaveLength(45);
+    expect([...client.status().serverEvaluatedFlags].sort()).toEqual(remoteKeys);
+
     let expectedRemote = 0;
     const wrong: string[] = [];
     const unsendable: string[] = [];
@@ -201,6 +210,18 @@ describe('the vectors through evaluateFlag', () => {
       }
       if (result.source !== (remote ? 'server' : 'local') || remote !== (testCase.must_local ? 0 : 1)) {
         wrong.push(`${testCase.id}: must_local=${testCase.must_local} but ${remote} server calls, source ${result.source}`);
+      }
+      if (remote) {
+        // The request that reached the server carries the case's context: the decoded `context`
+        // parameter equals it, and is absent when the context is null or {}.
+        const calls = server.requests('/feature-flags/evaluate/');
+        const sent = new URL(calls[calls.length - 1].url).searchParams.get('context');
+        const empty = !testCase.context || Object.keys(testCase.context).length === 0;
+        if (empty) {
+          if (sent !== null) wrong.push(`${testCase.id}: context sent for an empty context: ${sent}`);
+        } else if (sent === null || JSON.stringify(JSON.parse(sent)) !== JSON.stringify(testCase.context)) {
+          wrong.push(`${testCase.id}: context sent ${sent}, expected ${JSON.stringify(testCase.context)}`);
+        }
       }
       client.clearCache();
     }
@@ -813,6 +834,38 @@ describe('after local evaluation stops answering a pair', () => {
     // The ruleset still answers the attributes it can compare, with no request.
     await answersLocally(client, 'us-only', us);
     expect(server.requests('/feature-flags/evaluate/')).toHaveLength(1);
+  });
+});
+
+// ─── getCachedFlags ──────────────────────────────────────────────────────────
+//
+// #1714: the cached evaluations themselves, so a caller (the OpenFeature provider) can tell a
+// local entry, never reused, from a server one, which is.
+
+describe('getCachedFlags', () => {
+  test("getCachedFlags returns the user's unexpired cached evaluations, each with its source", async () => {
+    const server = new FakeServer(ok(RULESET_WITH_REMOTE, '"v2"'));
+    const { client } = localClient(server, { cacheTtlMs: 60_000 });
+    track(client);
+    await client.ready();
+    const t0 = Date.now();
+    const local = await client.evaluateFlag('us-only', us);
+    const remote = await client.evaluateFlag('semver', us);
+    await client.evaluateFlag('all-on', { userId: 'someone-else' });
+    const requests = server.calls.length;
+
+    expect(client.getCachedFlags('user-1')).toEqual([local, remote]);
+    expect(client.getCachedFlags('user-1').map(entry => [entry.key, entry.source])).toEqual([
+      ['us-only', 'local'],
+      ['semver', 'server'],
+    ]);
+    expect(client.getCachedFlags('nobody')).toEqual([]);
+    // Live for cacheTtlMs after it is set and expired from then on, with no call in between.
+    jest.setSystemTime(t0 + 59_999);
+    expect(client.getCachedFlags('user-1')).toHaveLength(2);
+    jest.setSystemTime(t0 + 60_000);
+    expect(client.getCachedFlags('user-1')).toEqual([]);
+    expect(server.calls.length).toBe(requests); // no network
   });
 });
 

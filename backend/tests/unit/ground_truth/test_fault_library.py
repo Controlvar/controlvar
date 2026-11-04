@@ -9,7 +9,10 @@
   meets it, and a different answer does not;
 * each fault plants what its docstring says, where it says (F3's lifecycle,
   F5's early events, F6's four cases, F7's lost users, F9's classes and raw
-  payloads, F4's timestamps from the event serial).
+  payloads, F2's bot volume and values beyond the bound, F4's timestamps from
+  the event serial);
+* ``inject`` plants one fault besides F4; ``combine`` places them all, each on
+  users no other touched, inside F3's pause and ``complete``.
 
 That each planted count reaches the ledger exactly is
 ``test_sensitivity.py``'s.
@@ -60,6 +63,7 @@ SMALL = {
     ),
     "F7": faults.ExposureLoss(lost_users=150),
     "F9": faults.Hostile(per_class=1),
+    "F2": faults.BotTraffic(bots=4, events_per_bot=30, huge_values=6),
     "F4": faults.ClockSkew(future_users_per_arm=2),
 }
 #: Every named count of every definition.
@@ -77,6 +81,9 @@ COUNTS = [
     (faults.VariantMismatch, "own_arm"),
     (faults.ExposureLoss, "lost_users"),
     (faults.Hostile, "per_class"),
+    (faults.BotTraffic, "bots"),
+    (faults.BotTraffic, "events_per_bot"),
+    (faults.BotTraffic, "huge_values"),
     (faults.ClockSkew, "future_users_per_arm"),
 ]
 
@@ -191,6 +198,16 @@ def test_a_count_below_one_or_not_a_whole_number_is_refused(fault, field, bad):
             SCENARIO,
             "F4 needs 5000 users of 'control' with a counting event",
         ),
+        (
+            faults.BotTraffic(bots=5000),
+            SCENARIO,
+            "F2 needs 5000 users assigned in a batch",
+        ),
+        (
+            faults.BotTraffic(),
+            replace(SCENARIO, metrics=SCENARIO.metrics[:2]),
+            "F2 needs a revenue, duration or custom metric on 'purchase'",
+        ),
     ],
     ids=[
         "F1-kinds",
@@ -204,6 +221,8 @@ def test_a_count_below_one_or_not_a_whole_number_is_refused(fault, field, bad):
         "F7-users",
         "F7-arm",
         "F4",
+        "F2-users",
+        "F2-metrics",
     ],
 )
 def test_a_plan_with_too_few_eligible_items_is_refused_naming_the_fault(
@@ -216,6 +235,31 @@ def test_a_plan_with_too_few_eligible_items_is_refused_naming_the_fault(
 def test_a_fault_given_twice_is_refused():
     with pytest.raises(ValueError, match="a fault is given twice"):
         faults.inject(CLEAN, SMALL["F5"], faults.EarlyEvents(r2_order_untags=2))
+    with pytest.raises(ValueError, match="a fault is given twice"):
+        faults.combine(CLEAN, SMALL["F5"], faults.EarlyEvents(r2_order_untags=2))
+
+
+def test_inject_plants_one_fault_besides_f4():
+    """Stacked by ``inject``, two faults' counts are not exact (F3's resends
+    are R4 drops, one fault takes another's event): ``combine`` places them."""
+    with pytest.raises(ValueError, match=r"not \['F1', 'F3'\].*combine"):
+        faults.inject(CLEAN, SMALL["F3"], SMALL["F1"], SMALL["F4"])
+
+
+@pytest.mark.parametrize(
+    "fields, message",
+    [
+        ({"bots": 2, "events_per_bot": 3, "huge_values": 7}, "more than the 6 bot"),
+        ({"value": float("nan")}, "F9: value must be None or a finite number"),
+        ({"value": 2e12}, "F9: value must be None or a finite number"),
+        ({"value": True}, "F9: value must be None or a finite number"),
+    ],
+    ids=["F2-more-values-than-events", "F9-nan", "F9-beyond", "F9-bool"],
+)
+def test_a_definition_that_cannot_plant_what_it_says_is_refused(fields, message):
+    kind = faults.BotTraffic if "bots" in fields else faults.Hostile
+    with pytest.raises(ValueError, match=message):
+        kind(**fields)
 
 
 # ---------------------------------------------------------------------------
@@ -525,6 +569,147 @@ def test_f4_composes_with_another_fault_and_keeps_its_timestamps():
     ]
     assert len(edges) == 6  # F9's edge timestamps on /track, /events and /batch
     assert faults.future_dated_users(plan) == {"control": 2, "treatment": 2}
+
+
+def test_f2_sends_its_bot_volume_and_values_beyond_the_bound():
+    """The volume is pinned here, not by the sensitivity check: ``bots``
+    users assigned in a batch, ``events_per_bot`` events each through
+    ``/batch`` after their assignment, each with its own ``event_id``;
+    ``huge_values`` of them beyond 10^12 in size, of both signs, the rest
+    ``BOT_VALUE``."""
+    fault = SMALL["F2"]
+    plan = planted("F2")
+    bodies = [b for b in _bodies(plan) if "-f2-e" in (b.get("event_id") or "")]
+    assert len(bodies) == fault.bots * fault.events_per_bot == 120
+    per_bot = Counter(b["user_id"] for b in bodies)
+    assert sorted(per_bot.values()) == [fault.events_per_bot] * fault.bots
+    assert len({b["event_id"] for b in bodies}) == len(bodies)
+    batched = {
+        u["user_id"]
+        for op in CLEAN.ops
+        if op.kind == "assign_batch"
+        for u in op.body["users"]
+    }
+    assert set(per_bot) <= batched
+    first = min(
+        i
+        for i, op in enumerate(plan.ops)
+        for b in _bodies(g.Plan(SEED, SCENARIO, (op,)))
+        if "-f2-e" in (b.get("event_id") or "")
+    )
+    assert first > max(i for i, op in enumerate(plan.ops) if op.kind == "assign")
+    assert {op.kind for op in plan.ops[first:]} == {"batch"}
+    beyond = [b["value"] for b in bodies if abs(b["value"]) > contract.VALUE_BOUND]
+    assert len(beyond) == fault.huge_values == 6
+    assert beyond == [faults.BEYOND_BOUND[i % 2] for i in range(6)]
+    assert all(
+        b["value"] == faults.BOT_VALUE for b in bodies if b["value"] not in beyond
+    )
+
+
+def test_f9_valid_sends_carry_the_value_it_is_given():
+    plan = faults.inject(CLEAN, faults.Hostile(per_class=1, value=1.0))
+    valid = [
+        op.body
+        for op in plan.ops
+        if op.kind == "track" and faults.f9_class(op.body["user_id"]) in faults.F9_VALID
+    ]
+    assert len(valid) == 6 and all(body["value"] == 1.0 for body in valid)
+    assert all(
+        "value" not in b
+        for b in _bodies(planted("F9"))
+        if faults.f9_class(b["user_id"]) in faults.F9_VALID
+    )
+
+
+# ---------------------------------------------------------------------------
+# Every fault at once: combine
+# ---------------------------------------------------------------------------
+COMBINED = faults.combine(CLEAN, *SMALL.values())
+
+
+def _fault_users(plan: g.Plan) -> dict[str, set[str]]:
+    """Who carries each fault in a combined plan, read from the plan alone."""
+    actions = {
+        op.body["action"]: i for i, op in enumerate(plan.ops) if op.kind == "lifecycle"
+    }
+    first_assign = _first(plan, ("assign", "assign_batch"))
+    window = [
+        *plan.ops[actions["pause"] + 1 : actions["resume"]],
+        *plan.ops[actions["complete"] + 1 :],
+    ]
+    seen = Counter(b["event_id"] for b in _bodies(plan) if b.get("event_id"))
+    defined = set(g.user_ids(SEED, SCENARIO.users))
+    return {
+        "F1": {
+            b["user_id"] for b in _bodies(plan) if seen.get(b.get("event_id"), 0) > 1
+        }
+        - {
+            b["user_id"]
+            for op in window
+            for b in _bodies(g.Plan(SEED, SCENARIO, (op,)))
+        },
+        "F2": {
+            b["user_id"] for b in _bodies(plan) if "-f2-e" in (b.get("event_id") or "")
+        },
+        "F3": {
+            b["user_id"]
+            for op in window
+            for b in _bodies(g.Plan(SEED, SCENARIO, (op,)))
+        },
+        "F5": {
+            b["user_id"]
+            for op in plan.ops[:first_assign]
+            for b in _bodies(g.Plan(SEED, SCENARIO, (op,)), ("track", "batch"))
+        },
+        "F6": {
+            b["user_id"]
+            for b in _bodies(plan, ("events",))
+            if "-f6-e" in (b.get("event_id") or "")
+        },
+        "F7": defined - set(_assigned_users(plan)),
+        "F9": {b["user_id"] for b in _bodies(plan) if faults.f9_class(b["user_id"])},
+        "F4": {
+            b["user_id"] for b in _bodies(plan) if b.get("timestamp") == faults.FUTURE
+        },
+    }
+
+
+def test_combine_places_each_fault_on_users_no_other_fault_touched():
+    users = _fault_users(COMBINED)
+    assert all(users.values()), {name: len(found) for name, found in users.items()}
+    overlaps = {
+        (a, b): sorted(users[a] & users[b])[:3]
+        for a in users
+        for b in users
+        if a < b and users[a] & users[b]
+    }
+    assert overlaps == {}
+
+
+def test_combine_encloses_every_other_send_in_f3_s_pause_and_complete():
+    """Between the pause and the resume, and after the ``complete``, only
+    F3's late events and its users asking again; everything else between
+    the start and the ``complete``."""
+    plan = COMBINED
+    actions = [op.body["action"] for op in plan.ops if op.kind == "lifecycle"]
+    assert actions == ["create", "start", "pause", "resume", "complete"]
+    at = {
+        op.body["action"]: i for i, op in enumerate(plan.ops) if op.kind == "lifecycle"
+    }
+    late = _fault_users(plan)["F3"]
+    for lo, hi in ((at["pause"], at["resume"]), (at["complete"], len(plan.ops))):
+        for op in plan.ops[lo + 1 : hi]:
+            if op.kind == "assign":
+                assert op.expect == faults.UNASSIGNED, op
+            else:
+                assert op.kind in ("track", "batch"), op
+                assert {
+                    b["user_id"] for b in _bodies(g.Plan(SEED, SCENARIO, (op,)))
+                } <= late
+    assert (
+        plan.ops[0].body["action"] == "create" and plan.ops[1].body["action"] == "start"
+    )
 
 
 def test_the_expected_ledger_of_a_fault_plan_reads_and_counts():
