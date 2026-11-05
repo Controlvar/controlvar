@@ -478,7 +478,10 @@ It prints `"status": "active"` and `"rollout_percentage": 5`.
 **Finally, resume the rollout schedule.** The rollback paused the flag's active schedule, and it
 stays paused until you resume it explicitly with `POST /api/v1/rollout-schedules/{schedule_id}/activate`
 (see [Rollout Schedules](rollouts.md#pausing-a-schedule)). The ids are in the rollback response's
-`details.paused_schedules`.
+`details.paused_schedules`. After an automatic rollback they are in the `safety_rollback` audit
+entry's `new_value.paused_schedules`. If that entry is missing, list the flag's paused schedules with
+`GET /api/v1/rollout-schedules/?feature_flag_id=$FLAG_ID&status=paused`; a schedule paused by hand is
+listed too.
 
 **Check the flag's thresholds.** A rollback does not change the flag's safety configuration: a
 flag with one of its own keeps its thresholds, and a flag without one is still checked against the

@@ -132,10 +132,22 @@ text = "It prints \"succeeded\": 2 and \"failed\": 1, with the error \"Feature f
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "The full response lists each flag's result, and the id of the audit entry written for each flag that changed:"
+text = "The full response lists each flag's result, and the id of the audit entry written for each flag that succeeded, including one that was already in the requested state:"
 by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_bulk_toggle_one_entry_per_flag",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_enable_and_disable_that_change_nothing_still_write_one_entry",
+]
+
+[[unit]]
+text = "/enable, /disable and bulk toggle also record a request that leaves the status unchanged: one toggle_enable or toggle_disable entry (feature_flag_update for bulk archive), with old_value equal to new_value, such as INACTIVE and INACTIVE for a flag that was already off."
+by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_enable_and_disable_that_change_nothing_still_write_one_entry"]
+
+[[unit]]
+text = "/activate and /deactivate write nothing then."
+by = [
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_activate_that_changes_nothing_writes_nothing",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_deactivate_that_changes_nothing_writes_nothing",
 ]
 
 [[unit]]

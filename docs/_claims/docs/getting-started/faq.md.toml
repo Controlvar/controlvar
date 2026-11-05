@@ -620,12 +620,25 @@ by = [
 ]
 
 [[unit]]
-text = "Full audit log export (JSON or CSV) is available for SIEM ingestion at GET /api/v1/compliance/export."
+text = "The compliance trail exports as JSON or CSV at GET /api/v1/compliance/export (compliance module; a core deployment answers 501): flag and experiment creates, changes and deletes, without their old and new values."
 by = [
     "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestAuditExport::test_admin_can_export_csv",
     "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestAuditExport::test_admin_can_export_json",
+    "test:backend/tests/unit/services/test_compliance_trail_writers.py::test_core_answers_the_report_and_export_501_after_the_role_check",
+    "test:modules/backend/tests/unit/services/test_compliance_export_contents.py::test_every_matching_event_oldest_first_with_eight_fields",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
+
+[[unit]]
+text = "Toggles, rollbacks, sign-ins and role changes are in the audit log, which exports at GET /api/v1/audit-logs/export (beta) in every profile."
+by = [
+    "test:backend/tests/integration/api/test_audit_export.py::test_each_filter_returns_exactly_its_rows_newest_first",
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+]
+
+[[unit]]
+text = "For a SIEM, take both."
+by = ["exempt:advice"]
 
 [[unit]]
 text = "See Compliance Audit Trail API for full documentation."
