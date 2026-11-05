@@ -33,6 +33,17 @@ results cache is off, so every request computes.
   work runs -- 404, 403, 400, 401, 500 and 200, by caller and by experiment --
   with every refusal compared byte for byte. The same table passes on the old
   code.
+
+``GET /api/v1/experiments/{id}/daily-results`` and
+``/segmented-results/{segment_by}`` had the same defect (#1762), with an async
+cache read between their checks and their analysis. Each now decides the
+caller's permission, closes the request's session, runs the lookup and the
+checks in one ``run_in_threadpool`` call, reads the cache on the event loop,
+runs the analysis in a second call and writes the cache on the loop. The
+``test_breakdown_*`` tests below are the three above for both routes, and
+``test_the_breakdown_cache_is_read_on_the_loop_after_the_checks`` pins that the
+cache is read and written on the event loop, and never for a caller the checks
+refuse.
 """
 
 from __future__ import annotations
@@ -631,3 +642,348 @@ def test_answers_by_caller(caller, client, db_session, admin_user, grants, monke
         ):
             wrong.append(f"{target}: 200 for another experiment {got[:120]!r}")
     assert not wrong, f"{caller}:\n" + "\n".join(wrong)
+
+
+# ---------------------------------------------------------------------------
+# #1762: the daily and segmented results
+# ---------------------------------------------------------------------------
+
+#: route -> (the AnalysisService method it calls, its path).
+BREAKDOWNS = {
+    "daily": ("get_daily_results", "/api/v1/experiments/{id}/daily-results"),
+    "segmented": (
+        "get_segmented_results",
+        "/api/v1/experiments/{id}/segmented-results/country",
+    ),
+}
+#: route -> the cache key of an experiment's answer (no metric_id).
+BREAKDOWN_CACHE_KEYS = {
+    "daily": "experiment_daily_results:{id}",
+    "segmented": "experiment_segmented_results:{id}:country",
+}
+#: route -> the sentence of its 500.
+BREAKDOWN_FAILURES = {
+    "daily": "Could not load the daily results",
+    "segmented": "Could not load the segmented results",
+}
+#: Stands for the route's 500 body in a table: its sentence and the request id.
+FAILED = "the route's 500"
+
+
+def _breakdown_url(route: str, experiment_id) -> str:
+    return BREAKDOWNS[route][1].format(id=experiment_id)
+
+
+def _breakdown_experiment(db_session, admin_user, status: ExperimentStatus):
+    """``_experiment`` with a last day, so the daily results cover three days,
+    and a country on every event, so the segmented results have a segment."""
+    experiment = _experiment(db_session, admin_user, status)
+    db_session.execute(
+        update(Experiment)
+        .where(Experiment.id == experiment.id)
+        .values(end_date=datetime(2026, 10, 3, tzinfo=timezone.utc))
+    )
+    db_session.execute(
+        update(Event)
+        .where(Event.experiment_id == experiment.id)
+        .values(event_metadata={"country": "GB"})
+    )
+    db_session.commit()
+    db_session.refresh(experiment)
+    return experiment
+
+
+def _analysed(route: str, db_session, experiment_id):
+    """What AnalysisService computes for *route*'s request, read directly."""
+    db_session.expire_all()
+    service = AnalysisService(db_session)
+    if route == "daily":
+        return service.get_daily_results(experiment_id=experiment_id)
+    return service.get_segmented_results(
+        experiment_id=experiment_id, segment_by="country"
+    )
+
+
+# Gate 1 ---------------------------------------------------------------------
+
+#: path -> (statements on the loop's thread, the status), as LOOP_PATHS. These
+#: routes take a sign-in only: a key is refused before it is looked up.
+BREAKDOWN_LOOP_PATHS = {
+    "sign-in": (0, 200),
+    "no role": (GRANT_READ_STATEMENTS if _full_profile() else 0, 403),
+    "key, first use": (0, 401),
+}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("path", list(BREAKDOWN_LOOP_PATHS))
+@pytest.mark.parametrize("route", list(BREAKDOWNS))
+async def test_breakdown_routes_on_the_event_loop(
+    route, path, seen, db_session, admin_user
+):
+    loop_thread = threading.get_ident()
+    experiment = _breakdown_experiment(db_session, admin_user, ExperimentStatus.ACTIVE)
+    want_statements, want_status = BREAKDOWN_LOOP_PATHS[path]
+    key_id = None
+    if path == "no role":
+        headers = _bearer(_make_user(db_session, None, "norole"))
+    elif path == "sign-in":
+        headers = _bearer(_make_user(db_session, UserRole.DEVELOPER, "dev"))
+    else:
+        key_id, plaintext = _key(
+            db_session, _make_user(db_session, UserRole.DEVELOPER, "keydev")
+        )
+        headers = {"X-API-Key": plaintext}
+        _set_last_used(db_session, key_id, None)
+
+    async with _http() as http:
+        mark = seen.mark()
+        response = await http.get(_breakdown_url(route, experiment.id), headers=headers)
+    checkouts, on_loop, elsewhere = seen.since(mark, loop_thread)
+
+    assert response.status_code == want_status, response.text
+    if key_id is None:
+        # Guard the guard: the listeners are on the engine the request used.
+        assert elsewhere, "no statement seen off the event loop's thread"
+    else:
+        # Refused before anything is read: the key's use is not recorded.
+        assert response.content == NOT_AUTHENTICATED, response.content
+        assert _last_used(db_session, key_id) is None
+        assert not elsewhere, [_shape(s) for s in elsewhere]
+
+    assert (checkouts, len(on_loop)) == (0, want_statements), (
+        f"{route}, {path}: on the event loop's thread, {checkouts} checkout(s) "
+        f"and {len(on_loop)} statement(s), want 0 and {want_statements}; the "
+        f"first: {[_shape(s) for s in on_loop[:5]]}"
+    )
+    if path == "no role" and want_statements:
+        assert all(any(t in s for t in GRANT_TABLES) for s in on_loop), on_loop
+
+
+# Gate 2 ---------------------------------------------------------------------
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("route", list(BREAKDOWNS))
+async def test_other_requests_are_answered_while_a_breakdown_is_computed(
+    route, seen, db_session, admin_user, make_feature_flag, monkeypatch
+):
+    experiment = _breakdown_experiment(db_session, admin_user, ExperimentStatus.ACTIVE)
+    developer = _make_user(db_session, UserRole.DEVELOPER, "held")
+    flag = make_feature_flag(status=FeatureFlagStatus.ACTIVE, rollout_percentage=100)
+    _key_id, sdk_key = _key(db_session, developer, scopes=None)
+
+    method = BREAKDOWNS[route][0]
+    original = getattr(AnalysisService, method)
+    entered = threading.Event()
+    release = threading.Event()
+    held: List[bool] = []
+
+    def holding(self, *args, **kwargs):
+        entered.set()
+        held.append(release.wait(timeout=HOLD_SECONDS))
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(AnalysisService, method, holding)
+
+    async with _http() as http:
+        with anyio.fail_after(EXCHANGE_DEADLINE_SECONDS):
+            computing = asyncio.create_task(
+                http.get(
+                    _breakdown_url(route, experiment.id), headers=_bearer(developer)
+                )
+            )
+            assert await anyio.to_thread.run_sync(entered.wait, HOLD_SECONDS), (
+                f"the {route} analysis was never reached"
+            )
+            evaluate = await http.get(
+                f"/api/v1/feature-flags/evaluate/{flag.key}",
+                params={"user_id": f"u-{uuid.uuid4().hex[:12]}"},
+                headers={"X-API-Key": sdk_key},
+            )
+            live = await http.get("/health/live")
+            ready = await http.get("/health")
+            release.set()
+            results = await computing
+
+    assert held == [True], (
+        f"the held {route} analysis was not released while it was held (wait() "
+        f"returned {held}): the flag evaluate and the health checks could not "
+        f"answer until it gave up"
+    )
+    assert evaluate.status_code == 200, evaluate.text
+    assert evaluate.json()["enabled"] is True, evaluate.text
+    assert live.status_code == 200, live.text
+    assert ready.status_code in (200, 503), ready.text
+    assert results.status_code == 200, results.text
+    assert results.json() == _analysed(route, db_session, experiment.id)
+
+
+# Gate 3 ---------------------------------------------------------------------
+
+#: caller -> target -> (status, the exact body, None for a 200 or FAILED).
+BREAKDOWN_CALLERS = {
+    "admin": ADMITTED,
+    "developer": ADMITTED,
+    "analyst": ADMITTED,
+    "viewer": ADMITTED,
+    "no role": REFUSED,
+    "analyst without read": REFUSED,
+    # A permission check that fails is not reached for an unknown experiment,
+    # and is the route's 500 for one that exists.
+    "check fails": {
+        "unknown": (404, NOT_FOUND),
+        "draft": (500, FAILED),
+        "active": (500, FAILED),
+    },
+    "no credential": dict.fromkeys(TARGETS, (401, NOT_AUTHENTICATED)),
+    # These routes take a sign-in only; the key is never looked up.
+    "viewer key, first use": dict.fromkeys(TARGETS, (401, NOT_AUTHENTICATED)),
+}
+#: Full profile only: no role, and a custom role granting experiment (read).
+BREAKDOWN_GRANT_CALLERS = {"no role with a grant": ADMITTED}
+
+
+def _breakdown_callers() -> List[str]:
+    return [*BREAKDOWN_CALLERS, *(BREAKDOWN_GRANT_CALLERS if _full_profile() else ())]
+
+
+def test_the_breakdown_table_is_the_size_it_says():
+    assert len(BREAKDOWN_CALLERS) == 9
+    assert len(BREAKDOWN_GRANT_CALLERS) == 1
+    assert all(set(row) == set(TARGETS) for row in BREAKDOWN_CALLERS.values())
+    assert all(set(row) == set(TARGETS) for row in BREAKDOWN_GRANT_CALLERS.values())
+
+
+def _failed_body(route: str, response) -> bytes:
+    """*route*'s 500 body: its sentence and this response's request id."""
+    sentence = BREAKDOWN_FAILURES[route]
+    request_id = response.headers.get("X-Request-ID")
+    detail = f"{sentence} (request ID: {request_id})." if request_id else f"{sentence}."
+    return json.dumps({"detail": detail}, separators=(",", ":")).encode()
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("caller", _breakdown_callers())
+@pytest.mark.parametrize("route", list(BREAKDOWNS))
+def test_breakdown_answers_by_caller(
+    route, caller, client, db_session, admin_user, grants, monkeypatch
+):
+    expected = {**BREAKDOWN_CALLERS, **BREAKDOWN_GRANT_CALLERS}[caller]
+    experiments = {
+        "unknown": uuid.uuid4(),
+        "draft": _breakdown_experiment(
+            db_session, admin_user, ExperimentStatus.DRAFT
+        ).id,
+        "active": _breakdown_experiment(
+            db_session, admin_user, ExperimentStatus.ACTIVE
+        ).id,
+    }
+    headers, key_id = _caller(caller, db_session, grants, monkeypatch)
+
+    wrong = []
+    for target in TARGETS:
+        if key_id is not None:
+            _set_last_used(db_session, key_id, None)
+        response = client.get(
+            _breakdown_url(route, experiments[target]), headers=headers
+        )
+        if key_id is not None:
+            assert _last_used(db_session, key_id) is None, (
+                f"{caller} on {target}: the key's use was recorded"
+            )
+        status, body = expected[target]
+        if body == FAILED:
+            body = _failed_body(route, response)
+        got = response.content
+        if response.status_code != status or (body is not None and got != body):
+            wrong.append(f"{target}: {response.status_code} {got[:160]!r}")
+        elif body is None and response.json() != _analysed(
+            route, db_session, experiments[target]
+        ):
+            wrong.append(f"{target}: 200 with another answer {got[:160]!r}")
+    assert not wrong, f"{route}, {caller}:\n" + "\n".join(wrong)
+
+
+class _RecordingCache:
+    """An async cache client: what was asked of it, and on which thread."""
+
+    def __init__(self, stored: Dict[str, str]):
+        self.stored = dict(stored)
+        self.calls: List[Tuple[str, str, int]] = []
+
+    async def get(self, key: str) -> Optional[str]:
+        self.calls.append(("get", key, threading.get_ident()))
+        return self.stored.get(key)
+
+    async def setex(self, key: str, _ttl: int, value: str) -> None:
+        self.calls.append(("setex", key, threading.get_ident()))
+        self.stored[key] = value
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("route", list(BREAKDOWNS))
+async def test_the_breakdown_cache_is_read_on_the_loop_after_the_checks(
+    route, seen, db_session, admin_user
+):
+    """A cached answer is served only to a caller the checks admit (a 403, a
+    404 or a draft's 400 never reads it), and the async cache client is used
+    on the event loop's thread, where it was made."""
+    loop_thread = threading.get_ident()
+    cached, fresh = (
+        _breakdown_experiment(db_session, admin_user, ExperimentStatus.ACTIVE).id
+        for _ in range(2)
+    )
+    draft = _breakdown_experiment(db_session, admin_user, ExperimentStatus.DRAFT).id
+    unknown = uuid.uuid4()
+
+    def key(experiment_id) -> str:
+        return BREAKDOWN_CACHE_KEYS[route].format(id=experiment_id)
+
+    marker = [{"from": "cache"}] if route == "daily" else {"from": "cache"}
+    cache = _RecordingCache(
+        {key(e): json.dumps(marker) for e in (cached, draft, unknown)}
+    )
+
+    async def cache_control():
+        return deps.CacheControl(enabled=True, redis=cache)
+
+    no_role = _bearer(_make_user(db_session, None, "norole"))
+    viewer = _bearer(_make_user(db_session, UserRole.VIEWER, "viewer"))
+    app.dependency_overrides[deps.get_cache_control] = cache_control
+    try:
+        async with _http() as http:
+            answers = [
+                await http.get(_breakdown_url(route, experiment_id), headers=headers)
+                for headers, experiment_id in (
+                    (no_role, cached),
+                    (no_role, draft),
+                    (no_role, unknown),
+                    (viewer, unknown),
+                    (viewer, draft),
+                )
+            ]
+            assert [(a.status_code, a.content) for a in answers] == [
+                (403, CANNOT_VIEW),
+                (403, CANNOT_VIEW),
+                (404, NOT_FOUND),
+                (404, NOT_FOUND),
+                (400, DRAFT_REFUSED),
+            ]
+            assert cache.calls == [], "a refused request read the cache"
+
+            from_cache = await http.get(_breakdown_url(route, cached), headers=viewer)
+            computed = await http.get(_breakdown_url(route, fresh), headers=viewer)
+    finally:
+        app.dependency_overrides.pop(deps.get_cache_control, None)
+
+    assert from_cache.status_code == 200, from_cache.text
+    assert from_cache.json() == marker
+    assert computed.status_code == 200, computed.text
+    assert computed.json() == _analysed(route, db_session, fresh)
+    assert json.loads(cache.stored[key(fresh)]) == computed.json()
+    assert cache.calls == [
+        ("get", key(cached), loop_thread),
+        ("get", key(fresh), loop_thread),
+        ("setex", key(fresh), loop_thread),
+    ], f"the event loop's thread is {loop_thread}"
