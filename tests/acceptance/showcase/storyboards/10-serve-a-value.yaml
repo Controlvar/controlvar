@@ -138,7 +138,7 @@ scenes:
           - type: {testid: condition-value}
             text: pro
 
-      - cue: "Rollout at 0%: no one else gets the on value."
+      - cue: "Rollout at 0%: only that rule's users get it."
         focus: {css: "section:has(#rollout-percentage)"}
         say:
           - With the rollout at 0%, no one else gets the on value.
