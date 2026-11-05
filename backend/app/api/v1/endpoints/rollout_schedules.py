@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.logging import get_logger
 from backend.app.core.permissions import Action, can_act_on_feature_flag
 from backend.app.models.audit_log import ActionType, EntityType
@@ -43,7 +44,7 @@ from backend.app.services.rollout_service import RolloutRuleConflict, RolloutSer
 
 logger = get_logger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 #: The database's rule that a schedule's end is after its start (#962).
 SCHEDULE_DATES_CONSTRAINT = "check_rollout_schedule_dates"

@@ -32,6 +32,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.permissions import Action, ResourceType, check_permission
 from backend.app.models.user import User, UserRole
 from modules.backend.app.schemas.realtime_counters import (
@@ -46,7 +47,7 @@ from modules.backend.app.services.dynamodb_counter_service import DynamoDBCounte
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 # ---------------------------------------------------------------------------
 # Dependency — provides a shared DynamoDBCounterService instance

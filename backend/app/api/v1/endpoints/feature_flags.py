@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import deps
 from backend.app.api.enum_filters import enum_filter
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.read_scope import get_current_reader
 from backend.app.api.segment_rules import refuse_unusable_segments
 from backend.app.core.context_limits import (
@@ -197,6 +198,7 @@ async def _skip_cache_ignored(skip_cache: bool = False) -> None:
 
 # Create router with tag for documentation grouping
 router = APIRouter(
+    route_class=OffLoopRoute,
     tags=["Feature Flags"],
     responses={
         status.HTTP_401_UNAUTHORIZED: {

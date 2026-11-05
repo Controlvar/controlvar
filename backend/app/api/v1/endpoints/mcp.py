@@ -19,11 +19,12 @@ import logging
 
 from fastapi import APIRouter
 
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.schemas.ai_design import MCPManifestResponse, MCPToolSchema
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 # ---------------------------------------------------------------------------
 # The six tools the MCP server offers (sdk/mcp/tools.json)

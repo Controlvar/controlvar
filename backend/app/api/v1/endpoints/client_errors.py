@@ -43,6 +43,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.sdk_scope import presented_key_is_server_key
 from backend.app.core.logger import failure_detail
 from backend.app.models.experiment import Experiment
@@ -57,7 +58,7 @@ from backend.app.schemas.metrics import ErrorLogCreate
 from backend.app.schemas.storable_text import StorableTextModel
 from backend.app.services.metrics_service import MetricsService
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 logger = logging.getLogger(__name__)
 

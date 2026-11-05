@@ -30,6 +30,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.config import settings
 from backend.app.core.security import create_local_access_token, oauth2_scheme
 from backend.app.models.audit_log import ActionType, EntityType
@@ -63,7 +64,7 @@ from backend.app.services.local_auth_service import (
     local_auth_service,
 )
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 INVALID_CREDENTIALS_DETAIL = "Invalid email or password"
 

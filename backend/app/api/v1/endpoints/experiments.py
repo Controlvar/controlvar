@@ -28,6 +28,7 @@ from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps, experiment_cache
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.read_scope import get_current_reader
 from backend.app.api.segment_rules import (
     refuse_clone_with_unusable_segments,
@@ -155,6 +156,7 @@ SPLIT_URL_START_CHECK_SKIPPED = (
 
 # Create router with tag for documentation grouping
 router = APIRouter(
+    route_class=OffLoopRoute,
     tags=["Experiments"],
     responses={
         status.HTTP_401_UNAUTHORIZED: {

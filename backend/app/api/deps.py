@@ -25,6 +25,7 @@ from backend.app.core.security import (
     hash_api_key,
     oauth2_scheme,
 )
+from backend.app.db import request_sessions
 from backend.app.db.session import SessionLocal
 from backend.app.models.api_key import APIKey
 from backend.app.models.experiment import Experiment, ExperimentStatus
@@ -100,14 +101,21 @@ async def get_db() -> Generator[Session, None, None]:
     """
     Get database session.
 
+    The session is registered as one of the request's sessions
+    (``backend.app.db.request_sessions``) until it is closed.
+
     Yields:
         Session: Database session
     """
     try:
         db = SessionLocal()
+        request_sessions.register(db)
         yield db
     finally:
-        db.close()
+        try:
+            db.close()
+        finally:
+            request_sessions.unregister(db)
 
 
 def get_token(request: Request) -> str:

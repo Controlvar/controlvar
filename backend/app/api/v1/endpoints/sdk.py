@@ -28,12 +28,13 @@ from sqlalchemy.orm import Session, load_only
 from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.sdk_scope import require_sdk_ruleset_key
 from backend.app.models.api_key import APIKey
 from backend.app.models.feature_flag import FeatureFlag
 from backend.app.services.sdk_ruleset import build_ruleset, canonical_json
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 #: If-None-Match entries read at most (a poll sends one).
 MAX_IF_NONE_MATCH_ENTRIES = 32

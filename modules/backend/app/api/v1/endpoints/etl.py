@@ -23,6 +23,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.models.user import User, UserRole
 from modules.backend.app.schemas.etl import (
     ETLJobRequest,
@@ -35,7 +36,7 @@ from modules.backend.app.services.etl_service import ETLService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 # ---------------------------------------------------------------------------
 # Dependency — shared ETLService instance (override-able in tests)

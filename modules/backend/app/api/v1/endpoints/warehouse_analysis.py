@@ -55,7 +55,6 @@ from typing import (
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from fastapi.routing import APIRoute
 from pydantic import Field
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
@@ -63,6 +62,7 @@ from sqlalchemy.orm import Session, joinedload
 from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.models.compliance_audit_event import AuditAction, AuditOutcome
 from backend.app.models.experiment import Experiment
 from backend.app.models.user import User
@@ -126,13 +126,13 @@ DEFAULT_PREVIEW_DAYS = 7
 RUN_LIST_LIMIT = 50
 
 
-class _ValuesOmittedRoute(APIRoute):
+class _ValuesOmittedRoute(OffLoopRoute):
     """Answer a request that fails validation without repeating what was sent.
 
     FastAPI's default 422 carries each error's ``input`` (for a body-level
     error, the whole body) and ``ctx``.  A connection body can carry a
     service-account key, so this route class keeps only ``type``, ``loc`` and
-    ``msg``.
+    ``msg``.  It is an ``OffLoopRoute``, as every route class here is.
     """
 
     def get_route_handler(self) -> Callable:

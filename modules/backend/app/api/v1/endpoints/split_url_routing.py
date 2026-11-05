@@ -27,6 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session, joinedload
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.v1.endpoints import tracking
 from backend.app.core.context_limits import check_context
 from backend.app.models.experiment import Experiment, ExperimentStatus
@@ -43,7 +44,7 @@ from modules.backend.app.services import split_url_service
 logger = logging.getLogger(__name__)
 
 #: Mounted behind nothing: each route takes an API key itself.
-public_router = APIRouter()
+public_router = APIRouter(route_class=OffLoopRoute)
 
 #: The reasons the assign route adds to ``/tracking/assign``'s.
 REASON_NOT_ENTRY = "not_entry"

@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import deps
 from backend.app.api.enum_filters import enum_filter
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.logger import unexpected_failure
 from backend.app.models.notification import (
     NotificationDeliveryLog,
@@ -33,7 +34,7 @@ from backend.app.schemas.notification import (
 from backend.app.schemas.scheduler import NotificationEvent
 from backend.app.services.notification_service import NotificationService
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 logger = logging.getLogger(__name__)
 
 #: The delivery log's ``status`` filter values, as its entries spell them (#955).

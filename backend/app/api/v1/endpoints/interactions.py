@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.app.api.deps import get_current_active_user, get_db
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.logger import unexpected_failure
 from backend.app.models.user import User, UserRole
 from backend.app.schemas.interaction import (
@@ -35,7 +36,7 @@ from backend.app.services.interaction_detection_service import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 #: The pair route is beta in the OpenAPI document (docs/api/stability.md) as
 #: well as in the response's analysis_status (#219).

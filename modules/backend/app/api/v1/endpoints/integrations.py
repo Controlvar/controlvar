@@ -28,6 +28,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.models.user import User, UserRole
 from modules.backend.app.models.integration_config import (
     IntegrationConfig,
@@ -47,14 +48,14 @@ from modules.backend.app.services.integrations.salesforce_service import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 #: Inbound webhooks from Jira, Salesforce and GitHub.  There is no platform
 #: user to ask for, so the registration mounts this without an authentication
 #: dependency; each handler instead authenticates the *sender* against the
 #: integration's ``webhook_secret`` before it reads the body, and answers 401
 #: when that fails.  Nothing here is reachable anonymously without the secret.
-public_router = APIRouter()
+public_router = APIRouter(route_class=OffLoopRoute)
 
 
 # ---------------------------------------------------------------------------

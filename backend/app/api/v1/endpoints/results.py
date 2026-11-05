@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
 from backend.app.api.deps import get_current_active_user, get_current_superuser, get_db
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.analysis_status import analysis_notice, analysis_status
 from backend.app.core.logger import unexpected_failure
 from backend.app.core.stats_engine import ENGINE_VERSION
@@ -70,7 +71,7 @@ from backend.app.services.sufficient_stats_analysis import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 
 # ---------------------------------------------------------------------------
