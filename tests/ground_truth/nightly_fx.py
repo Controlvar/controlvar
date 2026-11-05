@@ -21,7 +21,8 @@ sensitivity check reads is an exact sum of these named integers:
 Fault  Named integers
 =====  =====================================================================
 F1     120 repeats R4 does not store; 20 sent again with no ``event_id``
-F2     20 bots sending 250 events each; 20 of those values beyond 10^12
+F2     20 bots sending 250 events each; 20 of those values beyond 10^12,
+       each refused in its ``/batch``'s ``errors``
 F3     80 events received while paused or completed; 40 assigned users
        asking again while paused, 20 after the ``complete``; 20 paused
        events resent after the resume
@@ -35,7 +36,8 @@ F9     each hostile class once; the valid ones carry a value
 =====  =====================================================================
 
 The rows (``faults.combined_findings``): R4 = 120 + 20 = 140; R2-status 80;
-R2-order 80; R8 160 counted nowhere and 80 counted; R5 20; F7 4,000 users the
+R2-order 80; R8 160 counted nowhere and 80 counted; F2 20 refused and 4,980
+stored; F7 4,000 users the
 scenario defines never assigned; F9 each class as planted and its 6 hostile
 but valid users counting. The gates are ``test_faults.py``'s, on FX: P, G0,
 G1, G2, Z, S (``sensitivity(..., combined=True)``), F1d, F7 and F9.

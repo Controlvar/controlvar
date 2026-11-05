@@ -5,6 +5,7 @@ This module defines Pydantic models for tracking-related data structures.
 These models are used for experiment assignment and event tracking.
 """
 
+import math
 from datetime import datetime
 from typing import Annotated, Any, Dict, List, Optional
 
@@ -23,6 +24,11 @@ from pydantic import (
 from pydantic_core import InitErrorDetails, PydanticCustomError
 
 from backend.app.core.context_limits import nested_deeper_than
+from backend.app.core.finite_json import (
+    FINITE_NUMBER_MESSAGE,
+    FINITE_NUMBER_TYPE,
+    first_non_finite,
+)
 from backend.app.schemas.storable_text import StorableTextModel
 
 #: The longest ``event_id`` an event may carry (#1543).
@@ -83,12 +89,18 @@ class EventFields(BaseModel):
     @field_validator("properties", "metadata", mode="before")
     @classmethod
     def parse_json_string(cls, v: Any, info: ValidationInfo) -> Any:
-        """Accept a JSON-encoded string for the free-form attribute fields."""
+        """Accept a JSON-encoded string for the free-form attribute fields.
+
+        The decoded value is held to the rule a JSON request body is held to
+        (#1630, ``backend/app/core/finite_json.py``): NaN, an infinity or a
+        number too large for a double is refused with ``finite_number`` at
+        its place inside the field.
+        """
         if isinstance(v, str):
             import json
 
             try:
-                return json.loads(v) if v.strip() else None
+                decoded = json.loads(v) if v.strip() else None
             except json.JSONDecodeError as exc:
                 raise ValueError(f"must be a JSON object: {exc}") from exc
             except RecursionError:
@@ -98,6 +110,21 @@ class EventFields(BaseModel):
                     f"{info.field_name} must not be nested more than "
                     f"{EVENT_METADATA_MAX_DEPTH} levels deep"
                 ) from None
+            path = first_non_finite(decoded)
+            if path is not None:
+                raise ValidationError.from_exception_data(
+                    cls.__name__,
+                    [
+                        InitErrorDetails(
+                            type=PydanticCustomError(
+                                FINITE_NUMBER_TYPE, FINITE_NUMBER_MESSAGE
+                            ),
+                            loc=path,
+                            input=None,
+                        )
+                    ],
+                )
+            return decoded
         return v
 
 
@@ -128,6 +155,39 @@ class BoundedEventMetadata(BaseModel):
         return value
 
 
+#: The largest size an event ``value`` may have (#1630): an event's value must
+#: be between -1e12 and 1e12, both included. One constant, read wherever an
+#: event value is bounded (``backend/app/services/analysis_service.py``
+#: imports it).
+VALUE_BOUND: float = 1e12
+
+#: The message for a value outside that range, or not a finite number.
+VALUE_BOUND_MESSAGE = "value must be a finite number between -1e12 and 1e12"
+
+
+class BoundedEventValue(BaseModel):
+    """Refuses an event ``value`` that is not a finite number between -1e12
+    and 1e12 (``VALUE_BOUND``, both included). ``null`` and an absent value
+    are accepted.
+
+    For the schemas an event is built from before it is stored (``EventCreate``
+    and ``UntaggedEventCreate``), so the refusal comes before any write:
+    ``/tracking/track`` and ``/tracking/events`` answer 422, and
+    ``/tracking/batch`` reports that entry in ``errors`` and stores the others.
+    Not on ``EventFields``, because ``EventResponse`` inherits it. The message
+    names the field and the range, never the value.
+    """
+
+    @field_validator("value", mode="after", check_fields=False)
+    @classmethod
+    def _refuse_unbounded_value(cls, value: Optional[float]) -> Optional[float]:
+        if value is not None and not (
+            math.isfinite(value) and abs(value) <= VALUE_BOUND
+        ):
+            raise ValueError(VALUE_BOUND_MESSAGE)
+        return value
+
+
 class EventBase(EventFields):
     """Base model for event data."""
 
@@ -139,13 +199,17 @@ class EventBase(EventFields):
         return self
 
 
-class EventCreate(StorableTextModel, BoundedEventMetadata, EventBase):
+class EventCreate(
+    StorableTextModel, BoundedEventMetadata, BoundedEventValue, EventBase
+):
     """Model for creating a new event."""
 
     event_id: EventId = None
 
 
-class UntaggedEventCreate(StorableTextModel, BoundedEventMetadata, EventFields):
+class UntaggedEventCreate(
+    StorableTextModel, BoundedEventMetadata, BoundedEventValue, EventFields
+):
     """An event that names no experiment and no flag (#217).
 
     ``/tracking/track`` and ``/tracking/batch`` build this one when the

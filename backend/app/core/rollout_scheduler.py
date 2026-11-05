@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings as app_settings
 from backend.app.core.logging import get_logger
-from backend.app.core.scheduler_tick import run_locked_tick
+from backend.app.core.scheduler_tick import run_in_worker, run_locked_tick
 from backend.app.db.session import SessionLocal
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.feature_flag import FeatureFlag
@@ -141,8 +141,9 @@ class RolloutScheduler:
         while self.is_running:
             try:
                 # One tick under the advisory lock; records the run and
-                # skips when another replica holds the lock.
-                await run_locked_tick(SCHEDULER_NAME, self.process_rollout_schedules)
+                # skips when another replica holds the lock. The tick itself
+                # runs in a worker thread.
+                await run_locked_tick(SCHEDULER_NAME, self._process_off_loop)
 
                 # Wait for the next interval
                 await asyncio.sleep(self.interval_minutes * 60)
@@ -152,6 +153,36 @@ class RolloutScheduler:
                 logger.error(f"Error in rollout scheduler: {e!s}")
                 # Wait a bit before trying again
                 await asyncio.sleep(60)
+
+    async def _process_off_loop(self) -> Dict[str, int]:
+        """
+        Run :meth:`process_rollout_schedules` in a worker thread.
+
+        The tick is synchronous SQLAlchemy behind ``async def``s that never
+        suspend on the API's event loop: its first query checks a connection
+        out of the pool. On the loop's own thread that checkout, when every
+        connection is held by a request waiting for the loop, waits the whole
+        pool timeout and stops the API answering anything for that long. Here
+        it runs unchanged in one worker thread, on a private event loop and
+        with its own session, as the safety tick does
+        (``SafetyScheduler._check_off_loop``); its notifications go with it,
+        each still sent through ``asyncio.to_thread`` after its commit.
+
+        The coroutine is created inside the thread. ``run_in_worker`` on the
+        coroutine function would only create it, never run it: the tick would
+        be recorded as a success that advanced nothing.
+
+        The body must not await anything bound to the API's event loop (the
+        process-wide Redis pool in ``backend.app.api.deps`` above all: created
+        on the private loop, it would be reused by every request after the
+        tick, on a loop that has closed). It awaits nothing of the kind today;
+        ``test_ticks_off_the_loop.py`` runs it this way with the cache on and
+        fails if it asks for the Redis pool.
+        """
+        return await run_in_worker(
+            lambda: asyncio.run(self.process_rollout_schedules()),
+            label=f"{SCHEDULER_NAME} tick",
+        )
 
     async def process_rollout_schedules(self) -> Dict[str, int]:
         """
