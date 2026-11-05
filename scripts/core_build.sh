@@ -45,7 +45,8 @@
 #                exactly Base.metadata's core set and none of the tables
 #                modules-manifest.txt lists exist
 #   unit / integration / smoke
-#                three separate pytest sessions, -p no:cov; tests marked
+#                three separate pytest sessions, -p no:cov -rs (each skip is
+#                listed with its reason); tests marked
 #                @pytest.mark.modules are skipped by backend/tests/conftest.py
 #   lambda       one pytest session per backend/lambda/<function>/ (they all
 #                define `tests.conftest`, so they cannot share a session)
@@ -688,7 +689,10 @@ PY
 pytest_session() {
     # Each suite is its own session, from the copy's root, with the copy's
     # pyproject.toml as the configuration and its conftest as the harness.
-    (cd "$COPY" && "$PYTHON" -m pytest "$@" -p no:cov -q --tb=short)
+    # -rs lists every skipped test with its reason at the end of the log: a
+    # skip counts as a pass in the exit status, so the log is where a test
+    # that did not run shows.
+    (cd "$COPY" && "$PYTHON" -m pytest "$@" -p no:cov -q --tb=short -rs)
 }
 
 step_unit() {
