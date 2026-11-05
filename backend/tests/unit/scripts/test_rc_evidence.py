@@ -2212,13 +2212,16 @@ def test_an_unreadable_log_fails_p_naming_the_hop(world, hop1, hop2, says):
 def test_a_hop_that_does_not_answer_fails_p_naming_it(world, hop):
     def send(url: str, headers: Mapping[str, str]):
         if url.startswith(LOG_API if hop == 1 else f"https://{STORAGE_HOST}/"):
-            raise urllib.error.URLError(f"no route to {SIGNED_URL}")
+            raise urllib.error.URLError(f"no route to {SIGNED_URL} for {WORLD_TOKEN}")
         return world.send(url, headers)
 
     code, text = world.main(send=send)
     assert code == 1, text
     assert f"{HOP_1 if hop == 1 else HOP_2}: URLError" in _p_row(text, "PyPI")
-    assert SIGNATURE not in text
+    record = (world.tmp / "out" / "runs.json").read_text()
+    for written in (text, record):
+        for secret in (WORLD_TOKEN, SIGNATURE, "sig="):
+            assert secret not in written
 
 
 def test_a_log_longer_than_the_bound_fails_p_and_is_never_cut(world, monkeypatch):
