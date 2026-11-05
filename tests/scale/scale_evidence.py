@@ -1542,14 +1542,28 @@ def judge_step(
                 f"{window['measure_s']} s window",
             )
         )
+    # Every request the client sent is in nginx's log, exactly. A request the
+    # client timed out on is logged 499 only when nginx had not answered it
+    # yet: one answered at the cut-off is logged with its own status. So there
+    # may be fewer 499s than timeouts (109 timeouts and 108 logged 499 in one
+    # publication run's batch step 6), never more.
     client = step["rows"] - step["connection_errors"]
-    if client != step["server_count"] or step["timeouts"] != step["server_499"]:
+    if client != step["server_count"]:
         failed.append(
             (
                 "client-server",
                 f"step {number}: client {client}, server {step['server_count']}: "
                 f"{abs(client - step['server_count'])} requests unaccounted "
                 f"({step['timeouts']} client timeouts, {step['server_499']} logged 499)",
+            )
+        )
+    elif step["server_499"] > step["timeouts"]:
+        failed.append(
+            (
+                "client-server",
+                f"step {number}: {step['server_499']} logged 499 but only "
+                f"{step['timeouts']} client timeouts: the server saw requests "
+                "abandoned that the client did not give up on",
             )
         )
     if scenario == "assign_returning" and step["assignments_delta"]:

@@ -700,13 +700,58 @@ def test_client_and_server_counts_must_agree():
 
 
 def test_a_client_timeout_reconciles_against_the_logged_499():
+    """A timeout is logged 499, or with its own status when nginx answered it
+    at the cut-off: no more 499s than timeouts, and the counts always agree."""
     method = se.load_config()
     rows = fx.step_rows(method, "evaluate_get", 4)
     rows[650] = fx.row("evaluate_get", 650, error="timeout", latency_us=5_000_000)
     step, _ = summarise(rows=rows, server_499=1)
     assert step["valid"] and step["percentiles_are_lower_bounds"]
     step, _ = summarise(rows=rows, server_499=0)
+    assert step["valid"] and step["percentiles_are_lower_bounds"]
+    step, messages = summarise(rows=rows, server_499=2)
     assert step["invalid_reason"] == "client-server"
+    assert messages[0] == (
+        "step 4: 2 logged 499 but only 1 client timeouts: the server saw requests "
+        "abandoned that the client did not give up on"
+    )
+    sent = len(rows)
+    step, messages = summarise(rows=rows, server_499=1, server_count=sent - 1)
+    assert step["invalid_reason"] == "client-server"
+    assert messages[0].startswith(
+        f"step 4: client {sent}, server {sent - 1}: 1 requests"
+    )
+
+
+@pytest.mark.regression
+def test_a_timeout_answered_at_the_cut_off_is_not_a_missing_499():
+    """A real step: batch run 2's step 6 in a publication run of 0.43.2. All
+    223 requests were in nginx's log; 109 timed out at 5 s, and nginx logged
+    108 of them 499 (the other was answered at the cut-off and logged with its
+    own status). Demanding a 499 for every timeout made the step INVALID, which
+    blocked the run; it is valid, and fails on its errors."""
+    method = se.load_config()
+    real = {
+        "rows": 223,
+        "dropped": 0,
+        "measured": 191,
+        "errors": 109,
+        "timeouts": 109,
+        "server_count": 223,
+        "server_499": 108,
+        "p99_us": 5_001_158,
+        "start_lag_p99_us": 1876,
+        "generator_cpu_permille": 7,
+    }
+    assert se.step_rates(method, "batch")[6 - 1] == 3176
+    step = fx.step_facts(method, "batch", 6, **real)
+    assert (step["valid"], step["invalid_reason"]) == (True, "none")
+    assert (step["keeps_up"], step["fail_reason"]) == (False, "errors")
+    # either side of what stays strict: one 499 more than the timeouts, or a
+    # request missing from nginx's log
+    for changes in ({"server_499": 110}, {"server_count": 222}):
+        fields, _ = se.judge_step(method, "batch", {**step, **changes}, fx.SPLIT)
+        assert fields["invalid_reason"] == "client-server", changes
 
 
 def test_a_returning_user_that_wrote_a_row_is_invalid():
