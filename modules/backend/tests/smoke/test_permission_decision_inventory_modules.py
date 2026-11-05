@@ -73,11 +73,11 @@ ROLE_READS = {
         "B",
         "resetting counters is ADMIN's",
     ),
-    (E + "sso.py", "_finish_oidc_login"): (
+    (E + "sso.py", "_issue_jwt"): ("N", "puts the role in the token's claims"),
+    (E + "sso.py", "_oidc_sign_in"): (
         "N",
         "carries the role into the issued token",
     ),
-    (E + "sso.py", "_issue_jwt"): ("N", "puts the role in the token's claims"),
     (E + "sso.py", "_require_admin"): ("B", _ADMIN),
     (E + "sso.py", "saml_acs"): ("N", "carries the role into the issued token"),
     (E + "warehouse_analysis.py", "_parameters"): (

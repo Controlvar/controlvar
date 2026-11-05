@@ -60,12 +60,14 @@ def _config(is_active=True):
 
 
 @pytest.fixture
-def admin_session():
+def admin_session(monkeypatch):
     session = MagicMock()
     user = _admin()
     app.dependency_overrides[deps.get_current_active_user] = lambda: user
     app.dependency_overrides[deps.get_current_user] = lambda: user
     app.dependency_overrides[deps.get_db] = lambda: session
+    # The webhook routes open their own session in a worker, not get_db's.
+    monkeypatch.setattr(deps, "SessionLocal", lambda: session)
     yield session
     app.dependency_overrides.clear()
 

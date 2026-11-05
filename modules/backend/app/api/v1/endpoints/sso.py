@@ -20,12 +20,14 @@ endpoint paths below are relative to that prefix.
 
 from __future__ import annotations
 
+import copy
 import hmac
 import logging
 import re
 import uuid
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar
 from urllib.parse import urlencode
 
 from fastapi import (
@@ -43,6 +45,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
 from backend.app.api.v1.endpoints.auth import user_to_me
@@ -215,6 +218,76 @@ def _record_sso_login(db: Session, user: User) -> None:
     )
 
 
+_T = TypeVar("_T")
+
+
+def _in_own_session(work: Callable[[Session], _T]) -> _T:
+    """Run *work* on a session of its own, closed before this returns.
+
+    Called in a worker thread: the session is opened, used (and committed by
+    *work* when it writes) and closed here, so the request holds no
+    connection once the step is over -- not while it waits for the identity
+    provider, and not while it waits for another worker.
+    """
+    db = deps.SessionLocal()
+    try:
+        return work(db)
+    finally:
+        db.close()
+
+
+async def _database_step(work: Callable[[Session], _T]) -> _T:
+    """What *work* returns, run in a worker thread on its own short session.
+
+    The async routes below never use the database on the event loop: a query
+    there that has to wait for a connection holds up every other request the
+    process is serving until it gets one. *work* returns plain values, never
+    an ORM row, because its session is closed by the time this returns.
+    """
+    return await run_in_threadpool(_in_own_session, work)
+
+
+@dataclass(frozen=True)
+class _ConfigValues:
+    """The fields of one SSO configuration that a sign-in reads, as plain values.
+
+    Read from the row in a worker and used after that worker's session has
+    closed, so nothing after the lookup can reach the database through it.
+    It carries every ``config.<field>`` that ``sso_service`` reads on the OIDC
+    path (``start_oidc_login``, ``build_oidc_authorization_url``,
+    ``exchange_oidc_code``, ``verify_id_token``, ``get_oidc_user_info``,
+    ``verified_email``, ``provision_user``).
+    """
+
+    id: uuid.UUID
+    org_domain: str
+    provider_type: SSOProviderType
+    entity_id: Optional[str]
+    sso_url: Optional[str]
+    client_secret: Optional[str] = field(repr=False)
+    role_mapping: Any
+    is_active: bool
+
+    @classmethod
+    def of(cls, row: SSOConfig) -> "_ConfigValues":
+        return cls(
+            id=row.id,
+            org_domain=row.org_domain,
+            provider_type=row.provider_type,
+            entity_id=row.entity_id,
+            sso_url=row.sso_url,
+            client_secret=row.client_secret,
+            role_mapping=copy.deepcopy(row.role_mapping),
+            is_active=row.is_active,
+        )
+
+
+def _config_by_id(db: Session, config_id: uuid.UUID) -> Optional[_ConfigValues]:
+    """The configuration *config_id* names, active or not; None if there is none."""
+    config = sso_service.get_sso_config_by_id(db, config_id)
+    return None if config is None else _ConfigValues.of(config)
+
+
 def _get_redirect_uri(
     request: Request, provider: str, config_id: Optional[str] = None
 ) -> str:
@@ -385,18 +458,10 @@ async def oidc_login(
     provider: str,
     request: Request,
     org_domain: Optional[str] = Query(None, description="Org domain for config lookup"),
-    db: Session = Depends(deps.get_db),
 ) -> RedirectResponse:
     """Redirect the browser to the provider, holding the login's state in a cookie."""
     sso_service.require_supported_provider(provider)
-    # Find config by provider type and optional org_domain
-    configs = sso_service.list_sso_configs(db)
-    config = None
-    for c in configs:
-        if c.provider_type.value == provider and c.is_active:
-            if not org_domain or c.org_domain == org_domain:
-                config = c
-                break
+    config = await _database_step(lambda db: _login_config(db, provider, org_domain))
 
     if not config:
         raise HTTPException(
@@ -408,9 +473,21 @@ async def oidc_login(
     return _redirect_to_provider(request, config, provider, started)
 
 
+def _login_config(
+    db: Session, provider: str, org_domain: Optional[str]
+) -> Optional[_ConfigValues]:
+    """The first active config for *provider* (and *org_domain*, when given)."""
+    # Find config by provider type and optional org_domain
+    for c in sso_service.list_sso_configs(db):
+        if c.provider_type.value == provider and c.is_active:
+            if not org_domain or c.org_domain == org_domain:
+                return _ConfigValues.of(c)
+    return None
+
+
 def _redirect_to_provider(
     request: Request,
-    config: SSOConfig,
+    config: _ConfigValues,
     provider: str,
     started: sso_service.OIDCLoginStart,
 ) -> RedirectResponse:
@@ -540,7 +617,6 @@ async def sso_login(
     handoff: Optional[str] = Query(
         None, description="base64url(SHA-256(secret)), 43 characters"
     ),
-    db: Session = Depends(deps.get_db),
 ) -> RedirectResponse:
     """Start a dashboard sign-in: find the domain's OIDC config, go to its provider.
 
@@ -556,14 +632,7 @@ async def sso_login(
     if not _DOMAIN.fullmatch(wanted):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, DOMAIN_PARAM_DETAIL)
 
-    active = (
-        db.query(SSOConfig)
-        .filter(
-            func.lower(func.trim(SSOConfig.org_domain)) == wanted,
-            SSOConfig.is_active.is_(True),
-        )
-        .all()
-    )
+    active = await _database_step(lambda db: _active_domain_configs(db, wanted))
     oidc = [c for c in active if c.provider_type != SSOProviderType.SAML]
     if len(oidc) > 1:
         logger.warning(
@@ -593,6 +662,19 @@ async def sso_login(
         sso_error = getattr(exc, "sso_error", sso_service.SSO_FAILED)
         _log_refusal("login", exc, sso_error)
         return _redirect(_login_error_url(origin, sso_error, provider=provider))
+
+
+def _active_domain_configs(db: Session, wanted: str) -> List[_ConfigValues]:
+    """Every active config whose ``org_domain``, trimmed and lower-cased, is *wanted*."""
+    rows = (
+        db.query(SSOConfig)
+        .filter(
+            func.lower(func.trim(SSOConfig.org_domain)) == wanted,
+            SSOConfig.is_active.is_(True),
+        )
+        .all()
+    )
+    return [_ConfigValues.of(c) for c in rows]
 
 
 class SSOExchangeResponse(BaseModel):
@@ -634,9 +716,7 @@ class SSOExchangeResponse(BaseModel):
         },
     },
 )
-async def sso_exchange(
-    request: Request, db: Session = Depends(deps.get_db)
-) -> JSONResponse:
+async def sso_exchange(request: Request) -> JSONResponse:
     """`{code, secret}` -> `{access_token, token_type, user}`, or a fixed 400."""
     try:
         body = await request.json()
@@ -645,18 +725,57 @@ async def sso_exchange(
     if not isinstance(body, dict):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, EXCHANGE_BODY_DETAIL)
     user_id = sso_service.redeem_handoff_code(body.get("code"), body.get("secret"))
+    result = await _database_step(lambda db: _exchange_session(db, user_id))
+    if result is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, EXCHANGE_BODY_DETAIL)
+    return JSONResponse(
+        content=jsonable_encoder(result), headers={"Cache-Control": "no-store"}
+    )
+
+
+def _exchange_session(db: Session, user_id: uuid.UUID) -> Optional[SSOExchangeResponse]:
+    """The session for an active account *user_id* names, and its entry; else None."""
     user = db.query(User).filter(User.id == user_id).first()
     if user is None or not user.is_active:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, EXCHANGE_BODY_DETAIL)
+        return None
     result = SSOExchangeResponse(
         # The same token a password login issues, so every auth path accepts it.
         access_token=create_local_access_token(user),
         user=user_to_me(user),
     )
     _record_sso_login(db, user)
-    return JSONResponse(
-        content=jsonable_encoder(result), headers={"Cache-Control": "no-store"}
+    return result
+
+
+def _provisioned_account(
+    db: Session, user_info: Dict[str, Any], config: _ConfigValues
+) -> Tuple[uuid.UUID, bool]:
+    """Find or create the account (``provision_user`` commits): its id and is_active."""
+    user = sso_service.provision_user(db, user_info, config)
+    return user.id, bool(user.is_active)
+
+
+def _oidc_sign_in(
+    db: Session, user_info: Dict[str, Any], config: _ConfigValues, provider: str
+) -> Optional[OIDCLoginResponse]:
+    """Find or create the account; for an active one, its token and its entry.
+
+    None for an inactive account, after ``provision_user`` has committed any
+    change it made.
+    """
+    user = sso_service.provision_user(db, user_info, config)
+    if not user.is_active:
+        return None
+    result = OIDCLoginResponse(
+        # The same token a password login issues, so every auth path accepts it.
+        access_token=create_local_access_token(user),
+        user_id=str(user.id),
+        email=user.email,
+        role=user.role.value if user.role else "viewer",
+        provider=provider,
     )
+    _record_sso_login(db, user)
+    return result
 
 
 async def _redirect_mode_callback(
@@ -665,7 +784,6 @@ async def _redirect_mode_callback(
     code: Optional[str],
     state: Optional[str],
     error: Optional[str],
-    db: Session,
     cookie: str,
     peeked: Dict[str, Any],
 ) -> RedirectResponse:
@@ -707,7 +825,7 @@ async def _redirect_mode_callback(
         # The state matched, so this refuses only an expired cookie.
         login = sso_service.redeem_oidc_state(cookie, state)
 
-        config = sso_service.get_sso_config_by_id(db, login.config_id)
+        config = await _database_step(lambda db: _config_by_id(db, login.config_id))
         if (
             config is None
             or not config.is_active
@@ -736,12 +854,14 @@ async def _redirect_mode_callback(
         user_info = await sso_service.verified_email(
             config, provider, id_claims, user_info, access_token
         )
-        user = sso_service.provision_user(db, user_info, config)
-        if not user.is_active:
+        user_id, is_active = await _database_step(
+            lambda db: _provisioned_account(db, user_info, config)
+        )
+        if not is_active:
             raise sso_service.SSORefusal(
                 status.HTTP_400_BAD_REQUEST, "Inactive user", sso_service.SSO_INACTIVE
             )
-        handoff = sso_service.issue_handoff_code(user.id, str(hh))
+        handoff = sso_service.issue_handoff_code(user_id, str(hh))
     except sso_service.SSORefusal as exc:
         _log_refusal("callback", exc, exc.sso_error)
         return _redirect(
@@ -778,7 +898,6 @@ async def oidc_callback(
     code: Optional[str] = Query(None),
     state: Optional[str] = Query(None),
     error: Optional[str] = Query(None),
-    db: Session = Depends(deps.get_db),
 ) -> Any:
     """Finish a login this browser started: redeem the code, provision the user.
 
@@ -798,7 +917,7 @@ async def oidc_callback(
     peeked = sso_service.peek_oidc_state(cookie)
     if peeked is not None and peeked.get("rt"):
         return await _redirect_mode_callback(
-            provider, request, code, state, error, db, str(cookie), peeked
+            provider, request, code, state, error, str(cookie), peeked
         )
     if peeked is None:
         primary = settings.primary_dashboard_origin
@@ -813,7 +932,7 @@ async def oidc_callback(
                 _login_error_url(primary, sso_service.SSO_STATE, provider=provider)
             )
     try:
-        result = await _finish_oidc_login(provider, request, code, state, error, db)
+        result = await _finish_oidc_login(provider, request, code, state, error)
     except HTTPException as exc:
         headers = dict(exc.headers or {})
         headers["set-cookie"] = _expiring_state_cookie_header()
@@ -830,7 +949,6 @@ async def _finish_oidc_login(
     code: Optional[str],
     state: Optional[str],
     error: Optional[str],
-    db: Session,
 ) -> OIDCLoginResponse:
     sso_service.require_supported_provider(provider)
     if error:
@@ -855,7 +973,7 @@ async def _finish_oidc_login(
 
     # The configuration the login was started for, not whichever active one
     # matches the provider name now.
-    config = sso_service.get_sso_config_by_id(db, login.config_id)
+    config = await _database_step(lambda db: _config_by_id(db, login.config_id))
     if (
         config is None
         or not config.is_active
@@ -885,21 +1003,13 @@ async def _finish_oidc_login(
     user_info = await sso_service.verified_email(
         config, provider, id_claims, user_info, access_token
     )
-    user = sso_service.provision_user(db, user_info, config)
-    if not user.is_active:
+    result = await _database_step(
+        lambda db: _oidc_sign_in(db, user_info, config, provider)
+    )
+    if result is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user"
         )
-
-    result = OIDCLoginResponse(
-        # The same token a password login issues, so every auth path accepts it.
-        access_token=create_local_access_token(user),
-        user_id=str(user.id),
-        email=user.email,
-        role=user.role.value if user.role else "viewer",
-        provider=provider,
-    )
-    _record_sso_login(db, user)
     return result
 
 
