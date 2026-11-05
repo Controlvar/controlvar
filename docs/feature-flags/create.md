@@ -401,8 +401,9 @@ a `status` in it must be the flag's current status.
 
 ### Archived flags
 
-An archived flag is retired: it is never served, and nothing turns it back on by
-accident. Every request that would turn it on (`PUT` with `"is_active": true`,
+An archived flag is retired: every evaluation answers it as off (`enabled: false`,
+`reason: "inactive"`, and its off value, which a value method returns instead of your
+default), in local evaluation too, and nothing turns it back on by accident. Every request that would turn it on (`PUT` with `"is_active": true`,
 `/activate`, `/enable`, `/toggle`, and bulk `enable`) answers `400` with
 
 ```text
@@ -416,6 +417,25 @@ archived flag is already off. The way back is
 inactive; turn it on afterwards as usual. A flag is archived with
 `POST /api/v1/feature-flags/bulk-toggle` and `"action": "archive"`. The dashboard has no
 archive or unarchive action yet.
+
+### Deleting a flag
+
+`DELETE /api/v1/feature-flags/$FLAG_ID` removes a flag for good; it cannot be undone.
+While any code may still ask for the flag, archive it instead. After a delete:
+
+- As of v0.42.0, evaluating its key answers `404`.
+- Each SDK answers it as it does for any failure: see its page
+  ([JavaScript](../sdk/javascript.md), [React](../sdk/react.md),
+  [React Native](../sdk/react-native.md), [Python](../sdk/python.md),
+  [Go](../sdk/go.md), [Java](../sdk/java.md), [Ruby](../sdk/ruby.md),
+  [PHP](../sdk/php.md), [.NET](../sdk/dotnet.md), [Elixir](../sdk/elixir.md),
+  [iOS](../sdk/ios.md), [Android](../sdk/android.md), [Flutter](../sdk/flutter.md),
+  [Edge](../sdk/edge.md)).
+- A client keeps an answer it cached until the cache expires, 5 minutes by default.
+- Its events are kept, with `feature_flag_id` null.
+- The audit log records the delete as `feature_flag_delete`.
+- Only a role that may delete flags can do it (ADMIN, DEVELOPER, or in the full
+  profile a custom role with `feature_flag (delete)`); anyone else gets `403`.
 
 ### Create an API key
 
