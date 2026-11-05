@@ -403,8 +403,8 @@ a `status` in it must be the flag's current status.
 
 An archived flag is retired: every evaluation answers it as off (`enabled: false`,
 `reason: "inactive"`, and its off value, which a value method returns instead of your
-default), in local evaluation too, and nothing turns it back on by accident. Every request that would turn it on (`PUT` with `"is_active": true`,
-`/activate`, `/enable`, `/toggle`, and bulk `enable`) answers `400` with
+default), in local evaluation too, and nothing turns it back on by accident. Every request
+that would turn it on (`PUT` with `"is_active": true`, `/activate`, `/enable`, `/toggle`, and bulk `enable`) answers `400` with
 
 ```text
 This flag is archived. Unarchive it before turning it on.
