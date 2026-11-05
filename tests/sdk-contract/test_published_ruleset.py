@@ -1,7 +1,7 @@
 """The published local evaluators accept every ruleset the server sends (#1497, G1).
 
 Every release in ``published-sdks.json`` (npm ``@controlvar/js-sdk`` and PyPI
-``controlvar``, 0.1.1 and 0.2.0) evaluates flags locally from
+``controlvar``, from 0.1.1 on) evaluates flags locally from
 ``GET /api/v1/sdk/ruleset``. A document one of them cannot read is dropped
 whole, and it keeps answering from its last ruleset: a later kill switch never
 reaches it, and nothing on the server says so. So for each release:
@@ -334,7 +334,13 @@ def _pins(tmp_path, change):
         (lambda a: a[0].update(digest="md5-abc"), "is neither"),
         (lambda a: a[0].update(url="https://example.com/x.tgz"), "is not on"),
         (lambda a: a[0].pop("expectation"), "the fields must be exactly"),
-        (lambda a: a[2].update(registry="npm"), "with registry"),
+        (
+            # A PyPI pin found by content, not by index: a new npm pin moves indices.
+            lambda a: next(p for p in a if p["registry"] == "pypi").update(
+                registry="npm"
+            ),
+            "with registry",
+        ),
         (lambda a: a.clear(), "pins nothing"),
     ],
     ids=["duplicate", "expectation", "digest", "url", "field", "registry", "empty"],
