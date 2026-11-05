@@ -525,6 +525,7 @@ text = "The scheduler checks every 15 minutes by default (EXPERIMENT_SCHEDULER_I
 by = [
     "test:backend/tests/unit/core/test_documented_defaults.py::test_the_scheduler_cycles",
     "test:backend/tests/unit/core/test_experiment_scheduler_interval.py",
+    "test:backend/tests/unit/core/test_experiment_scheduler_interval.py::test_the_loop_ticks_then_sleeps_the_interval_in_seconds",
 ]
 
 [[unit]]
