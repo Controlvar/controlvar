@@ -118,7 +118,7 @@ def _authenticate_websocket(
         return False
     try:
         user = deps.get_current_user(token=bearer, db=db)
-        deps.get_current_active_user(user)
+        deps.require_active_user(user)
         return True
     except HTTPException as exc:
         logger.info("WebSocket auth rejected (%s): %s", exc.status_code, exc.detail)

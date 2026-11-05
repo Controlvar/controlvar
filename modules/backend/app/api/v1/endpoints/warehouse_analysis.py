@@ -159,38 +159,40 @@ router = APIRouter(route_class=_ValuesOmittedRoute)
 
 
 # -- seams (overridden in tests) ----------------------------------------------------
+# Each is ``async`` so that FastAPI calls it on the event loop rather than in a
+# worker thread: none of them waits on anything.
 
 
-def get_warehouse_executor() -> WarehouseExecutor:
+async def get_warehouse_executor() -> WarehouseExecutor:
     return get_executor()
 
 
-def get_client_factory() -> clients.ClientFactory:
+async def get_client_factory() -> clients.ClientFactory:
     return clients.build_client
 
 
-def get_job_session_factory() -> runner.SessionFactory:
+async def get_job_session_factory() -> runner.SessionFactory:
     from backend.app.db.session import SessionLocal
 
     return SessionLocal
 
 
-def get_clock() -> runner.Clock:
+async def get_clock() -> runner.Clock:
     return runner.utc_now
 
 
-def get_enabled_connectors() -> FrozenSet[str]:
+async def get_enabled_connectors() -> FrozenSet[str]:
     return connectors.ENABLED_CONNECTORS
 
 
-def get_estimator() -> Callable[..., Dict[str, Any]]:
+async def get_estimator() -> Callable[..., Dict[str, Any]]:
     """The proportion estimator ``/results`` uses (tests wrap it to record)."""
     from backend.app.services.sufficient_stats_analysis import binomial_metric_result
 
     return binomial_metric_result
 
 
-def get_mean_estimator() -> Callable[..., Dict[str, Any]]:
+async def get_mean_estimator() -> Callable[..., Dict[str, Any]]:
     """The core mean estimator for centred sums (tests wrap it to record)."""
     from backend.app.services.sufficient_stats_analysis import mean_metric_result
 

@@ -44,9 +44,12 @@ router = APIRouter()
 _etl_service: Optional[ETLService] = None
 
 
-def get_etl_service() -> ETLService:
+async def get_etl_service() -> ETLService:
     """
     Dependency that returns a singleton ETLService.
+
+    ``async`` so that FastAPI calls it on the event loop rather than in a
+    worker thread; the service is built once per process, on first use.
 
     Can be overridden in tests via app.dependency_overrides.
     """

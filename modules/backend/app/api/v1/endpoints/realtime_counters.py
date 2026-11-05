@@ -55,9 +55,12 @@ router = APIRouter()
 _counter_service: Optional[DynamoDBCounterService] = None
 
 
-def get_counter_service() -> DynamoDBCounterService:
+async def get_counter_service() -> DynamoDBCounterService:
     """
     Dependency that returns a singleton DynamoDBCounterService.
+
+    ``async`` so that FastAPI calls it on the event loop rather than in a
+    worker thread; the service is built once per process, on first use.
 
     This can be overridden in tests via app.dependency_overrides.
     """

@@ -295,9 +295,40 @@ def get_current_user(
         raise _credentials_exception()
 
 
-def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
+def require_active_user(user: User) -> User:
+    """
+    Return ``user`` if the account is active; 400 "Inactive user" otherwise.
+
+    The check behind :func:`get_current_active_user`, for code that resolves
+    the user itself rather than through ``Depends``:
+    ``read_scope.get_current_reader``, ``GET /api/v1/auth/me`` and the results
+    WebSocket. Call this, never the dependency: the dependency is ``async``, so
+    calling it as a plain function returns a coroutine and checks nothing.
+    """
+    if not user.is_active:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return user
+
+
+def require_superuser(user: User) -> User:
+    """
+    Return ``user`` if it is a superuser; 403 "Not enough permissions"
+    otherwise. The check behind :func:`get_current_superuser`.
+    """
+    if not user.is_superuser:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    return user
+
+
+async def get_current_active_user(
+    current_user: User = Depends(get_current_user),
+) -> User:
     """
     Get the current active user.
+
+    ``async`` on purpose: it only reads the user ``get_current_user`` has
+    already loaded, so it runs on the event loop and opens no connection.
+    Code that is not a ``Depends`` calls :func:`require_active_user`.
 
     Args:
         current_user (User): Current user
@@ -308,16 +339,17 @@ def get_current_active_user(current_user: User = Depends(get_current_user)) -> U
     Raises:
         HTTPException: If the user is inactive
     """
-    if not current_user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
-    return current_user
+    return require_active_user(current_user)
 
 
-def get_current_superuser(
+async def get_current_superuser(
     current_user: User = Depends(get_current_active_user),
 ) -> User:
     """
     Get the current superuser.
+
+    ``async`` for the reason :func:`get_current_active_user` is; code that is
+    not a ``Depends`` calls :func:`require_superuser`.
 
     Args:
         current_user (User): Current active user
@@ -328,16 +360,16 @@ def get_current_superuser(
     Raises:
         HTTPException: If the user is not a superuser
     """
-    if not current_user.is_superuser:
-        raise HTTPException(status_code=403, detail="Not enough permissions")
-    return current_user
+    return require_superuser(current_user)
 
 
-def get_current_superuser_or_none(
+async def get_current_superuser_or_none(
     current_user: User = Depends(get_current_active_user),
 ) -> Optional[User]:
     """
     Get current superuser or None.
+
+    ``async`` for the reason :func:`get_current_active_user` is.
 
     Args:
         current_user: Current authenticated user

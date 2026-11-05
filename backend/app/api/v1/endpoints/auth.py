@@ -482,7 +482,7 @@ def get_user_info(
     * ``AUTH_PROVIDER=cognito``: the Cognito ``{username, attributes}`` record.
     """
     if _is_local_provider() or deps.dev_auth_bypass_active():
-        user = deps.get_current_active_user(deps.get_current_user(token=token, db=db))
+        user = deps.require_active_user(deps.get_current_user(token=token, db=db))
         return user_to_me(user)
 
     cognito_token = deps.get_token(request)
