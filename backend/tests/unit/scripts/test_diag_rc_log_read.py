@@ -15,7 +15,7 @@ import subprocess
 import sys
 import urllib.error
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import pytest
 
@@ -51,25 +51,39 @@ SIGNED_URL = (
 LOG = "\N{ZERO WIDTH NO-BREAK SPACE}2026-10-17T22:15:34.3952163Z Current runner version: '2.337.0'\n"
 
 
-def _gh(read: Tuple[int, str, str], include: Tuple[int, str, str]):
-    """A fake ``gh``: *read* answers the verifier's plain GET, *include* the
-    ``gh api -i`` one, each as (exit status, stdout, stderr)."""
+API_URL = f"https://api.github.com/repos/{REPO}/actions/jobs/{JOB}/logs"
+
+
+def _gh(include: Tuple[int, str, str]):
+    """A fake ``gh``: only line 2's ``gh api -i`` reaches it, answered with
+    *include* (exit status, stdout, stderr). The verifier's read never does."""
 
     def run(argv: List[str], **kwargs: Any) -> subprocess.CompletedProcess:
-        assert argv[0] == "gh" and argv[1] == "api", argv
-        answer = include if "-i" in argv else read
-        assert argv[-1] == f"repos/{REPO}/actions/jobs/{JOB}/logs", argv
-        return subprocess.CompletedProcess(argv, answer[0], answer[1], answer[2])
+        assert argv == ["gh", "api", "-i", f"repos/{REPO}/actions/jobs/{JOB}/logs"]
+        return subprocess.CompletedProcess(argv, *include)
 
     return run
 
 
-def _run(monkeypatch, capsys, read, include, hop) -> str:
-    monkeypatch.setattr(diag.subprocess, "run", _gh(read, include))
+def _send(hop1, hop2=None):
+    """A fake HTTP for the verifier's two GETs: (status, headers, body) each."""
+
+    def send(url: str, headers: Any) -> Tuple[int, Dict[str, str], bytes]:
+        if url == API_URL:
+            assert headers["Authorization"] == f"Bearer {FAKE_TOKEN}"
+            return hop1
+        assert url == SIGNED_URL and "Authorization" not in headers, (url, headers)
+        return hop2
+
+    return send
+
+
+def _run(monkeypatch, capsys, send, include, hop) -> str:
+    monkeypatch.setattr(diag.subprocess, "run", _gh(include))
     monkeypatch.setattr(diag, "first_hop", hop)
     monkeypatch.setenv("GH_TOKEN", FAKE_TOKEN)
     environ = {"GITHUB_REPOSITORY": REPO, "GH_TOKEN": FAKE_TOKEN}
-    assert diag.main([JOB], environ) == 0
+    assert diag.main([JOB], environ, send=send) == 0
     return capsys.readouterr().out
 
 
@@ -85,30 +99,28 @@ def _hop(status: int, reason: str, location: Optional[str]):
 def test_a_readable_log_prints_its_size_and_where_github_sent_the_read(
     monkeypatch, capsys
 ):
-    include = (0, f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n{LOG}", "")
-    out = _run(
-        monkeypatch, capsys, (0, LOG, ""), include, _hop(302, "Found", SIGNED_URL)
-    )
+    include = (1, f"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n{LOG}", "")
+    send = _send((302, {"Location": SIGNED_URL}, b""), (200, {}, LOG.encode()))
+    out = _run(monkeypatch, capsys, send, include, _hop(302, "Found", SIGNED_URL))
     assert out.splitlines() == [
         f"verifier read: PASS, {len(LOG.encode())} bytes",
-        "gh api -i: exit 0; status line: HTTP/1.1 200 OK; Location host: none",
+        "gh api -i: exit 1; status line: HTTP/1.1 200 OK; Location host: none",
         "first hop (redirect not followed): HTTP 302 Found; Location host: "
         + STORAGE_HOST,
     ]
 
 
-def test_a_refused_read_prints_the_status_github_and_gh_gave(monkeypatch, capsys):
+def test_a_refused_read_prints_the_hop_and_its_status(monkeypatch, capsys):
     said = "gh: Resource not accessible by integration (HTTP 403)\n"
     body = '{"message":"Resource not accessible by integration","status":"403"}'
     include = (1, f"HTTP/2.0 403 Forbidden\r\nContent-Type: json\r\n\r\n{body}", said)
-    out = _run(
-        monkeypatch, capsys, (1, body, said), include, _hop(403, "Forbidden", None)
-    )
+    send = _send((403, {}, body.encode()))
+    out = _run(monkeypatch, capsys, send, include, _hop(403, "Forbidden", None))
     lines = out.splitlines()
-    assert lines[0].startswith("verifier read: FAIL (status 403, storage None):")
-    assert lines[0].endswith(
-        f"gh api repos/{REPO}/actions/jobs/{JOB}/logs failed (exit 1, HTTP 403):"
-        " gh: Resource not accessible by integration (HTTP 403)"
+    assert lines[0] == (
+        "verifier read: FAIL (status 403, storage None): cannot read the log of"
+        f" 'the job' (job {JOB}): hop 1 (GitHub's API) answered HTTP 403, not a"
+        " redirect: Resource not accessible by integration"
     )
     assert lines[1:] == [
         "gh api -i: exit 1; status line: HTTP/2.0 403 Forbidden; Location host: none",
@@ -128,23 +140,31 @@ def test_it_never_prints_the_token_or_a_signed_url_s_query(monkeypatch, capsys):
         f"X-Echo: {FAKE_TOKEN}\r\n\r\n{blob}",
         leaky,
     )
+    send = _send(
+        (302, {"Location": SIGNED_URL}, b""),
+        (403, {}, f"{blob}<T>{FAKE_TOKEN}</T>".encode()),
+    )
     hop = _hop(302, f"Found {FAKE_TOKEN}", SIGNED_URL)
-    out = _run(monkeypatch, capsys, (1, blob, leaky), include, hop)
+    out = _run(monkeypatch, capsys, send, include, hop)
     for secret in (FAKE_TOKEN, SIGNATURE, "sig=", "sv=", "?", "actions-results"):
         assert secret not in out, out
     assert out.count(f"Location host: {STORAGE_HOST}") == 2, out
-    assert "storage AuthenticationFailed" in out
+    assert (
+        f"hop 2 (log storage at {STORAGE_HOST}) answered HTTP 403, storage"
+        " AuthenticationFailed"
+    ) in out
 
 
 def test_it_exits_0_whatever_happens(monkeypatch, capsys):
-    def broken(argv: List[str], **kwargs: Any) -> subprocess.CompletedProcess:
+    def broken(*args: Any, **kwargs: Any) -> Any:
         raise RuntimeError(FAKE_TOKEN)
 
     monkeypatch.setattr(diag.subprocess, "run", broken)
-    assert diag.main([JOB], {"GITHUB_REPOSITORY": REPO}) == 0
+    environ = {"GITHUB_REPOSITORY": REPO, "GH_TOKEN": FAKE_TOKEN}
+    assert diag.main([JOB], environ, send=broken) == 0
     out = capsys.readouterr().out
     assert out.strip() == "diagnostic error: RuntimeError"
-    assert diag.main(["not-a-job"], {"GITHUB_REPOSITORY": REPO}) == 0
+    assert diag.main(["not-a-job"], {"GITHUB_REPOSITORY": REPO}, send=broken) == 0
 
 
 def test_the_first_hop_does_not_follow_the_redirect(monkeypatch):

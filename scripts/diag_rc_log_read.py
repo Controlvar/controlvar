@@ -8,12 +8,12 @@ verifier's verify job holds (``contents: read``, ``actions: read``). It prints
 three lines and exits 0 whatever happens; the lines are the result:
 
 1. ``verifier read``: the read ``scripts/rc_evidence.py`` makes for a P check
-   (``GitHub.text`` through ``run_gh``), reported as the verifier reports it
-   (``unreadable_log``): PASS and the byte count, or the HTTP status, the
-   storage's error code and what gh said, cleaned by ``said``.
-2. ``gh api -i``: the same GET once more, with ``--include``. gh follows the
-   redirect, so this is the LAST answer's status line, and its Location host
-   if it has one.
+   (``GitHub.log``: two GETs, ``read_job_log``, not gh), reported as the
+   verifier reports it (``unreadable_log``): PASS and the byte count, or the
+   hop, its HTTP status and the storage's error code.
+2. ``gh api -i``: the same GET through gh, with ``--include``, for comparison
+   (gh exited 1 after a 200 here, run 41978116497). gh follows the redirect,
+   so this is the LAST answer's status line, and its Location host if any.
 3. ``first hop``: the same GET once more, redirect NOT followed: GitHub's own
    status line and the host its Location points at.
 
@@ -68,12 +68,14 @@ def host_of(location: Optional[str]) -> str:
     return host if HOST.fullmatch(host) else "unparsable"
 
 
-def verifier_read(repo: str, job: str) -> str:
+def verifier_read(
+    repo: str, job: str, environ: Mapping[str, str], send: "rc.Send"
+) -> str:
     """Line 1: the verifier's own read and its own words."""
-    github = rc.GitHub(rc.run_gh, repo)
+    github = rc.GitHub(rc.run_gh, repo, send=send, environ=environ)
     try:
-        log = github.text(f"actions/jobs/{job}/logs")
-    except rc.GhError as error:
+        log = github.log(int(job))
+    except rc.LogError as error:
         return (
             f"verifier read: FAIL (status {error.status}, storage {error.storage}):"
             f" {rc.unreadable_log('the job', int(job), error)}"
@@ -152,14 +154,18 @@ def hop_read(repo: str, job: str, token: str) -> str:
     )
 
 
-def main(argv: List[str], environ: Mapping[str, str] = os.environ) -> int:
+def main(
+    argv: List[str],
+    environ: Mapping[str, str] = os.environ,
+    send: Optional["rc.Send"] = None,
+) -> int:
     try:
         job = argv[0] if argv else ""
         repo = environ.get("GITHUB_REPOSITORY", "")
         if not JOB_ID.fullmatch(job) or not rc.REPOSITORY_NAME.fullmatch(repo):
             print("diagnostic: a job id and GITHUB_REPOSITORY are needed")
             return 0
-        print(verifier_read(repo, job))
+        print(verifier_read(repo, job, environ, send or rc.http_send))
         print(include_read(repo, job))
         print(hop_read(repo, job, environ.get("GH_TOKEN", "")))
     except Exception as error:  # a diagnostic: its output is the result
