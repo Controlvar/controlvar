@@ -677,7 +677,13 @@ DEFAULT_VOICE_GAIN_DB = 4.5
 #: Polly's output level is suspected, and no Polly call has checked it. Its 26
 #: dashboard clips (D182) render at -19.33 LUFS at 3.5 dB, just under G17's
 #: window [-19.3, -18.7], so it takes 3.7 dB (-19.13 in the rehearsal).
-VOICE_GAIN_DB_BY_VIDEO: Dict[str, float] = {"09-design-in-depth": 3.7}
+#: Video 10's 15 clips measured a mean of -22.8 LUFS (2026-11-05), so 4.5 dB
+#: puts them at -18.3, outside G10's window, and 3.8 dB puts them at -19.0, its
+#: centre. The cause is likewise unverified.
+VOICE_GAIN_DB_BY_VIDEO: Dict[str, float] = {
+    "09-design-in-depth": 3.7,
+    "10-serve-a-value": 3.8,
+}
 
 
 def voice_gain_db(slug: str) -> float:

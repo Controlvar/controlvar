@@ -118,8 +118,10 @@ def test_video_10_registers_between_videos_6_and_9_with_no_app_or_override():
     assert (
         override_lists.override_list(made, run.Ports(28400, 28401, 28402), listed) == []
     )
-    # The default gain (EM1512-5) and the default cap.
-    assert contract.voice_gain_db(SLUG) == contract.DEFAULT_VOICE_GAIN_DB == 4.5
+    # Its own gain (its clips measure louder than the default expects) and
+    # the default cap.
+    assert contract.voice_gain_db(SLUG) == 3.8
+    assert contract.DEFAULT_VOICE_GAIN_DB == 4.5
     assert contract.max_video_ms(SLUG) == contract.MAX_VIDEO_MS
 
 
