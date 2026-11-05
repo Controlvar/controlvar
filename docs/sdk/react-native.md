@@ -145,7 +145,7 @@ remount is answered from the memory cache.
 | `baseUrl` | `string` | — | Backend origin (`https://api.example.com`); trailing slashes are stripped |
 | `timeoutMs` | `number` | `5000` | Per-request timeout (`AbortController`) |
 | `cacheTtlMs` | `number` | `300000` | How long a successful evaluation/assignment is reused per user + key (memory and AsyncStorage) |
-| `offlineFallback` | `boolean` | `true` | Persist results to AsyncStorage and serve them (even past their TTL) when the API is unreachable |
+| `offlineFallback` | `boolean` | `true` | Persist results to AsyncStorage and serve them (even past their TTL) when the request fails, except a flag evaluation that answers 404 (the flag was deleted), which removes the stored answer |
 | `onError` | `(error, operation) => void` | — | Called for every swallowed failure; `operation` is `'evaluateFlag' \| 'getAssignment' \| 'getAllFlags' \| 'track' \| 'trackBatch' \| 'exposure'` |
 | `onExposure` | `(exposure: Exposure) => void` | — | Called once each time the server enrols the user in an experiment and the answer is not cached; see [Exposure hook](#exposure-hook) |
 
@@ -262,9 +262,10 @@ For `evaluateFlag` and `getAssignment`:
    network call (e.g. right after an app restart) and promoted to memory.
 3. **Server** — `GET /api/v1/feature-flags/evaluate/…` / `POST /api/v1/tracking/assign`; the
    result is cached in memory and, if `offlineFallback`, persisted with its expiry.
-4. **Offline fallback** — on a network error or non-2xx response, the last-known AsyncStorage
-   value is returned even if its TTL has passed (it is *not* written back to memory, so the next
-   call retries the server).
+4. **Offline fallback** — on a network error or a non-2xx response other than a flag evaluation's 404,
+   the last-known AsyncStorage value is returned even if its TTL has passed (it is *not* written
+   back to memory, so the next call retries the server). A flag evaluation that answers 404 means
+   the flag was deleted: the stored answer is removed and the flag is answered as off.
 5. **Safe default** — `{ key, enabled: false, config: null }` / `null`. Failures are never cached.
 
 Every swallowed failure is passed to `config.onError(error, operation)`; HTTP failures are

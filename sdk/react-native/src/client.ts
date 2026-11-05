@@ -146,6 +146,8 @@ export class ExperimentationClient {
    *   2. AsyncStorage entry that has not expired (if `offlineFallback`).
    *   3. Server; the result is cached in memory and AsyncStorage.
    *   4. On failure: the last-known AsyncStorage value, even if expired (if `offlineFallback`).
+   *      A 404 (the flag was deleted) is not a failure: the stored value is removed and
+   *      the flag is answered disabled.
    *   5. `{ key, enabled: false, config: null }` as the safe default (not cached).
    */
   async evaluateFlag(
@@ -177,6 +179,12 @@ export class ExperimentationClient {
         return evaluation;
       } catch (err) {
         this.report(err, 'evaluateFlag');
+        // A 404 is a definitive answer (the flag was deleted), not an outage: drop the
+        // stored answer so it is never served again, and answer disabled.
+        if (err instanceof ApiError && err.status === 404) {
+          if (this.offlineFallback) await this.storage.removeFlag(userId, flagKey);
+          return disabled(flagKey);
+        }
         return stored ? stored.value : disabled(flagKey);
       }
     });
