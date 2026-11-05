@@ -194,7 +194,7 @@ by = [
 ]
 
 [[unit]]
-text = "The JavaScript SDK sends the eventId you give it, from its next published version, and makes none itself (Event ids)."
+text = "The JavaScript SDK sends the eventId you give it, and makes none itself (Event ids)."
 by = [
     "test:sdk/js/__tests__/event-id.test.ts::sends event_id on a track with an explicit key",
     "test:sdk/js/__tests__/event-id.test.ts::makes no id of its own: two tracks without an eventId send none",
@@ -202,7 +202,7 @@ by = [
 ]
 
 [[unit]]
-text = "The Python SDK sends the event_id you give it, from its next published version, and makes none itself (Event ids)."
+text = "The Python SDK sends the event_id you give it, and makes none itself (Event ids)."
 by = [
     "test:sdk/python/tests/test_event_id.py::TestEventId::test_sends_event_id_on_a_track_with_an_explicit_key",
     "test:sdk/python/tests/test_event_id.py::TestEventId::test_makes_no_id_of_its_own_two_tracks_without_an_event_id_send_none",

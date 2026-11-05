@@ -23,7 +23,7 @@ by = [
 ]
 
 [[unit]]
-text = "It is opt-in, and it is available in the JavaScript SDK (@controlvar/js-sdk 0.2.0, evaluation: 'local') and the Python SDK (controlvar 0.2.0, evaluation=\"local\")."
+text = "It is opt-in, and it is available in the JavaScript SDK (@controlvar/js-sdk 0.3.0, evaluation: 'local') and the Python SDK (controlvar 0.3.0, evaluation=\"local\")."
 by = [
     "mechanism:sdk-doc-versions",
     "test:sdk/js/__tests__/local.test.ts::server mode is unchanged: no ruleset request, no source field",
@@ -579,7 +579,7 @@ by = [
 ]
 
 [[unit]]
-text = "With @controlvar/js-sdk 0.2.0 or controlvar 0.2.0 and earlier, set cacheTtlMs / cache_ttl_seconds (5 minutes by default) lower if these limits must hold: once those versions stop evaluating a flag locally (maxStaleMs / max_stale_seconds passed, the ruleset dropped, close()), a user they answered locally keeps that answer from their cache for up to that lifetime."
+text = "With a JavaScript or Python SDK release published before November 2026, set cacheTtlMs / cache_ttl_seconds (5 minutes by default) lower if these limits must hold: once such a release stops evaluating a flag locally (maxStaleMs / max_stale_seconds passed, the ruleset dropped, close()), a user it answered locally keeps that answer from their cache for up to that lifetime."
 by = ["exempt:instruction"]
 
 [[unit]]
