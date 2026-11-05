@@ -24,6 +24,11 @@ from pydantic import (
 from pydantic_core import InitErrorDetails, PydanticCustomError
 
 from backend.app.core.context_limits import nested_deeper_than
+from backend.app.core.finite_json import (
+    FINITE_NUMBER_MESSAGE,
+    FINITE_NUMBER_TYPE,
+    first_non_finite,
+)
 from backend.app.schemas.storable_text import StorableTextModel
 
 #: The longest ``event_id`` an event may carry (#1543).
@@ -84,12 +89,18 @@ class EventFields(BaseModel):
     @field_validator("properties", "metadata", mode="before")
     @classmethod
     def parse_json_string(cls, v: Any, info: ValidationInfo) -> Any:
-        """Accept a JSON-encoded string for the free-form attribute fields."""
+        """Accept a JSON-encoded string for the free-form attribute fields.
+
+        The decoded value is held to the rule a JSON request body is held to
+        (#1630, ``backend/app/core/finite_json.py``): NaN, an infinity or a
+        number too large for a double is refused with ``finite_number`` at
+        its place inside the field.
+        """
         if isinstance(v, str):
             import json
 
             try:
-                return json.loads(v) if v.strip() else None
+                decoded = json.loads(v) if v.strip() else None
             except json.JSONDecodeError as exc:
                 raise ValueError(f"must be a JSON object: {exc}") from exc
             except RecursionError:
@@ -99,6 +110,21 @@ class EventFields(BaseModel):
                     f"{info.field_name} must not be nested more than "
                     f"{EVENT_METADATA_MAX_DEPTH} levels deep"
                 ) from None
+            path = first_non_finite(decoded)
+            if path is not None:
+                raise ValidationError.from_exception_data(
+                    cls.__name__,
+                    [
+                        InitErrorDetails(
+                            type=PydanticCustomError(
+                                FINITE_NUMBER_TYPE, FINITE_NUMBER_MESSAGE
+                            ),
+                            loc=path,
+                            input=None,
+                        )
+                    ],
+                )
+            return decoded
         return v
 
 

@@ -156,6 +156,77 @@ def test_finite_metadata_is_stored(sdk_client, db_session, experiment, route):
 
 
 # ---------------------------------------------------------------------------
+# metadata sent as a JSON-encoded string
+# ---------------------------------------------------------------------------
+
+#: (id, the attribute text with X where the number goes, the number, the
+#: place of the number inside the decoded object).
+TEXT_ROWS = [
+    ("nan", '{"a": X}', "NaN", ["a"]),
+    ("infinity-in-array", '{"a": [1, X]}', "Infinity", ["a", 1]),
+    ("1e400-nested", '{"b": {"c": X}}', "1e400", ["b", "c"]),
+]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("field", ["properties", "metadata"])
+@pytest.mark.parametrize(
+    "template, number, below",
+    [row[1:] for row in TEXT_ROWS],
+    ids=[row[0] for row in TEXT_ROWS],
+)
+def test_a_non_finite_number_in_metadata_sent_as_text_answers_422(
+    sdk_client, db_session, experiment, field, template, number, below
+):
+    """``/events`` takes either attribute field as a JSON-encoded string too
+    and decodes it itself; the decoded value is held to the same rule as a
+    number in the body, at the same place. It used to answer 500."""
+    before = _written(db_session)
+    event = _event(experiment, "events", **{field: template.replace("X", number)})
+    response = sdk_client.post("/api/v1/tracking/events", json=event)
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == [
+        {
+            "type": "finite_number",
+            "loc": ["body", field, *below],
+            "msg": "Input should be a finite number",
+        }
+    ]
+    assert _written(db_session) == before
+
+
+@pytest.mark.parametrize("field", ["properties", "metadata"])
+@pytest.mark.parametrize(
+    "template, number, below",
+    [row[1:] for row in TEXT_ROWS],
+    ids=[row[0] for row in TEXT_ROWS],
+)
+def test_the_same_text_with_a_finite_number_is_stored(
+    sdk_client, db_session, experiment, field, template, number, below
+):
+    before = _written(db_session)
+    text_value = template.replace("X", "1.5")
+    event = _event(experiment, "events", **{field: text_value})
+    response = sdk_client.post("/api/v1/tracking/events", json=event)
+    assert response.status_code == 200, response.text
+    assert response.json()["properties"] == json.loads(text_value)
+    assert _written(db_session)[0] == before[0] + 1
+
+
+@pytest.mark.parametrize("route", ["track", "batch"])
+def test_track_and_batch_take_metadata_as_an_object_only(
+    sdk_client, db_session, experiment, route
+):
+    """The string form is ``/events``' alone: ``/track`` and ``/batch`` refuse
+    a string ``metadata`` as not an object, NaN in it or not."""
+    before = _written(db_session)
+    response = _send(sdk_client, experiment, route, metadata='{"a": NaN}')
+    assert response.status_code == 422, response.text
+    assert [e["type"] for e in response.json()["detail"]] == ["dict_type"]
+    assert _written(db_session) == before
+
+
+# ---------------------------------------------------------------------------
 # The value range
 # ---------------------------------------------------------------------------
 

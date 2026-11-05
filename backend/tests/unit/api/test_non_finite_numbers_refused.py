@@ -374,6 +374,46 @@ def test_one_non_finite_number_refuses_the_whole_batch(client, stored):
     assert stored == []
 
 
+@pytest.mark.regression
+@pytest.mark.parametrize("field", ["properties", "metadata"])
+@pytest.mark.parametrize(
+    "text, below",
+    [
+        ('{"a": NaN}', ["a"]),
+        ('{"a": [1, -Infinity]}', ["a", 1]),
+        ('{"b": 1e400}', ["b"]),
+    ],
+    ids=["nan", "minus-infinity-in-array", "1e400"],
+)
+def test_events_holds_attributes_sent_as_text_to_the_same_rule(
+    client, stored, field, text, below
+):
+    """``/events`` decodes an attribute field sent as a JSON-encoded string;
+    a non-finite number in it is refused at its place, as in the body."""
+    body = {
+        "event_type": "click",
+        "event_name": "click",
+        "user_id": "u-1630",
+        "experiment_id": UUID,
+        field: text,
+    }
+    response = client.post("/api/v1/tracking/events", json=body)
+    assert _finite_number(response) == [
+        {
+            "type": FINITE_NUMBER_TYPE,
+            "loc": ["body", field, *below],
+            "msg": FINITE_NUMBER_MESSAGE,
+        }
+    ]
+    assert stored == []
+    body[field] = (
+        text.replace("NaN", "1.5").replace("-Infinity", "2").replace("1e400", "3")
+    )
+    response = client.post("/api/v1/tracking/events", json=body)
+    assert response.status_code == 200, response.text
+    assert len(stored) == 1
+
+
 def test_the_string_nan_in_a_free_form_field_is_stored_as_text(client, stored):
     response = client.post(
         "/api/v1/tracking/track",
