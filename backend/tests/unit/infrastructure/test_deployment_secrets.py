@@ -425,6 +425,22 @@ _OTHER_ORIGINS = [
     "https://elsewhere.example",
 ]
 
+#: The origins the AWS installer allows for the local demo apps (#1299). They
+#: reach the API task only as the `cors_origins` CDK context input, which
+#: fargate_service_stack.py adds outside `add_container(environment=...)`, and
+#: only when it is given; the CDK Stack Tests
+#: (infrastructure/tests/test_api_context_inputs.py) pin that it arrives as
+#: CORS_ORIGINS, verbatim. These tests pin what the API then allows.
+DEMO_ORIGINS = ["http://localhost:3200", "http://localhost:3300"]
+
+#: The API task's settings that only a CDK context input sets (#1299).
+CONTEXT_ONLY_SETTINGS = {
+    "CORS_ORIGINS",
+    "SAFETY_CHECK_INTERVAL_MINUTES",
+    "ROLLOUT_CHECK_INTERVAL_MINUTES",
+    "BANDIT_UPDATE_INTERVAL_MINUTES",
+}
+
 
 def _run_argv(
     environment: dict[str, str], script: str, *argv: str
@@ -445,7 +461,17 @@ def _run_argv(
     )
 
 
-def _cors_probe(name: str, profile: str, deployment: str, **extra: str) -> dict:
+def _cors_probe(
+    name: str,
+    profile: str,
+    deployment: str,
+    origins: list[str] = _OTHER_ORIGINS,
+    **extra: str,
+) -> dict:
+    """The task definition booted with ``extra`` added, and probed from
+    ``origins``. ``extra`` is the only way a CORS setting gets in here: no task
+    definition sets one for every task, and the cors_origins input, which is
+    added to the API task only when it is given, is not in this view."""
     import json
 
     has_modules = (REPO_ROOT / "modules" / "backend" / "app").is_dir()
@@ -455,11 +481,12 @@ def _cors_probe(name: str, profile: str, deployment: str, **extra: str) -> dict:
     environment = container_environment(STACKS[name], profile=profile)
     configured = {"CORS_ORIGINS", "BACKEND_CORS_ORIGINS", "DASHBOARD_ORIGINS"}
     assert not configured & set(environment), (
-        f"{STACKS[name].name} now sets {sorted(configured & set(environment))}; "
-        "these tests expect it to set none"
+        f"{STACKS[name].name} now sets {sorted(configured & set(environment))} in "
+        "every task; these tests expect it to set none unless the cors_origins "
+        "context input is given"
     )
     environment.update(APP_ENV=app_env, PUBLIC_BASE_URL=public_base_url, **extra)
-    result = _run_argv(environment, _CORS_PROBE, profile, json.dumps(_OTHER_ORIGINS))
+    result = _run_argv(environment, _CORS_PROBE, profile, json.dumps(origins))
     lines = [ln for ln in result.stdout.splitlines() if ln.startswith("RESULT ")]
     assert result.returncode == 0 and lines, (
         f"{STACKS[name].name} ({profile}, {deployment}) did not start:\n"
@@ -478,10 +505,10 @@ def _cors_probe(name: str, profile: str, deployment: str, **extra: str) -> dict:
 def test_the_task_definition_allows_no_other_browser_origin(
     name: str, profile: str, deployment: str
 ):
-    """Neither task definition sets a CORS setting, and its dashboard is served
-    from the API's own origin: the allow-list is exactly empty, the API still
-    starts and says so once, and a browser on any other origin gets no
-    Access-Control-Allow-Origin."""
+    """With no cors_origins input, neither task definition sets a CORS setting,
+    and its dashboard is served from the API's own origin: the allow-list is
+    exactly empty, the API still starts and says so once, and a browser on any
+    other origin gets no Access-Control-Allow-Origin."""
     result = _cors_probe(name, profile, deployment)
     environment = "staging" if deployment == "staging" else "production"
     assert result["environment"] == environment
@@ -525,3 +552,55 @@ def test_a_wildcard_is_logged_and_never_allows_credentials(
         assert wire["get_acao"] == "*", (origin, wire)
         assert wire["preflight_acac"] is None, (origin, wire)
         assert wire["get_acac"] is None, (origin, wire)
+
+
+@pytest.mark.unit
+@pytest.mark.regression
+@pytest.mark.parametrize("deployment", sorted(DEPLOYMENTS))
+@pytest.mark.parametrize("profile", ["core", "full"])
+def test_the_cors_origins_input_allows_exactly_its_origins(
+    profile: str, deployment: str
+):
+    """Given the cors_origins input, the API task's CORS_ORIGINS: the allow-list
+    is exactly those origins, each one gets itself back and no credentials, and
+    every other origin still gets no Access-Control-Allow-Origin."""
+    result = _cors_probe(
+        "fargate",
+        profile,
+        deployment,
+        origins=DEMO_ORIGINS + _OTHER_ORIGINS,
+        CORS_ORIGINS=",".join(DEMO_ORIGINS),
+    )
+    environment = "staging" if deployment == "staging" else "production"
+    assert result["environment"] == environment
+    assert result["allow_list"] == DEMO_ORIGINS
+    assert result["logged"] == [
+        [
+            "INFO",
+            f"CORS allow-list ({environment}): {', '.join(DEMO_ORIGINS)}. To let a "
+            "site on another origin call this API from a browser, add its origin "
+            "to CORS_ORIGINS.",
+        ]
+    ]
+    for origin, wire in result["wire"].items():
+        allowed = origin in DEMO_ORIGINS
+        assert wire["preflight_status"] == (200 if allowed else 400), (origin, wire)
+        assert wire["preflight_acao"] == (origin if allowed else None), (origin, wire)
+        assert wire["get_status"] == 200, (origin, wire)
+        assert wire["get_acao"] == (origin if allowed else None), (origin, wire)
+        assert wire["preflight_acac"] is None, (origin, wire)
+        assert wire["get_acac"] is None, (origin, wire)
+
+
+@pytest.mark.unit
+@pytest.mark.regression
+@pytest.mark.parametrize("name", sorted(STACKS))
+def test_no_context_input_is_in_every_task(name: str):
+    """The CDK context inputs (#1299) are added to the API task only when given,
+    outside `add_container(environment=...)`. So the environment every test here
+    boots from never holds one: given a stand-in value, a cadence would not even
+    parse, and the unset CORS case above would no longer be unset."""
+    names = set(container_environment(STACKS[name], profile="full"))
+    assert not CONTEXT_ONLY_SETTINGS & names, (
+        f"{STACKS[name].name} gives every task {sorted(CONTEXT_ONLY_SETTINGS & names)}"
+    )
