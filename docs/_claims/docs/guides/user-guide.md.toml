@@ -1366,8 +1366,11 @@ text = "Archived Flags"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "An archived flag is retired and never served."
-by = ["exempt:baseline"]
+text = "An archived flag is retired: every evaluation answers it as off, with its off value."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
+    "test:backend/tests/unit/services/test_sdk_ruleset.py::test_an_inactive_value_flag_carries_its_type_and_off_value",
+]
 
 [[unit]]
 text = "It cannot be turned on until it is unarchived: the API refuses every request that would turn it on with \"This flag is archived."

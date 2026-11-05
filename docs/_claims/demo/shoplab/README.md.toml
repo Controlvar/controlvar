@@ -366,7 +366,7 @@ by = [
 ]
 
 [[unit]]
-text = "orange_buy_now wins on add-to-cart; show the multivariate breakdown and the sequential-testing status."
+text = "orange_buy_now wins on add-to-cart; show the multivariate breakdown."
 by = ["test:backend/tests/unit/scripts/test_demo_apps_catalogues.py::test_the_simulator_walks_the_funnel_at_the_spec_rates"]
 
 [[unit]]

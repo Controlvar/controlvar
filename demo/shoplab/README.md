@@ -155,7 +155,7 @@ source venv/bin/activate && python -m pytest demo/shoplab/simulator/test_traffic
    and note the sort the page names: it follows the visitor's arm, and "Recommended for you" is
    `ml_personalized`'s, the arm the weights favour.
 3. **Buy button** (`shoplab_pdp_buy_button`): four cells. `orange_buy_now` wins on add-to-cart;
-   show the multivariate breakdown and the sequential-testing status. On a product page, switch
+   show the multivariate breakdown. On a product page, switch
    visitors to see colour and text change.
 4. **Checkout flow** (`shoplab_checkout_flow`): open Results. Its primary metric is the `purchase`
    conversion, and its secondary the revenue metric *Order value*. There is no CUPED toggle in the dashboard.
