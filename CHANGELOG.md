@@ -10,6 +10,38 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.43.0](https://github.com/Controlvar/controlvar/compare/v0.42.0...v0.43.0) (2026-11-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** GET /api/v1/scheduler/{name}/history answers 422 for a limit of 0, a negative limit or a limit above 1,000.
+
+### Features
+
+* **scale:** each step records the scheduler ticks that ended in the gap before it ([#1708](https://github.com/Controlvar/controlvar/issues/1708)) ([8e3f750](https://github.com/Controlvar/controlvar/commit/8e3f7502b831e51a3703254c3c92dca192ca7542))
+
+
+### Bug Fixes
+
+* **api:** bound the scheduler history limit to 1..1000 ([#1485](https://github.com/Controlvar/controlvar/issues/1485)) ([6e3075e](https://github.com/Controlvar/controlvar/commit/6e3075e2ec10fd493226021ac8a72839a4240958))
+* **api:** the feature-flag list pages in a stable order (oldest first) ([#1732](https://github.com/Controlvar/controlvar/issues/1732)) ([dbafee7](https://github.com/Controlvar/controlvar/commit/dbafee71e62f919146da8c2450984c076d565325))
+* **ci:** the junit skip check counts a test file skipped at collection ([#1707](https://github.com/Controlvar/controlvar/issues/1707)) ([c6d2583](https://github.com/Controlvar/controlvar/commit/c6d258302b5239d85e5610dfc297e16ae6325180))
+* **dashboard:** the API keys dialog works with a keyboard and a screen reader ([#1733](https://github.com/Controlvar/controlvar/issues/1733)) ([02af45a](https://github.com/Controlvar/controlvar/commit/02af45a8d54fdd65bc5df60b4480b74c2f297790))
+* **sdk:** local evaluation asks the server after it discards a ruleset instead of answering from the cache ([#1712](https://github.com/Controlvar/controlvar/issues/1712)) ([141b788](https://github.com/Controlvar/controlvar/commit/141b78813594806099c7c283644a043d74706d6b))
+* **sdk:** the .NET SDK sends the attributes it is given when it evaluates a flag ([#1722](https://github.com/Controlvar/controlvar/issues/1722)) ([7b4e538](https://github.com/Controlvar/controlvar/commit/7b4e538c59103f5f4f174809b0eaef809dec834d))
+* **sdk:** the Java SDK sends the user's attributes when it evaluates a flag ([#1723](https://github.com/Controlvar/controlvar/issues/1723)) ([6b517e7](https://github.com/Controlvar/controlvar/commit/6b517e7e6ba021b57d00e8bfc15440b377da5f23))
+* **sdk:** the JS OpenFeature provider reports SPLIT, not CACHED, for a server answer after local evaluation defers ([#1717](https://github.com/Controlvar/controlvar/issues/1717)) ([abc003e](https://github.com/Controlvar/controlvar/commit/abc003e4eb06fd73ec0bed542ccc4e4d7d3d31a5))
+
+
+### Documentation
+
+* **api:** the stability table records [#1485](https://github.com/Controlvar/controlvar/issues/1485)'s scheduler history bounds ([#1610](https://github.com/Controlvar/controlvar/issues/1610)) ([0a4266c](https://github.com/Controlvar/controlvar/commit/0a4266c78ee5224658cdd4609a15292075bcbd4e))
+* **deploy:** a teardown stopped by a listener still in use completes ([57cca60](https://github.com/Controlvar/controlvar/commit/57cca6030d5b9776add08f6c098ec7b423beb979))
+* **deploy:** a teardown stopped by a listener still in use completes when run again ([#1734](https://github.com/Controlvar/controlvar/issues/1734)) ([57cca60](https://github.com/Controlvar/controlvar/commit/57cca6030d5b9776add08f6c098ec7b423beb979))
+* **results:** a false winner is named more often on skewed revenue with a lopsided split ([#1740](https://github.com/Controlvar/controlvar/issues/1740)) ([f9ab953](https://github.com/Controlvar/controlvar/commit/f9ab953d77ad5f2862df793efa5d1bdfa82d8aa6))
+* **results:** winsorization is stored but applied by no results view ([#1739](https://github.com/Controlvar/controlvar/issues/1739)) ([9eabe14](https://github.com/Controlvar/controlvar/commit/9eabe14c063502eb2e3bd262bd9bf6fbc2ccf4ec))
+
 ## [0.42.0](https://github.com/Controlvar/controlvar/compare/v0.41.0...v0.42.0) (2026-11-03)
 
 
