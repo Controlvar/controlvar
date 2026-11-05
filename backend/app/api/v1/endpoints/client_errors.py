@@ -233,7 +233,7 @@ def _stored_metadata(report: ClientErrorRequest) -> Optional[Dict[str, Any]]:
     return metadata
 
 
-def report_source(
+async def report_source(
     db: Session = Depends(deps.get_db),
     api_key_header: Optional[str] = Depends(deps.API_KEY_HEADER),
     _owner: User = Depends(deps.get_api_key),
@@ -243,6 +243,8 @@ def report_source(
     Layered on ``deps.get_api_key``, so a missing or invalid key is still a 401
     and nothing else is refused. The value comes from the presented key alone
     (never from the body) and covers every report in a batch.
+
+    Reads on the request's session; does no blocking work.
     """
     if presented_key_is_server_key(db, api_key_header):
         return REPORT_SOURCE_SERVER

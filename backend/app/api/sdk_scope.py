@@ -130,12 +130,15 @@ def presented_key_is_server_key(db: Session, api_key_header: Optional[str]) -> b
     return scope_refusal(db, api_key) is None
 
 
-def require_sdk_ruleset_key(
+async def require_sdk_ruleset_key(
     db: Session = Depends(deps.get_db),
     api_key_header: str = Depends(deps.API_KEY_HEADER),
     _owner: User = Depends(deps.get_api_key),
 ) -> APIKey:
-    """Return the presented ``APIKey`` row if it carries ``sdk:ruleset``."""
+    """Return the presented ``APIKey`` row if it carries ``sdk:ruleset``.
+
+    Reads on the request's session; does no blocking work.
+    """
     if not api_key_header:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -157,7 +160,7 @@ def require_sdk_ruleset_key(
     return api_key
 
 
-def require_batch_assign_key(
+async def require_batch_assign_key(
     db: Session = Depends(deps.get_db),
     api_key: APIKey = Depends(require_sdk_ruleset_key),
 ) -> APIKey:
@@ -167,6 +170,8 @@ def require_batch_assign_key(
     owner must be able to change experiments: otherwise a 403 with
     :data:`OWNER_EXPERIMENT_DETAIL`, before the route reads its experiment or
     writes any assignment.
+
+    Reads on the request's session; does no blocking work.
     """
     refusal = batch_assign_refusal(db, api_key)
     if refusal is not None:

@@ -1,8 +1,8 @@
 """``POST /api/v1/tracking/assign/batch`` (#441): how it is served and published.
 
-* The handler is a plain ``def``: FastAPI runs it in the thread pool, so a
-  batch of 1,000 users does not hold the event loop. Found through the route
-  walk, not by importing the function, so it is the function actually routed.
+* The handler works through the batch off the event loop, so a batch of
+  1,000 users does not hold it. Found through the route walk, not by
+  importing the function, so it is the function actually routed.
 * It is in the committed stable snapshot, marked beta. A route missing from
   ``docs/api/openapi-v1.stable.json`` is only a warning in
   ``test_openapi_snapshot.py``, so the operation is pinned here by name.
@@ -12,9 +12,12 @@ from __future__ import annotations
 
 import inspect
 import json
+import threading
+from unittest.mock import MagicMock
 
 import pytest
 
+from backend.app.api.v1.endpoints import tracking
 from backend.app.main import app
 from backend.tests.smoke.modules_manifest import REPO_ROOT
 
@@ -36,10 +39,23 @@ def _routed(path: str, method: str):
     return found
 
 
-def test_the_batch_route_is_a_plain_def():
+async def test_the_batch_is_worked_through_off_the_event_loop(monkeypatch):
     routed = _routed(PATH, "POST")
     assert len(routed) == 1, routed
-    assert not inspect.iscoroutinefunction(routed[0].endpoint)
+    threads = []
+
+    def body(request, db):
+        threads.append(threading.get_ident())
+        return "the batch answer"
+
+    monkeypatch.setattr(tracking, "_assign_users_in_batch", body)
+    answer = await routed[0].endpoint(
+        request=MagicMock(), db=MagicMock(), api_key=MagicMock()
+    )
+    assert answer == "the batch answer"
+    assert len(threads) == 1 and threads[0] != threading.get_ident(), (
+        "the batch ran on the event loop's thread"
+    )
 
 
 def test_the_walk_can_tell_async_from_sync():

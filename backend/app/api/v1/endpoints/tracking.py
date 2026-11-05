@@ -14,6 +14,7 @@ from typing import Annotated, Any, Dict, List, Optional
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
 from backend.app.api.sdk_scope import require_batch_assign_key
@@ -443,7 +444,7 @@ BATCH_FAILURE_SENTENCE = "Could not assign the users to the experiment"
         429: {"description": "More than 60 requests a minute from this address"},
     },
 )
-def assign_users_to_experiment_batch(
+async def assign_users_to_experiment_batch(
     request: AssignmentBatchRequest = Body(
         ..., description="The experiment and its users"
     ),
@@ -473,131 +474,142 @@ def assign_users_to_experiment_batch(
     A plain ``def``: FastAPI runs it in the thread pool, so a batch does not
     hold the event loop while it works through its users.
     """
-    # Every user's context is held to the limits of
-    # backend.app.core.context_limits before the first user is assigned: one
-    # over a limit refuses the whole request, and nobody is assigned.
-    for index in range(len(request.users)):
-        check_context(request.users[index].context, field=f"users[{index}]")
+    db.close()
+    return await run_in_threadpool(_assign_users_in_batch, request, db)
 
-    experiment = (
-        db.query(Experiment)
-        .filter(
-            Experiment.key == request.experiment_key,
-            Experiment.status == ExperimentStatus.ACTIVE,
-        )
-        .first()
-    )
-    if not experiment:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Active experiment with key '{request.experiment_key}' not found",
-        )
 
-    # Plain values only from here on: every commit below expires the ORM
-    # objects of a production session, and touching one again reloads it.
-    experiment_id = str(experiment.id)
-    variants = {
-        str(v.id): BatchVariant(
-            name=v.name,
-            is_control=bool(v.is_control),
-            configuration=v.configuration,
-        )
-        for v in experiment.variants
-    }
-    choose = bandit_chooser(db, experiment)
-    service = AssignmentService(db)
-    total = len(request.users)
+def _assign_users_in_batch(
+    request: AssignmentBatchRequest, db: Session
+) -> AssignmentBatchResponse:
+    """Assign *request*'s users on *db*, as the batch route answers; closes *db*."""
+    try:
+        # Every user's context is held to the limits of
+        # backend.app.core.context_limits before the first user is assigned:
+        # one over a limit refuses the whole request, and nobody is assigned.
+        for index in range(len(request.users)):
+            check_context(request.users[index].context, field=f"users[{index}]")
 
-    assignments: List[BatchAssignment] = []
-    counts = BatchAssignmentCounts()
-    for index, user in enumerate(request.users):
-        try:
-            data = service.assign_user(
-                user_id=user.user_id,
+        experiment = (
+            db.query(Experiment)
+            .filter(
+                Experiment.key == request.experiment_key,
+                Experiment.status == ExperimentStatus.ACTIVE,
+            )
+            .first()
+        )
+        if not experiment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Active experiment with key '{request.experiment_key}' not found",
+            )
+
+        # Plain values only from here on: every commit below expires the ORM
+        # objects of a production session, and touching one again reloads it.
+        experiment_id = str(experiment.id)
+        variants = {
+            str(v.id): BatchVariant(
+                name=v.name,
+                is_control=bool(v.is_control),
+                configuration=v.configuration,
+            )
+            for v in experiment.variants
+        }
+        choose = bandit_chooser(db, experiment)
+        service = AssignmentService(db)
+        total = len(request.users)
+
+        assignments: List[BatchAssignment] = []
+        counts = BatchAssignmentCounts()
+        for index, user in enumerate(request.users):
+            try:
+                data = service.assign_user(
+                    user_id=user.user_id,
+                    experiment_id=experiment_id,
+                    track_exposure=False,
+                    override_variant_id=choose(user.user_id),
+                    context=user.context,
+                )
+            except ValidationError as e:
+                # pydantic's ValidationError is a ValueError, and not the
+                # experiment changing: an unexpected failure.
+                logger.error(
+                    "Batch assign failed at user %d of %d in experiment %s (%s)",
+                    index + 1,
+                    total,
+                    experiment_id,
+                    type(e).__name__,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=failure_detail(BATCH_FAILURE_SENTENCE),
+                )
+            except ValueError as e:
+                # assign_user raises ValueError when the experiment is gone, is
+                # no longer ACTIVE, or its variants no longer fit.
+                logger.warning(
+                    "Batch assign stopped at user %d of %d: experiment %s changed (%s)",
+                    index + 1,
+                    total,
+                    experiment_id,
+                    type(e).__name__,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=EXPERIMENT_CHANGED_DETAIL,
+                )
+            except Exception as e:
+                # The class name only: a database error's text repeats the
+                # row's parameters, the user id among them.
+                logger.error(
+                    "Batch assign failed at user %d of %d in experiment %s (%s)",
+                    index + 1,
+                    total,
+                    experiment_id,
+                    type(e).__name__,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=failure_detail(BATCH_FAILURE_SENTENCE),
+                )
+
+            variant_id = str(data.get("variant_id"))
+            if variant_id not in variants:
+                logger.error(
+                    "Batch assign failed at user %d of %d in experiment %s "
+                    "(assigned variant not in the experiment)",
+                    index + 1,
+                    total,
+                    experiment_id,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=failure_detail(BATCH_FAILURE_SENTENCE),
+                )
+            assigned = bool(data.get("assigned", True))
+            reason = str(data.get("reason") or "assigned")
+            record_experiment_assignment(
                 experiment_id=experiment_id,
-                track_exposure=False,
-                override_variant_id=choose(user.user_id),
-                context=user.context,
+                variant_id=variant_id if assigned else reason,
             )
-        except ValidationError as e:
-            # pydantic's ValidationError is a ValueError, and not the
-            # experiment changing: an unexpected failure.
-            logger.error(
-                "Batch assign failed at user %d of %d in experiment %s (%s)",
-                index + 1,
-                total,
-                experiment_id,
-                type(e).__name__,
+            assignments.append(
+                BatchAssignment(
+                    user_id=user.user_id,
+                    variant_id=variant_id,
+                    assigned=assigned,
+                    reason=reason,
+                )
             )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=failure_detail(BATCH_FAILURE_SENTENCE),
-            )
-        except ValueError as e:
-            # assign_user raises ValueError when the experiment is gone, is no
-            # longer ACTIVE, or its variants no longer fit.
-            logger.warning(
-                "Batch assign stopped at user %d of %d: experiment %s changed (%s)",
-                index + 1,
-                total,
-                experiment_id,
-                type(e).__name__,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=EXPERIMENT_CHANGED_DETAIL,
-            )
-        except Exception as e:
-            # The class name only: a database error's text repeats the row's
-            # parameters, the user id among them.
-            logger.error(
-                "Batch assign failed at user %d of %d in experiment %s (%s)",
-                index + 1,
-                total,
-                experiment_id,
-                type(e).__name__,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=failure_detail(BATCH_FAILURE_SENTENCE),
-            )
+            if reason in BatchAssignmentCounts.model_fields:
+                setattr(counts, reason, getattr(counts, reason) + 1)
 
-        variant_id = str(data.get("variant_id"))
-        if variant_id not in variants:
-            logger.error(
-                "Batch assign failed at user %d of %d in experiment %s "
-                "(assigned variant not in the experiment)",
-                index + 1,
-                total,
-                experiment_id,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=failure_detail(BATCH_FAILURE_SENTENCE),
-            )
-        assigned = bool(data.get("assigned", True))
-        reason = str(data.get("reason") or "assigned")
-        record_experiment_assignment(
-            experiment_id=experiment_id,
-            variant_id=variant_id if assigned else reason,
+        return AssignmentBatchResponse(
+            experiment_key=request.experiment_key,
+            variants=variants,
+            assignments=assignments,
+            counts=counts,
         )
-        assignments.append(
-            BatchAssignment(
-                user_id=user.user_id,
-                variant_id=variant_id,
-                assigned=assigned,
-                reason=reason,
-            )
-        )
-        if reason in BatchAssignmentCounts.model_fields:
-            setattr(counts, reason, getattr(counts, reason) + 1)
-
-    return AssignmentBatchResponse(
-        experiment_key=request.experiment_key,
-        variants=variants,
-        assignments=assignments,
-        counts=counts,
-    )
+    finally:
+        db.close()
 
 
 @router.post(

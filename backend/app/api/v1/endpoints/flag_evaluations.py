@@ -16,10 +16,12 @@ prefix, so it shares the SDK rate limit.
 
 from datetime import datetime, timedelta, timezone
 from typing import List, Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
 from backend.app.api.sdk_scope import require_sdk_ruleset_key
@@ -118,7 +120,7 @@ class FlagEvaluationReportResponse(BaseModel):
     response_description="How many evaluations were recorded, and any not recorded",
     openapi_extra={"x-stability": "beta"},
 )
-def report_flag_evaluations(
+async def report_flag_evaluations(
     report: FlagEvaluationReport = Body(...),
     db: Session = Depends(deps.get_db),
     api_key: APIKey = Depends(require_sdk_ruleset_key),
@@ -143,23 +145,35 @@ def report_flag_evaluations(
         HTTPException 403: If the API key does not have the ``sdk:ruleset`` scope
         HTTPException 422: If the report is malformed
     """
-    received_at = datetime.utcnow()
-    result = record_local_evaluations(
-        db,
-        api_key.id,
-        (
-            EvaluationReport(
-                flag_key=entry.flag_key,
-                count=entry.count,
-                enabled_count=entry.enabled_count,
-                window_start=_naive_utc(entry.window_start),
-                window_end=_naive_utc(entry.window_end),
-            )
-            for entry in report.evaluations
-        ),
-        received_at=received_at,
-    )
-    return FlagEvaluationReportResponse(
-        accepted=result.accepted,
-        errors=[FlagEvaluationError(**error) for error in result.errors],
-    )
+    api_key_id = api_key.id
+    db.close()
+    return await run_in_threadpool(_record_flag_evaluations, report, db, api_key_id)
+
+
+def _record_flag_evaluations(
+    report: FlagEvaluationReport, db: Session, api_key_id: UUID
+) -> FlagEvaluationReportResponse:
+    """Record *report* for the key *api_key_id* on *db*; closes *db*."""
+    try:
+        received_at = datetime.utcnow()
+        result = record_local_evaluations(
+            db,
+            api_key_id,
+            (
+                EvaluationReport(
+                    flag_key=entry.flag_key,
+                    count=entry.count,
+                    enabled_count=entry.enabled_count,
+                    window_start=_naive_utc(entry.window_start),
+                    window_end=_naive_utc(entry.window_end),
+                )
+                for entry in report.evaluations
+            ),
+            received_at=received_at,
+        )
+        return FlagEvaluationReportResponse(
+            accepted=result.accepted,
+            errors=[FlagEvaluationError(**error) for error in result.errors],
+        )
+    finally:
+        db.close()
