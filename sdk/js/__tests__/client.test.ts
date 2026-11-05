@@ -531,12 +531,21 @@ describe('evaluateFlag', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('throws ExperimentationError with status 404 when the flag is not ACTIVE', async () => {
+  it('throws ExperimentationError with status 404 when no flag has the key', async () => {
     mockFetch({ detail: 'not found' }, 404);
     const client = new ExperimentationClient(baseConfig);
     const error = await captureError(client.evaluateFlag('my-flag', user));
     expect(error.status).toBe(404);
     expect(error.body).toEqual({ detail: 'not found' });
+  });
+
+  it('never caches a 404 — a key created after the miss is served by the next call', async () => {
+    const fetchMock = mockFetchSequence({ status: 404, body: { detail: 'not found' } }, { body: flagOn });
+    const client = new ExperimentationClient(baseConfig);
+    const error = await captureError(client.evaluateFlag('my-flag', user));
+    expect(error.status).toBe(404);
+    await expect(client.evaluateFlag('my-flag', user)).resolves.toMatchObject({ enabled: true });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('never caches a failure — the next call re-fetches', async () => {

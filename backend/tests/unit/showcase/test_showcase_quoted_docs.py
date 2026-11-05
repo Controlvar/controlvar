@@ -11,6 +11,11 @@ says has a row of ``CLAIMS`` (QA 2a): what the video draws while it is said,
 checked against the storyboard (its caption, a test id its beat names, or the
 product's fixed copy in frontend/src), and the pages that state it, read from
 this tree (by their words, never by line number). No sentence of it says "API".
+
+Video 10 (#1512) has the same: every sentence it says has a row of
+``CLAIMS_10``, and its card's note says what docs/sdk/go.md says about
+installing the Go SDK. Its other checks are in test_showcase_flag_values.py;
+these are here because they read docs/, so they run on a docs-only change too.
 """
 
 from __future__ import annotations
@@ -629,3 +634,314 @@ def test_saying_the_old_api_line_is_refused():
     assert api_said(storyboard.parse(raw)) == [
         "scene design says 'Guided setup ends here: you do the rest through the API.'"
     ]
+
+
+# ---------------------------------------------------------------------------
+# Video 10: CLAIMS_10, and the card's note
+# ---------------------------------------------------------------------------
+
+VALUES_SLUG = "10-serve-a-value"
+CREATE = "docs/feature-flags/create.md"
+GO = "docs/sdk/go.md"
+FLAG_VALUES = "utils/flagValues.ts"
+NEW_FLAG = "pages/feature-flags/new.tsx"
+F = "flag"
+
+CLAIMS_10: Dict[str, Claim] = {
+    "A flag can serve a value instead of on or off.": Claim(
+        F,
+        1,
+        (Drawn("testid", "new-flag-btn"), Drawn("cue", "A flag can serve a value")),
+        (
+            (CREATE, "### Optional: serve a value instead of on or off"),
+            (
+                CREATE,
+                "Choose **String**, **Number** or **JSON** to serve a value instead",
+            ),
+        ),
+    ),
+    "Choose New Flag.": Claim(
+        F,
+        1,
+        (Drawn("testid", "new-flag-btn"),),
+        ((CREATE, "then click **+ New Flag**"),),
+    ),
+    "Name it, and the key your code uses fills itself in.": Claim(
+        F,
+        2,
+        (Drawn("testid", "flag-name-input"), Drawn("testid", "flag-key-input")),
+        (
+            (
+                CREATE,
+                "The identifier your code passes to the SDK. It's filled in from the name",
+            ),
+        ),
+    ),
+    "You can change it: here, to the key the docs use.": Claim(
+        F,
+        2,
+        (Drawn("testid", "flag-key-input"), Drawn("cue", "you can change it")),
+        (
+            (
+                CREATE,
+                "and you can edit it. Use lowercase letters, digits, `-` and `_`.",
+            ),
+            (GO, 'client.EvaluateFlag(ctx, "checkout-button-label", user)'),
+        ),
+    ),
+    "Choose its type: a string, a number, or JSON.": Claim(
+        F,
+        3,
+        (
+            Drawn("testid", "flag-value-type-choice"),
+            Drawn("copy", "['boolean', 'string', 'number', 'json']", FLAG_VALUES),
+        ),
+        (
+            (
+                CREATE,
+                "Choose **String**, **Number** or **JSON** to serve a value instead",
+            ),
+        ),
+    ),
+    "Here, a string: the checkout button label.": Claim(
+        F,
+        3,
+        (
+            Drawn("cue", "String"),
+            Drawn("copy", "string: 'Text, such as a button label.',", FLAG_VALUES),
+        ),
+        ((GO, '"checkout-button-label", user) // a string flag'),),
+    ),
+    "Users it's on for get the on value: Complete purchase.": Claim(
+        F,
+        4,
+        (
+            Drawn("testid", "flag-value-fields"),
+            Drawn("copy", "on_value: 'On value',", FLAG_VALUES),
+            Drawn(
+                "copy",
+                "'What users the flag is on for get: users who match",
+                FLAG_VALUES,
+            ),
+        ),
+        (
+            (
+                CREATE,
+                "| **On value** | What users the flag is on for get: users who match a"
+                " targeting rule, and the rollout percentage of everyone else. |",
+            ),
+        ),
+    ),
+    "Everyone else gets the off value: Buy now.": Claim(
+        F,
+        4,
+        (
+            Drawn("testid", "flag-value-fields"),
+            Drawn("copy", "off_value: 'Off value',", FLAG_VALUES),
+            Drawn(
+                "copy",
+                "off_value: 'What everyone else gets, and what everyone gets while the"
+                " flag is off.',",
+                FLAG_VALUES,
+            ),
+        ),
+        (
+            (
+                CREATE,
+                "| **Off value** | What everyone else gets, and what everyone gets while"
+                " the flag is off. |",
+            ),
+        ),
+    ),
+    "Add a rule: users on the pro plan get the on value.": Claim(
+        F,
+        5,
+        (
+            Drawn("testid", "add-group"),
+            Drawn("testid", "condition-attribute"),
+            Drawn("testid", "condition-value"),
+        ),
+        (
+            (CREATE, "If a user matches a rule, the flag is on for them."),
+            (CREATE, "users who match a targeting rule"),
+        ),
+    ),
+    "With the rollout at 0%, no one else gets the on value.": Claim(
+        F,
+        6,
+        (
+            Drawn("testid", "rollout-value-hint"),
+            Drawn("cue", "Rollout at 0%"),
+            Drawn(
+                "copy",
+                "'The share of users who match no targeting rule that get the on value."
+                " Everyone else gets the off value.'",
+                FLAG_VALUES,
+            ),
+            Drawn(
+                "copy",
+                "const [rolloutPercentage, setRolloutPercentage] = useState(0);",
+                NEW_FLAG,
+            ),
+        ),
+        ((CREATE, "| `0%` | Only users who match a targeting rule get the flag |"),),
+    ),
+    "Choose Create Feature Flag.": Claim(
+        F,
+        6,
+        (
+            Drawn("testid", "submit-flag"),
+            Drawn(
+                "copy",
+                "{isSubmitting ? 'Creating...' : 'Create Feature Flag'}",
+                NEW_FLAG,
+            ),
+        ),
+        ((CREATE, "Click **Create Feature Flag**."),),
+    ),
+    "It's created switched off, so everyone gets the off value.": Claim(
+        F,
+        7,
+        (
+            Drawn("cue", "everyone gets the off value"),
+            Drawn(
+                "copy",
+                "VALUE_FLAG_STATUS_OFF = 'Everyone gets the off value';",
+                FLAG_VALUES,
+            ),
+            Drawn("copy", "is_active: false,", NEW_FLAG),
+        ),
+        (
+            (
+                CREATE,
+                "A new flag starts off, so everyone gets its off value until you turn it on.",
+            ),
+            (CREATE, "reads *Everyone gets the off value* while it is off"),
+        ),
+    ),
+    "Switch it on: rules and rollout decide who gets the on value.": Claim(
+        F,
+        8,
+        (
+            Drawn("testid", "flag-toggle"),
+            Drawn(
+                "copy",
+                "VALUE_FLAG_STATUS_ON = 'Rules and rollout decide who gets the on value';",
+                FLAG_VALUES,
+            ),
+        ),
+        ((CREATE, "*Rules and rollout decide who gets the on value* while it is on"),),
+    ),
+    "In your app, the Go SDK reads the value for each user.": Claim(
+        "sdk",
+        1,
+        (Drawn("cue", "Your app reads the value"),),
+        (
+            (GO, "`EvalResult.Value` is what the flag serves this user"),
+            (GO, "Read the value with the method for its type:"),
+        ),
+    ),
+    "Without an answer, it returns the default you give it.": Claim(
+        "sdk",
+        1,
+        (Drawn("cue", "with a default"),),
+        (
+            (GO, "`StringValue` and `NumberValue` return your default"),
+            (GO, "a nil result, a failed evaluation"),
+            (
+                GO,
+                "Against a server that sends no `value`, `StringValue` returns your default.",
+            ),
+        ),
+    ),
+}
+
+
+def values_board() -> storyboard.Storyboard:
+    return storyboard.load(STORYBOARDS / config.VIDEOS[VALUES_SLUG])
+
+
+def values_raw():
+    return yaml.safe_load(
+        (STORYBOARDS / config.VIDEOS[VALUES_SLUG]).read_text(encoding="utf-8")
+    )
+
+
+def test_every_sentence_of_video_10_has_its_claims_row_and_it_holds():
+    made = values_board()
+    sentences = [text for _s, _b, _l, text in storyboard.narration_lines(made)]
+    assert len(CLAIMS_10) == len(sentences) == 15
+    assert sorted(CLAIMS_10) == sorted(sentences)
+    assert claims_problems(made, CLAIMS_10) == []
+
+
+def test_a_video_10_sentence_with_no_claims_row_is_refused():
+    raw = values_raw()
+    raw["scenes"][0]["beats"][5]["say"][0] = (
+        "With the rollout at 0%, nobody else gets it."
+    )
+    assert claims_problems(storyboard.parse(raw), CLAIMS_10) == [
+        "scene flag beat 6 says 'With the rollout at 0%, nobody else gets it.', which"
+        " has no CLAIMS row",
+        "scene flag beat 6 does not say 'With the rollout at 0%, no one else gets the on"
+        " value.'",
+    ]
+
+
+def test_a_video_10_claim_whose_drawing_is_gone_is_refused():
+    raw = values_raw()
+    raw["scenes"][0]["beats"][5]["steps"] = [{"look": {"testid": "rollout-percentage"}}]
+    assert claims_problems(storyboard.parse(raw), CLAIMS_10) == [
+        "scene flag beat 6 does not draw testid 'rollout-value-hint' while it says"
+        " 'With the rollout at 0%, no one else gets the on value.'"
+    ]
+
+
+def test_a_video_10_claim_whose_page_no_longer_says_it_is_refused():
+    def changed(relative: str) -> str:
+        text = read_page(relative)
+        if relative == GO:
+            return text.replace("return your default", "panic")
+        return text
+
+    assert claims_problems(values_board(), CLAIMS_10, read=changed) == [
+        f"{GO} no longer says '`StringValue` and `NumberValue` return your default'"
+        " ('Without an answer, it returns the default you give it.')"
+    ]
+
+
+def test_a_video_10_claim_whose_product_copy_is_gone_is_refused():
+    def changed(relative: str) -> str:
+        text = read_page(relative)
+        if relative == f"frontend/src/{FLAG_VALUES}":
+            return text.replace("'Everyone gets the off value'", "'Off for everyone'")
+        return text
+
+    assert claims_problems(values_board(), CLAIMS_10, read=changed) == [
+        "scene flag beat 7 does not draw copy \"VALUE_FLAG_STATUS_OFF = 'Everyone gets"
+        " the off value';\" while it says \"It's created switched off, so everyone gets"
+        ' the off value."'
+    ]
+
+
+#: What the card's note says about installing, and the words of go.md it rests on.
+GO_INSTALL = (
+    "no tagged release",
+    "The module has no tagged release yet, so `go get` resolves the head of the"
+    " `main` branch",
+)
+
+
+def test_video_10s_card_note_says_what_go_md_says_about_installing():
+    card = values_board().scenes[1].card
+    assert card.code.doc == GO
+    assert GO_INSTALL[0] in card.note
+    assert squeezed(GO_INSTALL[1]) in squeezed(read_page(GO))
+
+
+def test_a_tagged_go_release_makes_the_note_false():
+    """The plant: go.md says the module is tagged; the note no longer holds."""
+    page = read_page(GO).replace(
+        "The module has no tagged release yet", "The module is tagged"
+    )
+    assert squeezed(GO_INSTALL[1]) not in squeezed(page)

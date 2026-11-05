@@ -16998,7 +16998,7 @@
         "type": "object"
       },
       "VarianceReductionConfig": {
-        "description": "Configuration for variance reduction on an experiment.\n\nThis config is stored as JSONB in the experiments table and controls\nwhich variance-reduction method is applied when computing results.\n\nAttributes:\n    method: Which variance-reduction method to use.\n    covariate_metric_id: ID of one of the experiment's metrics whose event is\n        the history read as the covariate (CUPED and CUPED_PLUS only). Not\n        required: without it, each metric's own event before the user's\n        assignment is the history.\n    covariate_lookback_days: Number of days of pre-experiment data to use\n        when building the covariate (1–90, default 7).\n    winsorization_percentile: Upper percentile for Winsorization clipping\n        (50–100, default 99.0).",
+        "description": "Configuration for variance reduction on an experiment.\n\nThis config is stored as JSONB in the experiments table. Only the CUPED\nresults view reads it; ``winsorization`` is accepted and stored but\napplied by no results view.\n\nAttributes:\n    method: Which variance-reduction method to use.\n    covariate_metric_id: ID of one of the experiment's metrics whose event is\n        the history read as the covariate (CUPED and CUPED_PLUS only). Not\n        required: without it, each metric's own event before the user's\n        assignment is the history.\n    covariate_lookback_days: Number of days of pre-experiment data to use\n        when building the covariate (1–90, default 7).\n    winsorization_percentile: Upper percentile reserved for Winsorization\n        (50–100, default 99.0). Stored and validated; applied by no\n        results view.",
         "properties": {
           "covariate_lookback_days": {
             "default": 7,
@@ -17027,7 +17027,7 @@
           },
           "winsorization_percentile": {
             "default": 99,
-            "description": "Upper percentile threshold for Winsorization (50–100). Values above this percentile are clipped to the threshold value.",
+            "description": "Upper percentile reserved for Winsorization (50–100). Stored and validated, but applied by no results view: a metric's numbers are the same whatever this is.",
             "maximum": 100,
             "minimum": 50,
             "title": "Winsorization Percentile",
@@ -18748,7 +18748,7 @@
   "info": {
     "description": "API for managing experiments and feature flags in test environment",
     "title": "Controlvar",
-    "version": "0.42.0"
+    "version": "0.43.2"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -31009,7 +31009,7 @@
     },
     "/api/v1/results/{experiment_id}/cuped": {
       "get": {
-        "description": "Get CUPED variance-reduced results for an experiment (#21, #217).\n\nFor each conversion metric and each treatment, the effect against the\ncontrol adjusted for each user's own events in the\n``covariate_lookback_days`` before their assignment.  History counts only\nif the server received it before the user was assigned.  Intervals use\nthe experiment's stored ``confidence_level`` and ``corrected_p_value`` its\n``correction_method``.  A comparison that cannot be computed is listed\nwith ``unavailable_reason``.\n\nThe method is read from the experiment's ``variance_reduction_config``:\n\n- ``none``          — No adjustment: the unadjusted effect, θ exactly 0.\n- ``cuped``         — CUPED adjustment.\n- ``cuped_plus``    — Computed as ``cuped`` (each row's ``method`` says so).\n- ``winsorization`` — Clipping, for mean metrics.\n\nReturns 404 if the experiment does not exist.",
+        "description": "Get CUPED variance-reduced results for an experiment (#21, #217).\n\nFor each conversion metric and each treatment, the effect against the\ncontrol adjusted for each user's own events in the\n``covariate_lookback_days`` before their assignment.  History counts only\nif the server received it before the user was assigned.  Intervals use\nthe experiment's stored ``confidence_level`` and ``corrected_p_value`` its\n``correction_method``.  A comparison that cannot be computed is listed\nwith ``unavailable_reason``.\n\nThe method is read from the experiment's ``variance_reduction_config``:\n\n- ``none``          — No adjustment: the unadjusted effect, θ exactly 0.\n- ``cuped``         — CUPED adjustment.\n- ``cuped_plus``    — Computed as ``cuped`` (each row's ``method`` says so).\n- ``winsorization`` — Accepted and stored, applied by no results view (a\n  conversion metric is listed with ``unavailable_reason``).\n\nReturns 404 if the experiment does not exist.",
         "operationId": "get_cuped_results_api_v1_results__experiment_id__cuped_get",
         "parameters": [
           {
@@ -32639,7 +32639,7 @@
     },
     "/api/v1/scheduler/{name}/history": {
       "get": {
-        "description": "Return the most recent run records for a named scheduler.\n\nDefault limit is 20; pass ``?limit=N`` to override.",
+        "description": "Return the most recent run records for a named scheduler.\n\nDefault limit is 20; pass ``?limit=N`` (1 to 1000) to override.",
         "operationId": "get_run_history_api_v1_scheduler__name__history_get",
         "parameters": [
           {
@@ -32656,6 +32656,8 @@
             "required": false,
             "schema": {
               "default": 20,
+              "maximum": 1000,
+              "minimum": 1,
               "title": "Limit",
               "type": "integer"
             }

@@ -10,7 +10,7 @@
  *  - an ADMIN or DEVELOPER who is not a superuser is turned away from both.
  */
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import UsersPage from '@/pages/admin/users';
 import ApiKeysPage from '@/pages/admin/api-keys';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
@@ -118,6 +118,85 @@ function renderPage(Page: React.ComponentType) {
     </AuthProvider>,
   );
 }
+
+// The key the mocked POST returns (a fake value).
+const PLAIN_KEY = 'eptk_' + '1'.repeat(32);
+
+async function createKeyThroughDialog() {
+  fireEvent.click(await screen.findByTestId('create-api-key-button'));
+  fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'flag-guide' } });
+  fireEvent.click(screen.getByTestId('create-api-key-submit'));
+  await screen.findByTestId('new-key-banner');
+}
+
+describe('the API keys dialog on /admin/api-keys', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('never puts the key in the live region, whether created, copied or dismissed', async () => {
+    renderPage(ApiKeysPage);
+    await screen.findByTestId('new-key-live-region');
+    const region = () => screen.getByTestId('new-key-live-region');
+    const noKey = () => {
+      expect(region().textContent ?? '').not.toContain(PLAIN_KEY);
+      expect(region().textContent ?? '').not.toContain(PLAIN_KEY.slice(0, 8));
+    };
+    expect(region()).toHaveAttribute('aria-live', 'polite');
+    noKey();
+
+    await createKeyThroughDialog();
+    // The key is on screen, and the region says only that one was created.
+    expect(screen.getByTestId('new-key-value')).toHaveTextContent(PLAIN_KEY);
+    expect(region()).toHaveTextContent('Key created');
+    noKey();
+
+    fireEvent.click(screen.getByTestId('copy-new-key'));
+    await waitFor(() => expect(region()).toHaveTextContent('Key copied'));
+    noKey();
+
+    fireEvent.click(screen.getByTestId('dismiss-key-banner'));
+    expect(region().textContent).toBe('');
+    noKey();
+  });
+
+  it('does not announce "Key created" again when the copied state wears off', async () => {
+    renderPage(ApiKeysPage);
+    await createKeyThroughDialog();
+    jest.useFakeTimers();
+    fireEvent.click(screen.getByTestId('copy-new-key'));
+    await act(async () => {});
+    expect(screen.getByTestId('new-key-live-region')).toHaveTextContent('Key copied');
+
+    act(() => {
+      jest.advanceTimersByTime(2500);
+    });
+    expect(screen.getByTestId('copy-new-key')).toHaveTextContent('Copy');
+    expect(screen.getByTestId('new-key-live-region').textContent).toBe('');
+  });
+
+  it('opens a fresh dialog the second time, with focus inside it and Escape working', async () => {
+    renderPage(ApiKeysPage);
+    await createKeyThroughDialog();
+    fireEvent.click(screen.getByTestId('dismiss-key-banner'));
+
+    const opener = screen.getByTestId('create-api-key-button');
+    opener.focus();
+    fireEvent.click(opener);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Create API Key' });
+    expect(screen.getByTestId('api-key-name-input')).toHaveValue('');
+    expect(screen.queryByTestId('masked-key-value')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('modal-done-button')).not.toBeInTheDocument();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    // Nothing of the earlier key is anywhere in the page.
+    expect(document.body.textContent ?? '').not.toContain(PLAIN_KEY.slice(0, 8));
+
+    fireEvent.keyDown(document.activeElement as Element, { key: 'Escape' });
+    expect(screen.queryByTestId('create-api-key-modal')).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+  });
+});
 
 describe('the admin area', () => {
   it('names Users and API Keys in its sidebar', () => {

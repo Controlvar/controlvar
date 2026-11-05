@@ -19,6 +19,8 @@ with the advisory `at_risk`, which is not evidence that there is no effect.
 
 The `always_valid_p_value` can be interpreted like a standard p-value at any point without inflating Type I error.
 
+Each call answers from the counts at that look only, so the p-value, the interval and the recommended action are not remembered between looks and can move back: a later look can show a larger p-value, an interval that includes 0 again and `continue` after `stop_for_effect`.
+
 `lambda_ratio` is computed in log space and capped at the largest finite double
 (about 1.8 × 10³⁰⁸), so an overwhelming difference, such as 10% against 11% with
 ten million users per arm, still reports a finite number and can stop.

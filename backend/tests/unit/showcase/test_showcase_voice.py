@@ -984,11 +984,16 @@ def test_the_parser_refuses_a_missing_summary_or_label(text, reason):
 
 def test_the_gain_and_the_precheck_are_the_plans():
     assert contract.DEFAULT_VOICE_GAIN_DB == 4.5
-    # Video 9 alone takes another gain: its new clips measure louder. 3.7 dB
-    # since its dashboard clips rendered at -19.33 at 3.5 (the EM's ruling).
-    assert contract.VOICE_GAIN_DB_BY_VIDEO == {"09-design-in-depth": 3.7}
+    # Videos 9 and 10 take another gain: their new clips measure louder. Video 9
+    # takes 3.7 dB since its dashboard clips rendered at -19.33 at 3.5.
+    assert contract.VOICE_GAIN_DB_BY_VIDEO == {
+        "09-design-in-depth": 3.7,
+        "10-serve-a-value": 3.8,
+    }
     gains = {slug: contract.voice_gain_db(slug) for slug in config.VIDEOS}
     assert gains.pop("09-design-in-depth") == 3.7
+    assert gains.pop("10-serve-a-value") == 3.8
+    # Every other video takes the default: six at 4.5 dB.
     assert len(gains) == 6 and set(gains.values()) == {4.5}, gains
     assert contract.PRECHECK_PEAK_DBTP == -1.3
     assert (contract.LOUDNESS_TARGET_LUFS, contract.PRECHECK_LOUDNESS_LU) == (
@@ -1038,6 +1043,45 @@ def test_video_9s_measured_clips_pass_g10_at_its_gain_and_not_at_the_default():
     refused = contract.loudness_problems(V9_CLIPS, contract.DEFAULT_VOICE_GAIN_DB)
     assert [f"[voice] REFUSED {V9}: {problem}" for problem in refused] == [
         V9_REFUSED_AT_4_5
+    ]
+
+
+V10 = "10-serve-a-value"
+#: Video 10's 15 clips as the voice step measured them (2026-11-05):
+#: (where, integrated LUFS, true peak dBTP). Three were cached; the rest new.
+V10_CLIPS = [
+    ("flag beat 1 line 1", -22.4, -6.9),
+    ("flag beat 1 line 2", -23.1, -9.2),
+    ("flag beat 2 line 1", -23.9, -8.5),
+    ("flag beat 2 line 2", -23.4, -8.0),
+    ("flag beat 3 line 1", -23.2, -6.5),
+    ("flag beat 3 line 2", -23.7, -6.5),
+    ("flag beat 4 line 1", -22.4, -7.0),
+    ("flag beat 4 line 2", -22.0, -7.1),
+    ("flag beat 5 line 1", -21.9, -6.8),
+    ("flag beat 6 line 1", -22.4, -7.4),
+    ("flag beat 6 line 2", -23.2, -9.1),
+    ("flag beat 7 line 1", -22.0, -7.0),
+    ("flag beat 8 line 1", -22.6, -8.2),
+    ("sdk beat 1 line 1", -22.4, -6.8),
+    ("sdk beat 1 line 2", -23.1, -8.9),
+]
+#: That run's refusal, word for word.
+V10_REFUSED_AT_4_5 = (
+    "[voice] REFUSED 10-serve-a-value: the clips' mean loudness -22.8 LUFS is"
+    " -18.3 LUFS with the 4.5 dB gain; the target is -19 +-0.7"
+)
+
+
+@pytest.mark.regression
+def test_video_10s_measured_clips_pass_g10_at_its_gain_and_not_at_the_default():
+    """The voice step refused video 10's measured clips at 4.5 dB; at its own
+    gain the same 15 readings pass."""
+    assert len(V10_CLIPS) == 15
+    assert contract.loudness_problems(V10_CLIPS, contract.voice_gain_db(V10)) == []
+    refused = contract.loudness_problems(V10_CLIPS, contract.DEFAULT_VOICE_GAIN_DB)
+    assert [f"[voice] REFUSED {V10}: {problem}" for problem in refused] == [
+        V10_REFUSED_AT_4_5
     ]
 
 

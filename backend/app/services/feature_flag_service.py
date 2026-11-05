@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from uuid import UUID
 
 from pydantic_core import PydanticCustomError
-from sqlalchemy import func
+from sqlalchemy import delete, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -40,6 +40,7 @@ from backend.app.models.feature_flag import (
     FeatureFlagStatus,
     flag_status_name,
 )
+from backend.app.models.metrics.metric import AggregatedMetric, ErrorLog, RawMetric
 from backend.app.schemas.feature_flag import (
     READ_ONLY_FIELDS,
     FeatureFlagCreate,
@@ -409,6 +410,15 @@ class FeatureFlagService:
         """
         flag_id = str(flag.id)
         flag_name = flag.name
+
+        # The flag's metrics and error logs go with it, one DELETE per table
+        # in the same transaction as the flag. Error logs are removed here
+        # (their foreign key is SET NULL, which would keep them untagged).
+        for model in (RawMetric, AggregatedMetric, ErrorLog):
+            self.db.execute(
+                delete(model).where(model.feature_flag_id == flag.id),
+                execution_options={"synchronize_session": False},
+            )
 
         self.db.delete(flag)
         self.db.commit()

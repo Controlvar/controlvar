@@ -6,7 +6,8 @@ ledger (``ledger``, the JSON Lines format other tools parse too); the written
 event contract turns the ledger into the exact counts and per-user values the
 results must show (``contract``); and an independent reference computes the
 statistics from those values (``reference``). ``hashing`` is the assignment
-hash, re-implemented.
+hash, re-implemented, and ``targeting`` is who a targeted flag serves, written
+from the docs.
 
 Every module here imports only the standard library, scipy and statsmodels:
 never ``backend``, ``modules``, an HTTP library or the docs runner, so a defect

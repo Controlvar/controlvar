@@ -247,8 +247,9 @@ by = [
 ]
 
 [[unit]]
-text = "winsorization_percentile | float | 99.0 | The percentile above which values are clipped, 50–100"
+text = "winsorization_percentile | float | 99.0 | Reserved: stored and validated (50–100), but no results view clips values with it. A mean metric's numbers are the unclipped ones"
 by = [
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_winsorization_in_the_stored_config_changes_no_number",
     "test:backend/tests/unit/schemas/test_variance_reduction_schemas.py::TestVarianceReductionConfig::test_default_winsorization_percentile",
     "test:backend/tests/unit/schemas/test_variance_reduction_schemas.py::TestVarianceReductionConfig::test_winsorization_percentile_min_50",
     "test:backend/tests/unit/schemas/test_variance_reduction_schemas.py::TestVarianceReductionConfig::test_winsorization_percentile_max_100",
@@ -270,12 +271,19 @@ text = "cuped_plus is currently computed as cuped: the response's top-level meth
 by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_em6_cuped_plus_is_computed_as_cuped"]
 
 [[unit]]
-text = "winsorization clips values above a percentile, which only means something for a mean metric (revenue, say)."
-by = ["exempt:baseline"]
+text = "winsorization is accepted and stored, but nothing clips values: a revenue metric's /results numbers are the same as with none, a whale included."
+by = [
+    "test:backend/tests/integration/api/test_revenue_per_user_results.py::test_winsorization_in_the_stored_config_changes_no_number",
+    "test:backend/tests/integration/api/test_cuped_results_api.py::test_winsorization_on_a_revenue_metric_is_listed_as_not_a_proportion_metric",
+]
 
 [[unit]]
-text = "This view does not apply it: a conversion metric is listed with unavailable_reason: \"winsorization_needs_mean_metric\"."
+text = "A conversion metric is listed with unavailable_reason: \"winsorization_needs_mean_metric\"."
 by = ["test:backend/tests/integration/api/test_cuped_results_api.py::test_winsorization_on_a_conversion_metric_is_a_reason_not_zeroed"]
+
+[[unit]]
+text = "To limit a whale's effect today, cap or filter the value before you send the event."
+by = ["exempt:advice"]
 
 [[unit]]
 text = "This sets the demo experiment's method to cuped with a 7-day lookback:"

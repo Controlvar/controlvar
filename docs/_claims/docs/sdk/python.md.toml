@@ -481,6 +481,20 @@ by = [
 ]
 
 [[unit]]
+text = "From the next published version, track returns False, and sends nothing, when event_value or properties holds NaN or an infinite number."
+by = [
+    "test:sdk/python/tests/test_client.py::TestNaNAndInfinityAreNotSent::test_track_returns_false_and_sends_nothing",
+]
+
+[[unit]]
+text = "get_assignment raises ExperimentationError for the same in user_attributes, and get_variant returns the default for a user with no cached assignment (a cached assignment is returned as before)."
+by = [
+    "test:sdk/python/tests/test_client.py::TestNaNAndInfinityAreNotSent::test_get_variant_returns_the_default_and_sends_nothing",
+    "test:sdk/python/tests/test_client.py::TestNaNAndInfinityAreNotSent::test_get_assignment_raises_with_no_status_and_sends_nothing",
+    "test:sdk/python/tests/test_client.py::TestNaNAndInfinityAreNotSent::test_a_cached_assignment_is_returned_before_the_attributes_are_encoded",
+]
+
+[[unit]]
 text = "Event ids"
 by = ["exempt:label"]
 

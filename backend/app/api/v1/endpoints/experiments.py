@@ -26,6 +26,7 @@ from fastapi import (
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps, experiment_cache
 from backend.app.api.off_loop_route import OffLoopRoute
@@ -626,7 +627,8 @@ async def create_experiment(
         except Exception as _audit_err:
             db.rollback()
             logger.warning(
-                f"Compliance audit logging failed for experiment create: {_audit_err}"
+                "Compliance audit logging failed for experiment create (%s)",
+                type(_audit_err).__name__,
             )
 
         created_id = (
@@ -1047,7 +1049,8 @@ async def update_experiment(
         except Exception as _audit_err:
             db.rollback()
             logger.warning(
-                f"Compliance audit logging failed for experiment update: {_audit_err}"
+                "Compliance audit logging failed for experiment update (%s)",
+                type(_audit_err).__name__,
             )
 
         record_experiment_change(
@@ -1244,7 +1247,8 @@ async def delete_experiment(
     except Exception as _audit_err:
         db.rollback()
         logger.warning(
-            f"Compliance audit logging failed for experiment delete: {_audit_err}"
+            "Compliance audit logging failed for experiment delete (%s)",
+            type(_audit_err).__name__,
         )
 
     AuditService.record_after_commit(
@@ -1709,33 +1713,63 @@ async def get_experiment_results(
         HTTPException 403: If the caller's role does not hold READ on experiments
         HTTPException 404: If the experiment does not exist
     """
-    experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
-    if not experiment:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Experiment not found"
+    # The lookup, the 404 and DRAFT checks and the computation run in the
+    # thread pool, so a long computation does not hold up this process's other
+    # requests (#1738). The permission is decided here first, while the
+    # request's session can still load the caller: an API key's first use in a
+    # window commits, which expires its owner, and a role-less user's grants
+    # are read through the row's session. Once ``db`` is closed the row is
+    # detached and is not read again. What the check raised is re-raised after
+    # the lookup, so the order stays 404, 403, 400.
+    refusal: Optional[Exception] = None
+    try:
+        deps.get_experiment_read_access(None, current_user)
+    except Exception as exc:
+        refusal = exc
+    db.close()
+    return await run_in_threadpool(_experiment_results, experiment_id, refusal, db)
+
+
+def _experiment_results(
+    experiment_id: UUID, refusal: Optional[Exception], db: Session
+) -> ExperimentResultsResponse:
+    """The answer of ``GET /experiments/{experiment_id}/results``, read on *db*.
+
+    *refusal* is what the caller's permission check raised, or None. Closes
+    *db*.
+    """
+    try:
+        experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
+        if not experiment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Experiment not found"
+            )
+
+        if refusal is not None:
+            raise refusal
+
+        if experiment.status == ExperimentStatus.DRAFT:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot get results for experiments in DRAFT status",
+            )
+
+        # None, explicitly: the route function's own defaults are ``Query``
+        # objects, not values. None means the experiment's stored settings, so
+        # this goes through the same resolution, cache key, snapshot rule and
+        # labels as ``GET /results/{id}`` with no options (#580). The results
+        # route does not read ``current_user``; the caller was admitted above.
+        return results_endpoints.get_experiment_results(
+            experiment_id=experiment_id,
+            confidence_level=None,
+            correction_method=None,
+            use_cache=True,
+            breakdown=None,
+            db=db,
+            current_user=None,
         )
-
-    deps.get_experiment_read_access(experiment, current_user)
-
-    if experiment.status == ExperimentStatus.DRAFT:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot get results for experiments in DRAFT status",
-        )
-
-    # None, explicitly: the route function's own defaults are ``Query``
-    # objects, not values. None means the experiment's stored settings, so
-    # this goes through the same resolution, cache key, snapshot rule and
-    # labels as ``GET /results/{id}`` with no options (#580).
-    return results_endpoints.get_experiment_results(
-        experiment_id=experiment_id,
-        confidence_level=None,
-        correction_method=None,
-        use_cache=True,
-        breakdown=None,
-        db=db,
-        current_user=current_user,
-    )
+    finally:
+        db.close()
 
 
 # New endpoints
@@ -1962,22 +1996,16 @@ async def get_daily_experiment_results(
         HTTPException 403: If the caller's role does not hold READ on experiments
     """
     try:
-        # Get experiment
-        experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
-        if not experiment:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Experiment not found"
-            )
-
-        # Before the cache read: the role must hold READ on experiments
-        experiment = deps.get_experiment_read_access(experiment, current_user)
-
-        # Check if experiment has results
-        if experiment.status == ExperimentStatus.DRAFT:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot get results for experiments in DRAFT status",
-            )
+        # The lookup, the 404, 403 and DRAFT checks and the analysis run in the
+        # thread pool, so a long analysis does not hold up this process's other
+        # requests (#1762). The permission is decided here first, as in
+        # get_experiment_results, and raised after the lookup, so the order
+        # stays 404, 403, 400, and a refused caller never reaches the cache.
+        # The cache client is async, so the cache is read and written here,
+        # between the checks and the analysis.
+        refusal = _results_read_refusal(current_user)
+        db.close()
+        await run_in_threadpool(_admit_results_read, experiment_id, refusal, db)
 
         metric_part = f":{metric_id}" if metric_id else ""
         cache_key = f"experiment_daily_results:{experiment_id}{metric_part}"
@@ -1985,19 +2013,10 @@ async def get_daily_experiment_results(
         if cached_data:
             return json.loads(cached_data)
 
-        # Create analysis service
-        analysis_service = AnalysisService(db)
-
-        # Get daily results
         try:
-            if metric_id:
-                results = analysis_service.get_daily_results(
-                    experiment_id=experiment_id, metric_id=metric_id
-                )
-            else:
-                results = analysis_service.get_daily_results(
-                    experiment_id=experiment_id
-                )
+            results = await run_in_threadpool(
+                _daily_results, experiment_id, metric_id, db
+            )
         except ValueError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -2015,6 +2034,67 @@ async def get_daily_experiment_results(
             db=db,
             logger=logger,
         )
+
+
+def _results_read_refusal(current_user: User) -> Optional[Exception]:
+    """What the caller's permission check for the daily and segmented results
+    raises, or None when it admits them.
+
+    Called in the handler, before the request's session is closed: the check
+    may read the caller's grants through that session, and once it is closed
+    the user row is detached and is not read again. The value is raised by
+    :func:`_admit_results_read` after the lookup.
+    """
+    try:
+        deps.get_experiment_read_access(None, current_user)
+    except Exception as exc:
+        return exc
+    return None
+
+
+def _admit_results_read(
+    experiment_id: UUID, refusal: Optional[Exception], db: Session
+) -> None:
+    """The checks of the daily and segmented results routes, read on *db*.
+
+    404 for an unknown experiment, then *refusal* (see
+    :func:`_results_read_refusal`), then 400 for a draft. Closes *db*.
+    """
+    try:
+        experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
+        if not experiment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Experiment not found"
+            )
+
+        if refusal is not None:
+            raise refusal
+
+        if experiment.status == ExperimentStatus.DRAFT:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot get results for experiments in DRAFT status",
+            )
+    finally:
+        db.close()
+
+
+def _daily_results(
+    experiment_id: UUID, metric_id: Optional[UUID], db: Session
+) -> List[Dict[str, Any]]:
+    """The daily results of an admitted caller's request, read on *db*.
+
+    Closes *db*.
+    """
+    try:
+        analysis_service = AnalysisService(db)
+        if metric_id:
+            return analysis_service.get_daily_results(
+                experiment_id=experiment_id, metric_id=metric_id
+            )
+        return analysis_service.get_daily_results(experiment_id=experiment_id)
+    finally:
+        db.close()
 
 
 @router.get(
@@ -2055,22 +2135,11 @@ async def get_segmented_experiment_results(
         HTTPException 403: If the caller's role does not hold READ on experiments
     """
     try:
-        # Get experiment
-        experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
-        if not experiment:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Experiment not found"
-            )
-
-        # Before the cache read: the role must hold READ on experiments
-        experiment = deps.get_experiment_read_access(experiment, current_user)
-
-        # Check if experiment has results
-        if experiment.status == ExperimentStatus.DRAFT:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot get results for experiments in DRAFT status",
-            )
+        # As get_daily_experiment_results (#1762): the permission decided here,
+        # the checks and the analysis in the thread pool, the cache here.
+        refusal = _results_read_refusal(current_user)
+        db.close()
+        await run_in_threadpool(_admit_results_read, experiment_id, refusal, db)
 
         metric_part = f":{metric_id}" if metric_id else ""
         cache_key = (
@@ -2080,21 +2149,10 @@ async def get_segmented_experiment_results(
         if cached_data:
             return json.loads(cached_data)
 
-        # Create analysis service
-        analysis_service = AnalysisService(db)
-
-        # Get segmented results
         try:
-            if metric_id:
-                results = analysis_service.get_segmented_results(
-                    experiment_id=experiment_id,
-                    segment_by=segment_by,
-                    metric_id=metric_id,
-                )
-            else:
-                results = analysis_service.get_segmented_results(
-                    experiment_id=experiment_id, segment_by=segment_by
-                )
+            results = await run_in_threadpool(
+                _segmented_results, experiment_id, segment_by, metric_id, db
+            )
         except ValueError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -2112,6 +2170,28 @@ async def get_segmented_experiment_results(
             db=db,
             logger=logger,
         )
+
+
+def _segmented_results(
+    experiment_id: UUID, segment_by: str, metric_id: Optional[UUID], db: Session
+) -> Dict[str, Any]:
+    """The segmented results of an admitted caller's request, read on *db*.
+
+    Closes *db*.
+    """
+    try:
+        analysis_service = AnalysisService(db)
+        if metric_id:
+            return analysis_service.get_segmented_results(
+                experiment_id=experiment_id,
+                segment_by=segment_by,
+                metric_id=metric_id,
+            )
+        return analysis_service.get_segmented_results(
+            experiment_id=experiment_id, segment_by=segment_by
+        )
+    finally:
+        db.close()
 
 
 @router.post(

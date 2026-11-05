@@ -186,6 +186,11 @@ only, so call `clear_cache()` after changing a user's attributes.
 `datetime` (naive values are treated as UTC) or an ISO-8601 string. Conversions are matched to
 experiment metrics by **event name**.
 
+From the next published version, `track` returns `False`, and sends nothing, when `event_value`
+or `properties` holds NaN or an infinite number. `get_assignment` raises `ExperimentationError`
+for the same in `user_attributes`, and `get_variant` returns the default for a user with no
+cached assignment (a cached assignment is returned as before).
+
 ### Event ids
 
 `event_id` is your id for one event. The server stores an event sent again with the same

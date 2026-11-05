@@ -962,3 +962,33 @@ by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
+
+[[unit]]
+text = "GET /api/v1/scheduler/{name}/history | #1485 | limit accepts 1 to 1,000; 0, a negative value or a value above 1,000 answers 422 and the history is not read. The OpenAPI document changes: limit has a minimum of 1 and a maximum of 1,000, and the operation's description names the bounds."
+by = [
+    "test:backend/tests/unit/api/test_scheduler_health_endpoints.py::TestGetSchedulerHistory::test_rejects_limit_outside_bounds",
+    "test:backend/tests/unit/api/test_scheduler_health_endpoints.py::TestGetSchedulerHistory::test_accepts_limit_at_bounds",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "Every operation with a JSON request body (application/json in the snapshots); for the value range, POST /api/v1/tracking/track, POST /api/v1/tracking/batch, POST /api/v1/tracking/events | #1630 | A number in a JSON request body that is NaN, Infinity, -Infinity or too large for a double (such as 1e400) answers 422 with \"type\": \"finite_number\" at its place in the body, and nothing is written; it used to be accepted, and in some fields answered 500. It is answered before authentication, as a body that is not JSON already was. The form-encoded POST /api/v1/auth/token and POST /api/v1/auth/sso/saml/{config_id}/acs (full profile) are unchanged. An event value must be a finite number from -1e12 to 1e12, both included: /track answers 422 (Invalid event: value not valid), /events answers 422 at [\"body\", \"value\"], and /batch reports the entry in errors and stores the others. A non-finite number anywhere in a /batch body refuses the whole request and stores none of its events, while a value outside -1e12 to 1e12 fails only its own entry. Where a field already refused such a number (a flag's on_value and off_value, a rollout stage's duration, a power calculation's baseline_std), the 422 now carries finite_number at the number's place; the status does not change. Track Event gives a query that lists the events already stored with a value outside the range. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/smoke/test_every_json_body_route_refuses_non_finite.py::test_every_json_body_operation_refuses_a_non_finite_number",
+    "test:backend/tests/smoke/test_every_json_body_route_refuses_non_finite.py::test_the_form_operations_are_these",
+    "test:backend/tests/unit/api/test_non_finite_numbers_refused.py::test_a_non_finite_number_answers_422_at_its_place_and_nothing_is_stored",
+    "test:backend/tests/unit/api/test_non_finite_numbers_refused.py::test_a_check_before_authentication_answers_without_a_key",
+    "test:backend/tests/unit/api/test_non_finite_numbers_refused.py::test_the_token_route_reads_its_form_whatever_the_body",
+    "test:backend/tests/unit/api/test_non_finite_numbers_refused.py::test_the_saml_acs_reads_its_form_whatever_the_body",
+    "test:backend/tests/unit/api/test_non_finite_numbers_refused.py::test_one_non_finite_number_refuses_the_whole_batch",
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_track_refuses_a_value_beyond_the_bound",
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_events_refuses_a_value_beyond_the_bound_at_the_field",
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_batch_reports_the_entry_beyond_the_bound_and_stores_the_others",
+    "test:backend/tests/integration/api/test_tracking_non_finite_numbers.py::test_a_non_finite_number_in_metadata_answers_422_and_nothing_is_written",
+    "test:backend/tests/integration/api/test_tracking_non_finite_numbers.py::test_the_documented_query_finds_the_stored_values_outside_the_range",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_the_hostile_battery_is_422_on_create_never_500",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_the_hostile_battery_is_422_on_update_never_500",
+    "test:backend/tests/integration/api/test_rollout_stage_duration_api.py::test_bad_duration_is_422_on_all_three_write_paths",
+    "test:backend/tests/integration/api/test_power_calculator_api.py::TestOverflowAnswers422::test_infinite_baseline_std_answers_422",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]

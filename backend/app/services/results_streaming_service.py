@@ -4,9 +4,12 @@ Results Streaming Service for EP-058: Real-time WebSocket Streaming Results.
 Computes live experiment result snapshots for broadcasting to WebSocket subscribers.
 """
 
+import functools
 import logging
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
+
+from backend.app.core.scheduler_tick import run_in_worker
 
 logger = logging.getLogger(__name__)
 
@@ -51,15 +54,22 @@ class ResultsStreamingService:
 
         Returns a skeleton snapshot with 0 counts if the experiment is not found
         or if metrics data is unavailable.
+
+        The session is opened, queried and closed in a worker thread
+        (:meth:`_snapshot`); the event loop awaits the result. On the loop's
+        own thread the first query's checkout, when every connection is held
+        by a request waiting for the loop, would wait the whole pool timeout
+        and stop the API answering anything for that long -- and an open
+        results socket asks for a snapshot every
+        ``RESULTS_STREAM_INTERVAL_SECONDS``.
         """
         now_iso = datetime.now(timezone.utc).isoformat()
 
         try:
-            db = self._db_factory()
-            try:
-                return await self._compute_snapshot(experiment_id, db, now_iso)
-            finally:
-                db.close()
+            return await run_in_worker(
+                functools.partial(self._snapshot, experiment_id, now_iso),
+                label=f"results snapshot for experiment {experiment_id}",
+            )
         except Exception as exc:
             logger.warning(
                 "Failed to compute snapshot for experiment %s: %s",
@@ -68,9 +78,15 @@ class ResultsStreamingService:
             )
             return self._error_snapshot(experiment_id, now_iso, str(exc))
 
-    async def _compute_snapshot(
-        self, experiment_id: str, db: Any, now_iso: str
-    ) -> dict:
+    def _snapshot(self, experiment_id: str, now_iso: str) -> dict:
+        """Open a session, compute the snapshot, close the session; in a worker."""
+        db = self._db_factory()
+        try:
+            return self._compute_snapshot(experiment_id, db, now_iso)
+        finally:
+            db.close()
+
+    def _compute_snapshot(self, experiment_id: str, db: Any, now_iso: str) -> dict:
         """Internal method: queries DB and builds snapshot dict."""
         from sqlalchemy.orm import joinedload
 

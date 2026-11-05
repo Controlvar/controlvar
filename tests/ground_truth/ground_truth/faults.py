@@ -35,8 +35,9 @@ F6     variant mismatch     R8         ``other_arm + never_assigned`` counted
                                        counted (positive controls)
 F7     exposure loss        none       ``lost_users``
 F9     hostile payloads     none       ``per_class`` sends of each class
-F2     bots                 R5         ``huge_values`` (``bots`` and
-                                       ``events_per_bot``: the volume)
+F2     bots                 none (R0)  ``huge_values`` refused in their
+                                       ``/batch``'s ``errors``; the rest of
+                                       ``bots`` x ``events_per_bot`` stored
 F4     clock skew           none (R7)  ``future_users_per_arm``
 =====  ===================  =========  =============================================
 
@@ -1346,25 +1347,61 @@ VALUE_METRICS = ("revenue", "duration", "custom")
 #: The value of every bot event but the ones beyond the bound.
 BOT_VALUE = 1.0
 #: The values F2 plants beyond the bound, in turn. Finite (the ledger refuses
-#: NaN and infinity), of both signs (R5 bounds a value's size), and of two
-#: sizes no whole numbers of which cancel: ``a * 2e12 == b * (2e12 + 0.5)``
-#: only when ``b`` is a multiple of 4e12 (4e12 and 4e12 + 1 share no factor),
-#: so a variant's total without R5 moves wherever they land.
+#: NaN and infinity) and of both signs: the API refuses a value beyond 10^12
+#: in size either way, reporting its ``/batch`` entry in ``errors`` (#1630).
 BEYOND_BOUND = (2e12, -2000000000000.5)
 
 
-def _counted_only_without(
-    mine: contract.ExperimentExpected, theirs: contract.ExperimentExpected
-) -> int:
-    """The values counting events add in *theirs* and not in *mine*: per
-    user, the values of the one less those of the other, as multisets."""
-    found = 0
-    for key, entries in theirs.counting.items():
-        ours = mine.counting.get(key, {})
-        for user, (_, values) in entries.items():
-            kept = Counter(ours.get(user, (0, ()))[1])
-            found += sum((Counter(values) - kept).values())
-    return found
+def _beyond_bound(value: Any) -> bool:
+    """Whether the API refuses *value* as an event value: a number not finite
+    or beyond 10^12 in size."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    return not math.isfinite(value) or abs(value) > contract.VALUE_BOUND
+
+
+def _f2_answers(
+    records: Sequence[Mapping[str, Any]],
+) -> tuple[set[tuple[int, int]], set[tuple[int, int]], dict[tuple[int, int], Any]]:
+    """F2's bot events in the ledger, each as ``(seq, batch_index)``: those
+    its ``/batch`` refused (a 2xx with the position in ``errors``), those it
+    stored (a 2xx without), and each one's value."""
+    batches = {r["seq"]: r for r in records if r["kind"] == "batch" and "seq" in r}
+    refused: set[tuple[int, int]] = set()
+    stored: set[tuple[int, int]] = set()
+    values: dict[tuple[int, int], Any] = {}
+    for record in records:
+        if record["kind"] != "event" or "-f2-e" not in (record.get("event_id") or ""):
+            continue
+        if record.get("route") != "/batch" or record.get("seq") not in batches:
+            continue
+        batch = batches[record["seq"]]
+        if not 200 <= batch["status"] < 300:
+            continue
+        at = (record["seq"], record["batch_index"])
+        values[at] = record.get("value")
+        if record["batch_index"] in (batch["errors"] or ()):
+            refused.add(at)
+        else:
+            stored.add(at)
+    return refused, stored, values
+
+
+def _accepting(
+    records: Sequence[Mapping[str, Any]], positions: set[tuple[int, int]]
+) -> list[Mapping[str, Any]]:
+    """*records* as if each ``/batch`` had stored the entries at *positions*:
+    those positions taken out of its ``errors``."""
+    rewritten: list[Mapping[str, Any]] = []
+    for record in records:
+        if record["kind"] == "batch" and record.get("errors"):
+            kept = [
+                i for i in record["errors"] if (record.get("seq"), i) not in positions
+            ]
+            if len(kept) != len(record["errors"]):
+                record = {**record, "errors": kept}
+        rewritten.append(record)
+    return rewritten
 
 
 @dataclass(frozen=True)
@@ -1374,18 +1411,23 @@ class BotTraffic:
     assignment, each with its own ``event_id`` and a value: there is no bot
     filter, so every one counts. ``huge_values`` of those events, spread
     evenly over them, carry a value beyond 10^12 in size (``BEYOND_BOUND``,
-    in turn) instead of ``BOT_VALUE``: R5 adds none of them, and their user
-    still converts. The scenario needs a revenue, duration or custom metric
-    on its event, so a value R5 bounds moves a number the gates compare. The
-    volume, ``bots`` times ``events_per_bot``, is pinned on the plan
-    (``test_fault_library.py``); the sensitivity check reads
-    ``huge_values``."""
+    in turn) instead of ``BOT_VALUE``. The API refuses such a value (#1630):
+    each of those entries is reported in its ``/batch``'s ``errors`` and not
+    stored, and the other entries are stored, so each batch carrying one
+    expects exactly those positions (``item-errors:``). R0 then leaves them
+    out of the reference: they add no event, count or value. The scenario
+    needs a revenue, duration or custom metric on its event, which the bots'
+    values feed. The volume, ``bots`` times ``events_per_bot``, is pinned on
+    the plan (``test_fault_library.py``); the sensitivity check reads
+    ``huge_values`` refused, the rest of the volume stored, and that the
+    refusals move a number the gates compare."""
 
     bots: int = 20
     events_per_bot: int = 250
     huge_values: int = 20
     NAME = "F2"
-    RULE = "R5"
+    # R0 refuses the planted entries; no rule left out shows them.
+    RULE = None
 
     def __post_init__(self) -> None:
         _positive(
@@ -1415,8 +1457,8 @@ class BotTraffic:
             m.event_name == name and m.type in VALUE_METRICS for m in scenario.metrics
         ):
             raise ValueError(
-                f"F2 needs a revenue, duration or custom metric on {name!r}: without"
-                " one a value R5 bounds moves no number"
+                f"F2 needs a revenue, duration or custom metric on {name!r}: the"
+                " bots' values feed it"
             )
         bots = _spread(
             [
@@ -1446,19 +1488,46 @@ class BotTraffic:
             for n in range(volume)
         ]
         size = scenario.event_batch_size
-        batches = [
-            Op("batch", ledger.BATCH, {"events": c}) for c in _chunks(events, size)
-        ]
+        batches = []
+        for chunk in _chunks(events, size):
+            refused = [i for i, e in enumerate(chunk) if _beyond_bound(e["value"])]
+            expect = ITEM_ERRORS + ",".join(map(str, refused)) if refused else None
+            batches.append(Op("batch", ledger.BATCH, {"events": chunk}, expect))
         return replace(plan, ops=(*plan.ops, *batches)), frozenset(bots)
 
     def findings(self, plan, records, expected, without, hostile_sends) -> list[str]:
-        got = _counted_only_without(expected, without)
-        return _planted(
+        refused, stored, values = _f2_answers(records)
+        planted = {at for at in refused if _beyond_bound(values[at])}
+        found = _planted(
             self,
             self.huge_values,
-            got,
-            "values beyond the bound on counting events (counted only without R5)",
+            len(planted),
+            "values beyond the bound on bot events, each refused in its /batch's"
+            " errors",
         )
+        found += _planted(
+            self,
+            self.bots * self.events_per_bot - self.huge_values,
+            len({at for at in stored if not _beyond_bound(values[at])}),
+            "bot events within the bound, stored",
+        )
+        if len(planted) != len(refused) or any(
+            _beyond_bound(values[at]) for at in stored
+        ):
+            found.append(
+                "F2: the ledger shows a bot event refused within the bound or stored"
+                " beyond it"
+            )
+        if planted:
+            stored_anyway = contract.valid_events(_accepting(records, planted))
+            theirs = stored_anyway.experiments[plan.scenario.experiment_key]
+            if projection(expected, plan) == projection(theirs, plan):
+                found.append(
+                    "F2 moves no number the gates compare: had its refused entries"
+                    " been stored, the reference would have the same sample sizes,"
+                    " converting users, value totals and total events"
+                )
+        return found
 
 
 #: The order ``inject`` applies a fault and F4 in, whatever order they are
@@ -1640,7 +1709,9 @@ def combined_findings(
                                                            ``never_assigned``
     R8         ``/events`` events counted in a variant     F6 ``tagged_then_assigned``
                                                            + ``own_arm``
-    R5         values counted only without R5              F2 ``huge_values``
+    F2         bot entries beyond the bound refused in     F2 ``huge_values``; the rest
+               their ``/batch``'s ``errors``, the rest     of ``bots`` x
+               stored                                      ``events_per_bot``
     F7         users the scenario defines, never assigned  F7 ``lost_users`` (and the
                                                            sample-ratio p-value below
                                                            0.001)

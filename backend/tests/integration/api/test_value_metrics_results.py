@@ -21,6 +21,9 @@ another event's, one tagged with the control's variant from a user assigned
 to the treatment, an assigned user's stored with no variant, and an event of a
 type in ``EXPOSURE_EVENT_TYPES`` that carries the metric's event name.
 
+A value the tracking routes refuse since #1630 (not finite, or beyond 10^12 in
+size) is written by SQL, as events stored before then hold it.
+
 Rows created here are deleted in fixture teardown because the shared test
 database is not truncated between tests.
 """
@@ -137,6 +140,41 @@ def _track(client, exp, user_id, value=None, event="article_read", send_value=Fa
     )
     assert response.status_code in (200, 201), response.text
     return response
+
+
+def _counts_on_the_api(value) -> bool:
+    """Whether the tracking routes take *value*: none, or a finite number from
+    -1e12 to 1e12 (#1630)."""
+    return value is None or (math.isfinite(value) and abs(value) <= 1e12)
+
+
+def _stored_by_sql(db_session, exp, user_id, value, event="article_read"):
+    """An event as ``/track`` stored it, tagged with the user's variant,
+    written by SQL: the tracking routes refuse *value* now (#1630), and events
+    stored before that still hold such values."""
+    arm = user_id.rsplit("-", 2)[-2]
+    db_session.execute(
+        Event.__table__.insert().values(
+            id=uuid.uuid4(),
+            event_type=event,
+            event_name=event,
+            user_id=user_id,
+            experiment_id=exp.id,
+            variant_id={v.name: v.id for v in exp.variants}[arm],
+            value=value,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        )
+    )
+    db_session.commit()
+
+
+def _send(admin_client, db_session, exp, user_id, value, send_value=False):
+    """Through ``/track`` when it takes the value, by SQL otherwise."""
+    if _counts_on_the_api(value):
+        _track(admin_client, exp, user_id, value, send_value=send_value)
+    else:
+        _stored_by_sql(db_session, exp, user_id, value)
 
 
 def _stray_events(db_session, admin_client, exp, value=None):
@@ -281,7 +319,14 @@ ODD_VALUES = [None, math.nan, math.inf, -math.inf, 1e308, -5.0]
 def count_with_values(admin_client, db_session, make_experiment):
     exp = _make(db_session, make_experiment, MetricType.COUNT, 4)
     for value in ODD_VALUES:
-        _track(admin_client, exp, _user(exp, "control", 0), value, send_value=True)
+        _send(
+            admin_client,
+            db_session,
+            exp,
+            _user(exp, "control", 0),
+            value,
+            send_value=True,
+        )
     _track(admin_client, exp, _user(exp, "treatment", 0), 3.0)
     yield exp
     _cleanup(db_session, exp)
@@ -323,7 +368,7 @@ VALUE_TREATMENT_Y = _per_user([60.0, 18.5, 7.0, 7.75])
 def value_experiment(request, admin_client, db_session, make_experiment):
     exp = _make(db_session, make_experiment, request.param, USERS)
     for arm, i, value in VALUE_EVENTS:
-        _track(admin_client, exp, _user(exp, arm, i), value)
+        _send(admin_client, db_session, exp, _user(exp, arm, i), value)
     _stray_events(db_session, admin_client, exp, value=1000.0)
     yield exp
     _cleanup(db_session, exp)

@@ -321,13 +321,60 @@ def make_setup(
     return {"segments": made}
 
 
+#: The name of the API key gate 10 makes after the last frame, to read a flag's
+#: declared answers as an app does (#1512).
+GATE_KEY_NAME = "showcase-gate"
+
+
+def flag_answers(
+    end: storyboard.FlagEnd, api_url: str, token: str, redactor: Any
+) -> Optional[List[Dict[str, Any]]]:
+    """Gate 10's read of a flag's declared answers, after the last frame.
+
+    One API key (``GATE_KEY_NAME``), a needle from then on as the traffic's
+    is; then, for each declared user and context in order, the evaluate
+    route's answer as an SDK asks for it (``GET /feature-flags/evaluate/{key}
+    ?user_id=&context=``, ``X-API-Key``), recorded with the user and context
+    it asked for. An answer the API refuses (an HTTP error) is recorded with
+    none, and gate 10 refuses it (``gates.answers_agree``). A flag that
+    declares no answers reads nothing and makes no key (PE1512-2).
+    """
+    from urllib.error import HTTPError
+    from urllib.parse import quote, urlencode
+
+    if not end.answers:
+        return None
+    key = _api(f"{api_url}/api/v1/api-keys", token, body={"name": GATE_KEY_NAME})["key"]
+    redactor.add(key)
+    read: List[Dict[str, Any]] = []
+    for answer in end.answers:
+        query = urlencode(
+            {
+                "user_id": answer.user,
+                "context": json.dumps(answer.context, separators=(",", ":")),
+            }
+        )
+        url = f"{api_url}/api/v1/feature-flags/evaluate/{quote(end.key, safe='')}"
+        made: Dict[str, Any] = {"user": answer.user, "context": dict(answer.context)}
+        try:
+            made["answer"] = _api_with_key(f"{url}?{query}", key)
+        except HTTPError as refused:
+            refused.close()
+            made.update(answer=None, error=f"HTTP {refused.code}")
+        read.append(made)
+    return read
+
+
 def flag_state(
     end: storyboard.FlagEnd,
     api_url: str,
     token: str,
     readings: Mapping[str, str],
+    redactor: Any,
 ) -> Tuple[bool, Dict[str, Any], str]:
-    """Gate 10's half for a flag the video made: the API's answers, judged."""
+    """Gate 10's half for a flag the video made: the API's answers, judged.
+    A flag that declares answers has them read here (``flag_answers``), after
+    the last frame, with *redactor* keeping the read's key a needle."""
     from urllib.parse import quote
 
     from showcase.capture import gates as judge
@@ -344,13 +391,20 @@ def flag_state(
             token,
         )["items"]
     me = _api(f"{api_url}/api/v1/auth/me", token)
+    # A flag whose rule is not a segment's reads no segments (PE1512-2: what
+    # the storyboard leaves unset is not read).
     return judge.flag_end(
         end,
         named=named,
-        segments=_api(f"{api_url}/api/v1/segments?limit=200", token),
+        segments=(
+            _api(f"{api_url}/api/v1/segments?limit=200", token)
+            if end.segment is not None
+            else []
+        ),
         audit=audit,
         actor={"email": me.get("email"), "id": me.get("id")},
-        shown=readings.get(end.shown),
+        shown=readings.get(end.shown) if end.shown is not None else None,
+        answered=flag_answers(end, api_url, token, redactor),
     )
 
 
@@ -1213,8 +1267,9 @@ def record(
                 if not ok:
                     why.append(reason)
             if end.flag is not None:
+                # After the last frame: a flag's declared answers are read here.
                 ok, made, reason = flag_state(
-                    end.flag, stack.api_url, token, director.readings
+                    end.flag, stack.api_url, token, director.readings, redactor
                 )
                 numbers["flag"] = made
                 if not ok:

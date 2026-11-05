@@ -378,7 +378,9 @@ def decrypt_phi(
             request=request,
         )
     except Exception as audit_exc:
-        logger.error(f"Failed to audit-log PHI decryption: {audit_exc}")
+        logger.error(
+            "Failed to audit-log PHI decryption (%s)", type(audit_exc).__name__
+        )
 
     return PHIDecryptResponse(field=payload.field, plaintext=plaintext)
 

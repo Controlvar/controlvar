@@ -431,6 +431,8 @@ three levels deep.
 
 ### Pagination
 - List endpoints that page take `skip` and `limit` parameters
+- The feature flags list is ordered by creation time, oldest first (ties by `id`), so
+  paging with `skip` reads each flag once unless flags are created or deleted meanwhile
 - The default and the largest `limit` differ by route (the experiments list: 100, at most
   500; the feature flags list: 100, with no maximum). The API's OpenAPI document,
   `GET /api/v1/openapi.json`, gives each route's default `limit` and, where it has one, its
@@ -1109,6 +1111,18 @@ A 422 names positions and fields, never the ids that were sent.
   range whose UTC offset moves it past 0001-01-01 or 9999-12-31 answers 422 too. `/tracking/batch`
   and `/tracking/events` hold events to the same limits; in a batch the entry is reported in
   `errors` and the others are stored.
+- **Numbers**: `value` must be a finite number from -1e12 to 1e12, both included. Another value
+  answers 422 (`Invalid event: value not valid`) and nothing is stored. Every other number in the
+  body, in `metadata` for example, must be finite. NaN, Infinity and -Infinity, and a number too
+  large for a double such as `1e400`, answer 422 with `"type": "finite_number"` at their place in
+  the body, and nothing is stored. This query lists, per experiment, the events already stored
+  whose `value` is outside that range, NaN and the infinities included (the schema is
+  `experimentation` unless `POSTGRES_SCHEMA` names another):
+
+    ```sql
+    SELECT experiment_id, count(*) FROM experimentation.events WHERE abs(value) > 1e12 GROUP BY 1;
+    ```
+
 - **Headers**: X-API-Key: {api_key}
 - **Body**: `{"event_type": string, "event_name": string?, "user_id": string, "experiment_key": string?, "feature_flag_key": string?, "value": number?, "metadata": object?, "timestamp": datetime?, "event_id": string?}`
 - **Response**: 200 OK (the stored event, with `"duplicate": false` and the `event_id` sent, or null); 200 OK with `"duplicate": true` for an event already stored with that `event_id`: `id` is the stored event's, every other field is this request's, and nothing is written; 404 a key that was given was not found; 422 invalid body, an `event_id` that is not text or is over 255 characters among them
@@ -1120,6 +1134,10 @@ A 422 names positions and fields, never the ids that were sent.
   Each entry is tagged with a variant as `/track` tags it: only while its experiment is running.
   An entry already stored with its `event_id` (an earlier request's, or an earlier entry of this
   one) counts in `success_count` and in `duplicate_count`, and nothing is written for it.
+- **Numbers**: as on `/track`. An entry whose `value` is outside -1e12 to 1e12 is reported in
+  `errors` and the others are stored. A non-finite number anywhere in a `/batch` body refuses the
+  whole request and stores none of its events, while a `value` outside -1e12 to 1e12 fails only
+  its own entry.
 - **Response**: 200 OK `{"success_count": int, "failure_count": int, "duplicate_count": int, "errors": [...]|null}`; 422 above 100 events, or one entry invalid (its `event_id` among them), and none is stored. An entry that is valid as a request but refused when its event is built (metadata nested too deep, an edge `timestamp`, a key not found) is reported in `errors` and the others are stored
 
 ### Track Event by Ids
@@ -1128,6 +1146,7 @@ A 422 names positions and fields, never the ids that were sent.
   `event_name` is required. It stores the `variant_id` it is given, whatever the experiment's status.
   It takes `event_id` as `/track` does, and the same event sent through either route is stored
   once.
+- **Numbers**: as on `/track`; a `value` outside -1e12 to 1e12 answers 422 at `["body", "value"]`.
 - **Headers**: X-API-Key: {api_key}
 - **Response**: 200 OK (the stored event, or `"duplicate": true` as from `/track`); 404 an id names no stored row, and nothing is stored: the detail names
   each such field, for example `No experiment has that experiment_id.`; 422 invalid body, or an id that is not a UUID

@@ -245,6 +245,10 @@ class _FakeSession:
     def query(self, *_entities: Any) -> _FakeQuery:
         return _FakeQuery(self)
 
+    def close(self) -> None:
+        """``GET /experiments/{id}/results`` closes the request's session
+        before it computes, and again when it is done (#1738)."""
+
 
 def _experiment() -> SimpleNamespace:
     variants = [

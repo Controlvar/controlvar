@@ -56,8 +56,9 @@ MCP_TOOLS = [
             "`rollout_percentage`, `tags` and `updated_at`. `search` matches part of "
             "a flag's name or key; `status` keeps one status. Returns at most `limit` "
             "flags (default 50, at most 100) and `total`, the number that match. When "
-            "`total` is larger, call again with `skip`. The list has no defined order, "
-            "so a later page can repeat a flag or miss one; to read one flag by its "
+            "`total` is larger, call again with `skip`. The list is ordered by creation "
+            "time, oldest first, so paging with `skip` reads each flag once unless "
+            "flags are created or deleted meanwhile; to read one flag by its "
             "key, use get_feature_flag."
         ),
         parameters={

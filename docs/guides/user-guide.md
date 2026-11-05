@@ -485,7 +485,7 @@ flag off for every user and pauses its rollout schedule (see
 
 ### Archived Flags
 
-An archived flag is retired and never served. It cannot be turned on until it is
+An archived flag is retired: every evaluation answers it as off, with its off value. It cannot be turned on until it is
 unarchived: the API refuses every request that would turn it on with "This flag is
 archived. Unarchive it before turning it on." Turning it off succeeds and changes
 nothing. Archiving and unarchiving are API calls for now (bulk toggle with

@@ -10,7 +10,8 @@ three guarantees:
    get the lock skips the tick.
 2. **Run history** — every executed tick is persisted through
    :meth:`SchedulerHealthService.record_run` (``scheduler_runs`` table), which
-   feeds ``GET /api/v1/scheduler/health``.
+   feeds ``GET /api/v1/scheduler/health``. The write runs in a worker thread
+   (:func:`run_in_worker`), never on the event loop's thread.
 3. **Prometheus signal** — ``scheduler_last_success_timestamp{name}``,
    ``scheduler_tick_duration_seconds{name}`` and
    ``scheduler_ticks_total{name,status}`` from :mod:`backend.app.core.metrics`.
@@ -190,7 +191,17 @@ async def run_locked_tick(
         prom.record_scheduler_success(name)
 
     if record:
-        _persist_run(name, started_at, completed_at, status, result, error)
+        # In a worker thread, like the tick bodies (#1690): the write checks a
+        # connection out of the pool, and when every connection is held by a
+        # request waiting for this event loop, a checkout made on the loop's
+        # own thread waits the whole pool timeout and stops the API answering
+        # for that long -- and then the run record is lost as well.
+        await run_in_worker(
+            functools.partial(
+                _persist_run, name, started_at, completed_at, status, result, error
+            ),
+            label=f"{name} run record",
+        )
 
     if exc_to_raise is not None:
         raise exc_to_raise

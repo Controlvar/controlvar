@@ -432,7 +432,8 @@ async def create_feature_flag(
     except Exception as audit_error:
         db.rollback()
         logger.warning(
-            f"Compliance audit logging failed for feature_flag create: {audit_error}"
+            "Compliance audit logging failed for feature_flag create (%s)",
+            type(audit_error).__name__,
         )
 
     # The flag is committed above; a failed audit write does not undo it.
@@ -651,7 +652,8 @@ async def update_feature_flag(
     except Exception as audit_error:
         db.rollback()
         logger.warning(
-            f"Compliance audit logging failed for feature_flag update: {audit_error}"
+            "Compliance audit logging failed for feature_flag update (%s)",
+            type(audit_error).__name__,
         )
 
     old_value, new_value = audit_changes(
@@ -784,7 +786,8 @@ async def delete_feature_flag(
     except Exception as audit_error:
         db.rollback()
         logger.warning(
-            f"Compliance audit logging failed for feature_flag delete: {audit_error}"
+            "Compliance audit logging failed for feature_flag delete (%s)",
+            type(audit_error).__name__,
         )
 
     AuditService.record_after_commit(
