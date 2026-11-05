@@ -1884,6 +1884,40 @@ by = [
 ]
 
 [[unit]]
+text = "Numbers: value must be a finite number from -1e12 to 1e12, both included."
+by = [
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_a_value_within_the_bound_is_stored",
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_track_refuses_a_value_beyond_the_bound",
+    "test:backend/tests/integration/api/test_tracking_non_finite_numbers.py::test_the_bound_itself_is_stored_as_sent",
+]
+
+[[unit]]
+text = "Another value answers 422 (Invalid event: value not valid) and nothing is stored."
+by = [
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_track_refuses_a_value_beyond_the_bound",
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_track_refuses_a_quoted_number_beyond_the_bound",
+    "test:backend/tests/integration/api/test_tracking_non_finite_numbers.py::test_a_value_outside_the_range_answers_422_and_nothing_is_written",
+]
+
+[[unit]]
+text = "Every other number in the body, in metadata for example, must be finite."
+by = [
+    "test:backend/tests/unit/api/test_non_finite_numbers_refused.py::test_a_non_finite_number_answers_422_at_its_place_and_nothing_is_stored",
+    "test:backend/tests/smoke/test_every_json_body_route_refuses_non_finite.py::test_every_json_body_operation_refuses_a_non_finite_number",
+]
+
+[[unit]]
+text = "NaN, Infinity and -Infinity, and a number too large for a double such as 1e400, answer 422 with \"type\": \"finite_number\" at their place in the body, and nothing is stored."
+by = [
+    "test:backend/tests/unit/api/test_non_finite_numbers_refused.py::test_a_non_finite_number_answers_422_at_its_place_and_nothing_is_stored",
+    "test:backend/tests/integration/api/test_tracking_non_finite_numbers.py::test_a_non_finite_number_in_metadata_answers_422_and_nothing_is_written",
+]
+
+[[unit]]
+text = "This query lists, per experiment, the events already stored whose value is outside that range, NaN and the infinities included (the schema is experimentation unless POSTGRES_SCHEMA names another):"
+by = ["test:backend/tests/integration/api/test_tracking_non_finite_numbers.py::test_the_documented_query_finds_the_stored_values_outside_the_range"]
+
+[[unit]]
 text = "Body: {\"event_type\": string, \"event_name\": string?, \"user_id\": string, \"experiment_key\": string?, \"feature_flag_key\": string?, \"value\": number?, \"metadata\": object?, \"timestamp\": datetime?, \"event_id\": string?}"
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
@@ -1930,6 +1964,28 @@ by = [
 ]
 
 [[unit]]
+text = "Numbers: as on /track."
+by = [
+    "test:backend/tests/unit/api/test_non_finite_numbers_refused.py::test_a_non_finite_number_answers_422_at_its_place_and_nothing_is_stored",
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_batch_reports_the_entry_beyond_the_bound_and_stores_the_others",
+]
+
+[[unit]]
+text = "An entry whose value is outside -1e12 to 1e12 is reported in errors and the others are stored."
+by = [
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_batch_reports_the_entry_beyond_the_bound_and_stores_the_others",
+    "test:backend/tests/integration/api/test_tracking_non_finite_numbers.py::test_batch_stores_the_entries_within_the_range",
+]
+
+[[unit]]
+text = "A non-finite number anywhere in a /batch body refuses the whole request and stores none of its events, while a value outside -1e12 to 1e12 fails only its own entry."
+by = [
+    "test:backend/tests/unit/api/test_non_finite_numbers_refused.py::test_one_non_finite_number_refuses_the_whole_batch",
+    "test:backend/tests/integration/api/test_tracking_non_finite_numbers.py::test_one_non_finite_number_refuses_the_whole_batch",
+    "test:backend/tests/integration/api/test_tracking_non_finite_numbers.py::test_batch_stores_the_entries_within_the_range",
+]
+
+[[unit]]
 text = "Response: 200 OK {\"success_count\": int, \"failure_count\": int, \"duplicate_count\": int, \"errors\": [...]|null}; 422 above 100 events, or one entry invalid (its event_id among them), and none is stored."
 by = [
     "test:backend/tests/integration/api/test_tracking_api.py::TestBatch::test_reports_success_and_failure_per_event",
@@ -1962,6 +2018,13 @@ by = ["test:backend/tests/integration/api/test_tracking_inactive_experiment_even
 [[unit]]
 text = "It takes event_id as /track does, and the same event sent through either route is stored once."
 by = ["test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r4_one_event_through_track_batch_and_events_is_one_row"]
+
+[[unit]]
+text = "Numbers: as on /track; a value outside -1e12 to 1e12 answers 422 at [\"body\", \"value\"]."
+by = [
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_events_refuses_a_value_beyond_the_bound_at_the_field",
+    "test:backend/tests/integration/api/test_tracking_non_finite_numbers.py::test_a_value_outside_the_range_answers_422_and_nothing_is_written",
+]
 
 [[unit]]
 text = "Response: 200 OK (the stored event, or \"duplicate\": true as from /track); 404 an id names no stored row, and nothing is stored: the detail names each such field, for example No experiment has that experiment_id.; 422 invalid body, or an id that is not a UUID"
