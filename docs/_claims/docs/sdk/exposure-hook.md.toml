@@ -195,6 +195,15 @@ by = [
 ]
 
 [[unit]]
+text = "React's ServerClient.bootstrap() reads and fills no cache, so a ServerClient shared across requests calls its own hook on every bootstrap() call, once for each experiment the server enrols the user in (What the bootstrap records)."
+by = [
+    "test:sdk/react/src/__tests__/ServerClient.bootstrap.test.ts::reads no cache: a key the client answered before is asked again",
+    "test:sdk/react/src/__tests__/ServerClient.bootstrap.test.ts::fills no cache: the client asks again for a key bootstrap() answered",
+    "test:sdk/react/src/__tests__/bootstrap.test.tsx::ServerClient.bootstrap() assigns again on each call: it reads no cache",
+    "test:sdk/react/src/__tests__/bootstrap.test.tsx::ServerClient.bootstrap() assigns each experiment once and calls its onExposure once per assigned: true answer",
+]
+
+[[unit]]
 text = "It is called again, and the server records another exposure, whenever the SDK asks the server again: after the cache lifetime, after clearCache() (Java's invalidateCache too; Go has neither), after the answer is evicted from a full cache, and in every new client, such as each page load in a browser or each process or worker on a server; except that React Native, with its default offlineFallback, keeps the answer in AsyncStorage for the cache lifetime, so on one device neither clearCache() nor a new client calls it again until that stored answer expires, unless you set offlineFallback: false or call clearStorage()."
 by = [
     "test:sdk/js/__tests__/exposure.test.ts::after the cache lifetime",

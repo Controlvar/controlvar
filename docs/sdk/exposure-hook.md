@@ -38,7 +38,9 @@ It is not called for:
 - a feature flag.
 
 React's server render makes no request and calls nothing; hydration in the browser then makes the
-one request and the one call.
+one request and the one call. React's `ServerClient.bootstrap()` reads and fills no cache, so a
+`ServerClient` shared across requests calls its own hook on every `bootstrap()` call, once for each
+experiment the server enrols the user in ([What the bootstrap records](react.md#what-the-bootstrap-records)).
 
 It is called again, and the server records another exposure, whenever the SDK asks the server
 again: after the cache lifetime, after `clearCache()` (Java's `invalidateCache` too; Go has
