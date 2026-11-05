@@ -74,9 +74,7 @@ if not wg.WORKFLOWS.is_dir():
 NOT_WORKFLOWS = frozenset({"issue-triage.yml.example"})
 
 #: Every workflow, counted. Adding or removing one changes this, on purpose.
-#: 42 while the TEMPORARY diag-rc-log-read.yml is here (T174); back to 41 when
-#: it is removed before merge.
-WORKFLOW_COUNT = 42
+WORKFLOW_COUNT = 41
 
 #: Triggers that run a workflow for the repository's own pushes, schedules,
 #: dispatches and calls, or for a pull request with the token GitHub gives
