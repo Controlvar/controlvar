@@ -12,12 +12,14 @@ its default executor, are 4 for the test. ``app.dependency_overrides`` is
 empty. A burst of 24 concurrent requests is more than that serves at once:
 every request must get the route's normal answer.
 
-One route of each shape a signed-in route had -- the steps FastAPI ran in a
-worker thread, in order, from the sign-in to the response -- plus the
-dashboard's flag switch, ``GET /api/v1/auth/me`` (every dashboard page asks
-for it) and, in the full profile, the invite preview. ``GET
-/api/v1/rollout-schedules/`` is the flag page's list, with 20 schedules of two
-stages each.
+One core route of each shape a signed-in route had -- the steps FastAPI ran
+in a worker thread, in order, from the sign-in to the response -- plus the
+dashboard's flag switch and ``GET /api/v1/auth/me`` (every dashboard page asks
+for it). ``GET /api/v1/rollout-schedules/`` is the flag page's list, with 20
+schedules of two stages each. The full profile's routes run the same check
+from ``modules/backend/tests/integration/api/``
+(``test_signed_in_module_routes_under_overload.py``), which imports this
+file's harness: a core file never imports a module.
 
 Listeners on the engine show that the burst used every connection (peak 4),
 that no request's first database step ran on the event loop's thread, and
@@ -362,95 +364,6 @@ def _auth_me(world: World) -> Send:
     return _get("/api/v1/auth/me", world.user())
 
 
-def _invite_preview(world: World) -> Send:
-    from modules.backend.app.models.workspace import (
-        Workspace,
-        WorkspaceInvite,
-        WorkspaceMember,
-    )
-    from modules.backend.app.services.workspace_service import workspace_service
-
-    owner = world.user()
-    suffix = uuid.uuid4().hex[:8]
-    workspace = workspace_service.create_workspace(
-        db=world.db,
-        name=f"Overload {suffix}",
-        slug=f"overload-{suffix}",
-        owner_id=owner.id,
-    )
-    invite = workspace_service.create_invite(
-        world.db, workspace.id, f"invitee_{suffix}@int.test", "VIEWER", owner.id
-    )
-
-    def remove():
-        world.db.rollback()
-        for model in (WorkspaceInvite, WorkspaceMember):
-            world.db.query(model).filter(model.workspace_id == workspace.id).delete(
-                synchronize_session=False
-            )
-        world.db.query(Workspace).filter(Workspace.id == workspace.id).delete()
-        world.db.commit()
-
-    world.cleanups.append(remove)
-    return _get(f"/api/v1/workspaces/invites/{invite.token}", owner)
-
-
-def _warehouse_connectors(world: World) -> Send:
-    return _get("/api/v1/warehouse/analysis/connectors", world.user())
-
-
-def _etl_crawler_status(world: World) -> Send:
-    from modules.backend.app.api.v1.endpoints import etl
-    from modules.backend.app.schemas.etl import GlueCrawlerStatus
-
-    class Glue:
-        def get_crawler_status(self, crawler_name=None):
-            return GlueCrawlerStatus(crawler_name="overload", state="READY")
-
-    # The service, not the dependency: the real get_etl_service returns it.
-    world.monkeypatch.setattr(etl, "_etl_service", Glue())
-    return _get("/api/v1/etl/crawler/status", world.user())
-
-
-def _counters(world: World) -> Send:
-    from modules.backend.app.api.v1.endpoints import realtime_counters
-    from modules.backend.app.schemas.realtime_counters import ExperimentCounters
-
-    class Counters:
-        def get_experiment_counters(self, experiment_id):
-            return ExperimentCounters(
-                experiment_id=experiment_id,
-                total_assignments=1,
-                total_events=1,
-                total_conversions=0,
-                variants=[],
-            )
-
-    # The service, not the dependency: the real get_counter_service returns it.
-    world.monkeypatch.setattr(realtime_counters, "_counter_service", Counters())
-    return _get(f"/api/v1/counters/{uuid.uuid4()}", world.user())
-
-
-def _warehouse_run(world: World) -> Send:
-    """Every step of the route runs; the experiment does not exist, so its
-    normal answer is 404."""
-    headers = _bearer(world.user())
-    body = {
-        "connection_id": str(uuid.uuid4()),
-        "assignment_source_id": str(uuid.uuid4()),
-        "metric_source_ids": [str(uuid.uuid4())],
-    }
-
-    def send(http, _index):
-        return http.post(
-            f"/api/v1/warehouse/analysis/experiments/{uuid.uuid4()}/runs",
-            json=body,
-            headers=headers,
-        )
-
-    return send
-
-
 @dataclass(frozen=True)
 class Row:
     setup: Callable[[World], Send]
@@ -462,11 +375,9 @@ class Row:
     later_begins_on_loop: int = 0
 
 
-MODULES = pytest.mark.modules
-
 #: One route for each shape of signed-in route (the steps FastAPI ran in a
 #: worker thread before this change, named as in the parameter id), then the
-#: flag switch, the sign-in check every page makes and the invite preview.
+#: flag switch and the sign-in check every page makes.
 ROWS = [
     pytest.param(
         "GET /api/v1/rollout-schedules/",
@@ -505,36 +416,6 @@ ROWS = [
         id="flag-switch",
     ),
     pytest.param("GET /api/v1/auth/me", Row(_auth_me, 200, True), id="auth-me"),
-    pytest.param(
-        "GET /api/v1/workspaces/invites/{token}",
-        Row(_invite_preview, 200, True),
-        id="invite-preview",
-        marks=MODULES,
-    ),
-    pytest.param(
-        "GET /api/v1/warehouse/analysis/connectors",
-        Row(_warehouse_connectors, 200, True),
-        id="user-active-connectors-handler-validation",
-        marks=MODULES,
-    ),
-    pytest.param(
-        "GET /api/v1/etl/crawler/status",
-        Row(_etl_crawler_status, 200, True),
-        id="user-active-etl-handler-validation",
-        marks=MODULES,
-    ),
-    pytest.param(
-        "GET /api/v1/counters/{experiment_id}",
-        Row(_counters, 200, True),
-        id="user-active-counters-handler-validation",
-        marks=MODULES,
-    ),
-    pytest.param(
-        "POST /api/v1/warehouse/analysis/experiments/{experiment_id}/runs",
-        Row(_warehouse_run, 404, True),
-        id="user-active-warehouse-seams-handler-validation",
-        marks=MODULES,
-    ),
 ]
 
 
@@ -605,7 +486,12 @@ async def _drain(watch: PoolWatch) -> None:
 async def test_every_request_of_a_burst_is_answered(
     label: str, row: Row, small_pool: PoolWatch, world: World
 ):
-    watch = small_pool
+    await check_a_burst(label, row, small_pool, world)
+
+
+async def check_a_burst(label: str, row: Row, watch: PoolWatch, world: World) -> None:
+    """Send one request, then ``BURST`` at once, then one more, and check each
+    answer and what the listeners saw. The modules' rows call this too."""
     send = row.setup(world)
     assert app.dependency_overrides == {}
     watch.loop_thread = threading.get_ident()
