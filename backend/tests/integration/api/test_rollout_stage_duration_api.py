@@ -13,6 +13,7 @@ with a good one corrects it. Every request is a real one (a local JWT;
 from __future__ import annotations
 
 import json
+import math
 import uuid
 
 import pytest
@@ -138,10 +139,21 @@ def test_bad_duration_is_422_on_all_three_write_paths(
     flag_id = new_flag()
     response, loc, schedule_id = _write(path, client, developer, flag_id, value)
     assert response.status_code == 422, response.text
+    expected = [{"type": "value_error", "loc": loc, "msg": DURATION_REFUSED}]
+    if isinstance(value, float) and math.isnan(value):
+        # Since #1630 a NaN in any JSON body is refused before the route, at
+        # its own place in the body.
+        expected = [
+            {
+                "type": "finite_number",
+                "loc": [*loc, "duration"],
+                "msg": "Input should be a finite number",
+            }
+        ]
     assert [
         {key: item[key] for key in ("type", "loc", "msg")}
         for item in response.json()["detail"]
-    ] == [{"type": "value_error", "loc": loc, "msg": DURATION_REFUSED}]
+    ] == expected
     if path == "create":
         assert _schedules_of(fresh, flag_id) == 0
     else:

@@ -22,6 +22,9 @@ in ``EXPOSURE_EVENT_TYPES`` that carries the metric's event name and a value.
 A refund, a negative value, is added to its buyer's total: that has its own
 small experiment.
 
+Values the tracking routes refuse since #1630 (not finite, or beyond 10^12 in
+size) are written by SQL, as events stored before then hold them.
+
 The export and the analyses that stay on the share of buyers are held for
 every type ``/results`` analyses as a mean (#439): the same events, with the
 metric's type set to each of ``MEAN_METRIC_TYPES``.
@@ -419,9 +422,29 @@ def test_the_other_analyses_of_a_revenue_metric_stay_on_the_share_of_buyers(
 NOT_COUNTED = [math.nan, math.inf, -math.inf, 1e308, math.nextafter(1e12, math.inf)]
 
 
-def _seed_unusual_values(admin_client, exp):
+def _stored_by_sql(db_session, exp, arm, i, value):
+    """A purchase as ``/track`` stored it, tagged with the user's variant,
+    written by SQL: the tracking routes refuse these values now (#1630), and
+    events stored before that still hold them."""
+    db_session.execute(
+        Event.__table__.insert().values(
+            id=uuid.uuid4(),
+            event_type="purchase",
+            event_name="purchase",
+            user_id=_user(exp, arm, i),
+            experiment_id=exp.id,
+            variant_id=_variant_ids(exp)[arm],
+            value=value,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        )
+    )
+    db_session.commit()
+
+
+def _seed_unusual_values(admin_client, db_session, exp):
     for i, value in enumerate(NOT_COUNTED):
-        _track(admin_client, exp, _user(exp, "control", i), value)
+        _stored_by_sql(db_session, exp, "control", i, value)
     # The bound itself counts.
     _track(admin_client, exp, _user(exp, "treatment", 0), 1e12)
     _track(admin_client, exp, _user(exp, "treatment", 1), 10.0)
@@ -431,7 +454,7 @@ def _seed_unusual_values(admin_client, exp):
 @pytest.fixture
 def unusual_values(admin_client, db_session, make_experiment):
     exp = _make(db_session, make_experiment, len(NOT_COUNTED) + 1)
-    _seed_unusual_values(admin_client, exp)
+    _seed_unusual_values(admin_client, db_session, exp)
     yield exp
     _cleanup(db_session, exp)
 
@@ -448,7 +471,7 @@ def unusual_values_winsorized(admin_client, db_session, make_experiment):
             "winsorization_percentile": 50,
         },
     )
-    _seed_unusual_values(admin_client, exp)
+    _seed_unusual_values(admin_client, db_session, exp)
     yield exp
     _cleanup(db_session, exp)
 
@@ -490,7 +513,8 @@ def test_values_that_are_not_finite_or_too_large_add_nothing(
             Event.experiment_id == exp.id, Event.user_id.like("%-control-%")
         )
     )
-    # The values were stored as sent: this is what the analysis reads.
+    # The values as stored (by SQL, as events stored before #1630 hold them):
+    # this is what the analysis reads.
     assert stored == sorted(repr(v) for v in NOT_COUNTED)
 
     metric, control, treatment = _arms(_results(admin_client, exp))
