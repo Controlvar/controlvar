@@ -1,5 +1,6 @@
 """No route waits for a worker thread while its request may hold a database
-connection.
+connection: neither in the steps FastAPI runs in worker threads (the walk),
+nor in the trips an ``async`` handler takes itself (the pinned set below).
 
 FastAPI solves a route's dependencies depth first, each once per request
 unless it is declared ``use_cache=False``; it calls a synchronous dependency in
@@ -30,12 +31,24 @@ dependency, a synchronous handler without the route class, a second
 ``get_api_key`` declared ``use_cache=False`` (which a de-duplication by
 identity would miss), and it does not take a handler that shares
 ``get_current_user``'s name for it.
+
+The walk cannot see a trip an ``async`` handler takes itself
+(``run_in_threadpool``, ``asyncio.to_thread``, ...). The routes whose
+``async`` handler takes one while a ``get_db`` is in its dependency tree --
+directly, or through a function of its own module that it calls -- are listed
+in ``HANDLER_TRIPS`` exactly, and each must release the request's session
+(``release_request_sessions()``, or ``close()`` on its ``get_db`` parameter)
+before its first trip, in source order. The request may otherwise hold the
+connection its sign-in took while it waits for the worker thread.
 """
 
 from __future__ import annotations
 
+import ast
 import importlib.util
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+import inspect
+import textwrap
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
 import pytest
 from fastapi import APIRouter, Depends, FastAPI
@@ -46,9 +59,14 @@ from fastapi.dependencies.models import (
     _is_gen_callable,
 )
 from fastapi.routing import APIRoute
+from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
-from backend.app.api.off_loop_route import OFF_LOOP_MARKER, OffLoopRoute
+from backend.app.api.off_loop_route import (
+    OFF_LOOP_MARKER,
+    OffLoopRoute,
+    release_request_sessions,
+)
 from backend.app.db import session as session_module
 from backend.app.main import app
 
@@ -68,6 +86,33 @@ MODULE_ASYNC_FIRST = {
     ("POST", "/api/v1/integrations/webhooks/salesforce"),
 }
 CORE_ASYNC_FIRST: set = set()
+
+#: Routes whose ``async`` handler takes a worker trip itself while a ``get_db``
+#: is in its dependency tree. The core three close their session first (the
+#: SDK routes); the module three release the request's sessions first (the
+#: warehouse routes that wait on the warehouse).
+CORE_HANDLER_TRIPS = {
+    ("GET", "/api/v1/sdk/ruleset"),
+    ("POST", "/api/v1/tracking/evaluations"),
+    ("POST", "/api/v1/tracking/assign/batch"),
+}
+MODULE_HANDLER_TRIPS = {
+    ("POST", "/api/v1/warehouse/analysis/connections/{connection_id}/test"),
+    ("POST", "/api/v1/warehouse/analysis/sources/{source_id}/preview"),
+    ("POST", "/api/v1/warehouse/analysis/sources/{source_id}/validate"),
+}
+
+#: Calls that send work to a worker thread, by the callee's last name.
+WORKER_TRIP_CALLS = frozenset(
+    {
+        "run_in_threadpool",
+        "iterate_in_threadpool",
+        "to_thread",
+        "run_sync",
+        "run_in_executor",
+        "run_in_worker",
+    }
+)
 
 #: How many routes reach ``deps.get_current_user``, at least: an empty or
 #: shrunken walk fails here before it can pass the checks below.
@@ -167,6 +212,98 @@ def _walk(application) -> Dict[Tuple[str, str], Dict[str, Any]]:
     return {(m, p): worker_steps(ctx) for m, p, ctx in _contexts(application)}
 
 
+def _function_node(function) -> Optional[ast.AST]:
+    try:
+        source = textwrap.dedent(inspect.getsource(function))
+    except (OSError, TypeError):
+        return None
+    for node in ast.parse(source).body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return node
+    return None
+
+
+def _callee_name(call: ast.Call) -> Optional[str]:
+    if isinstance(call.func, ast.Name):
+        return call.func.id
+    if isinstance(call.func, ast.Attribute):
+        return call.func.attr
+    return None
+
+
+def _takes_a_trip(function, seen: Set[Any]) -> bool:
+    """Whether ``function`` sends work to a worker thread: a call of a
+    ``WORKER_TRIP_CALLS`` name in its body (nested functions included), or a
+    call of a function of its own module that does."""
+    if function in seen:
+        return False
+    seen.add(function)
+    node = _function_node(function)
+    if node is None:
+        return False
+    return any(_trips_at(call, function, seen) for call in _calls(node))
+
+
+def _calls(node: ast.AST) -> List[ast.Call]:
+    found = [n for n in ast.walk(node) if isinstance(n, ast.Call)]
+    return sorted(found, key=lambda call: (call.lineno, call.col_offset))
+
+
+def _trips_at(call: ast.Call, function, seen: Set[Any]) -> bool:
+    name = _callee_name(call)
+    if name in WORKER_TRIP_CALLS:
+        return True
+    if not isinstance(call.func, ast.Name):
+        return False
+    callee = getattr(function, "__globals__", {}).get(call.func.id)
+    return (
+        inspect.isfunction(callee)
+        and callee.__module__ == function.__module__
+        and _takes_a_trip(callee, seen)
+    )
+
+
+def handler_trips(ctx) -> Optional[Dict[str, Any]]:
+    """For a route whose ``async`` handler reaches a ``get_db`` and takes a
+    worker trip itself: the line of its first trip and of its first release
+    (``release_request_sessions()`` or ``close()`` on its ``get_db``
+    parameter), counted from the ``def``. None for any other route."""
+    handler = ctx.dependant.call
+    if getattr(handler, OFF_LOOP_MARKER, False) or _kind(handler) != "async":
+        return None
+    if not _reaches(ctx.dependant, GET_DBS):
+        return None
+    node = _function_node(handler)
+    if node is None:
+        return None
+    db_names = {sub.name for sub in ctx.dependant.dependencies if sub.call in GET_DBS}
+    first_trip = first_release = None
+    for call in _calls(node):
+        if first_trip is None and _trips_at(call, handler, {handler}):
+            first_trip = call.lineno
+        name = _callee_name(call)
+        released = name == "release_request_sessions" or (
+            name == "close"
+            and isinstance(call.func, ast.Attribute)
+            and isinstance(call.func.value, ast.Name)
+            and call.func.value.id in db_names
+        )
+        if first_release is None and released:
+            first_release = call.lineno
+    if first_trip is None:
+        return None
+    return {"first_trip": first_trip, "first_release": first_release}
+
+
+def _handler_trips(application) -> Dict[Tuple[str, str], Dict[str, Any]]:
+    found = {}
+    for method, path, ctx in _contexts(application):
+        trips = handler_trips(ctx)
+        if trips is not None:
+            found[(method, path)] = trips
+    return found
+
+
 def _route_classes(application) -> Dict[Tuple[str, str], type]:
     found = {}
     for method, path, ctx in _contexts(application):
@@ -201,6 +338,28 @@ def test_the_routes_whose_first_database_step_runs_on_the_event_loop():
     found = {route for route, steps in _walk(app).items() if steps["loop_first"]}
     assert found == expected, (
         f"new: {sorted(found - expected)}; gone: {sorted(expected - found)}"
+    )
+
+
+def test_the_async_handlers_that_take_worker_trips_themselves():
+    expected = CORE_HANDLER_TRIPS | (MODULE_HANDLER_TRIPS if _full_profile() else set())
+    found = _handler_trips(app)
+    assert set(found) == expected, (
+        f"new: {sorted(set(found) - expected)}; gone: {sorted(expected - set(found))}"
+    )
+
+
+def test_each_of_them_releases_the_request_session_before_its_first_trip():
+    late = {
+        route: trips
+        for route, trips in sorted(_handler_trips(app).items())
+        if trips["first_release"] is None
+        or trips["first_release"] > trips["first_trip"]
+    }
+    assert not late, (
+        "these async handlers wait for a worker thread before they release the "
+        "request's session:\n"
+        + "\n".join(f"{m} {p}: {t}" for (m, p), t in late.items())
     )
 
 
@@ -327,3 +486,63 @@ def test_a_route_whose_first_database_step_is_async_is_named():
 
     application.include_router(router)
     assert _walk(application)[("POST", "/hook")]["loop_first"] is True
+
+
+async def _helper_that_waits_for_a_worker() -> int:
+    return await run_in_threadpool(int)
+
+
+def test_an_async_handler_that_takes_a_trip_is_named_with_its_order():
+    application, router = _scratch()
+
+    @router.post("/late")
+    async def late(db=Depends(deps.get_db), _user=Depends(deps.get_current_user)):
+        await run_in_threadpool(int)
+        release_request_sessions()
+        return {}
+
+    @router.post("/first")
+    async def first(db=Depends(deps.get_db), _user=Depends(deps.get_current_user)):
+        release_request_sessions()
+        await run_in_threadpool(int)
+        return {}
+
+    @router.post("/closed")
+    async def closed(session=Depends(deps.get_db)):
+        session.close()
+        await run_in_threadpool(int)
+        return {}
+
+    async def something_else():
+        return None
+
+    @router.post("/other-close")
+    async def other_close(db=Depends(deps.get_db), other=Depends(something_else)):
+        other.close()
+        await run_in_threadpool(int)
+        return {}
+
+    @router.post("/helper")
+    async def helper(db=Depends(deps.get_db)):
+        return await _helper_that_waits_for_a_worker()
+
+    @router.post("/no-db")
+    async def no_db():
+        return await run_in_threadpool(int)
+
+    application.include_router(router)
+    found = _handler_trips(application)
+    assert set(found) == {
+        ("POST", "/late"),
+        ("POST", "/first"),
+        ("POST", "/closed"),
+        ("POST", "/other-close"),
+        ("POST", "/helper"),
+    }
+    in_order = {
+        path
+        for (_, path), trips in found.items()
+        if trips["first_release"] is not None
+        and trips["first_release"] < trips["first_trip"]
+    }
+    assert in_order == {"/first", "/closed"}

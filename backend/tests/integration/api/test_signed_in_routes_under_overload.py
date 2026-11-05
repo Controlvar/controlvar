@@ -373,6 +373,9 @@ class Row:
     #: Transactions started again on the event loop's thread during the burst
     #: (an async handler that commits and then reads).
     later_begins_on_loop: int = 0
+    #: An async handler that runs each of its database steps in a worker: no
+    #: SQL statement on the event loop's thread either.
+    steps_in_workers: bool = False
 
 
 #: One route for each shape of signed-in route (the steps FastAPI ran in a
@@ -529,7 +532,7 @@ async def check_a_burst(label: str, row: Row, watch: PoolWatch, world: World) ->
         f"{label}: {later_on_loop} transactions started again on the event "
         f"loop's thread, want {row.later_begins_on_loop}"
     )
-    if row.synchronous:
+    if row.synchronous or row.steps_in_workers:
         assert statements_on_loop == 0, (
             f"{label}: {statements_on_loop} SQL statements on the event loop's "
             "thread during the burst"

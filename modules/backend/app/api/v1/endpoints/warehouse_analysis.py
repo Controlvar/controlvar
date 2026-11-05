@@ -39,6 +39,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import (
     Annotated,
@@ -62,7 +63,7 @@ from sqlalchemy.orm import Session, joinedload
 from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
-from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.off_loop_route import OffLoopRoute, release_request_sessions
 from backend.app.models.compliance_audit_event import AuditAction, AuditOutcome
 from backend.app.models.experiment import Experiment
 from backend.app.models.user import User
@@ -213,7 +214,7 @@ READERS = ("ADMIN", "DEVELOPER", "ANALYST")
 EVERYONE = ("ADMIN", "DEVELOPER", "ANALYST", "VIEWER")
 
 
-def role_of(user: User) -> Optional[str]:
+def role_of(user: Union[User, _Caller]) -> Optional[str]:
     if getattr(user, "is_superuser", False):
         return "ADMIN"
     role = getattr(user, "role", None)
@@ -227,7 +228,7 @@ def _roles_text(roles: Tuple[str, ...]) -> str:
     return "the " + ", ".join(roles[:-1]) + f" or {roles[-1]} role"
 
 
-def require(user: User, allowed: Tuple[str, ...], action: str) -> None:
+def require(user: Union[User, _Caller], allowed: Tuple[str, ...], action: str) -> None:
     """403 unless the caller's role is one of ``allowed``."""
     role = role_of(user)
     if role in allowed:
@@ -326,7 +327,7 @@ def require_enabled(warehouse_type: str, enabled: FrozenSet[str]) -> None:
 
 def _audit(
     db: Session,
-    user: User,
+    user: Union[User, _Caller],
     action: AuditAction,
     resource_type: str,
     resource_id: Any,
@@ -449,6 +450,39 @@ def run_out(run: WarehouseAnalysisRun, *, include_sql: bool) -> Dict[str, Any]:
 
 
 # -- loading ----------------------------------------------------------------------------
+#
+# The ``async`` handlers below (the connection tests, validate and preview) wait
+# on the warehouse executor and on worker threads.  Each first reads what it
+# needs of the caller (``_caller``), then releases the request's sessions
+# (``release_request_sessions``), which returns the connection the sign-in
+# took to the pool; each later database step runs in a worker thread on a
+# session of its own (``_own_session``), closed before the step returns.  So
+# the request holds no connection while it waits for a worker thread or for
+# the warehouse.  The rows a load step returns are detached with every column
+# loaded: reading them runs no query.
+
+
+@dataclass(frozen=True)
+class _Caller:
+    """What the handlers read of the signed-in user, taken before the release.
+
+    ``require`` and ``_audit`` read only these three; reading the ``User``
+    itself after the release would load it again on the event loop.
+    """
+
+    id: uuid.UUID
+    is_superuser: Any
+    role: Any
+
+
+def _caller(user: User) -> _Caller:
+    return _Caller(id=user.id, is_superuser=user.is_superuser, role=user.role)
+
+
+def _own_session(bind: Any) -> Session:
+    """A session for one step in a worker thread, on the request session's
+    engine (``db.get_bind()``, read before the release)."""
+    return Session(bind=bind, autoflush=False)
 
 
 def _connection(db: Session, connection_id: uuid.UUID) -> WarehouseConnection:
@@ -793,7 +827,9 @@ async def test_unsaved_connection(
     """The configuration is held in memory for the test and not stored.
     Snowflake connections are tested after they are created, when their key
     pair exists."""
-    require(current_user, ADMIN, "Testing a warehouse connection")
+    caller = _caller(current_user)
+    release_request_sessions()
+    require(caller, ADMIN, "Testing a warehouse connection")
     require_enabled(body.warehouse_type, enabled)
     _check_limits(body)
     parameters = _parameters(body)
@@ -836,9 +872,13 @@ async def test_connection(
     """Signs in and runs a statement that reads no table.  A pending Snowflake
     key is tested in place of the current one and, if the test passes,
     becomes the current one.  Tests are not counted by the daily limit."""
-    require(current_user, ADMIN, "Testing a warehouse connection")
-    connection = await run_in_threadpool(_connection, db, connection_id)
+    caller = _caller(current_user)
+    bind = db.get_bind()
+    release_request_sessions()
+    require(caller, ADMIN, "Testing a warehouse connection")
+    connection = await run_in_threadpool(_load_connection, bind, connection_id)
     require_enabled(connection.warehouse_type, enabled)
+    warehouse_type = connection.warehouse_type
     pending = connection.pending_credentials_ciphertext is not None
     spec = _spec(connection, pending=pending)
     client = _client(factory, spec)
@@ -849,35 +889,46 @@ async def test_connection(
         kind=JobKind.CONNECTION_TEST,
     )
     if pending:
-        await run_in_threadpool(_promote_pending_key, db, connection, current_user)
+        await run_in_threadpool(_promote_pending_key, bind, connection, caller)
     return {
         "ok": True,
-        "warehouse_type": connection.warehouse_type,
+        "warehouse_type": warehouse_type,
         "promoted_pending_key": pending,
     }
 
 
+def _load_connection(bind: Any, connection_id: uuid.UUID) -> WarehouseConnection:
+    """Run in a worker thread: the connection, detached (see "loading")."""
+    with _own_session(bind) as db:
+        return _connection(db, connection_id)
+
+
 def _promote_pending_key(
-    db: Session, connection: WarehouseConnection, user: User
+    bind: Any, connection: WarehouseConnection, user: _Caller
 ) -> None:
-    before = _connection_audit(connection)
-    parameters = dict(connection.parameters or {})
-    parameters["key_slot"] = parameters.pop("pending_key_slot", "1")
-    connection.credentials_ciphertext = connection.pending_credentials_ciphertext
-    connection.public_key_fingerprint = connection.pending_public_key_fingerprint
-    connection.pending_credentials_ciphertext = None
-    connection.pending_public_key_fingerprint = None
-    connection.parameters = parameters
-    _audit(
-        db,
-        user,
-        AuditAction.KEY_CREATE,
-        "warehouse_connection",
-        connection.id,
-        old=before,
-        new=_connection_audit(connection),
-    )
-    db.commit()
+    """Run in a worker thread, on a session of its own.  ``connection`` is the
+    row as loaded for the test, attached again: the UPDATE writes the columns
+    changed below and no other, from the state the test used."""
+    with _own_session(bind) as db:
+        db.add(connection)
+        before = _connection_audit(connection)
+        parameters = dict(connection.parameters or {})
+        parameters["key_slot"] = parameters.pop("pending_key_slot", "1")
+        connection.credentials_ciphertext = connection.pending_credentials_ciphertext
+        connection.public_key_fingerprint = connection.pending_public_key_fingerprint
+        connection.pending_credentials_ciphertext = None
+        connection.pending_public_key_fingerprint = None
+        connection.parameters = parameters
+        _audit(
+            db,
+            user,
+            AuditAction.KEY_CREATE,
+            "warehouse_connection",
+            connection.id,
+            old=before,
+            new=_connection_audit(connection),
+        )
+        db.commit()
 
 
 @router.post(
@@ -1114,10 +1165,13 @@ def delete_source(
 
 
 def _load_for_warehouse(
-    db: Session, source_id: uuid.UUID
+    bind: Any, source_id: uuid.UUID
 ) -> Tuple[WarehouseSource, WarehouseConnection]:
-    source = _source(db, source_id)
-    return source, _connection(db, source.connection_id)
+    """Run in a worker thread: the source and its connection, detached (see
+    "loading")."""
+    with _own_session(bind) as db:
+        source = _source(db, source_id)
+        return source, _connection(db, source.connection_id)
 
 
 @router.post(
@@ -1136,8 +1190,11 @@ async def validate_source(
 ) -> Dict[str, Any]:
     """Reads the table's column names and types; no query reads data.
     Validation is not counted by the daily limit."""
-    source, connection = await run_in_threadpool(_load_for_warehouse, db, source_id)
-    require(current_user, _source_roles(source.kind), f"Validating {_a(source.kind)}")
+    caller = _caller(current_user)
+    bind = db.get_bind()
+    release_request_sessions()
+    source, connection = await run_in_threadpool(_load_for_warehouse, bind, source_id)
+    require(caller, _source_roles(source.kind), f"Validating {_a(source.kind)}")
     require_enabled(connection.warehouse_type, enabled)
     client = _client(factory, _spec(connection))
     parts = sources.table_parts(source)
@@ -1171,20 +1228,24 @@ async def validate_source(
         raise _refused_error(exc) from None
 
     def save() -> Dict[str, Any]:
-        before = sources.stored_definition(source)
-        sources.mark_validated(source, mapping, filters)
-        _audit(
-            db,
-            current_user,
-            AuditAction.UPDATE,
-            "warehouse_source",
-            source.id,
-            old=before,
-            new=sources.stored_definition(source),
-        )
-        db.commit()
-        db.refresh(source)
-        return source_out(source)
+        # The source as loaded, attached again: the UPDATE writes the columns
+        # mark_validated changes and no other.
+        with _own_session(bind) as session:
+            session.add(source)
+            before = sources.stored_definition(source)
+            sources.mark_validated(source, mapping, filters)
+            _audit(
+                session,
+                caller,
+                AuditAction.UPDATE,
+                "warehouse_source",
+                source.id,
+                old=before,
+                new=sources.stored_definition(source),
+            )
+            session.commit()
+            session.refresh(source)
+            return source_out(source)
 
     return {
         "source": await run_in_threadpool(save),
@@ -1228,8 +1289,16 @@ def _require_validated(source: WarehouseSource) -> None:
         )
 
 
+def _admit(
+    bind: Any, new: runner.NewRun, *, now: datetime, max_concurrent_runs: int
+) -> uuid.UUID:
+    """Run in a worker thread: ``runner.admit`` on a session of its own."""
+    with _own_session(bind) as db:
+        return runner.admit(db, new, now=now, max_concurrent_runs=max_concurrent_runs)
+
+
 async def _admit_and_wait(
-    db: Session,
+    bind: Any,
     executor: WarehouseExecutor,
     job: Callable[[Any, uuid.UUID], Any],
     new: runner.NewRun,
@@ -1251,8 +1320,8 @@ async def _admit_and_wait(
         raise _admission_error(exc) from None
     try:
         run_id = await run_in_threadpool(
-            runner.admit,
-            db,
+            _admit,
+            bind,
             new,
             now=now,
             max_concurrent_runs=_limits().WAREHOUSE_MAX_CONCURRENT_RUNS,
@@ -1289,8 +1358,11 @@ async def preview_source(
     cannot start while another run or preview on the connection is in
     progress."""
     body = body or PreviewRequest()
-    source, connection = await run_in_threadpool(_load_for_warehouse, db, source_id)
-    require(current_user, _source_roles(source.kind), f"Previewing {_a(source.kind)}")
+    caller = _caller(current_user)
+    bind = db.get_bind()
+    release_request_sessions()
+    source, connection = await run_in_threadpool(_load_for_warehouse, bind, source_id)
+    require(caller, _source_roles(source.kind), f"Previewing {_a(source.kind)}")
     require_enabled(connection.warehouse_type, enabled)
     _require_validated(source)
     now = clock()
@@ -1331,7 +1403,7 @@ async def preview_source(
         warehouse_type=connection.warehouse_type,
         max_runs_per_day=connection.max_runs_per_day,
         experiment_id=None,
-        requested_by=current_user.id,
+        requested_by=caller.id,
         request={
             "source_id": str(source.id),
             "experiment_key": body.experiment_key,
@@ -1342,7 +1414,7 @@ async def preview_source(
         statements=runner.statements_json([query]),
     )
     run_id, future = await _admit_and_wait(
-        db, executor, job, new, kind=JobKind.PREVIEW, total_seconds=total, now=now
+        bind, executor, job, new, kind=JobKind.PREVIEW, total_seconds=total, now=now
     )
     try:
         summary = await asyncio.wait_for(
