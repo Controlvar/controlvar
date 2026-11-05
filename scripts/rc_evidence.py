@@ -10,8 +10,9 @@
 
 A release is ready for production when one set of runs AT ITS TAG passed. This
 script reads them; it never starts, re-runs or cancels anything. Its GitHub
-calls are ``gh api`` GETs and ``gh run download``; its other calls are GETs of
-the two package registries (``http_get``). ``--plan`` prints the dispatch
+calls are ``gh api`` GETs, ``gh run download`` and the two GETs that read a
+job's log (``read_job_log``); its other calls are GETs of the two package
+registries (``http_get``). ``--plan`` prints the dispatch
 commands, in order, for a person to run. ``--suite`` is the step of
 ``rc-evidence.yml`` that runs one of the suites (``SUITES``) and writes its
 JUnit reports. ``--registry`` checks one published package only (P below):
@@ -81,10 +82,13 @@ Then:
   resolve, test-and-build and publish jobs green. Its build job's log
   holds the record that job wrote before uploading: for PyPI each file's
   sha256 and the digest of that listing (which must hash back to it, so the
-  record was read whole), for npm the tarball's sha256. A log that cannot be
-  read or is empty fails P, and the reason says why: the HTTP status ``gh``
-  reported and what it said (``said``: no URL, no token), or that the log is
-  gone from GitHub's log storage. The registry's latest
+  record was read whole), for npm the tarball's sha256. The log is read in
+  two GETs (``read_job_log``), not through ``gh``: GitHub's API with the
+  token, redirect not followed, then the storage URL it redirects to, with no
+  token. A log that cannot be read, is empty or is longer than ``LOG_MAX``
+  fails P, and the reason names the hop and its HTTP status (and the
+  storage's error code; a log the storage does not have is said so), never
+  the token or a URL's query. The registry's latest
   version is the manifest's; each PyPI file's sha256 is the recorded one, file
   for file; the npm tarball the registry serves has the recorded sha256 and
   its ``dist.integrity`` is that tarball's. The description the registry shows
@@ -554,7 +558,7 @@ class EvidenceError(RuntimeError):
 class GhError(RuntimeError):
     """A ``gh`` call failed. The message names the command, its exit status,
     the HTTP status ``gh`` reported (``status``) and, when the answer came from
-    the storage GitHub redirects a log read to, that storage's error code
+    the storage GitHub redirects a download to, that storage's error code
     (``storage``, parsed from the body); then what ``gh`` said on stderr,
     through ``said``. It never quotes stdout and never holds a token."""
 
@@ -602,8 +606,8 @@ GH_SAID_MAX = 200
 HTTP_STATUS = re.compile(r"\bHTTP ([1-5][0-9][0-9])\b")
 #: GitHub's API answers a job-log read with a redirect to Azure blob storage
 #: (a successful read ends at ``Server: Windows-Azure-Blob/1.0``, measured).
-#: Azure's error body is XML with a ``<Code>`` (its documented format, not
-#: measured here); ``BlobNotFound`` is a log that is gone.
+#: Azure's error body is XML with a ``<Code>``; ``BlobNotFound`` is a log that
+#: is not there (measured 2026-11-05 on a skipped job, which has none).
 STORAGE_CODE = re.compile(r"<Code>([A-Za-z]{1,64})</Code>")
 #: Taken out of what gh said: a URL, query and all (a storage URL's query is
 #: its signature), and anything token-shaped -- GitHub's token prefixes, or
@@ -614,13 +618,17 @@ SAID_TOKEN = re.compile(
 )
 
 
-def said(stderr: str) -> str:
-    """What ``gh`` said, safe to print in a public log and record: its first
-    ``GH_SAID_READ`` characters only; the token's value, every URL and every
-    token-shaped word taken out; printable ASCII; then cut to ``GH_SAID_MAX``."""
+def said(stderr: str, also: Sequence[str] = ()) -> str:
+    """What ``gh`` (or GitHub) said, safe to print in a public log and record:
+    its first ``GH_SAID_READ`` characters only; the token's value (and each of
+    *also*), every URL and every token-shaped word taken out; printable ASCII;
+    then cut to ``GH_SAID_MAX``."""
     head = (stderr or "")[:GH_SAID_READ]
-    for name in ("GH_TOKEN", "GITHUB_TOKEN"):
-        secret = os.environ.get(name, "")
+    for secret in (
+        os.environ.get("GH_TOKEN", ""),
+        os.environ.get("GITHUB_TOKEN", ""),
+        *also,
+    ):
         if len(secret) >= 8:
             head = head.replace(secret, "<token>")
     head = SAID_URL.sub("<url>", head)
@@ -666,6 +674,139 @@ def run_gh(args: List[str]) -> str:
     return done.stdout
 
 
+# ---------------------------------------------------------------------------
+# A job's log, in two GETs (T174)
+# ---------------------------------------------------------------------------
+# ``gh api .../actions/jobs/<id>/logs`` exits 1 under a workflow's token after
+# the redirected request has ended 200 OK, saying nothing (the diagnostic run
+# 41978116497 on PR #1764: the first hop answered 302 to Azure blob storage,
+# ``gh api -i`` printed ``HTTP/1.1 200 OK`` and exited 1). So the verifier makes
+# both hops itself: GitHub's API with the token, redirect NOT followed, then
+# the Location it names, with NO Authorization header. urllib would follow the
+# redirect and send the token on to the storage host; ``_NoRedirect`` stops it.
+
+#: The most of a job's log read, in bytes. sdk-release.yml's build logs are
+#: 27-63 kB, the record about 85% of the way down (measured 2026-11-05 on the
+#: four v0.1.1 and v0.2.0 build jobs). A longer log FAILs, it is never cut:
+#: the record is either read whole or not at all.
+LOG_MAX = 32 * 1024 * 1024
+API_ROOT = "https://api.github.com"
+#: What a token looks like before it goes into a header: no whitespace, no
+#: line break.
+TOKEN = re.compile(r"[A-Za-z0-9_.-]{8,2048}")
+HOST = re.compile(r"[A-Za-z0-9.-]{1,253}")
+REDIRECTS = (301, 302, 303, 307, 308)
+USER_AGENT = {"User-Agent": "controlvar-rc-evidence"}
+
+Send = Callable[[str, Mapping[str, str]], Tuple[int, Mapping[str, str], bytes]]
+
+
+class LogError(RuntimeError):
+    """A job's log was not read. The message names the hop and what it
+    answered: the HTTP status (``status``), the storage's error code
+    (``storage``) and GitHub's message through ``said``; never the token,
+    never more of a URL than its host."""
+
+    def __init__(
+        self, message: str, status: Optional[int] = None, storage: Optional[str] = None
+    ):
+        super().__init__(message)
+        self.status = status
+        self.storage = storage
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """A redirect is an answer, never followed: urllib copies a request's
+    headers, Authorization included, onto the request it redirects to."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def http_send(
+    url: str,
+    headers: Mapping[str, str],
+    handlers: Sequence[urllib.request.BaseHandler] = (),
+) -> Tuple[int, Mapping[str, str], bytes]:
+    """One GET of *url* with exactly *headers*; a redirect comes back as the
+    answer. (status, headers, body): the body at most ``LOG_MAX`` + 1 bytes,
+    an error's at most ``GH_SAID_READ``. *handlers*: for tests only."""
+    opener = urllib.request.build_opener(_NoRedirect, *handlers)
+    request = urllib.request.Request(url, headers=dict(headers), method="GET")
+    try:
+        with opener.open(request, timeout=120) as response:
+            return response.status, response.headers, response.read(LOG_MAX + 1)
+    except urllib.error.HTTPError as error:
+        body = error.read(GH_SAID_READ) if error.fp is not None else b""
+        return error.code, error.headers or {}, body
+
+
+def host_of(url: str) -> Optional[str]:
+    """The host of an https URL, and nothing else of it; None otherwise."""
+    try:
+        parts = urllib.parse.urlsplit(url.strip()[:4096])
+    except ValueError:
+        return None
+    host = parts.hostname or ""
+    return host if parts.scheme == "https" and HOST.fullmatch(host) else None
+
+
+def github_message(body: bytes, token: str) -> str:
+    """GitHub's ``message`` in a JSON error body, through ``said``; or ''."""
+    try:
+        data = json.loads(body[:GH_SAID_READ].decode("utf-8", "replace"))
+    except ValueError:
+        return ""
+    message = data.get("message") if isinstance(data, dict) else None
+    return said(message, also=(token,)) if isinstance(message, str) else ""
+
+
+def read_job_log(repo: str, job_id: int, token: str, send: Send = http_send) -> str:
+    """Job *job_id*'s log, as text: hop 1, GitHub's API with *token*, must
+    answer a redirect with an https Location; hop 2, that Location with no
+    Authorization header, must answer 200 with at most ``LOG_MAX`` bytes.
+    Anything else is a LogError naming the hop."""
+    api = "hop 1 (GitHub's API)"
+    try:
+        status, headers, body = send(
+            f"{API_ROOT}/repos/{repo}/actions/jobs/{int(job_id)}/logs",
+            {
+                **USER_AGENT,
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {token}",
+            },
+        )
+    except (OSError, ValueError, http.client.HTTPException) as error:
+        raise LogError(f"{api}: {type(error).__name__}") from None
+    if status not in REDIRECTS:
+        message = github_message(body, token)
+        raise LogError(
+            f"{api} answered HTTP {status}, not a redirect"
+            + (f": {message}" if message else ""),
+            status,
+        )
+    location = str(headers.get("Location") or "")
+    host = host_of(location)
+    if host is None:
+        raise LogError(f"{api} answered HTTP {status} with no https Location", status)
+    storage = f"hop 2 (log storage at {host})"
+    try:
+        status, _, body = send(location, dict(USER_AGENT))
+    except (OSError, ValueError, http.client.HTTPException) as error:
+        raise LogError(f"{storage}: {type(error).__name__}") from None
+    if status != 200:
+        found = STORAGE_CODE.search(body[:GH_SAID_READ].decode("utf-8", "replace"))
+        code = found.group(1) if found else None
+        raise LogError(
+            f"{storage} answered HTTP {status}" + (f", storage {code}" if code else ""),
+            status,
+            code,
+        )
+    if len(body) > LOG_MAX:
+        raise LogError(f"{storage}: the log is longer than {LOG_MAX} bytes", status)
+    return body.decode("utf-8", "replace")
+
+
 def git_head(root: pathlib.Path) -> Optional[str]:
     """The commit checked out at *root*, or None."""
     try:
@@ -697,21 +838,40 @@ def repository(environ: Mapping[str, str], gh: Gh) -> str:
 
 
 class GitHub:
-    """Read-only: GETs of the repository's API, and artifact downloads."""
+    """Read-only: GETs of the repository's API, artifact downloads, and a
+    job's log (``read_job_log``)."""
 
-    def __init__(self, gh: Gh, repo: str):
+    def __init__(
+        self,
+        gh: Gh,
+        repo: str,
+        send: Send = http_send,
+        environ: Optional[Mapping[str, str]] = None,
+    ):
         self.gh = gh
         self.repo = repo
+        self.send = send
+        self.environ = os.environ if environ is None else environ
 
     def get(self, path: str) -> Any:
         return json.loads(self.gh(["api", f"repos/{self.repo}/{path}"]) or "null")
 
-    def text(self, path: str) -> str:
-        """A GET whose answer is text, not JSON: a job's log. GitHub answers
-        302 to its log storage and gh follows it; a failure there comes back as
-        a GhError carrying the HTTP status gh reported and the storage's
-        error code, when its body has one."""
-        return self.gh(["api", f"repos/{self.repo}/{path}"])
+    def token(self) -> str:
+        """``GH_TOKEN`` (what the run sets) or ``GITHUB_TOKEN``; on a person's
+        machine, gh's own login (``gh auth token``). Never printed."""
+        token = self.environ.get("GH_TOKEN") or self.environ.get("GITHUB_TOKEN")
+        if not token:
+            try:
+                token = self.gh(["auth", "token"]).strip()
+            except GhError as error:
+                raise LogError(f"no GitHub token to read it with: {error}") from None
+        if not TOKEN.fullmatch(token or ""):
+            raise LogError("no usable GitHub token to read it with")
+        return token
+
+    def log(self, job_id: int) -> str:
+        """Job *job_id*'s log, in two GETs; a LogError that names the hop."""
+        return read_job_log(self.repo, job_id, self.token(), self.send)
 
     def download(self, run_id: int, name: str, dest: pathlib.Path) -> None:
         dest.mkdir(parents=True, exist_ok=True)
@@ -1035,16 +1195,18 @@ PYPI_FILE = re.compile(r"[A-Za-z0-9._+-]{1,200}\.(?:whl|tar\.gz)")
 NPM_FILE = re.compile(r"[A-Za-z0-9._+-]{1,200}\.tgz")
 
 
-def unreadable_log(job: str, job_id: int, error: GhError) -> str:
+def unreadable_log(job: str, job_id: int, error: LogError) -> str:
     """Why the log of *job* (id *job_id*) was not read: always a P FAIL. A log
-    the storage no longer has is said in words (logs expire after the
-    repository's retention, 90 days on 2026-11-05); every other failure is the
-    GhError, HTTP status and all."""
+    the storage does not have is said in words (logs expire after the
+    repository's retention, 90 days on 2026-11-05; a skipped job never had
+    one); every other failure is the LogError: the hop, its HTTP status and
+    all."""
     why = f"cannot read the log of {job!r} (job {job_id})"
     if error.storage and error.storage.endswith("NotFound"):
         why += (
-            ": the log is gone from GitHub's log storage (past the repository's"
-            " log retention, or deleted), so its record cannot be read back"
+            ": the log is not in GitHub's log storage (past the repository's"
+            " log retention, deleted, or never written), so its record cannot be"
+            " read back"
         )
     return f"{why}: {error}"
 
@@ -1906,8 +2068,8 @@ class Verifier:
             )
             return None
         try:
-            log = self.github.text(f"actions/jobs/{build['id']}/logs")
-        except GhError as error:
+            log = self.github.log(build["id"])
+        except LogError as error:
             problems.append(unreadable_log(package.build_job, build["id"], error))
             return None
         if not log.strip():
@@ -2403,6 +2565,7 @@ def main(
     registry: Callable[[pathlib.Path], Registry] = read_registry,
     fetch: Fetch = http_get,
     environ: Optional[Mapping[str, str]] = None,
+    send: Send = http_send,
 ) -> int:
     environ = os.environ if environ is None else environ
     parser = argparse.ArgumentParser(description=(__doc__ or "").split("\n", 1)[0])
@@ -2460,7 +2623,7 @@ def main(
         check_tag(args.tag)
         verifier = Verifier(
             args.tag,
-            github=GitHub(gh, repository(environ, gh)),
+            github=GitHub(gh, repository(environ, gh), send=send, environ=environ),
             root=args.root,
             out=args.out,
             dispositions=parse_dispositions(args.dispositions),
