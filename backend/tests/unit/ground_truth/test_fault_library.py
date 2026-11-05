@@ -605,6 +605,18 @@ def test_f2_sends_its_bot_volume_and_values_beyond_the_bound():
     assert all(
         b["value"] == faults.BOT_VALUE for b in bodies if b["value"] not in beyond
     )
+    # The API refuses a value beyond the bound in a /batch entry (#1630): each
+    # batch expects exactly those positions in its errors, and no other.
+    positions = 0
+    for op in plan.ops[first:]:
+        events = op.body["events"]
+        refused = [
+            i for i, e in enumerate(events) if abs(e["value"]) > contract.VALUE_BOUND
+        ]
+        want = "item-errors:" + ",".join(map(str, refused)) if refused else "accepted"
+        assert faults.check_expect(op) == want, (want, faults.check_expect(op))
+        positions += len(refused)
+    assert positions == fault.huge_values
 
 
 def test_f9_valid_sends_carry_the_value_it_is_given():

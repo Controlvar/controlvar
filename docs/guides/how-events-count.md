@@ -11,7 +11,8 @@ SDK, because each one sends its events through `POST /api/v1/tracking/track` and
 | Received before the user is assigned to the experiment | Yes, with no variant | No |
 | Received while the experiment is a draft, paused, completed or archived | Yes, with no variant | No |
 | Received after the user is assigned, with an earlier `timestamp` | Yes | Yes |
-| With a `value` larger than 10^12 in size | Yes | Its user counts as converting; the value adds nothing |
+| With a `value` that is not a finite number from -10^12 to 10^12 | No: `/track` and `/events` answer `422`; `/batch` reports the entry in `errors` and stores the others, but refuses the whole request when the number in the JSON is NaN or infinite | No |
+| Stored before the server refused such a value, with a `value` larger than 10^12 in size | Yes | Its user counts as converting; the value adds nothing |
 | Sent by a bot or a crawler | Yes | Yes |
 
 ## Sending an event again

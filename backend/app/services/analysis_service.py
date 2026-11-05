@@ -23,6 +23,10 @@ from backend.app.schemas.bayesian import (
     BayesianResultsResponse,
     BayesianVariantResult,
 )
+
+# The event value bound is the event schemas' constant, so the two cannot
+# drift apart.
+from backend.app.schemas.tracking import VALUE_BOUND
 from backend.app.services.analysis_settings import resolve_analysis_settings
 from backend.app.services.bayesian_service import DEFAULT_N_SAMPLES, BayesianService
 from backend.app.services.event_matching import (
@@ -56,10 +60,6 @@ logger = logging.getLogger(__name__)
 
 #: Monte Carlo samples per variant for the Bayesian block of the results API.
 BAYESIAN_N_SAMPLES: int = DEFAULT_N_SAMPLES
-
-#: An event value counts towards a per-user total when its absolute value is
-#: at most this.  NULL, NaN and the infinities fail the comparison too.
-VALUE_BOUND: float = 1e12
 
 
 class AnalysisService:

@@ -52,7 +52,16 @@ text = "Received after the user is assigned, with an earlier timestamp | Yes | Y
 by = ["test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp"]
 
 [[unit]]
-text = "With a value larger than 10^12 in size | Yes | Its user counts as converting; the value adds nothing"
+text = "With a value that is not a finite number from -10^12 to 10^12 | No: /track and /events answer 422; /batch reports the entry in errors and stores the others, but refuses the whole request when the number in the JSON is NaN or infinite | No"
+by = [
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_track_refuses_a_value_beyond_the_bound",
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_events_refuses_a_value_beyond_the_bound_at_the_field",
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_batch_reports_the_entry_beyond_the_bound_and_stores_the_others",
+    "test:backend/tests/integration/api/test_tracking_non_finite_numbers.py::test_one_non_finite_number_refuses_the_whole_batch",
+]
+
+[[unit]]
+text = "Stored before the server refused such a value, with a value larger than 10^12 in size | Yes | Its user counts as converting; the value adds nothing"
 by = ["test:backend/tests/integration/api/test_revenue_per_user_results.py::test_values_that_are_not_finite_or_too_large_add_nothing"]
 
 [[unit]]

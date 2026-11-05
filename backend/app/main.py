@@ -8,7 +8,7 @@ routers, and configuration.
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
@@ -18,6 +18,7 @@ from fastapi.openapi.utils import get_openapi
 from backend.app.api.api import api_router, tags_metadata
 from backend.app.core.bandit_scheduler import bandit_scheduler_runner
 from backend.app.core.config import cors_start_up_messages, settings
+from backend.app.core.finite_json import refuse_non_finite_json
 from backend.app.core.health import is_development_or_test
 from backend.app.core.health import router as health_router
 from backend.app.core.metrics_scheduler import metrics_scheduler
@@ -188,6 +189,11 @@ app = FastAPI(
     # it is read here after `api_router` has been imported above.
     openapi_tags=tags_metadata,
     lifespan=lifespan,
+    # A JSON request body holding NaN, Infinity or a number too large for a
+    # double is answered 422 `finite_number` (#1630). Passed here, to the
+    # constructor, so every router included below runs it; a dependency
+    # added to the application after the routers are included is not run.
+    dependencies=[Depends(refuse_non_finite_json)],
 )
 
 # A request that fails validation is answered with each error's type, loc, msg
