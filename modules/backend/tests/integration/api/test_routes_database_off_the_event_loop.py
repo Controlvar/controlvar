@@ -18,9 +18,13 @@ process.
   the engine records the thread of each checkout during one request that
   reaches every database step of its route: none is the event loop's thread.
 * ``test_no_connection_is_held_when_a_route_asks_for_a_worker`` -- at each
-  worker request (``anyio.to_thread.run_sync``) during that request, the pool
-  has no connection checked out; and the route asked for one worker per
-  database step, no more and no fewer.
+  worker request (``anyio.to_thread.run_sync``) during that request, and at
+  each call to the stubbed identity provider, the pool has no connection
+  checked out; and the route asked for one worker per database step, no more
+  and no fewer.
+* ``test_the_github_email_lookup_runs_off_the_event_loop`` -- the GitHub
+  callback's call to the emails endpoint (a blocking ``requests.get``, faked
+  here) runs in a worker thread, not on the event loop's.
 * ``test_each_refusal_answers_as_before`` -- for each refusal, its status,
   body, ``Location``, ``Set-Cookie`` and ``Cache-Control``, and whether it
   reached the database at all, are pinned: the same answers the routes gave
@@ -46,6 +50,7 @@ from urllib.parse import urlencode
 import anyio.to_thread
 import httpx
 import pytest
+import requests
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import QueuePool
@@ -96,6 +101,11 @@ class Seen:
     checkouts: int
     loop_checkouts: int
     held_at_worker_requests: List[int]
+    #: The pool's checked-out count at each call to the (stubbed) provider.
+    held_at_provider_calls: List[int]
+    loop_thread: Optional[int]
+    #: The thread of each call to the provider's emails endpoint.
+    emails_lookup_threads: List[int]
 
 
 @dataclass
@@ -105,6 +115,8 @@ class Watch:
     loop_thread: Optional[int] = None
     checkout_threads: List[int] = field(default_factory=list)
     held_at_worker_requests: List[int] = field(default_factory=list)
+    held_at_provider_calls: List[int] = field(default_factory=list)
+    emails_lookup_threads: List[int] = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def begin(self) -> None:
@@ -112,7 +124,20 @@ class Watch:
             self.loop_thread = threading.get_ident()
             self.checkout_threads.clear()
             self.held_at_worker_requests.clear()
+            self.held_at_provider_calls.clear()
+            self.emails_lookup_threads.clear()
             self.recording = True
+
+    def provider_call(self) -> None:
+        """Called by every stubbed provider call, wherever the route makes it."""
+        with self.lock:
+            if self.recording:
+                self.held_at_provider_calls.append(self.engine.pool.checkedout())
+
+    def emails_lookup(self) -> None:
+        with self.lock:
+            if self.recording:
+                self.emails_lookup_threads.append(threading.get_ident())
 
     def end(self) -> Seen:
         with self.lock:
@@ -123,6 +148,9 @@ class Watch:
                     1 for t in self.checkout_threads if t == self.loop_thread
                 ),
                 held_at_worker_requests=list(self.held_at_worker_requests),
+                held_at_provider_calls=list(self.held_at_provider_calls),
+                loop_thread=self.loop_thread,
+                emails_lookup_threads=list(self.emails_lookup_threads),
             )
 
 
@@ -214,6 +242,7 @@ class World:
     okta: SSOConfig
     inactive_okta: SSOConfig
     google: SSOConfig
+    github: SSOConfig
     saml_domain: str
     microsoft_domain: str
     member_id: uuid.UUID
@@ -226,6 +255,11 @@ class World:
 
     def new_email(self) -> str:
         return f"new-{uuid.uuid4().hex[:10]}@{self.domain}"
+
+    def github_email(self, kind: str = "new") -> str:
+        """An address in the GitHub config's domain; *kind* picks what the
+        stubbed emails endpoint answers for it (see ``_stub_the_identity_provider``)."""
+        return f"{kind}-{uuid.uuid4().hex[:10]}@{self.github.org_domain}"
 
 
 def _sso_config(db: Session, provider: SSOProviderType, *, active: bool = True):
@@ -257,10 +291,18 @@ def _member(db: Session, email: str, *, active: bool) -> User:
     return user
 
 
-def _stub_the_identity_provider(monkeypatch) -> None:
-    """The provider answers for whichever email the code names (``as:<email>``)."""
+def _stub_the_identity_provider(monkeypatch, watch: Watch) -> None:
+    """The provider answers for whichever email the code names (``as:<email>``).
+
+    Each call records the pool's checked-out count (``watch.provider_call``):
+    a request must hold no connection while it waits for the provider.
+    GitHub's emails endpoint is reached through ``requests.get``, so that is
+    faked too, recording its thread: the email's first word picks its answer
+    (``unverified`` -- not verified; ``lookup-fails`` -- no connection).
+    """
 
     async def exchange_oidc_code(config, code, redirect_uri, *, code_verifier, **_):
+        watch.provider_call()
         if code == FAILING_CODE:
             raise sso_service.SSORefusal(
                 400, "OIDC token exchange failed", sso_service.SSO_FAILED
@@ -269,9 +311,11 @@ def _stub_the_identity_provider(monkeypatch) -> None:
         return {"access_token": email, "id_token": email}
 
     def verify_id_token(config, provider_key, id_token, nonce):
+        watch.provider_call()
         return {"sub": f"sub-{id_token}", "email": id_token, "email_verified": True}
 
     async def get_oidc_user_info(config, access_token, http_client=None):
+        watch.provider_call()
         return {
             "email": access_token,
             "name": "Off Loop",
@@ -280,16 +324,36 @@ def _stub_the_identity_provider(monkeypatch) -> None:
             "raw": {},
         }
 
+    def requests_get(url, *, headers=None, **_):
+        watch.provider_call()
+        watch.emails_lookup()
+        assert url == sso_service._GITHUB_EMAILS_URL, f"unexpected request to {url}"
+        email = (headers or {}).get("Authorization", "").removeprefix("Bearer ")
+        if email.startswith("lookup-fails-"):
+            raise requests.ConnectionError("the stub refuses this lookup")
+        entries = [
+            {
+                "email": email,
+                "verified": not email.startswith("unverified-"),
+                "primary": True,
+            }
+        ]
+        return SimpleNamespace(
+            is_redirect=False, raise_for_status=lambda: None, json=lambda: entries
+        )
+
     monkeypatch.setattr(sso_service, "exchange_oidc_code", exchange_oidc_code)
     monkeypatch.setattr(sso_service, "verify_id_token", verify_id_token)
     monkeypatch.setattr(sso_service, "get_oidc_user_info", get_oidc_user_info)
+    monkeypatch.setattr(requests, "get", requests_get)
 
 
 @pytest.fixture
-def world(db_session: Session, monkeypatch) -> Any:
+def world(db_session: Session, pool: Watch, monkeypatch) -> Any:
     okta = _sso_config(db_session, SSOProviderType.OKTA)
     inactive_okta = _sso_config(db_session, SSOProviderType.OKTA, active=False)
     google = _sso_config(db_session, SSOProviderType.GOOGLE)
+    github = _sso_config(db_session, SSOProviderType.GITHUB)
     saml = _sso_config(db_session, SSOProviderType.SAML)
     microsoft = _sso_config(db_session, SSOProviderType.MICROSOFT)
     db_session.commit()
@@ -300,15 +364,16 @@ def world(db_session: Session, monkeypatch) -> Any:
     inactive = _member(db_session, inactive_email, active=False)
     db_session.commit()
 
-    _stub_the_identity_provider(monkeypatch)
+    _stub_the_identity_provider(monkeypatch, pool)
     monkeypatch.setattr(core_settings, "DASHBOARD_ORIGINS", [DASH])
     monkeypatch.setattr(core_settings, "PUBLIC_BASE_URL", None)
-    configs = [okta, inactive_okta, google, saml, microsoft]
+    configs = [okta, inactive_okta, google, github, saml, microsoft]
     try:
         yield World(
             okta=okta,
             inactive_okta=inactive_okta,
             google=google,
+            github=github,
             saml_domain=saml.org_domain,
             microsoft_domain=microsoft.org_domain,
             member_id=member.id,
@@ -358,14 +423,16 @@ def integrations(db_session: Session):
 # ---------------------------------------------------------------------------
 
 
-def _cookie(config: Any, *, dashboard: bool, expired: bool = False) -> Tuple[str, str]:
+def _cookie(
+    config: Any, *, dashboard: bool, expired: bool = False, provider: str = "okta"
+) -> Tuple[str, str]:
     """(state, Cookie header) for a login started with *config*."""
     kwargs = {"return_to": DASH, "handoff": HH} if dashboard else {}
     if expired:
         with patch.object(sso_service.time, "time", return_value=time.time() - 3600):
-            started = sso_service.start_oidc_login(config, "okta", **kwargs)
+            started = sso_service.start_oidc_login(config, provider, **kwargs)
     else:
-        started = sso_service.start_oidc_login(config, "okta", **kwargs)
+        started = sso_service.start_oidc_login(config, provider, **kwargs)
     return started.state, f"{sso_service.OIDC_STATE_COOKIE}={started.cookie_value}"
 
 
@@ -377,15 +444,29 @@ def _callback(
     state: Optional[str] = "the-cookies",
     error: Optional[str] = None,
     provider: str = "okta",
+    cookie_provider: str = "okta",
     cookie: bool = True,
     expired: bool = False,
 ) -> Call:
-    started_state, header = _cookie(config, dashboard=dashboard, expired=expired)
+    started_state, header = _cookie(
+        config, dashboard=dashboard, expired=expired, provider=cookie_provider
+    )
     params = {"code": code, "error": error}
     params["state"] = started_state if state == "the-cookies" else state
     query = urlencode({k: v for k, v in params.items() if v is not None})
     headers = (("cookie", header),) if cookie else ()
     return Call("GET", f"/api/v1/auth/sso/oidc/{provider}/callback?{query}", headers)
+
+
+def _github_callback(world: World, *, dashboard: bool, kind: str = "new") -> Call:
+    """The callback of a GitHub sign-in: its email comes from the emails endpoint."""
+    return _callback(
+        world.github,
+        dashboard=dashboard,
+        code=f"as:{world.github_email(kind)}",
+        provider="github",
+        cookie_provider="github",
+    )
 
 
 def _sso_login(domain: Optional[str], return_to: Optional[str] = DASH, handoff=HH):
@@ -441,6 +522,8 @@ class Route:
     status: int
     #: Database steps the request takes, each in a worker of its own.
     steps: int
+    #: Calls the request makes to the (stubbed) identity provider.
+    provider_calls: int = 0
 
 
 ROUTES = [
@@ -460,12 +543,14 @@ ROUTES = [
         lambda w: _callback(w.okta, dashboard=False, code=f"as:{w.new_email()}"),
         200,
         2,
+        provider_calls=3,
     ),
     Route(
         "oidc_callback-dashboard",
         lambda w: _callback(w.okta, dashboard=True, code=f"as:{w.new_email()}"),
         302,
         2,
+        provider_calls=3,
     ),
     Route("jira_webhook", lambda w: _webhook("jira", EVENT), 200, 1),
     Route("salesforce_webhook", lambda w: _webhook("salesforce", EVENT), 200, 1),
@@ -510,6 +595,36 @@ async def test_no_connection_is_held_when_a_route_asks_for_a_worker(
         f"{seen.held_at_worker_requests}, want {[0] * route.steps} (one worker "
         "per database step, none asked for while a connection is held)"
     )
+    assert seen.held_at_provider_calls == [0] * route.provider_calls, (
+        f"{route.id}: connections checked out at each identity provider call "
+        f"{seen.held_at_provider_calls}, want {[0] * route.provider_calls} (none "
+        "held while the request waits for the provider)"
+    )
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("dashboard", [False, True], ids=["json", "dashboard"])
+async def test_the_github_email_lookup_runs_off_the_event_loop(
+    dashboard: bool, pool: Watch, world: World
+):
+    """GitHub has no ID token, so the callback asks its emails endpoint, over a
+    blocking HTTP client: that call must run in a worker, holding no
+    connection, like the database steps around it."""
+    response, seen = await _send(pool, _github_callback(world, dashboard=dashboard))
+
+    if dashboard:
+        assert response.status_code == 302, response.text
+        assert response.headers["location"].startswith(f"{DASH}/sso/complete#code=")
+    else:
+        assert response.status_code == 200, response.text
+    assert len(seen.emails_lookup_threads) == 1, seen.emails_lookup_threads
+    assert seen.emails_lookup_threads[0] != seen.loop_thread, (
+        "the GitHub emails lookup (requests.get) ran on the event loop's thread"
+    )
+    # The config lookup, the emails lookup and the provisioning: one worker each.
+    assert seen.held_at_worker_requests == [0, 0, 0], seen.held_at_worker_requests
+    assert seen.held_at_provider_calls == [0, 0, 0], seen.held_at_provider_calls
+    assert seen.loop_checkouts == 0, seen.loop_checkouts
 
 
 # ---------------------------------------------------------------------------
@@ -566,6 +681,7 @@ UNSUPPORTED = "This single sign-on provider is not supported yet"
 EXCHANGE_REFUSED = "This sign-in could not be completed; start it again"
 WEBHOOK_REFUSED = _json("Webhook authentication failed")
 OTHER_DOMAIN = "someone@elsewhere.example"
+EMAIL_UNVERIFIED = "The identity provider has not verified this account's email address"
 DOMAIN_REFUSED = (
     "This account's email is not in the domain this single sign-on is configured for"
 )
@@ -880,6 +996,27 @@ REFUSALS = [
         ),
         _refused_to_dashboard("sso_inactive", database=True),
     ),
+    # --- the callback of a GitHub sign-in: its emails lookup refuses -----------
+    Refusal(
+        "callback-github-email-not-verified",
+        lambda w: _github_callback(w, dashboard=False, kind="unverified"),
+        _refused_json(403, EMAIL_UNVERIFIED, database=True, cookie=True),
+    ),
+    Refusal(
+        "callback-github-emails-lookup-fails",
+        lambda w: _github_callback(w, dashboard=False, kind="lookup-fails"),
+        _refused_json(400, "OIDC userinfo fetch failed", database=True, cookie=True),
+    ),
+    Refusal(
+        "dashboard-callback-github-email-not-verified",
+        lambda w: _github_callback(w, dashboard=True, kind="unverified"),
+        _refused_to_dashboard("sso_unverified", provider="github", database=True),
+    ),
+    Refusal(
+        "dashboard-callback-github-emails-lookup-fails",
+        lambda w: _github_callback(w, dashboard=True, kind="lookup-fails"),
+        _refused_to_dashboard("sso_failed", provider="github", database=True),
+    ),
     # --- POST /webhooks/{jira,salesforce,github} ---------------------------------
     *_webhook_refusals("jira"),
     *_webhook_refusals("salesforce"),
@@ -925,4 +1062,12 @@ async def test_no_refusal_uses_the_database_on_the_event_loop(
     assert seen.loop_checkouts == 0, (
         f"{case.id}: {seen.loop_checkouts} of {seen.checkouts} checkouts on the "
         "event loop's thread, want 0"
+    )
+    assert seen.loop_thread not in seen.emails_lookup_threads, (
+        f"{case.id}: the GitHub emails lookup (requests.get) ran on the event "
+        "loop's thread"
+    )
+    assert set(seen.held_at_provider_calls) <= {0}, (
+        f"{case.id}: connections checked out at each identity provider call "
+        f"{seen.held_at_provider_calls}, want 0 at each"
     )
