@@ -10,6 +10,13 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.43.1](https://github.com/Controlvar/controlvar/compare/v0.43.0...v0.43.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* **api:** the SDK ruleset route keeps answering under sustained overload ([#1754](https://github.com/Controlvar/controlvar/issues/1754)) ([e132666](https://github.com/Controlvar/controlvar/commit/e1326660b56ee178d18604847a6f1fefce2db55f))
+
 ## [0.43.0](https://github.com/Controlvar/controlvar/compare/v0.42.0...v0.43.0) (2026-11-04)
 
 
