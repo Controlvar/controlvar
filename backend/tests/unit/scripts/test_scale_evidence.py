@@ -243,11 +243,12 @@ def test_an_inexact_pair_is_refused():
 
 @pytest.mark.regression
 @pytest.mark.parametrize(
-    "pair, expected", [((5, 1000), 350), ((17, 2500), 476), ((1, 1000), 70)]
+    "pair, expected", [((5, 1000), 351), ((17, 2500), 477), ((1, 1000), 71)]
 )
 def test_the_schedule_of_a_70_second_scenario(pair, expected):
-    """5, 6.8 and 1 requests a second for 70 s: 350, 476 and 70 (the PE's numbers;
-    the first draft's formula gave 0 for all three)."""
+    """5, 6.8 and 1 requests a second for 70 s: 351, 477 and 71, the floor of
+    rate x 70 s plus the request k6 starts at t = 0 (the first draft's formula
+    gave 0 for all three; the second, the floor alone, was one short)."""
     assert se.scheduled_count(*pair, 70) == expected
 
 
@@ -401,13 +402,13 @@ def test_a_healthy_step_is_valid_and_keeps_up():
         "none",
     )
     assert messages == []
-    assert step["rows"] + step["dropped"] == step["scheduled"] == 700
+    assert step["rows"] + step["dropped"] == step["scheduled"] == 701
     # Iteration i is due at i x 500000 / 5001 ms: 101 is the first at or after 10 s.
     assert se.first_measured(5001, 500_000, 10) == 101
-    assert step["measured"] == 700 - 101
-    assert step["achieved_milli_rps"] == 599 * 1000 // 60
+    assert step["measured"] == 701 - 101
+    assert step["achieved_milli_rps"] == 600 * 1000 // 60
     assert step["milli_rps"] == 10002
-    assert step["reasons"] == {"targeting_rule": 299, "rollout": 300}
+    assert step["reasons"] == {"targeting_rule": 300, "rollout": 300}
     assert step["p50_us"] <= step["p95_us"] <= step["p99_us"]
 
 
@@ -422,9 +423,9 @@ def test_throughput_and_percentiles_come_from_the_steady_window_only():
     for row in rows[:settle]:
         row["latency_us"] = "900000"
     step, _ = summarise("track", 4, rows)
-    assert step["rows"] == 700
-    assert step["measured"] == len(rows) - settle == 599
-    assert step["achieved_milli_rps"] == 599 * 1000 // 60
+    assert step["rows"] == 701
+    assert step["measured"] == len(rows) - settle == 600
+    assert step["achieved_milli_rps"] == 600 * 1000 // 60
     assert step["p99_us"] < 900_000
 
 
@@ -434,9 +435,9 @@ def test_a_csv_missing_its_last_second_is_invalid():
     tolerance let through; the identity is exact to one request."""
     method = se.load_config()
     rows = fx.step_rows(method, "evaluate_get", 4, missing_tail=10)
-    step, messages = summarise(rows=rows, server_count=700)
+    step, messages = summarise(rows=rows, server_count=701)
     assert step["invalid_reason"] == "sent-identity"
-    assert messages[0] == "step 4: rows 690 + dropped 0 != scheduled 700"
+    assert messages[0] == "step 4: rows 691 + dropped 0 != scheduled 701"
 
 
 @pytest.mark.regression
@@ -448,6 +449,65 @@ def test_the_real_stale_csv_pair_is_invalid():
     fields, messages = se.judge_step(method, "track", step, fx.SPLIT)
     assert fields["invalid_reason"] == "sent-identity"
     assert messages[0] == "step 4: rows 5863 + dropped 0 != scheduled 5905"
+
+
+@pytest.mark.regression
+def test_the_request_k6_starts_at_t0_is_counted():
+    """A real step: ruleset run 2's step 19 in a publication run of 0.43.2.
+    128.157 requests a second for 70 s is 8,970.99 slots: k6 started the one at
+    t = 0, the 8,970 after it, and one more whose slot fell 78 µs after the end,
+    so 5,786 rows + 3,186 dropped = 8,972. Counted as the floor (8,970) the
+    identity was out by two and the step INVALID, which blocked the run; counted
+    as k6 starts them (8,971) it is out by one, and the step is judged on its
+    drops."""
+    method = se.load_config()
+    assert se.step_rates(method, "ruleset")[19 - 1] == 128_157
+    assert se.rate_pair(128_157) == (128_157, 1_000_000)
+    step = fx.step_facts(
+        method,
+        "ruleset",
+        19,
+        rows=5786,
+        dropped=3186,
+        measured=4786,
+        server_count=5786,
+        p99_us=3_860_797,
+        start_lag_p99_us=0,
+        generator_cpu_permille=33,
+    )
+    assert (step["valid"], step["invalid_reason"]) == (True, "none")
+    assert (step["keeps_up"], step["fail_reason"]) == (False, "dropped")
+    assert step["scheduled"] == 8971
+    assert step["rows"] + step["dropped"] - step["scheduled"] == 1
+    # two over the new count is still refused
+    fields, messages = se.judge_step(
+        method, "ruleset", {**step, "dropped": 3187}, fx.SPLIT
+    )
+    assert fields["invalid_reason"] == "sent-identity"
+    assert messages[0] == "step 19: rows 5786 + dropped 3187 != scheduled 8971"
+
+
+@pytest.mark.regression
+def test_a_row_is_refused_from_two_past_the_floor():
+    """Iterations are numbered from 0, and the tolerance allows one more than
+    k6 starts: at 10.002 requests a second (700.14 slots) iteration 701 is
+    accepted and iteration 702 refused. Counted as the floor, 701 was refused."""
+
+    def rows(count):
+        # iteration i due at i x 500,000 / 5001 ms; the last ones at the end
+        return [
+            fx.row(
+                "evaluate_get",
+                i,
+                sent_offset_us=min(i * 500_000_000 // 5001, 70_000_000),
+            )
+            for i in range(count)
+        ]
+
+    step, _ = summarise(rows=rows(702))
+    assert (step["rows"], step["scheduled"], step["valid"]) == (702, 701, True)
+    message = refused(summarise, rows=rows(703))
+    assert message == "rows: iteration 702 is beyond the 701 scheduled"
 
 
 def test_one_request_short_is_within_the_tolerance():
@@ -677,11 +737,11 @@ def test_an_unexpected_evaluate_reason_is_an_error_and_counted():
 
 
 def test_one_error_in_a_thousand_keeps_up_and_two_do_not():
-    """Step 7 measures 1,199 requests: 1 error is within 1 in 1,000, 2 are not
+    """Step 7 measures 1,200 requests: 1 error is within 1 in 1,000, 2 are not
     (1000 x errors > measured x 1, in integers)."""
     method = se.load_config()
     step = fx.step_facts(method, "track", 7, errors=1)
-    assert step["measured"] == 1199 and step["keeps_up"]
+    assert step["measured"] == 1200 and step["keeps_up"]
     step = fx.step_facts(method, "track", 7, errors=2)
     assert step["fail_reason"] == "errors"
 
@@ -692,11 +752,12 @@ def test_mix_is_smoke_only():
         se.summarise_step, method, "mix", [], {}, "", ""
     )
     smoke = se.load_config(mode="smoke")
-    # 5 requests a second for 5 + 20 s: 125 requests, of the mix's five kinds.
+    # 5 requests a second for 5 + 20 s: 126 requests (one at t = 0, then one
+    # every 200 ms up to 25 s), of the mix's five kinds.
     rows = [
         fx.row(kind, i, sent_offset_us=i * 200_000)
         for i, kind in enumerate(
-            ["evaluate_get", "track", "assign", "batch", "ruleset"] * 25
+            (["evaluate_get", "track", "assign", "batch", "ruleset"] * 26)[:126]
         )
     ]
     observation = fx.observation(smoke, "mix", 1, rows=len(rows), samples=20)
@@ -709,7 +770,7 @@ def test_mix_is_smoke_only():
         fx.metrics("a"),
         fx.metrics("a"),
     )
-    assert step["valid"] and step["keeps_up"] and step["scheduled"] == 125
+    assert step["valid"] and step["keeps_up"] and step["scheduled"] == 126
 
 
 def _dropped_step(sent_at_s, dropped, row_changes=None):
@@ -1001,10 +1062,23 @@ def test_the_issue_is_linked_only_when_serialised_is_the_result():
 STALL = fx.FIXTURES / "ruleset_stall_steps.json"
 
 
-def _stall():
+def _recorded():
     data = se.loads(STALL.read_text(encoding="utf-8"))
-    before, step = data["steps"]
-    return data["cpu_split"], before, step
+    return data["cpu_split"], data["steps"]
+
+
+def _stall():
+    """The two recorded steps, with ``scheduled`` counted as the rules count it
+    now. The job recorded the floor, one short of the request k6 starts at
+    t = 0 (see scheduled_count); every other field is as recorded."""
+    split, (before, step) = _recorded()
+    method = se.load_config()
+    window = se.ranges(method)
+    seconds = window["settle_s"] + window["measure_s"]
+    return split, *(
+        {**s, "scheduled": se.scheduled_count(s["rate"], s["time_unit_ms"], seconds)}
+        for s in (before, step)
+    )
 
 
 def _stalled_rep(meth, number):
@@ -1025,14 +1099,19 @@ def test_a_step_whose_answers_collapse_while_the_api_s_cpu_falls_is_stalled():
     split, before, step = _stall()
     method = se.load_config()
     assert split == fx.SPLIT
-    for record in (before, step):
+    _, recorded = _recorded()
+    for record, as_recorded in zip((before, step), recorded):
         problems = []
         se.STEP_SPEC.check(record, "step", problems)
         assert problems == []
-        # the record is what the rules give under the committed method
-        recomputed = {**record, **se._derived(record, method, split)}
+        # the record is what the rules give under the committed method, but
+        # for the count of the request at t = 0, which the job left out: with
+        # it, rows + dropped is the schedule exactly (3,560 and 4,485)
+        recomputed = {**as_recorded, **se._derived(as_recorded, method, split)}
         recomputed.update(se.judge_step(method, "ruleset", recomputed, split)[0])
         assert recomputed == record
+        assert record["scheduled"] == as_recorded["scheduled"] + 1
+        assert record["rows"] + record["dropped"] == record["scheduled"]
     assert (step["measured"] - step["errors"], step["timeouts"]) == (9, 1549)
     assert (before["api_cpu_permille"], step["api_cpu_permille"]) == (652, 172)
     assert step["active_backend_samples_by_count"] == [30]
@@ -2196,7 +2275,7 @@ def test_the_headline_is_the_lowest_knee_with_that_step_s_percentiles():
     assert _track_row(results) == (
         "| POST /api/v1/tracking/track | at least 10.0 requests a second | 10.0 to "
         "15.9 | 12.6 to 20.0 requests a second | the 99th percentile over the limit | "
-        "4 ms | 13 ms | 25 ms | 0 of 1,797 |"
+        "4 ms | 13 ms | 25 ms | 0 of 1,800 |"
     )
 
 
@@ -2317,7 +2396,7 @@ def test_latency_prints_in_whole_milliseconds(us, text):
 
 def test_errors_print_as_counts_never_a_percentage():
     block = se.render_block(fx.small(), LINK)
-    assert "| 0 of 1,797 |" in block  # 599 measured in each of 3 runs
+    assert "| 0 of 1,800 |" in block  # 600 measured in each of 3 runs
     rows = [line for line in block.split("\n") if line.startswith("| GET /api/v1")]
     assert rows and all("%" not in row for row in rows)
 
@@ -2348,7 +2427,7 @@ def test_the_setup_states_the_limit_the_tool_and_the_method_commit():
 def test_the_page_says_what_kept_up_with_and_its_columns_are():
     """F1: the old sentence said the figures were the median run's; the
     percentiles are each a median over the runs at that step, and the errors
-    are those runs added up (0 of 1,797 is 599 in each of 3). Kept up with is
+    are those runs added up (0 of 1,800 is 600 in each of 3). Kept up with is
     now the lowest of the runs' knees, and the spread limit is the method's."""
     block = se.render_block(fx.small(), LINK)
     assert "median run's" not in block

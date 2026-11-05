@@ -896,8 +896,16 @@ def milli_rps_of(rate: int, time_unit_ms: int) -> int:
 
 
 def scheduled_count(rate: int, time_unit_ms: int, seconds: int) -> int:
-    """How many requests k6 schedules in ``seconds``: ``floor(rate x s x 1000 / tu)``."""
-    return rate * seconds * 1000 // time_unit_ms
+    """How many requests k6 starts in ``seconds``: ``floor(rate x s x 1000 / tu) + 1``.
+
+    k6 starts one at t = 0 and one every ``tu / rate`` ms after it, up to and
+    including t = ``seconds``. The ``+ 1`` is the one at t = 0: without it the
+    count was one short, so the sent identity's one-request tolerance was
+    already used up before anything went wrong (rows + dropped was the floor
+    plus one in 487 of the 489 steps of two publication runs, and plus two in
+    the other two).
+    """
+    return rate * seconds * 1000 // time_unit_ms + 1
 
 
 def first_measured(rate: int, time_unit_ms: int, settle_s: int) -> int:
