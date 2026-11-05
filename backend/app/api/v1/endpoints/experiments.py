@@ -26,6 +26,7 @@ from fastapi import (
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps, experiment_cache
 from backend.app.api.read_scope import get_current_reader
@@ -1710,33 +1711,63 @@ async def get_experiment_results(
         HTTPException 403: If the caller's role does not hold READ on experiments
         HTTPException 404: If the experiment does not exist
     """
-    experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
-    if not experiment:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Experiment not found"
+    # The lookup, the 404 and DRAFT checks and the computation run in the
+    # thread pool, so a long computation does not hold up this process's other
+    # requests (#1738). The permission is decided here first, while the
+    # request's session can still load the caller: an API key's first use in a
+    # window commits, which expires its owner, and a role-less user's grants
+    # are read through the row's session. Once ``db`` is closed the row is
+    # detached and is not read again. What the check raised is re-raised after
+    # the lookup, so the order stays 404, 403, 400.
+    refusal: Optional[Exception] = None
+    try:
+        deps.get_experiment_read_access(None, current_user)
+    except Exception as exc:
+        refusal = exc
+    db.close()
+    return await run_in_threadpool(_experiment_results, experiment_id, refusal, db)
+
+
+def _experiment_results(
+    experiment_id: UUID, refusal: Optional[Exception], db: Session
+) -> ExperimentResultsResponse:
+    """The answer of ``GET /experiments/{experiment_id}/results``, read on *db*.
+
+    *refusal* is what the caller's permission check raised, or None. Closes
+    *db*.
+    """
+    try:
+        experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
+        if not experiment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Experiment not found"
+            )
+
+        if refusal is not None:
+            raise refusal
+
+        if experiment.status == ExperimentStatus.DRAFT:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot get results for experiments in DRAFT status",
+            )
+
+        # None, explicitly: the route function's own defaults are ``Query``
+        # objects, not values. None means the experiment's stored settings, so
+        # this goes through the same resolution, cache key, snapshot rule and
+        # labels as ``GET /results/{id}`` with no options (#580). The results
+        # route does not read ``current_user``; the caller was admitted above.
+        return results_endpoints.get_experiment_results(
+            experiment_id=experiment_id,
+            confidence_level=None,
+            correction_method=None,
+            use_cache=True,
+            breakdown=None,
+            db=db,
+            current_user=None,
         )
-
-    deps.get_experiment_read_access(experiment, current_user)
-
-    if experiment.status == ExperimentStatus.DRAFT:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot get results for experiments in DRAFT status",
-        )
-
-    # None, explicitly: the route function's own defaults are ``Query``
-    # objects, not values. None means the experiment's stored settings, so
-    # this goes through the same resolution, cache key, snapshot rule and
-    # labels as ``GET /results/{id}`` with no options (#580).
-    return results_endpoints.get_experiment_results(
-        experiment_id=experiment_id,
-        confidence_level=None,
-        correction_method=None,
-        use_cache=True,
-        breakdown=None,
-        db=db,
-        current_user=current_user,
-    )
+    finally:
+        db.close()
 
 
 # New endpoints
