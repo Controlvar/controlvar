@@ -10,6 +10,22 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.43.2](https://github.com/Controlvar/controlvar/compare/v0.43.1...v0.43.2) (2026-11-05)
+
+
+### Bug Fixes
+
+* **api:** a failed audit write logs the error's type, as the other audit paths do ([#1745](https://github.com/Controlvar/controlvar/issues/1745)) ([806e17e](https://github.com/Controlvar/controlvar/commit/806e17efdc1a37e98aec6e0b2b75ff6361b65bfd))
+* **api:** the API no longer pauses for about 30 seconds at a time under sustained overload ([#1766](https://github.com/Controlvar/controlvar/issues/1766)) ([38a792a](https://github.com/Controlvar/controlvar/commit/38a792a84fdbbbdb10990e03be14eb490153bd15))
+* **api:** under sustained overload the API keeps answering ([#1767](https://github.com/Controlvar/controlvar/issues/1767)) ([b411bcf](https://github.com/Controlvar/controlvar/commit/b411bcf40a1d70798af2527cd59b616668ba1a19))
+* **python-sdk:** track and get_variant refuse NaN and Infinity instead of sending them ([#1760](https://github.com/Controlvar/controlvar/issues/1760)) ([cb1e6c5](https://github.com/Controlvar/controlvar/commit/cb1e6c5ef1bf7593c6035956c9b95d0670d054b6))
+* **react-native-sdk:** a deleted flag is answered as off, not from the stored answer ([#1749](https://github.com/Controlvar/controlvar/issues/1749)) ([6084edf](https://github.com/Controlvar/controlvar/commit/6084edf94e6d30e6b1b881c04bd6887d12aea972))
+
+
+### Documentation
+
+* **flags:** archived and deleted flags say what each evaluation answers ([#1752](https://github.com/Controlvar/controlvar/issues/1752)) ([66c607f](https://github.com/Controlvar/controlvar/commit/66c607f7e82db42fd1ca91ac577da931bd7c28d1))
+
 ## [0.43.1](https://github.com/Controlvar/controlvar/compare/v0.43.0...v0.43.1) (2026-11-05)
 
 
