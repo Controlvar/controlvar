@@ -300,6 +300,10 @@ reason = "the SDK contract and each SDK's status; no steps to follow"
 class = "exec"
 reason = "its blocks run on a stack in Doc Examples"
 
+[pages."sdk/exposure-hook.md"]
+class = "reference"
+reason = "not walked: each example needs the reader's own account with that analytics tool; the hook it describes is held by each SDK's unit tests and the SDK live contract"
+
 [pages."api/auth.md"]
 class = "exec"
 reason = "its blocks run on a stack in Doc Examples"
@@ -701,7 +705,7 @@ note = "sign-in per role and a password change, a first API key used for an assi
 # above says what each field means.
 # ---------------------------------------------------------------------------
 [meta]
-walked = 156
+walked = 157
 
 # The front door, and the policy beside it.
 

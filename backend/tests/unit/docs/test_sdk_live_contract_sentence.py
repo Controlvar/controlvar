@@ -54,6 +54,7 @@ JOB = "sdk-live-contract"
 #: Pages under docs/sdk/ that are not one SDK's page, with the reason.
 NOT_AN_SDK_PAGE: Dict[str, str] = {
     "local-evaluation.md": "server-side local evaluation, shared by the Python and JS SDKs",
+    "exposure-hook.md": "the exposure hook of seven SDKs, sent to analytics tools; each SDK's page has its own sentence",
 }
 
 LINK = (
