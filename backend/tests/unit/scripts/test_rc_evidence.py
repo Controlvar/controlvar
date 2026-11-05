@@ -14,15 +14,22 @@ from __future__ import annotations
 import base64
 import contextlib
 import copy
+import functools
 import hashlib
+import http.client
 import importlib.util
 import io
 import json
+import os
 import pathlib
+import subprocess
 import sys
 import tomllib
+import urllib.error
 import urllib.parse
-from typing import Any, Callable, Dict, List, Optional, Tuple
+import urllib.request
+import urllib.response
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 import pytest
 
@@ -80,6 +87,24 @@ FILES = {
 PYPI_URL = "https://pypi.org/pypi/controlvar/json"
 NPM_URL = "https://registry.npmjs.org/@controlvar%2fjs-sdk"
 TARBALL_URL = f"https://registry.npmjs.org/{JS_NAME}/-/js-sdk-{JS_VERSION}.tgz"
+#: Token-shaped, made up at run time: gitleaks scans every pushed commit, so
+#: no token-shaped literal is in this file. WORLD_TOKEN is the run's GH_TOKEN.
+WORLD_TOKEN = "gh" + "s_" + "W0r" * 12
+FAKE_TOKEN = "gh" + "s_" + "Q7x" * 12
+OTHER_TOKEN = "github" + "_pat_" + "Zz9" * 20
+#: Where GitHub's API sends a log read, and the signature its URL carries.
+LOG_API = f"https://api.github.com/repos/{REPO}/actions/jobs/"
+STORAGE_HOST = "productionresultssa3.blob.core.windows.net"
+SIGNATURE = "Ab3" * 15
+
+
+def signed_url(job_id: int) -> str:
+    return (
+        f"https://{STORAGE_HOST}/actions-results/x/{job_id}"
+        "?sv=2025-11-05&se=2026-11-05T05%3A30%3A00Z&sp=r&sig=" + SIGNATURE
+    )
+
+
 GOOD_DESCRIPTION = {
     "PyPI": (
         "# controlvar\n\nThe Python client. See the"
@@ -282,6 +307,12 @@ class World:
         self.logs: Dict[str, str] = {}
         self.web: Dict[str, bytes] = {}
         self.fetched: List[str] = []
+        #: Each GET of a job's log, hop by hop: (url, headers).
+        self.sent: List[Tuple[str, Dict[str, str]]] = []
+        #: Answers that replace the good ones, by job id: hop 1 (GitHub's API)
+        #: and hop 2 (the storage), each (status, headers, body).
+        self.hop1: Dict[int, Tuple[int, Dict[str, str], bytes]] = {}
+        self.hop2: Dict[int, Tuple[int, Dict[str, str], bytes]] = {}
         self.release_ids = {"js": 3000, "python": 3001}
         self.build_ids = {"js": 4000, "python": 4001}
         self.manifests = {"js": (JS_NAME, JS_VERSION), "python": (PY_NAME, PY_VERSION)}
@@ -510,6 +541,37 @@ class World:
             raise rc.FetchError(f"GET {url}: HTTPError 404")
         return answer
 
+    # -- a job's log, over HTTP (read_job_log) ------------------------------------
+    def log_text(self, job_id: int) -> Optional[str]:
+        """The log the world holds for a job: world.logs, else a build job's."""
+        if f"actions/jobs/{job_id}/logs" in self.logs:
+            return self.logs[f"actions/jobs/{job_id}/logs"]
+        for sdk, build_id in self.build_ids.items():
+            if job_id == build_id:
+                return self.build_log(sdk)
+        return None
+
+    def send(
+        self, url: str, headers: Mapping[str, str]
+    ) -> Tuple[int, Dict[str, str], bytes]:
+        """GitHub's API answers 302 to a signed storage URL; the storage
+        answers the log. Every request is kept, headers and all."""
+        self.sent.append((url, dict(headers)))
+        if url.startswith(LOG_API) and url.endswith("/logs"):
+            job_id = int(url[len(LOG_API) : -len("/logs")])
+            if job_id in self.hop1:
+                return self.hop1[job_id]
+            if self.log_text(job_id) is None:
+                return 404, {}, b'{"message":"Not Found","status":"404"}'
+            return 302, {"Location": signed_url(job_id)}, b""
+        assert url.startswith(f"https://{STORAGE_HOST}/"), url
+        job_id = int(url.split("/")[-1].split("?")[0])
+        if job_id in self.hop2:
+            return self.hop2[job_id]
+        text = self.log_text(job_id)
+        assert text is not None, url
+        return 200, {"Content-Type": "text/plain"}, text.encode("utf-8")
+
     # -- the fake gh -------------------------------------------------------------
     def gh(self, args: List[str]) -> str:
         self.calls.append(list(args))
@@ -518,13 +580,10 @@ class World:
             prefix = f"repos/{REPO}/"
             assert args[1].startswith(prefix)
             path = args[1][len(prefix) :]
+            # T174: gh exits 1 on a log read under a workflow's token.
+            assert not path.endswith("/logs"), f"a log is never read through gh: {args}"
             if path.startswith("actions/workflows/") and "/runs?" in path:
                 return json.dumps(self.list_runs(path))
-            if path in self.logs:
-                return self.logs[path]
-            for sdk, job_id in self.build_ids.items():
-                if path == f"actions/jobs/{job_id}/logs":
-                    return self.build_log(sdk)
             if path.startswith("contents/sdk?ref="):
                 trees = self.trees.get(path.split("=", 1)[1])
                 if trees is None:
@@ -600,7 +659,13 @@ class World:
         return directory
 
     # -- running the verifier ---------------------------------------------------
-    def main(self, *extra: str, out: Optional[pathlib.Path] = None) -> Tuple[int, str]:
+    def main(
+        self,
+        *extra: str,
+        out: Optional[pathlib.Path] = None,
+        gh: Optional[Callable[[List[str]], str]] = None,
+        send: Optional[rc.Send] = None,
+    ) -> Tuple[int, str]:
         out = out or self.tmp / "out"
         argv = [TAG, "--root", str(self.root), "--out", str(out), *extra]
         if self.staging is not None:
@@ -610,10 +675,12 @@ class World:
         with contextlib.redirect_stdout(buffer):
             code = rc.main(
                 argv,
-                gh=self.gh,
+                gh=gh or self.gh,
                 head_of=lambda root: self.head,
                 registry=lambda root: copy.deepcopy(self.registry),
                 fetch=self.fetch,
+                environ={**os.environ, "GH_TOKEN": WORLD_TOKEN},
+                send=send or self.send,
             )
         return code, buffer.getvalue()
 
@@ -2023,6 +2090,331 @@ def test_a_build_job_listed_without_an_id_fails(world):
 def test_an_unreadable_build_log_fails(world):
     world.build_ids["python"] = 4999  # the fake answers no log for job 4001
     _fails(world, "cannot read the log of 'test and build for PyPI'")
+
+
+# ---------------------------------------------------------------------------
+# A job's log, in two GETs (T174). v0.34.1, v0.34.3 and v0.36.0's verifier
+# runs failed P with "gh api .../logs failed (exit 1)" and nothing else; the
+# diagnostic run 41978116497 (PR #1764) showed GitHub's API answering 302 to
+# the workflow token and gh exiting 1 after the redirected read ended 200 OK.
+# The verifier now makes both hops itself (read_job_log).
+# ---------------------------------------------------------------------------
+SIGNED_URL = signed_url(4001)
+#: Azure blob storage's answer for a log that is not there (measured
+#: 2026-11-05 on a skipped job's log; the leading BOM is Azure's).
+BLOB_GONE = (
+    "\N{ZERO WIDTH NO-BREAK SPACE}"
+    '<?xml version="1.0" encoding="utf-8"?><Error><Code>BlobNotFound</Code>'
+    "<Message>The specified blob does not exist.\nRequestId:0</Message></Error>"
+).encode()
+AUTH_FAILED = b'<?xml version="1.0"?><Error><Code>AuthenticationFailed</Code></Error>'
+ADMIN_403 = b'{"message":"Must have admin rights to Repository.","status":"403"}'
+NOT_FOUND = b'{"message":"Not Found","status":"404"}'
+GONE = (
+    "the log is not in GitHub's log storage (past the repository's log"
+    " retention, deleted, or never written), so its record cannot be read back"
+)
+HOP_1 = "hop 1 (GitHub's API)"
+HOP_2 = f"hop 2 (log storage at {STORAGE_HOST})"
+
+
+def _p_row(text: str, registry: str) -> str:
+    return next(
+        line for line in text.splitlines() if line.startswith(f"| P | {registry} ")
+    )
+
+
+def _authorization(headers: Mapping[str, str]) -> Optional[str]:
+    return next((v for k, v in headers.items() if k.lower() == "authorization"), None)
+
+
+@pytest.mark.regression
+def test_the_log_is_read_in_two_hops_and_only_the_first_carries_the_token(world):
+    """A 302 then a 200: PASS on the record. The storage, which gets a signed
+    URL, never gets the token."""
+    code, text = world.main()
+    assert code == 0, text
+    assert "| PASS |" in _p_row(text, "PyPI") and "| PASS |" in _p_row(text, "npm")
+    hops = sorted((url, _authorization(headers)) for url, headers in world.sent)
+    assert hops == [
+        (f"{LOG_API}4000/logs", f"Bearer {WORLD_TOKEN}"),
+        (f"{LOG_API}4001/logs", f"Bearer {WORLD_TOKEN}"),
+        (signed_url(4000), None),
+        (signed_url(4001), None),
+    ]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "hop1, hop2, says",
+    [
+        (
+            (403, {}, ADMIN_403),
+            None,
+            f"{HOP_1} answered HTTP 403, not a redirect: Must have admin rights to"
+            " Repository.",
+        ),
+        (
+            (404, {}, NOT_FOUND),
+            None,
+            f"{HOP_1} answered HTTP 404, not a redirect: Not Found",
+        ),
+        ((200, {}, b"a log"), None, f"{HOP_1} answered HTTP 200, not a redirect"),
+        ((302, {}, b""), None, f"{HOP_1} answered HTTP 302 with no https Location"),
+        (
+            (302, {"Location": f"http://{STORAGE_HOST}/4001"}, b""),
+            None,
+            f"{HOP_1} answered HTTP 302 with no https Location",
+        ),
+        (
+            None,
+            (403, {}, AUTH_FAILED),
+            f"{HOP_2} answered HTTP 403, storage AuthenticationFailed",
+        ),
+        (None, (404, {}, b""), f"(job 4001): {HOP_2} answered HTTP 404"),
+        (
+            None,
+            (404, {}, BLOB_GONE),
+            f"{GONE}: {HOP_2} answered HTTP 404, storage BlobNotFound",
+        ),
+        (None, (200, {}, b""), "GitHub answered with an empty log"),
+    ],
+    ids=[
+        "hop1-403",
+        "hop1-404",
+        "hop1-no-redirect",
+        "hop1-no-location",
+        "hop1-http-location",
+        "hop2-403",
+        "hop2-404",
+        "hop2-blob-gone",
+        "hop2-empty",
+    ],
+)
+def test_an_unreadable_log_fails_p_naming_the_hop(world, hop1, hop2, says):
+    """Each way a hop fails: P FAILs, and the reason names the hop and its
+    HTTP status (and the storage's code). The other package's P is untouched."""
+    if hop1 is not None:
+        world.hop1[4001] = hop1
+    if hop2 is not None:
+        world.hop2[4001] = hop2
+    code, text = world.main()
+    assert code == 1, text
+    assert text.rstrip().endswith("RC EVIDENCE: FAIL"), text
+    row = _p_row(text, "PyPI")
+    assert "| FAIL |" in row, row
+    assert "cannot read the log of 'test and build for PyPI' (job 4001)" in row, row
+    assert says in row, row
+    assert "| PASS |" in _p_row(text, "npm")
+
+
+@pytest.mark.parametrize("hop", [1, 2])
+def test_a_hop_that_does_not_answer_fails_p_naming_it(world, hop):
+    def send(url: str, headers: Mapping[str, str]):
+        if url.startswith(LOG_API if hop == 1 else f"https://{STORAGE_HOST}/"):
+            raise urllib.error.URLError(f"no route to {SIGNED_URL} for {WORLD_TOKEN}")
+        return world.send(url, headers)
+
+    code, text = world.main(send=send)
+    assert code == 1, text
+    assert f"{HOP_1 if hop == 1 else HOP_2}: URLError" in _p_row(text, "PyPI")
+    record = (world.tmp / "out" / "runs.json").read_text()
+    for written in (text, record):
+        for secret in (WORLD_TOKEN, SIGNATURE, "sig="):
+            assert secret not in written
+
+
+def test_a_log_longer_than_the_bound_fails_p_and_is_never_cut(world, monkeypatch):
+    monkeypatch.setattr(rc, "LOG_MAX", 64)
+    code, text = world.main()
+    assert code == 1, text
+    assert f"{HOP_2}: the log is longer than 64 bytes" in _p_row(text, "PyPI")
+
+
+@pytest.mark.regression
+def test_no_reason_holds_the_token_or_a_signed_query(world):
+    """GitHub's message, and the storage's body, carrying the token, another
+    token-shaped word and a signed URL: none of it is printed or recorded."""
+    leaky = f"Bad credentials {WORLD_TOKEN} {OTHER_TOKEN} at {SIGNED_URL}"
+    world.hop1[4001] = (
+        401,
+        {"Location": SIGNED_URL},
+        json.dumps({"message": leaky}).encode(),
+    )
+    world.hop2[4000] = (
+        403,
+        {},
+        f"<Error><Code>AuthenticationFailed</Code><Url>{signed_url(4000)}</Url>"
+        f"<T>{WORLD_TOKEN}</T></Error>".encode(),
+    )
+    code, text = world.main()
+    assert code == 1, text
+    record = (world.tmp / "out" / "runs.json").read_text()
+    for written in (text, record):
+        for secret in (
+            WORLD_TOKEN,
+            OTHER_TOKEN,
+            SIGNATURE,
+            "sig=",
+            "sv=",
+            "actions-results",
+        ):
+            assert secret not in written
+    assert (
+        f"{HOP_1} answered HTTP 401, not a redirect: Bad credentials <token> <token> at"
+        " <url>"
+    ) in _p_row(text, "PyPI")
+    assert f"{HOP_2} answered HTTP 403, storage AuthenticationFailed" in _p_row(
+        text, "npm"
+    )
+
+
+class FakeHTTPS(urllib.request.HTTPSHandler):
+    """HTTPS in process, no socket: GitHub's API answers 302 to the signed
+    storage URL, the storage answers the log. Every request is kept, with the
+    headers it carried, as urllib built it."""
+
+    def __init__(self, log: bytes):
+        super().__init__()
+        self.log = log
+        self.received: List[Tuple[str, Dict[str, str]]] = []
+
+    def https_open(self, req):
+        self.received.append((req.full_url, dict(req.header_items())))
+        if urllib.parse.urlsplit(req.full_url).hostname == "api.github.com":
+            status, reason, answer, body = 302, "Found", {"Location": SIGNED_URL}, b""
+        else:
+            status, reason, answer, body = 200, "OK", {}, self.log
+        message = http.client.HTTPMessage()
+        for key, value in answer.items():
+            message[key] = value
+        response = urllib.response.addinfourl(
+            io.BytesIO(body), message, req.full_url, status
+        )
+        response.msg = reason
+        return response
+
+
+@pytest.mark.regression
+def test_http_send_never_follows_the_redirect_so_the_token_stays_with_github():
+    """The real ``http_send`` through urllib: GitHub's 302 is an answer, so the
+    storage request is the verifier's own, without the token. urllib, left to
+    follow it, copies the Authorization header onto the storage request."""
+    https = FakeHTTPS(b"the log")
+    try:
+        text = rc.read_job_log(
+            REPO, 4001, WORLD_TOKEN, functools.partial(rc.http_send, handlers=[https])
+        )
+    except rc.LogError as error:
+        text = f"LogError: {error}"
+    storage = [headers for url, headers in https.received if STORAGE_HOST in url]
+    assert storage and all(_authorization(h) is None for h in storage), (
+        "the token reached the storage"
+    )
+    assert text == "the log"
+    assert [(url, _authorization(h)) for url, h in https.received] == [
+        (f"{LOG_API}4001/logs", f"Bearer {WORLD_TOKEN}"),
+        (SIGNED_URL, None),
+    ]
+
+
+def test_without_gh_token_the_token_is_gh_s_own_login():
+    calls: List[List[str]] = []
+
+    def gh(args: List[str]) -> str:
+        calls.append(args)
+        return WORLD_TOKEN + "\n"
+
+    assert rc.GitHub(gh, REPO, environ={}).token() == WORLD_TOKEN
+    assert calls == [["auth", "token"]]
+
+
+def test_no_usable_token_fails_the_read():
+    def gh(args: List[str]) -> str:
+        raise rc.GhError("gh auth token failed (exit 1)")
+
+    with pytest.raises(rc.LogError, match="no GitHub token to read it with"):
+        rc.GitHub(gh, REPO, environ={}).token()
+    with pytest.raises(rc.LogError, match="no usable GitHub token"):
+        rc.GitHub(gh, REPO, environ={"GH_TOKEN": "two words"}).token()
+
+
+def test_the_verifier_passes_through_the_real_run_gh(world, monkeypatch):
+    """The control for run_gh: every gh call through it, answered by the world."""
+
+    def gh_process(argv: List[str], **kwargs: Any) -> subprocess.CompletedProcess:
+        try:
+            answer = world.gh(argv[1:])
+        except rc.GhError:
+            return subprocess.CompletedProcess(
+                argv, 1, "", "gh: Not Found (HTTP 404)\n"
+            )
+        return subprocess.CompletedProcess(argv, 0, answer, "")
+
+    monkeypatch.setattr(rc.subprocess, "run", gh_process)
+    code, text = world.main(gh=rc.run_gh)
+    assert code == 0, text
+
+
+@pytest.mark.regression
+def test_a_failed_gh_call_says_its_http_status_and_never_the_token(monkeypatch):
+    """Every other gh call: run_gh keeps what gh said, cleaned by ``said``."""
+    monkeypatch.setenv("GH_TOKEN", FAKE_TOKEN)
+
+    def gh_process(argv: List[str], **kwargs: Any) -> subprocess.CompletedProcess:
+        said = f"gh: Bad credentials {FAKE_TOKEN} {OTHER_TOKEN} (HTTP 401) via {SIGNED_URL}\n"
+        return subprocess.CompletedProcess(
+            argv, 1, '{"message":"Bad credentials"}', said
+        )
+
+    monkeypatch.setattr(rc.subprocess, "run", gh_process)
+    with pytest.raises(rc.GhError) as raised:
+        rc.run_gh(["api", f"repos/{REPO}/actions/runs/1/jobs"])
+    assert str(raised.value) == (
+        f"gh api repos/{REPO}/actions/runs/1/jobs failed (exit 1, HTTP 401): gh: Bad"
+        " credentials <token> <token> (HTTP 401) via <url>"
+    )
+    assert raised.value.status == 401
+
+
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        f"{FAKE_TOKEN}",
+        f"token {OTHER_TOKEN} refused",
+        "x" * 40 + "eyJhbGciOiJIUzI1NiJ9" * 3,
+        f"see {SIGNED_URL} and http://example.com/?q={SIGNATURE}",
+        "\x1b[31mgh:\N{LINE SEPARATOR} HTTP 500\x00\N{ZERO WIDTH NO-BREAK SPACE}",
+        " " * 5000 + FAKE_TOKEN,
+    ],
+    ids=["ghs", "pat", "long-run", "urls", "control-chars", "past-the-read"],
+)
+def test_said_takes_out_tokens_urls_and_controls(monkeypatch, stderr):
+    monkeypatch.setenv("GH_TOKEN", FAKE_TOKEN)
+    quoted = rc.said(stderr)
+    assert len(quoted) <= rc.GH_SAID_MAX
+    assert all(" " <= c <= "~" for c in quoted)
+    for secret in (FAKE_TOKEN, OTHER_TOKEN, SIGNATURE, "eyJhbGciOiJIUzI1NiJ9"):
+        assert secret not in quoted
+
+
+def test_said_takes_out_the_token_s_value_whatever_its_shape(monkeypatch):
+    monkeypatch.setenv("GH_TOKEN", "short-but-secret")
+    assert rc.said("gh: refused short-but-secret (HTTP 403)") == (
+        "gh: refused <token> (HTTP 403)"
+    )
+
+
+@pytest.mark.regression
+def test_p_never_passes_without_a_record(world, monkeypatch):
+    """Any path that reads no record and says nothing still fails P: without a
+    record the registry comparisons compare nothing."""
+    monkeypatch.setattr(rc.Verifier, "release_record", lambda self, *a: None)
+    _fails(
+        world,
+        "no record of 'test and build for PyPI' was read",
+        "no record of 'test and build for npm' was read",
+    )
 
 
 def test_a_registry_that_does_not_answer_fails(world):
