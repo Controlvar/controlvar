@@ -44,7 +44,16 @@ import pytest
 from ground_truth.hashing import flag_bucket
 from usecases import admin, gates, proxy, runner, sdks
 
-from conftest import Live, _poll, _synced, _wait_until, proxied
+from conftest import (
+    Live,
+    _created,
+    _fail_on,
+    _poll,
+    _synced,
+    _turned_off,
+    _wait_until,
+    proxied,
+)
 
 #: G2-1: the server-mode SDKs' cache lifetime, in seconds (C).
 CACHE_TTL = 10
@@ -63,29 +72,6 @@ LOCAL_POLL = 0.5
 
 def _node_for(request: pytest.FixtureRequest, sdk: str) -> sdks.Node | None:
     return request.getfixturevalue("node") if sdk == "js" else None
-
-
-def _created(flag: dict[str, Any], percentage: int) -> str:
-    if (flag.get("status"), flag.get("rollout_percentage")) != ("active", percentage):
-        pytest.fail(
-            f"the flag was not created active at {percentage}%: status"
-            f" {flag.get('status')!r}, {flag.get('rollout_percentage')!r}%",
-            pytrace=False,
-        )
-    return str(flag["id"])
-
-
-def _turned_off(toggled: dict[str, Any]) -> bool:
-    """The toggle's answer says the flag is now off. The toggle route answers
-    the stored status as it is (``INACTIVE``,
-    ``backend/tests/integration/api/test_feature_flag_kill_switch.py``), where
-    the flag's own read answers it lower-cased: compared without case."""
-    return str(toggled.get("status", "")).lower() == "inactive"
-
-
-def _fail_on(findings: list[str], case: str) -> None:
-    if findings:
-        pytest.fail(f"{case} failed:\n  " + "\n  ".join(findings), pytrace=False)
 
 
 def ramp_users(run: str) -> list[str]:

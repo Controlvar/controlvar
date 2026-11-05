@@ -930,8 +930,67 @@ text = "Archived flags"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "An archived flag is retired: it is never served, and nothing turns it back on by accident."
-by = ["exempt:baseline"]
+text = "An archived flag is retired: every evaluation answers it as off (enabled: false, reason: \"inactive\", and its off value, which a value method returns instead of your default), in local evaluation too, and nothing turns it back on by accident."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
+    "test:backend/tests/unit/services/test_sdk_ruleset.py::test_an_inactive_value_flag_carries_its_type_and_off_value",
+    "test:sdk/python/tests/test_evaluator.py::test_every_must_local_case_is_answered_locally",
+    "test:sdk/js/__tests__/evaluator.test.ts::every must_local case is answered locally",
+]
+
+[[unit]]
+text = "Deleting a flag"
+by = ["exempt:label"]
+
+[[unit]]
+text = "DELETE /api/v1/feature-flags/$FLAG_ID removes a flag for good; it cannot be undone."
+by = [
+    "test:backend/tests/integration/api/test_feature_flags_api.py::TestFeatureFlagsDelete::test_delete_feature_flag_returns_204",
+    "test:backend/tests/integration/api/test_feature_flags_api.py::TestFeatureFlagsDelete::test_deleted_flag_not_found_by_id",
+]
+
+[[unit]]
+text = "While any code may still ask for the flag, archive it instead."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "After a delete:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "As of v0.42.0, evaluating its key answers 404."
+by = ["exempt:intent"]
+tag = "X"
+
+[[unit]]
+text = "Each SDK answers it as it does for any failure: see its page (JavaScript, React, React Native, Python, Go, Java, Ruby, PHP, .NET, Elixir, iOS, Android, Flutter, Edge)."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "A client keeps an answer it cached until the cache expires, 5 minutes by default."
+by = [
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_each_sdk_cache_lifetime_is_the_number_the_page_states",
+]
+
+[[unit]]
+text = "Its events are kept, with feature_flag_id null."
+by = [
+    "test:backend/tests/integration/api/test_flag_delete_keeps_events.py::test_deleting_a_flag_keeps_its_events_untagged",
+]
+
+[[unit]]
+text = "The audit log records the delete as feature_flag_delete."
+by = [
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_delete",
+]
+
+[[unit]]
+text = "Only a role that may delete flags can do it (ADMIN, DEVELOPER, or in the full profile a custom role with feature_flag (delete)); anyone else gets 403."
+by = [
+    "test:backend/tests/unit/core/test_feature_flag_access_rule.py::test_the_shipped_table_on_someone_elses_flag",
+    "test:backend/tests/smoke/test_flag_change_routes_guarded.py::test_the_inventory_is_exact",
+    "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
+]
 
 [[unit]]
 text = "Every request that would turn it on (PUT with \"is_active\": true, /activate, /enable, /toggle, and bulk enable) answers 400 with"

@@ -27,7 +27,15 @@ for _root in (LIBRARY_ROOT, DOCS_RUNNER_ROOT):
         sys.path.insert(0, str(_root))
 
 from docs_runner import oracles, traffic
-from ground_truth import contract, faults, generator, hashing, ledger, reference
+from ground_truth import (
+    contract,
+    faults,
+    generator,
+    hashing,
+    ledger,
+    reference,
+    targeting,
+)
 
 __all__ = [
     "DOCS_RUNNER_ROOT",
@@ -43,6 +51,7 @@ __all__ = [
     "records",
     "reference",
     "replay",
+    "targeting",
     "traffic",
 ]
 

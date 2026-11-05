@@ -21,7 +21,8 @@ class ExperimentationError(Exception):
 
     Attributes:
         status: HTTP status code of the failed response, or ``None`` for
-            network errors and timeouts.
+            network errors, timeouts and a request the SDK did not send (its
+            body held NaN or an infinite number).
         body: Raw response body (text) when a response was received.
         code: Set on the errors a typed getter (``get_string_value``,
             ``get_number_value``, ``get_json_value``) makes itself:

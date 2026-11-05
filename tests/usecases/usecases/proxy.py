@@ -84,7 +84,9 @@ before ``start`` or after ``stop``.
 out when it happened and the proxy's time; ``wait_idle`` waits (at most 30 s)
 until every request that arrived has its record and its answer.
 ``teardown_problem`` is the end-of-case check: no fault left on, and one
-ruleset ``GET`` through the proxy recorded unfaulted, 200 or 304.
+ruleset ``GET`` through the proxy recorded unfaulted, 200 or 304. ``stop``
+waits at most 5 s for the requests in flight and raises ``ProxyNotIdle`` when
+one is still in flight then (see its docstring for what it does not wait for).
 """
 
 from __future__ import annotations
@@ -181,6 +183,11 @@ RESPONSE_SKIP = frozenset(
 
 class ProxyRefused(ValueError):
     """The proxy was asked to listen or forward somewhere it may not."""
+
+
+class ProxyNotIdle(RuntimeError):
+    """``stop`` ran out of time before every request in flight had its
+    record."""
 
 
 @dataclass(frozen=True)
@@ -454,9 +461,17 @@ class RecordingProxy:
     def stop(self) -> None:
         """Stop serving. A held blackhole ends (as ``stop``) within
         ``HOLD_POLL``. The requests' threads are daemon threads, which
-        ``server_close`` does not join, so this waits (at most
-        ``STOP_SECONDS``) until no request is in flight: once it returns, every
-        request that arrived has its record, a held one included."""
+        ``server_close`` does not join, so this then waits, at most
+        ``STOP_SECONDS`` (5 s), until no request is in flight. When it returns,
+        every request in flight when it was called has its record, a held one
+        included; when the wait runs out first it raises ``ProxyNotIdle``
+        instead (a request still waiting on the upstream, say), because a
+        record missing from what a gate reads would otherwise go unseen.
+
+        A request is in flight from the moment its headers have been read. A
+        connection accepted before ``stop`` whose request has not arrived yet
+        is not waited for: if the request comes afterwards it is still
+        relayed, and recorded, after ``stop`` has returned."""
         server, thread = self._server, self._thread
         self._server = self._thread = None
         if server is None:
@@ -467,7 +482,14 @@ class RecordingProxy:
         server.server_close()
         if thread is not None:
             thread.join(timeout=STOP_SECONDS)
-        self.wait_idle(STOP_SECONDS)
+        idle = self.wait_idle(STOP_SECONDS)
+        serving = thread is not None and thread.is_alive()
+        if not idle or serving:
+            raise ProxyNotIdle(
+                f"stop() waited {STOP_SECONDS:g} s and {self.in_flight} requests were"
+                " still in flight (their records are missing)"
+                + (", and the serving thread had not ended" if serving else "")
+            )
 
     def __enter__(self) -> RecordingProxy:
         return self.start()

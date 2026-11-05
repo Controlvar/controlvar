@@ -59,6 +59,15 @@ export class OfflineStorage {
     return entry && typeof entry.value?.enabled === 'boolean' ? entry : null;
   }
 
+  /** Removes a persisted flag evaluation (a deleted flag must not be served again). Never throws. */
+  async removeFlag(userId: string, flagKey: string): Promise<void> {
+    try {
+      await AsyncStorage.removeItem(storageKey(FLAG_PREFIX, userId, flagKey));
+    } catch {
+      // Best-effort — never throw
+    }
+  }
+
   /** Persists an experiment assignment with its expiry. */
   async setAssignment(userId: string, experimentKey: string, value: Assignment, ttlMs: number): Promise<void> {
     await this.write(storageKey(ASSIGNMENT_PREFIX, userId, experimentKey), value, ttlMs);

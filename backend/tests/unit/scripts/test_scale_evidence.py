@@ -83,6 +83,10 @@ def test_the_method_file_holds_the_named_values():
         "cpu_permille": 900,
         "io_wait_permille": 500,
         "pool_permille": 900,
+        "stalled": {
+            "min_failed_permille": 250,
+            "max_api_cpu_of_previous_permille": 750,
+        },
         "serialised": {
             "max_cpu_permille": 900,
             "max_active_backends": 1,
@@ -146,6 +150,15 @@ DELETE = object()
         ({"keeps_up__max_p99_ms": 0}, "keeps_up.max_p99_ms: must be at least 1"),
         ({"repetitions": 4}, "repetitions: 4 is even"),
         ({"cpu_split": dict(fx.SPLIT)}, "cpu_split: unknown key"),
+        ({"bottleneck__stalled": DELETE}, "bottleneck.stalled: missing key"),
+        (
+            {"bottleneck__stalled__min_failed_permille": 0},
+            "bottleneck.stalled.min_failed_permille: must be at least 1",
+        ),
+        (
+            {"bottleneck__stalled__max_api_cpu_of_previous_permille": 1001},
+            "bottleneck.stalled.max_api_cpu_of_previous_permille: must be at most 1000",
+        ),
     ],
 )
 def test_the_loader_refuses_a_wrong_method_file_and_names_the_key(changes, named):
@@ -981,6 +994,143 @@ def test_the_issue_is_linked_only_when_serialised_is_the_result():
     )
     assert se.TRACKING_ISSUE not in hot
     assert "#823" not in hot
+
+
+#: V29's stall: ruleset run 2's steps 15 and 16 of workflow run 41732112985,
+#: as the job recorded them (scale_fixtures/ruleset_stall_steps.json).
+STALL = fx.FIXTURES / "ruleset_stall_steps.json"
+
+
+def _stall():
+    data = se.loads(STALL.read_text(encoding="utf-8"))
+    before, step = data["steps"]
+    return data["cpu_split"], before, step
+
+
+def _stalled_rep(meth, number):
+    """A ruleset run whose steps 1-14 kept up and whose steps 15 and 16 are the
+    recorded ones."""
+    split, before, step = _stall()
+    steps = [fx.step_facts(meth, "ruleset", n) for n in range(1, 15)]
+    return fx.rep(meth, "ruleset", number, [*steps, before, step], split)
+
+
+@pytest.mark.regression
+def test_a_step_whose_answers_collapse_while_the_api_s_cpu_falls_is_stalled():
+    """V29, recorded: 9 of the 1,557 measured requests answered (1,549 timed
+    out), the API's CPU fell from 652 to 172 per-mille, and the database
+    sampler saw no active connection in 30 of 30 samples. The step also meets
+    serialised's signature, which is what it was attributed before (and what
+    linked #823): it is stalled only because stalled is checked first."""
+    split, before, step = _stall()
+    method = se.load_config()
+    assert split == fx.SPLIT
+    for record in (before, step):
+        problems = []
+        se.STEP_SPEC.check(record, "step", problems)
+        assert problems == []
+        # the record is what the rules give under the committed method
+        recomputed = {**record, **se._derived(record, method, split)}
+        recomputed.update(se.judge_step(method, "ruleset", recomputed, split)[0])
+        assert recomputed == record
+    assert (step["measured"] - step["errors"], step["timeouts"]) == (9, 1549)
+    assert (before["api_cpu_permille"], step["api_cpu_permille"]) == (652, 172)
+    assert step["active_backend_samples_by_count"] == [30]
+    assert se.attribute(method, step, split, before) == "stalled"
+    # with no step before it, no fall in CPU is known: serialised, as before
+    assert se.attribute(method, step, split) == "serialised"
+
+
+@pytest.mark.parametrize(
+    "changes, before_cpu, expected",
+    [
+        ({}, 652, "stalled"),
+        # 1000 x 390 >= 250 x 1,557; 389 is not
+        ({"errors": 390}, 652, "stalled"),
+        ({"errors": 389}, 652, "serialised"),
+        # 1000 x 489 <= 750 x 652; 490 is not
+        ({"api_cpu_permille": 489}, 652, "stalled"),
+        ({"api_cpu_permille": 490}, 652, "serialised"),
+        # the API's CPU rose, or did not move: answers collapsing is not enough
+        ({}, 172, "serialised"),
+        ({}, 100, "serialised"),
+        ({}, 0, "serialised"),
+        # nothing measured: no share of failed requests
+        ({"measured": 0, "errors": 0}, 652, "serialised"),
+    ],
+    ids=[
+        "recorded",
+        "failed-share-at-the-limit",
+        "failed-share-under-the-limit",
+        "cpu-at-the-limit",
+        "cpu-over-the-limit",
+        "cpu-unchanged",
+        "cpu-rose",
+        "previous-cpu-zero",
+        "nothing-measured",
+    ],
+)
+def test_stalled_fires_at_its_limits_and_not_past_them(changes, before_cpu, expected):
+    """Each limit at its boundary: a comparison written the other way, or a
+    limit one per-mille off, moves one of each pair."""
+    split, before, step = _stall()
+    method = se.load_config()
+    step = {**step, **changes}
+    before = {**before, "api_cpu_permille": before_cpu}
+    assert se.attribute(method, step, split, before) == expected
+
+
+def test_a_hot_resource_is_named_before_a_stall():
+    """A step whose answers collapsed while the API's CPU fell, but whose
+    database connections were all waiting on disk, is postgres-io: stalled
+    only replaces serialised and none-at-limit."""
+    split, before, step = _stall()
+    method = se.load_config()
+    step = {
+        **step,
+        "active_backend_samples_by_count": [0, 0, 30],
+        "io_wait_observations": 40,
+    }
+    assert se.attribute(method, step, split, before) == "postgres-io"
+
+
+def test_a_run_is_attributed_from_its_first_failing_step_and_the_step_before():
+    meth = fx.method()
+    rep = _stalled_rep(meth, 1)
+    assert (rep["knee_step"], rep["first_failing_step"]) == (15, 16)
+    assert (rep["first_failing_reason"], rep["bottleneck"], rep["valid"]) == (
+        "dropped",
+        "stalled",
+        True,
+    )
+
+
+@pytest.mark.regression
+def test_a_stalled_run_is_never_published_and_never_links_the_database_issue():
+    """Render refuses a stall exactly as it refuses an invalid run: the
+    scenario is blocked (stalled-rep), so the page is never written, and the
+    bottleneck has no words of its own to write."""
+    meth = fx.method()
+    results = fx.small()
+    ruleset = next(s for s in results["scenarios"] if s["name"] == "ruleset")
+    ruleset["reps"] = [_stalled_rep(meth, n) for n in (1, 2, 3)]
+    ruleset["summary"] = se.summarise_scenario(meth, ruleset["reps"])
+    assert se.results_problems(results) == []
+    summary = ruleset["summary"]
+    assert (summary["bottleneck"], summary["publishable"]) == ("stalled", False)
+    assert summary["not_publishable"] == ["stalled-rep"]
+    assert "GET /api/v1/sdk/ruleset: not publishable (stalled-rep)" in (
+        se.publication_problems(results)
+    )
+    message = refused(se.render_block, results, LINK)
+    assert "stalled-rep" in message
+    assert se.TRACKING_ISSUE not in message and "#823" not in message
+    assert "no words for the bottleneck 'stalled'" in refused(
+        se._stopped, meth, "stalled", fx.SPLIT
+    )
+    # one stalled run of three is enough
+    mixed = [_stalled_rep(meth, 1), *fx.small()["scenarios"][5]["reps"][1:]]
+    assert "stalled-rep" in se.summarise_scenario(meth, mixed)["not_publishable"]
 
 
 # ---------------------------------------------------------------------------
@@ -1953,7 +2103,7 @@ def test_a_topology_beyond_the_four_recorded_threads_is_not_published():
 
 
 def test_more_runs_than_the_method_s_are_not_published():
-    """The page says "Over 3 runs" and states the median run's knee."""
+    """The page says "Over 3 runs" and states the lowest of the 3 runs' knees."""
     meth = fx.method()
     reps = [
         fx.rep(meth, "track", n, fx.rep_steps(meth, "track", 4, ["p99", "p99"]))
@@ -1992,15 +2142,79 @@ def test_the_data_the_runs_started_from_is_the_method_s():
     )
 
 
-def test_a_spread_wider_than_two_steps_is_unstable():
+def _track_knees(*knees):
+    """A publishable file whose three track runs have these knees."""
     meth = fx.method()
-    reps = [
-        fx.rep(meth, "track", n, fx.rep_steps(meth, "track", knee, ["p99"]))
-        for n, knee in ((1, 4), (2, 5), (3, 7))
+    results = fx.small(meth)
+    track = results["scenarios"][3]
+    track["reps"] = [
+        fx.rep(meth, "track", n, fx.rep_steps(meth, "track", knee, ["p99", "p99"]))
+        for n, knee in enumerate(knees, 1)
     ]
-    summary = se.summarise_scenario(meth, reps)
+    track["summary"] = se.summarise_scenario(meth, track["reps"])
+    return results
+
+
+def _track_row(results):
+    return next(
+        line
+        for line in se.render_block(results, LINK).split("\n")
+        if line.startswith("| POST /api/v1/tracking/track |")
+    )
+
+
+@pytest.mark.regression
+def test_a_spread_wider_than_two_steps_is_disclosed_not_refused():
+    """The spread is still computed against the method's limit; a spread over
+    it is said beside the lowest knee and no longer withholds the request type.
+    Knees 4, 5 and 7 are 10.0 to 20.0 requests a second, three steps apart."""
+    results = _track_knees(4, 5, 7)
+    summary = results["scenarios"][3]["summary"]
     assert (summary["knee_spread_steps"], summary["unstable"]) == (3, True)
-    assert "unstable" in summary["not_publishable"]
+    assert (summary["publishable"], summary["not_publishable"]) == (True, [])
+    assert "unstable" not in se.NOT_PUBLISHABLE
+    assert se.results_problems(results) == []
+    assert se.publication_problems(results) == []
+    assert _track_row(results).startswith(
+        "| POST /api/v1/tracking/track | at least 10.0 requests a second | 10.0 to "
+        "20.0; varied by a factor of 2 or more across runners | "
+    )
+    within = _track_knees(4, 5, 6)
+    assert within["scenarios"][3]["summary"]["unstable"] is False
+    row = _track_row(within)
+    assert "| 10.0 to 15.9 |" in row and "varied" not in row
+
+
+@pytest.mark.regression
+def test_the_headline_is_the_lowest_knee_with_that_step_s_percentiles():
+    """Knees 6, 4 and 5: the median is step 5 (p95 14 ms, p99 28 ms), the
+    lowest step 4 (13 ms, 25 ms). The row is the lowest's, never the median's."""
+    results = _track_knees(6, 4, 5)
+    summary = results["scenarios"][3]["summary"]
+    assert (summary["knee_min_step"], summary["knee_median_step"]) == (4, 5)
+    assert summary["knee_min_milli_rps"] == summary["steps"][3]["milli_rps"] == 10_002
+    assert _track_row(results) == (
+        "| POST /api/v1/tracking/track | at least 10.0 requests a second | 10.0 to "
+        "15.9 | 12.6 to 20.0 requests a second | the 99th percentile over the limit | "
+        "4 ms | 13 ms | 25 ms | 0 of 1,797 |"
+    )
+
+
+def test_the_spread_words_hold_at_every_pair_of_steps():
+    """The words "a factor of 2 or more" are computed from the method, rounded
+    down: at every pair of steps more than two apart, in each series, the higher
+    rate is at least twice the lower."""
+    meth = se.load_config()
+    apart = meth["max_knee_spread_steps"] + 1
+    for name in se.SCENARIOS:
+        assert se._spread_factor(meth, name) == "2"
+        rates = se.step_rates(meth, name)
+        assert all(
+            rates[high] >= 2 * rates[low]
+            for low in range(len(rates))
+            for high in range(low + apart, len(rates))
+        )
+    assert se._spread_factor(fx.method(max_knee_spread_steps=1), "track") == "1.5"
 
 
 def test_a_run_below_the_series_or_above_the_cap_is_not_a_number():
@@ -2134,15 +2348,99 @@ def test_the_setup_states_the_limit_the_tool_and_the_method_commit():
 def test_the_page_says_what_kept_up_with_and_its_columns_are():
     """F1: the old sentence said the figures were the median run's; the
     percentiles are each a median over the runs at that step, and the errors
-    are those runs added up (0 of 1,797 is 599 in each of 3)."""
+    are those runs added up (0 of 1,797 is 599 in each of 3). Kept up with is
+    now the lowest of the runs' knees, and the spread limit is the method's."""
     block = se.render_block(fx.small(), LINK)
     assert "median run's" not in block
+    assert "median of the 3 runs' knees" not in block
     assert (
-        "Kept up with is the median of the 3 runs' knees, a run's knee being the "
-        "last rate it kept up with before its first failing step. Beside it, each "
-        "percentile is the median of the runs that reached that step, and Errors "
-        "adds up those runs' failed and measured requests." in block
+        "Kept up with is the lowest of the 3 runs' knees, a run's knee being the "
+        "last rate it kept up with before its first failing step; Over 3 runs is "
+        "the range of their knees, and Each run gives every run's. Where the knees "
+        "were more than 2 steps apart, Over 3 runs says how much they varied "
+        "across runners. Beside it, each percentile is the median of the runs that "
+        "reached that step, and Errors adds up those runs' failed and measured "
+        "requests." in block
     )
+
+
+#: A safety tick, as a step's scheduler_ticks records it.
+SAFETY_TICK = fx.ticks(
+    safety={"success": 1, "duration_count": 1, "duration_sum_us": 950_000}
+)
+
+
+def test_each_run_is_rendered_from_the_results_file():
+    """V2: every run's CPU model, knee, first failing step and why, and the
+    steps that recorded a scheduler tick come from the file; change the file
+    and the page follows. Track run 3: another CPU model, and a tick in step 2
+    and in its first failing step, 5."""
+    results = fx.small()
+    rep = results["scenarios"][3]["reps"][2]
+    rep["host"]["cpu_model"] = "AMD EPYC 9V74 80-Core Processor"
+    for number in (2, 5):
+        rep["steps"][number - 1]["scheduler_ticks"] = SAFETY_TICK
+    assert se.results_problems(results) == []
+    lines = se.render_block(results, LINK).split("\n")
+    assert (
+        "| Request | Run | CPU | Kept up with | First failed at | Why | Steps with a "
+        "scheduler tick |" in lines
+    )
+    assert (
+        "| POST /api/v1/tracking/track | 3 | AMD EPYC 9V74 80-Core Processor | 10.0 "
+        "requests a second (step 4) | step 5, 12.6 requests a second, a scheduler "
+        "tick in it | the 99th percentile over the limit | 2 and 5 |" in lines
+    )
+    assert (
+        "| POST /api/v1/tracking/track | 2 | AMD EPYC 7763 64-Core Processor | 12.6 "
+        "requests a second (step 5) | step 6, 15.9 requests a second | the 99th "
+        "percentile over the limit | none |" in lines
+    )
+    # its row in What it served and one per run in Each run
+    ruleset = [line for line in lines if line.startswith("| GET /api/v1/sdk/ruleset |")]
+    assert len(ruleset) == 4
+    assert (
+        "Across the runs, a background scheduler tick was recorded during steps 2 "
+        "and 5; the first failing step held one in 1 of the 18 runs whose ticks "
+        "were recorded." in lines
+    )
+
+
+def test_a_run_whose_api_exported_no_ticks_says_so_never_none():
+    results = fx.small()
+    rep = results["scenarios"][0]["reps"][0]
+    for step in rep["steps"]:
+        step.update(scheduler_metrics="absent", scheduler_ticks={})
+        if step["step"] > 1:
+            step.update(gap_metrics="absent", gap_ticks={})
+    assert se.results_problems(results) == []
+    block = se.render_block(results, LINK)
+    assert "| the 99th percentile over the limit | not recorded |" in block
+    assert (
+        "Across the runs, a background scheduler tick was recorded during no step; "
+        "the first failing step held one in 0 of the 17 runs whose ticks were "
+        "recorded. In 1 of the 18 runs the API did not export its scheduler ticks."
+        in block
+    )
+
+
+def test_batch_s_rate_from_its_median_time_is_rendered_per_run():
+    """1 / p50 at each run's knee: 3.6 ms at step 4 is 278 a second, 3.75 ms at
+    step 5 is 267. Computed from the file, never typed."""
+    block = se.render_block(fx.small(), LINK)
+    assert (
+        "For POST /api/v1/tracking/batch (100 events each), requests answered one "
+        "after another, each in the median time at the run's knee, would be, in "
+        "requests a second, 278 in run 1 (median 4 ms), 267 in run 2 (median 4 ms) "
+        "and 278 in run 3 (median 4 ms)." in block
+    )
+    results = fx.small()
+    for rep in results["scenarios"][4]["reps"]:
+        rep["steps"][rep["knee_step"] - 1]["p50_us"] = 266_000
+    results["scenarios"][4]["summary"] = se.summarise_scenario(
+        results["method"], results["scenarios"][4]["reps"]
+    )
+    assert "3.76 in run 1 (median 266 ms)" in se.render_block(results, LINK)
 
 
 @pytest.mark.regression

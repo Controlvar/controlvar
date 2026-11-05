@@ -1201,6 +1201,16 @@ text = "In a script, add --force, which deletes without asking."
 by = ["exempt:instruction"]
 
 [[unit]]
+text = "If deleting a stack fails with a target group \"in use by a listener\" (#1618), run the teardown again."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The installer's message says \"run uninstall again; it continues where it stopped\", and a second run completes."
+by = [
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_a_failure_is_named_and_a_run_again_completes",
+]
+
+[[unit]]
 text = "The glue, analytics and counters stacks exist only in a full deployment; skip their lines in a core one, a full checkout deployed with the core profile included."
 by = [
     "test:infrastructure/tests/test_app_profiles.py::TestProfileSelection::test_a_core_checkout_builds_none_of_them",

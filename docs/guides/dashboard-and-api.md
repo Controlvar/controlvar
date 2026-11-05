@@ -41,7 +41,7 @@ The table lists each capability and where you do it today:
 | Create or edit a rollout schedule and its stages | Dashboard | [Gradual rollouts](../feature-flags/rollouts.md#in-the-dashboard) |
 | Activate, pause, resume or cancel a rollout schedule, and advance a manual stage | Dashboard | [Gradual rollouts](../feature-flags/rollouts.md#in-the-dashboard) |
 | Set a rollout schedule's own start and end dates, maximum percentage and minimum stage duration | API only | [Gradual rollouts](../feature-flags/rollouts.md#creating-a-rollout-schedule-via-api) |
-| Delete a feature flag | API only | [API endpoints](../api/endpoints.md) |
+| Delete a feature flag | API only | [Deleting a flag](../feature-flags/create.md#deleting-a-flag) |
 | Archive and unarchive a feature flag | API only | [Running experiments](user-guide.md) |
 | Create a bandit experiment | API only | [Multi-armed bandits](../api/multi-armed-bandit.md) |
 | Set a bandit's weights by hand | API only | [Multi-armed bandits](../api/multi-armed-bandit.md) |
