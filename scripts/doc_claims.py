@@ -765,18 +765,7 @@ MECHANISMS: Dict[str, Mechanism] = {
             "Each assistant starts the server itself, with two settings: "
             "CONTROLVAR_API_URL is your instance's address and "
             "CONTROLVAR_API_KEY is the key.",
-            "Run this in the sdk/mcp directory you built, with the key in $KEY:",
-        ),
-    ),
-    # "Not yet published": while the page says so it names no npx command.
-    "mcp-page-state": Mechanism(
-        "backend/tests/unit/docs/test_mcp_page_config.py"
-        "::test_an_unpublished_page_names_no_install_by_npx",
-        holds=_whole(
-            "docs/mcp-server.md",
-            "Not yet published.",
-            "@controlvar/mcp-server is not on npm, so build it from a clone of "
-            "this repository:",
+            "Run this with the key in $KEY:",
         ),
     ),
     "integrations-claims": Mechanism(

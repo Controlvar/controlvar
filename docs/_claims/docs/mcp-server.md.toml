@@ -81,18 +81,6 @@ text = "If your instance runs on a private network you trust and has no HTTPS, a
 by = ["test:sdk/mcp/__tests__/config.test.ts::http://10.0.0.5:8000 answers initialize, with exactly one W1 line at every start"]
 
 [[unit]]
-text = "Build the server"
-by = ["exempt:label"]
-
-[[unit]]
-text = "Not yet published."
-by = ["mechanism:mcp-page-state"]
-
-[[unit]]
-text = "@controlvar/mcp-server is not on npm, so build it from a clone of this repository:"
-by = ["mechanism:mcp-page-state"]
-
-[[unit]]
 text = "Create an API key"
 by = ["exempt:label"]
 
@@ -157,7 +145,7 @@ text = "Claude Code"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Run this in the sdk/mcp directory you built, with the key in $KEY:"
+text = "Run this with the key in $KEY:"
 by = ["mechanism:mcp-page-snippets"]
 
 [[unit]]

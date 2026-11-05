@@ -267,8 +267,9 @@ def test_sdk_mcp_is_the_mcp_server_and_not_an_sdk():
     assert package["name"] == "@controlvar/mcp-server"
     assert package["license"] == "MIT"
     assert "mcp" not in _live_contract_sdks()
-    # The README and the SDK guide say it is not yet published. Publishing it
-    # puts it in PUBLISHED, and this fails until both sentences say so.
+    # Its README is a packaged one (I_README in scripts/check_packaged_readme.py),
+    # which quotes no version and no registry install, so it is not one of the
+    # STRICT READMEs in PUBLISHED.
     assert "mcp" not in PUBLISHED
     tools = json.loads(_text("sdk/mcp/tools.json"))
     # It reads flags, experiments and results; the one tool that is not
