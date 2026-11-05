@@ -21,11 +21,59 @@ All previously documented application bugs in this file have been fixed.
 """
 
 import uuid
+from datetime import datetime, timedelta
 
 import pytest
 
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
-from backend.tests.integration.helpers import assert_feature_flag_in_db, unique_flag_key
+from backend.tests.integration.helpers import (
+    assert_feature_flag_in_db,
+    list_all_flags,
+    unique_flag_key,
+)
+
+#: Flags seeded ahead of a list test's own: more than the largest single page
+#: (``limit=500``) any test here read before it paged through the whole list.
+OLDER_FLAGS = 501
+
+
+@pytest.fixture
+def older_flags(db_session, admin_user):
+    """Seed ``n`` flags older than any other, and remove them afterwards.
+
+    The flag list pages oldest first (#1732), and the integration database is
+    shared by the whole run, so a list test meets the flags earlier tests left
+    behind ahead of its own. These stand in for them, deterministically: they
+    are dated 2000-01-01, so they sort before every flag a test creates.
+    """
+    seeded = []
+
+    def _seed(n: int) -> None:
+        start = datetime(2000, 1, 1)
+        flags = [
+            FeatureFlag(
+                key=f"older-{uuid.uuid4().hex[:12]}",
+                name="Older flag",
+                status=FeatureFlagStatus.INACTIVE,
+                owner_id=admin_user.id,
+                rollout_percentage=0,
+                created_at=start + timedelta(seconds=i),
+            )
+            for i in range(n)
+        ]
+        db_session.add_all(flags)
+        db_session.commit()
+        seeded.extend(flag.id for flag in flags)
+
+    yield _seed
+
+    if seeded:
+        db_session.rollback()
+        db_session.query(FeatureFlag).filter(FeatureFlag.id.in_(seeded)).delete(
+            synchronize_session=False
+        )
+        db_session.commit()
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # GROUP 1: Read-only and validation tests (safe to run first — no DB commits)
@@ -46,12 +94,22 @@ class TestFeatureFlagsList:
         assert "total" in data
         assert isinstance(data["items"], list)
 
+    @pytest.mark.regression
+    @pytest.mark.parametrize(
+        "older", [0, OLDER_FLAGS], ids=["alone", "behind-older-flags"]
+    )
     def test_list_items_report_status_and_derived_is_active(
-        self, admin_client, make_feature_flag
+        self, admin_client, make_feature_flag, older_flags, older
     ):
         """Each listed flag carries its lower-cased ``status`` and a matching
         ``is_active`` — an INACTIVE flag must not be listed as ``is_active: true``
-        (the schema default) just because the model has no ``is_active`` column."""
+        (the schema default) just because the model has no ``is_active`` column.
+
+        The flags are read from every page: a single ``limit=100`` page missed
+        one of them (a KeyError) once 99 older flags existed, which a
+        single-process run of the whole suite reaches.
+        """
+        older_flags(older)
         inactive = make_feature_flag(
             key=unique_flag_key("list-inactive"),
             name="Listed Inactive",
@@ -63,9 +121,7 @@ class TestFeatureFlagsList:
             status=FeatureFlagStatus.ACTIVE,
         )
 
-        response = admin_client.get("/api/v1/feature-flags/", params={"limit": 100})
-        assert response.status_code == 200, response.text
-        by_key = {item["key"]: item for item in response.json()["items"]}
+        by_key = {item["key"]: item for item in list_all_flags(admin_client)}
 
         assert by_key[inactive.key]["status"] == "inactive"
         assert by_key[inactive.key]["is_active"] is False
@@ -76,10 +132,17 @@ class TestFeatureFlagsList:
         for item in by_key.values():
             assert item["is_active"] is (item["status"] == "active"), item
 
+    @pytest.mark.regression
+    @pytest.mark.parametrize(
+        "older", [0, OLDER_FLAGS], ids=["alone", "behind-older-flags"]
+    )
     def test_list_status_filter_uses_db_enum_casing(
-        self, admin_client, make_feature_flag
+        self, admin_client, make_feature_flag, older_flags, older
     ):
-        """``?status=INACTIVE`` (the DB enum value) only returns inactive flags."""
+        """``?status=INACTIVE`` (the DB enum value) only returns inactive flags,
+        read from every page (a single ``limit=100`` page lost the new inactive
+        flag once 100 older inactive flags existed)."""
+        older_flags(older)
         inactive = make_feature_flag(
             key=unique_flag_key("filter-inactive"), status=FeatureFlagStatus.INACTIVE
         )
@@ -87,14 +150,11 @@ class TestFeatureFlagsList:
             key=unique_flag_key("filter-active"), status=FeatureFlagStatus.ACTIVE
         )
 
-        response = admin_client.get(
-            "/api/v1/feature-flags/", params={"status": "INACTIVE", "limit": 100}
-        )
-        assert response.status_code == 200, response.text
-        keys = {item["key"] for item in response.json()["items"]}
+        items = list_all_flags(admin_client, status="INACTIVE")
+        keys = {item["key"] for item in items}
         assert inactive.key in keys
         assert active.key not in keys
-        assert all(item["status"] == "inactive" for item in response.json()["items"])
+        assert all(item["status"] == "inactive" for item in items)
 
 
 @pytest.mark.integration
@@ -119,8 +179,11 @@ class TestFeatureFlagsPermissions:
         assert isinstance(response.json()["items"], list)
 
     @pytest.mark.regression
+    @pytest.mark.parametrize(
+        "older", [0, OLDER_FLAGS], ids=["alone", "behind-older-flags"]
+    )
     def test_an_analyst_sees_a_flag_they_do_not_own(
-        self, db_session, admin_user, analyst_client
+        self, db_session, admin_user, analyst_client, older_flags, older
     ):
         """#83, the feature-flag half.
 
@@ -135,7 +198,11 @@ class TestFeatureFlagsPermissions:
         and `analyst_client` override the same authentication dependency, so
         requesting both in one test authenticates every call as whichever
         resolved last.
+
+        Read from every page: a single ``limit=500`` page lost the flag once
+        500 older flags existed.
         """
+        older_flags(older)
         flag = FeatureFlag(
             key=f"not-the-analysts-{uuid.uuid4().hex[:8]}",
             name="Owned by somebody else entirely",
@@ -148,10 +215,7 @@ class TestFeatureFlagsPermissions:
         db_session.commit()
         db_session.refresh(flag)
 
-        response = analyst_client.get("/api/v1/feature-flags/", params={"limit": 500})
-
-        assert response.status_code == 200, response.text
-        keys = {item["key"] for item in response.json()["items"]}
+        keys = {item["key"] for item in list_all_flags(analyst_client)}
         assert flag.key in keys, "an analyst must see the platform, not an empty page"
 
 
