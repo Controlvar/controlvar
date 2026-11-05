@@ -25,6 +25,7 @@ from typing import Any, List, Literal, Optional
 from fastapi import APIRouter, Depends, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session, load_only
+from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
 from backend.app.api.sdk_scope import require_sdk_ruleset_key
@@ -200,7 +201,7 @@ def if_none_match_hits(header: Optional[str], version: str) -> bool:
     },
     openapi_extra={"x-stability": "beta"},
 )
-def get_ruleset(
+async def get_ruleset(
     request: Request,
     db: Session = Depends(deps.get_db),
     api_key: APIKey = Depends(require_sdk_ruleset_key),
@@ -228,32 +229,41 @@ def get_ruleset(
     answer from the server expires (up to 300 s by default in the 0.1.1 and
     0.2.0 SDKs); `getAllFlags` always asks the server.
     """
-    # Every column the builder reads, loaded by this one query: a column left
-    # out would be loaded by one more query per flag (PF-2).
-    flags = (
-        db.query(FeatureFlag)
-        .options(
-            load_only(
-                FeatureFlag.key,
-                FeatureFlag.status,
-                FeatureFlag.rollout_percentage,
-                FeatureFlag.targeting_rules,
-                FeatureFlag.value_type,
-                FeatureFlag.on_value,
-                FeatureFlag.off_value,
+    db.close()
+    return await run_in_threadpool(_ruleset_response, request, db)
+
+
+def _ruleset_response(request: Request, db: Session) -> Response:
+    """The ruleset response for *request*, read on *db*; closes *db*."""
+    try:
+        # Every column the builder reads, loaded by this one query: a column
+        # left out would be loaded by one more query per flag (PF-2).
+        flags = (
+            db.query(FeatureFlag)
+            .options(
+                load_only(
+                    FeatureFlag.key,
+                    FeatureFlag.status,
+                    FeatureFlag.rollout_percentage,
+                    FeatureFlag.targeting_rules,
+                    FeatureFlag.value_type,
+                    FeatureFlag.on_value,
+                    FeatureFlag.off_value,
+                )
             )
+            .all()
         )
-        .all()
-    )
-    ruleset = build_ruleset(flags)
-    headers = {
-        "ETag": f'"{ruleset["version"]}"',
-        "Cache-Control": "private, no-cache",
-    }
-    if if_none_match_hits(request.headers.get("if-none-match"), ruleset["version"]):
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=headers)
-    return Response(
-        content=canonical_json(ruleset),
-        media_type="application/json",
-        headers=headers,
-    )
+        ruleset = build_ruleset(flags)
+        headers = {
+            "ETag": f'"{ruleset["version"]}"',
+            "Cache-Control": "private, no-cache",
+        }
+        if if_none_match_hits(request.headers.get("if-none-match"), ruleset["version"]):
+            return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=headers)
+        return Response(
+            content=canonical_json(ruleset),
+            media_type="application/json",
+            headers=headers,
+        )
+    finally:
+        db.close()

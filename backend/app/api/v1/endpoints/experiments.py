@@ -624,7 +624,8 @@ async def create_experiment(
         except Exception as _audit_err:
             db.rollback()
             logger.warning(
-                f"Compliance audit logging failed for experiment create: {_audit_err}"
+                "Compliance audit logging failed for experiment create (%s)",
+                type(_audit_err).__name__,
             )
 
         created_id = (
@@ -1045,7 +1046,8 @@ async def update_experiment(
         except Exception as _audit_err:
             db.rollback()
             logger.warning(
-                f"Compliance audit logging failed for experiment update: {_audit_err}"
+                "Compliance audit logging failed for experiment update (%s)",
+                type(_audit_err).__name__,
             )
 
         record_experiment_change(
@@ -1242,7 +1244,8 @@ async def delete_experiment(
     except Exception as _audit_err:
         db.rollback()
         logger.warning(
-            f"Compliance audit logging failed for experiment delete: {_audit_err}"
+            "Compliance audit logging failed for experiment delete (%s)",
+            type(_audit_err).__name__,
         )
 
     AuditService.record_after_commit(

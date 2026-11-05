@@ -66,17 +66,15 @@ def test_sso_is_a_module_of_the_full_profile_under_apache_2():
 
 
 def test_an_sso_session_is_a_local_token_that_cognito_does_not_accept(monkeypatch):
-    # The dashboard's exchange answers the session a password sign-in issues.
-    exchange = ast.unparse(
-        next(
-            f
-            for f in ast.walk(
-                ast.parse(pathlib.Path(sso_endpoint.__file__).read_text())
-            )
-            if isinstance(f, ast.AsyncFunctionDef) and f.name == "sso_exchange"
-        )
-    )
-    assert "create_local_access_token(user)" in exchange
+    # The dashboard's exchange answers the session a password sign-in issues:
+    # the route builds it with `_exchange_session`, in a worker.
+    functions = {
+        f.name: ast.unparse(f)
+        for f in ast.walk(ast.parse(pathlib.Path(sso_endpoint.__file__).read_text()))
+        if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    assert "_exchange_session(db, user_id)" in functions["sso_exchange"]
+    assert "create_local_access_token(user)" in functions["_exchange_session"]
     user = SimpleNamespace(id=uuid.uuid4(), email="bob@acme.com", role=UserRole.VIEWER)
     token = create_local_access_token(user)
     db = MagicMock()
@@ -173,32 +171,40 @@ def _request():
 
 
 @pytest.mark.asyncio
-async def test_the_api_sign_in_compares_org_domain_exactly():
-    first = SimpleNamespace(
-        provider_type=SSOProviderType.OKTA, is_active=True, org_domain="acme.com"
-    )
-    second = SimpleNamespace(
-        provider_type=SSOProviderType.OKTA, is_active=True, org_domain="beta.io"
-    )
+async def test_the_api_sign_in_compares_org_domain_exactly(monkeypatch):
+    def okta_config(org_domain):
+        return SimpleNamespace(
+            id=uuid.uuid4(),
+            org_domain=org_domain,
+            provider_type=SSOProviderType.OKTA,
+            entity_id=None,
+            sso_url=None,
+            client_secret=None,
+            role_mapping={},
+            is_active=True,
+        )
+
+    first = okta_config("acme.com")
+    second = okta_config("beta.io")
     started = []
 
     def start(config, provider):
-        started.append(config)
+        started.append(config.org_domain)
         return MagicMock()
 
+    # The lookup runs in a worker, on a session the route opens itself.
+    monkeypatch.setattr(deps, "SessionLocal", MagicMock)
     with (
         patch.object(sso_service, "list_sso_configs", return_value=[first, second]),
         patch.object(sso_service, "start_oidc_login", side_effect=start),
         patch.object(sso_endpoint, "_redirect_to_provider", return_value="redirect"),
     ):
         with pytest.raises(HTTPException) as refused:
-            await sso_endpoint.oidc_login(
-                "okta", _request(), org_domain="Beta.IO", db=None
-            )
+            await sso_endpoint.oidc_login("okta", _request(), org_domain="Beta.IO")
         assert refused.value.status_code == 404
-        await sso_endpoint.oidc_login("okta", _request(), org_domain="beta.io", db=None)
-        await sso_endpoint.oidc_login("okta", _request(), org_domain=None, db=None)
-    assert started == [second, first]
+        await sso_endpoint.oidc_login("okta", _request(), org_domain="beta.io")
+        await sso_endpoint.oidc_login("okta", _request(), org_domain=None)
+    assert started == ["beta.io", "acme.com"]
 
 
 def test_the_dashboard_sign_in_needs_domain_return_to_and_handoff():

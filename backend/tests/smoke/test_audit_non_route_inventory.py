@@ -85,12 +85,12 @@ SITES: Dict[Tuple[str, str, str], Tuple[int, object]] = {
     # --- the experiment scheduler -------------------------------------------
     (
         "backend/app/core/scheduler.py",
-        "ExperimentScheduler.process_scheduled_experiments",
+        "ExperimentScheduler._process_due",
         "status=ACTIVE",
     ): (1, Audited(A.EXPERIMENT_START)),
     (
         "backend/app/core/scheduler.py",
-        "ExperimentScheduler.process_scheduled_experiments",
+        "ExperimentScheduler._process_due",
         "status=COMPLETED",
     ): (1, Audited(A.EXPERIMENT_COMPLETE)),
     # --- the rollout scheduler ----------------------------------------------

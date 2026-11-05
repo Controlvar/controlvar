@@ -194,6 +194,14 @@ text = "A result is statistically significant when p < your chosen alpha thresho
 by = ["exempt:theory"]
 
 [[unit]]
+text = "On zero-inflated, right-skewed revenue with a lopsided split, these rates did not hold at α = 0.05: A/A experiments (both variants the same) recommended shipping a variant that was no better more often than alpha says."
+by = ["test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_an_uneven_split_recommends_a_false_winner_above_the_band"]
+
+[[unit]]
+text = "See Limitations for what was measured."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "Important: statistical significance does not tell you the effect is large or meaningful."
 by = ["exempt:theory"]
 
@@ -626,8 +634,8 @@ text = "A/B/n test | Experiment comparing more than two variants"
 by = ["exempt:theory"]
 
 [[unit]]
-text = "Alpha (α) | The significance threshold; probability of a false positive you are willing to accept (typically 0.05)"
-by = ["exempt:theory"]
+text = "Alpha (α) | The significance threshold; probability of a false positive you are willing to accept (typically 0.05). On zero-inflated, right-skewed revenue with a lopsided split, false positives were measured more often than α: see Limitations"
+by = ["test:backend/tests/unit/stats_validation/test_false_winner_unequal_split.py::test_an_uneven_split_recommends_a_false_winner_above_the_band"]
 
 [[unit]]
 text = "Bucketing | The process of assigning users to variants"

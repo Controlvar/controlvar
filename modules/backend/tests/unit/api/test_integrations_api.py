@@ -83,6 +83,20 @@ def _clear():
     app.dependency_overrides.clear()
 
 
+@pytest.fixture(autouse=True)
+def _own_session_is_the_mock_db(monkeypatch):
+    """The webhook routes open their own session (``deps.SessionLocal``) in a
+    worker rather than taking ``get_db``'s; give them the mock ``get_db`` is
+    overridden with, so a test's configured answers reach them too."""
+    real = deps.SessionLocal
+
+    def session():
+        override = app.dependency_overrides.get(deps.get_db)
+        return real() if override is None else override()
+
+    monkeypatch.setattr(deps, "SessionLocal", session)
+
+
 # ---------------------------------------------------------------------------
 # TestListIntegrations
 # ---------------------------------------------------------------------------

@@ -40,6 +40,7 @@ from defusedxml import ElementTree as ET
 from fastapi import HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from backend.app.core.config import settings as core_settings
 from backend.app.core.logger import get_log_context
@@ -1263,8 +1264,14 @@ async def _github_verified_email(
         else:
             import requests  # type: ignore
 
-            resp = requests.get(
-                _GITHUB_EMAILS_URL, headers=headers, timeout=10, allow_redirects=False
+            # A blocking client: in a worker thread, so the wait for GitHub
+            # (up to the timeout) holds up only this request.
+            resp = await run_in_threadpool(
+                requests.get,
+                _GITHUB_EMAILS_URL,
+                headers=headers,
+                timeout=10,
+                allow_redirects=False,
             )
             if resp.is_redirect:
                 raise requests.HTTPError("emails endpoint redirected", response=resp)

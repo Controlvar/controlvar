@@ -999,7 +999,6 @@ exempt:baseline	docs/feature-flags/create.md	e99df88b6717
 exempt:baseline	docs/feature-flags/create.md	eb136082215a
 exempt:baseline	docs/feature-flags/create.md	eb73ccdcf269
 exempt:baseline	docs/feature-flags/create.md	ec80912117cc
-exempt:baseline	docs/feature-flags/create.md	f18dca758edb
 exempt:baseline	docs/feature-flags/create.md	f9a0454e7fa8
 exempt:baseline	docs/feature-flags/rollouts.md	04b6abf34f93
 exempt:baseline	docs/feature-flags/rollouts.md	0703a8f0fa6f
@@ -1205,7 +1204,6 @@ exempt:baseline	docs/guides/user-guide.md	61f56fe36f3d
 exempt:baseline	docs/guides/user-guide.md	63151ea8f25f
 exempt:baseline	docs/guides/user-guide.md	65b2faa67287
 exempt:baseline	docs/guides/user-guide.md	66cac753c5aa
-exempt:baseline	docs/guides/user-guide.md	6837c3dff136
 exempt:baseline	docs/guides/user-guide.md	6b62708aa39c
 exempt:baseline	docs/guides/user-guide.md	6d053c16ae8f
 exempt:baseline	docs/guides/user-guide.md	6d248c81a9ea

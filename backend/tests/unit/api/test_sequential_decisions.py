@@ -239,6 +239,93 @@ def test_with_no_tau_squared_stored_the_analysis_uses_0001(client):
     )
 
 
+# ---------------------------------------------------------------------------
+# A series of looks at one experiment
+# ---------------------------------------------------------------------------
+
+#: One experiment looked at five times, 100 more users per arm each time:
+#: ``(control converted, control users, treatment converted, treatment users)``
+#: cumulatively. The first 100 per arm convert 10 against 30; every later 100
+#: convert 10 against 10. Stored tau^2 0.01, alpha 0.05 (boundary 20).
+SERIES = [
+    (10, 100, 30, 100),
+    (20, 200, 40, 200),
+    (30, 300, 50, 300),
+    (40, 400, 60, 400),
+    (50, 500, 70, 500),
+]
+
+#: Per look: lambda, always-valid p, lower and upper bound of the confidence
+#: sequence. Computed once, outside the product, with ``fractions.Fraction``
+#: for the Agresti-Caffo variance V of the difference (p~ = (x + 1) / (n + 2),
+#: V = p~c (1 - p~c) / (nc + 2) + p~t (1 - p~t) / (nt + 2)) and 50-digit
+#: ``decimal.Decimal`` for the rest: lambda = sqrt(V / (V + tau^2)) *
+#: exp(tau^2 * delta^2 / V / (2 (V + tau^2))), p = min(1, 1 / lambda), and the
+#: bounds delta -/+ sqrt(V (V + tau^2) / tau^2 * (2 ln(1 / alpha) + ln((V +
+#: tau^2) / V))) clipped to [-1, 1], with delta the observed difference.
+EXPECTED_LOOKS = [
+    (78.33823921434089, 0.012765157987070716, 0.02890091584079215, 0.37109908415920784),
+    (
+        11.286405925702027,
+        0.08860216499237766,
+        -0.007825411885805426,
+        0.20782541188580542,
+    ),
+    (
+        3.9014590973999064,
+        0.2563143621488794,
+        -0.017916406753055957,
+        0.15124974008638928,
+    ),
+    (
+        1.9812795639354552,
+        0.5047243297728665,
+        -0.021922887949181364,
+        0.12192288794918137,
+    ),
+    (
+        1.2336010216852562,
+        0.8106348668825457,
+        -0.023724184239352002,
+        0.10372418423935201,
+    ),
+]
+
+
+def test_each_look_answers_from_the_counts_at_that_look(client):
+    """One experiment, five looks: each answer is the one for the counts at that look.
+
+    The route keeps no memory between calls, so a later look can say ``continue``
+    after ``stop_for_effect``, the p-value can rise, and the interval can include
+    0 again (docs/api/sequential-testing.md). The same experiment object is read
+    every time, so a cache above ``_get_sequential_data`` or a p-value that is the
+    running minimum of the earlier ones answers look 2 like look 1 and fails here.
+    """
+    experiment = _experiment({"tau_squared": 0.01})
+    experiment.id = EXPERIMENT_UUID
+    for look, (counts, expected) in enumerate(zip(SERIES, EXPECTED_LOOKS), start=1):
+        body = _get(client, counts, experiment=experiment)
+        lam, p_value, lower, upper = expected
+        msprt = body["msprt_result"]
+        interval = body["confidence_sequence"]
+        assert msprt["lambda_ratio"] == pytest.approx(lam, rel=1e-9), look
+        assert msprt["always_valid_p_value"] == pytest.approx(p_value, rel=1e-9), look
+        assert interval["lower"] == pytest.approx(lower, rel=1e-9), look
+        assert interval["upper"] == pytest.approx(upper, rel=1e-9), look
+        assert interval["sample_size"] == 200 * look, look
+        assert msprt["boundary"] == pytest.approx(20.0), look
+        assert msprt["can_stop"] is (look == 1), look
+        assert body["recommended_action"] == (
+            "stop_for_effect" if look == 1 else "continue"
+        ), look
+        assert len(body["evidence_trajectory"]) == 1, look
+        assert body["evidence_trajectory"][0]["lambda_ratio"] == pytest.approx(
+            lam, rel=1e-9
+        ), look
+    # The interval at look 2 is back across 0 although look 1's excluded it.
+    assert EXPECTED_LOOKS[0][2] > 0 and EXPECTED_LOOKS[1][2] < 0 < EXPECTED_LOOKS[1][3]
+
+
 @pytest.mark.parametrize("bad", [0, -1, 101, 1000])
 def test_planned_looks_outside_one_to_a_hundred_is_refused(bad):
     with pytest.raises(ValidationError) as caught:
