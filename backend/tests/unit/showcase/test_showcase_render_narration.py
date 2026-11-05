@@ -605,13 +605,12 @@ def test_two_sound_streams_fail_g16():
 
 #: Each registered video's gain as the mux's filter, the review page's words
 #: and G17's record write it: the default 4.5 dB, which every video had before
-#: video 9 took its own, except video 9's 3.7 dB.
-BEFORE_T216 = ("volume=4.5dB:precision=float", "4.5 dB gain", 4.5)
+#: video 9 took its own, except video 9's 3.7 dB and video 10's 3.8 dB.
+DEFAULT_GAIN = ("volume=4.5dB:precision=float", "4.5 dB gain", 4.5)
 VIDEO_9 = ("volume=3.7dB:precision=float", "3.7 dB gain", 3.7)
-GAINS = [
-    (slug, *(VIDEO_9 if slug == "09-design-in-depth" else BEFORE_T216))
-    for slug in config.VIDEOS
-]
+VIDEO_10 = ("volume=3.8dB:precision=float", "3.8 dB gain", 3.8)
+OWN_GAIN = {"09-design-in-depth": VIDEO_9, "10-serve-a-value": VIDEO_10}
+GAINS = [(slug, *OWN_GAIN.get(slug, DEFAULT_GAIN)) for slug in config.VIDEOS]
 GAIN_IDS = list(config.VIDEOS)
 
 
