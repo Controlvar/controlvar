@@ -20,12 +20,15 @@ secret's value, ``PUT`` merges ``encrypted_config`` key by key rather than
 replacing it: see :func:`merge_config`.
 """
 
+import copy
 import json
 import logging
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
 from backend.app.models.user import User, UserRole
@@ -308,7 +311,50 @@ def _active_config(
     )
 
 
-def _webhook_secret(config: IntegrationConfig) -> str:
+@dataclass(frozen=True)
+class _ActiveIntegration:
+    """An active integration's ``encrypted_config``, read in a worker.
+
+    Everything a delivery reads from its configuration once it is found --
+    the ``webhook_secret`` and what ``<Service>.from_config`` builds a service
+    from -- is in this one field, so it is all the route keeps: a plain value,
+    not the row, whose session is closed by then.
+    """
+
+    encrypted_config: Any = field(repr=False)
+
+
+def _lookup_active_integration(
+    integration_type: IntegrationType,
+) -> Optional[_ActiveIntegration]:
+    """Run in a worker thread: the lookup on a session of its own, then closed.
+
+    The session is opened, queried and closed here, so the request holds no
+    connection once the lookup is over.
+    """
+    db = deps.SessionLocal()
+    try:
+        config = _active_config(db, integration_type)
+        if config is None:
+            return None
+        return _ActiveIntegration(copy.deepcopy(config.encrypted_config))
+    finally:
+        db.close()
+
+
+async def _active_integration(
+    integration_type: IntegrationType,
+) -> Optional[_ActiveIntegration]:
+    """The active integration of this type, or None, looked up in a worker.
+
+    The webhook routes are async and never use the database on the event
+    loop: a query there that has to wait for a connection holds up every
+    other request the process is serving until it gets one.
+    """
+    return await run_in_threadpool(_lookup_active_integration, integration_type)
+
+
+def _webhook_secret(config: Union[IntegrationConfig, _ActiveIntegration]) -> str:
     """The shared secret an inbound delivery to *config* is checked against.
 
     The one thing webhook authentication needs, read straight off the config
@@ -414,7 +460,6 @@ def _decode(body: bytes) -> dict:
 )
 async def jira_webhook(
     request: Request,
-    db: Session = Depends(deps.get_db),
 ):
     """Receive and process Jira webhook events.
 
@@ -427,7 +472,7 @@ async def jira_webhook(
     """
     body = await request.body()
 
-    config = _active_config(db, IntegrationType.JIRA)
+    config = await _active_integration(IntegrationType.JIRA)
     if config is None:
         raise _unauthenticated()
     secret = _webhook_secret(config)
@@ -456,7 +501,6 @@ async def jira_webhook(
 )
 async def salesforce_webhook(
     request: Request,
-    db: Session = Depends(deps.get_db),
 ):
     """Receive and process a Salesforce webhook delivery.
 
@@ -473,7 +517,7 @@ async def salesforce_webhook(
     """
     body = await request.body()
 
-    config = _active_config(db, IntegrationType.SALESFORCE)
+    config = await _active_integration(IntegrationType.SALESFORCE)
     if config is None:
         raise _unauthenticated()
     secret = _webhook_secret(config)
@@ -502,7 +546,6 @@ async def salesforce_webhook(
 )
 async def github_webhook(
     request: Request,
-    db: Session = Depends(deps.get_db),
 ):
     """Receive and process GitHub webhook events.
 
@@ -515,7 +558,7 @@ async def github_webhook(
     body = await request.body()
     event_type = request.headers.get("X-GitHub-Event", "")
 
-    config = _active_config(db, IntegrationType.GITHUB)
+    config = await _active_integration(IntegrationType.GITHUB)
     if config is None:
         raise _unauthenticated()
     secret = _webhook_secret(config)
