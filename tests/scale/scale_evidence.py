@@ -896,8 +896,16 @@ def milli_rps_of(rate: int, time_unit_ms: int) -> int:
 
 
 def scheduled_count(rate: int, time_unit_ms: int, seconds: int) -> int:
-    """How many requests k6 schedules in ``seconds``: ``floor(rate x s x 1000 / tu)``."""
-    return rate * seconds * 1000 // time_unit_ms
+    """How many requests k6 starts in ``seconds``: ``floor(rate x s x 1000 / tu) + 1``.
+
+    k6 starts one at t = 0 and one every ``tu / rate`` ms after it, up to and
+    including t = ``seconds``. The ``+ 1`` is the one at t = 0: without it the
+    count was one short, so the sent identity's one-request tolerance was
+    already used up before anything went wrong (rows + dropped was the floor
+    plus one in 487 of the 489 steps of two publication runs, and plus two in
+    the other two).
+    """
+    return rate * seconds * 1000 // time_unit_ms + 1
 
 
 def first_measured(rate: int, time_unit_ms: int, settle_s: int) -> int:
@@ -1534,14 +1542,28 @@ def judge_step(
                 f"{window['measure_s']} s window",
             )
         )
+    # Every request the client sent is in nginx's log, exactly. A request the
+    # client timed out on is logged 499 only when nginx had not answered it
+    # yet: one answered at the cut-off is logged with its own status. So there
+    # may be fewer 499s than timeouts (109 timeouts and 108 logged 499 in one
+    # publication run's batch step 6), never more.
     client = step["rows"] - step["connection_errors"]
-    if client != step["server_count"] or step["timeouts"] != step["server_499"]:
+    if client != step["server_count"]:
         failed.append(
             (
                 "client-server",
                 f"step {number}: client {client}, server {step['server_count']}: "
                 f"{abs(client - step['server_count'])} requests unaccounted "
                 f"({step['timeouts']} client timeouts, {step['server_499']} logged 499)",
+            )
+        )
+    elif step["server_499"] > step["timeouts"]:
+        failed.append(
+            (
+                "client-server",
+                f"step {number}: {step['server_499']} logged 499 but only "
+                f"{step['timeouts']} client timeouts: the server saw requests "
+                "abandoned that the client did not give up on",
             )
         )
     if scenario == "assign_returning" and step["assignments_delta"]:
