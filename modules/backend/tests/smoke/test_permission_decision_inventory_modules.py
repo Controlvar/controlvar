@@ -80,6 +80,10 @@ ROLE_READS = {
     (E + "sso.py", "_issue_jwt"): ("N", "puts the role in the token's claims"),
     (E + "sso.py", "_require_admin"): ("B", _ADMIN),
     (E + "sso.py", "saml_acs"): ("N", "carries the role into the issued token"),
+    (E + "warehouse_analysis.py", "_caller"): (
+        "N",
+        "copies the built-in role for role_of, which decides",
+    ),
     (E + "warehouse_analysis.py", "_parameters"): (
         "B",
         "the warehouse analysis role bands read the built-in role",
