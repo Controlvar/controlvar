@@ -431,6 +431,8 @@ three levels deep.
 
 ### Pagination
 - List endpoints that page take `skip` and `limit` parameters
+- The feature flags list is ordered by creation time, oldest first (ties by `id`), so
+  paging with `skip` reads each flag once unless flags are created or deleted meanwhile
 - The default and the largest `limit` differ by route (the experiments list: 100, at most
   500; the feature flags list: 100, with no maximum). The API's OpenAPI document,
   `GET /api/v1/openapi.json`, gives each route's default `limit` and, where it has one, its

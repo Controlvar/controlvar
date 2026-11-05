@@ -589,6 +589,30 @@ describe('evaluateFlag — offline fallback (AsyncStorage)', () => {
     expect(fetchMock()).toHaveBeenCalledTimes(1);
   });
 
+  test('a 404 (deleted flag) answers disabled and removes the stored answer', async () => {
+    const storage = new OfflineStorage();
+    await storage.setFlag('user-1', 'dark-mode', { key: 'dark-mode', enabled: true, config: { a: 1 } }, -1);
+    mockFetchOnce({ detail: 'not found' }, 404);
+
+    const client = makeClient({ offlineFallback: true }, storage);
+    expect(await client.evaluateFlag('dark-mode', 'user-1')).toEqual({ key: 'dark-mode', enabled: false, config: null });
+    expect(await storage.getFlag('user-1', 'dark-mode')).toBeNull();
+
+    // a later outage has nothing left to serve
+    mockFetchError('Connection refused');
+    expect((await makeClient({ offlineFallback: true }, storage).evaluateFlag('dark-mode', 'user-1')).enabled).toBe(false);
+  });
+
+  test('a 500 still serves the stored answer and keeps it', async () => {
+    const storage = new OfflineStorage();
+    await storage.setFlag('user-1', 'dark-mode', { key: 'dark-mode', enabled: true, config: null }, -1);
+    mockFetchOnce({ detail: 'boom' }, 500);
+
+    const client = makeClient({ offlineFallback: true }, storage);
+    expect((await client.evaluateFlag('dark-mode', 'user-1')).enabled).toBe(true);
+    expect(await storage.getFlag('user-1', 'dark-mode')).not.toBeNull();
+  });
+
   test('on API failure with nothing persisted returns disabled (and persists nothing)', async () => {
     mockFetchError('Connection refused');
     const storage = new OfflineStorage();

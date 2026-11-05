@@ -93,7 +93,9 @@ steps, ``days_ahead`` outside 1 to 7, ``at`` other than 06:00 to 21:59, a
 ``date`` reading named twice or as another beat's ``record``, a ``date`` on a
 storyboard that does not pin its ``time_zone`` and ``locale``, a zone the
 zone database does not know, a flag's end state naming a
-segment the setup does not make or a reading no beat records, an incident step
+segment the setup does not make or a reading no beat records (or both a
+segment and a rule, or neither; values that do not fit their type or are
+equal; an answer its reason does not give, ``FlagEnd``), an incident step
 other than ``story: 2`` or out of order, or ``{rollback_minutes}`` anywhere but
 the card after the wait, and a narration ``narration.board_problems`` refuses
 (every problem at once). Caption text
@@ -104,13 +106,21 @@ the file, so the cue list is the same on every run (gate 13a).
 from __future__ import annotations
 
 import json
+import math
 import re
 import zoneinfo
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Mapping, Optional, Tuple, Union
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    model_serializer,
+    model_validator,
+)
 
 from showcase import contract
 from showcase.capture import config
@@ -651,22 +661,200 @@ FlagAction = Literal[
 ]
 
 
+#: The value types a flag may have (backend/app/core/flag_values.py
+#: ``VALUE_TYPES`` and boolean; frontend/src/utils/flagValues.ts ``VALUE_TYPES``).
+FlagValueType = Literal["boolean", "string", "number", "json"]
+#: Why the API answered a user as it did (the evaluate route's ``reason``), for
+#: the reasons an answer may declare: never ``error``.
+AnswerReason = Literal["targeting_rule", "rollout", "inactive"]
+
+
+def values_equal(a: Any, b: Any) -> bool:
+    """Whether PostgreSQL's ``jsonb`` ``=`` holds two JSON values equal, as the
+    API's ``values_equal`` does (backend/app/core/flag_values.py; a unit test
+    keeps the two equal): numbers as numbers (``3`` equals ``3.0``), a boolean
+    never a number, strings exactly, objects by the same keys and equal values,
+    arrays by the same length and equal items in order. Iterative."""
+
+    def number(value: Any) -> bool:
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+    stack = [(a, b)]
+    while stack:
+        x, y = stack.pop()
+        if isinstance(x, bool) or isinstance(y, bool):
+            if not (isinstance(x, bool) and isinstance(y, bool) and x is y):
+                return False
+        elif number(x) or number(y):
+            if not (number(x) and number(y) and x == y):
+                return False
+        elif isinstance(x, str) or isinstance(y, str):
+            if not (isinstance(x, str) and isinstance(y, str) and x == y):
+                return False
+        elif isinstance(x, dict) or isinstance(y, dict):
+            if (
+                not (isinstance(x, dict) and isinstance(y, dict))
+                or x.keys() != y.keys()
+            ):
+                return False
+            stack.extend((x[key], y[key]) for key in x)
+        elif isinstance(x, list) or isinstance(y, list):
+            if not (isinstance(x, list) and isinstance(y, list)) or len(x) != len(y):
+                return False
+            stack.extend(zip(x, y))
+        elif not (x is None and y is None):
+            return False
+    return True
+
+
+def value_fits(value_type: str, value: Any) -> bool:
+    """*value* is one a *value_type* flag can serve: a string; a finite number
+    (never a boolean); an object or an array; or, for a boolean flag, a boolean."""
+    if value_type == "string":
+        return isinstance(value, str)
+    if value_type == "number":
+        return (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(value)
+        )
+    if value_type == "json":
+        return isinstance(value, (dict, list))
+    return isinstance(value, bool)
+
+
+class FlagAnswer(_Strict):
+    """What the API answers one user for the flag after the last frame: the
+    value it serves them and why (``GET /feature-flags/evaluate/{key}``)."""
+
+    user: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$")
+    #: The attributes the user is evaluated with, as an app sends them.
+    context: Dict[str, Any] = Field(default_factory=dict)
+    value: Any
+    reason: AnswerReason
+
+
 class FlagEnd(_Strict):
     """Gate 10 for a flag the video made: it exists once, with its key, its one
-    rule naming the setup's segment, at the rollout and status the video left
-    it, and the audit log holds the video's changes to it, each by the
-    signed-in user, as the page showed them."""
+    rule (naming the setup's segment, or the declared ``rule``), at the rollout
+    and status the video left it, and the audit log holds the video's changes
+    to it, each by the signed-in user, as the page showed them.
+
+    A flag that serves a value declares its ``value_type``, ``on_value`` and
+    ``off_value`` (all three, or none), and may declare ``answers``: what the
+    API answers given users after the last frame. Each answer's value follows
+    from its declared reason (``targeting_rule``: the on value; ``inactive``:
+    the off value; ``rollout``: the off value at 0% and the on value at 100%),
+    and one that would depend on the user's bucket (``rollout`` at 1-99%) is
+    refused, as is a reason the flag's status cannot give. Nothing here
+    matches a rule: the reason is the author's, and the API is the judge.
+
+    A field left unset is not read and not compared (gate 10), and is left out
+    of the end state's dump, so a flag declared before values existed (video 3)
+    is judged and recorded exactly as it was."""
 
     name: str
     key: str
     #: The segment the flag's only rule (``is in segment``) names.
-    segment: str
+    segment: Optional[str] = None
     rollout_percentage: int = Field(ge=0, le=100)
     status: Literal["active", "inactive"]
     #: The audit entries on the flag, oldest first: all of them, exactly.
     audit: List[FlagAction] = Field(min_length=1)
     #: The ``record`` name of the audit log's rows as the page showed them.
-    shown: str
+    shown: Optional[str] = None
+    value_type: Optional[FlagValueType] = None
+    on_value: Any = None
+    off_value: Any = None
+    #: The flag's only rule, one condition as the targeting builder sends it
+    #: (less its ids), instead of a segment.
+    rule: Optional["DesignCondition"] = None
+    answers: List[FlagAnswer] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _one_rule_and_its_values(self) -> "FlagEnd":
+        if (self.segment is None) == (self.rule is None):
+            raise ValueError(
+                "a flag's one rule names a segment or is a rule: exactly one of"
+                " segment and rule"
+            )
+        declared = [
+            name
+            for name in ("value_type", "on_value", "off_value")
+            if getattr(self, name) is not None
+        ]
+        if declared and len(declared) != 3:
+            raise ValueError(
+                "a flag's values are declared together: value_type, on_value and"
+                f" off_value, not only {declared}"
+            )
+        if self.value_type is not None:
+            for field in ("on_value", "off_value"):
+                value = getattr(self, field)
+                if not value_fits(self.value_type, value):
+                    raise ValueError(
+                        f"{field} {value!r} is not a value a {self.value_type} flag"
+                        " serves"
+                    )
+            if self.value_type == "boolean" and (
+                self.on_value is not True or self.off_value is not False
+            ):
+                raise ValueError(
+                    "a boolean flag serves true when on and false when off"
+                )
+            if values_equal(self.on_value, self.off_value):
+                raise ValueError(
+                    f"on_value equals off_value ({self.on_value!r}): the two values"
+                    " differ, or turning the flag off changes nothing"
+                )
+        if self.answers and self.value_type is None:
+            raise ValueError(
+                "answers compare the values the flag serves: declare value_type,"
+                " on_value and off_value"
+            )
+        for answer in self.answers:
+            served = self._served(answer)
+            if not values_equal(answer.value, served):
+                raise ValueError(
+                    f"the answer for {answer.user} {answer.context} says"
+                    f" {answer.value!r}; its reason {answer.reason} serves"
+                    f" {served!r}"
+                )
+        return self
+
+    def _served(self, answer: FlagAnswer) -> Any:
+        """The value *answer*'s reason serves, or ValueError when the flag's
+        status cannot give that reason or the value would depend on the bucket."""
+        where = f"the answer for {answer.user} {answer.context}"
+        if (answer.reason == "inactive") != (self.status == "inactive"):
+            raise ValueError(
+                f"{where} gives the reason {answer.reason}, which a flag left"
+                f" {self.status} never gives"
+            )
+        if answer.reason == "targeting_rule":
+            return self.on_value
+        if answer.reason == "inactive":
+            return self.off_value
+        if self.rollout_percentage == 0:
+            return self.off_value
+        if self.rollout_percentage == 100:
+            return self.on_value
+        raise ValueError(
+            f"{where} gives the reason rollout at {self.rollout_percentage}%: its"
+            " value would depend on the user's bucket"
+        )
+
+    @model_serializer(mode="wrap")
+    def _unset_left_out(self, handler: Any) -> Dict[str, Any]:
+        """The dump without the fields left unset: a flag declared before values
+        existed records exactly what it did (gate 10's ``storyboard`` number)."""
+        data = handler(self)
+        for name in ("segment", "shown", "value_type", "on_value", "off_value", "rule"):
+            if data.get(name) is None:
+                data.pop(name, None)
+        if not data.get("answers"):
+            data.pop("answers", None)
+        return data
 
 
 #: The audit action types a rolled-back flag's end state may name.
@@ -926,6 +1114,11 @@ class DesignCondition(_Strict):
                 f"the builder sends the value box's text, a string, not {self.value!r}"
             )
         return self
+
+
+#: A flag's ``rule`` is one condition as the builder sends it (above FlagEnd's
+#: class, which names it before it is defined).
+FlagEnd.model_rebuild()
 
 
 class DesignGroup(_Strict):
@@ -1228,11 +1421,11 @@ class Storyboard(_Strict):
         flag = self.end_state.flag
         if flag is not None:
             made = [s.name for s in self.setup.segments] if self.setup else []
-            if flag.segment not in made:
+            if flag.segment is not None and flag.segment not in made:
                 raise ValueError(
                     f"the flag's rule names {flag.segment!r}, which the setup does not make"
                 )
-            if flag.shown not in recorded:
+            if flag.shown is not None and flag.shown not in recorded:
                 raise ValueError(
                     f"the flag's end state compares {flag.shown!r}, which no beat records"
                 )

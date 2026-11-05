@@ -20,6 +20,7 @@ truncated between tests.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -474,7 +475,24 @@ def test_events_by_ids_sent_before_the_assignment_count_once_it_names_that_varia
     send(never, ids["control"])
     send(never, ids["treatment"])
 
-    users = [f"hec-{exp.key}-late-{i}" for i in range(6)]
+    # The experiment key is random, so a fixed count of late users would draw
+    # only one arm in about 3% of runs. Take the first three users from each
+    # half of the 0-99 hash space (the algorithm of the SDK contract: first
+    # four bytes of md5("{user}:{key}"), little-endian, over 2**32), so both
+    # arms are drawn by construction whatever the key is. The assertions below
+    # still read the arm from the API's answer.
+    halves: Dict[bool, list] = {False: [], True: []}
+    i = 0
+    while min(len(h) for h in halves.values()) < 3:
+        candidate = f"hec-{exp.key}-late-{i}"
+        i += 1
+        digest = hashlib.md5(
+            f"{candidate}:{exp.key}".encode("utf-8"), usedforsecurity=False
+        ).digest()
+        upper = int.from_bytes(digest[:4], "little") * 100 // 2**32 >= 50
+        if len(halves[upper]) < 3:
+            halves[upper].append(candidate)
+    users = halves[False] + halves[True]
     for user_id in users:
         send(user_id, ids["control"])
         send(user_id, ids["treatment"])

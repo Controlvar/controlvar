@@ -112,6 +112,40 @@ async def test_the_safety_check_runs_once_off_the_loop_and_its_result_is_recorde
 
 
 @pytest.mark.asyncio
+async def test_the_safety_loop_checks_then_sleeps_the_interval_in_seconds(safety):
+    """Three ticks at ``interval_minutes=5``: three checks, and a sleep of 300
+    seconds after each. The setting's default (5) is pinned elsewhere; this pins
+    that the loop turns it into 5 minutes, not 5 seconds or 10 minutes."""
+    checks = []
+    sleeps = []
+
+    async def check():
+        checks.append(1)
+        return {"items_processed": 0, "items_failed": 0}
+
+    @asynccontextmanager
+    async def lock(name, engine=None):
+        yield True
+
+    async def record_and_stop_after_three(seconds):
+        sleeps.append(seconds)
+        if len(sleeps) == 3:
+            safety.is_running = False
+
+    safety.check_feature_flags_safety = check
+    with (
+        patch.object(scheduler_tick, "async_scheduler_lock", lock),
+        patch.object(scheduler_tick, "_persist_run"),
+        patch.object(asyncio, "sleep", record_and_stop_after_three),
+    ):
+        safety.is_running = True
+        await safety._run_scheduler()
+
+    assert sleeps == [300, 300, 300]
+    assert len(checks) == 3
+
+
+@pytest.mark.asyncio
 async def test_a_cancelled_safety_tick_keeps_the_lock_until_the_worker_thread_returns(
     safety,
 ):

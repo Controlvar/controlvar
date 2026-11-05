@@ -39,7 +39,8 @@ from ``Record.fault``):
   (R, 2R, 4R, ...; ``SLACK`` for the clock), and the first unfaulted ruleset
   request after them at least the next step after the last. Lower bounds
   only: a timer never fires early, and a runner may be slow. None faulted is
-  void.
+  void. The same gate holds a corrupt ruleset after a load (``fault=``): it is
+  a failed refresh, and backs off the same way.
 * ``error_tally_findings``: the driver's ``on_error`` count for an operation
   equals the requests the proxy faulted on its path.
 * ``last_known_findings``: every answer of every round is A0's (the answers
@@ -55,6 +56,14 @@ from ``Record.fault``):
   polls were sent and answered inside the hold, each A0's answer, local.
 * ``upstream_failure_findings``: no unfaulted 502 (the proxy's own answer
   when the upstream cannot be reached): an injected fault is always tagged.
+* ``serving_findings``: every ``status()`` read through a fault window says
+  the SDK answers locally from the ruleset it had before the faults, and one
+  read after the last fault shows it saw the failure (``last_error``).
+
+``retry_deadline`` is not a gate: it is how long a case waits for the SDK's
+next ruleset request after n faulted ones (the n-th answer, plus the backoff
+step after it, plus R), so a wait never ends before a retry the documented
+backoff still allows.
 
 ``status()`` gives the ruleset's version as the document has it; the ruleset
 route sends it as the ETag in double quotes (``ETag: "<version>"``), which is
@@ -356,6 +365,7 @@ def outage_findings(
     refresh: float = 5.0,
     expected: int = 5,
     status: int = 503,
+    fault: str | None = None,
 ) -> list[str]:
     """One proxy's records over a ``status`` outage on every path, the SDK
     refreshing every *refresh* seconds: exactly *expected* faulted ruleset
@@ -363,7 +373,12 @@ def outage_findings(
     them; after the k-th failure the next request at least
     ``backoff_step(refresh, k) - SLACK`` after that failure's answer; and the
     first relayed ruleset request after the last failure at least the step
-    after it. None faulted is void: the outage never met the SDK."""
+    after it. None faulted is void: the outage never met the SDK.
+
+    *fault*, when given, is the tag every faulted request must carry instead
+    of ``status:<status>``: a ruleset that is not valid after a load
+    (``corrupt:truncated``) is a failed refresh too, and backs off the same
+    way."""
     ruleset = _ruleset_requests(records)
     faulted_at = [i for i, record in enumerate(ruleset) if record.fault is not None]
     if not faulted_at:
@@ -375,12 +390,13 @@ def outage_findings(
             f"{label}: {len(faulted)} faulted ruleset requests during the cut,"
             f" expected {expected}"
         )
-    tag = f"status:{status}"
+    tag = f"status:{status}" if fault is None else fault
+    wanted = f"{status} ({tag})" if fault is None else tag
     wrong = sorted({(r.status, str(r.fault)) for r in faulted if r.fault != tag})
     if wrong:
         found.append(
             f"{label}: faulted ruleset requests were answered {wrong}, expected"
-            f" every one {status} ({tag})"
+            f" every one {wanted}"
         )
     between = [r for r in ruleset[faulted_at[0] : faulted_at[-1]] if r.fault is None]
     if between:
@@ -415,6 +431,74 @@ def outage_findings(
                 f"{label}: the first ruleset request after the outage came"
                 f" {wait:.2f} s after the last failure, expected at least {step:g} s"
             )
+    return found
+
+
+def retry_deadline(
+    records: Sequence[Record], *, refresh: float, since: float, first_wait: float
+) -> float:
+    """When the SDK's next ruleset request is due at the latest, on the
+    proxy's clock, from what one proxy recorded: after a streak of n faulted
+    ruleset requests (the faulted ones since the last relayed one), the n-th
+    one's answer plus ``backoff_step(refresh, n)`` plus *refresh* to spare;
+    with no streak, *since* + *first_wait*. A fixed 3R would end before the
+    retry after the third failure, which comes 4R after it."""
+    streak: list[Record] = []
+    for record in _ruleset_requests(records):
+        streak = [*streak, record] if record.fault is not None else []
+    if not streak:
+        return since + first_wait
+    return streak[-1].t_answer + backoff_step(refresh, len(streak)) + refresh
+
+
+def serving_findings(
+    statuses: Sequence[tuple[float, Any]],
+    records: Sequence[Record],
+    label: str,
+    *,
+    version: str | None,
+) -> list[str]:
+    """The driver's ``status()`` read through a fault window, each with the
+    time it was read: every one says the SDK is answering locally (``ready``)
+    from *version*, the ruleset it loaded before the faults (a discarded
+    ruleset says ``ready`` false; a cache can hide that from the answers).
+    And at least one read after the last faulted ruleset request was answered
+    carries ``last_error``: the SDK had seen the failure and still answered
+    locally. Without one the reads did not cover the faults (void)."""
+    if not statuses:
+        return [f"void: {label}: no status() was read through the faults"]
+    found = []
+    wrong = [
+        status
+        for _, status in statuses
+        if not isinstance(status, Mapping)
+        or status.get("ready") is not True
+        or status.get("ruleset_version") != version
+    ]
+    if wrong:
+        first = wrong[0] if isinstance(wrong[0], Mapping) else {}
+        found.append(
+            f"{label}: {len(wrong)} of {len(statuses)} status() reads were not"
+            f" ready on version {version!r} (the first: ready"
+            f" {first.get('ready')!r}, version {first.get('ruleset_version')!r})"
+        )
+    faulted = [r for r in _ruleset_requests(records) if r.fault is not None]
+    if not faulted:
+        found.append(f"void: {label}: no ruleset request was faulted")
+        return found
+    last = faulted[-1].t_answer
+    seen = [
+        status
+        for read, status in statuses
+        if read >= last
+        and isinstance(status, Mapping)
+        and status.get("last_error") is not None
+    ]
+    if not seen:
+        found.append(
+            f"void: {label}: no status() read after the last faulted ruleset request"
+            " carried last_error: the reads did not cover the faults"
+        )
     return found
 
 

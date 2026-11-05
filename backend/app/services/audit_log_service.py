@@ -96,9 +96,11 @@ class AuditLogService:
                 new_value={"key": flag.key},
             )
             db.commit()
-        except Exception:
+        except Exception as exc:
             db.rollback()
-            logger.warning("Compliance audit logging failed", exc_info=True)
+            logger.warning(
+                "Compliance audit logging failed (%s)", type(exc).__name__
+            )
     """
 
     def __init__(self, db: Session) -> None:

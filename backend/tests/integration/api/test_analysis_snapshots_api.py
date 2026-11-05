@@ -508,3 +508,104 @@ class TestOtherAnalysisSnapshots:
         snaps = _snapshots(db_session, seeded_experiment.id, "sequential")
         assert len(snaps) == 1
         assert snaps[0].payload["method"] == response.json()["method"]
+
+
+# ---------------------------------------------------------------------------
+# A failed snapshot write logs the error's type, not its text
+# ---------------------------------------------------------------------------
+
+MARKER = "marker-not-for-logs"
+
+
+def _assert_type_only_warning(caplog, fragment):
+    records = [r for r in caplog.records if fragment in r.getMessage()]
+    # One record per snapshot kind the request writes.
+    assert records, [r.getMessage() for r in caplog.records]
+    for record in records:
+        assert record.levelname == "WARNING"
+        assert "RuntimeError" in record.getMessage()
+        assert MARKER not in record.getMessage()
+        assert record.exc_info is None and MARKER not in (record.exc_text or "")
+
+
+@pytest.mark.integration
+@pytest.mark.requires_db
+class TestSnapshotWriteFailureLogsTypeOnly:
+    @pytest.mark.parametrize(
+        "path,params,target,fragment",
+        [
+            (
+                "",
+                {"use_cache": "false"},
+                "backend.app.services.analysis_snapshot_service.build_snapshot",
+                "analysis_snapshots write failed",
+            ),
+            (
+                "/sequential",
+                {},
+                "backend.app.api.v1.endpoints.results.record_snapshot",
+                "Sequential snapshot failed",
+            ),
+            (
+                "/cuped",
+                {},
+                "backend.app.api.v1.endpoints.results.record_snapshot",
+                "CUPED snapshot failed",
+            ),
+            (
+                "/bayesian",
+                {},
+                "backend.app.api.v1.endpoints.results.record_snapshot",
+                "Bayesian snapshot failed",
+            ),
+        ],
+        ids=["write", "sequential", "cuped", "bayesian"],
+    )
+    def test_route_snapshot_failure(
+        self,
+        admin_client,
+        db_session,
+        seeded_experiment,
+        caplog,
+        path,
+        params,
+        target,
+        fragment,
+    ):
+        seeded_experiment.sequential_testing_enabled = True
+        seeded_experiment.sequential_testing_config = {"alpha": 0.05}
+        db_session.commit()
+        control, treatment = _variants(seeded_experiment)
+        _seed(db_session, seeded_experiment, control, 40, 4)
+        _seed(db_session, seeded_experiment, treatment, 40, 8)
+
+        with patch(target, side_effect=RuntimeError(MARKER)):
+            with caplog.at_level("WARNING"):
+                response = admin_client.get(
+                    f"/api/v1/results/{seeded_experiment.id}{path}", params=params
+                )
+
+        assert response.status_code == 200, response.text
+        _assert_type_only_warning(caplog, fragment)
+
+    def test_serialise_failure(self, caplog):
+        from backend.app.api.v1.endpoints import results as results_endpoints
+
+        class Unserialisable:
+            def model_dump(self, **kwargs):
+                raise RuntimeError(MARKER)
+
+        with caplog.at_level("WARNING"):
+            results_endpoints._record_results_snapshots(None, Unserialisable())
+
+        _assert_type_only_warning(caplog, "Could not serialise results")
+
+    def test_purge_failure(self, caplog):
+        from backend.app.services import analysis_snapshot_service as service
+
+        with patch.object(service, "_audit_session", side_effect=RuntimeError(MARKER)):
+            with caplog.at_level("WARNING"):
+                result = service.purge_expired_history(None, retention_days=30)
+
+        assert result == {"analysis_snapshots": 0, "bandit_state_history": 0}
+        _assert_type_only_warning(caplog, "analysis history purge failed")

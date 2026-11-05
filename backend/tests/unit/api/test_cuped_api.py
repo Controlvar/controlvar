@@ -6,7 +6,7 @@ Tests cover:
 - Returns 404 for unknown experiment
 - Default method (none) when no variance_reduction_config
 - CUPED method returns CUPED-adjusted results
-- WINSORIZATION method returns winsorized results
+- WINSORIZATION method lists a conversion metric with a reason (no view applies it)
 - Response includes variance_reduction_pct field
 - Validates schema structure (all fields present)
 """

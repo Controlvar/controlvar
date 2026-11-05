@@ -423,6 +423,144 @@ def test_the_outage_report_gives_f_the_excess_and_the_recovery():
     assert "next request after the last failure 80.00 s" in report
 
 
+def corrupt_trace(*, faulted=3, recovery=20.0):
+    """``outage_trace`` with each faulted request a synthesized corrupt 200
+    (G4-2 warm): the SDK backs off from it as from a 503."""
+    return [
+        replace(r, status=200, fault="corrupt:truncated") if r.fault else r
+        for r in outage_trace(faulted=faulted, recovery=recovery)
+    ]
+
+
+def test_the_outage_gate_holds_a_corrupt_window_by_its_tag():
+    findings = gates.outage_findings(
+        corrupt_trace(), "d", expected=3, fault="corrupt:truncated"
+    )
+    assert findings == []
+
+
+def test_the_outage_gate_fires_on_a_corrupt_window_cleared_late():
+    """clear() after the 4th corrupt answer, not the 3rd: 4 faulted."""
+    findings = gates.outage_findings(
+        corrupt_trace(faulted=4, recovery=40.0),
+        "d",
+        expected=3,
+        fault="corrupt:truncated",
+    )
+    assert findings == ["d: 4 faulted ruleset requests during the cut, expected 3"]
+
+
+def test_the_outage_gate_holds_a_corrupt_window_only_to_the_tag_it_is_given():
+    (finding,) = gates.outage_findings(corrupt_trace(), "d", expected=3)
+    assert "expected every one 503 (status:503)" in finding
+    (finding,) = gates.outage_findings(
+        corrupt_trace(), "d", expected=3, fault="corrupt:html"
+    )
+    assert finding.endswith(
+        "[(200, 'corrupt:truncated')], expected every one corrupt:html"
+    )
+
+
+def test_the_retry_deadline_is_the_last_failure_plus_its_step_plus_r():
+    records = outage_trace(recovery=None)
+    # No fault yet: the first one is due by since + first_wait.
+    assert gates.retry_deadline(
+        records[:1], refresh=R, since=96.0, first_wait=10.5
+    ) == pytest.approx(106.5)
+    # After the 3rd failure the 4th comes 20 s (4R) after its answer.
+    third = records[3]
+    assert third.fault is not None
+    assert gates.retry_deadline(
+        records[:4], refresh=R, since=0.0, first_wait=0.0
+    ) == pytest.approx(third.t_answer + 20.0 + R)
+    # A relayed ruleset request ends the streak.
+    after = _record(9, 300.0, RULESET, 304, '"v1"', if_none_match=True)
+    assert gates.retry_deadline(
+        [*records, after], refresh=R, since=301.0, first_wait=7.0
+    ) == pytest.approx(308.0)
+
+
+def test_the_retry_deadline_never_ends_before_the_next_documented_retry():
+    """For every prefix of an outage, the next ruleset request (each retry,
+    then the recovery 80 s after the 5th failure) comes before the deadline.
+    _synced's fixed 3R from the last failure would end 5 s before the retry
+    after the 3rd failure and 25 s before the one after the 4th."""
+    records = outage_trace(recovery=80.0)
+    for count in range(2, len(records)):
+        deadline = gates.retry_deadline(
+            records[:count], refresh=R, since=0.0, first_wait=0.0
+        )
+        assert records[count].t_recv < deadline, count
+    for k in (3, 4):
+        assert records[k + 1].t_recv > records[k].t_answer + 3 * R
+
+
+def _statuses(*reads):
+    """``status()`` reads: (time, ready, version, with last_error)."""
+    return [
+        (
+            t,
+            {
+                "ready": ready,
+                "ruleset_version": version,
+                "last_error": {"type": "E", "status": 503} if failed else None,
+            },
+        )
+        for t, ready, version, failed in reads
+    ]
+
+
+def test_serving_holds_when_every_read_is_ready_on_the_old_ruleset():
+    records = outage_trace()
+    last = records[5].t_answer
+    statuses = _statuses(
+        (101.0, True, "v1", False),
+        (110.0, True, "v1", True),
+        (last + 1, True, "v1", True),
+    )
+    assert gates.serving_findings(statuses, records, "d", version="v1") == []
+
+
+def test_serving_fires_on_a_discarded_or_unusable_ruleset():
+    """A cache can keep a discarded ruleset's answers; status() cannot. A
+    ruleset kept but no longer used (too stale, say) still has its version:
+    only ``ready`` shows it."""
+    records = outage_trace()
+    last = records[5].t_answer
+    for ready, version in ((False, None), (False, "v1")):
+        statuses = _statuses(
+            (101.0, True, "v1", False),
+            (110.0, ready, version, True),
+            (last + 1, True, "v1", True),
+        )
+        (finding,) = gates.serving_findings(statuses, records, "d", version="v1")
+        assert finding == (
+            "d: 1 of 3 status() reads were not ready on version 'v1' (the first:"
+            f" ready False, version {version!r})"
+        )
+
+
+def test_serving_is_void_when_no_read_came_after_the_last_fault():
+    records = outage_trace()
+    last = records[5].t_answer
+    early = _statuses((101.0, True, "v1", False), (last - 1, True, "v1", True))
+    (void,) = gates.serving_findings(early, records, "d", version="v1")
+    assert void.startswith("void: d: no status() read after the last faulted")
+    unseen = _statuses((last + 1, True, "v1", False))
+    (void,) = gates.serving_findings(unseen, records, "d", version="v1")
+    assert void.startswith("void: d: no status() read after the last faulted")
+
+
+def test_serving_is_void_without_reads_or_faults():
+    (void,) = gates.serving_findings([], outage_trace(), "d", version="v1")
+    assert void.startswith("void:")
+    statuses = _statuses((101.0, True, "v1", True))
+    (void,) = gates.serving_findings(
+        statuses, outage_trace(faulted=0), "d", version="v1"
+    )
+    assert void == "void: d: no ruleset request was faulted"
+
+
 def test_the_backoff_step_doubles_from_r_up_to_the_cap():
     assert [gates.backoff_step(R, k) for k in range(1, 9)] == [
         5.0,

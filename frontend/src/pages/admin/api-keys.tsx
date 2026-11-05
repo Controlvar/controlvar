@@ -8,10 +8,14 @@ export function ApiKeysPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [newKeyBanner, setNewKeyBanner] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // What the live region says. Cleared (not switched back) when the "copied"
+  // state wears off, so nothing is announced a second time.
+  const [announcement, setAnnouncement] = useState('');
   const [tableKey, setTableKey] = useState(0);
 
   const handleKeyCreated = (keyValue: string) => {
     setNewKeyBanner(keyValue);
+    setAnnouncement('Key created');
     setModalOpen(false);
     // Ask the table to refetch
     setTableKey((prev) => prev + 1);
@@ -21,6 +25,12 @@ export function ApiKeysPage() {
     <AdminLayout title="API Keys" currentPath="/admin/api-keys">
       <div data-testid="api-keys-page" className="flex flex-col gap-5">
         <h2 className="text-xl font-semibold text-slate-900">API Keys</h2>
+
+        {/* Always mounted so a screen reader announces the change. Never the
+            key itself: only that one was created, and that it was copied. */}
+        <div role="status" aria-live="polite" data-testid="new-key-live-region" className="sr-only">
+          {announcement}
+        </div>
 
         {/* Banner showing the newly created key (shown once) */}
         {newKeyBanner && (
@@ -48,12 +58,16 @@ export function ApiKeysPage() {
                   try {
                     await navigator.clipboard?.writeText(newKeyBanner);
                     setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
+                    setAnnouncement('Key copied');
+                    setTimeout(() => {
+                      setCopied(false);
+                      setAnnouncement('');
+                    }, 2000);
                   } catch {
                     setCopied(false);
                   }
                 }}
-                className="px-3 py-1.5 rounded-md bg-amber-600 text-white text-sm font-medium hover:bg-amber-700"
+                className="px-3 py-1.5 rounded-md bg-amber-800 text-white text-sm font-medium hover:bg-amber-900"
               >
                 {copied ? 'Copied' : 'Copy'}
               </button>
@@ -62,8 +76,9 @@ export function ApiKeysPage() {
                 onClick={() => {
                   setNewKeyBanner(null);
                   setCopied(false);
+                  setAnnouncement('');
                 }}
-                className="text-amber-600 hover:text-amber-800 text-sm font-medium"
+                className="text-amber-800 hover:text-amber-900 text-sm font-medium"
               >
                 Dismiss
               </button>

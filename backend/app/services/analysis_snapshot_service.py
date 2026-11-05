@@ -240,7 +240,7 @@ def record_snapshot(
             "analysis_snapshots write failed for experiment %s (%s): %s",
             experiment_id,
             kind.value if isinstance(kind, AnalysisKind) else kind,
-            exc,
+            type(exc).__name__,
         )
         return None
 
@@ -292,7 +292,7 @@ def purge_expired_history(
             # `_audit_session` never commits on its own.
             session.commit()
     except Exception as exc:
-        logger.warning("analysis history purge failed: %s", exc)
+        logger.warning("analysis history purge failed: %s", type(exc).__name__)
         return {"analysis_snapshots": 0, "bandit_state_history": 0}
 
     if deleted["analysis_snapshots"] or deleted["bandit_state_history"]:
