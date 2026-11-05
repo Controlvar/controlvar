@@ -81,7 +81,10 @@ Then:
   resolve, test-and-build and publish jobs green. Its build job's log
   holds the record that job wrote before uploading: for PyPI each file's
   sha256 and the digest of that listing (which must hash back to it, so the
-  record was read whole), for npm the tarball's sha256. The registry's latest
+  record was read whole), for npm the tarball's sha256. A log that cannot be
+  read or is empty fails P, and the reason says why: the HTTP status ``gh``
+  reported and what it said (``said``: no URL, no token), or that the log is
+  gone from GitHub's log storage. The registry's latest
   version is the manifest's; each PyPI file's sha256 is the recorded one, file
   for file; the npm tarball the registry serves has the recorded sha256 and
   its ``dist.integrity`` is that tarball's. The description the registry shows
@@ -549,7 +552,18 @@ class EvidenceError(RuntimeError):
 
 
 class GhError(RuntimeError):
-    """A ``gh`` call failed; the message names the command, never its output."""
+    """A ``gh`` call failed. The message names the command, its exit status,
+    the HTTP status ``gh`` reported (``status``) and, when the answer came from
+    the storage GitHub redirects a log read to, that storage's error code
+    (``storage``, parsed from the body); then what ``gh`` said on stderr,
+    through ``said``. It never quotes stdout and never holds a token."""
+
+    def __init__(
+        self, message: str, status: Optional[int] = None, storage: Optional[str] = None
+    ):
+        super().__init__(message)
+        self.status = status
+        self.storage = storage
 
 
 class FetchError(RuntimeError):
@@ -579,16 +593,76 @@ def http_get(url: str) -> bytes:
     return data
 
 
+#: How much of a failed call's stderr and stdout is looked at, and how much of
+#: what it said a reason quotes. Cut before anything else reads it.
+GH_SAID_READ = 2048
+GH_SAID_MAX = 200
+#: How gh 2.90 reports an HTTP failure on stderr (measured): ``gh: Not Found
+#: (HTTP 404)`` when the body is GitHub's JSON, ``gh: HTTP 404`` when it is not.
+HTTP_STATUS = re.compile(r"\bHTTP ([1-5][0-9][0-9])\b")
+#: GitHub's API answers a job-log read with a redirect to Azure blob storage
+#: (a successful read ends at ``Server: Windows-Azure-Blob/1.0``, measured).
+#: Azure's error body is XML with a ``<Code>`` (its documented format, not
+#: measured here); ``BlobNotFound`` is a log that is gone.
+STORAGE_CODE = re.compile(r"<Code>([A-Za-z]{1,64})</Code>")
+#: Taken out of what gh said: a URL, query and all (a storage URL's query is
+#: its signature), and anything token-shaped -- GitHub's token prefixes, or
+#: any long unbroken run of base64 characters.
+SAID_URL = re.compile(r"[A-Za-z][A-Za-z0-9+.-]{0,20}://[^\s\"'<>]{0,2048}")
+SAID_TOKEN = re.compile(
+    r"\b(?:gh[a-z]_|github_pat_)[A-Za-z0-9_]{0,255}|[A-Za-z0-9_+/=-]{32,2048}"
+)
+
+
+def said(stderr: str) -> str:
+    """What ``gh`` said, safe to print in a public log and record: its first
+    ``GH_SAID_READ`` characters only; the token's value, every URL and every
+    token-shaped word taken out; printable ASCII; then cut to ``GH_SAID_MAX``."""
+    head = (stderr or "")[:GH_SAID_READ]
+    for name in ("GH_TOKEN", "GITHUB_TOKEN"):
+        secret = os.environ.get(name, "")
+        if len(secret) >= 8:
+            head = head.replace(secret, "<token>")
+    head = SAID_URL.sub("<url>", head)
+    head = SAID_TOKEN.sub("<token>", head)
+    head = "".join(c if " " <= c <= "~" else " " for c in head)
+    return " ".join(head[:GH_SAID_MAX].split())
+
+
+def gh_failure(command: str, code: int, stderr: str, stdout: str) -> GhError:
+    """The GhError of a ``gh`` call that exited *code*."""
+    status = HTTP_STATUS.search((stderr or "")[:GH_SAID_READ])
+    storage = STORAGE_CODE.search((stdout or "")[:GH_SAID_READ])
+    parts = [f"exit {code}"]
+    if status:
+        parts.append(f"HTTP {status.group(1)}")
+    if storage:
+        parts.append(f"storage {storage.group(1)}")
+    message = f"{command} failed ({', '.join(parts)})"
+    quoted = said(stderr)
+    return GhError(
+        f"{message}: {quoted}" if quoted else message,
+        int(status.group(1)) if status else None,
+        storage.group(1) if storage else None,
+    )
+
+
 def run_gh(args: List[str]) -> str:
-    """``gh <args>``, its stdout."""
+    """``gh <args>``, its stdout; a GhError that says why when it fails."""
+    command = f"gh {' '.join(args[:2])}"
     try:
         done = subprocess.run(
-            ["gh", *args], capture_output=True, text=True, timeout=300, check=False
+            ["gh", *args],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=300,
+            check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
-        raise GhError(f"gh {' '.join(args[:2])}: {type(error).__name__}") from None
+        raise GhError(f"{command}: {type(error).__name__}") from None
     if done.returncode != 0:
-        raise GhError(f"gh {' '.join(args[:2])} failed (exit {done.returncode})")
+        raise gh_failure(command, done.returncode, done.stderr, done.stdout)
     return done.stdout
 
 
@@ -633,7 +707,10 @@ class GitHub:
         return json.loads(self.gh(["api", f"repos/{self.repo}/{path}"]) or "null")
 
     def text(self, path: str) -> str:
-        """A GET whose answer is text, not JSON: a job's log."""
+        """A GET whose answer is text, not JSON: a job's log. GitHub answers
+        302 to its log storage and gh follows it; a failure there comes back as
+        a GhError carrying the HTTP status gh reported and the storage's
+        error code, when its body has one."""
         return self.gh(["api", f"repos/{self.repo}/{path}"])
 
     def download(self, run_id: int, name: str, dest: pathlib.Path) -> None:
@@ -956,6 +1033,20 @@ RECORDED_FILE = re.compile(
 RECORDED_DIGEST = re.compile(r"digest (?P<sha>[0-9a-f]{64})")
 PYPI_FILE = re.compile(r"[A-Za-z0-9._+-]{1,200}\.(?:whl|tar\.gz)")
 NPM_FILE = re.compile(r"[A-Za-z0-9._+-]{1,200}\.tgz")
+
+
+def unreadable_log(job: str, job_id: int, error: GhError) -> str:
+    """Why the log of *job* (id *job_id*) was not read: always a P FAIL. A log
+    the storage no longer has is said in words (logs expire after the
+    repository's retention, 90 days on 2026-11-05); every other failure is the
+    GhError, HTTP status and all."""
+    why = f"cannot read the log of {job!r} (job {job_id})"
+    if error.storage and error.storage.endswith("NotFound"):
+        why += (
+            ": the log is gone from GitHub's log storage (past the repository's"
+            " log retention, or deleted), so its record cannot be read back"
+        )
+    return f"{why}: {error}"
 
 
 def read_record(package: Package, log: str) -> Tuple[Dict[str, str], List[str]]:
@@ -1817,7 +1908,13 @@ class Verifier:
         try:
             log = self.github.text(f"actions/jobs/{build['id']}/logs")
         except GhError as error:
-            problems.append(f"cannot read the log of {package.build_job!r}: {error}")
+            problems.append(unreadable_log(package.build_job, build["id"], error))
+            return None
+        if not log.strip():
+            problems.append(
+                f"cannot read the log of {package.build_job!r} (job {build['id']}):"
+                " GitHub answered with an empty log"
+            )
             return None
         files, found = read_record(package, log)
         problems += [f"run {run.id}: {p}" for p in found]
@@ -1861,6 +1958,11 @@ class Verifier:
         if commit is not None:
             run = self.release_run(ref, commit, problems)
             recorded = self.release_record(package, run, problems) if run else None
+        if recorded is None and not problems:
+            # Every path that reads no record says why above; this one is for
+            # the path that forgot. The registry comparisons below compare
+            # nothing without a record, so P must not pass on them.
+            problems.append(f"no record of {package.build_job!r} was read")
         if package.registry == "PyPI":
             checked = self._judge_pypi(package, name, version, run, recorded, problems)
         else:

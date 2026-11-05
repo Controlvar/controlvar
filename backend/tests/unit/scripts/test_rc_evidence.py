@@ -19,6 +19,7 @@ import importlib.util
 import io
 import json
 import pathlib
+import subprocess
 import sys
 import tomllib
 import urllib.parse
@@ -600,7 +601,12 @@ class World:
         return directory
 
     # -- running the verifier ---------------------------------------------------
-    def main(self, *extra: str, out: Optional[pathlib.Path] = None) -> Tuple[int, str]:
+    def main(
+        self,
+        *extra: str,
+        out: Optional[pathlib.Path] = None,
+        gh: Optional[Callable[[List[str]], str]] = None,
+    ) -> Tuple[int, str]:
         out = out or self.tmp / "out"
         argv = [TAG, "--root", str(self.root), "--out", str(out), *extra]
         if self.staging is not None:
@@ -610,7 +616,7 @@ class World:
         with contextlib.redirect_stdout(buffer):
             code = rc.main(
                 argv,
-                gh=self.gh,
+                gh=gh or self.gh,
                 head_of=lambda root: self.head,
                 registry=lambda root: copy.deepcopy(self.registry),
                 fetch=self.fetch,
@@ -2023,6 +2029,195 @@ def test_a_build_job_listed_without_an_id_fails(world):
 def test_an_unreadable_build_log_fails(world):
     world.build_ids["python"] = 4999  # the fake answers no log for job 4001
     _fails(world, "cannot read the log of 'test and build for PyPI'")
+
+
+# ---------------------------------------------------------------------------
+# A log read that fails, through the real run_gh (T174): v0.34.1, v0.34.3 and
+# v0.36.0's verifier runs each failed P with "gh api .../logs failed (exit 1)"
+# and nothing else, because run_gh dropped what gh said.
+# ---------------------------------------------------------------------------
+#: Token-shaped, made up at run time: gitleaks scans every pushed commit, so
+#: no token-shaped literal is in this file.
+FAKE_TOKEN = "gh" + "s_" + "Q7x" * 12
+OTHER_TOKEN = "github" + "_pat_" + "Zz9" * 20
+#: A storage URL as gh prints one in a network error; its query is a signature.
+SIGNATURE = "Ab3" * 15
+SIGNED_URL = (
+    "https://productionresultssa0.blob.core.windows.net/actions-results/x/job.txt"
+    "?sv=2025-11-05&se=2026-11-05T05%3A30%3A00Z&sp=r&sig=" + SIGNATURE
+)
+#: What Azure blob storage answers for a log that is gone, after GitHub's 302.
+BLOB_GONE = (
+    '<?xml version="1.0" encoding="utf-8"?><Error><Code>BlobNotFound</Code>'
+    "<Message>The specified blob does not exist.\nRequestId:0</Message></Error>"
+)
+#: gh 2.90's own words for each failure (measured: stderr, then stdout).
+GH_403 = (
+    1,
+    '{"message":"Must have admin rights to Repository.","status":"403"}',
+    "gh: Must have admin rights to Repository. (HTTP 403)\n",
+)
+GH_403_INTEGRATION = (
+    1,
+    '{"message":"Resource not accessible by integration","status":"403"}',
+    "gh: Resource not accessible by integration (HTTP 403)\n",
+)
+GH_404 = (1, '{"message":"Not Found","status":"404"}', "gh: Not Found (HTTP 404)\n")
+GH_BLOB_GONE = (1, BLOB_GONE, "gh: HTTP 404\n")
+GH_NO_HOST = (
+    1,
+    "",
+    f'gh: Get "{SIGNED_URL}": dial tcp: lookup productionresultssa0: no such host\n',
+)
+GH_EMPTY = (0, "", "")
+GH_SILENT = (1, "", "")
+#: A failure that says the token, another token-shaped word and a signed URL.
+GH_LEAKY = (
+    1,
+    "",
+    f"gh: Bad credentials {FAKE_TOKEN} {OTHER_TOKEN} (HTTP 401) via {SIGNED_URL}\n",
+)
+
+
+def _through_run_gh(world, monkeypatch, log_answer):
+    """The verifier with the real ``run_gh``: the PyPI build job's log read
+    gets *log_answer* (exit status, stdout, stderr); every other call is the
+    world's answer, as gh gives it (exit 0, or exit 1 and gh's 404)."""
+    log_read = ["api", f"repos/{REPO}/actions/jobs/{world.build_ids['python']}/logs"]
+
+    def gh_process(argv: List[str], **kwargs: Any) -> subprocess.CompletedProcess:
+        assert argv[0] == "gh"
+        if argv[1:] == log_read and log_answer is not None:
+            code, stdout, stderr = log_answer
+            return subprocess.CompletedProcess(argv, code, stdout=stdout, stderr=stderr)
+        try:
+            answer = world.gh(argv[1:])
+        except rc.GhError:
+            return subprocess.CompletedProcess(argv, *GH_404)
+        return subprocess.CompletedProcess(argv, 0, stdout=answer, stderr="")
+
+    monkeypatch.setattr(rc.subprocess, "run", gh_process)
+    monkeypatch.setenv("GH_TOKEN", FAKE_TOKEN)
+    return world.main(gh=rc.run_gh)
+
+
+def _p_row(text: str, registry: str) -> str:
+    return next(
+        line for line in text.splitlines() if line.startswith(f"| P | {registry} ")
+    )
+
+
+def test_a_readable_log_passes_through_the_real_run_gh(world, monkeypatch):
+    """The control: the same path, the log read answered, PASS."""
+    code, text = _through_run_gh(world, monkeypatch, None)
+    assert code == 0, text
+    assert "| PASS |" in _p_row(text, "PyPI") and "| PASS |" in _p_row(text, "npm")
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "answer, says",
+    [
+        (
+            GH_403,
+            "(exit 1, HTTP 403): gh: Must have admin rights to Repository. (HTTP 403)",
+        ),
+        (
+            GH_403_INTEGRATION,
+            "(exit 1, HTTP 403): gh: Resource not accessible by integration (HTTP 403)",
+        ),
+        (GH_404, "(exit 1, HTTP 404): gh: Not Found (HTTP 404)"),
+        (
+            GH_BLOB_GONE,
+            "the log is gone from GitHub's log storage (past the repository's log"
+            " retention, or deleted), so its record cannot be read back: gh api"
+            f" repos/{REPO}/actions/jobs/4001/logs failed (exit 1, HTTP 404,"
+            " storage BlobNotFound): gh: HTTP 404",
+        ),
+        (
+            GH_NO_HOST,
+            '(exit 1): gh: Get "<url>": dial tcp: lookup productionresultssa0: no such host',
+        ),
+        (GH_EMPTY, "GitHub answered with an empty log"),
+        (GH_SILENT, f"gh api repos/{REPO}/actions/jobs/4001/logs failed (exit 1)"),
+    ],
+    ids=[
+        "403-admin",
+        "403-integration",
+        "404",
+        "blob-gone",
+        "no-host",
+        "empty",
+        "silent",
+    ],
+)
+def test_an_unreadable_log_fails_p_and_says_why(world, monkeypatch, answer, says):
+    """Each way gh fails a log read: P FAILs, and the reason names the HTTP
+    status and what gh said. The other package's P is untouched."""
+    code, text = _through_run_gh(world, monkeypatch, answer)
+    assert code == 1, text
+    assert text.rstrip().endswith("RC EVIDENCE: FAIL"), text
+    row = _p_row(text, "PyPI")
+    assert "| FAIL |" in row, row
+    assert "cannot read the log of 'test and build for PyPI' (job 4001)" in row, row
+    assert says in row, row
+    assert "| PASS |" in _p_row(text, "npm")
+
+
+@pytest.mark.regression
+def test_a_failed_log_read_never_prints_a_token_or_a_signed_url(world, monkeypatch):
+    """What gh said is printed, and recorded in runs.json, without the token's
+    value, any token-shaped word or a URL (whose query is a signature)."""
+    code, text = _through_run_gh(world, monkeypatch, GH_LEAKY)
+    assert code == 1, text
+    record = (world.tmp / "out" / "runs.json").read_text()
+    for written in (text, record):
+        for secret in (FAKE_TOKEN, OTHER_TOKEN, SIGNATURE, "sig=", "blob.core"):
+            assert secret not in written
+    assert (
+        "(exit 1, HTTP 401): gh: Bad credentials <token> <token> (HTTP 401) via <url>"
+        in _p_row(text, "PyPI")
+    )
+
+
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        f"{FAKE_TOKEN}",
+        f"token {OTHER_TOKEN} refused",
+        "x" * 40 + "eyJhbGciOiJIUzI1NiJ9" * 3,
+        f"see {SIGNED_URL} and http://example.com/?q={SIGNATURE}",
+        "\x1b[31mgh:\N{LINE SEPARATOR} HTTP 500\x00\N{ZERO WIDTH NO-BREAK SPACE}",
+        " " * 5000 + FAKE_TOKEN,
+    ],
+    ids=["ghs", "pat", "long-run", "urls", "control-chars", "past-the-read"],
+)
+def test_said_takes_out_tokens_urls_and_controls(monkeypatch, stderr):
+    monkeypatch.setenv("GH_TOKEN", FAKE_TOKEN)
+    quoted = rc.said(stderr)
+    assert len(quoted) <= rc.GH_SAID_MAX
+    assert all(" " <= c <= "~" for c in quoted)
+    for secret in (FAKE_TOKEN, OTHER_TOKEN, SIGNATURE, "eyJhbGciOiJIUzI1NiJ9"):
+        assert secret not in quoted
+
+
+def test_said_takes_out_the_token_s_value_whatever_its_shape(monkeypatch):
+    monkeypatch.setenv("GH_TOKEN", "short-but-secret")
+    assert rc.said("gh: refused short-but-secret (HTTP 403)") == (
+        "gh: refused <token> (HTTP 403)"
+    )
+
+
+@pytest.mark.regression
+def test_p_never_passes_without_a_record(world, monkeypatch):
+    """Any path that reads no record and says nothing still fails P: without a
+    record the registry comparisons compare nothing."""
+    monkeypatch.setattr(rc.Verifier, "release_record", lambda self, *a: None)
+    _fails(
+        world,
+        "no record of 'test and build for PyPI' was read",
+        "no record of 'test and build for npm' was read",
+    )
 
 
 def test_a_registry_that_does_not_answer_fails(world):
