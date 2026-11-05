@@ -145,7 +145,7 @@ text = "Claude Code"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Run this with the key in $KEY:"
+text = "Run this in the project directory where you want the server, with the key in $KEY:"
 by = ["mechanism:mcp-page-snippets"]
 
 [[unit]]

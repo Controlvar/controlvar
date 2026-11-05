@@ -71,7 +71,8 @@ is your instance's address and `CONTROLVAR_API_KEY` is the key.
 
 ### Claude Code
 
-Run this with the key in `$KEY`:
+Run this in the project directory where you want the server, with the key in
+`$KEY`:
 
 ```{.bash skip reason="toolchain: needs the Claude Code CLI and the key from the step above"}
 claude mcp add controlvar \

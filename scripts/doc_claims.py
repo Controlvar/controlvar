@@ -765,7 +765,8 @@ MECHANISMS: Dict[str, Mechanism] = {
             "Each assistant starts the server itself, with two settings: "
             "CONTROLVAR_API_URL is your instance's address and "
             "CONTROLVAR_API_KEY is the key.",
-            "Run this with the key in $KEY:",
+            "Run this in the project directory where you want the server, "
+            "with the key in $KEY:",
         ),
     ),
     "integrations-claims": Mechanism(
