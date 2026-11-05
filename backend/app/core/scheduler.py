@@ -6,6 +6,7 @@ such as experiment status updates based on scheduled dates.
 """
 
 import asyncio
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
@@ -15,7 +16,7 @@ from sqlalchemy.orm import Session
 from backend.app.api import experiment_cache
 from backend.app.core.logging import get_logger
 from backend.app.core.metrics import update_active_experiments
-from backend.app.core.scheduler_tick import run_locked_tick
+from backend.app.core.scheduler_tick import run_in_worker, run_locked_tick
 from backend.app.db.session import SessionLocal
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.experiment import Experiment, ExperimentStatus
@@ -42,6 +43,24 @@ NOT_READY_TO_START = (
     "needs at least two variants, a control and a metric, and a split URL "
     "experiment needs a valid split_url_config), so it stays a draft"
 )
+
+
+@dataclass
+class _DueWork:
+    """What one tick's database work did (:meth:`ExperimentScheduler._process_due`).
+
+    The counts are for the run record. The ids and notifications are set only
+    for a phase whose commit went through: those experiments are dropped from
+    the cache and announced on the API's event loop.
+    """
+
+    activated: int = 0
+    completed: int = 0
+    failed: int = 0
+    activated_ids: List[Any] = field(default_factory=list)
+    started: List[Dict[str, Any]] = field(default_factory=list)
+    completed_ids: List[Any] = field(default_factory=list)
+    ended: List[Dict[str, Any]] = field(default_factory=list)
 
 
 class ExperimentScheduler:
@@ -91,7 +110,8 @@ class ExperimentScheduler:
         while self.is_running:
             try:
                 # One tick under the advisory lock; records the run and
-                # skips when another replica holds the lock.
+                # skips when another replica holds the lock. Its database
+                # work runs in a worker thread.
                 await run_locked_tick(
                     SCHEDULER_NAME, self.process_scheduled_experiments
                 )
@@ -117,20 +137,70 @@ class ExperimentScheduler:
            a DRAFT, is logged once per tick, and is not counted as failed
         2. Experiments in ACTIVE status that should be completed (time-based)
 
-        After each commit, the cached detail of every experiment it started,
-        resumed or completed is dropped (with ``CACHE_ENABLED`` on), so the
-        experiment page shows the new status at once; a Redis failure there is
-        logged and does not stop the tick. Then the notifications for that
-        commit are sent, each in a worker thread (#1690): a send is a
-        synchronous HTTP call, and nothing is announced that was not committed.
+        The database work (:meth:`_process_due`: both phases, their commits,
+        the audit entries and the gauge) runs in one worker thread with its
+        own session. Its queries check connections out of the pool; on the
+        event loop's thread such a checkout, when every connection is held by
+        a request waiting for the loop, waits the whole pool timeout and stops
+        the API answering anything for that long.
+
+        Once it has returned, here on the API's event loop: the cached detail
+        of every experiment it started or resumed is dropped (with
+        ``CACHE_ENABLED`` on), so the experiment page shows the new status at
+        once, and the "started" notifications are sent; then the same for the
+        experiments it completed and the "ended" notifications. The cache
+        drop stays on this loop because it uses the process-wide Redis pool,
+        which belongs to it (run on a private loop in the worker, as the
+        safety tick runs, it would create that pool on a loop that closes when
+        the tick ends); a Redis failure there is logged and does not stop the
+        tick. Each send runs in a worker thread (#1690): a send
+        is a synchronous HTTP call. Nothing is dropped or announced that was
+        not committed, and "started" still comes before "ended". A tick
+        cancelled at shutdown while the worker runs waits for it
+        (``run_in_worker``) and then drops and announces nothing.
 
         An experiment's ``bayesian_decision`` is a recommendation only: nothing
         here stops an experiment on it (see docs/api/bayesian.md).
 
         Returns ``{"items_processed": n, "items_failed": m}`` for the run record.
         """
+        # self._process_due is read here, at call time: the tests replace it
+        # on the instance.
+        work = await run_in_worker(self._process_due, label=f"{SCHEDULER_NAME} tick")
+
+        if work.activated_ids:
+            await experiment_cache.drop_cached_experiment_details(work.activated_ids)
+            await _send_each(
+                self._notification_service.notify_experiment_started, work.started
+            )
+        if work.completed_ids:
+            await experiment_cache.drop_cached_experiment_details(work.completed_ids)
+            await _send_each(
+                self._notification_service.notify_experiment_ended, work.ended
+            )
+
+        return {
+            "items_processed": work.activated + work.completed,
+            "items_failed": work.failed,
+            "metadata": {
+                "activated": work.activated,
+                "completed": work.completed,
+            },
+        }
+
+    def _process_due(self) -> "_DueWork":
+        """
+        The tick's database work; runs in a worker thread.
+
+        Opens and closes its own session in that thread. Activates what is
+        due, commits, then completes what is due and commits, one savepoint
+        per row; sets the gauge. Returns the counts and, for each phase whose
+        commit went through, the ids to drop from the cache and the
+        notifications to send: the caller does both on the API's event loop.
+        """
         logger.info("Processing scheduled experiments")
 
+        work = _DueWork()
         activated_count = 0
         completed_count = 0
         failed_count = 0
@@ -230,10 +300,10 @@ class ExperimentScheduler:
             # Commit all activation changes before checking for experiments to complete
             if activated_count > 0:
                 db.commit()
-                await experiment_cache.drop_cached_experiment_details(activated_ids)
-                await _send_each(
-                    self._notification_service.notify_experiment_started, started
-                )
+                # Dropped from the cache and announced by the caller, on the
+                # API's event loop.
+                work.activated_ids = activated_ids
+                work.started = started
 
             # Find experiments to complete (end_date has passed)
             experiments_to_complete = (
@@ -287,10 +357,8 @@ class ExperimentScheduler:
             # Commit completion changes
             if completed_count > 0:
                 db.commit()
-                await experiment_cache.drop_cached_experiment_details(completed_ids)
-                await _send_each(
-                    self._notification_service.notify_experiment_ended, ended
-                )
+                work.completed_ids = completed_ids
+                work.ended = ended
 
             # Log the results
             if activated_count > 0 or completed_count > 0:
@@ -310,14 +378,10 @@ class ExperimentScheduler:
         finally:
             db.close()
 
-        return {
-            "items_processed": activated_count + completed_count,
-            "items_failed": failed_count,
-            "metadata": {
-                "activated": activated_count,
-                "completed": completed_count,
-            },
-        }
+        work.activated = activated_count
+        work.completed = completed_count
+        work.failed = failed_count
+        return work
 
     @staticmethod
     def _record_transition(
