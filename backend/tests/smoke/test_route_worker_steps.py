@@ -75,26 +75,21 @@ pytestmark = [pytest.mark.smoke]
 GET_DBS = (deps.get_db, session_module.get_db)
 
 #: Routes that reach a ``get_db`` but run no synchronous step, so their first
-#: database step runs on the event loop. All are in the full profile.
-MODULE_ASYNC_FIRST = {
-    ("GET", "/api/v1/auth/sso/login"),
-    ("GET", "/api/v1/auth/sso/oidc/{provider}/callback"),
-    ("GET", "/api/v1/auth/sso/oidc/{provider}/login"),
-    ("POST", "/api/v1/auth/sso/exchange"),
-    ("POST", "/api/v1/integrations/webhooks/github"),
-    ("POST", "/api/v1/integrations/webhooks/jira"),
-    ("POST", "/api/v1/integrations/webhooks/salesforce"),
-}
+#: database step runs on the event loop. There are none, in either profile.
+MODULE_ASYNC_FIRST: set = set()
 CORE_ASYNC_FIRST: set = set()
 
 #: Routes whose ``async`` handler takes a worker trip itself while a ``get_db``
-#: is in its dependency tree. The core three close their session first (the
-#: SDK routes); the module three release the request's sessions first (the
-#: warehouse routes that wait on the warehouse).
+#: is in its dependency tree. The core six close their session first (the
+#: SDK routes and the experiment results routes); the module three release the
+#: request's sessions first (the warehouse routes that wait on the warehouse).
 CORE_HANDLER_TRIPS = {
     ("GET", "/api/v1/sdk/ruleset"),
     ("POST", "/api/v1/tracking/evaluations"),
     ("POST", "/api/v1/tracking/assign/batch"),
+    ("GET", "/api/v1/experiments/{experiment_id}/results"),
+    ("GET", "/api/v1/experiments/{experiment_id}/daily-results"),
+    ("GET", "/api/v1/experiments/{experiment_id}/segmented-results/{segment_by}"),
 }
 MODULE_HANDLER_TRIPS = {
     ("POST", "/api/v1/warehouse/analysis/connections/{connection_id}/test"),
