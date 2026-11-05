@@ -67,6 +67,59 @@ def test_the_default_is_15_minutes():
     assert Settings(_env_file=None).EXPERIMENT_SCHEDULER_INTERVAL_MINUTES == 15
 
 
+@pytest.mark.asyncio
+async def test_the_loop_ticks_then_sleeps_the_interval_in_seconds(monkeypatch):
+    """The setting is in minutes; the loop sleeps ``interval_minutes * 60`` seconds.
+
+    The loop runs for exactly three ticks, with a sleep that records its
+    argument and stops the loop at the third. At the default of 15 minutes that
+    is ``[900, 900, 900]`` (minutes passed as seconds would give ``[15, 15, 15]``,
+    ``* 120`` would give ``[1800, ...]``) and each sleep follows a tick, so three
+    sleeps are three ticks. Both fakes also stop the loop on their own after a
+    bounded number of calls, so a deleted sleep or tick fails the assertions
+    below instead of hanging the run.
+    """
+    import asyncio
+
+    import backend.app.core.scheduler as scheduler_module
+    from backend.app.core.scheduler import ExperimentScheduler
+
+    scheduler = ExperimentScheduler()
+    scheduler.is_running = True
+    sleeps: list[float] = []
+    processed: list[int] = []
+    locked: list[str] = []
+
+    async def process_scheduled_experiments():
+        processed.append(1)
+        return {"items_processed": 0, "items_failed": 0}
+
+    async def run_locked_tick(name, tick, **_kwargs):
+        locked.append(name)
+        # A loop that never sleeps would otherwise spin here for ever.
+        if len(locked) > 10:
+            scheduler.is_running = False
+        return await tick()
+
+    async def fake_sleep(seconds):
+        sleeps.append(seconds)
+        if len(sleeps) >= 3 or len(sleeps) > 10:
+            scheduler.is_running = False
+
+    monkeypatch.setattr(
+        scheduler, "process_scheduled_experiments", process_scheduled_experiments
+    )
+    monkeypatch.setattr(scheduler_module, "run_locked_tick", run_locked_tick)
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+
+    await scheduler._run_scheduler()
+
+    assert scheduler.interval_minutes == 15
+    assert sleeps == [900, 900, 900]
+    assert locked == [scheduler_module.SCHEDULER_NAME] * 3
+    assert len(processed) == 3
+
+
 @pytest.mark.regression
 def test_the_schedule_form_quotes_the_default():
     """The experiment page's schedule form (#1454) tells the user how late a

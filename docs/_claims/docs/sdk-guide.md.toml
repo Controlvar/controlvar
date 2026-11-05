@@ -579,7 +579,7 @@ text = "evaluateFlag(flagKey, user) | Promise<FlagEvaluation> (key, enabled, con
 by = [
     "test:sdk/js/__tests__/client.test.ts::maps {key, enabled, config}",
     "test:sdk/js/__tests__/client.test.ts::appends context=<url-encoded JSON of user.attributes> when the user has attributes",
-    "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 404 when the flag is not ACTIVE",
+    "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 404 when no flag has the key",
 ]
 
 [[unit]]
