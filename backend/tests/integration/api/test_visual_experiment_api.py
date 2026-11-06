@@ -273,12 +273,23 @@ def test_an_ordinary_experiment_has_no_etag(client, developer):
 # --- V3 / V4: every write path validates ------------------------------------------
 
 
+def _escaped_json(user, body):
+    """*body* as JSON with every character outside ASCII escaped, as the
+    request's keyword arguments. A lone surrogate (one corpus entry) then
+    travels as the ``\\ud800`` escape a client sends; httpx's ``json=``
+    encodes the body as UTF-8, which cannot hold one."""
+    return {
+        "content": json.dumps(body),
+        "headers": {**_auth(user), "Content-Type": "application/json"},
+    }
+
+
 @pytest.mark.parametrize("case_id,field,document", REFUSED, ids=[c[0] for c in REFUSED])
 def test_create_refuses_each_hostile_payload(
     client, developer, case_id, field, document
 ):
     body = _body(variants=_variants(document))
-    response = client.post(f"{BASE}/", json=body, headers=_auth(developer))
+    response = client.post(f"{BASE}/", **_escaped_json(developer, body))
     assert response.status_code == 422, response.text
     locs = [error["loc"][:4] for error in response.json()["detail"]]
     assert ["body", "variants", 1, "visual_changes"] in locs, locs
@@ -292,8 +303,7 @@ def test_put_refuses_each_hostile_payload_and_keeps_the_stored_changes(
     for case_id, _, document in REFUSED:
         response = client.put(
             f"{BASE}/{created['id']}",
-            json={"variants": _variants(document)},
-            headers=_auth(developer),
+            **_escaped_json(developer, {"variants": _variants(document)}),
         )
         if response.status_code != 422:
             refused.append((case_id, response.status_code))

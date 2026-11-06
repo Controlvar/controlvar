@@ -127,12 +127,12 @@ def test_every_string_field_has_a_refused_corpus_entry():
 
 
 def test_the_refused_corpus_has_exactly_these_entries():
-    assert len(REFUSED) == 91
+    assert len(REFUSED) == 92
     assert len({case_id for case_id, _, _ in REFUSED}) == len(REFUSED)
     margins = [case_id for case_id, _, _ in REFUSED if case_id.startswith("margin-")]
     assert len(margins) == 12  # V99's twelve
     selectors = [case_id for case_id, field, _ in REFUSED if field == "selector"]
-    assert len(selectors) == 17
+    assert len(selectors) == 18
 
 
 def test_the_selector_refusal_names_exactly_what_is_refused():
@@ -146,6 +146,7 @@ def test_the_selector_refusal_names_exactly_what_is_refused():
     assert visual._COMMENT_MARKS == ("/*", "*/")
     assert "letters" not in visual.SELECTOR_REFUSED
     assert "512" in visual.SELECTOR_REFUSED and "control" in visual.SELECTOR_REFUSED
+    assert "surrogate" in visual.SELECTOR_REFUSED
 
 
 @pytest.mark.parametrize(
@@ -166,10 +167,40 @@ def test_a_selector_may_hold_any_character_s1_does_not_refuse(selector):
 
 @pytest.mark.parametrize(
     "selector",
-    ["/*", "*/", "a /* b", "a */ b", "{", "}", ";", "\\", "@", "<", "\x00", "\x1b"],
+    [
+        "/*",
+        "*/",
+        "a /* b",
+        "a */ b",
+        "{",
+        "}",
+        ";",
+        "\\",
+        "@",
+        "<",
+        "\x00",
+        "\x1b",
+        "a\ud800b",
+        "\udfff",
+    ],
 )
 def test_a_selector_refuses_each_character_and_comment_mark_s1_lists(selector):
     assert visual.selector_problem(selector) == visual.SELECTOR_REFUSED
+
+
+@pytest.mark.regression
+def test_a_lone_surrogate_in_a_selector_gets_the_selector_refusal():
+    """A JSON ``\\ud800`` escape reaches the validator as a lone surrogate.
+    Without its own check it was refused only by the 64 KiB check's UTF-8
+    encoding, as a ``value_error`` with the codec's text."""
+    document = {
+        "version": 1,
+        "changes": [{"op": "set_text", "selector": "a\ud800b", "text": "Hi"}],
+    }
+
+    assert [(e["type"], e["msg"]) for e in _errors(document)] == [
+        ("visual_changes", visual.SELECTOR_REFUSED)
+    ]
 
 
 @pytest.mark.parametrize(

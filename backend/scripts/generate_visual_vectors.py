@@ -192,7 +192,7 @@ REFUSED: List[Tuple[str, str, Dict[str, Any]]] = [
     ("text-nul", "set_text.text", _text("a\u0000b")),
     ("text-number", "set_text.text", _text(5)),
     # Selectors: each character S1 refuses on its own, each comment mark on
-    # its own, control characters, and the length.
+    # its own, control characters, a lone surrogate, and the length.
     ("selector-brace", "selector", _selector("div{color:red}")),
     ("selector-open-brace", "selector", _selector("div{")),
     ("selector-close-brace", "selector", _selector("div}")),
@@ -208,6 +208,7 @@ REFUSED: List[Tuple[str, str, Dict[str, Any]]] = [
     ("selector-tab", "selector", _selector("a\tb")),
     ("selector-delete", "selector", _selector("a\u007fb")),
     ("selector-c1-control", "selector", _selector("a\u0085b")),
+    ("selector-lone-surrogate", "selector", _selector("a\ud800b")),
     ("selector-empty", "selector", _selector("")),
     (
         "selector-513-code-points",

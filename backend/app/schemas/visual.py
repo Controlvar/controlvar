@@ -190,7 +190,8 @@ def exposure_event_types() -> Tuple[str, ...]:
 
 SELECTOR_REFUSED = (
     "A selector is 1 to 512 characters, and cannot contain { } ; \\ @ <, the "
-    "comment marks /* and */, or a control character such as NUL."
+    "comment marks /* and */, a control character such as NUL, or a lone "
+    "surrogate."
 )
 TEXT_REFUSED = "A NUL character cannot be part of the text."
 ATTRIBUTE_VALUE_REFUSED = "An attribute value cannot contain a control character."
@@ -275,9 +276,11 @@ def selector_problem(selector: str) -> Optional[str]:
 
     Refused: a selector that is not 1 to 512 characters (counted as Unicode
     code points), one that contains any of ``{ } ; \\ @ <``, the comment
-    opener ``/*`` or closer ``*/``, or a control character (NUL, tab and new
-    line among them). Everything else is accepted. Each of the comment marks
-    is its own check: ``/`` and ``*`` alone are ordinary characters here."""
+    opener ``/*`` or closer ``*/``, a control character (NUL, tab and new
+    line among them), or a lone surrogate (Unicode category Cs, which a JSON
+    ``\\ud800`` escape can carry and UTF-8 cannot encode). Everything else is
+    accepted. Each of the comment marks is its own check: ``/`` and ``*``
+    alone are ordinary characters here."""
     if not isinstance(selector, str):
         return SELECTOR_REFUSED
     if not 1 <= len(selector) <= MAX_SELECTOR_LENGTH:
@@ -287,6 +290,8 @@ def selector_problem(selector: str) -> Optional[str]:
     if any(mark in selector for mark in _COMMENT_MARKS):
         return SELECTOR_REFUSED
     if _has_control(selector):
+        return SELECTOR_REFUSED
+    if any(unicodedata.category(character) == "Cs" for character in selector):
         return SELECTOR_REFUSED
     return None
 
