@@ -8,6 +8,7 @@ import { VariantsEditor } from './VariantsEditor';
 import { MetricsEditor } from './MetricsEditor';
 import { CreateError, footMessage } from './createErrors';
 import { TargetingProblems } from './TargetingProblems';
+import { BalanceWithinFields, splitProblemShown } from './BalanceWithinFields';
 import { AnalysisSettingsFields } from './AnalysisSettingsFields';
 import { correctionName, formatConfidence } from '@/components/results/shared/analysisSettings';
 import { formatEffect, plannedEffectFraction, plannedEffectProblem } from './estimate';
@@ -72,7 +73,13 @@ export function AdvancedForm({
 
       {/* Variants */}
       <section className="bg-white rounded-lg border border-slate-200 p-6 space-y-4">
-        <VariantsEditor variants={state.variants} dispatch={dispatch} revealProblems={revealProblems} />
+        <VariantsEditor
+          variants={state.variants}
+          dispatch={dispatch}
+          revealProblems={revealProblems}
+          splitProblem={splitProblemShown(state, error?.balance)}
+        />
+        <BalanceWithinFields balance={state.balance} dispatch={dispatch} issue={error?.balance ?? null} />
       </section>
 
       {/* Metrics */}

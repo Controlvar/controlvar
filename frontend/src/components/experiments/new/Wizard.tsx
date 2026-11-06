@@ -7,6 +7,7 @@ import { docsUrl } from '@/services/docs';
 import { EXPERIMENT_TYPE_LABELS, METRIC_TYPE_LABELS } from '@/types/experiments';
 import {
   buildCreatePayload,
+  checkVariants,
   configurationProblems,
   ExperimentFormAction,
   ExperimentFormState,
@@ -14,9 +15,11 @@ import {
   FORM_STEPS,
   FormStep,
   maxReachableStep,
-  validateForm,
   validateStep,
 } from './formState';
+import { BalanceWithinFields, focusBalanceField, splitProblemShown } from './BalanceWithinFields';
+import { balanceSummary } from './balanceWithin';
+import { useSegmentList } from '@/hooks/useSegmentList';
 import { BasicInfoFields } from './BasicInfoFields';
 import { VariantsEditor } from './VariantsEditor';
 import { MetricsEditor } from './MetricsEditor';
@@ -121,6 +124,13 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
   const current = pinned ?? (requested < 0 ? 0 : Math.min(requested, maxReachable));
   const step = FORM_STEPS[current];
 
+  // The Review row names the saved segments the setting lists, never their ids.
+  const segmentList = useSegmentList(
+    state.balance.on && state.balance.groupBy === 'segments' && state.balance.segments.length > 0,
+  );
+  const segmentNames =
+    segmentList.state === 'ready' ? new Map(segmentList.segments.map((s) => [s.id, s.name] as const)) : null;
+
   const moveTo = (index: number, how: 'push' | 'replace') => {
     pinnedRef.current = index;
     setPinned(index);
@@ -180,12 +190,17 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
       if (key instanceof HTMLInputElement) {
         key.focus();
         key.select();
+      } else if (error?.balance && FORM_STEPS[current] === 'variants') {
+        // "Edit balance": the control the API's refusal is about, not the heading.
+        focusBalanceField(error.balance.field);
       } else {
         headingRef.current?.focus();
       }
       setStepError(null);
     }
     shownRef.current = current;
+    // Runs when the step changes; the error is read as it stands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current]);
 
   const next = () => {
@@ -196,6 +211,8 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
       if (step === 'variants' && configurationProblems(state.variants).some((p) => p !== null)) {
         setRevealProblems((n) => n + 1);
       }
+      // The split is the problem (its line is under the allocations): focus goes there.
+      if (step === 'variants' && checkVariants(state.variants) === null) focusBalanceField('split');
       return;
     }
     setStepError(null);
@@ -260,9 +277,7 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
             // marks another. Review is the whole form.
             const problem =
               !isCurrent && index <= visitedMax
-                ? s === 'review'
-                  ? validateForm(state.name, state.variants, state.metrics)
-                  : validateStep(s, state)
+                ? validateStep(s, state)
                 : null;
             const status = isCurrent
               ? 'current step'
@@ -398,7 +413,15 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
                 variants={state.variants}
                 dispatch={dispatch}
                 revealProblems={revealProblems}
+                splitProblem={splitProblemShown(state, error?.balance)}
               />
+              <div className="pt-2">
+                <BalanceWithinFields
+                  balance={state.balance}
+                  dispatch={dispatch}
+                  issue={error?.balance ?? null}
+                />
+              </div>
               <div className="pt-2">
                 <TargetingRuleBuilder
                   value={state.rules}
@@ -503,6 +526,26 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
                     </p>
                   )}
                 </div>
+                <p className="mt-1" data-testid="review-balance">
+                  Balance: {balanceSummary(payload.balance_within ?? null, segmentNames)}
+                </p>
+                {error?.balance && (
+                  <div
+                    role="alert"
+                    className="mt-2 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700"
+                    data-testid="balance-review-error"
+                  >
+                    <p>{error.balance.message}</p>
+                    <button
+                      type="button"
+                      onClick={() => goTo(FORM_STEPS.indexOf('variants'))}
+                      className="mt-2 font-medium underline hover:text-red-900 focus:outline-none focus:ring-2 focus:ring-blue-600 rounded"
+                      data-testid="balance-error-edit"
+                    >
+                      Edit balance
+                    </button>
+                  </div>
+                )}
                 <div className="mt-2">
                   <TargetingProblems error={error}>
                     <button

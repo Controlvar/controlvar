@@ -10,6 +10,7 @@
 import { TargetingRules } from '@/types/targeting';
 import { createEmptyRules, validateRules } from '@/utils/targeting';
 import {
+  BalanceWithin,
   DesignMetric,
   DesignVariant,
   Experiment,
@@ -26,6 +27,14 @@ import {
   DEFAULT_CORRECTION_METHOD,
 } from '@/components/results/shared/analysisSettings';
 import { plannedEffectFraction, plannedEffectProblem } from './estimate';
+import {
+  balanceStateFromStored,
+  BalanceFormState,
+  buildBalancePayload,
+  initialBalanceState,
+  sameBalance,
+  splitProblem,
+} from './balanceWithin';
 
 export function generateKey(name: string): string {
   return name
@@ -126,6 +135,14 @@ export interface ExperimentFormState {
    * `buildCreatePayload` does with `plannedEffectPct`.
    */
   designPlannedEffect?: number | null;
+  /** Balance the split within groups of users (beta, #448); see `balanceWithin.ts`. */
+  balance: BalanceFormState;
+  /**
+   * The design edit's stored setting, as read (null: off). Set only by
+   * `formStateFromExperiment`; `buildDesignPayload` sends `balance_within`
+   * only when the form's differs from it.
+   */
+  balanceStored?: BalanceWithin | null;
 }
 
 const DEFAULT_VARIANTS: VariantFormData[] = [
@@ -154,6 +171,7 @@ export function createInitialFormState(): ExperimentFormState {
     bayesianEnabled: false,
     sequentialEnabled: false,
     plannedEffectPct: '',
+    balance: initialBalanceState(),
   };
 }
 
@@ -315,6 +333,16 @@ export function validateForm(
 }
 
 /**
+ * The API's refusal of the split for a balanced experiment (every share must
+ * be a multiple of 5), or null: nothing while the switch is off, and nothing
+ * until the shares add up to 100.
+ */
+export function balanceSplitProblem(state: Pick<ExperimentFormState, 'balance' | 'variants'>): string | null {
+  if (!state.balance.on) return null;
+  return splitProblem(state.variants.map((v) => Number(v.traffic_allocation) || 0));
+}
+
+/**
  * Every problem with the targeting rules, in the builder's words, or [] when
  * they can be sent. No groups means no targeting and is always fine.
  *
@@ -353,11 +381,11 @@ export function validateStep(step: FormStep, state: ExperimentFormState): string
     case 'details':
       return checkName(state.name) ?? checkMetrics(state.metrics);
     case 'variants':
-      return checkVariants(state.variants);
+      return checkVariants(state.variants) ?? balanceSplitProblem(state);
     case 'estimate':
       return plannedEffectProblem(state.plannedEffectPct);
     case 'review':
-      return validateForm(state.name, state.variants, state.metrics);
+      return validateForm(state.name, state.variants, state.metrics) ?? balanceSplitProblem(state);
   }
 }
 
@@ -423,6 +451,9 @@ export function buildCreatePayload(state: ExperimentFormState): CreateExperiment
   };
   if (state.bayesianEnabled) payload.bayesian_enabled = true;
   if (state.sequentialEnabled) payload.sequential_testing_enabled = true;
+  // Sent only when on: a draft that does not balance is created as before.
+  const balance = buildBalancePayload(state.balance);
+  if (balance) payload.balance_within = balance;
   return payload;
 }
 
@@ -478,6 +509,8 @@ export function formStateFromExperiment(experiment: Experiment): ExperimentFormS
     name: experiment.name,
     variants: experiment.variants.map(variantFromStored),
     metrics: experiment.metrics.map((m, i) => metricFromStored(m, i === planned)),
+    balance: balanceStateFromStored(experiment.balance_within),
+    balanceStored: experiment.balance_within ?? null,
   };
   if (planned >= 0) state.designPlannedEffect = experiment.metrics[planned].expected_effect ?? null;
   return state;
@@ -528,7 +561,11 @@ export function buildDesignPayload(state: ExperimentFormState): ExperimentDesign
     if (carried?.minimum_sample_size != null) metric.minimum_sample_size = carried.minimum_sample_size;
     return metric;
   });
-  return { variants, metrics };
+  const body: ExperimentDesignUpdate = { variants, metrics };
+  // Only a change to the setting is sent: a save that leaves it alone sends the two lists, as before.
+  const balance = buildBalancePayload(state.balance);
+  if (!sameBalance(balance, state.balanceStored ?? null)) body.balance_within = balance;
+  return body;
 }
 
 /** The design edit's own refusals; every other one is guided setup's (`checkVariants`, `checkMetrics`). */
@@ -593,6 +630,10 @@ export function checkDesign(state: ExperimentFormState): DesignProblem | null {
   if (controls.length > 1) {
     return { message: ONE_CONTROL, field: { list: 'variants', index: controls[0], field: 'is_control' } };
   }
+  const splitRefusal = balanceSplitProblem(state);
+  if (splitRefusal !== null) {
+    return { message: splitRefusal, field: { list: 'variants', index: 0, field: 'traffic_allocation' } };
+  }
   const metricProblem = checkMetrics(metrics);
   if (metricProblem !== null) return { message: metricProblem, field: metricProblemField(metrics) };
   const primaries = indexesWhere(metrics, (m) => m.is_primary);
@@ -616,6 +657,14 @@ export type ExperimentFormAction =
   | { type: 'setBayesianEnabled'; bayesianEnabled: boolean }
   | { type: 'setSequentialEnabled'; sequentialEnabled: boolean }
   | { type: 'setPlannedEffect'; plannedEffectPct: string }
+  | { type: 'setBalanceOn'; on: boolean }
+  | { type: 'setBalanceGroupBy'; groupBy: BalanceFormState['groupBy'] }
+  | { type: 'setBalanceCustomKey'; customKey: string }
+  | { type: 'addBalanceValue'; value: string }
+  | { type: 'removeBalanceValue'; index: number }
+  | { type: 'addBalanceSegment'; segmentId: string }
+  | { type: 'removeBalanceSegment'; index: number }
+  | { type: 'moveBalanceSegment'; index: number; by: -1 | 1 }
   | { type: 'addVariant' }
   | { type: 'removeVariant'; index: number }
   | {
@@ -661,6 +710,38 @@ export function experimentFormReducer(
       return { ...state, sequentialEnabled: action.sequentialEnabled };
     case 'setPlannedEffect':
       return { ...state, plannedEffectPct: action.plannedEffectPct };
+
+    case 'setBalanceOn':
+      return { ...state, balance: { ...state.balance, on: action.on } };
+    case 'setBalanceGroupBy':
+      // The values belong to the key they were listed for.
+      return { ...state, balance: { ...state.balance, groupBy: action.groupBy, values: [] } };
+    case 'setBalanceCustomKey':
+      return { ...state, balance: { ...state.balance, customKey: action.customKey, values: [] } };
+    case 'addBalanceValue':
+      // A value is matched exactly, so it is kept as typed; only nothing is not added.
+      if (action.value.trim() === '') return state;
+      return { ...state, balance: { ...state.balance, values: [...state.balance.values, action.value] } };
+    case 'removeBalanceValue':
+      return {
+        ...state,
+        balance: { ...state.balance, values: state.balance.values.filter((_, i) => i !== action.index) },
+      };
+    case 'addBalanceSegment':
+      if (action.segmentId === '' || state.balance.segments.includes(action.segmentId)) return state;
+      return { ...state, balance: { ...state.balance, segments: [...state.balance.segments, action.segmentId] } };
+    case 'removeBalanceSegment':
+      return {
+        ...state,
+        balance: { ...state.balance, segments: state.balance.segments.filter((_, i) => i !== action.index) },
+      };
+    case 'moveBalanceSegment': {
+      const to = action.index + action.by;
+      if (to < 0 || to >= state.balance.segments.length) return state;
+      const segments = [...state.balance.segments];
+      [segments[action.index], segments[to]] = [segments[to], segments[action.index]];
+      return { ...state, balance: { ...state.balance, segments } };
+    }
 
     case 'addVariant':
       return {

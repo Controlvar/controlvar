@@ -1,8 +1,11 @@
 import React, { useEffect, useReducer, useRef, useState } from 'react';
+import { ApiError } from '@/services/api';
 import { ExperimentsService } from '@/services/experiments';
 import { Experiment } from '@/types/experiments';
 import { MetricsEditor } from './new/MetricsEditor';
 import { VariantsEditor } from './new/VariantsEditor';
+import { BalanceUnavailable, BalanceWithinFields, splitProblemShown } from './new/BalanceWithinFields';
+import { BalanceIssue, balanceUnavailableLine, takeBalanceIssue } from './new/balanceWithin';
 import {
   buildDesignPayload,
   checkDesign,
@@ -63,7 +66,10 @@ export function ExperimentDesignForm({ experiment, onSaved, onCancel, describeEr
   const [seeded] = useState(() => JSON.stringify(buildDesignPayload(formStateFromExperiment(experiment))));
   const [problem, setProblem] = useState<DesignProblem | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
+  // The API's refusal of the balance setting, shown at its control in the API's own words.
+  const [balanceIssue, setBalanceIssue] = useState<BalanceIssue | null>(null);
   const [saving, setSaving] = useState(false);
+  const unavailable = balanceUnavailableLine(experiment);
   const [revealProblems, setRevealProblems] = useState(0);
   const [focusField, setFocusField] = useState<DesignField | null>(null);
   const [focusSave, setFocusSave] = useState(false);
@@ -93,12 +99,14 @@ export function ExperimentDesignForm({ experiment, onSaved, onCancel, describeEr
   const change: React.Dispatch<ExperimentFormAction> = (action) => {
     dispatch(action);
     setProblem(null);
+    setBalanceIssue(null);
   };
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
     if (saving) return;
     setServerError(null);
+    setBalanceIssue(null);
     const found = checkDesign(state);
     if (found) {
       setProblem(found);
@@ -117,8 +125,20 @@ export function ExperimentDesignForm({ experiment, onSaved, onCancel, describeEr
       const updated = await ExperimentsService.updateDesign(experiment.id, body);
       onSaved(updated);
     } catch (err) {
-      setServerError(describeError(err));
       setSaving(false);
+      // A refusal of the balance setting is the API's own sentence, at its control, which takes focus.
+      if (err instanceof ApiError && err.status === 422) {
+        const { issue } = takeBalanceIssue(
+          err.detail,
+          state.balance,
+          state.variants.map((v) => Number(v.traffic_allocation) || 0),
+        );
+        if (issue) {
+          setBalanceIssue(issue);
+          return;
+        }
+      }
+      setServerError(describeError(err));
       setFocusSave(true);
     }
   };
@@ -170,7 +190,13 @@ export function ExperimentDesignForm({ experiment, onSaved, onCancel, describeEr
           revealProblems={revealProblems}
           invalid={variantInvalid}
           invalidDescribedBy={ERROR_ID}
+          splitProblem={unavailable ? null : splitProblemShown(state, balanceIssue)}
         />
+        {unavailable ? (
+          <BalanceUnavailable line={unavailable} />
+        ) : (
+          <BalanceWithinFields balance={state.balance} dispatch={change} issue={balanceIssue} />
+        )}
       </fieldset>
 
       <fieldset className="min-w-0 space-y-4" data-testid="design-metrics">
