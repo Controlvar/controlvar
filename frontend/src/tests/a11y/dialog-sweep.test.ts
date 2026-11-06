@@ -50,7 +50,6 @@ export const RAW_DIALOGS: Record<string, RawEntry> = {
   'frontend/src/components/admin/api-keys/CreateApiKeyModal.tsx': { banned: 2, dialogUses: 0 },
   'frontend/src/components/admin/users/InviteUserModal.tsx': { banned: 2, dialogUses: 0 },
   'frontend/src/pages/admin/safety.tsx': { banned: 2, dialogUses: 0 },
-  'modules/frontend/src/components/admin/roles/CreateRoleModal.tsx': { banned: 2, dialogUses: 0 },
   'modules/frontend/src/components/warehouse/common.tsx': { banned: 2, dialogUses: 0 },
   'modules/frontend/src/pages/workspaces/index.tsx': { banned: 1, dialogUses: 0 },
   'modules/frontend/src/pages/workspaces/[id]/index.tsx': { banned: 1, dialogUses: 0 },
@@ -63,6 +62,7 @@ export const MIGRATED: Record<string, number> = {
   'frontend/src/components/admin/users/EditUserModal.tsx': 1,
   'frontend/src/components/admin/users/EffectivePermissionsModal.tsx': 1,
   'modules/frontend/src/components/warehouse/runs/ViewSqlDialog.tsx': 1,
+  'modules/frontend/src/components/admin/roles/CreateRoleModal.tsx': 1,
 };
 
 /** Fewer files than this means the roots are wrong, not that the tree is clean. */
