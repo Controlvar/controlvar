@@ -229,12 +229,17 @@ def _check_bound(shares: Sequence[int], seed: str, group: str, count: int) -> No
         )
 
 
+def _seed(rng: random.Random) -> str:
+    """A block-order key from *rng*: the same keys on every run."""
+    return f"{rng.getrandbits(256):064x}"
+
+
 def test_the_bound_holds_for_every_split_in_steps_of_5():
     rng = random.Random(4480)
     cases = 0
     for shares in SPLITS:
         for order in _orders(shares, rng):
-            seed = ba.new_balance_seed()
+            seed = _seed(rng)
             _check_bound(order, seed, rng.choice(["gold", "unknown", "x"]), 500)
             cases += 1
     assert cases == 627 * 5
@@ -247,12 +252,14 @@ def test_a_zero_share_gets_nobody():
 
 def test_each_users_chance_is_their_share():
     """Over 4,000 block-order keys, the first user of a group takes each
-    variant at its share (a two-sided 4-sigma band)."""
+    variant at its share (a two-sided 4-sigma band). The keys come from a
+    fixed generator, so the answer is the same on every run."""
+    rng = random.Random(44800)
     shares = (20, 30, 50)
     keys = 4000
     hits = [0, 0, 0]
     for _ in range(keys):
-        hits[ba.slot_variant(ba.new_balance_seed(), "gold", 0, shares)] += 1
+        hits[ba.slot_variant(_seed(rng), "gold", 0, shares)] += 1
     for index, share in enumerate(shares):
         p = share / 100
         z = (hits[index] - keys * p) / math.sqrt(keys * p * (1 - p))

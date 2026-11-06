@@ -18,8 +18,9 @@
 * A held counter row holds up nothing else, and the per-process limit holds:
   with the row held, ``MAX_BALANCED_WAITS + 8`` new users of that group are
   answered (the limit's worth wait in the thread pool, the rest are assigned
-  by hash at once as ``busy``) while a flag evaluate and the health checks
-  answer; for ``/tracking/assign`` and ``/tracking/assign/batch``. An
+  by hash at once as ``busy``) while other requests, a flag evaluate among
+  them, are answered; for ``/tracking/assign`` and ``/tracking/assign/batch``.
+  No timing is asserted: the state is polled to, with a liveness bound. An
   uncontended balanced assign runs its counter statement off the event
   loop's thread.
 """
