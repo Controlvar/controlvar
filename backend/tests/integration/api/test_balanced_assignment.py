@@ -11,7 +11,8 @@
   the waiting user is answered 200 by the hash, keeps their group with no
   seq, is counted under ``timeout`` and logged once; the group's places are
   untouched. The same from a ``BEFORE UPDATE`` trigger that sleeps, which a
-  ``lock_timeout`` would not bound.
+  ``lock_timeout`` would not bound. Either way, the rest of the transaction
+  runs under the session's own ``statement_timeout`` again.
 * An experiment that balances nothing is assigned exactly as before: every
   user gets the variant ``tests/ground_truth``'s own copy of the hash gives,
   and the allocator is never called. No assign sends a Redis command.
@@ -595,6 +596,51 @@ def test_a_slow_counter_statement_falls_back_too(
     assert seq is None, f"balance_seq {seq} is not None"
     assert _fallbacks("timeout") == before + 1
     assert _next_seq(session_factory, experiment.id, "silver") == 0
+
+
+#: The session's own ``statement_timeout`` in the test below, set when it
+#: connects: neither the server's default nor the counter step's.
+SESSION_STATEMENT_TIMEOUT = "7s"
+
+
+def test_the_step_leaves_the_sessions_statement_timeout_as_it_was(
+    db_session, admin_user, session_factory, test_db
+):
+    """The step's timeout bounds its upsert alone. After ``take_seq`` the
+    rest of the transaction -- the assignment's INSERT, which can wait on a
+    concurrent first assignment of the same user -- runs under the session's
+    own ``statement_timeout``, whether the step took a place or timed out."""
+    experiment = _experiment(db_session, admin_user)
+    _seed_counter(session_factory, experiment.id, "gold", 0)
+    engine = create_engine(
+        test_db.url,
+        connect_args={
+            "options": f"-c statement_timeout={SESSION_STATEMENT_TIMEOUT} "
+            f"-c search_path={SCHEMA}"
+        },
+    )
+    session = sessionmaker(bind=engine)()
+    show = text("SHOW statement_timeout")
+    try:
+        before = session.execute(show).scalar()
+        placed = balanced_allocation.take_seq(session, experiment.id, "gold")
+        after_place = session.execute(show).scalar()
+        session.rollback()
+        with _held_row(test_db, experiment.id, "gold"):
+            timed_out = balanced_allocation.take_seq(session, experiment.id, "gold")
+            after_timeout = session.execute(show).scalar()
+        session.rollback()
+    finally:
+        session.close()
+        engine.dispose()
+
+    assert before == SESSION_STATEMENT_TIMEOUT, before
+    assert placed == (0, None), placed
+    assert timed_out == (None, balanced_allocation.REASON_TIMEOUT), timed_out
+    assert (after_place, after_timeout) == (before, before), (
+        f"statement_timeout after a place {after_place}, after a timeout "
+        f"{after_timeout}; the session's is {before}"
+    )
 
 
 @pytest.mark.regression
