@@ -491,6 +491,18 @@ def _refuse_unbalanceable_update(
     )
 
 
+def _end_transaction_on_refusal(db: Session) -> None:
+    """Roll *db* back as a 4xx is raised, so a row read for update is not held
+    while the response is written and the session waits to be closed (#1545).
+    A rollback that fails is logged, never raised over the refusal."""
+    try:
+        db.rollback()
+    except Exception as error:  # the refusal is the answer, not this
+        logger.warning(
+            "Rollback after a refused request failed (%s)", type(error).__name__
+        )
+
+
 def _visual_refusal(loc: List[Any], message: str, error_type: str) -> HTTPException:
     """A 422 in the shape of a request-validation error, at *loc*."""
     return HTTPException(
@@ -1099,8 +1111,15 @@ async def update_experiment(
     for the variant of the same name; `visual_changes: null` removes them.
     """
     try:
-        # Get experiment
-        experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
+        # Get experiment. A request that sends visual_config reads the row for
+        # update: the start date it is checked against below must be the
+        # committed one, and PUT /schedule reads the row the same way before it
+        # checks visual_config (#1545). No await may come between this read
+        # and the commit; a refusal rolls back at once (the except below).
+        query = db.query(Experiment).filter(Experiment.id == experiment_id)
+        if "visual_config" in experiment_in.model_fields_set:
+            query = query.with_for_update()
+        experiment = query.first()
         if not experiment:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Experiment not found"
@@ -1333,7 +1352,9 @@ async def update_experiment(
             else:
                 raise
     except HTTPException:
-        # Let deliberate 4xx responses through instead of wrapping them in a 500.
+        # Let deliberate 4xx responses through instead of wrapping them in a
+        # 500, ending the transaction first (a row read for update is freed).
+        _end_transaction_on_refusal(db)
         raise
     except Exception as e:
         raise unexpected_failure(
@@ -1814,8 +1835,14 @@ async def update_experiment_schedule(
             time zone name
     """
     try:
-        # Get experiment by ID
-        experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
+        # Get experiment by ID. A request that sends a start date reads the row
+        # for update, as a PUT that sends visual_config does, so each checks the
+        # other's committed value (#1545). No await may come between this read
+        # and the commit; a refusal rolls back at once (the except below).
+        query = db.query(Experiment).filter(Experiment.id == experiment_id)
+        if schedule.start_date is not None:
+            query = query.with_for_update()
+        experiment = query.first()
         if not experiment:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Experiment not found"
@@ -1884,7 +1911,9 @@ async def update_experiment_schedule(
 
         return ExperimentResponse.model_validate(updated_experiment)
     except HTTPException:
-        # Let deliberate 4xx responses through instead of wrapping them in a 500.
+        # Let deliberate 4xx responses through instead of wrapping them in a
+        # 500, ending the transaction first (a row read for update is freed).
+        _end_transaction_on_refusal(db)
         raise
     except Exception as e:
         raise unexpected_failure(

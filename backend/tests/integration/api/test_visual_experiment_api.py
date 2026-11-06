@@ -37,12 +37,15 @@ from __future__ import annotations
 
 import copy
 import json
+import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.api import deps
@@ -962,3 +965,170 @@ def test_visual_config_is_locked_once_the_experiment_leaves_draft(
     assert response.json()["detail"] == (
         "Cannot update visual_config for experiments in active status"
     )
+
+
+# --- the start date and the visual settings are checked against the saved row ----
+
+
+def _waiting_on(db_session, pid) -> bool:
+    """Whether some backend waits for a row that backend *pid* holds. pg_locks
+    is read afresh on every call (it is not a statistics snapshot)."""
+    session = _factory(db_session)()
+    try:
+        waiting = session.execute(
+            text(
+                "SELECT count(*) FROM pg_locks "
+                "WHERE NOT granted AND :pid = ANY(pg_blocking_pids(pid))"
+            ),
+            {"pid": pid},
+        ).scalar()
+        return bool(waiting)
+    finally:
+        session.close()
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("pending", ["start_date", "visual_config"])
+def test_the_start_date_and_visual_settings_checks_read_the_committed_row(
+    client, db_session, developer, pending
+):
+    """PUT refuses visual_config on a draft with a start date, and PUT
+    /schedule refuses a start date on a visual draft. Each reads the row for
+    update before it checks the other field, so while another transaction
+    holds an uncommitted write of that field, the request waits for its commit
+    and answers as if it came after it.
+
+    Planted defect: the row read without for update. The request then checks
+    the row as it was, answers 200, and its own write lands after the other
+    one: a visual draft with a start date.
+    """
+    created = _create(client, developer, visual_config=None, variants=_variants(None))
+    experiment_id = uuid.UUID(created["id"])
+    if pending == "start_date":
+        value = datetime.now(timezone.utc) + timedelta(days=1)
+
+        def send():
+            return client.put(
+                f"{BASE}/{experiment_id}",
+                json={"visual_config": CONFIG},
+                headers=_auth(developer),
+            )
+
+        refused_with, untouched = 422, "visual_config"
+    else:
+        value = CONFIG
+
+        def send():
+            return _schedule(
+                client, developer, experiment_id, {"start_date": _soon(days=1)}
+            )
+
+        refused_with, untouched = 400, "start_date"
+
+    other = _factory(db_session)()
+    pool = ThreadPoolExecutor(max_workers=1)
+    try:
+        row = (
+            other.query(Experiment)
+            .filter(Experiment.id == experiment_id)
+            .with_for_update()
+            .one()
+        )
+        setattr(row, pending, value)
+        other.flush()
+        other_pid = other.execute(text("SELECT pg_backend_pid()")).scalar()
+        answer = pool.submit(send)
+        try:
+            deadline = time.monotonic() + 30
+            while not answer.done() and not _waiting_on(db_session, other_pid):
+                assert time.monotonic() < deadline, (
+                    "the request neither waited nor answered"
+                )
+                time.sleep(0.05)
+        finally:
+            other.commit()
+        response = answer.result(timeout=60)
+    finally:
+        pool.shutdown(wait=True)
+        other.close()
+
+    assert response.status_code == refused_with, response.text
+    stored = _row(db_session, experiment_id)
+    assert stored[pending] is not None
+    assert stored[untouched] is None
+
+
+def _row_is_free(db_session, experiment_id) -> bool:
+    """Whether the experiment's row can be taken for update at once."""
+    probe = _factory(db_session)()
+    try:
+        probe.execute(
+            text("SELECT id FROM experiments WHERE id = :id FOR UPDATE NOWAIT"),
+            {"id": uuid.UUID(str(experiment_id))},
+        )
+        return True
+    except OperationalError as error:
+        if getattr(error.orig, "pgcode", None) == "55P03":  # lock_not_available
+            return False
+        raise
+    finally:
+        probe.rollback()
+        probe.close()
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("route", ["put", "schedule"])
+def test_a_refusal_ends_its_transaction_before_the_session_closes(
+    client, db_session, developer, route
+):
+    """A PUT or PUT /schedule that read the row for update and is refused rolls
+    back as it refuses, so the row is free well before the request's session is
+    closed. Checked from the session's own teardown.
+
+    Planted defect: no rollback on a refusal. The row is still held at
+    teardown, after the response has been written.
+    """
+    if route == "put":
+        created = _create(
+            client, developer, visual_config=None, variants=_variants(None)
+        )
+        _ok(_schedule(client, developer, created["id"], {"start_date": _soon(days=1)}))
+
+        def send():
+            return client.put(
+                f"{BASE}/{created['id']}",
+                json={"visual_config": CONFIG},
+                headers=_auth(developer),
+            )
+
+        refused_with = 422
+    else:
+        created = _create(client, developer)
+
+        def send():
+            return _schedule(
+                client, developer, created["id"], {"start_date": _soon(days=1)}
+            )
+
+        refused_with = 400
+
+    session = _factory(db_session)
+    free_at_close = []
+
+    def get_db_that_looks_at_close():
+        s = session()
+        try:
+            yield s
+        finally:
+            free_at_close.append(_row_is_free(db_session, created["id"]))
+            s.close()
+
+    previous = app.dependency_overrides[deps.get_db]
+    app.dependency_overrides[deps.get_db] = get_db_that_looks_at_close
+    try:
+        response = send()
+    finally:
+        app.dependency_overrides[deps.get_db] = previous
+
+    assert response.status_code == refused_with, response.text
+    assert free_at_close == [True]
