@@ -44,6 +44,7 @@ from backend.tests.installer_sweeps.harness.install_world import (
     Batch,
     InstallWorld,
     alive,
+    interrupt_once_the_clock_is_held,
     is_aws,
     is_write,
     stop_group,
@@ -777,6 +778,52 @@ for _name, (_sig, _group) in SIGNALS.items():
     )
 
 
+# #1565: an INT while the stack wait reads the clock, once it has looked once (the fake
+# logs the wait's own query), the read then ending normally.
+STACK_LOOK = "ends_with(StackStatus, '_IN_PROGRESS')"
+STACKS_STEP = "Delete the nine stacks, about 26 minutes"
+CLOCK_TARGETS = {"to-the-group": True, "to-the-installer": False}
+
+
+def _the_stack_wait_and_its_clock_held(world: InstallWorld) -> None:
+    world.adopt(TEMPLATE["world"])
+    world.edit(_in_progress)
+    world.hold_a_clock_read("+%s", once_called_with=STACK_LOOK)
+
+
+for _target, _group in CLOCK_TARGETS.items():
+    BATCH.add(
+        f"stack-wait-clock-held-{_target}-INT",
+        prepare=_the_stack_wait_and_its_clock_held,
+        run=lambda w, g=_group: interrupt_once_the_clock_is_held(
+            w, w.start_uninstall(), signal.SIGINT, g
+        ),
+        stub_sweep="state",
+    )
+
+
+# #1381: tag-index entries that look like the CDK's but are not what uninstall keeps (the
+# us-east-1 bootstrap's bucket, another cdk- repository) still count as clearing; one that
+# is what it keeps (its us-west-2 bucket) does not.
+def _cdk_look_alike_tags(state: dict) -> None:
+    state["regions"]["us-west-2"].setdefault("tag_index", []).extend(
+        [
+            f"arn:aws:s3:::cdk-hnb659fds-assets-{ACCOUNT}-us-west-2",
+            f"arn:aws:ecr:us-west-2:{ACCOUNT}:repository/cdk-unrelated-app-images",
+        ]
+    )
+    state["regions"]["us-east-1"].setdefault("tag_index", []).append(
+        f"arn:aws:s3:::cdk-hnb659fds-assets-{ACCOUNT}-us-east-1"
+    )
+
+
+BATCH.add(
+    "cdk-look-alike-tags",
+    prepare=_installed(_state(_cdk_look_alike_tags)),
+    stub_sweep="state",
+)
+
+
 @pytest.fixture(scope="module")
 def ran(tmp_path_factory, shapes_file):
     root = tmp_path_factory.mktemp("uninstall-run")
@@ -828,7 +875,9 @@ def test_the_kept_list_is_exactly_the_residue_both_ways(clean, before):
         "AWS managed keys made on first use (aws/acm, aws/lambda, aws/s3, aws/secretsmanager); the database's key, pending deletion",
         "3 DynamoDB backup(s) of the deleted tables",
         "the alarm subscription, never confirmed",
-        "4 task definition(s) and 10 tag-index entries AWS is still clearing",
+        # 9: the tag index's entry for CDKToolkit, which uninstall keeps, is not counted
+        # (#1381).
+        "4 task definition(s) and 9 tag-index entries AWS is still clearing",
         "Kept by the installer: the CDK's setup stack (CDKToolkit)",
     ):
         assert line in out, line
@@ -844,7 +893,7 @@ def test_the_caches_automatic_backup_still_listed_is_a_clean_uninstall(ran, befo
     assert (done.code, done.err) == (0, ""), done.err
     assert DONE in done.out and NOTHING_EXPLAINED in done.out, done.out
     assert (
-        "  4 task definition(s), 1 cache backup(s) and 10 tag-index entries AWS is still clearing (minutes to hours)"
+        "  4 task definition(s), 1 cache backup(s) and 9 tag-index entries AWS is still clearing (minutes to hours)"
         in done.out
     ), done.out
     assert kept_list_is_the_residue(one.world, before) == []
@@ -1324,6 +1373,25 @@ def test_an_interrupt_during_the_destroy_then_a_run_again_completes(ran, before,
     assert kept_list_is_the_residue(world, before) == []
 
 
+@pytest.mark.regression
+@pytest.mark.parametrize("target", sorted(CLOCK_TARGETS))
+def test_an_interrupt_while_the_stack_wait_reads_the_clock_stops_the_uninstall(
+    ran, target
+):
+    """#1565: the wait for a stack an earlier run left in progress read the clock in a
+    command substitution on every pass, in which bash drops an INT whose command then
+    ends normally, so a Ctrl-C there was sometimes lost: the wait went on, and the
+    uninstall with it. It now reads it through a file, and the INT stops the uninstall:
+    exit 130, STOPPED at the step, before any stack is destroyed."""
+    one = ran[f"stack-wait-clock-held-{target}-INT"]
+    done = one.done
+    assert done.code == 130, done.err
+    assert done.err.startswith(
+        f'STOPPED: Stopped by Ctrl-C or a signal at "{STACKS_STEP}".'
+    ), done.err
+    assert ("cdk", "destroy") not in deletes(one.world)
+
+
 # --- U1: uninstall's own messages keep the rules ----------------------------------------------
 
 BATCH.add(
@@ -1508,13 +1576,44 @@ def test_the_plan_lists_the_cdks_setup_stack_as_kept_not_deleted(ran):
 
 def test_the_state_line_does_not_say_the_kept_stack_waits_to_be_deleted(ran):
     """Everything else gone: the state line says uninstall keeps the CDK's setup stack,
-    not that it is still to be deleted."""
+    not that it is still to be deleted. A list could not be read afterwards, so it does
+    not say nothing else of the install is there either (#1381)."""
     state = ran["incomplete"].done.err.splitlines()[1]
     assert "Still in your account: the CDK's setup stack" not in state, state
     assert "until they are deleted" not in state, state
+    assert "Nothing else the install made" not in state, state
     assert state.endswith(
-        "Nothing else the install made is in your account but the CDK's setup stack, which uninstall keeps."
+        " Uninstall keeps the CDK's setup stack this install made (other CDK apps may use it)."
+        " The 1 list(s) that could not be read may hold more of what the install made."
     ), state
+
+
+@pytest.mark.regression
+def test_a_residue_does_not_say_nothing_else_the_install_made_is_there(ran):
+    """#1381: the comparison found a thing it could not explain (the look-alikes' stack
+    made after the install), so the state line under the FAILED message says that thing
+    may be the install's own, not "Nothing else the install made is in your account"."""
+    one = ran["look-alikes"]
+    assert "Not explained: 1." in one.done.out
+    state = one.done.err.splitlines()[1]
+    assert "Nothing else the install made" not in state, state
+    assert state.endswith(
+        '. The 1 thing(s) under "Not explained" above may include some of what the install made.'
+    ), state
+
+
+@pytest.mark.regression
+def test_only_what_uninstall_keeps_is_left_out_of_what_aws_is_clearing(ran):
+    """#1381, by exact ARN: the clean run counts 9 tag-index entries. Here the tag index
+    also lists the CDK's us-west-2 bucket, which uninstall keeps (not counted), the
+    us-east-1 bootstrap's bucket and an unrelated cdk- repository (both counted): 11."""
+    done = ran["cdk-look-alike-tags"].done
+    assert done.code == 0, done.err
+    assert (
+        "  4 task definition(s) and 11 tag-index entries AWS is still clearing (minutes to hours)"
+        in done.out
+    ), done.out
+    assert "Kept by the installer: the CDK's setup stack (CDKToolkit)" in done.out
 
 
 def test_the_stacks_left_keep_only_the_repositories(ran):

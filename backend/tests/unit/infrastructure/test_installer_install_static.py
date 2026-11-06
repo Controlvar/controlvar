@@ -399,21 +399,163 @@ def _function(path: Path, name: str) -> list[tuple[int, str]]:
     return [(number, line) for number, line in _code(path) if start < number < end]
 
 
+#: The three waits a Ctrl-C must always stop, each in the file that defines it.
+WAITS = {
+    "cv_deploy_wait": LIB / "steps.sh",
+    "cv_wait_certificate": LIB / "steps.sh",
+    "cv_un_wait_for_stacks": LIB / "uninstall.sh",
+}
+_SUBSTITUTION = re.compile(r"\$\((?!\()|`")
+_SUBSHELL_LINE = re.compile(r"^\((.*)\)$")
+_DEFINED = re.compile(r"^([a-z_][a-z0-9_]*)\(\) \{$", re.M)
+_WORD = re.compile(r"(?<![\w$./-])([a-z_][a-z0-9_]*)(?![\w-])")
+
+
+def _defined_functions() -> dict[str, Path]:
+    """Every function install and uninstall define, and the file each is in."""
+    found = {}
+    for path in INSTALL_FILES:
+        for name in _DEFINED.findall(path.read_text()):
+            found[name] = path
+    return found
+
+
+def _called(lines: list[tuple[int, str]], subshell: bool) -> set[str]:
+    """The installer's functions ``lines`` call: in the function's own shell, or (with
+    ``subshell``) on a line that is one subshell, ``( ... )``."""
+    defined = _defined_functions()
+    found = set()
+    for _, line in lines:
+        if bool(_SUBSHELL_LINE.match(line)) != subshell:
+            continue
+        found |= {word for word in _WORD.findall(line) if word in defined}
+    return found
+
+
+#: What each wait calls in its own shell, exactly (#1565). A new one is checked by the
+#: tests below before it counts.
+WAIT_CALLS = {
+    "cv_deploy_wait": {
+        "cv_deploy_failed",
+        "cv_kill",
+        "cv_log",
+        "cv_now",
+        "cv_sleep",
+        "cv_wait",
+        "cv_watch_failed",
+    },
+    "cv_wait_certificate": {
+        "cv_now",
+        "cv_sleep",
+        "msg_certificate_failed",
+        "msg_certificate_timeout",
+        "msg_tool_failed",
+    },
+    "cv_un_wait_for_stacks": {
+        "cv_now",
+        "cv_out",
+        "cv_sleep",
+        "msg_stack_wait_cap",
+        "msg_tool_failed",
+    },
+}
+#: What each wait runs in a subshell it waits for: its looks, which read with $(...).
+WAIT_SUBSHELLS = {
+    "cv_deploy_wait": {"cv_heartbeat"},
+    "cv_wait_certificate": {"cv_certificate_look"},
+    "cv_un_wait_for_stacks": {"cv_un_stacks_look", "cv_un_still_waiting"},
+}
+#: Of those, the ones that end the run (each a message, which exits): what runs after the
+#: wait is over cannot lose a Ctrl-C the wait needs.
+ENDS_THE_RUN = {
+    "cv_deploy_failed",
+    "cv_watch_failed",
+    "msg_certificate_failed",
+    "msg_certificate_timeout",
+    "msg_stack_wait_cap",
+    "msg_tool_failed",
+}
+#: What reads AWS's answers, every one with a $(...) of its own or in its caller: only in
+#: a subshell.
+READS = {"cv_read", "cv_list", "cv_string", "cv_error_code", "cv_names_json", "jq"}
+
+
 @pytest.mark.regression
-def test_the_deploy_steps_wait_runs_no_command_substitution():
-    """#1558: bash drops an INT that arrives while it waits for a command substitution
-    whose command then ends normally, though INT is trapped, so a Ctrl-C during the
-    deploy step's wait was sometimes lost and the deploy carried on. The wait runs none
-    itself; the heartbeat's run in a subshell it waits for (installer_sweeps'
-    test_an_interrupt_while_the_deploy_wait_reads_the_clock_stops_the_install holds
-    both kinds open while it sends INT)."""
-    body = _function(LIB / "steps.sh", "cv_deploy_wait")
+@pytest.mark.parametrize("wait", sorted(WAITS))
+def test_the_waits_run_no_command_substitution(wait):
+    """#1558, #1565: bash drops an INT that arrives while it waits for a command
+    substitution whose command then ends normally, though INT is trapped, so a Ctrl-C
+    during a wait was sometimes lost and the wait went on. No wait has a $(...) or a
+    backquote anywhere in its text, with no exemption: what reads with one runs in a
+    function the wait runs in a subshell (installer_sweeps' interrupt tests hold the
+    clock read open while they send INT)."""
+    path = WAITS[wait]
+    body = _function(path, wait)
     assert len(body) > 10, body
     found = [
-        f"lib/steps.sh:{number}: {line}"
+        f"lib/{path.name}:{number}: {line}"
         for number, line in body
-        if re.search(r"\$\((?!\()|`", line)
+        if _SUBSTITUTION.search(line)
     ]
+    assert found == [], "\n".join(found)
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("wait", sorted(WAITS))
+def test_what_a_wait_calls_in_its_own_shell_is_exactly_this(wait):
+    """#1565: the set is parsed from the wait's text and pinned, so a helper added to a
+    wait's own shell (whose text the test above does not see) fails here until the next
+    test has checked it."""
+    body = _function(WAITS[wait], wait)
+    assert _called(body, subshell=False) == WAIT_CALLS[wait]
+    assert _called(body, subshell=True) == WAIT_SUBSHELLS[wait]
+
+
+def test_the_helpers_a_wait_returns_from_run_no_command_substitution():
+    """#1565: every function a wait calls in its own shell and that returns to it, and
+    every function those call in their own shell, runs no $(...) or backquote: cv_now
+    reads the clock through a file, cv_sleep and cv_wait wait with `wait`."""
+    defined = _defined_functions()
+    todo = sorted(set().union(*WAIT_CALLS.values()) - ENDS_THE_RUN)
+    seen, found = set(), []
+    while todo:
+        name = todo.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        body = _function(defined[name], name)
+        found += [
+            f"{name}: lib/{defined[name].name}:{number}: {line}"
+            for number, line in body
+            if _SUBSTITUTION.search(line) and not _SUBSHELL_LINE.match(line)
+        ]
+        todo += sorted(_called(body, subshell=False) - seen)
+    assert {"cv_now", "cv_sleep", "cv_bg", "cv_wait", "cv_out", "cv_print"} <= seen, (
+        seen
+    )
+    assert found == [], "\n".join(found)
+
+
+def test_the_waits_read_aws_only_in_a_subshell():
+    """#1565: cv_read sets CV_CODE with a $(...), and the list and string reads use jq in
+    one, so none of them runs in a wait's own shell, nor in a helper it returns from:
+    only in the looks it runs in a subshell. Each look does read."""
+    defined = _defined_functions()
+    found = []
+    for wait, path in WAITS.items():
+        shells = [(wait, _function(path, wait))] + [
+            (name, _function(defined[name], name))
+            for name in sorted(WAIT_CALLS[wait] - ENDS_THE_RUN)
+        ]
+        for name, body in shells:
+            for number, line in body:
+                if _SUBSHELL_LINE.match(line):
+                    continue
+                words = set(re.findall(r"(?<![\w$./-])([a-z_][a-z0-9_]*)\b", line))
+                if words & READS:
+                    found.append(f"{wait} via {name}: {number}: {line}")
+        for look in WAIT_SUBSHELLS[wait] - {"cv_heartbeat", "cv_un_still_waiting"}:
+            assert "cv_read" in _called(_function(defined[look], look), False), look
     assert found == [], "\n".join(found)
 
 
