@@ -301,8 +301,13 @@ text = "Step 2: Create a new experiment."
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "It needs at least one variant and one metric, and experiment_type is a_b, mv, split_url or bandit."
-by = ["docex:docs/api/endpoints.md#{\"loc\":[\"body\",\"name\"],\"msg\":\"String should have at least 1 character\"}"]
+text = "It needs at least one variant and one metric, though a visual experiment (one sent with visual_config) may be created without metrics, and experiment_type is a_b, mv, split_url or bandit."
+by = [
+    "docex:docs/api/endpoints.md#{\"loc\":[\"body\",\"name\"],\"msg\":\"String should have at least 1 character\"}",
+    "test:backend/tests/unit/schemas/test_visual_changes.py::test_a_visual_experiment_may_be_created_without_a_metric",
+    "test:backend/tests/unit/schemas/test_visual_changes.py::test_any_other_experiment_still_needs_one",
+    "test:backend/tests/integration/api/test_visual_experiment_api.py::test_uc9_a_visual_experiment_without_a_metric_is_created_and_cannot_start",
+]
 
 [[unit]]
 text = "key is what the tracking API and the SDKs call it by:"
@@ -2875,6 +2880,10 @@ text = "Schedule an experiment with PUT /api/v1/experiments/{experiment_id}/sche
 by = ["exempt:instruction"]
 
 [[unit]]
+text = "A visual draft takes no start date there: a start_date other than null is refused with 400, because it starts only with POST /start; an end_date is accepted, and {\"start_date\": null} clears a start date."
+by = ["test:backend/tests/integration/api/test_visual_experiment_api.py::test_v71a_schedule_refuses_a_start_date_on_a_visual_draft"]
+
+[[unit]]
 text = "An experiment's status"
 by = ["exempt:label"]
 
@@ -2911,6 +2920,10 @@ by = [
     "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_refuses_the_same_control_page_as_an_active_experiment",
     "test:backend/tests/integration/api/test_split_url_config_rules_api.py::test_start_refuses_a_chain_either_way",
 ]
+
+[[unit]]
+text = "A visual draft (one with visual_config) starts only with the body {\"design_etag\": \"...\"}, the design_etag that GET /api/v1/experiments/{experiment_id} returned: without it the start is refused with 400, and with a different one (its design changed after it was read) with 409, and nothing is changed."
+by = ["test:backend/tests/integration/api/test_visual_experiment_api.py::test_v68_start_refuses_a_design_changed_after_it_was_read"]
 
 [[unit]]
 text = "POST /api/v1/experiments/{experiment_id}/pause: active to paused."

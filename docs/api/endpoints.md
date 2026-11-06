@@ -167,7 +167,8 @@ curl -s -X GET "http://localhost:8000/api/v1/experiments/" \
 On the Quick Start stack it prints its three demo experiments, among them
 `Checkout Button Color`.
 
-Step 2: Create a new experiment. It needs at least one variant and one metric, and
+Step 2: Create a new experiment. It needs at least one variant and one metric, though a
+visual experiment (one sent with `visual_config`) may be created without metrics, and
 `experiment_type` is `a_b`, `mv`, `split_url` or `bandit`. `key` is what the tracking API
 and the SDKs call it by:
 
@@ -1725,6 +1726,9 @@ any value including `null` or `{}`, is refused with 422, nothing is changed,
 and the error is on `["body", "schedule"]` with the message `schedule is not
 applied by this endpoint; use PUT /api/v1/experiments/{experiment_id}/schedule`.
 Schedule an experiment with `PUT /api/v1/experiments/{experiment_id}/schedule`.
+A visual draft takes no start date there: a `start_date` other than `null` is
+refused with 400, because it starts only with `POST /start`; an `end_date` is
+accepted, and `{"start_date": null}` clears a start date.
 
 ### An experiment's status
 
@@ -1742,6 +1746,11 @@ the caller's role, superusers included:
   split URL experiment is also refused with 400 when its `split_url_config`
   is missing or cannot split; see
   [Starting a split URL experiment](split-url.md#starting-a-split-url-experiment).
+  A visual draft (one with `visual_config`) starts only with the body
+  `{"design_etag": "..."}`, the `design_etag` that
+  `GET /api/v1/experiments/{experiment_id}` returned: without it the start is
+  refused with 400, and with a different one (its design changed after it was
+  read) with 409, and nothing is changed.
 - `POST /api/v1/experiments/{experiment_id}/pause`: `active` to `paused`.
 - `POST /api/v1/experiments/{experiment_id}/complete`: `active` or `paused` to
   `completed`, and sets `end_date` to now. An experiment that an earlier
