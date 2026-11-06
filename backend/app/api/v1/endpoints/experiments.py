@@ -9,7 +9,7 @@ AB testing and feature experimentation.
 import copy
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 from uuid import UUID
 
 from fastapi import (
@@ -78,6 +78,7 @@ from backend.app.schemas.split_url_config import (
     split_url_conflict,
     split_url_entries,
 )
+from backend.app.schemas.storable_text import storable_text_param
 from backend.app.services.analysis_service import AnalysisService
 from backend.app.services.audit_log_service import AuditLogService
 from backend.app.services.audit_service import (
@@ -2199,8 +2200,15 @@ def _segmented_results(
     response_description="Returns the updated experiment with metadata",
 )
 async def update_experiment_metadata(
+    # NUL or a lone surrogate anywhere in the body answers 422 (#961). Body()
+    # sits inside Annotated because, as the default, FastAPI 0.141 drops the
+    # validator beside it; with no default the parameter must come first.
+    metadata: Annotated[
+        Dict[str, Any],
+        Body(..., description="Metadata to update"),
+        storable_text_param("metadata"),
+    ],
     experiment_id: UUID = Path(..., description="The ID of the experiment to update"),
-    metadata: Dict[str, Any] = Body(..., description="Metadata to update"),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user),
     cache_control: Dict[str, Any] = Depends(deps.get_cache_control),
