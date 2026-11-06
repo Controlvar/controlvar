@@ -403,6 +403,21 @@ by = [
 ]
 
 [[unit]]
+text = "A balanced experiment with more than 10 saved segments | At most 10 segments are listed, as in one set of targeting rules."
+by = ["test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_is_refused_verbatim"]
+
+[[unit]]
+text = "A user balanced in each of the saved segments they belong to | A user is balanced in the first listed segment they belong to, so the order of segments decides; a user in none of them is balanced in other."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_each_user_is_balanced_in_the_first_listed_segment_they_belong_to",
+    "test:backend/tests/unit/services/test_balance_segments.py::test_the_first_listed_segment_a_user_belongs_to_is_their_group",
+]
+
+[[unit]]
+text = "Archiving a saved segment that an experiment balances within | Refused with 409 while a draft, active or paused experiment balances within it, as for a segment its targeting rules use."
+by = ["test:backend/tests/integration/api/test_balance_within_segments.py::test_a_segment_an_experiment_balances_within_cannot_be_archived"]
+
+[[unit]]
 text = "A balanced 34/33/33 split | Every share of a balanced experiment must be a multiple of 5, such as 50/50, 20/80, 35/35/30 or 40/30/30; any other split is refused with 422."
 by = [
     "test:backend/tests/integration/api/test_balance_within_api.py::test_a_split_not_in_steps_of_5_is_refused",

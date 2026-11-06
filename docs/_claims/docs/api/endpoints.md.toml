@@ -2712,6 +2712,14 @@ by = [
 ]
 
 [[unit]]
+text = "With {\"segments\": [\"<segment id>\", ...]}, 1 to 10 saved segments, each new user is balanced within the first listed segment they belong to, or other when they belong to none."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_each_user_is_balanced_in_the_first_listed_segment_they_belong_to",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_segments_are_stored_and_echoed",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_is_refused_verbatim",
+]
+
+[[unit]]
 text = "Every experiment response carries it, null when the experiment balances nothing, and a clone copies it."
 by = [
     "test:backend/tests/integration/api/test_balance_within_api.py::test_put_on_a_draft_sets_echoes_and_clears_it",
@@ -2720,11 +2728,13 @@ by = [
 ]
 
 [[unit]]
-text = "It answers 422 at [\"body\", \"balance_within\"] for a bandit, a split URL experiment, or a split whose shares are not all multiples of 5."
+text = "It answers 422 at [\"body\", \"balance_within\"] for a bandit, a split URL experiment, or a split whose shares are not all multiples of 5, and at [\"body\", \"balance_within\", \"segments\"] for a segment that does not exist, is archived or inactive, or whose rules are not valid; a clone answers 409 when a segment it would balance within cannot be used."
 by = [
     "test:backend/tests/integration/api/test_balance_within_api.py::test_a_bandit_cannot_balance",
     "test:backend/tests/integration/api/test_balance_within_api.py::test_a_split_url_experiment_cannot_balance_on_create",
     "test:backend/tests/integration/api/test_balance_within_api.py::test_a_split_not_in_steps_of_5_is_refused",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_segment_that_cannot_be_used_is_refused",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_clone_of_an_experiment_balanced_within_an_archived_segment_is_refused",
 ]
 
 [[unit]]
@@ -3245,8 +3255,11 @@ text = "Flags and experiments target a segment with in_segment / not_in_segment 
 by = ["test:backend/tests/integration/api/test_segment_targeting_api.py::test_rules_naming_an_active_segment_are_accepted"]
 
 [[unit]]
-text = "DELETE /api/v1/segments/{id}, and a PUT that sets status to inactive or archived, answer 409 and change nothing while a flag that is not archived (a disabled one included), or an experiment that is draft, active or paused, has a rule naming the segment:"
-by = ["test:backend/tests/integration/api/test_segment_in_use.py::test_a_disabled_flag_and_a_paused_experiment_block"]
+text = "DELETE /api/v1/segments/{id}, and a PUT that sets status to inactive or archived, answer 409 and change nothing while a flag that is not archived (a disabled one included), or an experiment that is draft, active or paused, has a rule naming the segment, or while such an experiment balances within the segment (Balancing the split within groups):"
+by = [
+    "test:backend/tests/integration/api/test_segment_in_use.py::test_a_disabled_flag_and_a_paused_experiment_block",
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_a_segment_an_experiment_balances_within_cannot_be_archived",
+]
 
 [[unit]]
 text = "A stored row that mentions the segment's id but whose rules cannot be read is listed too."

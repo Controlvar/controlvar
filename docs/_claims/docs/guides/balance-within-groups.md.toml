@@ -135,6 +135,62 @@ by = [
 ]
 
 [[unit]]
+text = "Balance within saved segments"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Instead of an attribute, balance_within can list 1 to 10 saved segments by their id:"
+by = [
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_segments_are_stored_and_echoed",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_is_refused_verbatim",
+    "test:backend/tests/unit/services/test_balance_segments.py::test_the_schema_takes_up_to_ten_segment_ids",
+]
+
+[[unit]]
+text = "A new user is balanced in the group of the first listed segment they belong to, so for a user in two of them the order of the list decides."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_each_user_is_balanced_in_the_first_listed_segment_they_belong_to",
+    "test:backend/tests/unit/services/test_balance_segments.py::test_the_first_listed_segment_a_user_belongs_to_is_their_group",
+]
+
+[[unit]]
+text = "A user in none of them is balanced in other."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_each_user_is_balanced_in_the_first_listed_segment_they_belong_to",
+    "test:backend/tests/unit/services/test_balance_segments.py::test_the_first_listed_segment_a_user_belongs_to_is_their_group",
+]
+
+[[unit]]
+text = "Membership is decided as it is for targeting rules: an ID list by the assign request's user_id, a rules segment by its context."
+by = ["test:backend/tests/integration/api/test_balance_within_segments.py::test_each_user_is_balanced_in_the_first_listed_segment_they_belong_to"]
+
+[[unit]]
+text = "When the membership of a segment listed before the first one the user belongs to cannot be decided, the user is balanced in unknown."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_a_user_whose_membership_cannot_be_decided_is_balanced_in_unknown",
+    "test:backend/tests/unit/services/test_balance_segments.py::test_the_first_listed_segment_a_user_belongs_to_is_their_group",
+]
+
+[[unit]]
+text = "A user keeps their variant and their group if they leave the segment later."
+by = ["test:backend/tests/integration/api/test_balance_within_segments.py::test_a_user_who_leaves_their_segment_keeps_their_variant_and_group"]
+
+[[unit]]
+text = "Every segment must exist and be active, and a rules segment's rules must be valid."
+by = ["test:backend/tests/integration/api/test_balance_within_api.py::test_a_segment_that_cannot_be_used_is_refused"]
+
+[[unit]]
+text = "A segment that a draft, active or paused experiment balances within cannot be archived or made inactive: the request answers 409, as for a segment that targeting rules use."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_a_segment_an_experiment_balances_within_cannot_be_archived",
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_a_completed_experiment_or_an_attribute_value_does_not_hold_a_segment",
+]
+
+[[unit]]
+text = "A clone answers 409 when a segment it would balance within has been archived since."
+by = ["test:backend/tests/integration/api/test_balance_within_api.py::test_a_clone_of_an_experiment_balanced_within_an_archived_segment_is_refused"]
+
+[[unit]]
 text = "What is refused"
 by = ["exempt:label"]
 
@@ -169,8 +225,15 @@ by = [
 ]
 
 [[unit]]
-text = "segments is sent: balancing within saved segments is not available yet."
+text = "both attribute and segments are sent, or neither is;"
 by = ["test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_is_refused_verbatim"]
+
+[[unit]]
+text = "segments has more than 10 ids, lists one twice, or names a segment that does not exist, is archived or inactive, or whose rules are not valid."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_is_refused_verbatim",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_segment_that_cannot_be_used_is_refused",
+]
 
 [[unit]]
 text = "Changing balance_within after the experiment has started answers 400."
