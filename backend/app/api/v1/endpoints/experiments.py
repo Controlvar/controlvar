@@ -25,6 +25,7 @@ from fastapi import (
 )
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
+from sqlalchemy import text
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -501,6 +502,54 @@ def _end_transaction_on_refusal(db: Session) -> None:
         logger.warning(
             "Rollback after a refused request failed (%s)", type(error).__name__
         )
+
+
+#: How long PUT /{experiment_id} with visual_config, and PUT
+#: /{experiment_id}/schedule with a start date, wait for another transaction's
+#: hold on the experiment's row (``_read_row_for_update``) before they give up
+#: with a database error (a 500). The bound and the pattern are users.py's
+#: (``SUPERUSER_LOCK_TIMEOUT``): these handlers run on the API's event loop, so
+#: a wait holds every other request for as long as it lasts.
+EXPERIMENT_ROW_LOCK_TIMEOUT = "5s"
+
+
+def _read_row_for_update(db: Session, experiment_id: UUID) -> Optional[Experiment]:
+    """Read the experiment's row again, for update, and refresh the object the
+    session already holds with it (#1545). None if the row is gone.
+
+    FOR NO KEY UPDATE (``key_share=True``): it excludes the other route's read
+    and every write of the row, and not the FOR KEY SHARE that an insert of a
+    row referencing the experiment (an assignment, an event) holds. Called
+    after the route's role and state checks, so a caller they refuse never
+    waits on the row, and with no ``await`` between this call and the commit.
+    A wait longer than ``EXPERIMENT_ROW_LOCK_TIMEOUT`` ends the request with a
+    database error (a 500), as on users.py's superuser rows.
+    """
+    # The value is the module constant above, never request data.
+    db.execute(text(f"SET LOCAL lock_timeout = '{EXPERIMENT_ROW_LOCK_TIMEOUT}'"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text  # fmt: skip
+    return (
+        db.query(Experiment)
+        .filter(Experiment.id == experiment_id)
+        .with_for_update(key_share=True)
+        .populate_existing()
+        .first()
+    )
+
+
+def _refuse_fields_fixed_after_draft(
+    experiment: Experiment, update_data: Dict[str, Any]
+) -> None:
+    """400 when *experiment* is not a draft and *update_data* carries one of
+    ``FIXED_AFTER_DRAFT``. Presence, not difference: re-sending the stored
+    value is refused too."""
+    if experiment.status == ExperimentStatus.DRAFT:
+        return
+    for field in FIXED_AFTER_DRAFT:
+        if field in update_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot update {field} for experiments in {experiment.status.value} status",
+            )
 
 
 def _visual_refusal(loc: List[Any], message: str, error_type: str) -> HTTPException:
@@ -1111,15 +1160,9 @@ async def update_experiment(
     for the variant of the same name; `visual_changes: null` removes them.
     """
     try:
-        # Get experiment. A request that sends visual_config reads the row for
-        # update: the start date it is checked against below must be the
-        # committed one, and PUT /schedule reads the row the same way before it
-        # checks visual_config (#1545). No await may come between this read
-        # and the commit; a refusal rolls back at once (the except below).
-        query = db.query(Experiment).filter(Experiment.id == experiment_id)
-        if "visual_config" in experiment_in.model_fields_set:
-            query = query.with_for_update()
-        experiment = query.first()
+        # Get experiment. A request that sends visual_config reads the row
+        # again, for update, once the role and state checks below have passed.
+        experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
         if not experiment:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Experiment not found"
@@ -1213,13 +1256,23 @@ async def update_experiment(
         # an experiment leaves draft, nobody changes how its results are
         # judged or analysed (#580, #848). It works on presence, so re-sending
         # the stored value, or null, is refused too.
-        if experiment.status != ExperimentStatus.DRAFT:
-            for field in FIXED_AFTER_DRAFT:
-                if field in update_data:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Cannot update {field} for experiments in {experiment.status.value} status",
-                    )
+        _refuse_fields_fixed_after_draft(experiment, update_data)
+
+        # A request that sends visual_config reads the row again, for update,
+        # now that the role and state checks above have passed: the start date
+        # checked below must be the committed one, and PUT /schedule reads the
+        # row the same way before it checks visual_config (#1545). The row
+        # read here is a draft or the request is refused: visual_config is
+        # fixed outside draft. No await may come between this read and the
+        # commit; a refusal rolls back at once (the except below).
+        if "visual_config" in fields_sent:
+            experiment = _read_row_for_update(db, experiment_id)
+            if not experiment:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Experiment not found",
+                )
+            _refuse_fields_fixed_after_draft(experiment, update_data)
 
         # A visual draft keeps its visual settings, a dated draft cannot
         # become visual, and the design that results follows the visual rules
@@ -1835,14 +1888,10 @@ async def update_experiment_schedule(
             time zone name
     """
     try:
-        # Get experiment by ID. A request that sends a start date reads the row
-        # for update, as a PUT that sends visual_config does, so each checks the
-        # other's committed value (#1545). No await may come between this read
-        # and the commit; a refusal rolls back at once (the except below).
-        query = db.query(Experiment).filter(Experiment.id == experiment_id)
-        if schedule.start_date is not None:
-            query = query.with_for_update()
-        experiment = query.first()
+        # Get experiment by ID. A request that sends a start date reads the
+        # row again, for update, once the role and state checks below have
+        # passed.
+        experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
         if not experiment:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Experiment not found"
@@ -1861,6 +1910,20 @@ async def update_experiment_schedule(
                 detail=f"Cannot schedule experiment with status {experiment.status.value}. "
                 f"Experiment must be in DRAFT or PAUSED status.",
             )
+
+        # A request that sends a start date reads the row again, for update,
+        # now that the role and state checks above have passed, as a PUT that
+        # sends visual_config does, so each checks the other's committed value
+        # (#1545). The service checks the state again on the row read here. No
+        # await may come between this read and the commit; a refusal rolls
+        # back at once (the except below).
+        if schedule.start_date is not None:
+            experiment = _read_row_for_update(db, experiment_id)
+            if not experiment:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Experiment not found",
+                )
 
         # A visual draft starts only with Start, which checks the design shown
         # (#1545, C1): it is never given a start date. A null start date

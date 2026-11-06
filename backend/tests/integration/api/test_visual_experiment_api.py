@@ -49,6 +49,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.api import deps
+from backend.app.api.v1.endpoints import experiments as experiments_endpoints
 from backend.app.api.v1.endpoints.auth import create_local_access_token
 from backend.app.core.config import settings
 from backend.app.main import app
@@ -1135,3 +1136,204 @@ def test_a_refusal_ends_its_transaction_before_the_session_closes(
 
     assert response.status_code == refused_with, response.text
     assert free_at_close == [True]
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("route", ["put", "schedule"])
+def test_a_caller_the_role_check_refuses_answers_without_queueing_on_the_row(
+    client, db_session, developer, route
+):
+    """A VIEWER's PUT ``{"visual_config": null}``, or PUT /schedule with a
+    start date, answers 403 at once while another transaction holds the
+    experiment's row with an uncommitted write: each route reads the row for
+    update only after its role and state checks.
+
+    Planted defect (the routes as they were): the row read for update first.
+    The request then queues behind the other transaction, and answers 403 only
+    once that transaction ends.
+    """
+    created = _create(client, developer)
+    viewer = _user(db_session, UserRole.VIEWER)
+    if route == "put":
+
+        def send():
+            return client.put(
+                f"{BASE}/{created['id']}",
+                json={"visual_config": None},
+                headers=_auth(viewer),
+            )
+
+    else:
+
+        def send():
+            return _schedule(
+                client, viewer, created["id"], {"start_date": _soon(days=1)}
+            )
+
+    other = _factory(db_session)()
+    pool = ThreadPoolExecutor(max_workers=1)
+    queued = False
+    try:
+        written = other.execute(
+            update(Experiment)
+            .where(Experiment.id == uuid.UUID(created["id"]))
+            .values(description="written by another transaction")
+        )
+        assert written.rowcount == 1
+        other_pid = other.execute(text("SELECT pg_backend_pid()")).scalar()
+        answer = pool.submit(send)
+        try:
+            deadline = time.monotonic() + 30
+            while not answer.done():
+                if _waiting_on(db_session, other_pid):
+                    queued = True
+                    break
+                assert time.monotonic() < deadline, (
+                    "the request neither queued nor answered"
+                )
+                time.sleep(0.05)
+        finally:
+            other.rollback()
+        response = answer.result(timeout=60)
+    finally:
+        pool.shutdown(wait=True)
+        other.close()
+
+    assert not queued, "the request queued on the row before its role check"
+    assert response.status_code == 403, response.text
+    assert _row(db_session, created["id"])["visual_config"] == CONFIG
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("route", ["put", "schedule"])
+def test_a_draft_started_while_the_request_queues_is_refused(
+    client, db_session, developer, route
+):
+    """The state checks run before the row is read for update, so the state
+    is checked again on the row read then. Another transaction makes the
+    draft active and has not committed: the request passes its state checks
+    on the draft, waits at its read for update, and once the other commits it
+    refuses on the active experiment it read, writing nothing. PUT checks
+    again itself; /schedule's service does.
+
+    Planted defect: PUT without that second check. It answers 200 and writes
+    visual_config onto an active experiment.
+    """
+    created = _create(client, developer, visual_config=None, variants=_variants(None))
+    if route == "put":
+
+        def send():
+            return client.put(
+                f"{BASE}/{created['id']}",
+                json={"visual_config": CONFIG},
+                headers=_auth(developer),
+            )
+
+        detail = "Cannot update visual_config for experiments in active status"
+    else:
+
+        def send():
+            return _schedule(
+                client, developer, created["id"], {"start_date": _soon(days=1)}
+            )
+
+        detail = (
+            "Cannot schedule experiment with status active. "
+            "Experiment must be in DRAFT or PAUSED status."
+        )
+
+    other = _factory(db_session)()
+    pool = ThreadPoolExecutor(max_workers=1)
+    try:
+        written = other.execute(
+            update(Experiment)
+            .where(Experiment.id == uuid.UUID(created["id"]))
+            .values(status=ExperimentStatus.ACTIVE)
+        )
+        assert written.rowcount == 1
+        other_pid = other.execute(text("SELECT pg_backend_pid()")).scalar()
+        answer = pool.submit(send)
+        try:
+            deadline = time.monotonic() + 30
+            while not answer.done() and not _waiting_on(db_session, other_pid):
+                assert time.monotonic() < deadline, (
+                    "the request neither waited nor answered"
+                )
+                time.sleep(0.05)
+        finally:
+            other.commit()
+        response = answer.result(timeout=60)
+    finally:
+        pool.shutdown(wait=True)
+        other.close()
+
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == detail
+    stored = _row(db_session, created["id"])
+    assert stored["status"] == ExperimentStatus.ACTIVE
+    assert stored["visual_config"] is None
+    assert stored["start_date"] is None
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("route", ["put", "schedule"])
+def test_a_read_for_update_gives_up_after_its_bound(
+    client, db_session, developer, monkeypatch, route
+):
+    """While another transaction holds the experiment's row with an
+    uncommitted write, PUT visual_config and PUT /schedule with a start date
+    wait at most ``EXPERIMENT_ROW_LOCK_TIMEOUT`` (5 s; 200 ms here), then
+    answer 500 and write nothing, as users.py's superuser routes do
+    (``test_superuser_race.py``).
+
+    Planted defect: no bound. The request waits for as long as the other
+    transaction lasts.
+    """
+    monkeypatch.setattr(experiments_endpoints, "EXPERIMENT_ROW_LOCK_TIMEOUT", "200ms")
+    created = _create(client, developer, visual_config=None, variants=_variants(None))
+    if route == "put":
+
+        def send():
+            return client.put(
+                f"{BASE}/{created['id']}",
+                json={"visual_config": CONFIG},
+                headers=_auth(developer),
+            )
+
+    else:
+
+        def send():
+            return _schedule(
+                client, developer, created["id"], {"start_date": _soon(days=1)}
+            )
+
+    other = _factory(db_session)()
+    pool = ThreadPoolExecutor(max_workers=1)
+    response = None
+    try:
+        other.execute(
+            update(Experiment)
+            .where(Experiment.id == uuid.UUID(created["id"]))
+            .values(description="written by another transaction")
+        )
+        answer = pool.submit(send)
+        try:
+            # Only a failure detector: nothing is asserted about how long the
+            # request took.
+            response = answer.result(timeout=10)
+        except TimeoutError:
+            pass
+        finally:
+            other.rollback()
+        stuck = response is None
+        if stuck:
+            answer.result(timeout=60)
+    finally:
+        pool.shutdown(wait=True)
+        other.close()
+
+    assert not stuck, "the request was still waiting for the held row"
+    assert response.status_code == 500, response.text
+    stored = _row(db_session, created["id"])
+    assert stored["visual_config"] is None
+    assert stored["start_date"] is None
