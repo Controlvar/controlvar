@@ -376,6 +376,10 @@ def grant_permission(
 ):
     """Grant a direct permission to a user. ADMIN only. Supports expiry."""
     _require_admin(current_user)
+    # Looked up before the insert: the foreign key refused a grant for an id
+    # with no account on flush, a 500 (#1002). Nothing is written.
+    if db.query(User).filter(User.id == user_id).first() is None:
+        raise HTTPException(status_code=404, detail="User not found")
     actor = AuditActor.of(current_user)
     grant = RBACService.grant_direct_permission(
         db,

@@ -611,6 +611,10 @@ three levels deep.
     "updated_at": "datetime"
   }
   ```
+- **Errors**: 400 "Invalid user ID format" when `{user_id}` is not a UUID (a
+  caller who is not a superuser gets 403 first). 403 "Not enough permissions"
+  when a caller who is not a superuser asks for another account. 404 "User not
+  found".
 
 ### Update User
 - **Endpoint**: `PUT /api/v1/users/{user_id}`
@@ -673,7 +677,9 @@ three levels deep.
   another account holds in any letter case. Changing only the letter case of
   the account's own address is accepted, and resending the stored address
   unchanged is never refused. 409 "Username already registered" when a
-  superuser sets a username another account has.
+  superuser sets a username another account has. 400 "Invalid user ID format"
+  when `{user_id}` is not a UUID, `me` included: `GET /api/v1/users/me`
+  returns your account and its `id`.
 
 ### Delete User
 - **Endpoint**: `DELETE /api/v1/users/{user_id}`
@@ -690,7 +696,9 @@ three levels deep.
 - **Response**: 204 No Content
 - **Errors**: 400 "Superusers cannot delete themselves" when a superuser
   deletes their own account. 403 "Not enough permissions" when anyone else
-  deletes another account. 404 "User not found".
+  deletes another account. 404 "User not found". 400 "Invalid user ID format"
+  when `{user_id}` is not a UUID, `me` included: `GET /api/v1/users/me`
+  returns your account and its `id`.
 
 ### Change Your Password
 - **Endpoint**: `POST /api/v1/users/me/password`

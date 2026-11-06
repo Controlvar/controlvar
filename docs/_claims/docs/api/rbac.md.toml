@@ -772,7 +772,11 @@ by = ["test:modules/backend/tests/integration/api/test_rbac_api.py::TestEffectiv
 
 [[unit]]
 text = "404 Not Found — User does not exist"
-by = ["test:modules/backend/tests/integration/api/test_rbac_api.py::TestEffectivePermissions::test_get_permissions_nonexistent_user_returns_404"]
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestEffectivePermissions::test_get_permissions_nonexistent_user_returns_404",
+    "test:modules/backend/tests/integration/rbac/test_rbac_grant_unknown_user.py::test_a_grant_to_an_id_with_no_account_answers_404_and_writes_nothing",
+]
+count = 2
 
 [[unit]]
 text = "View your own permissions."

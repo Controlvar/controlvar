@@ -521,6 +521,7 @@ are checked as a role's permissions are (see
 
 **Error responses:**
 - `403 Forbidden` — Caller is not an admin
+- `404 Not Found` — User does not exist
 - `422 Unprocessable Entity` — A permission a grant cannot hold (`"type": "not_grantable"`)
 
 **Example — Temporary permission with expiry**
