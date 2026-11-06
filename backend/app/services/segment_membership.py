@@ -345,7 +345,7 @@ def _references(raw_rules: Any, segment_id: str) -> bool:
         return True
 
 
-def _balance_references(raw_setting: Any, segment_id: str) -> bool:
+def balance_references(raw_setting: Any, segment_id: str) -> bool:
     """Whether a stored ``balance_within`` that mentions ``segment_id``
     balances within it (#448).
 
@@ -363,9 +363,13 @@ def _balance_references(raw_setting: Any, segment_id: str) -> bool:
     return True
 
 
-#: The key :func:`segment_references` sets on an experiment that balances
-#: within the segment; :func:`segment_in_use_detail` reads it and leaves it out.
+#: The keys :func:`segment_references` sets on an experiment that balances
+#: within the segment, and on one whose rules reference it;
+#: :func:`segment_in_use_detail` reads them to say what holds the segment and
+#: leaves them out of the answer.
 BALANCES_WITHIN = "balances_within"
+TARGETED_BY_RULES = "targeted_by_rules"
+_INTERNAL_KEYS = (BALANCES_WITHIN, TARGETED_BY_RULES)
 
 
 def segment_references(
@@ -382,9 +386,10 @@ def segment_references(
 
     Returns:
         ``(feature_flags, experiments)``: ``[{id, key, name}]`` and
-        ``[{id, key, name, status}]``, each ordered by key. An experiment that
-        balances within the segment also carries ``balances_within: True``,
-        for :func:`segment_in_use_detail`'s message.
+        ``[{id, key, name, status}]``, each ordered by key. An experiment also
+        carries ``balances_within: True`` when it balances within the segment
+        and ``targeted_by_rules: True`` when its rules reference it, for
+        :func:`segment_in_use_detail`'s message.
     """
     sid = str(segment_id).lower()
     pattern = f"%{sid}%"
@@ -430,7 +435,7 @@ def segment_references(
     experiments = []
     for row in experiment_rows:
         by_rules = bool(row.in_rules) and _references(row.targeting_rules, sid)
-        by_balance = bool(row.in_balance) and _balance_references(
+        by_balance = bool(row.in_balance) and balance_references(
             row.balance_within, sid
         )
         if not (by_rules or by_balance):
@@ -443,6 +448,8 @@ def segment_references(
         }
         if by_balance:
             reference[BALANCES_WITHIN] = True
+        if by_rules:
+            reference[TARGETED_BY_RULES] = True
         experiments.append(reference)
     return flags, experiments
 
@@ -464,13 +471,16 @@ def segment_in_use_detail(
             f"{len(experiments)} experiment{'s' if len(experiments) != 1 else ''}"
         )
     balanced = any(e.get(BALANCES_WITHIN) for e in experiments)
+    targeted = bool(flags) or any(e.get(TARGETED_BY_RULES) for e in experiments)
     message = f"This segment is used by {' and '.join(parts)}. "
-    if balanced:
-        message += (
-            "Remove it from their targeting rules and from the segments a draft "
-            "balances within first; a started experiment that balances within it "
-            "uses it until it is completed."
-        )
+    balance_clause = (
+        "the segments a draft balances within first; a started experiment that "
+        "balances within it uses it until it is completed or archived."
+    )
+    if balanced and targeted:
+        message += f"Remove it from their targeting rules and from {balance_clause}"
+    elif balanced:
+        message += f"Remove it from {balance_clause}"
     else:
         message += "Remove it from their targeting rules first."
     return {
@@ -478,6 +488,6 @@ def segment_in_use_detail(
         "message": message,
         "feature_flags": flags,
         "experiments": [
-            {k: v for k, v in e.items() if k != BALANCES_WITHIN} for e in experiments
+            {k: v for k, v in e.items() if k not in _INTERNAL_KEYS} for e in experiments
         ],
     }

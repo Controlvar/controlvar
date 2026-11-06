@@ -87,3 +87,67 @@ def test_the_schema_takes_up_to_ten_segment_ids():
     ids = [str(uuid.uuid4()) for _ in range(10)]
     setting = BalanceWithin.model_validate({"segments": ids})
     assert setting.stored() == {"segments": ids}
+
+
+def _experiment(**held_by):
+    return {"id": "e1", "key": "k", "name": "n", "status": "draft", **held_by}
+
+
+HELD = [
+    # (what holds the segment, flags, experiments, message tail)
+    (
+        "targeting",
+        [{"id": "f1", "key": "f", "name": "F"}],
+        [_experiment(targeted_by_rules=True)],
+        "Remove it from their targeting rules first.",
+    ),
+    (
+        "balancing",
+        [],
+        [_experiment(balances_within=True)],
+        "Remove it from the segments a draft balances within first; a started "
+        "experiment that balances within it uses it until it is completed or "
+        "archived.",
+    ),
+    (
+        "both",
+        [],
+        [
+            _experiment(balances_within=True),
+            _experiment(targeted_by_rules=True),
+        ],
+        "Remove it from their targeting rules and from the segments a draft "
+        "balances within first; a started experiment that balances within it "
+        "uses it until it is completed or archived.",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "held,flags,experiments,tail", HELD, ids=[row[0] for row in HELD]
+)
+def test_the_in_use_message_names_what_holds_the_segment(
+    held, flags, experiments, tail
+):
+    from backend.app.services.segment_membership import segment_in_use_detail
+
+    detail = segment_in_use_detail(flags, experiments)
+
+    assert detail["message"].endswith(tail), detail["message"]
+    assert "until it is completed." not in detail["message"]
+    for experiment in detail["experiments"]:
+        assert set(experiment) == {"id", "key", "name", "status"}
+
+
+def test_the_listing_and_archiving_read_a_stored_setting_alike():
+    """Both go through ``balance_references``: an attribute value that is the
+    segment's id does not hold it; a segment list does, in any letter case; a
+    value that cannot be read does."""
+    from backend.app.services.segment_membership import balance_references
+
+    sid = A
+    assert balance_references({"segments": [B, sid.upper()]}, sid)
+    assert not balance_references({"attribute": "tier", "values": [sid]}, sid)
+    assert not balance_references({"segments": [B]}, sid)
+    assert balance_references({"segments": sid}, sid)
+    assert balance_references(["tier"], sid)

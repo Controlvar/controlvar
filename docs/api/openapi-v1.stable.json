@@ -26342,7 +26342,7 @@
     },
     "/api/v1/segments/{segment_id}": {
       "delete": {
-        "description": "Soft-delete a segment by setting its status to ARCHIVED. Refused (409) while targeting rules use the segment. Requires permission to delete experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (delete).",
+        "description": "Soft-delete a segment by setting its status to ARCHIVED. Refused (409) while targeting rules use the segment or while a draft, active or paused experiment balances within it. Requires permission to delete experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (delete).",
         "operationId": "delete_segment_api_v1_segments__segment_id__delete",
         "parameters": [
           {
@@ -26361,7 +26361,7 @@
             "description": "Successful Response"
           },
           "409": {
-            "description": "The segment is used by the targeting rules of a flag that is not archived or an experiment that is draft, active or paused. `detail` is `{\"code\": \"segment_in_use\", \"message\", \"feature_flags\": [{id, key, name}], \"experiments\": [{id, key, name, status}]}`."
+            "description": "The segment is used by the targeting rules of a flag that is not archived or an experiment that is draft, active or paused, or a draft, active or paused experiment balances within it. `detail` is `{\"code\": \"segment_in_use\", \"message\", \"feature_flags\": [{id, key, name}], \"experiments\": [{id, key, name, status}]}`."
           },
           "422": {
             "content": {
@@ -26434,7 +26434,7 @@
         ]
       },
       "put": {
-        "description": "Update segment name, description, rules, or status. A segment's kind cannot be changed, and an id_list segment takes no rules (422). A status other than active is refused (409) while targeting rules use the segment. Requires permission to change experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (update).",
+        "description": "Update segment name, description, rules, or status. A segment's kind cannot be changed, and an id_list segment takes no rules (422). A status other than active is refused (409) while targeting rules use the segment or while a draft, active or paused experiment balances within it. Requires permission to change experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (update).",
         "operationId": "update_segment_api_v1_segments__segment_id__put",
         "parameters": [
           {
@@ -26470,7 +26470,7 @@
             "description": "Successful Response"
           },
           "409": {
-            "description": "The segment is used by the targeting rules of a flag that is not archived or an experiment that is draft, active or paused. `detail` is `{\"code\": \"segment_in_use\", \"message\", \"feature_flags\": [{id, key, name}], \"experiments\": [{id, key, name, status}]}`."
+            "description": "The segment is used by the targeting rules of a flag that is not archived or an experiment that is draft, active or paused, or a draft, active or paused experiment balances within it. `detail` is `{\"code\": \"segment_in_use\", \"message\", \"feature_flags\": [{id, key, name}], \"experiments\": [{id, key, name, status}]}`."
           },
           "422": {
             "content": {
@@ -26560,7 +26560,7 @@
     },
     "/api/v1/segments/{segment_id}/experiments": {
       "get": {
-        "description": "Return all experiments and feature flags whose targeting_rules reference this segment's UUID.",
+        "description": "Return all experiments and feature flags whose targeting_rules reference this segment's UUID, and the experiments that balance within it.",
         "operationId": "get_segment_experiments_api_v1_segments__segment_id__experiments_get",
         "parameters": [
           {

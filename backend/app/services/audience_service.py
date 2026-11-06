@@ -58,6 +58,7 @@ from backend.app.schemas.segment import (
 from backend.app.schemas.storable_text import contains_unstorable_text
 from backend.app.schemas.targeting_rule import TargetingRules
 from backend.app.services.segment_membership import (
+    balance_references,
     segment_in_use_detail,
     segment_references,
 )
@@ -633,10 +634,12 @@ class AudienceService:
     ) -> SegmentExperimentResponse:
         """
         Find all experiments and feature flags that reference this segment in their
-        targeting rules (JSONB field contains the segment_id).
+        targeting rules (JSONB field contains the segment_id), and the experiments
+        that balance within it.
 
         This performs a lightweight search by looking for the segment UUID inside
-        the JSONB targeting_rules of Experiment and FeatureFlag records.
+        the JSONB targeting_rules of Experiment and FeatureFlag records, and in an
+        experiment's balance_within, which is then read as archiving reads it.
 
         Args:
             db: SQLAlchemy session.
@@ -657,11 +660,22 @@ class AudienceService:
 
         # Query errors propagate: the route answers its fixed 500, never an
         # empty list that reads as "no one uses this segment" (#888).
-        experiments = (
-            db.query(Experiment)
-            .filter(Experiment.targeting_rules.cast(sa.Text).contains(segment_id))
+        # An experiment that balances within the segment (#448) is listed too,
+        # read by the same reader archiving uses, so the two cannot disagree.
+        in_rules = Experiment.targeting_rules.cast(sa.Text).contains(segment_id)
+        in_balance = sa.cast(Experiment.balance_within, sa.Text).ilike(
+            f"%{segment_id.lower()}%"
+        )
+        candidates = (
+            db.query(Experiment, in_rules.label("in_rules"))
+            .filter(sa.or_(in_rules, in_balance))
             .all()
         )
+        experiments = [
+            exp
+            for exp, by_rules in candidates
+            if by_rules or balance_references(exp.balance_within, segment_id.lower())
+        ]
         for exp in experiments:
             experiments_data.append(
                 {

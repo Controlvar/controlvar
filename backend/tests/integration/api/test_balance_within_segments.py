@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Dict, Iterator, List, Optional, Tuple
 
@@ -45,6 +46,7 @@ from backend.app.models.segment import (
     SegmentStatus,
 )
 from backend.app.models.user import User, UserRole
+from backend.app.services import balanced_allocation
 from backend.tests.integration.balance_checks import balance_rows
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db]
@@ -67,6 +69,20 @@ PREMIUM_RULES = {
     ],
 }
 PREMIUM = {"tier": "premium"}
+
+#: A rules segment on the dotted attribute ``user.tier``: targeting's alias
+#: rule makes ``{"tier": ...}`` and ``{"user": {"tier": ...}}`` both match it.
+DOTTED_PREMIUM_RULES = {
+    "logical_operator": "AND",
+    "groups": [
+        {
+            "logical_operator": "AND",
+            "conditions": [
+                {"attribute": "user.tier", "operator": "equals", "value": "premium"}
+            ],
+        }
+    ],
+}
 
 
 # ---------------------------------------------------------------------------
@@ -376,9 +392,9 @@ def test_a_user_who_leaves_their_segment_keeps_their_variant_and_group(
 # ---------------------------------------------------------------------------
 
 BALANCED_IN_USE = (
-    "This segment is used by 1 experiment. Remove it from their targeting rules "
-    "and from the segments a draft balances within first; a started experiment "
-    "that balances within it uses it until it is completed."
+    "This segment is used by 1 experiment. Remove it from the segments a draft "
+    "balances within first; a started experiment that balances within it uses it "
+    "until it is completed or archived."
 )
 
 
@@ -437,3 +453,82 @@ def test_a_completed_experiment_or_an_attribute_value_does_not_hold_a_segment(
     db_session.rollback()
     stored = db_session.query(Segment).filter(Segment.id == segment_id).one()
     assert stored.status == SegmentStatus.ARCHIVED
+
+
+@pytest.mark.regression
+def test_the_listing_names_an_experiment_that_balances_within_the_segment(
+    admin_client, made
+):
+    """The "used by" listing and archiving read the same stored setting, so
+    the listing cannot say no one uses a segment that archiving refuses."""
+    segment_id = made.segment()
+    draft = made.experiment({"segments": [segment_id]}, ExperimentStatus.DRAFT)
+    made.experiment({"attribute": "tier", "values": [segment_id]})
+
+    listing = admin_client.get(f"{SEGMENTS}/{segment_id}/experiments")
+    archive = admin_client.delete(f"{SEGMENTS}/{segment_id}")
+
+    assert archive.status_code == 409, archive.text
+    assert listing.status_code == 200, listing.text
+    assert [e["id"] for e in listing.json()["experiments"]] == [str(draft.id)]
+    assert [e["id"] for e in archive.json()["detail"]["experiments"]] == [str(draft.id)]
+
+
+# ---------------------------------------------------------------------------
+# Claims of the guide, the body and the commits, each pinned
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.regression
+def test_membership_is_decided_as_it_is_for_targeting_rules(
+    client, key, made, session_factory
+):
+    """A rules segment on ``user.tier`` has a user sent ``{"tier": ...}`` or
+    ``{"user": {"tier": ...}}`` as a member: the context is expanded first."""
+    segment_id = made.segment(rules=DOTTED_PREMIUM_RULES)
+    experiment = made.experiment({"segments": [segment_id]})
+    flat = f"alias-flat-{uuid.uuid4().hex[:8]}"
+    nested = f"alias-nested-{uuid.uuid4().hex[:8]}"
+
+    _assign(client, key, experiment, flat, {"tier": "premium"})
+    _assign(client, key, experiment, nested, {"user": {"tier": "premium"}})
+
+    assert _groups(session_factory, experiment.id) == {
+        flat: segment_id,
+        nested: segment_id,
+    }
+
+
+@pytest.mark.regression
+def test_a_stored_setting_that_cannot_be_read_holds_the_segment(admin_client, made):
+    """The archive check fails closed: segments stored as text, not a list."""
+    segment_id = made.segment()
+    made.experiment({"segments": f"{segment_id}"}, ExperimentStatus.DRAFT)
+
+    response = admin_client.delete(f"{SEGMENTS}/{segment_id}")
+
+    assert response.status_code == 409, response.text
+
+
+@pytest.mark.regression
+def test_an_undecided_membership_is_logged_once_per_experiment(
+    client, key, made, session_factory, caplog
+):
+    inactive = made.segment(members=("x",), status=SegmentStatus.INACTIVE)
+    experiment = made.experiment({"segments": [inactive]})
+    balanced_allocation._undecided_notes.clear()
+
+    with caplog.at_level(logging.WARNING, logger=balanced_allocation.__name__):
+        for index in range(3):
+            _assign(
+                client, key, experiment, f"undec-{index}-{uuid.uuid4().hex[:6]}", {}
+            )
+
+    lines = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == balanced_allocation.__name__
+        and "could not" in record.getMessage()
+    ]
+    assert len(lines) == 1, lines
+    assert str(experiment.id) in lines[0] and inactive in lines[0]
