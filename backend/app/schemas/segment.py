@@ -447,11 +447,12 @@ PreviewEndedBy = Literal["sample_size", "cap", "window"]
 
 
 class AudiencePreviewResponse(BaseModel):
-    """How many of the users seen most recently the rules match (#830).
+    """How many of the users seen most recently the rules match.
 
-    The users are the most recent ones with an exposure (a ``/tracking/assign``
-    call) whose attributes, sent as ``context``, were stored with it. It is not
-    a random sample: it leans toward frequent users and the time of day.
+    The users are the most recent ones with an exposure (a /tracking/assign
+    call) in the last 30 days, each counted once, with the attributes sent as
+    context on their latest one. It is not a random sample: it leans toward
+    frequent users and the time of day.
     """
 
     estimated_percentage: Optional[float] = Field(

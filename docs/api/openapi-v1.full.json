@@ -986,30 +986,105 @@
         "type": "object"
       },
       "AudiencePreviewResponse": {
-        "description": "Estimated audience size from preview evaluation.",
+        "description": "How many of the users seen most recently the rules match.\n\nThe users are the most recent ones with an exposure (a /tracking/assign\ncall) in the last 30 days, each counted once, with the attributes sent as\ncontext on their latest one. It is not a random sample: it leans toward\nfrequent users and the time of day.",
         "example": {
+          "ended_by": "sample_size",
           "estimated_percentage": 35.5,
           "matched": 355,
-          "sample_size": 1000
+          "sample_size": 1000,
+          "sampled_since": "2026-11-06T09:12:45.120391+00:00",
+          "source": "exposure_metadata",
+          "users_without_context": 42,
+          "window_days": 30
         },
         "properties": {
+          "ended_by": {
+            "description": "sample_size: enough users were found; cap: the row cap was reached first; window: every exposure in the window was read.",
+            "enum": [
+              "sample_size",
+              "cap",
+              "window"
+            ],
+            "title": "Ended By",
+            "type": "string"
+          },
           "estimated_percentage": {
-            "title": "Estimated Percentage",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "matched / sample_size x 100, to 2 decimals. null when reason is set: no user seen with attributes, or fewer than 30.",
+            "title": "Estimated Percentage"
           },
           "matched": {
+            "description": "Of those users, how many the rules match.",
             "title": "Matched",
             "type": "integer"
           },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "no_exposures_with_context",
+                  "too_few_users"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why estimated_percentage is null: no_exposures_with_context (no user with attributes) or too_few_users (1 to 29). null otherwise.",
+            "title": "Reason"
+          },
           "sample_size": {
+            "description": "Distinct users read whose latest exposure carried attributes; at most the requested sample_size.",
             "title": "Sample Size",
+            "type": "integer"
+          },
+          "sampled_since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The time of the oldest exposure read, UTC ISO-8601; null when none was read.",
+            "title": "Sampled Since"
+          },
+          "source": {
+            "const": "exposure_metadata",
+            "description": "Where the attributes come from: the exposures' stored context.",
+            "title": "Source",
+            "type": "string"
+          },
+          "users_without_context": {
+            "description": "Distinct users read whose latest exposure carried no attributes; not counted in sample_size.",
+            "title": "Users Without Context",
+            "type": "integer"
+          },
+          "window_days": {
+            "description": "The read goes back at most this many days (fixed at 30).",
+            "title": "Window Days",
             "type": "integer"
           }
         },
         "required": [
           "estimated_percentage",
           "sample_size",
-          "matched"
+          "matched",
+          "source",
+          "window_days",
+          "sampled_since",
+          "ended_by",
+          "users_without_context",
+          "reason"
         ],
         "title": "AudiencePreviewResponse",
         "type": "object"
@@ -34204,7 +34279,7 @@
     },
     "/api/v1/segments/{segment_id}/preview": {
       "post": {
-        "description": "Estimate the percentage of users who would match the provided targeting rules by evaluating them against the stored contexts of up to sample_size assignments. Only assignments that carry a context are counted; the answer's sample_size is how many there were, and 0 when none do.",
+        "description": "Estimate the share of the users seen most recently that the provided rules match. The users are the most recent ones with an exposure (a /tracking/assign call) in the last 30 days, each counted once with the attributes sent as context on their latest one; up to sample_size of them are evaluated. Not a random sample: it leans toward frequent users and the time of day. estimated_percentage is null when fewer than 30 users have attributes (reason says why); sampled_since and ended_by say how far back the read went. Any role that can read segments may preview: the answer is counts and a share, never a stored attribute value.",
         "operationId": "preview_audience_size_api_v1_segments__segment_id__preview_post",
         "parameters": [
           {
@@ -34262,6 +34337,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "503": {
+            "description": "The read took longer than its time limit (a large table with few exposures can). The text is fixed."
           }
         },
         "security": [
