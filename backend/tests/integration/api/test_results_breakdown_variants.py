@@ -150,12 +150,19 @@ def _breakdown(client, exp):
     return {seg["segment_value"]: seg for seg in breakdown["segments"]}
 
 
-def _two_prop_p(c1, n1, c2, n2):
-    """Two-sided pooled two-proportion z-test, written out independently."""
-    pooled = (c1 + c2) / (n1 + n2)
-    se = math.sqrt(pooled * (1 - pooled) * (1 / n1 + 1 / n2))
-    z = (c2 / n2 - c1 / n1) / se
-    return math.erfc(abs(z) / math.sqrt(2))
+def _fisher_p(c1, n1, c2, n2):
+    """Two-sided Fisher's exact p-value of ``c2/n2`` against ``c1/n1``, written
+    out independently: the probability, under the margins, of every table no
+    more likely than the observed one."""
+    converted = c1 + c2
+
+    def weight(x):
+        return math.comb(n2, x) * math.comb(n1, converted - x)
+
+    observed = weight(c2)
+    tables = range(max(0, converted - n1), min(n2, converted) + 1)
+    as_extreme = sum(w for w in map(weight, tables) if w <= observed)
+    return as_extreme / math.comb(n1 + n2, converted)
 
 
 @pytest.mark.regression
@@ -197,7 +204,7 @@ def test_breakdown_control_is_the_real_control_not_the_smallest_id(
     assert [v["is_control"] for v in variants.values()].count(True) == 1
     # The p-value is the treatment's, tested against the control's counts.
     assert ctrl["p_value"] is None
-    assert treat["p_value"] == pytest.approx(_two_prop_p(20, 200, 40, 200), rel=1e-6)
+    assert treat["p_value"] == pytest.approx(_fisher_p(20, 200, 40, 200), rel=1e-6)
     assert (ctrl["sample_size"], ctrl["conversions"]) == (200, 20)
     assert (treat["sample_size"], treat["conversions"]) == (200, 40)
 

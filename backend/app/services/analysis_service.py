@@ -8,10 +8,9 @@ from uuid import UUID
 
 import numpy as np
 from scipy import stats
-from sqlalchemy import func, text
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from backend.app.core.database_config import get_schema_name
 from backend.app.core.stats_engine import ENGINE_VERSION, as_of_bucket, derive_seed
 from backend.app.models.assignment import Assignment
 from backend.app.models.event import Event
@@ -30,15 +29,13 @@ from backend.app.schemas.tracking import VALUE_BOUND
 from backend.app.services.analysis_settings import resolve_analysis_settings
 from backend.app.services.bayesian_service import DEFAULT_N_SAMPLES, BayesianService
 from backend.app.services.event_matching import (
-    CONVERSION_SQL_PREDICATE,
-    CONVERTING_USERS_JOIN,
-    CONVERTING_USERS_SQL,
     _assigned_pairs,
     conversion_event_filter,
     count_converting_users,
     count_converting_users_any,
     first_conversion_times,
 )
+from backend.app.services.segment_breakdown import segment_rows
 from backend.app.services.srm_service import (
     recommendation_under_srm,
     sample_ratio_check,
@@ -1208,6 +1205,12 @@ class AnalysisService:
         """
         Get experiment results segmented by a specific property.
 
+        The rows come from ``segment_breakdown.segment_rows``, as in
+        ``/results?breakdown=``: every assigned user in exactly one segment
+        (``unknown`` and ``other`` included), with each metric's converting
+        users, so per variant and metric the rows add up to the headline.
+        Each variant's ``conversion_rate`` is a percentage; no test is run.
+
         Args:
             experiment_id: ID of the experiment
             segment_by: Property to segment results by (e.g., 'country', 'device')
@@ -1240,35 +1243,13 @@ class AnalysisService:
         if not metrics:
             return {"segments": []}
 
-        # Get segment values from event metadata.
-        # `schema` comes from get_schema_name(), which only ever returns one of
-        # two literal identifiers; all request-derived values are bound params.
-        schema = get_schema_name()
-        segment_values_query = text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
-            f"""
-            SELECT DISTINCT jsonb_extract_path_text(event_metadata, :segment_key) as segment_value
-            FROM {schema}.events
-            WHERE experiment_id = :experiment_id
-            AND event_metadata ? :segment_key
-            AND jsonb_extract_path_text(event_metadata, :segment_key) IS NOT NULL
-            AND jsonb_extract_path_text(event_metadata, :segment_key) != ''
-        """  # nosec B608 - schema is a fixed config identifier, not user input
+        rows = segment_rows(
+            self.db, experiment.id, segment_by, [m.event_name for m in metrics]
         )
 
-        segment_values_result = self.db.execute(
-            segment_values_query,
-            {"segment_key": segment_by, "experiment_id": str(experiment_id)},
-        )
-
-        segment_values = [row[0] for row in segment_values_result]
-
-        if not segment_values:
-            return {"segments": []}
-
-        # Process each segment
         segments = []
-        for segment_value in segment_values:
-            segment_result = {"segment_value": segment_value, "metrics": []}
+        for row in rows:
+            segment_result = {"segment_value": row.value, "metrics": []}
 
             for metric in metrics:
                 metric_result = {
@@ -1278,59 +1259,9 @@ class AnalysisService:
                 }
 
                 for variant in experiment.variants:
-                    # Get assignments count for this variant in this segment
-                    # This is an approximation - ideally would track segment with the assignment
-                    segment_assignments_query = text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
-                        f"""
-                        SELECT COUNT(DISTINCT a.user_id)
-                        FROM {schema}.assignments a
-                        JOIN {schema}.events e ON a.user_id = e.user_id AND a.experiment_id = e.experiment_id
-                        WHERE a.experiment_id = :experiment_id
-                        AND a.variant_id = :variant_id
-                        AND e.event_metadata ? :segment_key
-                        AND jsonb_extract_path_text(e.event_metadata, :segment_key) = :segment_value
-                    """  # nosec B608 - schema is a fixed config identifier, not user input
-                    )
-
-                    assignments = (
-                        self.db.execute(
-                            segment_assignments_query,
-                            {
-                                "experiment_id": str(experiment_id),
-                                "variant_id": str(variant.id),
-                                "segment_key": segment_by,
-                                "segment_value": segment_value,
-                            },
-                        ).scalar()
-                        or 0
-                    )
-
-                    # Get conversions for this variant and segment
-                    segment_conversions_query = text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
-                        f"""
-                        SELECT {CONVERTING_USERS_SQL}
-                        FROM {schema}.events e
-                        JOIN {schema}.assignments a ON {CONVERTING_USERS_JOIN}
-                        WHERE e.experiment_id = :experiment_id
-                        AND e.variant_id = :variant_id
-                        AND {CONVERSION_SQL_PREDICATE}
-                        AND e.event_metadata ? :segment_key
-                        AND jsonb_extract_path_text(e.event_metadata, :segment_key) = :segment_value
-                    """  # nosec B608 - schema is a fixed config identifier, not user input
-                    )
-
-                    conversions = (
-                        self.db.execute(
-                            segment_conversions_query,
-                            {
-                                "experiment_id": str(experiment_id),
-                                "variant_id": str(variant.id),
-                                "event_name": metric.event_name,
-                                "segment_key": segment_by,
-                                "segment_value": segment_value,
-                            },
-                        ).scalar()
-                        or 0
+                    assignments = row.users.get(str(variant.id), 0)
+                    conversions = row.converters[metric.event_name].get(
+                        str(variant.id), 0
                     )
 
                     # Calculate conversion rate

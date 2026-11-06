@@ -199,7 +199,7 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 [[unit]]
 text = "It prints the dimension, \"is_exploratory\": true, the corrected threshold and the segments: desktop, mobile, and unknown for the users' assignment events, which carry no device."
 by = [
-    "test:backend/tests/unit/services/test_breakdown_reads.py::test_events_without_the_key_form_an_unknown_segment_under_a_bonferroni_threshold",
+    "test:backend/tests/unit/services/test_breakdown_reads.py::test_users_without_the_key_form_an_unknown_segment_under_a_bonferroni_threshold",
     "docex:docs/api/dimensional-analysis.md#\"is_exploratory\": true",
 ]
 
@@ -229,7 +229,7 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "The control's p_value is null; every other variant's is its test against the control in the same segment."
-by = ["test:backend/tests/unit/services/test_breakdown_reads.py::test_the_control_has_no_p_value_and_each_treatment_is_tested_against_it"]
+by = ["test:backend/tests/unit/services/test_breakdown_reads.py::test_the_control_has_no_p_value_and_each_treatment_has_fishers_exact_test_against_it"]
 
 [[unit]]
 text = "The breakdown also carries has_heterogeneous_effects and hte_warning."
@@ -244,12 +244,12 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Counts per segment, variant and metric, with no significance test."
-by = ["test:backend/tests/unit/services/test_breakdown_reads.py::test_segmented_results_are_counts_for_segments_that_carry_the_key"]
+by = ["test:backend/tests/unit/services/test_breakdown_reads.py::test_segmented_results_count_each_user_in_one_segment_with_no_test"]
 
 [[unit]]
 text = "Only segments with the key are listed (no unknown), conversion_rate is a percentage, and an experiment in draft answers 400."
 by = [
-    "test:backend/tests/unit/services/test_breakdown_reads.py::test_segmented_results_are_counts_for_segments_that_carry_the_key",
+    "test:backend/tests/unit/services/test_breakdown_reads.py::test_segmented_results_count_each_user_in_one_segment_with_no_test",
     "test:backend/tests/unit/services/test_breakdown_reads.py::test_a_draft_experiment_has_no_segmented_results",
 ]
 

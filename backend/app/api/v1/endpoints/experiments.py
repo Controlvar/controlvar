@@ -100,6 +100,7 @@ from backend.app.services.power_calculator_service import (
     SampleSizeNotFiniteError,
     sample_size_two_proportions,
 )
+from backend.app.services.segment_breakdown import NUL_IN_DIMENSION
 
 #: The states in which ``PUT /experiments/{id}`` accepts ``targeting_rules``
 #: (#523). PAUSED only when targeting is the one field sent; see the route.
@@ -2138,6 +2139,11 @@ async def get_segmented_experiment_results(
         refusal = _results_read_refusal(current_user)
         db.close()
         await run_in_threadpool(_admit_results_read, experiment_id, refusal, db)
+        if "\x00" in segment_by:
+            # Refused before the cache: the database driver cannot bind it.
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=NUL_IN_DIMENSION
+            )
 
         metric_part = f":{metric_id}" if metric_id else ""
         cache_key = (
