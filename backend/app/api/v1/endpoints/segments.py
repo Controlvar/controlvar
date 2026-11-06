@@ -54,6 +54,7 @@ from backend.app.schemas.segment import (
 )
 from backend.app.services.audience_service import (
     AudienceService,
+    PreviewTimedOut,
     SegmentChangeRefused,
     SegmentRulesNotValid,
     _segment_to_response_dict,
@@ -448,16 +449,32 @@ def get_segment_experiments(
 # ---------------------------------------------------------------------------
 
 
+#: The 503 answer when the preview's read passes its statement timeout.
+PREVIEW_TIMED_OUT = "The preview took too long. Try again later."
+
+
 @router.post(
     "/{segment_id}/preview",
     response_model=AudiencePreviewResponse,
     summary="Preview estimated audience size",
     description=(
-        "Estimate the percentage of users who would match the provided targeting rules "
-        "by evaluating them against the stored contexts of up to sample_size "
-        "assignments. Only assignments that carry a context are counted; the "
-        "answer's sample_size is how many there were, and 0 when none do."
+        "Estimate the share of the users seen most recently that the provided "
+        "rules match. The users are the most recent ones with an exposure (a "
+        "/tracking/assign call) in the last 30 days, each counted once with the "
+        "attributes sent as context on their latest one; up to sample_size of "
+        "them are evaluated. Not a random sample: it leans toward frequent users "
+        "and the time of day. estimated_percentage is null when fewer than 30 "
+        "users have attributes (reason says why); sampled_since and ended_by say "
+        "how far back the read went. Any role that can read segments may "
+        "preview: the answer is counts and a share, never a stored attribute "
+        "value."
     ),
+    responses={
+        503: {
+            "description": "The read took longer than its time limit (a large "
+            "table with few exposures can). The text is fixed."
+        },
+    },
     tags=["Segments"],
 )
 def preview_audience_size(
@@ -473,7 +490,9 @@ def preview_audience_size(
 
     The ruleset and ``sample_size`` are checked against the limits in
     ``backend.app.core.segment_preview_limits`` before any database query; a
-    request over any of them is answered 422.
+    request over any of them is answered 422. A read PostgreSQL cancels at its
+    statement timeout answers 503 with fixed text; any other database error
+    propagates.
     """
     _require_permission(current_user, Action.READ)
     if data.rules is None:
@@ -488,9 +507,14 @@ def preview_audience_size(
         AudienceService.get_segment(db, segment_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    return AudienceService.preview_audience_size(
-        db, data.rules, sample_size=sample_size
-    )
+    try:
+        return AudienceService.preview_audience_size(
+            db, data.rules, sample_size=sample_size
+        )
+    except PreviewTimedOut:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=PREVIEW_TIMED_OUT
+        ) from None
 
 
 # ---------------------------------------------------------------------------

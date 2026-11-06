@@ -88,7 +88,6 @@ INVENTORY: Dict[str, str] = {
     "backend/app/services/assignment_service.py::AssignmentService._stored_assignment": READS,
     "backend/app/services/assignment_service.py::AssignmentService.get_assignment": READS,
     "backend/app/services/assignment_service.py::AssignmentService.get_user_assignments": READS,
-    "backend/app/services/audience_service.py::AudienceService.preview_audience_size": READS,
     "backend/app/services/event_matching.py::_assigned_pairs": READS,
     "backend/app/services/event_matching.py::assignment_times": READS,
     "backend/app/services/event_service.py::EventService.track_conversion": READS,
