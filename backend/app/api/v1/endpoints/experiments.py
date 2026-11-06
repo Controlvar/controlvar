@@ -493,9 +493,12 @@ def _refuse_unbalanceable_update(
 
 
 def _end_transaction_on_refusal(db: Session) -> None:
-    """Roll *db* back as a 4xx is raised, so a row read for update is not held
-    while the response is written and the session waits to be closed (#1545).
-    A rollback that fails is logged, never raised over the refusal."""
+    """Roll *db* back as a 4xx is raised, so a row read for update is freed at
+    once (#1545). Defence in depth: with production's async ``get_db``,
+    FastAPI (0.141.1) unwinds the request's dependencies, closing the
+    session, before it writes the error response, so the row is already free
+    when the response starts even without this. A rollback that fails is
+    logged, never raised over the refusal."""
     try:
         db.rollback()
     except Exception as error:  # the refusal is the answer, not this
