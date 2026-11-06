@@ -65,6 +65,7 @@ from backend.app.services.analysis_snapshot_service import snapshot_day
 from backend.app.services.dimensional_analysis_service import (
     DimensionalAnalysisService,
 )
+from backend.app.services.event_matching import EXPOSURE_EVENT_TYPES
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db]
 
@@ -177,6 +178,7 @@ def exp(make_breakdown_experiment):
 
 _KINDS = {
     "exposure": ("exposure", "variant_exposure"),
+    "experiment_exposure": ("experiment_exposure", "variant_exposure"),
     "purchase": ("purchase", "purchase"),
     "signup": ("signup", "signup"),
     "page_view": ("page_view", "page_view"),
@@ -565,12 +567,13 @@ def test_a_user_value_is_the_first_received_keyed_event_order(
 
 
 @pytest.mark.regression
+@pytest.mark.parametrize("exposure_type", EXPOSURE_EVENT_TYPES)
 @pytest.mark.parametrize(
     "purchase_received",
     ["after-the-exposure", "before-the-exposure"],
 )
 def test_an_exposure_value_wins_over_an_earlier_keyed_event_order(
-    admin_client, db_session, exp, purchase_received
+    admin_client, db_session, exp, purchase_received, exposure_type
 ):
     """Case A reversed: the android purchase carries an earlier client timestamp.
 
@@ -591,7 +594,7 @@ def test_an_exposure_value_wins_over_an_earlier_keyed_event_order(
                 exp,
                 "treatment",
                 "o2",
-                "exposure",
+                exposure_type,
                 {DIM: "ios"},
                 created=exposure_at.isoformat() + "+00:00",
                 received=exposure_at,
@@ -1099,7 +1102,18 @@ def test_a_dimension_with_a_nul_character_is_refused_nul(
 ):
     _two_segments(db_session, exp)
     dimension = "plat\x00form"
+    # A valid cached answer filed under the refused dimension's own key: the
+    # refusal must come before the cache is read, or this entry would answer 200.
     _FakeRedis.store = {}
+    with patch("redis.Redis", _FakeRedis):
+        warm = admin_client.get(f"/api/v1/results/{exp.id}", params={"breakdown": DIM})
+    assert warm.status_code == 200, warm.text
+    (warm_key,) = [k for k in _FakeRedis.store if k.startswith(f"results:{exp.id}:")]
+    assert warm_key.endswith(f":{DIM}"), warm_key
+    nul_key = warm_key[: -len(DIM)] + dimension
+    _FakeRedis.store = {nul_key: _FakeRedis.store[warm_key]}
+    seeded = dict(_FakeRedis.store)
+    snapshots = _snapshot_count(db_session, exp)
     with caplog.at_level(logging.WARNING), patch("redis.Redis", _FakeRedis):
         results = admin_client.get(
             f"/api/v1/results/{exp.id}", params={"breakdown": dimension}
@@ -1119,8 +1133,8 @@ def test_a_dimension_with_a_nul_character_is_refused_nul(
     # The refusal comes after the experiment is found.
     assert unknown_results.status_code == 404, unknown_results.text
     assert unknown_segmented.status_code == 404, unknown_segmented.text
-    assert _FakeRedis.store == {}, list(_FakeRedis.store)
-    assert _snapshot_count(db_session, exp) == 0
+    assert _FakeRedis.store == seeded, list(_FakeRedis.store)
+    assert _snapshot_count(db_session, exp) == snapshots
     assert not [r for r in caplog.records if "DataError" in r.getMessage()]
 
 
@@ -1809,9 +1823,21 @@ def test_a_breakdown_computes_statistics_for_the_listed_rows_only(
         return original(self, segments, *args, **kwargs)
 
     monkeypatch.setattr(DimensionalAnalysisService, "compute_segment_results", spy)
+    original_hte = DimensionalAnalysisService.detect_hte
+    hte_rows: List[List[str]] = []
+
+    def hte_spy(self, segment_results):
+        hte_rows.append([r.segment_value for r in segment_results])
+        return original_hte(self, segment_results)
+
+    monkeypatch.setattr(DimensionalAnalysisService, "detect_hte", hte_spy)
     response = _get_results(viewer_client, exp)
     assert response.status_code == 200, response.text
     assert received == [22], received
+    # The cross-row test sees every returned row, other and unknown included.
+    (hte_seen,) = hte_rows
+    assert len(hte_seen) == 22, hte_seen
+    assert {"other", "unknown"} <= set(hte_seen), hte_seen
     segmented = _get_segmented(viewer_client, exp)
     assert segmented.status_code == 200, segmented.text
     assert len(segmented.json()["segments"]) == 22
