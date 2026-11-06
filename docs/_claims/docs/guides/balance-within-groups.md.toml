@@ -30,7 +30,7 @@ text = "How it works"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Within each group, each new user takes the next place in a shuffled list of the experiment's split."
+text = "Within each group, each new user takes the next place in a block, a shuffled list of the experiment's split."
 by = [
     "test:backend/tests/integration/services/test_balance_across_processes.py::test_four_processes_keep_every_group_balanced",
     "test:backend/tests/unit/services/test_balanced_allocation.py::test_the_order_depends_on_the_key_and_the_group",
@@ -41,7 +41,7 @@ text = "Every user's chance of each variant is still its share."
 by = ["test:backend/tests/unit/services/test_balanced_allocation.py::test_each_users_chance_is_their_share"]
 
 [[unit]]
-text = "A variant's count in a group stays within a few users of its share at every moment, and is exactly its share each time the group completes a list: at 50/50, the two variants of a group never differ by more than one user."
+text = "For the users balanced in the blocks, a variant's count in a group stays within a few users of its share at every moment, and is exactly its share each time the group completes a block: at 50/50, the two variants of a group never differ by more than one user."
 by = [
     "test:backend/tests/unit/services/test_balanced_allocation.py::test_the_bound_holds_for_every_split_in_steps_of_5",
     "test:backend/tests/integration/services/test_balance_across_processes.py::test_four_processes_keep_every_group_balanced",

@@ -7,10 +7,11 @@ each tier are split 50/50 among themselves, so a lucky mix of tiers cannot tip t
 
 ## How it works
 
-Within each group, each new user takes the next place in a shuffled list of the experiment's
-split. Every user's chance of each variant is still its share. A variant's count in a group stays
-within a few users of its share at every moment, and is exactly its share each time the group
-completes a list: at 50/50, the two variants of a group never differ by more than one user.
+Within each group, each new user takes the next place in a block, a shuffled list of the
+experiment's split. Every user's chance of each variant is still its share. For the users balanced
+in the blocks, a variant's count in a group stays within a few users of its share at every moment,
+and is exactly its share each time the group completes a block: at 50/50, the two variants of a
+group never differ by more than one user.
 
 The global holdout, the exclusion group and the targeting rules come first: only users who take
 part are balanced. A user keeps their variant and their group if their attribute changes later. An
