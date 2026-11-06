@@ -560,6 +560,10 @@ text = "email | string | Target internal users by domain"
 by = ["exempt:example"]
 
 [[unit]]
+text = "tags | array | A list of labels, such as beta or staff"
+by = ["exempt:example"]
+
+[[unit]]
 text = "Environments"
 by = ["exempt:label"]
 
