@@ -58,6 +58,14 @@
 # (200), so it reaches that one. Its list is 103. The three were read from
 # fuzz_check's evaluation of a local run of the pass at this seed on the pull
 # request's earlier head; its CI runs gave the same counts.
+#
+# Then #959 answered 400 for an id that is not a UUID on
+# PUT and DELETE /api/v1/users/{user_id} and on
+# POST /api/v1/llm-experiments/{experiment_id}/evaluate, where it answered 500,
+# and a 5xx reaches an operation. So the superuser pass's three are listed from
+# the code, each with its refusals, before the pull request's own fuzz run.
+# The viewer pass does not select DELETE /api/v1/users/{user_id}
+# (exclusions.toml), so it has no entry here.
 
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
@@ -90,6 +98,16 @@ reason = "Cognito sign-up and recovery: the stack signs in with the local provid
 pass = "superuser"
 operation = "POST /api/v1/users/"
 reason = "Every generated request fails the operation's own validation (422)."
+
+[[unreached]]
+pass = "superuser"
+operation = "PUT /api/v1/users/{user_id}"
+reason = "An id that is not a UUID answers 400 (#959) and one that names no account 404; bodies that fail validation answer 422."
+
+[[unreached]]
+pass = "superuser"
+operation = "DELETE /api/v1/users/{user_id}"
+reason = "An id that is not a UUID answers 400 (#959), one that names no account 404, and the caller's own account 400."
 
 [[unreached]]
 pass = "superuser"
@@ -360,6 +378,11 @@ reason = "Generated ids never name a stored row (404); the other requests fail v
 pass = "superuser"
 operation = "PUT /api/v1/llm-experiments/{experiment_id}/variants/{variant_id}"
 reason = "Generated ids never name a stored row (404); the other requests fail validation (422)."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/llm-experiments/{experiment_id}/evaluate"
+reason = "An evaluation_id that is not a UUID answers 400 (#959) and one that names no stored evaluation 404; bodies that fail validation answer 422."
 
 [[unreached]]
 pass = "superuser"
