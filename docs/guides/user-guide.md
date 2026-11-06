@@ -552,8 +552,10 @@ After an experiment concludes, use dimensional analysis to understand whether th
 
 **Important:** Segment findings are always exploratory. Use them to generate hypotheses for follow-up experiments, not as final conclusions.
 
-Access via the **Breakdowns** tab on any experiment results page, or via the route below,
-where `segment_by` is the dimension, such as `device`:
+Access via the **Breakdowns** tab on any experiment results page, which reads
+`GET /api/v1/results/{experiment_id}?breakdown={dimension}`. The same segments, as counts
+with no significance test, are at the route below, where `segment_by` is the dimension,
+such as `device`:
 ```text
 GET /api/v1/experiments/{experiment_id}/segmented-results/{segment_by}
 ```
