@@ -2,6 +2,11 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { PageTitle } from '@/components/PageTitle';
 import { FlagToggle } from '@/components/feature-flags/FlagToggle';
+import {
+  ARCHIVED_LABEL,
+  ArchivedFlagRowLink,
+  isFlagArchived,
+} from '@/components/feature-flags/ArchivedFlag';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
 import { FLAG_ROLE_NOTE, canChangeFeatureFlags, canCreateFeatureFlags } from '@/utils/experimentPermissions';
@@ -18,6 +23,8 @@ const STATUS_FILTERS: Array<{ label: string; value: FeatureFlagStatus | 'all' }>
   { label: 'All', value: 'all' },
   { label: 'On', value: 'active' },
   { label: 'Off', value: 'inactive' },
+  // An archived flag is neither: "Off" lists only inactive ones (#1748).
+  { label: 'Archived', value: 'archived' },
 ];
 
 function formatDate(value: string): string {
@@ -272,6 +279,9 @@ export default function FeatureFlagsPage() {
               <tbody className="divide-y divide-slate-100">
                 {flags.map((flag) => {
                   const on = isFlagOn(flag);
+                  // The API refuses to turn an archived flag on (400), so its
+                  // row has no switch: it says how to unarchive it (#1748).
+                  const archived = isFlagArchived(flag);
                   return (
                     <tr
                       key={flag.id}
@@ -302,11 +312,15 @@ export default function FeatureFlagsPage() {
                       <td className="px-4 py-3">
                         <span
                           className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                            on ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-700'
+                            on
+                              ? 'bg-green-100 text-green-800'
+                              : archived
+                                ? 'bg-slate-200 text-slate-800'
+                                : 'bg-slate-100 text-slate-700'
                           }`}
                           data-testid="flag-status-pill"
                         >
-                          {on ? 'On' : 'Off'}
+                          {archived ? ARCHIVED_LABEL : on ? 'On' : 'Off'}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-slate-700">
@@ -315,13 +329,17 @@ export default function FeatureFlagsPage() {
                       <td className="px-4 py-3 text-slate-500">{formatDate(flag.updated_at)}</td>
                       {canChange && (
                         <td className="px-4 py-3 text-right">
-                          <FlagToggle
-                            on={on}
-                            disabled={Boolean(toggling[flag.id])}
-                            label={`Turn ${flag.key} ${on ? 'off' : 'on'}`}
-                            onChange={() => void handleToggle(flag)}
-                            data-testid={`flag-toggle-${flag.key}`}
-                          />
+                          {archived ? (
+                            <ArchivedFlagRowLink flagKey={flag.key} />
+                          ) : (
+                            <FlagToggle
+                              on={on}
+                              disabled={Boolean(toggling[flag.id])}
+                              label={`Turn ${flag.key} ${on ? 'off' : 'on'}`}
+                              onChange={() => void handleToggle(flag)}
+                              data-testid={`flag-toggle-${flag.key}`}
+                            />
+                          )}
                         </td>
                       )}
                     </tr>

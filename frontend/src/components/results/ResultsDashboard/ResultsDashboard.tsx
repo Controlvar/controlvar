@@ -537,7 +537,11 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
             <h3 className="text-base font-semibold text-slate-800 mb-4">
               Sequential Testing Monitor
             </h3>
-            <SequentialMonitor data={sequential} lowerIsBetter={lowerIsBetter} />
+            <SequentialMonitor
+              data={sequential}
+              lowerIsBetter={lowerIsBetter}
+              srmWarning={results.srm?.warning === true}
+            />
           </section>
         )}
 

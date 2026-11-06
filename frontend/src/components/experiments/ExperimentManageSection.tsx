@@ -61,6 +61,26 @@ export const ERROR_COPY: Record<ManageAction, Record<number, string> & { fallbac
   },
 };
 
+/**
+ * A design save on a split URL experiment whose variants no longer match its
+ * `split_url_config` (#1560) answers 422 with the type `split_url_config`
+ * (`SPLIT_URL_CONFIG_ERROR` in backend/app/schemas/split_url_config.py). The
+ * generic 422 copy names none of that, and the dashboard cannot edit the
+ * configuration, so this says where the change is made (#1562). It is chosen
+ * by the type of the error's first item; its text is still never shown.
+ */
+export const DESIGN_SPLIT_URL_COPY =
+  'The variants were not accepted. This is a split URL experiment: its variants and its ' +
+  'split_url_config change together, through PUT /api/v1/experiments/{id}, and the dashboard ' +
+  'cannot edit split_url_config.';
+
+/** The `type` of the first item of a validation list, or undefined. */
+function firstErrorType(detail: unknown): unknown {
+  if (!Array.isArray(detail) || detail.length === 0) return undefined;
+  const first: unknown = detail[0];
+  return first && typeof first === 'object' ? (first as Record<string, unknown>).type : undefined;
+}
+
 export const DELETE_CONFIRM =
   'Delete this draft? It has never run, so no data is lost. This cannot be undone.';
 
@@ -74,7 +94,8 @@ export const SAVED = 'Details saved.';
 export const DESIGN_SAVED = 'Variants and metrics saved.';
 
 /**
- * The fixed sentence for a failed action, chosen by the answer's status only.
+ * The fixed sentence for a failed action, chosen by the answer's status, and
+ * for a design save's 422 also by the type of its first item (#1562).
  * A time-out shows the dashboard's own time-out sentence instead (#1040): the
  * API may still carry out the change, and "could not reach" invites a repeat.
  */
@@ -82,6 +103,9 @@ export function errorCopy(action: ManageAction, err: unknown): string {
   if (!isApiError(err)) return ERROR_COPY[action].fallback;
   if (err.timedOut) return err.message;
   if (err.status === 0) return UNREACHABLE;
+  if (action === 'design' && err.status === 422 && firstErrorType(err.detail) === 'split_url_config') {
+    return DESIGN_SPLIT_URL_COPY;
+  }
   return ERROR_COPY[action][err.status] ?? ERROR_COPY[action].fallback;
 }
 
