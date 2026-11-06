@@ -188,6 +188,7 @@ This would target enterprise users in the US or Canada who have had their accoun
 | `app_version` | semver | Target specific app versions |
 | `device_type` | string | Mobile vs desktop |
 | `email` | string | Target internal users by domain |
+| `tags` | array | A list of labels, such as beta or staff |
 
 ---
 
