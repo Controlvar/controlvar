@@ -829,3 +829,48 @@ describe('Dialog: an announcement made as it closes', () => {
     expect(watch.changes).toStrictEqual([{ text: 'Saved.', underInert: true }]);
   });
 });
+
+describe('Dialog: widths and the header', () => {
+  it.each([
+    ['sm', 'max-w-sm'],
+    ['md', 'max-w-md'],
+    ['md-wide', 'max-w-lg'],
+    ['lg', 'max-w-2xl'],
+    ['xl', 'max-w-4xl'],
+  ] as const)('size %s is %s, and each size is a different width', (size, widthClass) => {
+    renderInAppRoot(<Harness startOpen size={size} />);
+    const classes = screen.getByRole('dialog').className.split(' ');
+    expect(classes).toContain(widthClass);
+    expect(classes.filter((c) => c.startsWith('max-w-'))).toStrictEqual([widthClass]);
+  });
+
+  it('headerAction sits beside the title, before the body, and is not part of the title', () => {
+    renderInAppRoot(
+      <Harness startOpen headerAction={<button type="button">Close</button>}>
+        <button type="button">Body control</button>
+      </Harness>,
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Rename flag' });
+    const close = screen.getByRole('button', { name: 'Close' });
+    expect(dialog).toContainElement(close);
+    // Tab order: the header control comes before the body.
+    const order = Array.from(dialog.querySelectorAll('button')).map((b) => b.textContent);
+    expect(order).toStrictEqual(['Close', 'Body control']);
+    expect(screen.getByRole('heading', { name: 'Rename flag' })).toHaveTextContent(/^Rename flag$/);
+  });
+
+  it('subtitle is shown under the title and is not read as the description', () => {
+    renderInAppRoot(
+      <Harness startOpen subtitle={<span>ada@example.com</span>} description="Who can do what.">
+        <button type="button">Body control</button>
+      </Harness>,
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Rename flag' });
+    expect(screen.getByText('ada@example.com')).toBeVisible();
+    expect(dialog).toHaveAccessibleDescription('Who can do what.');
+    const heading = screen.getByRole('heading', { name: 'Rename flag' });
+    expect(heading.compareDocumentPosition(screen.getByText('ada@example.com'))).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+});
