@@ -348,6 +348,11 @@ lists of users. Every other key, including any key used in a browser or a mobile
 Because no other scope limits a key, a separate key per service is what lets you revoke one
 integration without touching the others.
 
+### Remember that a browser key answers for any user id
+
+A key used in a browser or a mobile app is visible to the people who use the app, and it answers for whichever user id it is sent: what that id is served, whether it is in a segment, and which experiments it is assigned to.
+Where that matters, use user ids that do not identify a person (not email addresses), in ID lists too, and read assignments from your server.
+
 ### Remember that a key acts as its owner
 
 A key authenticates as the user who created it. Create keys from an account whose role is
