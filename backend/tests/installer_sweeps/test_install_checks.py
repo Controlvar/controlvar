@@ -38,6 +38,7 @@ from backend.tests.installer_sweeps.harness.install_world import (
     Batch,
     InstallWorld,
     alive,
+    interrupt_once_the_clock_is_held,
     stop_group,
 )
 from backend.tests.installer_sweeps.harness.world import (
@@ -1149,6 +1150,49 @@ def test_an_interrupt_while_the_deploy_wait_reads_the_clock_stops_the_install(
     tool, op, _, step = SIGNAL_STEPS["during-the-deploy"]
     one = ran[f"e3-while-{read}-{target}-INT"]
     _stopped_and_usable(one.world, one.done, tool, op, step)
+
+
+#: The certificate wait's own look, as the fake logs its arguments: the clock read held is
+#: the wait's, once it has looked once, not the one before its first look.
+CERTIFICATE_LOOK = "Certificate.FailureReason"
+CERTIFICATE_STEP = "Copy the release images into the repositories, 253 MiB, and wait for the certificate"
+
+
+def _the_certificate_wait_and_its_clock_held(world: InstallWorld) -> None:
+    world.edit(lambda s: s.setdefault("acm", {}).update(never_validates=True))
+    world.hold_a_clock_read("+%s", once_called_with=CERTIFICATE_LOOK)
+
+
+for _target, _group in SIGNAL_TARGETS.items():
+    BATCH.add(
+        f"e3-while-the-certificate-wait-reads-the-clock-{_target}-INT",
+        prepare=_the_certificate_wait_and_its_clock_held,
+        run=lambda w, g=_group: interrupt_once_the_clock_is_held(
+            w, w.start(), signal.SIGINT, g
+        ),
+    )
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("target", sorted(SIGNAL_TARGETS))
+def test_an_interrupt_while_the_certificate_wait_reads_the_clock_stops_the_install(
+    ran, target
+):
+    """#1565: the certificate wait read the clock in a command substitution on every pass,
+    in which bash drops an INT whose command then ends normally, so a Ctrl-C there was
+    sometimes lost and the wait went on to its deadline. It now reads it through a file,
+    and the INT stops the install as E3 says: exit 130 and STOPPED at the step."""
+    one = ran[f"e3-while-the-certificate-wait-reads-the-clock-{target}-INT"]
+    world, done = one.world, one.done
+    assert done.code == 130, done.err
+    assert done.err.startswith(
+        f'STOPPED: Stopped by Ctrl-C or a signal at "{CERTIFICATE_STEP}".'
+    ), done.err
+    assert "AWS had still not issued the certificate" not in done.err
+    assert (
+        world.record / "env.d" / "INTERRUPTED_AT.sh"
+    ).read_text() == f"export INTERRUPTED_AT={_q(CERTIFICATE_STEP)}\n"
+    assert list((world.record / "tmp").iterdir()) == []
 
 
 def _stopped_and_usable(

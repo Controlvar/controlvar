@@ -321,7 +321,9 @@ ZERO = re.compile(r"\b0 (task definition|tag-index entr)")
 
 def test_the_end_report_leaves_out_a_count_of_nothing(half):
     """The report's line of what AWS is still clearing names only what there is: after the
-    first repository fails, one tag-index entry and no task definition."""
+    first repository fails, nothing. The one tag-index entry is CDKToolkit's, which
+    uninstall keeps and its "Kept by the installer" line names, so it is not counted
+    (#1381), and there is no task definition, so the line is not printed."""
     found = {}
     for kind, runs in (("failed", half.failed), ("killed", half.killed)):
         for name, run in runs.items():
@@ -332,7 +334,8 @@ def test_the_end_report_leaves_out_a_count_of_nothing(half):
                 found[f"{kind} at {name}"] = hits
     assert found == {}, found
     out = half.failed["02-ecr-create-repository-1"]["uninstall"].out
-    assert "  1 tag-index entry AWS is still clearing (minutes to hours)" in out, out
+    assert "AWS is still clearing" not in out, out
+    assert "Kept by the installer: the CDK's setup stack (CDKToolkit)" in out, out
 
 
 def test_a_stop_dead_leaves_nothing_recorded_after_its_call(half):

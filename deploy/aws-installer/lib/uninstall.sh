@@ -28,6 +28,15 @@ CV_NINE_GONE=0
 # Exact lines the comparison keeps besides the kept list (lib/sweep.sh's <also kept>):
 # what uninstall keeps on purpose, with the sweep file each shows in.
 CV_ALSO_KEPT=()
+# The ARNs the tag index lists those by (the CDK's setup stack and what it holds, which
+# carry the account and region): not counted with what AWS is still clearing (#1381).
+CV_KEPT_ARNS=()
+# CDKToolkit's StackId, when cv_un_cdktoolkit_ours found it this install's.
+CV_CDKTOOLKIT_ID=""
+# The comparison's verdict word and its count (lists not read, or things not explained),
+# for the state line under its message (#1381); set by cv_un_step_compare, this run only.
+CV_UN_VERDICT=""
+CV_UN_VERDICT_N=0
 # The tools uninstall needs: always these; for the stacks, also the CDK's (read by
 # controlvar-aws).
 # shellcheck disable=SC2034
@@ -283,17 +292,24 @@ cv_un_step_alias() {
 
 # A stack an earlier run left in progress (a deploy, or a delete CloudFormation carries on
 # with) is waited for, a line a minute, up to CV_STACK_WAIT_MINUTES.
+# The wait runs no command substitution, $(...), in which bash drops a Ctrl-C (#1565; see
+# lib/steps.sh's cv_deploy_wait): each look at the stacks, and the line a minute, run in a
+# subshell the wait runs in the foreground; a look writes what it found to a file the wait
+# reads back with read.
 cv_un_wait_for_stacks() {
-    local f="$CV_RECORD/tmp/in-progress.json" left deadline now last=0 said=0 nine
-    nine=$(cv_names_json ${NAMES_STACKS[@]+"${NAMES_STACKS[@]}"})
-    deadline=$(($(date +%s) + CV_STACK_WAIT_MINUTES * 60))
+    local found="$CV_RECORD/tmp/in-progress-look.txt" kind left code deadline last=0 said=0
+    cv_now
+    deadline=$((CV_NOW + CV_STACK_WAIT_MINUTES * 60))
     while :; do
-        if ! cv_read "the stacks" "$f" cloudformation list-stacks \
-            --query "StackSummaries[?ends_with(StackStatus, '_IN_PROGRESS')].[StackName,StackStatus]" ||
-            ! cv_list "$f" 'all(type == "array" and length == 2)' ||
-            ! left=$(jq -r --argjson nine "$nine" \
-                '[.[] | select(.[0] as $s | $nine | index($s) != null) | "\(.[0]) (\(.[1]))"] | join(", ")' "$f"); then
-            msg_tool_failed "aws cloudformation list-stacks" "1" "the stacks could not be listed (${CV_CODE:-an answer that is not a list})"
+        kind="" left="" code=""
+        (cv_un_stacks_look "$found")
+        {
+            IFS= read -r kind
+            IFS= read -r left
+            IFS= read -r code
+        } 2> /dev/null < "$found" || :
+        if [ "$kind" != listed ]; then
+            msg_tool_failed "aws cloudformation list-stacks" "1" "the stacks could not be listed (${code:-an answer that is not a list})"
         fi
         if [ -z "$left" ]; then
             return 0
@@ -302,16 +318,38 @@ cv_un_wait_for_stacks() {
             said=1
             cv_out "Waiting for AWS: $left, started by an earlier run. AWS decides how long this takes and bills what exists meanwhile (about \$10 a day). The installer waits up to $CV_STACK_WAIT_MINUTES minutes. Ctrl-C is safe: run uninstall again to carry on."
         fi
-        now=$(date +%s)
-        if [ "$now" -ge "$deadline" ]; then
+        cv_now
+        if [ "$CV_NOW" -ge "$deadline" ]; then
             msg_stack_wait_cap "$left"
         fi
-        if [ $((now - last)) -ge "$CV_HEARTBEAT_SECONDS" ]; then
-            last=$now
-            cv_out "$(date -u +%H:%M) UTC  still waiting for $left"
+        if [ $((CV_NOW - last)) -ge "$CV_HEARTBEAT_SECONDS" ]; then
+            last=$CV_NOW
+            (cv_un_still_waiting "$left")
         fi
         cv_sleep "$CV_POLL_SECONDS"
     done
+}
+
+# cv_un_stacks_look <file>: one look at the stacks in progress, for cv_un_wait_for_stacks,
+# which runs it in a subshell. Three lines to <file>: listed or unread; the nine's stacks in
+# progress, "name (status)" joined with ", " (empty for none); the read's error code.
+cv_un_stacks_look() {
+    local f="$CV_RECORD/tmp/in-progress.json" left="" nine
+    nine=$(cv_names_json ${NAMES_STACKS[@]+"${NAMES_STACKS[@]}"})
+    if cv_read "the stacks" "$f" cloudformation list-stacks \
+        --query "StackSummaries[?ends_with(StackStatus, '_IN_PROGRESS')].[StackName,StackStatus]" &&
+        cv_list "$f" 'all(type == "array" and length == 2)' &&
+        left=$(jq -r --argjson nine "$nine" \
+            '[.[] | select(.[0] as $s | $nine | index($s) != null) | "\(.[0]) (\(.[1]))"] | join(", ")' "$f"); then
+        printf 'listed\n%s\n\n' "${left//$'\n'/ }" > "$1"
+    else
+        printf 'unread\n\n%s\n' "${CV_CODE:-}" > "$1"
+    fi
+}
+
+# cv_un_still_waiting <stacks>: the line a minute, in a subshell (its clock read is a $(...)).
+cv_un_still_waiting() {
+    cv_out "$(date -u +%H:%M) UTC  still waiting for $1"
 }
 
 # cv_un_destroy_failed <stack> <exit status>: cdk destroy failed. A stack DELETE_FAILED is
@@ -671,6 +709,7 @@ when = [datetime.datetime.fromisoformat(v.replace("Z", "+00:00")) for v in sys.a
 sys.exit(0 if when[0] >= when[1] else 1)' "$created" "${CDKTOOLKIT_INTENT:-}" 2> /dev/null; then
         return 0
     fi
+    CV_CDKTOOLKIT_ID=$(jq -r '.[1]' "$f")
     CV_CDKTOOLKIT_NOW=$(jq -r '.[0]' "$f")
 }
 
@@ -697,6 +736,17 @@ cv_un_step_cdktoolkit() {
                 )
                 for kind in cfn-exec deploy file-publishing image-publishing lookup; do
                     CV_ALSO_KEPT+=("global/iam-roles.txt$t+$t/${t}cdk-$CV_CDK_QUALIFIER-$kind-role-$CV_ACCOUNT-$CV_REGION")
+                done
+                # The same names, as the tag index lists them: exact ARNs, never a pattern,
+                # so another region's bootstrap or another cdk- resource still counts.
+                CV_KEPT_ARNS+=(
+                    "$CV_CDKTOOLKIT_ID"
+                    "arn:aws:ecr:$CV_REGION:$CV_ACCOUNT:repository/cdk-$CV_CDK_QUALIFIER-container-assets-$CV_ACCOUNT-$CV_REGION"
+                    "arn:aws:ssm:$CV_REGION:$CV_ACCOUNT:parameter/cdk-bootstrap/$CV_CDK_QUALIFIER/version"
+                    "arn:aws:s3:::cdk-$CV_CDK_QUALIFIER-assets-$CV_ACCOUNT-$CV_REGION"
+                )
+                for kind in cfn-exec deploy file-publishing image-publishing lookup; do
+                    CV_KEPT_ARNS+=("arn:aws:iam::$CV_ACCOUNT:role/cdk-$CV_CDK_QUALIFIER-$kind-role-$CV_ACCOUNT-$CV_REGION")
                 done
                 ;;
         esac
@@ -767,6 +817,16 @@ cv_un_report() {
     n=$(cv_un_count "$v/kept.txt" "^us-west-2/elasticache-snapshots.txt$t\\+$t")
     if [ "$n" -gt 0 ]; then parts+=("$n cache backup(s)"); fi
     lag=$(cv_un_count "$v/lag.txt" '.')
+    # The tag index's entries for what the installer keeps (its line below names them) are
+    # not something AWS is clearing (#1381): left out of the count by exact ARN.
+    if [ "$(cv_un_count "$v/kept.txt" "^us-west-2/cfn-stacks.txt$t\\+${t}CDKToolkit$t")" -gt 0 ] &&
+        [ -s "$v/lag.txt" ]; then
+        if printf '%s\n' ${CV_KEPT_ARNS[@]+"${CV_KEPT_ARNS[@]}"} | sed '/^$/d' > "$CV_RECORD/tmp/report-kept-arns.txt" &&
+            awk -F "$t" 'FILENAME == ARGV[1] { kept[$0] = 1; next } !($2 == "+" && ($3 in kept))' \
+                "$CV_RECORD/tmp/report-kept-arns.txt" "$v/lag.txt" > "$CV_RECORD/tmp/report-lag.txt"; then
+            lag=$(cv_un_count "$CV_RECORD/tmp/report-lag.txt" '.')
+        fi
+    fi
     if [ "$lag" -gt 0 ]; then
         parts+=("$lag tag-index entr$([ "$lag" -eq 1 ] && printf 'y' || printf 'ies')")
     fi
@@ -843,11 +903,16 @@ cv_un_step_compare() {
     cv_step_done 6
     cv_un_report
     if [ "$word" = INCOMPLETE ]; then
-        msg_incomplete "$(cv_un_count "$CV_RECORD/verdict/not-checked.txt" '.') list(s)"
+        CV_UN_VERDICT=INCOMPLETE
+        CV_UN_VERDICT_N=$(cv_un_count "$CV_RECORD/verdict/not-checked.txt" '.')
+        msg_incomplete "$CV_UN_VERDICT_N list(s)"
     fi
     cv_put_fact UNINSTALLED "$(date -u +%Y-%m-%dT%H:%M:%SZ)" || msg_tool_failed "the record" "1" "UNINSTALLED"
     if [ "$word" = RESIDUE ]; then
         n=$(cv_un_count "$CV_RECORD/verdict/not-explained.txt" '.')
+        # shellcheck disable=SC2034  # read by lib/messages.sh's cv_uninstall_state
+        CV_UN_VERDICT=RESIDUE
+        CV_UN_VERDICT_N=$n
         msg_residue "$n thing(s)"
     fi
     cv_out "Controlvar is uninstalled from account $CV_ACCOUNT, us-west-2. The record stays in $CV_RECORD/ (its logs and both records of the account)."
