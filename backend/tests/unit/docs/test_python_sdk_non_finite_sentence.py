@@ -30,7 +30,7 @@ PAGE = REPO_ROOT / "docs" / "sdk" / "python.md"
 README = REPO_ROOT / "sdk" / "python" / "README.md"
 
 #: How the paragraph starts, after its line breaks are folded.
-OPENING = "From the next published version, `track` returns `False`, and sends nothing,"
+OPENING = "`track` returns `False`, and sends nothing, when `event_value` or `properties` holds NaN"
 #: The heading of the section the paragraph is in, on both pages.
 SECTION = "Tracking fan-out rule"
 

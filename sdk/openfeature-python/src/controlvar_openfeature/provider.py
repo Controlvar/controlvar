@@ -178,7 +178,7 @@ def _attributes_of(evaluation_context: Optional[EvaluationContext]) -> dict:
 
 def _boolean_value(evaluation: Any, flag: str) -> Any:
     """A boolean call's value: ``enabled``, for a boolean flag or for an answer with no
-    ``value_type`` (a server or an SDK without flag values, where every flag is boolean)."""
+    ``value_type`` (from a server without flag values, where every flag is boolean)."""
     # getattr: the 0.2.0 SDK's FlagEvaluation has no value_type.
     value_type = getattr(evaluation, "value_type", None)
     if isinstance(value_type, str) and value_type != "boolean":

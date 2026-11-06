@@ -47,9 +47,9 @@ or message id. From a browser or an app, let the SDK make the id. Send revenue e
 server. Make the id once, when the event happens, and send that same id each time.
 
 The Java SDK gives every event an `event_id` ([Event ids](../sdk/java.md#event-ids)). The
-JavaScript SDK sends the `eventId` you give it, from its next published version, and makes none
-itself ([Event ids](../sdk/javascript.md#event-ids)). The Python SDK sends the `event_id` you give
-it, from its next published version, and makes none itself ([Event ids](../sdk/python.md#event-ids)).
+JavaScript SDK sends the `eventId` you give it, and makes none itself
+([Event ids](../sdk/javascript.md#event-ids)). The Python SDK sends the `event_id` you give it, and
+makes none itself ([Event ids](../sdk/python.md#event-ids)).
 No other
 SDK has an `event_id` option yet ([Limitations](../getting-started/limitations.md#sdks)): send an
 event that may be sent again to `POST /api/v1/tracking/track` or `POST /api/v1/tracking/batch`

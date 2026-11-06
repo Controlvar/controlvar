@@ -1,6 +1,6 @@
 # JavaScript SDK
 
-`@controlvar/js-sdk` (v0.2.0) is the JavaScript/TypeScript client for the
+`@controlvar/js-sdk` (v0.3.0) is the JavaScript/TypeScript client for the
 Controlvar public API: experiment assignment, feature flag evaluation and event
 tracking for Node >= 18 and browsers. Zero runtime dependencies — it uses the global `fetch`.
 
@@ -25,14 +25,14 @@ SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlv
 If you installed `@getexperimently/js-sdk`, the name this package had before the project was renamed, uninstall it and install `@controlvar/js-sdk`.
 
 The `@controlvar/js-sdk` package is on [npm](https://www.npmjs.com/package/@controlvar/js-sdk).
-0.2.0 is a beta release.
+0.3.0 is a beta release.
 
 ```bash
-npm install @controlvar/js-sdk@0.2.0
+npm install @controlvar/js-sdk@0.3.0
 ```
 
 To work on the SDK itself, build it from a clone of this repository instead. `npm pack` writes
-`controlvar-js-sdk-0.2.0.tgz`:
+`controlvar-js-sdk-0.3.0.tgz`:
 
 ```bash
 git clone https://github.com/Controlvar/controlvar.git
@@ -43,7 +43,7 @@ npm ci && npm run build && npm pack
 Then, in your app, install the packed tarball:
 
 ```bash
-npm install /path/to/controlvar/sdk/js/controlvar-js-sdk-0.2.0.tgz
+npm install /path/to/controlvar/sdk/js/controlvar-js-sdk-0.3.0.tgz
 ```
 
 CommonJS build (`dist/index.js`) with type declarations; `import`/`require` both work.
@@ -102,6 +102,7 @@ const client = new ExperimentationClient({
   defaultVariant: 'control',         // Returned by getVariant when assignment fails (default 'control')
   fetch: customFetch,                // Optional custom fetch (tests, polyfills); defaults to globalThis.fetch
   onError: (err, operation) => {},   // Optional; called when track / trackBatch (or, in local mode, refresh / flush / evaluate) swallow a failure
+  onExposure: (exposure) => {},      // Optional; called once per experiment exposure the server recorded (see Exposure hook)
   evaluation: 'server',              // 'server' (default) or 'local' (server-side only; see Local evaluation)
 });
 ```
@@ -111,10 +112,11 @@ const client = new ExperimentationClient({
 | `apiUrl` | `string` | — | Backend origin, e.g. `https://api.example.com`; the SDK appends `/api/v1/...` |
 | `apiKey` | `string` | — | API key, sent as `X-API-Key` |
 | `timeoutMs` | `number` | `5000` | Per-request timeout (`AbortController`); also caps the 429 retry delay |
-| `cacheTtlMs` | `number` | `300000` | TTL of successful evaluations/assignments, per user + key |
+| `cacheTtlMs` | `number` | `300000` | TTL of successful evaluations/assignments, per user + key; `0` caches nothing |
 | `defaultVariant` | `string` | `'control'` | Variant name `getVariant` returns on failure |
 | `fetch` | `typeof fetch` | global `fetch` | Custom fetch implementation |
-| `onError` | `(error: ExperimentationError, op: 'track' \| 'trackBatch' \| 'refresh' \| 'flush' \| 'evaluate' \| 'reportError') => void` | — | Only way to observe swallowed failures; a throwing handler is itself swallowed. `'refresh'`, `'flush'` and `'evaluate'` occur only in local mode |
+| `onError` | `(error: ExperimentationError, op: 'track' \| 'trackBatch' \| 'refresh' \| 'flush' \| 'evaluate' \| 'reportError' \| 'value' \| 'exposure') => void` | — | Only way to observe swallowed failures; a throwing handler is itself swallowed. `'refresh'`, `'flush'` and `'evaluate'` occur only in local mode |
+| `onExposure` | `(exposure: Exposure) => void` | — | Called once each time the server enrols the user and the answer is not cached; see [Exposure hook](#exposure-hook) |
 | `evaluation` | `'server' \| 'local'` | `'server'` | `'local'`: answer flags in-process from `GET /api/v1/sdk/ruleset`; needs a key with the `sdk:ruleset` scope; throws in a browser |
 | `refreshIntervalMs` | `number` | `30000` | Local mode: ruleset refresh interval (minimum 5000, ±10% jitter) |
 | `maxStaleMs` | `number` | none | Local mode: evaluate on the server once the ruleset has not been refreshed for this long |
@@ -158,8 +160,11 @@ turn that into their safe default.
 |--------|-----------|---------|------------|
 | `getAssignment` | `(experimentKey, user: UserContext) => Promise<Assignment>` | `{ experimentKey, userId, variantId, variantName, isControl, configuration, assigned?, reason? }` | Rejects with `ExperimentationError` (404 when no experiment has the key, or for a draft with no control variant); an experiment that is not ACTIVE resolves to its control variant with `assigned: false` and `reason` its status |
 | `getVariant` | `(experimentKey, user) => Promise<string>` | `assignment.variantName` | `defaultVariant` (`'control'`); never rejects |
-| `evaluateFlag` | `(flagKey, user) => Promise<FlagEvaluation>` | `{ key, enabled, config, reason? }` (`user.attributes` sent as `context`) | Rejects with `ExperimentationError` (404 for an unknown key); a flag that exists but is not ACTIVE resolves `enabled: false`, `reason: "inactive"` |
+| `evaluateFlag` | `(flagKey, user) => Promise<FlagEvaluation>` | `{ key, enabled, config, reason?, value?, valueType? }` (`user.attributes` sent as `context`) | Rejects with `ExperimentationError` (404 for an unknown key); a flag that exists but is not ACTIVE resolves `enabled: false`, `reason: "inactive"` |
 | `isFeatureEnabled` | `(flagKey, user) => Promise<boolean>` | `evaluation.enabled` | `false`; never rejects |
+| `getStringValue` | `(flagKey, user, defaultValue: string) => Promise<string>` | The string a string flag serves this user; see [Flag values](#flag-values) | `defaultValue`; never rejects; `onError(err, 'value')` |
+| `getNumberValue` | `(flagKey, user, defaultValue: number) => Promise<number>` | The number a number flag serves this user | `defaultValue`; never rejects; `onError(err, 'value')` |
+| `getJsonValue` | `<T>(flagKey, user, defaultValue: T) => Promise<T>` | A new copy of the object or array a json flag serves this user | `defaultValue`; never rejects; `onError(err, 'value')` |
 | `getAllFlags` | `(userId, attributes?) => Promise<Record<string, boolean>>` | `{ flagKey: enabled }`; `attributes` sent as `context`; not cached, not part of the fan-out | Rejects |
 | `track` | `(userId, eventName, options?: TrackOptions) => Promise<void>` | — | Never rejects; `onError(err, 'track')` |
 | `trackBatch` | `(events: TrackEvent[]) => Promise<BatchResult>` | `{ successCount, failureCount, errors }` | Never rejects; a failed chunk counts all its events as failures and calls `onError(err, 'trackBatch')` |
@@ -220,9 +225,8 @@ Conversions are matched to metrics by **event name**.
 
 `eventId` is your id for one event. The server stores an event sent again with the same
 `event_id`, user, experiment, flag and event name only once (see
-[How events count](../guides/how-events-count.md#sending-an-event-again)). Use this option from
-the next published version of this package, not from the version on npm now. It also
-needs a Controlvar server that includes the `event_id` change ([#1640](https://github.com/Controlvar/controlvar/pull/1640)),
+[How events count](../guides/how-events-count.md#sending-an-event-again)). It needs a
+Controlvar server that includes the `event_id` change ([#1640](https://github.com/Controlvar/controlvar/pull/1640)),
 which the platform release after 0.39.0 is to carry; an older server ignores the field and stores
 an event sent again a second time.
 
@@ -279,6 +283,8 @@ without checking it.
 | `NETWORK_ERROR` | `fetch` rejected (DNS, connection refused, CORS, no fetch available) | `undefined` |
 | `TIMEOUT` | The request exceeded `timeoutMs` | `undefined` |
 | `INVALID_RESPONSE` | 2xx but the body is not what the SDK expects (or `userId` missing) | HTTP status or `undefined` |
+| `TYPE_MISMATCH` | Only passed to `onError`, with the operation `'value'`: a typed getter was called for a flag that serves another type | `undefined` |
+| `HOOK_ERROR` | Only passed to `onError`, with the operation `'exposure'`: your `onExposure` threw, or its Promise rejected; `cause` is what it threw | `undefined` |
 
 ```typescript
 import { ExperimentationClient, ExperimentationError } from '@controlvar/js-sdk';
@@ -294,6 +300,102 @@ try {
 
 ---
 
+## Flag values
+
+A flag serves two values: its on value to the users it is on for, and its off value to everyone
+else, and to everyone while it is turned off. For a string, number or json flag, read the value
+with the getter of its type: `getStringValue`, `getNumberValue` or `getJsonValue`.
+
+```typescript
+const label = await client.getStringValue('checkout-button-label', user, 'Buy now');
+const limit = await client.getNumberValue('free-shipping-threshold', user, 50);
+const theme = await client.getJsonValue('checkout-theme', user, { color: 'gray' });
+```
+
+Pass the flag's off value as your default, so that a flag your code cannot reach behaves as off.
+Each getter takes the user before the default, as every method of this client does. OpenFeature's
+`getStringValue` takes the default first; a call written in that order is a TypeScript error here.
+
+A getter never rejects. It returns your default, and passes the reason to `onError(err, 'value')`,
+when the request fails (including a 404 for a flag the server does not know), when the server's
+answer carries no value (in server mode, from a server from before flag values, `err.code`
+`'INVALID_RESPONSE'`; in local mode, every flag the client answers locally from such a server's
+ruleset reads as boolean, so the getter reports `'TYPE_MISMATCH'`), or when the flag serves another type
+(`err.code` `'TYPE_MISMATCH'`, with a message such as
+`Flag "checkout-button-label" serves a string; getNumberValue returned your default`). A boolean
+flag is another type; read it with `isFeatureEnabled`. Nothing is coerced: `"10"` is not a number.
+
+`getJsonValue` checks that the value is an object or an array, not that it matches your type
+parameter, and returns a new copy on every call.
+
+A getter is evaluated as `evaluateFlag` is: cached per user and flag for `cacheTtlMs`, and in
+local mode answered from the ruleset. `evaluateFlag` returns the same answer with `value` and
+`valueType`; in server mode both are `undefined` from a server without flag values.
+
+---
+
+## Exposure hook
+
+`onExposure` is a function you give the client when you create it. The client calls it once each
+time the server enrols the user in an experiment and the answer did not come from the client's
+cache: the moment the server records the exposure. Use it to send the exposure to your analytics
+tool or warehouse.
+
+```typescript
+const client = new ExperimentationClient({
+  apiUrl: 'http://localhost:8000',
+  apiKey: process.env.CONTROLVAR_API_KEY!,
+  onExposure: (exposure) => {
+    // your analytics tool's call goes here
+    console.log('exposure', exposure.experimentKey, exposure.variantName, exposure.userId);
+  },
+  onError: (error, operation) => {
+    if (operation === 'exposure') console.warn('onExposure failed', error.cause);
+  },
+});
+```
+
+It receives an `Exposure`: `experimentKey`, `userId`, `variantId` (`null` when the server sends
+none) and `variantName`, in a new object for each call. Nothing else: not the user's attributes and
+not the variant's configuration.
+
+It is not called for:
+
+- an answer from the client's cache, or a call that shares a request already in flight;
+- a user the experiment did not enrol (`assigned: false`, with `reason` `'holdout'`,
+  `'mutual_exclusion'` or `'targeting'`), or an experiment that is not running (`'draft'`,
+  `'paused'`, `'completed'` or `'archived'`): the server records no exposure for them, and the
+  client returns the control variant;
+- a call that fails, including one that times out after the server recorded the exposure;
+- a feature flag, in either evaluation mode.
+
+It is not called when the server does not send `assigned`; every Controlvar server release sends it.
+
+It is called again, and the server records another exposure, after the cache lifetime
+(`cacheTtlMs`, 5 minutes by default; with `cacheTtlMs: 0`, on every call), after `clearCache()`,
+and in every new client: each page load in a browser, each process on a server. So your tool can
+receive several exposures for one user and experiment: count users, not events. It never receives
+one the server did not record.
+
+It is called when your code asks for the assignment, whether or not you then show the variant, so
+ask for it where the variant is shown.
+
+It runs before `getAssignment` resolves, and before every call that is waiting on the same request,
+so keep it quick: hand the exposure to your analytics library, which sends it later. The client
+does not wait for a Promise it returns.
+
+If it throws, or returns a Promise that rejects, the answer is unchanged, and the error goes to
+`onError` with the operation `'exposure'`: an `ExperimentationError` whose `code` is
+`'HOOK_ERROR'`, whose message starts with `onExposure failed:`, and whose `cause` is what your
+function threw.
+
+The constructor throws `onExposure must be a function` for any other value; `null` and `undefined`
+set none.
+
+In a test, a faked `/assign` answer must include `"assigned": true`, or the hook is not called.
+
+---
+
 ## Backend endpoints used
 
 Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept: application/json`.
@@ -301,7 +403,7 @@ Every request carries `X-API-Key`, `Content-Type: application/json` and `Accept:
 
 | SDK call | Method and path | Body / query | 200 response |
 |---|---|---|---|
-| `getAssignment`, `getVariant` | `POST /api/v1/tracking/assign` | `{"experiment_key","user_id","context"?: object}` | `{"experiment_key","user_id","variant_id","variant_name","is_control","configuration"}` |
+| `getAssignment`, `getVariant` | `POST /api/v1/tracking/assign` | `{"experiment_key","user_id","context"?: object}` | `{"experiment_key","user_id","variant_id","variant_name","is_control","configuration","assigned","reason"}` |
 | `evaluateFlag`, `isFeatureEnabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<id>&context=<url-encoded JSON>` | `context` = `user.attributes` (omitted when empty) | `{"key","enabled","config","reason"}` |
 | `getAllFlags` | `GET /api/v1/feature-flags/user/{user_id}?context=<url-encoded JSON>` | `context` = `attributes` (omitted when empty) | `{"<flag_key>": bool, ...}` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{"event_type","event_name","user_id","experiment_key"?,"feature_flag_key"?,"value"?,"metadata"?,"timestamp"?,"event_id"?}` | stored event (ignored) |
@@ -323,7 +425,15 @@ rate limited (`Retry-After` header, retried once).
 import type {
   ClientConfig, UserContext, Assignment, FlagEvaluation,
   TrackOptions, TrackEvent, BatchResult, AssignmentRecord, ErrorReport,
+  Exposure, SwallowedOperation,
 } from '@controlvar/js-sdk';
+
+interface Exposure {
+  readonly experimentKey: string;
+  readonly userId: string;
+  readonly variantId: string | null;
+  readonly variantName: string;
+}
 
 interface Assignment {
   experimentKey: string;
@@ -339,6 +449,8 @@ interface FlagEvaluation {
   enabled: boolean;
   config: unknown | null;
   reason?: string;     // 'targeting_rule' | 'rollout' | 'inactive' | 'error'; undefined when the server does not send it
+  value?: unknown;     // what the flag serves this user (see Flag values); undefined when the server does not send it
+  valueType?: string;  // 'boolean' | 'string' | 'number' | 'json'; undefined when the server does not send it
   source?: 'server' | 'local'; // local mode only: answered in-process, or by the server
 }
 
@@ -391,6 +503,19 @@ await client.ready({ timeoutMs: 5_000 });        // optional; never rejects
 const { enabled, reason, source } = await client.evaluateFlag('new_search', user); // source: 'local' | 'server'
 await client.close();                            // on shutdown: sends the evaluation counts
 ```
+
+A value flag's value is answered locally too: its on value when the flag is on for the user, its
+off value otherwise, and its off value to everyone while it is turned off. A flag entry this SDK
+cannot read (an `evaluation` or `value_type` from a newer server, or a value of the wrong type) is
+evaluated by the server, the rest of the ruleset is still answered locally, and, while the flag is
+active, `status().serverEvaluatedFlags` lists it.
+
+A flag whose stored values the server cannot serve reaches every local client as a
+server-evaluated flag, whatever its status (only a direct database write, or a rollback past a
+release with wider value limits, produces one). Turning such a flag off does not change the
+ruleset. So a local client of any version keeps the server's answer it cached for that user and
+flag for up to `cacheTtlMs` (5 minutes by default) before it sees the flag off, and while the flag exists
+`getAllFlags` asks the server on every call.
 
 A change made in the dashboard reaches the process at its next successful refresh. While the API
 is unreachable the last ruleset keeps being served (set `maxStaleMs` to bound that); a 401 or 403
