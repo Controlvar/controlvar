@@ -1532,6 +1532,8 @@
             "anyOf": [
               {
                 "items": {
+                  "maxLength": 36,
+                  "minLength": 1,
                   "type": "string"
                 },
                 "type": "array"
@@ -1540,7 +1542,7 @@
                 "type": "null"
               }
             ],
-            "description": "Not available yet: a request that sends it is refused with 422.",
+            "description": "Saved segments to balance within instead of an attribute: 1 to 10 segment ids, each listed once, each an active segment. A new user is balanced in the first listed segment they belong to, in `other` when they belong to none, and in `unknown` when their membership of a segment listed before it cannot be decided.",
             "title": "Segments"
           },
           "values": {
@@ -5676,7 +5678,7 @@
                 "type": "null"
               }
             ],
-            "description": "Beta. Balance the split within groups of users as they are assigned: `{\"attribute\": \"tier\", \"values\": [\"gold\", \"silver\"]}` puts each new user in the group of their `context.tier` (a top-level key, matched exactly; any other value is `other`, no value is `unknown`), and each group gets the experiment's split among its own users. Every share must be a multiple of 5; a bandit or a split URL experiment cannot balance. Null balances nothing."
+            "description": "Beta. Balance the split within groups of users as they are assigned: `{\"attribute\": \"tier\", \"values\": [\"gold\", \"silver\"]}` puts each new user in the group of their `context.tier` (a top-level key, matched exactly; any other value is `other`, no value is `unknown`), and each group gets the experiment's split among its own users. `{\"segments\": [\"<segment id>\", ...]}` (1 to 10 active saved segments) puts each new user in the group of the first listed segment they belong to, and in `other` when they belong to none. Every share must be a multiple of 5; a bandit or a split URL experiment cannot balance. Null balances nothing."
           },
           "bayesian_config": {
             "anyOf": [
@@ -5939,7 +5941,7 @@
                 "type": "null"
               }
             ],
-            "description": "Beta. What the experiment balances its split within: `{\"attribute\": ..., \"values\": [...]}`, or null when it balances nothing.",
+            "description": "Beta. What the experiment balances its split within: `{\"attribute\": ..., \"values\": [...]}`, `{\"segments\": [...]}`, or null when it balances nothing.",
             "title": "Balance Within"
           },
           "bayesian_config": {
@@ -6297,7 +6299,7 @@
                 "type": "null"
               }
             ],
-            "description": "Beta. What the experiment balances its split within: `{\"attribute\": ..., \"values\": [...]}`, or null when it balances nothing.",
+            "description": "Beta. What the experiment balances its split within: `{\"attribute\": ..., \"values\": [...]}`, `{\"segments\": [...]}`, or null when it balances nothing.",
             "title": "Balance Within"
           },
           "bayesian_config": {
@@ -6840,7 +6842,7 @@
                 "type": "null"
               }
             ],
-            "description": "Beta. Balance the split within groups of users as they are assigned: `{\"attribute\": \"tier\", \"values\": [\"gold\", \"silver\"]}` puts each new user in the group of their `context.tier` (a top-level key, matched exactly; any other value is `other`, no value is `unknown`), and each group gets the experiment's split among its own users. Every share must be a multiple of 5; a bandit or a split URL experiment cannot balance. Null balances nothing. Changeable only while the experiment is a draft."
+            "description": "Beta. Balance the split within groups of users as they are assigned: `{\"attribute\": \"tier\", \"values\": [\"gold\", \"silver\"]}` puts each new user in the group of their `context.tier` (a top-level key, matched exactly; any other value is `other`, no value is `unknown`), and each group gets the experiment's split among its own users. `{\"segments\": [\"<segment id>\", ...]}` (1 to 10 active saved segments) puts each new user in the group of the first listed segment they belong to, and in `other` when they belong to none. Every share must be a multiple of 5; a bandit or a split URL experiment cannot balance. Null balances nothing. Changeable only while the experiment is a draft."
           },
           "bayesian_config": {
             "anyOf": [

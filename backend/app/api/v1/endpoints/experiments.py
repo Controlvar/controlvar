@@ -33,7 +33,9 @@ from backend.app.api import deps, experiment_cache
 from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.read_scope import get_current_reader
 from backend.app.api.segment_rules import (
+    refuse_clone_with_unusable_balance_segments,
     refuse_clone_with_unusable_segments,
+    refuse_unusable_balance_segments,
     refuse_unusable_segments,
 )
 from backend.app.api.v1.endpoints import results as results_endpoints
@@ -654,6 +656,8 @@ async def create_experiment(
 
     # Every segment the rules name exists and is active (#440).
     refuse_unusable_segments(db, experiment_in.targeting_rules)
+    # So is every segment the experiment balances within (#448).
+    refuse_unusable_balance_segments(db, experiment_in.balance_within)
 
     try:
         # Create experiment service
@@ -1068,6 +1072,11 @@ async def update_experiment(
         # A balanced experiment is not a bandit, not a split URL experiment,
         # and its shares are multiples of 5 (#448), on the result too.
         _refuse_unbalanceable_update(experiment, experiment_in, fields_sent)
+
+        # Every segment a draft is set to balance within exists and is
+        # active (#448).
+        if "balance_within" in fields_sent:
+            refuse_unusable_balance_segments(db, experiment_in.balance_within)
 
         # Capture pre-update snapshot for audit trail. The update below
         # rebinds targeting_rules (setattr) rather than changing the dict,
@@ -2009,8 +2018,10 @@ async def clone_experiment(
         _reject_unroutable_split_url(experiment.experiment_type)
 
         # The clone's rules are the source's, and every segment they name
-        # must still be usable (#440).
+        # must still be usable (#440); so must every segment it would
+        # balance within (#448).
         refuse_clone_with_unusable_segments(db, experiment.targeting_rules)
+        refuse_clone_with_unusable_balance_segments(db, balance_setting(experiment))
 
         # Create experiment service
         experiment_service = ExperimentService(db)

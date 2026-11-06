@@ -4,9 +4,11 @@ Driven through the real app with the real local sign-in and API keys; each
 request gets its own session on the test database.
 
 * The setting is stored and echoed by create, ``PUT`` on a draft, GET and the
-  list; ``null`` clears it on a draft.
-* Every refusal, verbatim at its place: the setting's own (R1-R5, R9, R11,
-  R13, a setting naming nothing, an unknown key) and the experiment's (R6 for
+  list; ``null`` clears it on a draft. So is a setting of saved segments.
+* Every refusal, verbatim at its place: the setting's own (R1-R5, R8, R9,
+  R13, a setting naming nothing, an unknown key), a segment that does not
+  exist, is archived or inactive, or has rules that are not valid (on create
+  and on a draft's ``PUT``; clone answers 409), and the experiment's (R6 for
   a bandit in either order and at any status, R10 for a split not in steps of
   5, R12 for a split URL experiment, which holds in a core build). On an
   ACTIVE or PAUSED experiment the setting is locked for every role, the
@@ -40,6 +42,7 @@ from backend.app.core.security import create_local_access_token, get_password_ha
 from backend.app.main import app
 from backend.app.models import experiment as experiment_model
 from backend.app.models.experiment import Experiment, ExperimentStatus, ExperimentType
+from backend.app.models.segment import Segment, SegmentKind, SegmentStatus
 from backend.app.models.user import User, UserRole
 
 pytestmark = pytest.mark.integration
@@ -74,10 +77,8 @@ R6 = (
 R7_ACTIVE = "Cannot update balance_within for experiments in active status"
 R7_PAUSED = "Cannot update balance_within for experiments in paused status"
 R9 = "web_device is phone, tablet or desktop; tv is not one of them."
-R11 = (
-    "Balancing within saved segments is not available yet. Balance within an "
-    "attribute instead, such as country."
-)
+R8_BOTH = "Balance within an attribute or within segments, not both."
+R8_TOO_MANY = "Balance within at most 10 segments, not 12."
 R12 = (
     "Split URL experiments cannot balance within groups: the edge router sends "
     "no user attributes."
@@ -86,13 +87,37 @@ R13 = (
     "Balance on a top-level key of the user's attributes, made of letters, "
     "digits, _ and - (up to 100 characters), other than user_id and segment."
 )
-NO_ATTRIBUTE = "Name the attribute to balance within, such as country."
+NEITHER = "Balance within an attribute, such as country, or within segments."
+
+#: Segment ids for the refusals the schema makes before any segment is read.
+SEG_A = "0a0a0a0a-0000-4000-8000-000000000001"
+TWELVE = [f"00000000-0000-4000-8000-{i:012d}" for i in range(12)]
 
 
 def r10(split: str) -> str:
     return (
         "To balance within groups, every share must be a multiple of 5, such as "
         f"50/50, 20/80, 35/35/30 or 40/30/30; {split} is not."
+    )
+
+
+def r8_unusable(segment_id: str) -> str:
+    return f"Segment {segment_id} does not exist or is archived."
+
+
+def segment_not_usable(segment_id: str) -> str:
+    return f"Segment {segment_id} is inactive or its rules are not valid."
+
+
+def segment_twice(segment_id: str) -> str:
+    return f"Segment {segment_id} is listed twice."
+
+
+def clone_refused(segment_id: str) -> str:
+    return (
+        f"The experiment cannot be cloned: it balances within segment {segment_id}, "
+        "which does not exist, is not active or has rules that are not valid. "
+        "Create the experiment again with active segments."
     )
 
 
@@ -344,17 +369,43 @@ SETTING_REFUSALS = [
         R9,
     ),
     (
-        "R11",
-        {"segments": [str(uuid.uuid4())]},
-        ["body", "balance_within", "segments"],
-        R11,
+        "R8-both",
+        {"attribute": "tier", "values": ["gold"], "segments": [SEG_A]},
+        ["body", "balance_within"],
+        R8_BOTH,
     ),
     (
-        "R11-with-attribute",
-        {"attribute": "tier", "values": ["gold"], "segments": [str(uuid.uuid4())]},
-        ["body", "balance_within", "segments"],
-        R11,
+        "R8-both-values",
+        {"values": ["gold"], "segments": [SEG_A]},
+        ["body", "balance_within"],
+        R8_BOTH,
     ),
+    (
+        "R8-too-many",
+        {"segments": TWELVE},
+        ["body", "balance_within", "segments"],
+        R8_TOO_MANY,
+    ),
+    (
+        "R8-not-an-id",
+        {"segments": [SEG_A, "gold"]},
+        ["body", "balance_within", "segments"],
+        r8_unusable("gold"),
+    ),
+    (
+        "R8-not-lowercase",
+        {"segments": [SEG_A.upper()]},
+        ["body", "balance_within", "segments"],
+        r8_unusable(SEG_A.upper()),
+    ),
+    (
+        "segment-twice",
+        {"segments": [SEG_A, SEG_A]},
+        ["body", "balance_within", "segments"],
+        segment_twice(SEG_A),
+    ),
+    ("R8-neither-empty", {"segments": []}, ["body", "balance_within"], NEITHER),
+    ("R8-neither-values", {"values": ["gold"]}, ["body", "balance_within"], NEITHER),
     (
         "R13-user_id",
         {"attribute": "user_id", "values": ["a"]},
@@ -385,7 +436,7 @@ SETTING_REFUSALS = [
         ["body", "balance_within", "attribute"],
         R13,
     ),
-    ("no-attribute", {}, ["body", "balance_within"], NO_ATTRIBUTE),
+    ("R8-neither", {}, ["body", "balance_within"], NEITHER),
 ]
 
 
@@ -413,6 +464,153 @@ def test_an_unknown_key_in_the_setting_is_refused(client, developer):
     assert response.status_code == 422, response.text
     locs = [e["loc"] for e in response.json()["detail"]]
     assert ["body", "balance_within", "values_typo"] in locs, locs
+
+
+# ---------------------------------------------------------------------------
+# Saved segments
+# ---------------------------------------------------------------------------
+
+#: A rules segment's stored rules, in the shape the segment routes store.
+PREMIUM_RULES = {
+    "logical_operator": "AND",
+    "groups": [
+        {
+            "logical_operator": "AND",
+            "conditions": [
+                {"attribute": "tier", "operator": "equals", "value": "premium"}
+            ],
+        }
+    ],
+}
+
+
+@pytest.fixture
+def segments(db_session):
+    """Make a segment row (active id list unless told otherwise); its id."""
+    owner = _user(db_session, UserRole.DEVELOPER)
+    made: List[uuid.UUID] = []
+
+    def make(
+        status: SegmentStatus = SegmentStatus.ACTIVE,
+        kind: str = SegmentKind.ID_LIST.value,
+        rules: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        row = Segment(
+            name=f"Balance within {uuid.uuid4().hex[:8]}",
+            kind=kind,
+            rules=rules,
+            status=status,
+            owner_id=owner.id,
+        )
+        db_session.add(row)
+        db_session.commit()
+        made.append(row.id)
+        return str(row.id)
+
+    yield make
+    db_session.rollback()
+    db_session.query(Segment).filter(Segment.id.in_(made)).delete(False)
+    db_session.commit()
+
+
+def _set_segment_status(db_session, segment_id: str, status: SegmentStatus) -> None:
+    """Past the segment routes, which refuse it for a segment in use."""
+    db_session.rollback()
+    db_session.query(Segment).filter(Segment.id == uuid.UUID(segment_id)).update(
+        {"status": status}, synchronize_session=False
+    )
+    db_session.commit()
+
+
+@pytest.mark.regression
+def test_segments_are_stored_and_echoed(client, developer, segments, session_factory):
+    ids = [
+        segments(),
+        segments(kind=SegmentKind.RULES.value, rules=PREMIUM_RULES),
+    ]
+    created = _create(client, developer, balance={"segments": ids})
+
+    assert created["balance_within"] == {"segments": ids}
+    got = client.get(f"{EXPERIMENTS}/{created['id']}", headers=developer)
+    assert got.status_code == 200, got.text
+    assert got.json()["balance_within"] == {"segments": ids}
+    stored = _stored(session_factory, created["id"])
+    assert stored.balance_within == {"segments": ids}
+    assert HEX64.fullmatch(stored.balance_seed or ""), stored.balance_seed
+
+    other = [segments()]
+    put = client.put(
+        f"{EXPERIMENTS}/{created['id']}",
+        json={"balance_within": {"segments": other}},
+        headers=developer,
+    )
+    assert put.status_code == 200, put.text
+    assert put.json()["balance_within"] == {"segments": other}
+    attribute = client.put(
+        f"{EXPERIMENTS}/{created['id']}",
+        json={"balance_within": TIER},
+        headers=developer,
+    )
+    assert attribute.status_code == 200, attribute.text
+    assert attribute.json()["balance_within"] == TIER
+
+
+#: A rules segment whose stored rules cannot be read.
+BROKEN_RULES = {"groups": "not a list"}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("state", ["missing", "archived", "inactive", "rules"])
+def test_a_segment_that_cannot_be_used_is_refused(
+    client, developer, segments, session_factory, state
+):
+    """On create and on a draft's ``PUT``, at the segments, for the first
+    segment listed that cannot be used; nothing is stored."""
+    usable = segments()
+    if state == "missing":
+        bad = str(uuid.uuid4())
+        message = r8_unusable(bad)
+    elif state == "archived":
+        bad = segments(status=SegmentStatus.ARCHIVED)
+        message = r8_unusable(bad)
+    elif state == "inactive":
+        bad = segments(status=SegmentStatus.INACTIVE)
+        message = segment_not_usable(bad)
+    else:
+        bad = segments(kind=SegmentKind.RULES.value, rules=BROKEN_RULES)
+        message = segment_not_usable(bad)
+    setting = {"segments": [usable, bad]}
+
+    created = client.post(
+        f"{EXPERIMENTS}/", json=_body(balance=setting), headers=developer
+    )
+    _refusal(created, ["body", "balance_within", "segments"], message)
+
+    draft = _create(client, developer, balance=...)
+    put = client.put(
+        f"{EXPERIMENTS}/{draft['id']}",
+        json={"balance_within": setting},
+        headers=developer,
+    )
+    _refusal(put, ["body", "balance_within", "segments"], message)
+    assert _stored(session_factory, draft["id"]).balance_within is None
+
+
+@pytest.mark.regression
+def test_a_clone_of_an_experiment_balanced_within_an_archived_segment_is_refused(
+    client, developer, segments, db_session
+):
+    """The clone would balance within the source's segments; one archived
+    since (a completed source no longer holds it) answers 409."""
+    usable = segments()
+    archived = segments()
+    source = _create(client, developer, balance={"segments": [usable, archived]})
+    _set_segment_status(db_session, archived, SegmentStatus.ARCHIVED)
+
+    response = client.post(f"{EXPERIMENTS}/{source['id']}/clone", headers=developer)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == clone_refused(archived)
 
 
 # ---------------------------------------------------------------------------
