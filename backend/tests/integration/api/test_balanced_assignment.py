@@ -651,34 +651,49 @@ def test_a_stored_setting_that_is_not_an_object_is_assigned_by_hash(
 ):
     """A balance setting written past the API that is not an object balances
     nothing: the user is answered 200 by the hash with no group, never a 500,
-    and the process logs it once."""
+    and the process logs it once.
+
+    The value is cleared afterwards: the experiment routes answer 500 for an
+    experiment that stores one, so a later test of this session that lists
+    experiments would fail on it."""
     experiment = _experiment(db_session, admin_user)
-    db_session.execute(
-        text(
-            "UPDATE experiments SET balance_within = CAST(:v AS jsonb) WHERE id = :id"
-        ),
-        {"v": '["tier"]', "id": str(experiment.id)},
-    )
-    db_session.commit()
-    users = [f"notobj-{i}-{uuid.uuid4().hex[:8]}" for i in range(2)]
-    hashed = [
-        AssignmentService(db_session)._hash_user_to_variant(u, experiment)
-        for u in users
-    ]
-    balanced_blocks._SETTING_NOTES.clear()
 
-    with caplog.at_level(logging.WARNING, logger=balanced_blocks.__name__):
-        answers = [_assign(client, key, experiment, u, {"tier": "gold"}) for u in users]
+    def store(value: Optional[str]) -> None:
+        db_session.execute(
+            text(
+                "UPDATE experiments SET balance_within = CAST(:v AS jsonb) "
+                "WHERE id = :id"
+            ),
+            {"v": value, "id": str(experiment.id)},
+        )
+        db_session.commit()
 
-    assert [a.status_code for a in answers] == [200, 200], [a.text for a in answers]
-    assert [a.json()["variant_id"] for a in answers] == [str(h) for h in hashed]
-    for user_id, variant in zip(users, hashed):
-        assert _user_rows(session_factory, experiment.id, user_id) == [
-            (variant, None, None)
+    store('["tier"]')
+    try:
+        users = [f"notobj-{i}-{uuid.uuid4().hex[:8]}" for i in range(2)]
+        hashed = [
+            AssignmentService(db_session)._hash_user_to_variant(u, experiment)
+            for u in users
         ]
-    lines = [r for r in caplog.records if r.name == balanced_blocks.__name__]
-    assert len(lines) == 1, [r.getMessage() for r in lines]
-    assert str(experiment.id) in lines[0].getMessage()
+        balanced_blocks._SETTING_NOTES.clear()
+
+        with caplog.at_level(logging.WARNING, logger=balanced_blocks.__name__):
+            answers = [
+                _assign(client, key, experiment, u, {"tier": "gold"}) for u in users
+            ]
+
+        assert [a.status_code for a in answers] == [200, 200], [a.text for a in answers]
+        assert [a.json()["variant_id"] for a in answers] == [str(h) for h in hashed]
+        for user_id, variant in zip(users, hashed):
+            assert _user_rows(session_factory, experiment.id, user_id) == [
+                (variant, None, None)
+            ]
+        lines = [r for r in caplog.records if r.name == balanced_blocks.__name__]
+        assert len(lines) == 1, [r.getMessage() for r in lines]
+        assert str(experiment.id) in lines[0].getMessage()
+    finally:
+        db_session.rollback()
+        store(None)
 
 
 @pytest.mark.regression
