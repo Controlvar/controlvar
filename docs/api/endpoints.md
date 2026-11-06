@@ -2122,10 +2122,15 @@ attribute that is misspelt or not sent. It counts only users who reached
 and a visitor whose SDK sends attributes only after sign-in is counted from then on. It takes
 each user's latest attributes, not their first exposure's, so a user whose attributes
 changed is counted by the new ones. An exposure dated more than 5 minutes after the server's
-clock is not read, nor one whose stored attributes are longer than 8,192 bytes.
+clock is not read, nor one whose stored attributes are longer than 8,192 bytes as PostgreSQL
+prints them. PostgreSQL prints a space after each colon and comma, which assign's own
+8,192-byte limit does not count, so attributes that assign accepted close to that limit may
+not be read.
 
-On PostgreSQL the read stops after 5 seconds, and the preview then answers 503 with a fixed
-message. A large events table with few exposures can take that long. The preview also refuses, before any query, `regex`
+The read has 5 seconds in all. It fetches rows from the database in batches and gives each
+fetch only the time left, so PostgreSQL stops it at 5 seconds however many fetches it has
+made, and the preview then answers 503 with a fixed message. A large events table with few
+exposures can take that long. The preview also refuses, before any query, `regex`
 conditions times `sample_size` above 500 and conditions plus groups times `sample_size`
 above 50,000, at `loc` `["query", "sample_size"]`.
 

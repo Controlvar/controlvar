@@ -3371,14 +3371,31 @@ by = [
 ]
 
 [[unit]]
-text = "An exposure dated more than 5 minutes after the server's clock is not read, nor one whose stored attributes are longer than 8,192 bytes."
+text = "An exposure dated more than 5 minutes after the server's clock is not read, nor one whose stored attributes are longer than 8,192 bytes as PostgreSQL prints them."
 by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_future_dated_and_oversize_exposures_are_not_sampled"]
 
 [[unit]]
-text = "On PostgreSQL the read stops after 5 seconds, and the preview then answers 503 with a fixed message."
+text = "PostgreSQL prints a space after each colon and comma, which assign's own 8,192-byte limit does not count, so attributes that assign accepted close to that limit may not be read."
 by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_future_dated_and_oversize_exposures_are_not_sampled",
+    "test:backend/tests/unit/core/test_context_limits.py::test_size_is_counted_in_utf8_bytes_of_compact_json",
+]
+
+[[unit]]
+text = "The read has 5 seconds in all."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_read_of_quick_fetches_that_passes_the_limit_in_all_answers_503",
+    "test:backend/tests/unit/services/test_audience_service.py::TestPreviewRead::test_postgresql_gives_each_fetch_what_is_left_of_one_budget",
+]
+
+[[unit]]
+text = "It fetches rows from the database in batches and gives each fetch only the time left, so PostgreSQL stops it at 5 seconds however many fetches it has made, and the preview then answers 503 with a fixed message."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_the_read_streams_from_a_server_side_cursor",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_read_of_quick_fetches_that_passes_the_limit_in_all_answers_503",
     "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_read_past_the_statement_timeout_answers_503",
-    "test:backend/tests/unit/services/test_audience_service.py::TestPreviewRead::test_postgresql_bounds_the_read_with_a_statement_timeout",
+    "test:backend/tests/unit/services/test_audience_service.py::TestPreviewRead::test_postgresql_gives_each_fetch_what_is_left_of_one_budget",
+    "test:backend/tests/unit/services/test_audience_service.py::TestPreviewRead::test_the_read_stops_when_its_time_is_up",
 ]
 
 [[unit]]
