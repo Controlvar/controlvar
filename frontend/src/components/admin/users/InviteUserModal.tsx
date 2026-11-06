@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Dialog } from '@/components/ui/Dialog';
 import { CreatedUser, UserRole, USER_ROLE_LABELS } from '@/types/admin';
 import { AdminService } from '@/services/admin';
 
@@ -57,6 +58,14 @@ export function usernameFromEmail(email: string): string {
     .slice(0, 50);
 }
 
+/**
+ * The Invite User dialog, on the shared Dialog (#369): focus opens on the email
+ * field, Tab stays inside, the page behind is inert, and on close focus goes
+ * back to the button that opened it. Escape closes the form, but not while the
+ * create is in flight (`busy`; Cancel is disabled then too). Once the temporary
+ * password is shown, Done is the only way out (`dismissible={false}`): the
+ * password is shown once, and Escape must not throw it away.
+ */
 export function InviteUserModal({ isOpen, onClose, onSuccess }: InviteUserModalProps) {
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
@@ -67,8 +76,14 @@ export function InviteUserModal({ isOpen, onClose, onSuccess }: InviteUserModalP
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<{ user: CreatedUser; password: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const copyRef = useRef<HTMLButtonElement>(null);
 
-  if (!isOpen) return null;
+  // The form gives way to the password, and the focused control goes with it:
+  // move focus to Copy, inside the dialog. Not Done, so that a second Enter
+  // does not close the dialog before the password is copied.
+  useEffect(() => {
+    if (created) copyRef.current?.focus();
+  }, [created]);
 
   const effectiveUsername = usernameEdited ? username : usernameFromEmail(email);
   const canSubmit = email.trim().length > 0 && effectiveUsername.trim().length >= 3 && !submitting;
@@ -133,18 +148,15 @@ export function InviteUserModal({ isOpen, onClose, onSuccess }: InviteUserModalP
   };
 
   return (
-    <div
-      data-testid="invite-user-modal"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="invite-modal-title"
+    <Dialog
+      open={isOpen}
+      onClose={handleClose}
+      title={created ? 'User created' : 'Invite User'}
+      busy={submitting}
+      dismissible={created === null}
+      testId="invite-user-modal"
     >
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
-        <h2 id="invite-modal-title" className="text-lg font-semibold text-slate-900 mb-4">
-          {created ? 'User created' : 'Invite User'}
-        </h2>
-
+      <div className="mt-3">
         {created ? (
           <div data-testid="invite-created" className="flex flex-col gap-4">
             <p className="text-sm text-slate-600">
@@ -163,6 +175,7 @@ export function InviteUserModal({ isOpen, onClose, onSuccess }: InviteUserModalP
               </code>
               <button
                 type="button"
+                ref={copyRef}
                 data-testid="invite-copy-password-button"
                 onClick={handleCopy}
                 className="px-3 py-2 text-sm font-medium border border-slate-300 rounded-md hover:bg-slate-50"
@@ -263,6 +276,7 @@ export function InviteUserModal({ isOpen, onClose, onSuccess }: InviteUserModalP
             {/* Error */}
             {error && (
               <div
+                role="alert"
                 data-testid="invite-error-message"
                 className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700"
               >
@@ -293,6 +307,6 @@ export function InviteUserModal({ isOpen, onClose, onSuccess }: InviteUserModalP
           </form>
         )}
       </div>
-    </div>
+    </Dialog>
   );
 }

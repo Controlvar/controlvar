@@ -43,12 +43,11 @@ export interface RawEntry {
 }
 
 /**
- * The overlays not yet on Dialog: 3 in 3 files (the invite-user dialog, the
- * safety rollback and the warehouse confirm). Each moves in a later change of
- * #369 and leaves this list when it does.
+ * The overlays not yet on Dialog: 2 in 2 files (the safety rollback and the
+ * warehouse confirm). Each moves in a later change of #369 and leaves this
+ * list when it does.
  */
 export const RAW_DIALOGS: Record<string, RawEntry> = {
-  'frontend/src/components/admin/users/InviteUserModal.tsx': { banned: 2, dialogUses: 0 },
   'frontend/src/pages/admin/safety.tsx': { banned: 2, dialogUses: 0 },
   'modules/frontend/src/components/warehouse/common.tsx': { banned: 2, dialogUses: 0 },
 };
@@ -64,6 +63,7 @@ export const MIGRATED: Record<string, number> = {
   // Two dialogs: the invite form and the remove confirmation.
   'modules/frontend/src/pages/workspaces/[id]/members.tsx': 2,
   'frontend/src/components/admin/api-keys/CreateApiKeyModal.tsx': 1,
+  'frontend/src/components/admin/users/InviteUserModal.tsx': 1,
 };
 
 /** Fewer files than this means the roots are wrong, not that the tree is clean. */
