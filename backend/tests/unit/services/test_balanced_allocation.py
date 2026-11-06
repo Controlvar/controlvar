@@ -14,6 +14,8 @@ allocation, and the block-order key the ``Experiment`` listeners make.
 * Each user's chance of each variant is still its share: the first user of a
   group, over many experiments' block-order keys, lands on each variant at
   its share.
+* The block order of a fixed key, against literals typed in once: the same
+  in every release.
 * The refusals, verbatim: a split that is not in steps of 5 (``34/33/33``,
   ``1/99``), a bandit, a split URL experiment.
 """
@@ -275,6 +277,41 @@ def test_the_order_depends_on_the_key_and_the_group():
     assert one != ba.group_sequence("6" * 64, "gold", shares, 64)
     assert one != ba.group_sequence(SEED, "silver", shares, 64)
     assert [ba.slot_variant(SEED, "gold", n, shares) for n in range(64)] == one
+
+
+#: A block-order key used only by the fixed vectors below.
+VECTOR_KEY = "0123456789abcdef" * 4
+
+#: The variant index each of a group's first 40 users takes under
+#: VECTOR_KEY, typed in once. Never regenerate them from the code.
+ORDER_VECTORS = [
+    ((50, 50), "gold", "0101101010010101100110100110100101100110"),
+    ((50, 50), "unknown", "0110101010101010101001101010011010100101"),
+    ((20, 30, 50), "gold", "2102221201222101212021202102121011222220"),
+    ((20, 30, 50), "unknown", "2022102211122112202010220212211222020121"),
+]
+
+
+@pytest.mark.parametrize(
+    ("shares", "group", "expected"),
+    ORDER_VECTORS,
+    ids=[f"{'/'.join(map(str, s))}-{g}" for s, g, _ in ORDER_VECTORS],
+)
+def test_the_block_order_stays_the_same_across_releases(shares, group, expected):
+    """The places a key gives a group stay the same from one release to the
+    next. A running experiment's groups are part-way through a block when the
+    server is upgraded, and during a rolling deploy two releases assign at
+    once: if the order of a given key, group and block changed, both would
+    shuffle the current block of every running balanced experiment. When this
+    fails, restore the order; do not edit these literals."""
+    by_slot = "".join(
+        str(ba.slot_variant(VECTOR_KEY, group, n, shares)) for n in range(40)
+    )
+    in_sequence = "".join(
+        str(v) for v in ba.group_sequence(VECTOR_KEY, group, shares, 40)
+    )
+    assert by_slot == expected, f"{shares} {group}: {by_slot} != {expected}"
+    assert in_sequence == expected, f"{shares} {group}: {in_sequence} != {expected}"
 
 
 def test_the_effective_shares_are_the_hash_paths():
