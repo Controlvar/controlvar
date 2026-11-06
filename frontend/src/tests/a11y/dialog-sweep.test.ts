@@ -43,18 +43,15 @@ export interface RawEntry {
 }
 
 /**
- * The overlays not yet on Dialog: 11 in 10 files. Each moves in a later change
- * of #369 and leaves this list when it does.
+ * The overlays not yet on Dialog: 4 in 4 files (the API key and invite-user
+ * dialogs, the safety rollback and the warehouse confirm). Each moves in a
+ * later change of #369 and leaves this list when it does.
  */
 export const RAW_DIALOGS: Record<string, RawEntry> = {
   'frontend/src/components/admin/api-keys/CreateApiKeyModal.tsx': { banned: 2, dialogUses: 0 },
   'frontend/src/components/admin/users/InviteUserModal.tsx': { banned: 2, dialogUses: 0 },
   'frontend/src/pages/admin/safety.tsx': { banned: 2, dialogUses: 0 },
   'modules/frontend/src/components/warehouse/common.tsx': { banned: 2, dialogUses: 0 },
-  'modules/frontend/src/pages/workspaces/index.tsx': { banned: 1, dialogUses: 0 },
-  'modules/frontend/src/pages/workspaces/[id]/index.tsx': { banned: 1, dialogUses: 0 },
-  // Two overlays: the invite form and the remove confirmation.
-  'modules/frontend/src/pages/workspaces/[id]/members.tsx': { banned: 3, dialogUses: 0 },
 };
 
 /** Files that left RAW_DIALOGS, with their exact number of `<Dialog` uses. */
@@ -63,6 +60,10 @@ export const MIGRATED: Record<string, number> = {
   'frontend/src/components/admin/users/EffectivePermissionsModal.tsx': 1,
   'modules/frontend/src/components/warehouse/runs/ViewSqlDialog.tsx': 1,
   'modules/frontend/src/components/admin/roles/CreateRoleModal.tsx': 1,
+  'modules/frontend/src/pages/workspaces/index.tsx': 1,
+  'modules/frontend/src/pages/workspaces/[id]/index.tsx': 1,
+  // Two dialogs: the invite form and the remove confirmation.
+  'modules/frontend/src/pages/workspaces/[id]/members.tsx': 2,
 };
 
 /** Fewer files than this means the roots are wrong, not that the tree is clean. */
