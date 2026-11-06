@@ -1002,8 +1002,32 @@ by = ["test:backend/tests/integration/api/test_own_access_put.py::TestDeleteAnsw
 
 [[unit]]
 text = "404 \"User not found\"."
-by = ["test:backend/tests/integration/api/test_admin_users_api.py::TestPatchRefusals::test_an_unknown_user_is_404"]
-count = 4
+by = [
+    "test:backend/tests/integration/api/test_admin_users_api.py::TestPatchRefusals::test_an_unknown_user_is_404",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_a_uuid_with_no_account_still_answers_404",
+]
+count = 5
+
+[[unit]]
+text = "Errors: 400 \"Invalid user ID format\" when {user_id} is not a UUID (a caller who is not a superuser gets 403 first)."
+by = [
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_a_superuser_gets_400_for_an_id_that_is_not_a_uuid",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_a_viewer_gets_403_on_get_and_400_on_put_and_delete",
+]
+
+[[unit]]
+text = "403 \"Not enough permissions\" when a caller who is not a superuser asks for another account."
+by = ["test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_a_viewer_gets_403_on_get_and_400_on_put_and_delete"]
+
+[[unit]]
+text = "400 \"Invalid user ID format\" when {user_id} is not a UUID, me included: GET /api/v1/users/me returns your account and its id."
+by = [
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_a_superuser_gets_400_for_an_id_that_is_not_a_uuid",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_a_viewer_gets_403_on_get_and_400_on_put_and_delete",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_me_is_an_id_that_is_not_a_uuid_on_put_and_delete",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_get_users_me_still_returns_the_callers_account",
+]
+count = 2
 
 [[unit]]
 text = "Change Your Password"

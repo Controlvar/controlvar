@@ -19,6 +19,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from backend.app.api import deps
+from backend.app.api.v1.endpoints.power_calculator import OUT_OF_RANGE_MESSAGE
 from backend.app.models.user import User
 from backend.app.schemas.ai_design import (
     DesignRequest,
@@ -29,7 +30,11 @@ from backend.app.schemas.ai_design import (
     SampleSizeEstimateResponse,
 )
 from backend.app.schemas.power_calculator import MAX_COUNT
-from backend.app.services.ai_design_service import AIDesignService
+from backend.app.services.ai_design_service import (
+    AIDesignService,
+    SampleSizeOutOfRangeError,
+    sample_size_input_problem,
+)
 from backend.app.services.experiment_template_service import ExperimentTemplateService
 
 logger = logging.getLogger(__name__)
@@ -127,14 +132,29 @@ def estimate_sample_size(
     ),
     current_user: User = Depends(deps.get_current_active_user),
 ) -> SampleSizeEstimateResponse:
-    """Estimate the required sample size per variant."""
-    estimate = AIDesignService.estimate_sample_size(
-        baseline_rate=baseline_rate,
-        mde=mde,
-        confidence=confidence,
-        power=power,
-        daily_traffic=daily_traffic,
-    )
+    """Estimate the required sample size per variant.
+
+    Inputs it cannot calculate with answer 422 with fixed text, never 500 or a
+    size that is not one (#958): see ``AIDesignService.estimate_sample_size``.
+    """
+    problem = sample_size_input_problem(baseline_rate, mde, confidence, power)
+    if problem is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=problem
+        )
+    try:
+        estimate = AIDesignService.estimate_sample_size(
+            baseline_rate=baseline_rate,
+            mde=mde,
+            confidence=confidence,
+            power=power,
+            daily_traffic=daily_traffic,
+        )
+    except SampleSizeOutOfRangeError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=OUT_OF_RANGE_MESSAGE,
+        )
     return SampleSizeEstimateResponse(**estimate.__dict__)
 
 
