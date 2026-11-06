@@ -274,10 +274,11 @@ text = "Targeting context"
 by = ["exempt:label"]
 
 [[unit]]
-text = "user_attributes is what the platform's targeting rules evaluate against."
+text = "user_attributes is what the platform's targeting rules evaluate against, and what sets the user's segment in a breakdown."
 by = [
     "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_matching_context_enables_flag_with_reason",
     "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_sends_attributes_as_url_encoded_json_context",
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_the_sdk_path_puts_each_converter_in_its_assignment_context_segment",
 ]
 
 [[unit]]
