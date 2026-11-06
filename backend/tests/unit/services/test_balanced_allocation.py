@@ -18,10 +18,12 @@ allocation, and the block-order key the ``Experiment`` listeners make.
   in every release.
 * The refusals, verbatim: a split that is not in steps of 5 (``34/33/33``,
   ``1/99``), a bandit, a split URL experiment.
+* Only an object is a setting; a stored value that is not one logs once.
 """
 
 from __future__ import annotations
 
+import logging
 import math
 import random
 import string
@@ -411,6 +413,34 @@ def test_only_an_object_is_a_setting(stored, setting):
     """A value that is not an object balances nothing: the experiment is
     assigned by the hash, as one without the setting is."""
     assert ba.balance_setting(stored) == setting
+
+
+def test_a_stored_value_that_is_not_an_object_logs_once(caplog):
+    """The first stored value a process meets that is set and is not an
+    object logs one WARNING, naming the experiment and the value's type, never
+    the value; a second does not, and a setting or a null logs nothing."""
+    good = _Stored(id="exp-good", balance_within=TIER)
+    null = _Stored(id="exp-null", balance_within=None)
+    empty = _Stored(id="exp-empty", balance_within={})
+    listed = _Stored(id="exp-list", balance_within=["tier"])
+    text = _Stored(id="exp-text", balance_within="tier")
+    ba._SETTING_NOTES.clear()
+    with caplog.at_level(logging.WARNING, logger=ba.__name__):
+        assert ba.balance_setting(good) == TIER
+        assert ba.balance_setting(null) is None
+        assert ba.balance_setting(empty) is None
+        quiet = [r.getMessage() for r in caplog.records if r.name == ba.__name__]
+        assert quiet == [], quiet
+
+        assert ba.balance_setting(listed) is None
+        assert ba.balance_setting(text) is None
+        assert ba.balance_setting(listed) is None
+    lines = [r for r in caplog.records if r.name == ba.__name__]
+    assert len(lines) == 1, [r.getMessage() for r in lines]
+    assert lines[0].levelno == logging.WARNING
+    message = lines[0].getMessage()
+    assert "exp-list" in message and "a list" in message, message
+    assert "tier" not in message, message
 
 
 @pytest.mark.regression

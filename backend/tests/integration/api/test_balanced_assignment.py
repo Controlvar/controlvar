@@ -13,6 +13,8 @@
   untouched. The same from a ``BEFORE UPDATE`` trigger that sleeps, which a
   ``lock_timeout`` would not bound. Either way, the rest of the transaction
   runs under the session's own ``statement_timeout`` again.
+* A stored setting that is not an object balances nothing: answered 200 by
+  the hash with no group, and logged once per process.
 * An experiment that balances nothing is assigned exactly as before: every
   user gets the variant ``tests/ground_truth``'s own copy of the hash gives,
   and the allocator is never called. No assign sends a Redis command.
@@ -641,6 +643,42 @@ def test_the_step_leaves_the_sessions_statement_timeout_as_it_was(
         f"statement_timeout after a place {after_place}, after a timeout "
         f"{after_timeout}; the session's is {before}"
     )
+
+
+@pytest.mark.regression
+def test_a_stored_setting_that_is_not_an_object_is_assigned_by_hash(
+    client, key, db_session, admin_user, session_factory, caplog
+):
+    """A balance setting written past the API that is not an object balances
+    nothing: the user is answered 200 by the hash with no group, never a 500,
+    and the process logs it once."""
+    experiment = _experiment(db_session, admin_user)
+    db_session.execute(
+        text(
+            "UPDATE experiments SET balance_within = CAST(:v AS jsonb) WHERE id = :id"
+        ),
+        {"v": '["tier"]', "id": str(experiment.id)},
+    )
+    db_session.commit()
+    users = [f"notobj-{i}-{uuid.uuid4().hex[:8]}" for i in range(2)]
+    hashed = [
+        AssignmentService(db_session)._hash_user_to_variant(u, experiment)
+        for u in users
+    ]
+    balanced_blocks._SETTING_NOTES.clear()
+
+    with caplog.at_level(logging.WARNING, logger=balanced_blocks.__name__):
+        answers = [_assign(client, key, experiment, u, {"tier": "gold"}) for u in users]
+
+    assert [a.status_code for a in answers] == [200, 200], [a.text for a in answers]
+    assert [a.json()["variant_id"] for a in answers] == [str(h) for h in hashed]
+    for user_id, variant in zip(users, hashed):
+        assert _user_rows(session_factory, experiment.id, user_id) == [
+            (variant, None, None)
+        ]
+    lines = [r for r in caplog.records if r.name == balanced_blocks.__name__]
+    assert len(lines) == 1, [r.getMessage() for r in lines]
+    assert str(experiment.id) in lines[0].getMessage()
 
 
 @pytest.mark.regression

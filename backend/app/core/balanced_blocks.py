@@ -1,8 +1,8 @@
 """The groups and blocks of an experiment that balances within groups (#448).
 
-Pure functions and constants, with no database and no import from the
-services or schemas packages, so the request schemas can use them without an
-import cycle. The counter step that gives each user their place is
+Functions and constants with no database and no import from the services or
+schemas packages, so the request schemas can use them without an import
+cycle. The counter step that gives each user their place is
 ``backend.app.services.balanced_allocation``.
 
 An experiment that declares ``balance_within`` names one top-level key of the
@@ -26,8 +26,13 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import math
 from typing import Any, List, Mapping, Optional, Sequence, Tuple
+
+from backend.app.core.log_once import OnceLog
+
+logger = logging.getLogger(__name__)
 
 #: At most this many named groups; ``other`` and ``unknown`` come on top.
 MAX_GROUPS = 20
@@ -57,6 +62,12 @@ CLOSED_KEYS: Mapping[str, Tuple[str, ...]] = {
 # ---------------------------------------------------------------------------
 
 
+#: What a JSON column can hold besides an object and null.
+_STORED_NON_OBJECTS = (list, str, int, float, bool)
+#: The stored settings that are not an object, logged once per process.
+_SETTING_NOTES = OnceLog()
+
+
 def balance_setting(experiment: Any) -> Optional[Mapping[str, Any]]:
     """The experiment's ``balance_within`` when it is a setting, else None.
 
@@ -64,9 +75,25 @@ def balance_setting(experiment: Any) -> Optional[Mapping[str, Any]]:
     attribute, or a value written past the API that is not an object (a list,
     a string) balances nothing, so such an experiment is assigned by the hash
     as every experiment without the setting is.
+
+    A stored value that is set and is not an object (a list, a string, a
+    number or a bool) logs one WARNING per process, naming the experiment and
+    the value's type, never the value.
     """
     setting = getattr(experiment, "balance_within", None)
-    return setting if isinstance(setting, Mapping) and setting else None
+    if isinstance(setting, Mapping):
+        return setting if setting else None
+    if isinstance(setting, _STORED_NON_OBJECTS) and _SETTING_NOTES.first(
+        "balance_within", "not an object"
+    ):
+        logger.warning(
+            "Experiment %s: its stored balance_within is a %s, not an object, so "
+            "it balances nothing and its new users are assigned by the hash. "
+            "Logged once.",
+            getattr(experiment, "id", None),
+            type(setting).__name__,
+        )
+    return None
 
 
 def named_groups(setting: Optional[Mapping[str, Any]]) -> Tuple[str, ...]:
