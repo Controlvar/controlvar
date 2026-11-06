@@ -416,26 +416,37 @@ def test_the_preview_runs_the_same_statements_for_10_and_1000_users(
 def test_the_read_is_capped_and_stops_at_sample_size(
     admin_client, db_session, no_exposures, segment_id
 ):
+    """The read stops at sample_size users, and its statement carries the row
+    cap whatever the number of rows, so one user more than sample_size shows
+    the stop: 101 exposures, not 10,001 (the batch route commits each one on
+    its own)."""
     prefix = _prefix()
     start = datetime.now(timezone.utc) - timedelta(hours=6)
     _batch(
         admin_client,
         [
             _exposure(
-                f"{prefix}-{i:05d}", start + timedelta(seconds=i), {"country": "US"}
+                f"{prefix}-{i:03d}", start + timedelta(seconds=i), {"country": "US"}
             )
-            for i in range(10001)
+            for i in range(101)
         ],
     )
     times = _stored_times(db_session, prefix)
-    assert len(times) == 10001
+    assert len(times) == 101
 
     with _statements(db_session.get_bind()) as seen:
-        body = _preview(admin_client, segment_id, sample_size=10000)
-    assert (body["sample_size"], body["matched"]) == (10000, 10000)
+        body = _preview(admin_client, segment_id, sample_size=100)
+    assert (body["sample_size"], body["matched"]) == (100, 100)
     assert body["ended_by"] == "sample_size"
-    # The 10,000th newest user's row is the oldest read; the one before it is not.
-    assert body["sampled_since"] == times[9999]
+    # The 100th newest user's row is the oldest read; the 101st is not read.
+    assert body["sampled_since"] == times[99]
+    _, parameters = _preview_read(seen)
+    assert parameters["param_1"] == audience_service.preview_candidate_cap(100) == 500
+
+    # The cap at the largest sample_size and at the smallest.
+    with _statements(db_session.get_bind()) as seen:
+        largest = _preview(admin_client, segment_id, sample_size=10000)
+    assert (largest["sample_size"], largest["ended_by"]) == (101, "window")
     _, parameters = _preview_read(seen)
     assert parameters["param_1"] == 50_000
 
