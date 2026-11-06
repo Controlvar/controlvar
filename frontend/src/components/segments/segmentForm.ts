@@ -64,7 +64,11 @@ export function previewText(preview: AudiencePreview): string {
   const since = !byWindow && preview.sampled_since ? ` (since ${previewSince(preview.sampled_since)})` : '';
   if (preview.matched === 0) return `None of ${who} match${since}.`;
   const rounded = Math.round(preview.estimated_percentage);
-  const share = rounded === 0 ? 'Under 1%' : `About ${rounded}%`;
+  // A share that rounds to 0% while some users match, or to 100% while some
+  // do not, is shown as a bound, so it never reads as none or all of them.
+  let share = `About ${rounded}%`;
+  if (rounded === 0) share = 'Under 1%';
+  else if (rounded === 100 && preview.matched < n) share = 'Over 99%';
   return `${share} of ${who} match${since}.`;
 }
 

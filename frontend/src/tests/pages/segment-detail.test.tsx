@@ -446,6 +446,10 @@ describe('rules segments', () => {
       ['none matched', share(1000, 0, 'sample_size'), `None of the 1,000 users seen most recently match (since ${SINCE_SHOWN}).`],
       ['none matched, the window', share(1000, 0, 'window'), 'None of the 1,000 users seen in the last 30 days match.'],
       ['one in a thousand', share(1000, 1, 'cap'), `Under 1% of the 1,000 users seen most recently match (since ${SINCE_SHOWN}).`],
+      ['995 in a thousand', share(1000, 995, 'cap'), `Over 99% of the 1,000 users seen most recently match (since ${SINCE_SHOWN}).`],
+      ['999 in a thousand', share(1000, 999, 'cap'), `Over 99% of the 1,000 users seen most recently match (since ${SINCE_SHOWN}).`],
+      ['994 in a thousand', share(1000, 994, 'cap'), `About 99% of the 1,000 users seen most recently match (since ${SINCE_SHOWN}).`],
+      ['all of a thousand', share(1000, 1000, 'cap'), `About 100% of the 1,000 users seen most recently match (since ${SINCE_SHOWN}).`],
     ])('%s', async (_label, body, text) => {
       const result = await shown(body);
       expect(result).toHaveTextContent(text, { normalizeWhitespace: true });
