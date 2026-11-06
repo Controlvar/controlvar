@@ -18,6 +18,9 @@ def _ready_to_start(mock_experiment):
         SimpleNamespace(is_control=False),
     ]
     mock_experiment.metric_definitions = [SimpleNamespace()]
+    # Not a visual experiment. Only None reads as absent, so a mock's own
+    # attribute would count as visual settings and fail the start check (#1545).
+    mock_experiment.visual_config = None
 
 
 @pytest.fixture

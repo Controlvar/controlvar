@@ -106,31 +106,28 @@ STARTED = "started"
 _get = get_field
 _is_split_url = is_split_url
 
-#: What a JSONB column can hold.
-_JSON_VALUES = (dict, list, str, int, float, bool)
-
-
-def stored_json(value: Any) -> Any:
-    """*value* if it is a JSON value (what a JSONB column holds), else ``None``.
-
-    A stored value that is not the expected shape is still returned, so the
-    schema refuses it; only something no column can hold (an attribute of a
-    test double, say) reads as absent."""
-    return value if isinstance(value, _JSON_VALUES) else None
-
 
 def visual_config_of(experiment: Any) -> Any:
-    """The experiment's stored ``visual_config``, or ``None``."""
-    return stored_json(_get(experiment, "visual_config"))
+    """The experiment's ``visual_config`` exactly as it is held, or ``None``.
+
+    Nothing but ``None`` reads as absent. A value of any other type, even one
+    no JSONB column could hold (a model object, a test double's attribute),
+    counts as visual settings, so :func:`is_visual` is true, ``/start`` asks
+    for the design etag, and the start check refuses what fails its schema:
+    an unknown value fails closed."""
+    return _get(experiment, "visual_config")
 
 
 def is_visual(experiment: Any) -> bool:
-    """Whether *experiment* is a visual experiment: it holds ``visual_config``."""
+    """Whether *experiment* is a visual experiment: its ``visual_config`` is
+    anything but ``None``."""
     return visual_config_of(experiment) is not None
 
 
 def _changes_of(variant: Any) -> Any:
-    return stored_json(_get(variant, "visual_changes"))
+    """A variant's ``visual_changes`` as held; as above, only ``None`` is
+    absent, so a value of an unknown type is checked, never skipped."""
+    return _get(variant, "visual_changes")
 
 
 def _change_count(visual_changes: Any) -> int:

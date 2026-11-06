@@ -121,7 +121,6 @@ from backend.app.services.visual import (
     clone_visual_problem,
     design_etag,
     is_visual,
-    stored_json,
     visual_config_of,
     visual_start_problem,
 )
@@ -550,7 +549,7 @@ def _refuse_visual_update(
     stored_variants = [
         {
             "is_control": getattr(v, "is_control", False),
-            "visual_changes": stored_json(getattr(v, "visual_changes", None)),
+            "visual_changes": getattr(v, "visual_changes", None),
         }
         for v in experiment.variants
     ]

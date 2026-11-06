@@ -36,7 +36,6 @@ from backend.app.services.visual import (
     STARTED,
     design_etag,
     revoke_editor_tokens,
-    stored_json,
     visual_config_of,
     visual_start_problem,
 )
@@ -1296,9 +1295,7 @@ class ExperimentService:
                 is_control=variant.is_control,
                 traffic_allocation=variant.traffic_allocation,
                 configuration=variant.configuration,
-                visual_changes=copy.deepcopy(
-                    stored_json(getattr(variant, "visual_changes", None))
-                ),
+                visual_changes=copy.deepcopy(getattr(variant, "visual_changes", None)),
                 experiment_id=new_experiment.id,
             )
             self.db.add(new_variant)
@@ -1612,7 +1609,7 @@ class ExperimentService:
                     "is_control": v.is_control,
                     "traffic_allocation": v.traffic_allocation,
                     "configuration": v.configuration,
-                    "visual_changes": stored_json(getattr(v, "visual_changes", None)),
+                    "visual_changes": getattr(v, "visual_changes", None),
                     "experiment_id": str(v.experiment_id),
                     "created_at": (
                         v.created_at.isoformat()
