@@ -764,7 +764,7 @@ text = "sso_url | string | SAML, Okta | SAML: the IdP's single sign-on URL. Okta
 by = [
     "test:modules/backend/tests/unit/services/test_sso_service.py::TestBuildOIDCAuthorizationURL::test_okta_url_uses_sso_url",
     "test:modules/backend/tests/unit/services/test_sso_service.py::TestSsoUrlIsHttpsWhenSaved::test_create_refuses_an_okta_sso_url_that_is_not_https",
-    "test:modules/backend/tests/unit/services/test_sso_service.py::TestSsoUrlIsHttpsWhenSaved::test_a_provider_that_ignores_sso_url_is_not_checked",
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestSamlSsoUrlIsHttpsWhenSaved::test_create_refuses_a_saml_sso_url_that_is_not_https",
 ]
 
 [[unit]]
@@ -829,6 +829,23 @@ by = ["exempt:baseline"]
 [[unit]]
 text = "The response carries the configuration's id: the ACS URL to register is https://app.example.com/api/v1/auth/sso/saml/<id>/acs."
 by = ["test:modules/backend/tests/integration/api/test_sso_api.py::TestCreateSSOConfig::test_created_config_has_id"]
+
+[[unit]]
+text = "A SAML configuration's sso_url must be https when it is saved: creating one, or an update that sets sso_url or provider_type, with another scheme is answered 400 SAML single sign-on URL must use https; check this SSO configuration's sso_url, in every environment except test."
+by = [
+    "test:modules/backend/tests/integration/api/test_sso_api.py::TestASamlSsoUrlMustBeHttps::test_create_with_an_http_sso_url_is_refused",
+    "test:modules/backend/tests/integration/api/test_sso_api.py::TestASamlSsoUrlMustBeHttps::test_update_to_an_http_sso_url_is_refused",
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestSamlSsoUrlIsHttpsWhenSaved::test_create_refuses_a_saml_sso_url_that_is_not_https",
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestSamlSsoUrlIsHttpsWhenSaved::test_update_refuses_a_saml_sso_url_that_is_not_https",
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestSamlSsoUrlIsHttpsWhenSaved::test_the_test_environment_accepts_an_http_saml_url",
+]
+
+[[unit]]
+text = "An update that sends neither, such as one that changes only org_name or is_active, is not checked, so a configuration stored earlier with an http URL can still be renamed or switched off."
+by = [
+    "test:modules/backend/tests/integration/api/test_sso_api.py::TestASamlSsoUrlMustBeHttps::test_a_stored_http_config_can_still_be_renamed_and_switched_off",
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestSamlSsoUrlIsHttpsWhenSaved::test_a_stored_http_saml_config_can_still_be_changed",
+]
 
 [[unit]]
 text = "OIDC Configuration"
@@ -1461,6 +1478,22 @@ by = [
     "test:modules/backend/tests/unit/services/test_sso_service.py::TestSsoUrlIsHttpsWhenSaved::test_create_refuses_an_okta_sso_url_that_is_not_https",
     "test:modules/backend/tests/unit/services/test_sso_service.py::TestSsoUrlIsHttpsWhenSaved::test_update_refuses_an_http_sso_url",
 ]
+
+[[unit]]
+text = "\"SAML single sign-on URL must use https; check this SSO configuration's sso_url\""
+by = ["test:modules/backend/tests/unit/services/test_sso_service.py::TestSamlSsoUrlIsHttpsWhenSaved::test_create_refuses_a_saml_sso_url_that_is_not_https"]
+
+[[unit]]
+text = "Creating or updating a SAML configuration with an sso_url that is not https is answered 400 with this message."
+by = [
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestSamlSsoUrlIsHttpsWhenSaved::test_create_refuses_a_saml_sso_url_that_is_not_https",
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestSamlSsoUrlIsHttpsWhenSaved::test_update_refuses_a_saml_sso_url_that_is_not_https",
+    "test:modules/backend/tests/integration/api/test_sso_api.py::TestASamlSsoUrlMustBeHttps::test_update_to_an_http_sso_url_is_refused",
+]
+
+[[unit]]
+text = "Use the https single sign-on URL your IdP gives."
+by = ["exempt:instruction"]
 
 [[unit]]
 text = "\"OIDC ID token was not accepted (iss)\""
