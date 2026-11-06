@@ -418,11 +418,14 @@ describe('EditUserModal accessibility (axe-core in jsdom; colour contrast is not
   // while checking nothing. The scan is of the dialog node itself, and asserts
   // that the rule naming the dialog ran on it.
   async function dialogViolations() {
-    const dialog = screen.getByRole('dialog', { name: 'Edit user' });
+    // By role alone: a lost name must be axe's finding, not a failed query.
+    const dialog = screen.getByRole('dialog');
     expect(document.body).toContainElement(dialog);
     const result = await axe.run(dialog, axeOptions);
-    expect(result.passes.map((p) => p.id)).toContain('aria-dialog-name');
-    return result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`);
+    const violations = result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`);
+    // A clean scan must have run the rule that names the dialog, on it.
+    if (violations.length === 0) expect(result.passes.map((p) => p.id)).toContain('aria-dialog-name');
+    return violations;
   }
 
   it('the dialog has no axe violations: editing another user, with the warning and an error', async () => {

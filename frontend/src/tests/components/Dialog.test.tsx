@@ -11,7 +11,7 @@
  * Every render goes through renderInAppRoot: the page sits in `#__next`, as
  * Next mounts it, and the dialog portals to `document.body` beside it.
  */
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import axe from 'axe-core';
@@ -361,7 +361,8 @@ describe('Dialog: axe (scanned at the dialog node, which a container scan no lon
 
   it('the open dialog, with a description, has no violations', async () => {
     renderInAppRoot(<Harness startOpen description="The key used by the SDKs does not change." />);
-    const dialog = screen.getByRole('dialog', { name: 'Rename flag' });
+    // By role alone: a lost name must be axe's finding, not a failed query.
+    const dialog = screen.getByRole('dialog');
     expect(document.body).toContainElement(dialog);
     const result = await axe.run(dialog, axeOptions);
     expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`)).toStrictEqual([]);
@@ -624,6 +625,23 @@ describe('Dialog: first focus', () => {
     renderInAppRoot(<Consumer />);
     expect(screen.getByRole('textbox', { name: 'Field' })).toHaveFocus();
     expect(screen.getByText('attached')).toBeInTheDocument();
+  });
+
+  it('a consumer that focuses its own field in an effect finds it rendered (the portal is not one effect late)', () => {
+    function OwnEffect() {
+      const field = useRef<HTMLInputElement>(null);
+      useEffect(() => {
+        field.current?.focus();
+      }, []);
+      return (
+        <Dialog open onClose={() => undefined} title="Rename flag">
+          <input aria-label="First" />
+          <input aria-label="Second" ref={field} />
+        </Dialog>
+      );
+    }
+    renderInAppRoot(<OwnEffect />);
+    expect(screen.getByRole('textbox', { name: 'Second' })).toHaveFocus();
   });
 });
 
