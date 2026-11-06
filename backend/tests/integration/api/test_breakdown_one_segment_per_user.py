@@ -1147,9 +1147,10 @@ def _plant_failure(monkeypatch, kind: str) -> Dict[str, int]:
     """Make ``segment_breakdown.user_values`` fail; returns its firing count.
 
     ``python-error`` raises RuntimeError (never ValueError, which
-    /segmented-results answers with 400). ``database-error`` sets a 1 ms
-    statement timeout on the request's session and sleeps 50 ms in the
-    database, so a real database error reaches the route.
+    /segmented-results answers with 400). ``database-error`` makes
+    PostgreSQL cancel the reader's own statement (a 1 ms
+    ``statement_timeout`` and a 50 ms ``pg_sleep``), so a real database
+    error reaches the route.
     """
     module = _segment_module()
     original = module.user_values
