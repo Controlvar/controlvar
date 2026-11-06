@@ -43,6 +43,9 @@ and the conventions, with the reasons for them, are in
 - While a `Dialog` is open, Tab and Shift+Tab stay inside it, the page behind
   it is `inert`, and the page does not scroll. Escape calls `onClose`, unless
   `dismissible={false}` or `busy` is set.
+- Content inside a `Dialog` never receives Escape: the dialog takes the key in
+  the capture phase on `document` and stops it there, even when it refuses to
+  close, so a tooltip or combobox inside a dialog cannot use Escape.
 - Focus opens on `initialFocusRef`, else on the first element marked
   `data-autofocus`, else on the first control. Give a confirmation that
   deletes something its Cancel button as `initialFocusRef`.

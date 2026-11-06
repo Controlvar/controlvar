@@ -150,7 +150,7 @@ export function isOverlayClassString(text: string): boolean {
 export function bannedLines(source: string): number[] {
   const lines = new Set<number>();
   source.split('\n').forEach((text, i) => {
-    if (text.includes('aria-modal') || /<dialog[\s>/]/.test(text)) lines.add(i + 1);
+    if (text.includes('aria-modal') || /<dialog(?![\w-])/.test(text)) lines.add(i + 1);
   });
   let line = 1;
   let at = 0;
@@ -298,6 +298,7 @@ describe('dialog sweep: the patterns', () => {
     ['aria-modal={true}', '<div role="dialog" aria-modal={true}>'],
     ['an object key', "const props = { 'aria-modal': true };"],
     ['a native dialog', '<dialog open>'],
+    ['a native dialog with its attributes on the next lines', '<dialog\n  open\n>'],
   ])('refuses %s', (_name, line) => {
     expect(bannedLines(`const a = 1;\n${line}\n`)).toEqual([2]);
   });

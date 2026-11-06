@@ -150,6 +150,44 @@ describe('Dialog: focus returns', () => {
     expect(screen.getByRole('button', { name: 'Target' })).toHaveFocus();
   });
 
+  it('an explicit returnFocus target that has left the page falls through to the opener', async () => {
+    const user = userEvent.setup();
+    let captured: HTMLElement | null = null;
+    function TargetLeaves() {
+      const [shown, setShown] = useState(true);
+      return (
+        <>
+          {shown && (
+            <button
+              type="button"
+              ref={(el) => {
+                if (el) captured = el;
+              }}
+            >
+              Target
+            </button>
+          )}
+          {/* A function keeps returning the node it last saw, as a ref would not. */}
+          <Harness returnFocus={() => captured}>
+            <button type="button" onClick={() => setShown(false)}>
+              Remove target
+            </button>
+          </Harness>
+        </>
+      );
+    }
+    renderInAppRoot(<TargetLeaves />);
+    const opener = screen.getByRole('button', { name: 'Open' });
+    await user.click(opener);
+    await user.click(screen.getByRole('button', { name: 'Remove target' }));
+    expect(screen.queryByRole('button', { name: 'Target' })).not.toBeInTheDocument();
+    expect(captured).not.toBeNull();
+    expect((captured as unknown as HTMLElement).isConnected).toBe(false);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+  });
+
   it('returnFocus as a function is called once, at close, and its element gets focus', async () => {
     const user = userEvent.setup();
     const pick = jest.fn(() => screen.getByRole('button', { name: 'Background' }));
@@ -309,6 +347,31 @@ describe('Dialog: Escape', () => {
     escape();
     escape(screen.getByRole('button', { name: 'Done' }));
     expect(onClose).toHaveBeenCalledTimes(0);
+  });
+
+  it.each([
+    ['busy', { busy: true }],
+    ['dismissible={false}', { dismissible: false }],
+    ['closing', {}],
+  ])('never reaches a page key handler, from an input inside the dialog: %s', (_name, props) => {
+    // Content inside a Dialog never receives Escape, even when the Escape is
+    // refused: a page's own Escape handler must not act behind a dialog that
+    // stays open (the invite dialog, dismissible={false}, in a later change).
+    const pageKeyDown = jest.fn();
+    renderInAppRoot(
+      <div onKeyDown={pageKeyDown}>
+        <input aria-label="Page field" />
+        <Dialog open onClose={() => undefined} title="Saving" {...props}>
+          <input aria-label="Inside" />
+        </Dialog>
+      </div>,
+    );
+    // The control: the same handler does see a key pressed outside the dialog.
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Page field' }), { key: 'a' });
+    expect(pageKeyDown).toHaveBeenCalledTimes(1);
+    pageKeyDown.mockClear();
+    escape(screen.getByRole('textbox', { name: 'Inside' }));
+    expect(pageKeyDown).toHaveBeenCalledTimes(0);
   });
 
   it('is ignored while an input method is composing', () => {

@@ -100,6 +100,12 @@ by = [
 ]
 
 [[unit]]
+text = "Content inside a Dialog never receives Escape: the dialog takes the key in the capture phase on document and stops it there, even when it refuses to close, so a tooltip or combobox inside a dialog cannot use Escape."
+by = [
+    "test:frontend/src/tests/components/Dialog.test.tsx::never reaches a page key handler, from an input inside the dialog: %s",
+]
+
+[[unit]]
 text = "Focus opens on initialFocusRef, else on the first element marked data-autofocus, else on the first control."
 by = [
     "test:frontend/src/tests/components/Dialog.test.tsx::initialFocusRef wins over the first control: a destructive confirm opens on Cancel",
@@ -116,6 +122,7 @@ text = "On close, focus goes to returnFocus if you pass one, else back to the el
 by = [
     "test:frontend/src/tests/components/Dialog.test.tsx::an explicit returnFocus ref wins over the opener",
     "test:frontend/src/tests/components/Dialog.test.tsx::to the opener after Escape, and after the dialog’s own close control",
+    "test:frontend/src/tests/components/Dialog.test.tsx::an explicit returnFocus target that has left the page falls through to the opener",
 ]
 
 [[unit]]

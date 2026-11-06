@@ -227,7 +227,9 @@ test.describe("Journey: a dialog keeps focus inside and gives it back", () => {
     } finally {
       if (userId) {
         const removed = await page.request.delete(`${API_URL}/api/v1/admin/users/${userId}`, { headers });
-        expect(removed.status(), "the journey's user is deleted").toBe(204);
+        // Soft, so a failed delete is reported without replacing the error that
+        // is already propagating from the try block.
+        expect.soft(removed.status(), "the journey's user is deleted").toBe(204);
       }
     }
   });
