@@ -29,6 +29,7 @@ from sqlalchemy import delete, update
 from sqlalchemy import event as sa_event
 
 from backend.app.api.v1.endpoints.segments import PREVIEW_TIMED_OUT
+from backend.app.core.pattern_match import MAX_REGEX_INPUT
 from backend.app.models.assignment import Assignment
 from backend.app.models.event import Event
 from backend.app.models.experiment import ExperimentStatus, Variant
@@ -342,8 +343,8 @@ def _brief(statement: str) -> str:
         return statement
     if "set_config(" in statement:
         return "SELECT set_config"
-    table = statement.split(" FROM test_experimentation.", 1)[1].split()[0]
-    return f"{statement.split()[0]} {table}"
+    _, found, rest = statement.partition(" FROM test_experimentation.")
+    return f"{statement.split()[0]} {rest.split()[0] if found else statement}"
 
 
 def test_the_preview_runs_the_same_statements_for_10_and_1000_users(
@@ -575,15 +576,20 @@ def test_unevaluable_and_missing_attributes_count_and_do_not_match(
     admin_client, experiment, segment_id
 ):
     prefix = _prefix()
+    # Matching, a number, no email, and a text too long to search (unevaluable).
+    too_long = "x" * MAX_REGEX_INPUT + "@x.test"
     contexts = (
-        [{"email": "a@x.test"}] * 10 + [{"email": 123}] * 10 + [{"country": "US"}] * 10
+        [{"email": "a@x.test"}] * 10
+        + [{"email": 123}] * 10
+        + [{"country": "US"}] * 10
+        + [{"email": too_long}] * 5
     )
     for i, context in enumerate(contexts):
         _assign(admin_client, experiment, f"{prefix}-{i:02d}", context)
 
     rules = _rules(_cond("email", "regex", r"@x\.test$"))
     body = _preview(admin_client, segment_id, rules=rules, sample_size=100)
-    assert (body["matched"], body["sample_size"]) == (10, 30)
+    assert (body["matched"], body["sample_size"]) == (10, 35)
 
 
 # ---------------------------------------------------------------------------
