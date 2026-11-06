@@ -43,12 +43,10 @@ export interface RawEntry {
 }
 
 /**
- * The overlays not yet on Dialog: 2 in 2 files (the safety rollback and the
- * warehouse confirm). Each moves in a later change of #369 and leaves this
- * list when it does.
+ * The overlay not yet on Dialog: 1 in 1 file (the warehouse confirm). It moves
+ * in a later change of #369 and leaves this list when it does.
  */
 export const RAW_DIALOGS: Record<string, RawEntry> = {
-  'frontend/src/pages/admin/safety.tsx': { banned: 2, dialogUses: 0 },
   'modules/frontend/src/components/warehouse/common.tsx': { banned: 2, dialogUses: 0 },
 };
 
@@ -56,6 +54,7 @@ export const RAW_DIALOGS: Record<string, RawEntry> = {
 export const MIGRATED: Record<string, number> = {
   'frontend/src/components/admin/users/EditUserModal.tsx': 1,
   'frontend/src/components/admin/users/EffectivePermissionsModal.tsx': 1,
+  'frontend/src/pages/admin/safety.tsx': 1,
   'modules/frontend/src/components/warehouse/runs/ViewSqlDialog.tsx': 1,
   'modules/frontend/src/components/admin/roles/CreateRoleModal.tsx': 1,
   'modules/frontend/src/pages/workspaces/index.tsx': 1,
