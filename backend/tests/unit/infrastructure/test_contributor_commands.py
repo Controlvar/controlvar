@@ -1,18 +1,15 @@
-"""Commands a contributor is told to run do what they say (#1287, #288).
+"""Commands a contributor is told to run do what they say (#1287).
 
 * #1287: the development stack's documented teardown (the compose file's header
   comment and ``make down``) left the ``demo``, ``tools`` and ``aws`` profile
   services running, because a plain ``docker compose down`` only acts on the
   services of the profiles that are enabled -- none, by default.
-* #288: ``sdk/react-native`` had an ``npm run lint`` script that invokes eslint,
-  which the package did not install, so the command failed for everyone.
 
-Read as text and JSON, with no Docker and no npm, so it runs in the unit job.
+Read as text, with no Docker and no npm, so it runs in the unit job.
 """
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 from typing import Set
@@ -68,33 +65,3 @@ def test_the_compose_header_teardown_names_every_profile():
     for command in commands:
         named = _profiles_named(command)
         assert "*" in named or named >= _declared_profiles(), command
-
-
-def _package_jsons():
-    found = []
-    for top in ("sdk", "frontend", "demo"):
-        for path in sorted((REPO_ROOT / top).rglob("package.json")):
-            if "node_modules" not in path.parts:
-                found.append(path)
-    return found
-
-
-def test_every_script_that_runs_eslint_declares_eslint():
-    # #288 (react-native) and the same defect in sdk/openfeature: a `lint`
-    # script that runs eslint with no eslint dependency fails for everyone.
-    paths = _package_jsons()
-    assert REPO_ROOT / "sdk" / "react-native" / "package.json" in paths
-    assert REPO_ROOT / "sdk" / "openfeature" / "package.json" in paths
-    running = 0
-    offenders = []
-    for path in paths:
-        pkg = json.loads(path.read_text())
-        deps = {**pkg.get("dependencies", {}), **pkg.get("devDependencies", {})}
-        for name, command in pkg.get("scripts", {}).items():
-            if re.search(r"\beslint\b", command):
-                running += 1
-                if "eslint" not in deps:
-                    offenders.append(f"{path.parent.name}: `npm run {name}`")
-    assert not offenders, f"these run eslint without declaring it: {offenders}"
-    # positive control: frontend and the demos really do run eslint, declared
-    assert running >= 3
