@@ -12,9 +12,11 @@ interface SequentialMonitorProps {
    * one; undefined when the metric could not be read.
    */
   lowerIsBetter?: boolean;
+  /** The server's sample-ratio warning, passed to the stopping banner (#1737). */
+  srmWarning?: boolean;
 }
 
-export function SequentialMonitor({ data, lowerIsBetter }: SequentialMonitorProps) {
+export function SequentialMonitor({ data, lowerIsBetter, srmWarning }: SequentialMonitorProps) {
   const boundary = data.msprt_result?.boundary ?? 1 / 0.05; // default 20
 
   // `at_risk` is the top-level advisory flag; older responses carry only
@@ -31,6 +33,7 @@ export function SequentialMonitor({ data, lowerIsBetter }: SequentialMonitorProp
         recommendedAction={data.recommended_action}
         confidenceSequence={data.confidence_sequence}
         lowerIsBetter={lowerIsBetter}
+        srmWarning={srmWarning}
       />
 
       {/* Evidence ratio chart */}

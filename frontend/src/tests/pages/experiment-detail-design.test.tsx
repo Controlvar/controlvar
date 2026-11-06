@@ -640,6 +640,83 @@ describe('a refused save shows fixed copy, never the server text', () => {
 });
 
 // ---------------------------------------------------------------------------
+// #1562: a split URL draft's variants are refused at ["body","variants"] with
+// the type `split_url_config` when they no longer match its split_url_config.
+// The generic 422 copy names none of that, so the type picks its own copy.
+// ---------------------------------------------------------------------------
+
+describe('a split URL draft whose variant edit the API refuses (#1562)', () => {
+  const SPLIT_URL_COPY =
+    'The variants were not accepted. This is a split URL experiment: its variants and its ' +
+    'split_url_config change together, through PUT /api/v1/experiments/{id}, and the dashboard ' +
+    'cannot edit split_url_config.';
+
+  const refusal = (items: Array<{ type: string; loc?: unknown[] }>) => () => {
+    throw new ApiError({
+      status: 422,
+      detail: items.map(({ type, loc }) => ({ loc: loc ?? ['body', 'variants'], msg: PLANTED, type })),
+    });
+  };
+
+  const splitUrlDraft = () =>
+    experiment({
+      experiment_type: 'split_url',
+      split_url_config: {
+        variants: [
+          { name: 'Control', url: 'https://example.com/a', traffic_allocation: 34 },
+          { name: 'Blue CTA', url: 'https://example.com/b', traffic_allocation: 33 },
+          { name: 'Green CTA', url: 'https://example.com/c', traffic_allocation: 33 },
+        ],
+      },
+    });
+
+  it('says the variants and split_url_config change together through the API, never the server text', async () => {
+    await openDesign(splitUrlDraft(), refusal([{ type: 'split_url_config' }]));
+    type('variant-name-1', 'Blue button');
+    save();
+    const alert = await screen.findByTestId('design-error');
+    expect(alert).toHaveTextContent(SPLIT_URL_COPY);
+    expect(alert).not.toHaveTextContent(ERROR_COPY.design[422]);
+    expect(document.body.textContent).not.toContain('PLANTED');
+    expect(screen.getByTestId('variant-name-1')).toHaveValue('Blue button');
+  });
+
+  it.each<[string, unknown]>([
+    ['a 422 whose detail is text', apiError(422, PLANTED)],
+    ['a 422 whose first item has another type', new ApiError({
+      status: 422,
+      detail: [
+        { loc: ['body', 'variants'], msg: PLANTED, type: 'value_error' },
+        { loc: ['body', 'variants'], msg: PLANTED, type: 'split_url_config' },
+      ],
+    })],
+    ['a 422 with an empty list', new ApiError({ status: 422, detail: [] })],
+  ])('%s keeps the generic copy', async (_name, err) => {
+    await openDesign(splitUrlDraft(), () => {
+      throw err;
+    });
+    type('variant-name-1', 'Blue button');
+    save();
+    const alert = await screen.findByTestId('design-error');
+    expect(alert).toHaveTextContent(ERROR_COPY.design[422]);
+    expect(alert).not.toHaveTextContent(/split_url_config/);
+    expect(document.body.textContent).not.toContain('PLANTED');
+  });
+
+  it('another status with that type keeps its own copy', async () => {
+    await openDesign(splitUrlDraft(), () => {
+      throw new ApiError({
+        status: 400,
+        detail: [{ loc: ['body', 'variants'], msg: PLANTED, type: 'split_url_config' }],
+      });
+    });
+    type('variant-name-1', 'Blue button');
+    save();
+    expect(await screen.findByTestId('design-error')).toHaveTextContent(ERROR_COPY.design[400]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Accessibility (QA #28). Scoped to the region that holds the form.
 // ---------------------------------------------------------------------------
 
