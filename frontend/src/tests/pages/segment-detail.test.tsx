@@ -6,7 +6,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import axe from 'axe-core';
 import SegmentDetailPage from '@/pages/segments/[id]';
 import { ApiError, ApiFetchOptions, apiFetch } from '@/services/api';
-import { Segment } from '@/services/segments';
+import { AudiencePreview, Segment } from '@/services/segments';
 import { RULES_NOT_VALID } from '@/utils/segmentErrors';
 import vocabularyRefusal from '@/tests/fixtures/targeting-vocabulary-refusal.json';
 import { Route, makeRouter, routedApi } from './helpers/apiMock';
@@ -376,26 +376,107 @@ describe('rules segments', () => {
     expect(within(error).getAllByRole('listitem').map((li) => li.textContent)).toEqual([vocabularyRefusal.shown]);
   });
 
-  it('the preview says so honestly when no assignment carries attributes', async () => {
-    serve(rulesSegment(), [
-      { method: 'POST', path: `${BASE}/preview`, handler: () => ({ estimated_percentage: 0, sample_size: 0, matched: 0 }) },
-    ]);
-    render(<SegmentDetailPage />);
-    await screen.findByTestId('segment-name-heading');
-    fireEvent.click(screen.getByTestId('segment-preview'));
-    expect(await screen.findByTestId('segment-preview-result')).toHaveTextContent(
-      "No recent assignments carry user attributes, so the size can't be estimated yet. The segment still works: it is evaluated against each request's attributes.",
-    );
-  });
+  describe('the size estimate (#830)', () => {
+    const SINCE = '2026-11-06T09:12:45.120391+00:00';
+    const SINCE_SHOWN = 'Nov 6, 9:12 AM UTC';
 
-  it('a preview with a sample gives the share', async () => {
-    serve(rulesSegment(), [
-      { method: 'POST', path: `${BASE}/preview`, handler: () => ({ estimated_percentage: 34.2, sample_size: 2150, matched: 735 }) },
-    ]);
-    render(<SegmentDetailPage />);
-    await screen.findByTestId('segment-name-heading');
-    fireEvent.click(screen.getByTestId('segment-preview'));
-    expect(await screen.findByTestId('segment-preview-result')).toHaveTextContent('About 34% of 2,150 recently assigned users match.');
+    function answer(overrides: Partial<AudiencePreview>): AudiencePreview {
+      return {
+        estimated_percentage: null,
+        sample_size: 0,
+        matched: 0,
+        source: 'exposure_metadata',
+        window_days: 30,
+        sampled_since: null,
+        ended_by: 'window',
+        users_without_context: 0,
+        reason: 'no_exposures_with_context',
+        ...overrides,
+      };
+    }
+
+    function share(n: number, matched: number, ended_by: AudiencePreview['ended_by']): AudiencePreview {
+      return answer({
+        sample_size: n,
+        matched,
+        estimated_percentage: Math.round((matched / n) * 10000) / 100,
+        sampled_since: SINCE,
+        ended_by,
+        reason: null,
+      });
+    }
+
+    async function shown(body: AudiencePreview): Promise<HTMLElement> {
+      serve(rulesSegment(), [{ method: 'POST', path: `${BASE}/preview`, handler: () => body }]);
+      render(<SegmentDetailPage />);
+      await screen.findByTestId('segment-name-heading');
+      fireEvent.click(screen.getByTestId('segment-preview'));
+      return screen.findByTestId('segment-preview-result');
+    }
+
+    const NEVER = /suppress|interval|confidence|margin|\bwide\b|±/i;
+
+    it.each([
+      [
+        'no user with attributes',
+        answer({ users_without_context: 7 }),
+        "No users have attributes yet, so the size can't be estimated. Send the user's attributes as context when you " +
+          'call assign, and users who are assigned from then on will count. The segment still works: it is matched ' +
+          "against each request's attributes.",
+      ],
+      [
+        '12 users',
+        answer({ sample_size: 12, matched: 4, sampled_since: SINCE, reason: 'too_few_users' }),
+        'Only 12 users have attributes so far, too few to estimate a share.',
+      ],
+      [
+        '29 users',
+        answer({ sample_size: 29, matched: 29, sampled_since: SINCE, ended_by: 'cap', reason: 'too_few_users' }),
+        'Only 29 users have attributes so far, too few to estimate a share.',
+      ],
+      ['1 user', answer({ sample_size: 1, matched: 1, sampled_since: SINCE, reason: 'too_few_users' }), 'Only 1 user has attributes so far, too few to estimate a share.'],
+      ['30 users, the cap', share(30, 10, 'cap'), `About 33% of the 30 users seen most recently match (since ${SINCE_SHOWN}).`],
+      ['2,150 users, the cap', share(2150, 735, 'cap'), `About 34% of the 2,150 users seen most recently match (since ${SINCE_SHOWN}).`],
+      [
+        '2,150 users, enough found',
+        share(2150, 735, 'sample_size'),
+        `About 34% of the 2,150 users seen most recently match (since ${SINCE_SHOWN}).`,
+      ],
+      ['2,150 users, the window', share(2150, 735, 'window'), 'About 34% of the 2,150 users seen in the last 30 days match.'],
+      ['none matched', share(1000, 0, 'sample_size'), `None of the 1,000 users seen most recently match (since ${SINCE_SHOWN}).`],
+      ['none matched, the window', share(1000, 0, 'window'), 'None of the 1,000 users seen in the last 30 days match.'],
+      ['one in a thousand', share(1000, 1, 'cap'), `Under 1% of the 1,000 users seen most recently match (since ${SINCE_SHOWN}).`],
+    ])('%s', async (_label, body, text) => {
+      const result = await shown(body);
+      expect(result).toHaveTextContent(text, { normalizeWhitespace: true });
+      expect(result).toHaveAttribute('role', 'status');
+      expect(result.textContent).not.toMatch(NEVER);
+      if (body.ended_by !== 'window') expect(result.textContent).not.toMatch(/30 days/);
+      if (body.estimated_percentage === null) expect(result.textContent).not.toMatch(/%/);
+      if (body.matched === 0 && body.sample_size > 0 && body.estimated_percentage !== null) {
+        expect(result.textContent).not.toMatch(/0%/);
+      }
+    });
+
+    it('says the estimate took too long when the server stops the read (503)', async () => {
+      serve(rulesSegment(), [
+        {
+          method: 'POST',
+          path: `${BASE}/preview`,
+          handler: () => {
+            throw new ApiError({ status: 503, detail: PLANTED });
+          },
+        },
+      ]);
+      render(<SegmentDetailPage />);
+      await screen.findByTestId('segment-name-heading');
+      fireEvent.click(screen.getByTestId('segment-preview'));
+      const error = await screen.findByTestId('segment-preview-error');
+      expect(error).toHaveAttribute('role', 'alert');
+      expect(error).toHaveTextContent('The estimate took too long. Try again later.');
+      expect(error.textContent).not.toContain('PLANTED');
+      expect(screen.queryByTestId('segment-preview-result')).not.toBeInTheDocument();
+    });
   });
 
   it.each([
