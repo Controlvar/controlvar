@@ -315,7 +315,9 @@ describe('archiving (D7, D17)', () => {
     fireEvent.click(screen.getByTestId('segment-archive-yes'));
     const inUse = await screen.findByTestId('segment-in-use');
     expect(inUse).toHaveTextContent(
-      'Enterprise pilot is used by 1 flag and 2 experiments. Remove the segment from their targeting rules, then archive it.',
+      'Enterprise pilot is used by 1 flag and 2 experiments. Remove the segment from the targeting rules that name it and ' +
+        'from the segments an experiment balances within, then archive it. A started experiment that balances within it ' +
+        'lets it go once it is completed or archived.',
     );
     const links = within(inUse).getAllByRole('link');
     expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
