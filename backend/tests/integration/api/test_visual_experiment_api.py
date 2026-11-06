@@ -1337,3 +1337,76 @@ def test_a_read_for_update_gives_up_after_its_bound(
     stored = _row(db_session, created["id"])
     assert stored["visual_config"] is None
     assert stored["start_date"] is None
+
+
+@pytest.mark.regression
+def test_put_and_schedule_sent_together_into_one_app_both_answer(
+    db_session, developer, monkeypatch
+):
+    """PUT visual_config and PUT /schedule with a start date, for one draft,
+    sent at the same moment into one app: one event loop, as on one API
+    process, with an async get_db as production's is. Each route reads the row
+    for update and runs on to its commit with no await between, so the request
+    that reads second finds the row free: one answers 200, the other refuses
+    (422 for the PUT, 400 for /schedule), and the row ends with one of the two
+    fields. Each wait is bounded at 0.5 s here (5 s in production).
+
+    Planted defect: an ``await`` between the read for update and the commit
+    (``await asyncio.sleep(0.2)``). The first request then hands the event loop
+    to the second while it holds the row; the second's read holds the event
+    loop until its bound ends, and it answers 500.
+    """
+    monkeypatch.setattr(experiments_endpoints, "EXPERIMENT_ROW_LOCK_TIMEOUT", "500ms")
+    session = _factory(db_session)
+
+    async def async_get_db():
+        s = session()
+        s.execute(text("SET lock_timeout = '500ms'"))
+        try:
+            yield s
+        finally:
+            try:
+                s.rollback()
+                s.execute(text("RESET lock_timeout"))
+                s.commit()
+            finally:
+                s.close()
+
+    previous = app.dependency_overrides.get(deps.get_db)
+    app.dependency_overrides[deps.get_db] = async_get_db
+    try:
+        with TestClient(app, raise_server_exceptions=False) as c:
+            created = _create(
+                c, developer, visual_config=None, variants=_variants(None)
+            )
+            pool = ThreadPoolExecutor(max_workers=2)
+            try:
+                put = pool.submit(
+                    c.put,
+                    f"{BASE}/{created['id']}",
+                    json={"visual_config": CONFIG},
+                    headers=_auth(developer),
+                )
+                time.sleep(0.05)
+                schedule = pool.submit(
+                    _schedule,
+                    c,
+                    developer,
+                    created["id"],
+                    {"start_date": _soon(days=1)},
+                )
+                answers = (
+                    put.result(timeout=60).status_code,
+                    schedule.result(timeout=60).status_code,
+                )
+            finally:
+                pool.shutdown(wait=True)
+    finally:
+        if previous is None:
+            app.dependency_overrides.pop(deps.get_db, None)
+        else:
+            app.dependency_overrides[deps.get_db] = previous
+
+    assert answers in {(200, 400), (422, 200)}, answers
+    stored = _row(db_session, created["id"])
+    assert (stored["visual_config"] is None) != (stored["start_date"] is None), stored
