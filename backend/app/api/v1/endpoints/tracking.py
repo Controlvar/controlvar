@@ -19,6 +19,7 @@ from starlette.concurrency import run_in_threadpool
 from backend.app.api import deps
 from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.sdk_scope import require_batch_assign_key
+from backend.app.core.balanced_blocks import balance_setting
 from backend.app.core.context_limits import check_context
 from backend.app.core.logger import failure_detail, unexpected_failure
 from backend.app.core.metrics import (
@@ -395,7 +396,7 @@ async def assign_user_to_experiment(
         )
 
     try:
-        if experiment.balance_within:
+        if balance_setting(experiment) is not None:
             # A balanced experiment's new user takes a place from their
             # group's counter row, which another request can be holding
             # (#448): that wait, and everything after it, runs in the thread

@@ -38,6 +38,7 @@ from backend.app.api.segment_rules import (
 )
 from backend.app.api.v1.endpoints import results as results_endpoints
 from backend.app.api.v1.endpoints.power_calculator import OUT_OF_RANGE_MESSAGE
+from backend.app.core.balanced_blocks import balance_problem, balance_setting
 from backend.app.core.logger import failure_detail, unexpected_failure
 from backend.app.core.logging import logger
 from backend.app.core.optional_modules import (
@@ -89,7 +90,6 @@ from backend.app.services.audit_service import (
     audit_snapshot,
     record_experiment_change,
 )
-from backend.app.services.balanced_allocation import balance_problem
 from backend.app.services.experiment_service import (
     END_DATE_PASSED,
     SORT_BY_COLUMNS,
@@ -397,9 +397,9 @@ _BALANCE_FIELDS = frozenset(
 def _balance_refusal(experiment: Experiment) -> Optional[str]:
     """Why a stored experiment cannot balance as it is, or None (#448)."""
     return balance_problem(
-        experiment.balance_within,
-        optimization_type=experiment.optimization_type,
-        experiment_type=experiment.experiment_type,
+        balance_setting(experiment),
+        optimization_type=getattr(experiment, "optimization_type", None),
+        experiment_type=getattr(experiment, "experiment_type", None),
         allocations=[v.traffic_allocation for v in experiment.variants or []],
     )
 

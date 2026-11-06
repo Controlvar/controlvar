@@ -23,6 +23,7 @@ from pydantic import (
 )
 from pydantic_core import InitErrorDetails, PydanticCustomError
 
+from backend.app.core.balanced_blocks import balance_problem
 from backend.app.core.targeting_adapter import (
     TargetingRulesError,
     validate_experiment_targeting,
@@ -37,7 +38,6 @@ from backend.app.schemas.split_url_config import (
     find_split_url_config_problem,
 )
 from backend.app.schemas.variance_reduction import VarianceReductionConfig
-from backend.app.services.balanced_allocation import balance_problem
 
 #: What ``balance_within`` takes on a create and an update (#448).
 BALANCE_WITHIN_DESCRIPTION = (

@@ -10,7 +10,7 @@ Every refusal is a 422 whose message is one of the texts below, at
 ``["body", "balance_within", ...]``: the key, the values, or the setting as a
 whole. What a balanced experiment refuses beyond its own setting (a bandit, a
 split not in steps of 5, a split URL experiment) is judged with the rest of
-the experiment by ``balanced_allocation.balance_problem``.
+the experiment by ``backend.app.core.balanced_blocks.balance_problem``.
 """
 
 from __future__ import annotations
@@ -27,13 +27,13 @@ from pydantic import (
 )
 from pydantic_core import PydanticCustomError
 
-from backend.app.schemas.storable_text import StorableTextModel
-from backend.app.services.balanced_allocation import (
+from backend.app.core.balanced_blocks import (
     CLOSED_KEYS,
     MAX_GROUPS,
     MAX_VALUE_LENGTH,
     RESERVED_GROUPS,
 )
+from backend.app.schemas.storable_text import StorableTextModel
 
 #: A top-level key of the user's attributes: letters, digits, ``_`` and
 #: ``-``, not starting with ``-``, at most 100 characters. No dot: the group

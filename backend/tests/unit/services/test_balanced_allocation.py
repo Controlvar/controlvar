@@ -1,6 +1,7 @@
 """The group, the block and the refusals of a balanced experiment (#448).
 
-No database: :mod:`backend.app.services.balanced_allocation`'s pure parts.
+No database: :mod:`backend.app.core.balanced_blocks`, the pure parts of the
+allocation, and the block-order key the ``Experiment`` listeners make.
 
 * The label table: SPEC A's inputs, one parametrised case each, and the group
   of every generated JSON value is a named group, ``other`` or ``unknown``,
@@ -27,7 +28,8 @@ from typing import Iterator, List, Sequence, Tuple
 import numpy as np
 import pytest
 
-from backend.app.services import balanced_allocation as ba
+from backend.app.core import balanced_blocks as ba
+from backend.app.models.experiment import new_balance_seed
 
 pytestmark = pytest.mark.unit
 
@@ -283,7 +285,7 @@ def test_the_effective_shares_are_the_hash_paths():
 
 
 def test_a_seed_is_64_hex_characters_and_fresh():
-    seeds = {ba.new_balance_seed() for _ in range(50)}
+    seeds = {new_balance_seed() for _ in range(50)}
     assert len(seeds) == 50
     assert all(len(s) == 64 and set(s) <= set("0123456789abcdef") for s in seeds)
 
@@ -347,3 +349,58 @@ def test_a_split_url_experiment_is_refused():
 
 def test_nothing_is_refused_without_a_setting():
     assert _problem((34, 33, 33), "ucb1", "split_url", setting=None) is None
+
+
+class _Stored:
+    """An object standing in for a stored experiment."""
+
+    def __init__(self, **values):
+        self.__dict__.update(values)
+
+
+@pytest.mark.parametrize(
+    ("stored", "setting"),
+    [
+        (_Stored(balance_within=TIER), TIER),
+        (_Stored(balance_within=None), None),
+        (_Stored(balance_within={}), None),
+        (_Stored(balance_within=["tier"]), None),
+        (_Stored(balance_within="tier"), None),
+        (_Stored(), None),
+    ],
+    ids=["object", "null", "empty", "list", "string", "no-attribute"],
+)
+def test_only_an_object_is_a_setting(stored, setting):
+    """A value that is not an object balances nothing: the experiment is
+    assigned by the hash, as one without the setting is."""
+    assert ba.balance_setting(stored) == setting
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "module",
+    [
+        "backend.app.schemas.experiment",
+        "backend.app.schemas.balance_within",
+        "backend.app.core.balanced_blocks",
+        "backend.app.services.balanced_allocation",
+    ],
+)
+def test_each_module_imports_first_in_a_fresh_interpreter(module):
+    """The request schemas read the setting's rules from a module that imports
+    neither the services nor the schemas package: imported first, nothing
+    cycles back to a module half-initialised (``seed_streampulse`` imports
+    ``backend.app.schemas.experiment`` first)."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[4]
+    done = subprocess.run(
+        [sys.executable, "-B", "-c", f"import {module}"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert done.returncode == 0, done.stderr[-2000:]

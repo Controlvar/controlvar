@@ -12,6 +12,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
+from backend.app.core import balanced_blocks
 from backend.app.core.consistent_hash import bucket_of
 from backend.app.core.log_once import EVALUATION_NOTES
 from backend.app.core.rules_engine import SegmentMembershipUnavailable
@@ -256,7 +257,7 @@ class AssignmentService:
                 raise ValueError(
                     f"Override variant {override_variant_id} not valid for experiment {experiment_id}"
                 )
-        elif experiment.balance_within:
+        elif balanced_blocks.balance_setting(experiment) is not None:
             # The next place in the user's group's blocks (#448); its counter
             # step runs in this transaction, so the commit below covers it.
             variant_id, balance_group, balance_seq = self._balanced_variant(
@@ -1027,7 +1028,7 @@ class AssignmentService:
         """``(variant id, group, seq)`` for a new user of a balanced experiment.
 
         The group comes from the assign ``context`` (top-level key only,
-        :func:`balanced_allocation.group_of`); the variant is the group's
+        :func:`balanced_blocks.group_of`); the variant is the group's
         next block place, keyed on the experiment's ``balance_seed``. When no
         place can be had (the counter step timed out, this process already
         has its limit of steps in progress, or the experiment has no key), the
@@ -1036,7 +1037,9 @@ class AssignmentService:
         """
         if not experiment.variants:
             raise ValueError(f"Experiment {experiment.id} has no variants")
-        group = balanced_allocation.group_of(experiment.balance_within, context)
+        group = balanced_blocks.group_of(
+            balanced_blocks.balance_setting(experiment), context
+        )
         seed = experiment.balance_seed
         if not seed:
             seq, reason = None, balanced_allocation.REASON_NO_SEED
@@ -1045,10 +1048,10 @@ class AssignmentService:
         if seq is None:
             balanced_allocation.note_fallback(experiment.id, reason or "")
             return self._hash_user_to_variant(user_id, experiment), group, None
-        shares = balanced_allocation.effective_shares(
+        shares = balanced_blocks.effective_shares(
             [variant.traffic_allocation for variant in experiment.variants]
         )
-        index = balanced_allocation.slot_variant(seed, group, seq, shares)
+        index = balanced_blocks.slot_variant(seed, group, seq, shares)
         return experiment.variants[index].id, group, seq
 
     def _hash_user_to_variant(

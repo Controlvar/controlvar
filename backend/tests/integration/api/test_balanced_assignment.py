@@ -44,6 +44,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import QueuePool
 
 from backend.app.api import deps
+from backend.app.core import balanced_blocks
 from backend.app.core.config import settings
 from backend.app.core.metrics import experiment_balance_fallback_total
 from backend.app.db import session as db_session_module
@@ -633,14 +634,18 @@ def test_an_unbalanced_experiment_is_assigned_by_the_hash_alone(
         db_session, admin_user, setting=None, allocations=(34, 33, 33)
     )
     calls: List[str] = []
-    for name in ("take_seq", "slot_variant", "group_of"):
-        real = getattr(balanced_allocation, name)
+    for module, name in (
+        (balanced_allocation, "take_seq"),
+        (balanced_blocks, "slot_variant"),
+        (balanced_blocks, "group_of"),
+    ):
+        real = getattr(module, name)
 
         def spy(*args, _real=real, _name=name, **kwargs):
             calls.append(_name)
             return _real(*args, **kwargs)
 
-        monkeypatch.setattr(balanced_allocation, name, spy)
+        monkeypatch.setattr(module, name, spy)
     allocations = [("control", 34), ("treatment1", 33), ("treatment2", 33)]
     golden = hashing  # tests/ground_truth's copy, not the product's
     users = [f"gt-{i:04d}-{uuid.uuid4().hex[:6]}" for i in range(240)]

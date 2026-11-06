@@ -17,7 +17,7 @@ from typing import Dict, List, Optional
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from backend.app.services import balanced_allocation
+from backend.app.core import balanced_blocks
 
 
 @dataclass
@@ -65,9 +65,7 @@ def balance_rows(session: Session, experiment_id) -> BalanceRows:
     ).all()
     names = {str(v.id): v.name for v in variants}
     order = [v.name for v in variants]
-    shares = balanced_allocation.effective_shares(
-        [v.traffic_allocation for v in variants]
-    )
+    shares = balanced_blocks.effective_shares([v.traffic_allocation for v in variants])
 
     groups: Dict[Optional[str], GroupRows] = defaultdict(GroupRows)
     for row in session.execute(
@@ -101,7 +99,7 @@ def balance_rows(session: Session, experiment_id) -> BalanceRows:
         by_seq[row.balance_group][seq] = name
         if seed and row.balance_group is not None:
             want = order[
-                balanced_allocation.slot_variant(seed, row.balance_group, seq, shares)
+                balanced_blocks.slot_variant(seed, row.balance_group, seq, shares)
             ]
             if name != want:
                 problems.append(
