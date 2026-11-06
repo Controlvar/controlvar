@@ -125,10 +125,49 @@ def test_every_string_field_has_a_refused_corpus_entry():
 
 
 def test_the_refused_corpus_has_exactly_these_entries():
-    assert len(REFUSED) == 83
+    assert len(REFUSED) == 91
     assert len({case_id for case_id, _, _ in REFUSED}) == len(REFUSED)
     margins = [case_id for case_id, _, _ in REFUSED if case_id.startswith("margin-")]
     assert len(margins) == 12  # V99's twelve
+    selectors = [case_id for case_id, field, _ in REFUSED if field == "selector"]
+    assert len(selectors) == 17
+
+
+def test_the_selector_refusal_names_exactly_what_is_refused():
+    """S1's list, word for word: each refused character and comment mark is in
+    the text, and the text names no character class it does not refuse."""
+    for character in visual._SELECTOR_FORBIDDEN:
+        assert character in visual.SELECTOR_REFUSED, character
+    for mark in visual._COMMENT_MARKS:
+        assert mark in visual.SELECTOR_REFUSED, mark
+    assert visual._SELECTOR_FORBIDDEN == frozenset("{};\\@<")
+    assert visual._COMMENT_MARKS == ("/*", "*/")
+    assert "letters" not in visual.SELECTOR_REFUSED
+    assert "512" in visual.SELECTOR_REFUSED and "control" in visual.SELECTOR_REFUSED
+
+
+@pytest.mark.parametrize(
+    "selector",
+    [
+        'a[href="/checkout"]',
+        "a[href*='?ref=']",
+        "[data-x='a&b']",
+        '[aria-label="Añadir al carrito"]',
+        "[title='Warenkorb öffnen']",
+        'a[href^="/"] > *',
+        "*",
+    ],
+)
+def test_a_selector_may_hold_any_character_s1_does_not_refuse(selector):
+    assert visual.selector_problem(selector) is None
+
+
+@pytest.mark.parametrize(
+    "selector",
+    ["/*", "*/", "a /* b", "a */ b", "{", "}", ";", "\\", "@", "<", "\x00", "\x1b"],
+)
+def test_a_selector_refuses_each_character_and_comment_mark_s1_lists(selector):
+    assert visual.selector_problem(selector) == visual.SELECTOR_REFUSED
 
 
 @pytest.mark.parametrize(
@@ -382,6 +421,8 @@ def test_a_click_goal_names_a_selector():
         _config_errors(_config(goals=[_goal("click_buy", "click", selector="#buy")]))
         == []
     )
+    on_a_link = _goal("click_buy", "click", selector='a[href="/cart?step=2"]')
+    assert _config_errors(_config(goals=[on_a_link])) == []
     errors = _config_errors(_config(goals=[_goal("click_buy", "click", selector="a{")]))
     assert visual.SELECTOR_REFUSED in [e["msg"] for e in errors]
     errors = _config_errors(_config(goals=[_goal("hover_buy", "hover")]))

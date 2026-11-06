@@ -7074,7 +7074,7 @@
             "type": "string"
           },
           "selector": {
-            "description": "A CSS selector for exactly one element: 1 to 512 characters of letters, digits, spaces and _ - # . [ ] = \" ' * ^ $ | ~ : > ( ) , +. A change whose selector matches no element, or more than one, is not applied.",
+            "description": "A CSS selector for exactly one element: 1 to 512 characters, without { } ; \\ @ <, the comment marks /* and */, or a control character. A change whose selector matches no element, or more than one, is not applied.",
             "title": "Selector",
             "type": "string"
           }
@@ -12829,7 +12829,7 @@
             "type": "string"
           },
           "selector": {
-            "description": "A CSS selector for exactly one element: 1 to 512 characters of letters, digits, spaces and _ - # . [ ] = \" ' * ^ $ | ~ : > ( ) , +. A change whose selector matches no element, or more than one, is not applied.",
+            "description": "A CSS selector for exactly one element: 1 to 512 characters, without { } ; \\ @ <, the comment marks /* and */, or a control character. A change whose selector matches no element, or more than one, is not applied.",
             "title": "Selector",
             "type": "string"
           },
@@ -12870,7 +12870,7 @@
             "type": "string"
           },
           "selector": {
-            "description": "A CSS selector for exactly one element: 1 to 512 characters of letters, digits, spaces and _ - # . [ ] = \" ' * ^ $ | ~ : > ( ) , +. A change whose selector matches no element, or more than one, is not applied.",
+            "description": "A CSS selector for exactly one element: 1 to 512 characters, without { } ; \\ @ <, the comment marks /* and */, or a control character. A change whose selector matches no element, or more than one, is not applied.",
             "title": "Selector",
             "type": "string"
           },
@@ -12898,7 +12898,7 @@
             "type": "string"
           },
           "selector": {
-            "description": "A CSS selector for exactly one element: 1 to 512 characters of letters, digits, spaces and _ - # . [ ] = \" ' * ^ $ | ~ : > ( ) , +. A change whose selector matches no element, or more than one, is not applied.",
+            "description": "A CSS selector for exactly one element: 1 to 512 characters, without { } ; \\ @ <, the comment marks /* and */, or a control character. A change whose selector matches no element, or more than one, is not applied.",
             "title": "Selector",
             "type": "string"
           },
@@ -12928,7 +12928,7 @@
             "type": "string"
           },
           "selector": {
-            "description": "A CSS selector for exactly one element: 1 to 512 characters of letters, digits, spaces and _ - # . [ ] = \" ' * ^ $ | ~ : > ( ) , +. A change whose selector matches no element, or more than one, is not applied.",
+            "description": "A CSS selector for exactly one element: 1 to 512 characters, without { } ; \\ @ <, the comment marks /* and */, or a control character. A change whose selector matches no element, or more than one, is not applied.",
             "title": "Selector",
             "type": "string"
           },

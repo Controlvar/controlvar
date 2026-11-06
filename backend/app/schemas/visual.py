@@ -174,9 +174,8 @@ EXPOSURE_EVENT_NAMES = frozenset({"exposure", "experiment_exposure"})
 # --- the refusals (fixed text) -------------------------------------------------
 
 SELECTOR_REFUSED = (
-    "A selector is 1 to 512 characters of letters, digits, spaces and "
-    "_ - # . [ ] = \" ' * ^ $ | ~ : > ( ) , +; it cannot contain { } ; \\ @ < "
-    "or a comment."
+    "A selector is 1 to 512 characters, and cannot contain { } ; \\ @ <, the "
+    "comment marks /* and */, or a control character such as NUL."
 )
 TEXT_REFUSED = "Text cannot contain a NUL character."
 ATTRIBUTE_VALUE_REFUSED = "An attribute value cannot contain a control character."
@@ -219,7 +218,12 @@ EVENT_NAME_REFUSED = (
 DUPLICATE_GOAL_EVENT = "Each goal needs its own event_name."
 GOAL_PAGE_HOST_REFUSED = "A goal's page must be on one of the experiment's sites."
 
-_SELECTOR = re.compile(r"^[A-Za-z0-9 _\-#.\[\]=\"'*^$|~:>(),+]{1,512}$")
+#: The characters a selector may not contain (S1). Every other character is
+#: accepted: ``/``, ``?``, ``&``, quotes inside an attribute value and letters
+#: outside ASCII among them.
+_SELECTOR_FORBIDDEN = frozenset("{};\\@<")
+#: A CSS comment's opener and closer, each refused wherever it appears.
+_COMMENT_MARKS = ("/*", "*/")
 _STYLE_FORBIDDEN = frozenset(";{}<>\\@!")
 #: Words that never belong in a value, whatever surrounds them.
 _STYLE_FORBIDDEN_WORDS = ("expression", "-moz-binding", "behavior", "javascript")
@@ -249,10 +253,22 @@ def _has_control(value: str, allow_whitespace: bool = False) -> bool:
 
 
 def selector_problem(selector: str) -> Optional[str]:
-    """The refusal for *selector*, or ``None``. The allowed characters are a
-    closed set, so ``{ } ; \\ @ <``, ``/*``, NUL and control characters are
-    all outside it."""
-    if not isinstance(selector, str) or not _SELECTOR.match(selector):
+    """The refusal for *selector*, or ``None`` (S1).
+
+    Refused: a selector that is not 1 to 512 characters (counted as Unicode
+    code points), one that contains any of ``{ } ; \\ @ <``, the comment
+    opener ``/*`` or closer ``*/``, or a control character (NUL, tab and new
+    line among them). Everything else is accepted. Each of the comment marks
+    is its own check: ``/`` and ``*`` alone are ordinary characters here."""
+    if not isinstance(selector, str):
+        return SELECTOR_REFUSED
+    if not 1 <= len(selector) <= MAX_SELECTOR_LENGTH:
+        return SELECTOR_REFUSED
+    if any(character in _SELECTOR_FORBIDDEN for character in selector):
+        return SELECTOR_REFUSED
+    if any(mark in selector for mark in _COMMENT_MARKS):
+        return SELECTOR_REFUSED
+    if _has_control(selector):
         return SELECTOR_REFUSED
     return None
 
@@ -321,10 +337,10 @@ class _Change(BaseModel):
     selector: str = Field(
         ...,
         description=(
-            "A CSS selector for exactly one element: 1 to 512 characters of "
-            "letters, digits, spaces and _ - # . [ ] = \" ' * ^ $ | ~ : > ( ) , +. "
-            "A change whose selector matches no element, or more than one, is "
-            "not applied."
+            "A CSS selector for exactly one element: 1 to 512 characters, "
+            "without { } ; \\ @ <, the comment marks /* and */, or a control "
+            "character. A change whose selector matches no element, or more "
+            "than one, is not applied."
         ),
     )
 

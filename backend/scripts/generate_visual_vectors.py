@@ -191,16 +191,29 @@ REFUSED: List[Tuple[str, str, Dict[str, Any]]] = [
     # Text.
     ("text-nul", "set_text.text", _text("a\u0000b")),
     ("text-number", "set_text.text", _text(5)),
-    # Selectors.
+    # Selectors: each character S1 refuses on its own, each comment mark on
+    # its own, control characters, and the length.
     ("selector-brace", "selector", _selector("div{color:red}")),
+    ("selector-open-brace", "selector", _selector("div{")),
+    ("selector-close-brace", "selector", _selector("div}")),
     ("selector-semicolon", "selector", _selector("a;b")),
     ("selector-backslash", "selector", _selector("a\\b")),
     ("selector-at", "selector", _selector("@media")),
     ("selector-angle", "selector", _selector("a<b")),
     ("selector-comment", "selector", _selector("a/*x*/")),
+    ("selector-comment-open", "selector", _selector('a[href="/*"]')),
+    ("selector-comment-close", "selector", _selector("a */")),
     ("selector-nul", "selector", _selector("a\u0000")),
     ("selector-newline", "selector", _selector("a\nb")),
+    ("selector-tab", "selector", _selector("a\tb")),
+    ("selector-delete", "selector", _selector("a\u007fb")),
+    ("selector-c1-control", "selector", _selector("a\u0085b")),
     ("selector-empty", "selector", _selector("")),
+    (
+        "selector-513-code-points",
+        "selector",
+        _selector('[title="' + "\U0001f600" * 503 + '"]'),
+    ),
     # The document and the operations.
     (
         "op-set-html",
@@ -252,6 +265,18 @@ ACCEPTED: List[Tuple[str, Dict[str, Any]]] = [
     (
         "selector-complex",
         _selector('div.card > a[data-id^="p1"]:nth-of-type(2), #x + .y ~ p'),
+    ),
+    # Selectors: everything S1 does not refuse is accepted.
+    ("selector-slash-in-value", _selector('a[href="/checkout"]')),
+    ("selector-query-in-value", _selector("a[href*='?ref=']")),
+    ("selector-ampersand-in-value", _selector("[data-x='a&b']")),
+    ("selector-non-ascii-value", _selector('[aria-label="Añadir al carrito"]')),
+    ("selector-non-ascii-value-2", _selector("[title='Warenkorb öffnen']")),
+    ("selector-slash-and-star-apart", _selector('a[href^="/"] > *')),
+    # 512 code points, 1014 UTF-16 code units: the limit counts code points.
+    (
+        "selector-512-code-points",
+        _selector('[title="' + "\U0001f600" * 502 + '"]'),
     ),
     (
         "style-colours",
