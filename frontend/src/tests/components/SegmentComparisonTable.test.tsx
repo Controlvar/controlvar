@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
+import axe from 'axe-core';
 import { SegmentComparisonTable } from '@/components/results/Breakdowns/SegmentComparisonTable';
 import { DimensionalBreakdownResponse } from '@/types/results';
 
@@ -154,10 +155,82 @@ describe('SegmentComparisonTable', () => {
     expect(significantBadges).toHaveLength(2);
   });
 
-  it('shows empty message when segments array is empty', () => {
+  // UI5 (#1776): an empty list no longer means "no data for this dimension":
+  // every assigned user is in a row (`unknown` at worst), so it means no users.
+  it('J6: says no users are assigned when the segments array is empty', () => {
     render(<SegmentComparisonTable breakdown={makeBreakdown({ segments: [] })} />);
-    expect(
-      screen.getByText(/no segment data available/i)
-    ).toBeInTheDocument();
+    expect(screen.getByText('No users are assigned to this experiment yet.')).toBeInTheDocument();
+    expect(screen.queryByText(/no segment data available/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('segment-attribution-caption')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('segment-unknown-only')).not.toBeInTheDocument();
+  });
+});
+
+const ATTRIBUTION =
+  'Each user is counted once, in the segment of the value the user was first assigned with, or else the first value tracked for them; unknown is users with none.';
+const OTHER =
+  'Values beyond the 20 with the most users are counted together under other.';
+
+/** The first segment of makeBreakdown, renamed. */
+function row(value: string) {
+  return { ...makeBreakdown().segments[0], segment_value: value };
+}
+
+describe('SegmentComparisonTable captions and hints (#1776)', () => {
+  it('J4: every table carries the attribution caption, in these words', () => {
+    render(<SegmentComparisonTable breakdown={makeBreakdown()} />);
+    expect(screen.getByTestId('segment-attribution-caption').textContent).toBe(ATTRIBUTION);
+    expect(screen.getByTestId('segment-attribution-caption').textContent).not.toMatch(/seen with/);
+  });
+
+  it('J3: the other caption shows when an other row exists, and only then', () => {
+    const { rerender } = render(
+      <SegmentComparisonTable breakdown={makeBreakdown({ segments: [row('ios'), row('other')] })} />
+    );
+    expect(screen.getByTestId('segment-other-caption').textContent).toBe(OTHER);
+    rerender(
+      <SegmentComparisonTable breakdown={makeBreakdown({ segments: [row('ios'), row('unknown')] })} />
+    );
+    expect(screen.queryByTestId('segment-other-caption')).not.toBeInTheDocument();
+    expect(screen.queryByText(/counted together under other/)).not.toBeInTheDocument();
+  });
+
+  it('J5: the unknown-only hint names the dimension, links the docs, and shows only when unknown is the only row', () => {
+    const { rerender } = render(
+      <SegmentComparisonTable breakdown={makeBreakdown({ segments: [row('unknown')] })} />
+    );
+    const hint = screen.getByTestId('segment-unknown-only');
+    expect(hint.textContent).toContain(
+      "No user of this experiment was assigned or tracked with platform. Send it in the user's attributes when you assign them."
+    );
+    expect(hint.querySelector('code')?.textContent).toBe('platform');
+    const link = screen.getByRole('link', { name: 'How a user gets a segment' });
+    expect(link.getAttribute('href')).toMatch(/api\/dimensional-analysis/);
+
+    // unknown beside a real value: the dimension is carried by someone.
+    rerender(
+      <SegmentComparisonTable
+        breakdown={makeBreakdown({ segments: [row('ios'), row('unknown')] })}
+      />
+    );
+    expect(screen.queryByTestId('segment-unknown-only')).not.toBeInTheDocument();
+    // a table with no unknown row at all
+    rerender(<SegmentComparisonTable breakdown={makeBreakdown()} />);
+    expect(screen.queryByTestId('segment-unknown-only')).not.toBeInTheDocument();
+  });
+
+  describe('J8: axe-core in jsdom, colour contrast off (jsdom cannot compute it)', () => {
+    const axeOptions: axe.RunOptions = { rules: { 'color-contrast': { enabled: false } } };
+
+    it.each([
+      ['a table', makeBreakdown()],
+      ['an other row', makeBreakdown({ segments: [row('ios'), row('other')] })],
+      ['only unknown', makeBreakdown({ segments: [row('unknown')] })],
+      ['no users', makeBreakdown({ segments: [] })],
+    ])('has no violations with %s', async (_, breakdown) => {
+      const { container } = render(<SegmentComparisonTable breakdown={breakdown} />);
+      const result = await axe.run(container, axeOptions);
+      expect(result.violations.map((v) => v.id)).toEqual([]);
+    });
   });
 });
