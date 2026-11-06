@@ -449,7 +449,7 @@ def get_segment_experiments(
 # ---------------------------------------------------------------------------
 
 
-#: The 503 answer when the preview's read passes its statement timeout.
+#: The 503 answer when the preview's read passes its time limit.
 PREVIEW_TIMED_OUT = "The preview took too long. Try again later."
 
 
@@ -471,8 +471,9 @@ PREVIEW_TIMED_OUT = "The preview took too long. Try again later."
     ),
     responses={
         503: {
-            "description": "The read took longer than its time limit (a large "
-            "table with few exposures can). The text is fixed."
+            "description": "The read of recent exposures, all its fetches "
+            "together, took longer than its 5-second limit (a large events table "
+            "with few exposures can). The text is fixed."
         },
     },
     tags=["Segments"],
@@ -490,9 +491,9 @@ def preview_audience_size(
 
     The ruleset and ``sample_size`` are checked against the limits in
     ``backend.app.core.segment_preview_limits`` before any database query; a
-    request over any of them is answered 422. A read PostgreSQL cancels at its
-    statement timeout answers 503 with fixed text; any other database error
-    propagates.
+    request over any of them is answered 422. A read that passes its time limit
+    in all (``PREVIEW_READ_TIMEOUT_MS``, every fetch together) answers 503 with
+    fixed text; any other database error propagates.
     """
     _require_permission(current_user, Action.READ)
     if data.rules is None:

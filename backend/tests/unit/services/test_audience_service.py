@@ -686,34 +686,113 @@ class TestPreviewAudienceSize:
         assert (window.ended_by, window.sample_size) == ("window", 5)
 
 
+class _Clock:
+    """``time.monotonic`` for the read, moved only by the fake fetches."""
+
+    def __init__(self):
+        self.now = 1000.0
+
+    def monotonic(self) -> float:
+        return self.now
+
+
+def _no_context_rows(count: int, start: int = 0) -> list:
+    """Rows of distinct users without attributes: the read never stops early."""
+    return [(f"u{start + i}", None, f"t{start + i:03d}") for i in range(count)]
+
+
 class TestPreviewRead:
-    """The read's guards, without a database."""
+    """The read's guards, without a database.
+
+    Each fake fetch serves the next batch and moves the clock on by
+    ``seconds_per_fetch``, so the budget each fetch is given is exact.
+    """
+
+    @pytest.fixture
+    def clock(self, monkeypatch) -> _Clock:
+        clock = _Clock()
+        monkeypatch.setattr(audience_service, "time", clock)
+        monkeypatch.setattr(audience_service, "PREVIEW_ROWS_PER_FETCH", 2)
+        return clock
 
     @staticmethod
-    def _db(dialect: str) -> MagicMock:
+    def _db(
+        dialect: str, clock: _Clock, batches, seconds_per_fetch: float
+    ) -> MagicMock:
         db = MagicMock()
         db.get_bind.return_value.dialect.name = dialect
-        db.execute.return_value.__iter__.return_value = iter([])
+        pending = [list(batch) for batch in batches]
+
+        def fetchmany(size):
+            assert size == 2
+            clock.now += seconds_per_fetch
+            return pending.pop(0) if pending else []
+
+        db.execute.return_value.fetchmany.side_effect = fetchmany
         return db
 
     @staticmethod
     def _executed(db) -> list:
         return [str(c.args[0]) for c in db.execute.call_args_list]
 
-    def test_postgresql_bounds_the_read_with_a_statement_timeout(self):
-        db = self._db("postgresql")
-        AudienceService.preview_audience_size(db, US_RULES, 10)
-        executed = self._executed(db)
-        assert len(executed) == 2
-        assert "set_config('statement_timeout', :ms, true)" in executed[0]
-        assert db.execute.call_args_list[0].args[1] == {"ms": "5000"}
+    @staticmethod
+    def _budgets(db) -> list:
+        """The ``statement_timeout`` set before each statement, in order."""
+        return [
+            c.args[1]["ms"]
+            for c in db.execute.call_args_list
+            if "set_config('statement_timeout', :ms, true)" in str(c.args[0])
+        ]
 
-    def test_another_database_skips_the_statement_timeout(self):
-        db = self._db("sqlite")
-        AudienceService.preview_audience_size(db, US_RULES, 10)
+    def test_postgresql_gives_each_fetch_what_is_left_of_one_budget(self, clock):
+        batches = [_no_context_rows(2), _no_context_rows(2, 2), _no_context_rows(1, 4)]
+        db = self._db("postgresql", clock, batches, seconds_per_fetch=1.0)
+        result = AudienceService.preview_audience_size(db, US_RULES, 10)
+
+        # The statement, then one budget per fetch: 5 s in all, not 5 s each.
+        assert self._budgets(db) == ["5000", "5000", "4000", "3000"]
+        executed = self._executed(db)
+        assert len(executed) == 5
+        assert "events.created_at DESC" in executed[1]
+        assert db.execute.call_args_list[1].kwargs == {
+            "execution_options": {"yield_per": 2}
+        }
+        # The short third batch ended the read: no fourth fetch.
+        assert (result.users_without_context, result.ended_by) == (5, "window")
+
+    @pytest.mark.parametrize(
+        "seconds_per_fetch, budgets",
+        [
+            (2.0, ["5000", "5000", "3000", "1000"]),
+            # Under a millisecond left: the read stops; 0 would turn the limit off.
+            (4.9996, ["5000", "5000"]),
+        ],
+    )
+    def test_the_read_stops_when_its_time_is_up(
+        self, clock, seconds_per_fetch, budgets
+    ):
+        batches = [_no_context_rows(2, 2 * i) for i in range(10)]
+        db = self._db("postgresql", clock, batches, seconds_per_fetch)
+        with pytest.raises(audience_service.PreviewTimedOut):
+            AudienceService.preview_audience_size(db, US_RULES, 10)
+
+        assert self._budgets(db) == budgets
+        assert "0" not in self._budgets(db)
+
+    def test_another_database_skips_the_statement_timeout_but_keeps_the_deadline(
+        self, clock
+    ):
+        batches = [_no_context_rows(2), _no_context_rows(1, 2)]
+        db = self._db("sqlite", clock, batches, seconds_per_fetch=1.0)
+        result = AudienceService.preview_audience_size(db, US_RULES, 10)
         executed = self._executed(db)
         assert len(executed) == 1
         assert "set_config" not in executed[0]
+        assert result.users_without_context == 3
+
+        db = self._db("sqlite", clock, batches, seconds_per_fetch=6.0)
+        with pytest.raises(audience_service.PreviewTimedOut):
+            AudienceService.preview_audience_size(db, US_RULES, 10)
 
     def test_only_sqlstate_57014_is_a_timeout(self):
         class DriverError(Exception):

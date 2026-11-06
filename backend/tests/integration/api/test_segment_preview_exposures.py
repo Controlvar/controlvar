@@ -328,13 +328,16 @@ def test_a_users_latest_attributes_are_the_ones_evaluated(
 # ---------------------------------------------------------------------------
 
 #: The route's statements: the session's search path, the signed-in user, the
-#: segment, the statement timeout, and the one read.
+#: segment, the read's time limit, the one read, and the time left given to
+#: its first fetch. Both reads below end in that fetch: 10 users is a short
+#: fetch, and the 1,000th user ends the read at sample_size 1,000.
 PREVIEW_STATEMENTS = [
     "SET search_path TO test_experimentation",
     "SELECT users",
     "SELECT segments",
     "SELECT set_config",
     "SELECT events",
+    "SELECT set_config",
 ]
 
 
@@ -634,7 +637,7 @@ def _failing_statement(since, until, cap):
 def test_a_read_past_the_statement_timeout_answers_503(
     admin_client, no_exposures, segment_id, monkeypatch
 ):
-    monkeypatch.setattr(audience_service, "PREVIEW_STATEMENT_TIMEOUT_MS", 50)
+    monkeypatch.setattr(audience_service, "PREVIEW_READ_TIMEOUT_MS", 50)
     monkeypatch.setattr(audience_service, "recent_exposures_statement", _slow_statement)
     response = admin_client.post(
         f"{COLLECTION}/{segment_id}/preview", json={"name": "Preview", "rules": US}
@@ -642,6 +645,47 @@ def test_a_read_past_the_statement_timeout_answers_503(
     assert response.status_code == 503, response.text
     assert response.json() == {"detail": PREVIEW_TIMED_OUT}
     assert "window" not in response.text
+
+
+#: The slow read below: SLOW_ROWS users without attributes (so the read never
+#: stops early), each row sleeping 1 ms as it is fetched, SLOW_ROWS_PER_FETCH
+#: rows per fetch, against a limit of SLOW_READ_LIMIT_MS for the whole read.
+SLOW_ROWS = 1000
+SLOW_ROWS_PER_FETCH = 20
+SLOW_READ_LIMIT_MS = 300
+
+
+def _slowly_fetched_rows(since, until, cap):
+    return sa.text(
+        "SELECT 'u' || g AS user_id, NULL::jsonb AS event_metadata, "
+        "'2026-01-01T00:00:00+00:00' || pg_sleep(0.001)::text AS created_at "
+        "FROM generate_series(1, :n) g"
+    ).bindparams(n=SLOW_ROWS)
+
+
+def test_a_read_of_quick_fetches_that_passes_the_limit_in_all_answers_503(
+    admin_client, no_exposures, segment_id, monkeypatch
+):
+    """The limit is on the whole read, not on each fetch.
+
+    Each fetch from a server-side cursor is a statement of its own, and
+    PostgreSQL starts ``statement_timeout`` again on each. Here every fetch is
+    far under the limit and the fetches together are well over it: measured
+    with a 60 s limit (2026-11-06, PostgreSQL 14), 50 fetches of about 50 ms
+    each, 2.5 s in all, against the 300 ms set here.
+    """
+    monkeypatch.setattr(audience_service, "PREVIEW_READ_TIMEOUT_MS", SLOW_READ_LIMIT_MS)
+    monkeypatch.setattr(audience_service, "PREVIEW_ROWS_PER_FETCH", SLOW_ROWS_PER_FETCH)
+    monkeypatch.setattr(
+        audience_service, "recent_exposures_statement", _slowly_fetched_rows
+    )
+    response = admin_client.post(
+        f"{COLLECTION}/{segment_id}/preview",
+        params={"sample_size": 1000},
+        json={"name": "Preview", "rules": US},
+    )
+    assert response.status_code == 503, response.text
+    assert response.json() == {"detail": PREVIEW_TIMED_OUT}
 
 
 def test_another_database_error_is_not_a_503(

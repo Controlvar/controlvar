@@ -90,8 +90,9 @@ PREVIEW_ROWS_PER_USER = 5
 #: With fewer users with attributes than this, there is no percentage
 #: (``reason: too_few_users``). A floor on the estimate's quality only.
 PREVIEW_MIN_USERS = 30
-#: PostgreSQL cancels the preview's read after this long (``PreviewTimedOut``).
-PREVIEW_STATEMENT_TIMEOUT_MS = 5000
+#: The preview's whole read, every fetch and the work between them, has this
+#: long; past it the read stops (``PreviewTimedOut``).
+PREVIEW_READ_TIMEOUT_MS = 5000
 #: Rows fetched from the server per round trip while the read streams.
 PREVIEW_ROWS_PER_FETCH = 1000
 #: SQLSTATE ``query_canceled``: what PostgreSQL raises at a statement timeout.
@@ -104,7 +105,11 @@ def preview_candidate_cap(sample_size: int) -> int:
 
 
 class PreviewTimedOut(Exception):
-    """The preview's read passed ``PREVIEW_STATEMENT_TIMEOUT_MS`` (SQLSTATE 57014)."""
+    """The preview's read passed ``PREVIEW_READ_TIMEOUT_MS``.
+
+    Raised when PostgreSQL cancels a fetch at the time left (SQLSTATE 57014),
+    or when no time is left before the next fetch.
+    """
 
 
 def recent_exposures_statement(since: datetime, until: datetime, cap: int) -> sa.Select:
@@ -133,18 +138,33 @@ def recent_exposures_statement(since: datetime, until: datetime, cap: int) -> sa
     )
 
 
-def _bound_preview_statement(db: Session) -> None:
-    """Bound the preview's read in time (PostgreSQL only).
+def _on_postgresql(db: Session) -> bool:
+    dialect = getattr(getattr(db.get_bind(), "dialect", None), "name", None)
+    return dialect == "postgresql"
+
+
+def _limit_next_statement(db: Session, deadline: float, on_postgresql: bool) -> None:
+    """Give the read's next statement the time left before ``deadline``.
+
+    ``deadline`` is on ``time.monotonic()``. A server-side cursor's every
+    FETCH is a statement of its own, and PostgreSQL starts
+    ``statement_timeout`` again on each, so it is set to the time left before
+    each one: PostgreSQL cancels whichever fetch is under way at the deadline
+    (SQLSTATE 57014). With less than a millisecond left the read stops here
+    instead, since a timeout of 0 would turn the limit off.
 
     ``set_config('statement_timeout', ..., true)`` is ``SET LOCAL``: it lasts
     until the transaction ends, which the request's session does when it
-    closes. Other databases (SQLite in tests) have no such setting.
+    closes. Other databases (SQLite in tests) have no such setting; the
+    deadline is still checked before each fetch.
     """
-    dialect = getattr(getattr(db.get_bind(), "dialect", None), "name", None)
-    if dialect == "postgresql":
+    left_ms = int((deadline - time.monotonic()) * 1000)
+    if left_ms < 1:
+        raise PreviewTimedOut()
+    if on_postgresql:
         db.execute(
             sa.text("SELECT set_config('statement_timeout', :ms, true)"),
-            {"ms": str(int(PREVIEW_STATEMENT_TIMEOUT_MS))},
+            {"ms": str(left_ms)},
         )
 
 
@@ -153,17 +173,30 @@ def _read_recent_exposures(
 ) -> Iterator[Tuple[str, Any, str]]:
     """``(user_id, event_metadata, created_at)`` of recent exposures, streamed.
 
-    Rows are fetched ``PREVIEW_ROWS_PER_FETCH`` at a time, so a caller that
-    stops early never holds more; closing the generator closes the cursor.
+    The statement runs on a server-side cursor (``yield_per``) and rows are
+    fetched ``PREVIEW_ROWS_PER_FETCH`` at a time, so a caller that stops
+    early never holds more; closing the generator closes the cursor. The
+    whole read has ``PREVIEW_READ_TIMEOUT_MS`` from here, and the time left
+    is given to each fetch (``_limit_next_statement``), so the caller's work
+    between fetches counts too.
     """
-    _bound_preview_statement(db)
+    deadline = time.monotonic() + PREVIEW_READ_TIMEOUT_MS / 1000.0
+    on_postgresql = _on_postgresql(db)
+    _limit_next_statement(db, deadline, on_postgresql)
     result = db.execute(
         recent_exposures_statement(since, until, cap),
         execution_options={"yield_per": PREVIEW_ROWS_PER_FETCH},
     )
     try:
-        for user_id, metadata, created_at in result:
-            yield user_id, metadata, created_at
+        while True:
+            _limit_next_statement(db, deadline, on_postgresql)
+            # At most one fetch from the server per call: SQLAlchemy asks the
+            # driver only for the rows its buffer lacks.
+            batch = result.fetchmany(PREVIEW_ROWS_PER_FETCH)
+            for user_id, metadata, created_at in batch:
+                yield user_id, metadata, created_at
+            if len(batch) < PREVIEW_ROWS_PER_FETCH:
+                return
     finally:
         result.close()
 
@@ -823,7 +856,8 @@ class AudienceService:
         ``users_without_context`` only. The read stops at ``sample_size`` such
         users, at ``preview_candidate_cap(sample_size)`` rows, or at the start
         of the window, and ``ended_by`` says which. It is one statement,
-        streamed; nothing is written.
+        streamed, with ``PREVIEW_READ_TIMEOUT_MS`` for the whole read; nothing
+        is written.
 
         With fewer than ``PREVIEW_MIN_USERS`` users the answer has no
         percentage (``reason`` says why), so a share of a handful of users is
@@ -836,8 +870,9 @@ class AudienceService:
             sample_size: At most this many users are evaluated.
 
         Raises:
-            PreviewTimedOut: PostgreSQL cancelled the read at
-                ``PREVIEW_STATEMENT_TIMEOUT_MS`` (SQLSTATE 57014). Any other
+            PreviewTimedOut: the read passed ``PREVIEW_READ_TIMEOUT_MS`` in
+                all: PostgreSQL cancelled a fetch at the time left (SQLSTATE
+                57014), or none was left before the next fetch. Any other
                 database error propagates unchanged.
         """
         engine_rules = validate_segment_rules(rules)
