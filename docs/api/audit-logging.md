@@ -282,8 +282,9 @@ writes it after the change is saved, with the signed-in user as the actor; the
 written. An update records only the fields that changed, as
 `old_value` and `new_value` JSON; a create records the new entity's identifying fields in
 `new_value`, and a delete the old ones in `old_value`. Descriptions, hypotheses, targeting
-rules, segment rules, variants and metrics are never stored: when they change, their names
-are listed in `new_value.changed_fields`. No entry holds a password, a token, any part of
+rules, segment rules, variants and metrics are never stored. A change to a description, a hypothesis or
+a rule is named in `new_value.changed_fields`; a change to an experiment's variants or metrics is not yet
+named there (the entry records who saved and when; #1782 tracks naming them). No entry holds a password, a token, any part of
 an API key, or a request body.
 
 | Action Type | Entity | Written when |
@@ -372,7 +373,8 @@ entry. No entry ever holds:
 - passwords or their hashes, tokens, or any part of an API key or its hash;
 - request bodies, IP addresses or user agents;
 - the contents of descriptions, hypotheses, targeting rules, segment rules, variants and
-  metrics (only their names, under `changed_fields`);
+  metrics (descriptions, hypotheses and rules are named under `changed_fields`; an experiment's
+  variants and metrics are not yet named, #1782);
 - error text;
 - changes made directly in the database rather than through the platform.
 

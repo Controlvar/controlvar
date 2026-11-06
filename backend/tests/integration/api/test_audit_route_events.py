@@ -565,6 +565,38 @@ def test_experiment_create_update_delete(client, fresh, developer):
     _one(w, "experiment_delete", "experiment", exp["id"], developer, v2_delta=1)
 
 
+def test_a_design_save_records_the_save_but_not_which_parts_changed(
+    client, fresh, developer
+):
+    """Today a design save names neither variants nor metrics in the entry.
+
+    A PUT of ``{variants, metrics}`` on a draft writes one ``experiment_update``
+    entry with the user and the time, but ``old_value`` and ``new_value`` are
+    both null, so ``changed_fields`` does not name the variants or the metrics.
+    The audit-logging page says so (#1782). This pins that fact; #1782 will
+    name them, and this test then changes with it.
+    """
+    exp = _create_experiment(client, developer)
+
+    w = Written(fresh)
+    payload = _experiment_payload()
+    payload["variants"][0]["name"] = "Control renamed"
+    payload["metrics"][0]["name"] = "Conversion Rate renamed"
+    response = client.put(
+        f"{V1}/experiments/{exp['id']}",
+        json={"variants": payload["variants"], "metrics": payload["metrics"]},
+        headers=_auth(developer),
+    )
+    assert response.status_code == 200, response.text
+    row = _one(w, "experiment_update", "experiment", exp["id"], developer, v2_delta=1)
+    assert row.timestamp is not None
+    old, new = _values(row)
+    named = set((old or {}).keys()) | set((new or {}).keys())
+    assert "variants" not in named and "metrics" not in named
+    assert "variants" not in (new or {}).get("changed_fields", [])
+    assert "metrics" not in (new or {}).get("changed_fields", [])
+
+
 def test_experiment_lifecycle(client, fresh, developer):
     exp = _create_experiment(client, developer)
     h = _auth(developer)
