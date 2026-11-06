@@ -233,7 +233,8 @@ Segment targeting (`in_segment` and `not_in_segment`) arrived in v0.22.0.
   default).
 
 `GET /api/v1/segments/{segment_id}/experiments` lists the flags and
-experiments whose rules mention a segment.
+experiments whose rules mention a segment, and the experiments that balance
+within it.
 
 ### Step 1: Find the Previous Task Definition ARN
 

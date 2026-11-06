@@ -72,7 +72,7 @@ id:
 - Every segment must exist and be active, and a rules segment's rules must be valid.
 - A segment that a draft, active or paused experiment balances within cannot be archived or made
   inactive: the request answers `409`, as for a segment that targeting rules use. A clone answers
-  `409` when a segment it would balance within has been archived since.
+  `409` when a segment it would balance within cannot be used.
 
 ## What is refused
 

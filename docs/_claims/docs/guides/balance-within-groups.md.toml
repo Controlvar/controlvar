@@ -187,7 +187,7 @@ by = [
 ]
 
 [[unit]]
-text = "A clone answers 409 when a segment it would balance within has been archived since."
+text = "A clone answers 409 when a segment it would balance within cannot be used."
 by = ["test:backend/tests/integration/api/test_balance_within_api.py::test_a_clone_of_an_experiment_balanced_within_an_archived_segment_is_refused"]
 
 [[unit]]

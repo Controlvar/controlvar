@@ -1999,7 +1999,7 @@ PUT    /api/v1/segments/{id}             — Update segment (DEVELOPER+; 409: in
 DELETE /api/v1/segments/{id}             — Archive segment: sets status archived (DEVELOPER+; 409: in use)
 POST   /api/v1/segments/{id}/evaluate    — Is this user context a member? (409: stored rules not valid)
 POST   /api/v1/segments/bulk-evaluate    — One user context against up to 50 segments
-GET    /api/v1/segments/{id}/experiments — Experiments and flags whose rules mention the segment's id
+GET    /api/v1/segments/{id}/experiments — Experiments and flags whose rules mention the segment's id, and experiments that balance within it
 POST   /api/v1/segments/{id}/preview     — Estimate the share of users the rules in the body match
 POST   /api/v1/segments/{id}/members        — Add user IDs to an id_list segment (beta; DEVELOPER+)
 POST   /api/v1/segments/{id}/members/remove — Remove user IDs from an id_list segment (beta; DEVELOPER+)
