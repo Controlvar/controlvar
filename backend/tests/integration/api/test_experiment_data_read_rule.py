@@ -756,6 +756,28 @@ def test_stream_closes_4401_without_a_token(client, db_session, people):
     assert _stream(client, _url("stream", experiment_id), None) == WS_UNAUTHORIZED
 
 
+def test_stream_closes_when_the_read_check_itself_fails(client, db_session, people):
+    """An error that is not a refusal, raised by the read check, closes the
+    socket 4401 and sends no snapshot: the check fails closed."""
+    assert deps.dev_auth_bypass_active() is False
+    experiment_id = _experiment(client, db_session, people)
+    url = _url("stream", experiment_id)
+    protocols = [WS_AUTH_SUBPROTOCOL, _token(people["superuser"])]
+
+    with (
+        patch.object(
+            deps, "get_experiment_read_access", side_effect=RuntimeError("boom")
+        ),
+        patch(SNAPSHOT, return_value={"event": "results_update"}) as snapshot,
+    ):
+        with client.websocket_connect(url, subprotocols=protocols) as ws:
+            message = ws.receive()
+
+    assert message["type"] == "websocket.close"
+    assert message["code"] == WS_UNAUTHORIZED
+    snapshot.assert_not_called()
+
+
 def test_stream_snapshot_for_a_reader(client, db_session, people):
     """A VIEWER, the narrowest shipped role, still gets the first snapshot."""
     assert deps.dev_auth_bypass_active() is False
