@@ -49,7 +49,6 @@ export interface RawEntry {
 export const RAW_DIALOGS: Record<string, RawEntry> = {
   'frontend/src/components/admin/api-keys/CreateApiKeyModal.tsx': { banned: 2, dialogUses: 0 },
   'frontend/src/components/admin/users/InviteUserModal.tsx': { banned: 2, dialogUses: 0 },
-  'frontend/src/components/admin/users/EffectivePermissionsModal.tsx': { banned: 2, dialogUses: 0 },
   'frontend/src/pages/admin/safety.tsx': { banned: 2, dialogUses: 0 },
   'modules/frontend/src/components/admin/roles/CreateRoleModal.tsx': { banned: 2, dialogUses: 0 },
   'modules/frontend/src/components/warehouse/common.tsx': { banned: 2, dialogUses: 0 },
@@ -62,6 +61,7 @@ export const RAW_DIALOGS: Record<string, RawEntry> = {
 /** Files that left RAW_DIALOGS, with their exact number of `<Dialog` uses. */
 export const MIGRATED: Record<string, number> = {
   'frontend/src/components/admin/users/EditUserModal.tsx': 1,
+  'frontend/src/components/admin/users/EffectivePermissionsModal.tsx': 1,
   'modules/frontend/src/components/warehouse/runs/ViewSqlDialog.tsx': 1,
 };
 
