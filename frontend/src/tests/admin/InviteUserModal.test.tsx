@@ -256,6 +256,13 @@ describe('InviteUserModal on the shared Dialog (#369)', () => {
     return user;
   }
 
+  function mockClipboard() {
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: jest.fn().mockResolvedValue(undefined) },
+      configurable: true,
+    });
+  }
+
   /** Fill the form and submit it; resolves once the temporary password is shown. */
   async function createUser(user: ReturnType<typeof userEvent.setup>) {
     mockCreated();
@@ -343,6 +350,13 @@ describe('InviteUserModal on the shared Dialog (#369)', () => {
     const password = screen.getByTestId('invite-temp-password').textContent;
     expect(password).toBeTruthy();
 
+    // Copying the password must not make the dialog dismissible either.
+    mockClipboard();
+    await user.click(screen.getByTestId('invite-copy-password-button'));
+    await waitFor(() =>
+      expect(screen.getByTestId('invite-copy-password-button')).toHaveAccessibleName('Password copied'),
+    );
+
     fireEvent.keyDown(document, { key: 'Escape' });
     await user.keyboard('{Escape}');
     // The backdrop is the element the dialog sits in.
@@ -371,6 +385,69 @@ describe('InviteUserModal on the shared Dialog (#369)', () => {
     expect(screen.getByTestId('invite-done-button')).toHaveFocus();
     await user.tab();
     expect(screen.getByTestId('invite-copy-password-button')).toHaveFocus();
+  });
+
+  it('Done takes the password away: it is not on the page, and the next open is an empty form', async () => {
+    const user = await openIt();
+    await createUser(user);
+    const password = screen.getByTestId('invite-temp-password').textContent as string;
+    expect(password).toBeTruthy();
+    await user.click(screen.getByTestId('invite-done-button'));
+    expect(document.body.textContent).not.toContain(password);
+
+    await user.click(opener());
+    expect(screen.getByRole('dialog', { name: 'Invite User' })).toBeInTheDocument();
+    expect(screen.queryByTestId('invite-temp-password')).not.toBeInTheDocument();
+    expect(screen.getByTestId('invite-email-input')).toHaveValue('');
+    expect(document.body.textContent).not.toContain(password);
+  });
+
+  it('Copy is named "Copy password" and described by the sign-in note, which holds no password', async () => {
+    const user = await openIt();
+    await createUser(user);
+    const password = screen.getByTestId('invite-temp-password').textContent as string;
+    const copy = screen.getByRole('button', { name: 'Copy password' });
+    expect(copy).toBe(screen.getByTestId('invite-copy-password-button'));
+    expect(copy).toHaveAccessibleDescription(/can sign in as .* with this temporary password\. It is shown once/);
+    expect(copy.getAttribute('aria-describedby')).toBe('invite-created-note');
+    expect(document.getElementById('invite-created-note')?.textContent).not.toContain(password);
+  });
+
+  it('puts the temporary password in no accessible name, description or live region', async () => {
+    const user = await openIt();
+    await createUser(user);
+    const password = screen.getByTestId('invite-temp-password').textContent as string;
+    expect(password).toBeTruthy();
+
+    const ids = (el: Element, attr: string) =>
+      (el.getAttribute(attr) ?? '')
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((id) => document.getElementById(id)?.textContent ?? '');
+    // The same loop twice: as the password appears, and after Copy (the name changes).
+    const scan = () => {
+      const dialog = screen.getByRole('dialog', { name: 'User created' });
+      const all = [dialog, ...Array.from(dialog.querySelectorAll('*'))];
+      for (const el of all) {
+        for (const attr of ['aria-label', 'title', 'aria-valuetext', 'aria-roledescription']) {
+          expect(el.getAttribute(attr) ?? '').not.toContain(password);
+        }
+        expect(ids(el, 'aria-labelledby').join(' ')).not.toContain(password);
+        expect(ids(el, 'aria-describedby').join(' ')).not.toContain(password);
+        if (el.matches('[aria-live], [role="status"], [role="alert"], [role="log"]')) {
+          expect(el.textContent ?? '').not.toContain(password);
+        }
+      }
+    };
+    scan();
+    mockClipboard();
+    await user.click(screen.getByTestId('invite-copy-password-button'));
+    await waitFor(() =>
+      expect(screen.getByTestId('invite-copy-password-button')).toHaveAccessibleName('Password copied'),
+    );
+    scan();
+    // The password is on the page in exactly one place: the code element.
+    expect(screen.getByTestId('invite-temp-password')).toHaveTextContent(password);
   });
 
   it('Tab from Cancel wraps to the email field; the page behind is never reached', async () => {

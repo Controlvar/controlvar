@@ -147,6 +147,15 @@ export function InviteUserModal({ isOpen, onClose, onSuccess }: InviteUserModalP
     onClose();
   };
 
+  // Whenever the dialog opens or closes (by this component or by its parent),
+  // drop everything it held, so the next open is a fresh form and the previous
+  // invitee's password is never the first thing a new open shows.
+  useEffect(() => {
+    resetForm();
+    setSubmitting(false);
+    // Runs on open and close only: resetForm just calls state setters.
+  }, [isOpen]);
+
   return (
     <Dialog
       open={isOpen}
@@ -159,7 +168,7 @@ export function InviteUserModal({ isOpen, onClose, onSuccess }: InviteUserModalP
       <div className="mt-3">
         {created ? (
           <div data-testid="invite-created" className="flex flex-col gap-4">
-            <p className="text-sm text-slate-600">
+            <p id="invite-created-note" className="text-sm text-slate-600">
               <span className="font-medium text-slate-800">{created.user.email}</span> can sign in
               as <span className="font-mono">{created.user.username}</span> with this temporary
               password. It is shown <strong>once</strong> — share it now. After signing in,
@@ -178,6 +187,9 @@ export function InviteUserModal({ isOpen, onClose, onSuccess }: InviteUserModalP
                 ref={copyRef}
                 data-testid="invite-copy-password-button"
                 onClick={handleCopy}
+                // Never the password itself: a screen reader speaks this name.
+                aria-label={copied ? 'Password copied' : 'Copy password'}
+                aria-describedby="invite-created-note"
                 className="px-3 py-2 text-sm font-medium border border-slate-300 rounded-md hover:bg-slate-50"
               >
                 {copied ? 'Copied' : 'Copy'}
