@@ -112,6 +112,86 @@ text = "A clone balances within the same groups, and its groups start from their
 by = ["test:backend/tests/integration/api/test_balance_within_api.py::test_a_clone_balances_within_the_same_groups_and_starts_fresh"]
 
 [[unit]]
+text = "In the dashboard"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The Variants step of guided setup and the single-page form have Balance the split within groups, off until you turn it on."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::guided setup offers it on the Variants step, off, before the targeting rules",
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::the single-page form offers the same switch",
+]
+
+[[unit]]
+text = "A draft's Edit variants and metrics, on the experiment page, has the same switch."
+by = ["test:frontend/src/tests/pages/experiment-detail-balance.test.tsx::a fixed-split draft has it, off, with its label"]
+
+[[unit]]
+text = "Group users by offers Platform, Country and User Tier, Another attribute… (type its name) and Saved segments…."
+by = ["test:frontend/src/tests/pages/experiment-new-balance.test.tsx::turning it on asks what to group by, with the dashboard breakdown keys and two more"]
+
+[[unit]]
+text = "For an attribute, Values to keep apart (up to 20) takes one chip per value."
+by = ["test:frontend/src/tests/pages/experiment-new-balance.test.tsx::a key that is not a closed set asks for its values, as chips each with a named remove button"]
+
+[[unit]]
+text = "An attribute named web_device, web_visitor or web_browser needs no values."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::a closed web_ key needs no values, and says so",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_closed_key_needs_no_list_and_is_stored_without_one",
+]
+
+[[unit]]
+text = "For saved segments, Add a saved segment adds one at the end of the list, and each can be moved up or down: a user is balanced in the first segment in the list they belong to."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::sends a closed key without values, and saved segments in the order listed",
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_each_user_is_balanced_in_the_first_listed_segment_they_belong_to",
+]
+
+[[unit]]
+text = "A split with a share that is not a multiple of 5, such as 34/33/33, shows the refusal under the allocations as you type it."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::R10 shows at the split as it is typed, and not when the split is allowed",
+    "test:frontend/src/tests/pages/experiment-detail-balance.test.tsx::R10 shows at the split as it is typed, and Save sends nothing",
+]
+
+[[unit]]
+text = "Next and Create Experiment wait until it is fixed."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::guided: Next waits on a split R10 refuses, and focus goes to the split",
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::single page: Create sends nothing for a split R10 refuses, and focus goes to the split",
+]
+
+[[unit]]
+text = "When the API refuses the setting, its own sentence is shown at the control it is about, and focus moves there."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::a 422 on the attribute shows its text verbatim at the key, and focus goes there",
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::a 422 on the segments shows verbatim at the segments, and focus goes there",
+    "test:frontend/src/tests/pages/experiment-detail-balance.test.tsx::a 422 on the attribute shows verbatim at the key, with focus there, and Save stays usable",
+]
+
+[[unit]]
+text = "A draft that is a bandit or a split URL experiment shows a sentence in place of the switch."
+by = [
+    "test:frontend/src/tests/pages/experiment-detail-balance.test.tsx::a bandit draft gets a text line, not a control, and sends no setting",
+    "test:frontend/src/tests/pages/experiment-detail-balance.test.tsx::a split URL draft gets the sentence the API gives for it",
+]
+
+[[unit]]
+text = "The experiment page's Balance row says what the split is balanced within, such as within Platform (ios, android, web), or off."
+by = [
+    "test:frontend/src/tests/pages/experiment-detail-balance.test.tsx::names the key and its values",
+    "test:frontend/src/tests/pages/experiment-detail-balance.test.tsx::says off for an experiment that does not balance",
+]
+
+[[unit]]
+text = "Once the experiment has started the row is all there is: the setting cannot be changed."
+by = [
+    "test:frontend/src/tests/pages/experiment-detail-balance.test.tsx::a %s experiment has no switch anywhere: the setting is read-only",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_is_locked_after_draft_for_every_role",
+]
+
+[[unit]]
 text = "Assign users"
 by = ["exempt:label"]
 
