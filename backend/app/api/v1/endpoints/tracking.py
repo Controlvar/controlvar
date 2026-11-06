@@ -283,6 +283,9 @@ async def assign_user_to_experiment(
     - Targeting rules
     - Traffic allocation percentages
 
+    For an experiment that balances within groups, a new user's variant also
+    depends on the users of their group assigned before them.
+
     This means that the same user will always get the same variant assignment
     for a specific experiment, including across experiments in the same mutual
     exclusion group: a user enrolled in one experiment of a group is not
@@ -345,7 +348,7 @@ async def assign_user_to_experiment(
         request.user_id
     )
 
-    try:
+    def assign_and_answer() -> VariantAssignmentResponse:
         # Attempt to assign the user
         assignment_data = assignment_service.assign_user(
             user_id=request.user_id,
@@ -390,6 +393,17 @@ async def assign_user_to_experiment(
             assigned=bool(assignment_data.get("assigned", True)),
             reason=str(assignment_data.get("reason") or "assigned"),
         )
+
+    try:
+        if experiment.balance_within:
+            # A balanced experiment's new user takes a place from their
+            # group's counter row, which another request can be holding
+            # (#448): that wait, and everything after it, runs in the thread
+            # pool, never on the event loop. The request's session is used by
+            # one thread at a time. Every other experiment is assigned here,
+            # as before.
+            return await run_in_threadpool(assign_and_answer)
+        return assign_and_answer()
     except ValidationError as e:
         # A response that does not build is not the caller's mistake, and
         # pydantic's text repeats the values: answer as an unexpected failure.
@@ -460,7 +474,9 @@ async def assign_users_to_experiment_batch(
     checks for a new user (global holdout, mutual exclusion group, targeting
     rules against that user's ``context``) and the same sticky answer for a
     user already assigned. Users are processed in request order and each new
-    assignment is committed on its own, as N single calls would be.
+    assignment is committed on its own, as N single calls would be. For an
+    experiment that balances within groups, the same list sent in another
+    order can split differently; each user keeps the variant they got.
 
     Only assignments are recorded, never a view event: the user's first
     ``POST /api/v1/tracking/assign`` records that they saw the experiment.
