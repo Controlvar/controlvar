@@ -176,6 +176,15 @@ CHARACTERISATIONS: Dict[str, Dict[str, str]] = {
         "edges-0.95-none": "8d91d26793e6b0e468326346a25847140f33a5202775bde06efa79137c2cdf2e",
         "edges-0.95-bonferroni": "74ba8e871adc4bfe9fac98ee425468da5bea6ced18f1a4e5f974bad37f20ee0e",
     },
+    # 1.9.0 (#1776) changes the segment breakdown only: 1.8.0's.
+    "1.9.0": {
+        "three_variants-0.95-none": "ece157050f50545868f0578cfaa695d25584f87c1546aa86f7d02e0f41516b53",
+        "three_variants-0.95-bonferroni": "d3a91b82c4a94008c415af63846df6245af4719997ea6dc4b0985f3a5dfa1b8b",
+        "three_variants-0.95-benjamini_hochberg": "dd080d66753fbe4a6a0a391d59a6e193370456310bc5bd88a2fb5bc0eb061e43",
+        "three_variants-0.9-benjamini_hochberg": "3fccfd274278e5811b851b2f097580678de0ad5d3d1e3ab6bea48425f86fa453",
+        "edges-0.95-none": "8d91d26793e6b0e468326346a25847140f33a5202775bde06efa79137c2cdf2e",
+        "edges-0.95-bonferroni": "74ba8e871adc4bfe9fac98ee425468da5bea6ced18f1a4e5f974bad37f20ee0e",
+    },
 }
 
 #: The cases pinned for the running engine.  The same six keys in every
