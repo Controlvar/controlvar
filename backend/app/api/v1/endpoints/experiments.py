@@ -89,6 +89,7 @@ from backend.app.services.audit_service import (
     audit_snapshot,
     record_experiment_change,
 )
+from backend.app.services.balanced_allocation import balance_problem
 from backend.app.services.experiment_service import (
     END_DATE_PASSED,
     SORT_BY_COLUMNS,
@@ -384,6 +385,61 @@ def _refuse_split_url_update(
     raise HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         detail=[{"loc": loc, "msg": problem.message, "type": SPLIT_URL_CONFIG_ERROR}],
+    )
+
+
+#: The update fields a balanced experiment is judged on (#448).
+_BALANCE_FIELDS = frozenset(
+    {"balance_within", "variants", "optimization_type", "experiment_type"}
+)
+
+
+def _balance_refusal(experiment: Experiment) -> Optional[str]:
+    """Why a stored experiment cannot balance as it is, or None (#448)."""
+    return balance_problem(
+        experiment.balance_within,
+        optimization_type=experiment.optimization_type,
+        experiment_type=experiment.experiment_type,
+        allocations=[v.traffic_allocation for v in experiment.variants or []],
+    )
+
+
+def _refuse_unbalanceable_update(
+    experiment: Experiment, experiment_in: ExperimentUpdate, fields_sent: set
+) -> None:
+    """Refuse an update whose result balances a bandit, a split URL experiment
+    or a split not in steps of 5 (#448), in either order: the setting sent to
+    a bandit, or a bandit, a split or a type sent to a balanced experiment.
+
+    The result is what the request sent, and what is stored for every field
+    it left out (a ``variants`` of null changes nothing). Only a request that
+    sends one of ``_BALANCE_FIELDS`` is judged. The 422 is at
+    ``balance_within``, whichever field changed.
+    """
+    if not fields_sent & _BALANCE_FIELDS:
+        return
+
+    def result(name: str) -> Any:
+        if name in fields_sent:
+            return getattr(experiment_in, name)
+        return getattr(experiment, name)
+
+    variants = experiment_in.variants if "variants" in fields_sent else None
+    if variants is None:
+        variants = experiment.variants or []
+    problem = balance_problem(
+        result("balance_within"),
+        optimization_type=result("optimization_type"),
+        experiment_type=result("experiment_type"),
+        allocations=[v.traffic_allocation for v in variants],
+    )
+    if problem is None:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=[
+            {"loc": ["body", "balance_within"], "msg": problem, "type": "value_error"}
+        ],
     )
 
 
@@ -994,6 +1050,9 @@ async def update_experiment(
                 "end_date",
                 "correction_method",
                 "confidence_level",
+                # #448: which users share a group's blocks is decided before
+                # the first one is assigned.
+                "balance_within",
             ]
             for field in restricted_fields:
                 if field in update_data:
@@ -1005,6 +1064,10 @@ async def update_experiment(
         # A split URL experiment's URL variants match its variants (#393), on
         # the result of this update.
         _refuse_split_url_update(experiment, experiment_in, fields_sent)
+
+        # A balanced experiment is not a bandit, not a split URL experiment,
+        # and its shares are multiples of 5 (#448), on the result too.
+        _refuse_unbalanceable_update(experiment, experiment_in, fields_sent)
 
         # Capture pre-update snapshot for audit trail. The update below
         # rebinds targeting_rules (setattr) rather than changing the dict,
@@ -1381,6 +1444,14 @@ async def start_experiment(
         if split_url_refusal is not None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=split_url_refusal
+            )
+
+        # A balanced experiment the API would refuse to store as it is (#448):
+        # only a write that bypassed create and update makes one.
+        balance_refusal = _balance_refusal(experiment)
+        if balance_refusal is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=balance_refusal
             )
 
         before_audit = audit_snapshot(EntityType.EXPERIMENT, experiment)

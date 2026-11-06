@@ -338,6 +338,16 @@ def _normalise_analysis_configs(
         elif isinstance(value, dict):
             data[field] = schema.model_validate(value).model_dump(mode="json")
 
+    # #448: the balance setting is stored with only the keys it was given
+    # (a closed key's setting keeps no ``values``; no ``segments: null``).
+    balance = data.get("balance_within")
+    if isinstance(balance, BaseModel):
+        balance = balance.model_dump(mode="json")
+    if isinstance(balance, dict):
+        data["balance_within"] = {
+            key: value for key, value in balance.items() if value is not None
+        }
+
     # The correction method is stored as its value ('benjamini_hochberg'),
     # never as an enum's repr (#580).
     method = data.get("correction_method")
@@ -469,6 +479,9 @@ CLONED_ANALYSIS_FIELDS = (
     # #580: a clone is a draft, so its own settings can still be changed.
     "correction_method",
     "confidence_level",
+    # #448: the clone balances within the same groups; its block-order key is
+    # its own (made on insert), and its groups start from their first place.
+    "balance_within",
 )
 
 
@@ -1532,6 +1545,8 @@ class ExperimentService:
             "key": experiment.key,
             "experiment_metadata": experiment.experiment_metadata or {},
             "split_url_config": experiment.split_url_config,
+            # #448: the setting only; its block-order key is never answered.
+            "balance_within": experiment.balance_within,
             # Issue #197: every column ExperimentResponse declares with a
             # default must be copied here, or the response reports the
             # default instead of the stored value (a bandit read as "fixed").
