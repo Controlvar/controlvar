@@ -57,8 +57,14 @@ pytestmark = [pytest.mark.integration]
 #: which reached main before it.
 REVISION = "7b6b4b4fe246"
 PREVIOUS_CORE_HEAD = "85dd4796bb8b"
-#: The core head of this tree.
-CORE_HEAD = "7b6b4b4fe246"
+#: The core head of this tree: ``c448_balance_within`` (#448), the revision
+#: after this one, whose downgrade drops the table ``balance_group_counters``
+#: and four columns of ``experiments`` and ``assignments``.
+CORE_HEAD = "c448_balance_within"
+#: The core revisions after this one, newer than release N-1 too.
+LATER_REVISIONS = ("c448_balance_within",)
+#: Tables a later core revision's downgrade drops.
+LATER_DOWNGRADE_TABLES = {"balance_group_counters"}
 #: The modules branch's head in this tree, recorded on both sides of every
 #: step here: this file is about the core chain.
 MODULES_HEAD = "modules_0004_rbac_activation"
@@ -453,15 +459,20 @@ _PREVIOUS_RELEASE_REMOVALS = (
 
 def _previous_release(profile: str, tmp_path):
     """Release N-1: a copy of this tree without the revision, the column and
-    its writes."""
+    its writes.
+
+    The revisions after this one go too: they are newer than release N-1, and
+    one whose ``down_revision`` file is gone would break the script directory.
+    """
     destination = tmp_path / "release-n-minus-1"
     if profile == FULL:
         tree = tree_profiles.full_tree(destination)
     else:
         tree = tree_profiles.core_tree(destination)
     versions = tree / "backend" / "app" / "db" / "migrations" / "versions"
-    (revision_file,) = versions.glob(f"{REVISION}_*.py")
-    revision_file.unlink()
+    for newer in (REVISION, *LATER_REVISIONS):
+        (revision_file,) = versions.glob(f"{newer}_*.py")
+        revision_file.unlink()
     for parts, pattern, expected in _PREVIOUS_RELEASE_REMOVALS:
         path = tree.joinpath(*parts)
         source, found = pattern.subn("", path.read_text(encoding="utf-8"))
@@ -567,7 +578,7 @@ def test_the_downgrade_drops_the_column_only_and_an_upgrade_sets_it_from_updated
     _report(profile, "after downgrade", test_db, scratch_schema)
     assert _rows(test_db, scratch_schema) == PREVIOUS_ROWS[profile]
     assert _all_columns(test_db, scratch_schema) == columns - {COLUMN}
-    assert _tables(test_db, scratch_schema) == tables
+    assert _tables(test_db, scratch_schema) == tables - LATER_DOWNGRADE_TABLES
     with test_db.connect() as conn:
         kept = conn.execute(
             text(f'SELECT count(*) FROM "{scratch_schema}".{TABLE}')
@@ -613,7 +624,9 @@ def test_the_previous_release_starts_only_after_the_downgrade(
     print(f"[{profile}] previous release's bootstrap: exit {refused.returncode}")
     assert refused.returncode != 0, refused.stdout[-2000:]
     assert "migrated by a newer Controlvar release" in refused.stderr
-    assert REVISION in refused.stderr
+    # The database records the core head, the newest revision release N-1
+    # does not know.
+    assert CORE_HEAD in refused.stderr
     assert _rows(test_db, scratch_schema) == ROWS[profile]
 
     heads = tree_profiles.alembic(release_n_minus_1, "public", "heads")
