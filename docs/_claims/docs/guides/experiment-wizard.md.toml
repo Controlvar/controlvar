@@ -675,3 +675,14 @@ by = [
     "test:backend/tests/unit/api/test_experiment_wizard_endpoints.py::TestSubmitDraft::test_viewer_cannot_create_an_experiment_through_the_wizard",
     "test:backend/tests/unit/api/test_experiment_wizard_endpoints.py::TestSubmitDraft::test_developer_can_create_an_experiment_through_the_wizard",
 ]
+
+[[unit]]
+text = "The wizard does not set balance_within."
+by = ["test:backend/tests/unit/services/test_experiment_wizard_service.py"]
+
+[[unit]]
+text = "To balance the split within groups, send it with PUT /api/v1/experiments/$EXP_ID before you start the experiment; a multivariate draft's 33/33/34 split must first become one whose shares are multiples of 5, such as 40/30/30."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_put_on_a_draft_sets_echoes_and_clears_it",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_sent_to_a_draft_split_not_in_steps_of_5_is_refused",
+]
