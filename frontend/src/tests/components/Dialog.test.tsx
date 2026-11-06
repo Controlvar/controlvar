@@ -12,7 +12,7 @@
  * Next mounts it, and the dialog portals to `document.body` beside it.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import axe from 'axe-core';
 import { Dialog, useDeferredAnnouncement, type DialogProps } from '@/components/ui/Dialog';
@@ -687,6 +687,60 @@ function SavePage({ sameBatch = false }: { sameBatch?: boolean }) {
     </>
   );
 }
+
+// The example in docs/development/guidelines.md ("Dialogs"), as it is written
+// there.
+function RenameFlag({ rename }: { rename: (name: string) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [status, , announceAfterClose] = useDeferredAnnouncement();
+  const nameField = useRef<HTMLInputElement>(null);
+
+  const save = async () => {
+    await rename(name);
+    setOpen(false);
+    announceAfterClose(`Renamed to ${name}.`);
+  };
+
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}>
+        Rename
+      </button>
+      <p role="status">{status}</p>
+      <Dialog open={open} onClose={() => setOpen(false)} title="Rename flag" initialFocusRef={nameField}>
+        <label htmlFor="flag-name">Name</label>
+        <input id="flag-name" ref={nameField} value={name} onChange={(e) => setName(e.target.value)} />
+        <button type="button" onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+        <button type="button" onClick={save}>
+          Save
+        </button>
+      </Dialog>
+    </>
+  );
+}
+
+describe('Dialog: the example in the development guidelines', () => {
+  it('opens on the name field, saves, gives focus back and announces after the close', async () => {
+    const user = userEvent.setup();
+    const rename = jest.fn(() => Promise.resolve());
+    renderInAppRoot(<RenameFlag rename={rename} />);
+    const opener = screen.getByRole('button', { name: 'Rename' });
+    await user.click(opener);
+    expect(screen.getByRole('textbox', { name: 'Name' })).toHaveFocus();
+    await user.keyboard('checkout-v2');
+    const watch = watchLiveRegions();
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Renamed to checkout-v2.'));
+    watch.stop();
+    expect(rename).toHaveBeenCalledWith('checkout-v2');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+    expect(watch.changes).toStrictEqual([{ text: 'Renamed to checkout-v2.', underInert: false }]);
+  });
+});
 
 describe('Dialog: an announcement made as it closes', () => {
   it('useDeferredAnnouncement writes the live region after #__next is no longer inert', () => {
