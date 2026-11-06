@@ -46,6 +46,7 @@ describe('INITIAL_FORM_STATE', () => {
       bayesianEnabled: false,
       sequentialEnabled: false,
       plannedEffectPct: '',
+      balance: { on: false, groupBy: 'platform', customKey: '', values: [], segments: [] },
     });
   });
 
