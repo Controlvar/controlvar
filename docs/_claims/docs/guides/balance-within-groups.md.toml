@@ -151,15 +151,15 @@ by = [
 [[unit]]
 text = "A split with a share that is not a multiple of 5, such as 34/33/33, shows the refusal under the allocations as you type it."
 by = [
-    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::R10 shows at the split as it is typed, and not when the split is allowed",
-    "test:frontend/src/tests/pages/experiment-detail-balance.test.tsx::R10 shows at the split as it is typed, and Save sends nothing",
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::a split that is not in steps of 5 shows at the split as it is typed, and not when the split is allowed",
+    "test:frontend/src/tests/pages/experiment-detail-balance.test.tsx::a split that is not in steps of 5 shows at the split as it is typed, and Save sends nothing",
 ]
 
 [[unit]]
 text = "Next and Create Experiment wait until it is fixed."
 by = [
-    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::guided: Next waits on a split R10 refuses, and focus goes to the split",
-    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::single page: Create sends nothing for a split R10 refuses, and focus goes to the split",
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::guided: Next waits on a split that is not in steps of 5, and focus goes to the split",
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::single page: Create sends nothing for a split that is not in steps of 5, and focus goes to the split",
 ]
 
 [[unit]]

@@ -9,10 +9,20 @@ import {
   buildBalancePayload,
   sameBalance,
   splitProblem,
+  closedKeyNote,
   takeBalanceIssue,
 } from '@/components/experiments/new/balanceWithin';
+import {
+  createInitialFormState,
+  experimentFormReducer,
+  ExperimentFormAction,
+  ExperimentFormState,
+} from '@/components/experiments/new/formState';
 
-const R10_TAIL = ', such as 50/50, 20/80, 35/35/30 or 40/30/30; ';
+const run = (state: ExperimentFormState, ...actions: ExperimentFormAction[]) =>
+  actions.reduce(experimentFormReducer, state);
+
+const STEPS_TAIL = ', such as 50/50, 20/80, 35/35/30 or 40/30/30; ';
 
 describe('splitProblem', () => {
   it.each([
@@ -32,7 +42,7 @@ describe('splitProblem', () => {
     [[1, 99], '1/99'],
     [[25, 25, 26, 24], '25/25/26/24'],
   ])('%j is refused, naming the split as typed', (shares, text) => {
-    expect(splitProblem(shares)).toBe(`To balance within groups, every share must be a multiple of 5${R10_TAIL}${text} is not.`);
+    expect(splitProblem(shares)).toBe(`To balance within groups, every share must be a multiple of 5${STEPS_TAIL}${text} is not.`);
   });
 
   it('says nothing about a split that does not add up to 100 yet', () => {
@@ -79,6 +89,50 @@ describe('the stored setting and the form', () => {
   });
 });
 
+describe('the values belong to the key they were listed for', () => {
+  const withValues = () =>
+    run(
+      createInitialFormState(),
+      { type: 'setBalanceOn', on: true },
+      { type: 'addBalanceValue', value: 'ios' },
+      { type: 'addBalanceValue', value: 'android' },
+    );
+
+  it('changing "Group users by" drops the values listed for the old key', () => {
+    const before = withValues();
+    expect(before.balance.values).toEqual(['ios', 'android']);
+    for (const groupBy of ['country', 'user_tier', 'custom', 'segments'] as const) {
+      const after = run(before, { type: 'setBalanceGroupBy', groupBy });
+      expect(after.balance.values).toEqual([]);
+      expect(buildBalancePayload(after.balance)).toEqual(groupBy === 'segments' ? { segments: [] } : { attribute: groupBy === 'custom' ? '' : groupBy, values: [] });
+    }
+  });
+
+  it('typing in the custom key keeps the values; settling on another key drops them', () => {
+    const custom = run(withValues(), { type: 'setBalanceGroupBy', groupBy: 'custom' }, { type: 'setBalanceCustomKey', customKey: 'tier' }, { type: 'addBalanceValue', value: 'gold' });
+    const typing = run(custom, { type: 'setBalanceCustomKey', customKey: 'tie' }, { type: 'setBalanceCustomKey', customKey: 'tier' });
+    expect(typing.balance.values).toEqual(['gold']);
+    expect(run(typing, { type: 'commitBalanceCustomKey', from: 'tier' }).balance.values).toEqual(['gold']);
+
+    const changed = run(typing, { type: 'setBalanceCustomKey', customKey: 'plan' });
+    expect(changed.balance.values).toEqual(['gold']);
+    const settled = run(changed, { type: 'commitBalanceCustomKey', from: 'tier' });
+    expect(settled.balance.values).toEqual([]);
+    expect(buildBalancePayload(settled.balance)).toEqual({ attribute: 'plan', values: [] });
+  });
+});
+
+describe('closedKeyNote', () => {
+  it('names the API\'s closed sets, and for a browser says what any other one is', () => {
+    expect(closedKeyNote('web_device')).toBe('web_device is phone, tablet or desktop: there is nothing to list.');
+    expect(closedKeyNote('web_visitor')).toBe('web_visitor is new or returning: there is nothing to list.');
+    expect(closedKeyNote('web_browser')).toBe(
+      'web_browser is chrome, edge, firefox, safari, samsung or opera, and any other browser is balanced as other: there is nothing to list.',
+    );
+    expect(closedKeyNote('tier')).toBeNull();
+  });
+});
+
 describe('balanceSummary', () => {
   it('names a breakdown key by its label and any other key as typed', () => {
     expect(balanceSummary({ attribute: 'user_tier', values: ['gold'] }, null)).toBe('within User Tier (gold)');
@@ -115,7 +169,7 @@ describe('takeBalanceIssue', () => {
     expect(takeBalanceIssue(whole('Balance within an attribute'), segmentState, [50, 50]).issue?.field).toBe('segments');
     expect(takeBalanceIssue(whole('anything'), state, [34, 33, 33]).issue?.field).toBe('split');
     expect(
-      takeBalanceIssue(whole(`To balance within groups, every share must be a multiple of 5${R10_TAIL}x is not.`), state, [50, 50])
+      takeBalanceIssue(whole(`To balance within groups, every share must be a multiple of 5${STEPS_TAIL}x is not.`), state, [50, 50])
         .issue?.field,
     ).toBe('split');
   });

@@ -128,13 +128,15 @@ export function ExperimentDesignForm({ experiment, onSaved, onCancel, describeEr
       setSaving(false);
       // A refusal of the balance setting is the API's own sentence, at its control, which takes focus.
       if (err instanceof ApiError && err.status === 422) {
-        const { issue } = takeBalanceIssue(
+        const { issue, rest } = takeBalanceIssue(
           err.detail,
           state.balance,
           state.variants.map((v) => Number(v.traffic_allocation) || 0),
         );
         if (issue) {
           setBalanceIssue(issue);
+          // Another field's refusal in the same 422 is still said, at the foot, in the dashboard's words.
+          if (rest && rest.length > 0) setServerError(describeError(new ApiError({ status: 422, detail: rest })));
           return;
         }
       }

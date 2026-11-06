@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSegmentList } from '@/hooks/useSegmentList';
 import { unavailableLabel } from '@/components/targeting/SegmentPicker';
@@ -49,7 +49,8 @@ export function focusBalanceField(field: BalanceField): void {
         : field === 'segments'
           ? byTestId('balance-segment-add')
           : (byTestId('balance-custom-key') ?? byTestId('balance-group-by'));
-  target?.focus();
+  // A closed key has no values control: the refusal's own text takes the focus.
+  (target ?? byTestId('balance-error'))?.focus();
 }
 
 interface BalanceWithinFieldsProps {
@@ -81,10 +82,20 @@ export function BalanceWithinFields({ balance, dispatch, issue = null }: Balance
     shown && shown.field === field ? { 'aria-invalid': true as const, 'aria-describedby': ERROR_ID } : {};
   const errorAt = (field: BalanceField) =>
     shown && shown.field === field ? (
-      <p id={ERROR_ID} role="alert" className="text-sm text-red-700" data-testid="balance-error">
+      <p id={ERROR_ID} role="alert" tabIndex={-1} className="text-sm text-red-700" data-testid="balance-error">
         {shown.message}
       </p>
     ) : null;
+
+  // The key as it stood when its field was entered: values are dropped only if the key
+  // has changed once it is settled, so fixing a typo does not lose them.
+  const keyAtFocus = useRef<string | null>(null);
+  const commitKey = (typed: string) => {
+    if (keyAtFocus.current !== null && typed !== keyAtFocus.current) {
+      dispatch({ type: 'commitBalanceCustomKey', from: keyAtFocus.current });
+    }
+    keyAtFocus.current = typed;
+  };
 
   const addValue = () => {
     dispatch({ type: 'addBalanceValue', value: draft });
@@ -145,6 +156,15 @@ export function BalanceWithinFields({ balance, dispatch, issue = null }: Balance
                 type="text"
                 value={balance.customKey}
                 onChange={(e) => dispatch({ type: 'setBalanceCustomKey', customKey: e.target.value })}
+                onFocus={(e) => {
+                  keyAtFocus.current = e.currentTarget.value;
+                }}
+                onBlur={(e) => commitKey(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter') return;
+                  e.preventDefault();
+                  commitKey(e.currentTarget.value);
+                }}
                 placeholder="tier"
                 className={`${smallInputClass} font-mono`}
                 data-testid="balance-custom-key"
@@ -156,9 +176,13 @@ export function BalanceWithinFields({ balance, dispatch, issue = null }: Balance
           )}
 
           {balance.groupBy !== 'segments' && closed && (
-            <p className="text-sm text-slate-700" data-testid="balance-closed-note">
-              {closed}
-            </p>
+            <div className="space-y-1">
+              <p className="text-sm text-slate-700" data-testid="balance-closed-note">
+                {closed}
+              </p>
+              {/* No values control here, so a refusal of the whole setting is shown here instead. */}
+              {errorAt('values')}
+            </div>
           )}
 
           {balance.groupBy !== 'segments' && !closed && (

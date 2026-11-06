@@ -660,6 +660,8 @@ export type ExperimentFormAction =
   | { type: 'setBalanceOn'; on: boolean }
   | { type: 'setBalanceGroupBy'; groupBy: BalanceFormState['groupBy'] }
   | { type: 'setBalanceCustomKey'; customKey: string }
+  /** `from` is the key as it stood when the text field was entered. */
+  | { type: 'commitBalanceCustomKey'; from: string }
   | { type: 'addBalanceValue'; value: string }
   | { type: 'removeBalanceValue'; index: number }
   | { type: 'addBalanceSegment'; segmentId: string }
@@ -717,7 +719,12 @@ export function experimentFormReducer(
       // The values belong to the key they were listed for.
       return { ...state, balance: { ...state.balance, groupBy: action.groupBy, values: [] } };
     case 'setBalanceCustomKey':
-      return { ...state, balance: { ...state.balance, customKey: action.customKey, values: [] } };
+      // Typing only changes the text: a typo fixed mid-word keeps the values listed so far.
+      return { ...state, balance: { ...state.balance, customKey: action.customKey } };
+    case 'commitBalanceCustomKey':
+      // The key is settled (blur or Enter): values listed for another key do not go with this one.
+      if (state.balance.customKey === action.from) return state;
+      return { ...state, balance: { ...state.balance, values: [] } };
     case 'addBalanceValue':
       // A value is matched exactly, so it is kept as typed; only nothing is not added.
       if (action.value.trim() === '') return state;

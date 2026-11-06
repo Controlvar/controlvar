@@ -59,7 +59,12 @@ function listed(values: readonly string[]): string {
 /** What a closed key's page says in place of a list of values, or null for any other key. */
 export function closedKeyNote(key: string): string | null {
   const set = Object.prototype.hasOwnProperty.call(CLOSED_KEYS, key) ? CLOSED_KEYS[key] : undefined;
-  return set ? `${key} is ${listed(set)}: there is nothing to list.` : null;
+  if (!set) return null;
+  // The API's set for web_browser has other as a member of its own.
+  if (key === 'web_browser') {
+    return `${key} is ${listed(set)}, and any other browser is balanced as other: there is nothing to list.`;
+  }
+  return `${key} is ${listed(set)}: there is nothing to list.`;
 }
 
 // --- the form's state --------------------------------------------------------

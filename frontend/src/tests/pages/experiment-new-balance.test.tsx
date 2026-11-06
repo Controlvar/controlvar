@@ -42,15 +42,15 @@ const HELPER = 'Each group gets the same split as the whole experiment.';
 const COMES_FIRST =
   'The global holdout, the exclusion group and the targeting rules come first: only users who take part are balanced. ' +
   "A user keeps their variant and their group, even if their attribute changes later.";
-const R10 =
+const STEPS_REFUSAL =
   'To balance within groups, every share must be a multiple of 5, such as 50/50, 20/80, 35/35/30 or 40/30/30; 34/33/33 is not.';
-const R13 =
+const KEY_REFUSAL =
   "Balance on a top-level key of the user's attributes, made of letters, digits, _ and - (up to 100 characters), other than user_id and segment.";
-const R1 =
+const VALUES_REFUSAL =
   'List the values of tier to balance within (1 to 20). Users with any other value are balanced together as other, and users without tier as unknown.';
-const R8_NONE = 'Balance within an attribute, such as country, or within segments.';
-const R8_TOO_MANY = 'Balance within at most 10 segments, not 12.';
-const R3 = 'other and unknown name the groups for any other value and for no value, so they cannot be listed.';
+const NONE_NAMED_REFUSAL = 'Balance within an attribute, such as country, or within segments.';
+const TOO_MANY_SEGMENTS_REFUSAL = 'Balance within at most 10 segments, not 12.';
+const LISTED_OTHER_REFUSAL = 'other and unknown name the groups for any other value and for no value, so they cannot be listed.';
 
 const SEG_A = '8d4c6f0e-3a1b-4c2d-9e8f-7a6b5c4d3e2f';
 const SEG_B = '1f2e3d4c-5b6a-4978-8a9b-0c1d2e3f4a5b';
@@ -128,7 +128,7 @@ beforeEach(() => {
   api();
 });
 
-describe('UC1: the switch on a draft', () => {
+describe('the switch on a draft', () => {
   it('guided setup offers it on the Variants step, off, before the targeting rules', () => {
     toVariantsStep();
     const toggle = screen.getByLabelText(SWITCH_LABEL);
@@ -249,7 +249,7 @@ describe('UC1: the switch on a draft', () => {
   });
 });
 
-describe('UC2: the review row', () => {
+describe('the review row', () => {
   const reviewWith = async (fill: () => void) => {
     toVariantsStep();
     fireEvent.click(screen.getByLabelText(SWITCH_LABEL));
@@ -308,14 +308,14 @@ describe('UC2: the review row', () => {
   });
 });
 
-describe('UC3: refusals at their fields', () => {
-  it('R10 shows at the split as it is typed, and not when the split is allowed', () => {
+describe('refusals at their fields', () => {
+  it('a split that is not in steps of 5 shows at the split as it is typed, and not when the split is allowed', () => {
     toVariantsStep();
     fireEvent.click(screen.getByLabelText(SWITCH_LABEL));
     expect(screen.queryByTestId('balance-split-error')).toBeNull();
     split(34, 33, 33);
     const line = screen.getByTestId('balance-split-error');
-    expect(line).toHaveTextContent(R10);
+    expect(line).toHaveTextContent(STEPS_REFUSAL);
     expect(screen.getByTestId('variant-allocation-0')).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByTestId('variant-allocation-0')).toHaveAttribute('aria-describedby', line.id);
     split(40, 30, 30);
@@ -325,7 +325,7 @@ describe('UC3: refusals at their fields', () => {
     expect(screen.queryByTestId('balance-split-error')).toBeNull();
   });
 
-  it('R10 uses the typed split in its sentence, and waits for a split that adds up to 100', () => {
+  it('the steps-of-5 line uses the typed split in its sentence, and waits for a split that adds up to 100', () => {
     toVariantsStep();
     fireEvent.click(screen.getByLabelText(SWITCH_LABEL));
     set('variant-allocation-0', '33');
@@ -337,17 +337,17 @@ describe('UC3: refusals at their fields', () => {
     );
   });
 
-  it('guided: Next waits on a split R10 refuses, and focus goes to the split', () => {
+  it('guided: Next waits on a split that is not in steps of 5, and focus goes to the split', () => {
     toVariantsStep();
     fireEvent.click(screen.getByLabelText(SWITCH_LABEL));
     split(34, 33, 33);
     click('wizard-next');
     expect(heading()).toHaveTextContent('Set up the versions users will see');
-    expect(screen.getByTestId('step-error')).toHaveTextContent(R10);
+    expect(screen.getByTestId('step-error')).toHaveTextContent(STEPS_REFUSAL);
     expect(screen.getByTestId('variant-allocation-0')).toHaveFocus();
   });
 
-  it('single page: Create sends nothing for a split R10 refuses, and focus goes to the split', () => {
+  it('single page: Create sends nothing for a split that is not in steps of 5, and focus goes to the split', () => {
     routerAt({ advanced: '' });
     render(<NewExperimentPage />);
     set('experiment-name', 'A');
@@ -355,14 +355,14 @@ describe('UC3: refusals at their fields', () => {
     split(34, 33, 33);
     click('submit-experiment');
     expect(posts()).toEqual([]);
-    expect(screen.getByTestId('balance-split-error')).toHaveTextContent(R10);
+    expect(screen.getByTestId('balance-split-error')).toHaveTextContent(STEPS_REFUSAL);
     expect(screen.getByTestId('variant-allocation-0')).toHaveFocus();
     expect(screen.queryByTestId('form-error')).toBeNull();
   });
 
   it('a 422 on the attribute shows its text verbatim at the key, and focus goes there', async () => {
     routerAt({ advanced: '' });
-    refuse([{ loc: ['body', 'balance_within', 'attribute'], msg: R13, type: 'value_error' }]);
+    refuse([{ loc: ['body', 'balance_within', 'attribute'], msg: KEY_REFUSAL, type: 'value_error' }]);
     render(<NewExperimentPage />);
     set('experiment-name', 'A');
     fireEvent.click(screen.getByLabelText(SWITCH_LABEL));
@@ -370,8 +370,8 @@ describe('UC3: refusals at their fields', () => {
     set('balance-custom-key', 'user id');
     click('submit-experiment');
     const alert = await screen.findByTestId('balance-error');
-    expect(alert).toHaveTextContent(R13);
-    expect(alert.textContent).toBe(R13);
+    expect(alert).toHaveTextContent(KEY_REFUSAL);
+    expect(alert.textContent).toBe(KEY_REFUSAL);
     expect(alert).toHaveAttribute('role', 'alert');
     expect(screen.getByTestId('balance-custom-key')).toHaveFocus();
     expect(screen.getByTestId('balance-custom-key')).toHaveAttribute('aria-invalid', 'true');
@@ -381,44 +381,59 @@ describe('UC3: refusals at their fields', () => {
 
   it('a 422 on the setting as a whole (values) shows at the values, and focus goes there', async () => {
     routerAt({ advanced: '' });
-    refuse([{ loc: ['body', 'balance_within'], msg: R1, type: 'value_error' }]);
+    refuse([{ loc: ['body', 'balance_within'], msg: VALUES_REFUSAL, type: 'value_error' }]);
     render(<NewExperimentPage />);
     set('experiment-name', 'A');
     fireEvent.click(screen.getByLabelText(SWITCH_LABEL));
     set('balance-group-by', 'custom');
     set('balance-custom-key', 'tier');
     click('submit-experiment');
-    expect((await screen.findByTestId('balance-error')).textContent).toBe(R1);
+    expect((await screen.findByTestId('balance-error')).textContent).toBe(VALUES_REFUSAL);
     expect(screen.getByLabelText('Values to keep apart (up to 20)')).toHaveFocus();
   });
 
-  it('R3 (a listed other) shows verbatim at the values', async () => {
+  it('a refusal of the whole setting for a closed key (no values control) shows its text, and focus goes to it', async () => {
+    const reworded = 'The setting is not usable here, said in some new words.';
     routerAt({ advanced: '' });
-    refuse([{ loc: ['body', 'balance_within'], msg: R3, type: 'value_error' }]);
+    refuse([{ loc: ['body', 'balance_within'], msg: reworded, type: 'value_error' }]);
+    render(<NewExperimentPage />);
+    set('experiment-name', 'A');
+    fireEvent.click(screen.getByLabelText(SWITCH_LABEL));
+    set('balance-group-by', 'custom');
+    set('balance-custom-key', 'web_device');
+    click('submit-experiment');
+    const alert = await screen.findByTestId('balance-error');
+    expect(alert.textContent).toBe(reworded);
+    expect(alert).toHaveFocus();
+  });
+
+  it('a listed other shows verbatim at the values', async () => {
+    routerAt({ advanced: '' });
+    refuse([{ loc: ['body', 'balance_within'], msg: LISTED_OTHER_REFUSAL, type: 'value_error' }]);
     render(<NewExperimentPage />);
     set('experiment-name', 'A');
     fireEvent.click(screen.getByLabelText(SWITCH_LABEL));
     fireEvent.change(screen.getByLabelText('Values to keep apart (up to 20)'), { target: { value: 'other' } });
     click('balance-value-add');
     click('submit-experiment');
-    expect((await screen.findByTestId('balance-error')).textContent).toBe(R3);
+    expect((await screen.findByTestId('balance-error')).textContent).toBe(LISTED_OTHER_REFUSAL);
   });
 
   it('a 422 on the segments shows verbatim at the segments, and focus goes there', async () => {
     routerAt({ advanced: '' });
-    refuse([{ loc: ['body', 'balance_within', 'segments'], msg: R8_TOO_MANY, type: 'value_error' }]);
+    refuse([{ loc: ['body', 'balance_within', 'segments'], msg: TOO_MANY_SEGMENTS_REFUSAL, type: 'value_error' }]);
     render(<NewExperimentPage />);
     set('experiment-name', 'A');
     fireEvent.click(screen.getByLabelText(SWITCH_LABEL));
     set('balance-group-by', 'segments');
     click('submit-experiment');
-    expect((await screen.findByTestId('balance-error')).textContent).toBe(R8_TOO_MANY);
+    expect((await screen.findByTestId('balance-error')).textContent).toBe(TOO_MANY_SEGMENTS_REFUSAL);
     expect(screen.getByTestId('balance-segment-add')).toHaveFocus();
   });
 
   it('segments with none chosen is the API\'s refusal, shown verbatim at the segments', async () => {
     routerAt({ advanced: '' });
-    refuse([{ loc: ['body', 'balance_within'], msg: R8_NONE, type: 'value_error' }]);
+    refuse([{ loc: ['body', 'balance_within'], msg: NONE_NAMED_REFUSAL, type: 'value_error' }]);
     render(<NewExperimentPage />);
     set('experiment-name', 'A');
     fireEvent.click(screen.getByLabelText(SWITCH_LABEL));
@@ -426,27 +441,27 @@ describe('UC3: refusals at their fields', () => {
     click('submit-experiment');
     await waitFor(() => expect(posts()).toHaveLength(1));
     expect(postedBody().balance_within).toEqual({ segments: [] });
-    expect((await screen.findByTestId('balance-error')).textContent).toBe(R8_NONE);
+    expect((await screen.findByTestId('balance-error')).textContent).toBe(NONE_NAMED_REFUSAL);
     expect(screen.getByTestId('balance-segment-add')).toHaveFocus();
   });
 
-  it('R10 from the API (a split the page did not catch) shows at the split', async () => {
+  it('the steps-of-5 refusal from the API (a split the page did not catch) shows at the split', async () => {
     routerAt({ advanced: '' });
-    refuse([{ loc: ['body', 'balance_within'], msg: R10, type: 'value_error' }]);
+    refuse([{ loc: ['body', 'balance_within'], msg: STEPS_REFUSAL, type: 'value_error' }]);
     render(<NewExperimentPage />);
     set('experiment-name', 'A');
     fireEvent.click(screen.getByLabelText(SWITCH_LABEL));
     // The page's own check passes 50/50; the API's answer is what is shown.
     click('submit-experiment');
     const line = await screen.findByTestId('balance-split-error');
-    expect(line.textContent).toBe(R10);
+    expect(line.textContent).toBe(STEPS_REFUSAL);
     expect(screen.getByTestId('variant-allocation-0')).toHaveFocus();
   });
 
   it('a Value error prefix is not shown, and an error about another field stays at the foot', async () => {
     routerAt({ advanced: '' });
     refuse([
-      { loc: ['body', 'balance_within', 'attribute'], msg: `Value error, ${R13}`, type: 'value_error' },
+      { loc: ['body', 'balance_within', 'attribute'], msg: `Value error, ${KEY_REFUSAL}`, type: 'value_error' },
       { loc: ['body', 'name'], msg: 'Name is too long', type: 'value_error' },
     ]);
     render(<NewExperimentPage />);
@@ -455,12 +470,12 @@ describe('UC3: refusals at their fields', () => {
     set('balance-group-by', 'custom');
     set('balance-custom-key', 'x y');
     click('submit-experiment');
-    expect((await screen.findByTestId('balance-error')).textContent).toBe(R13);
+    expect((await screen.findByTestId('balance-error')).textContent).toBe(KEY_REFUSAL);
     expect(screen.getByTestId('form-error')).toHaveTextContent('Name is too long');
   });
 
   it('guided: a 422 shows on Review, "Edit balance" goes to the field with the text and focus there', async () => {
-    refuse([{ loc: ['body', 'balance_within', 'attribute'], msg: R13, type: 'value_error' }]);
+    refuse([{ loc: ['body', 'balance_within', 'attribute'], msg: KEY_REFUSAL, type: 'value_error' }]);
     toVariantsStep();
     fireEvent.click(screen.getByLabelText(SWITCH_LABEL));
     set('balance-group-by', 'custom');
@@ -469,16 +484,16 @@ describe('UC3: refusals at their fields', () => {
     click('wizard-next');
     click('wizard-create');
     const row = await screen.findByTestId('balance-review-error');
-    expect(row).toHaveTextContent(R13);
+    expect(row).toHaveTextContent(KEY_REFUSAL);
     click('balance-error-edit');
     await waitFor(() => expect(heading()).toHaveTextContent('Set up the versions users will see'));
-    expect(screen.getByTestId('balance-error').textContent).toBe(R13);
+    expect(screen.getByTestId('balance-error').textContent).toBe(KEY_REFUSAL);
     await waitFor(() => expect(screen.getByTestId('balance-custom-key')).toHaveFocus());
   });
 
   it('the text goes away when the setting is changed', async () => {
     routerAt({ advanced: '' });
-    refuse([{ loc: ['body', 'balance_within', 'attribute'], msg: R13, type: 'value_error' }]);
+    refuse([{ loc: ['body', 'balance_within', 'attribute'], msg: KEY_REFUSAL, type: 'value_error' }]);
     render(<NewExperimentPage />);
     set('experiment-name', 'A');
     fireEvent.click(screen.getByLabelText(SWITCH_LABEL));
@@ -512,7 +527,7 @@ describe('UC3: refusals at their fields', () => {
   });
 });
 
-describe('UC10: one set of words', () => {
+describe('one set of words', () => {
   it('guided and single page use the same copy, and neither says even or stratified', () => {
     const regions: string[] = [];
     routerAt();
@@ -535,7 +550,7 @@ describe('UC10: one set of words', () => {
   });
 });
 
-describe('UC12: axe on the switch', () => {
+describe('axe on the switch', () => {
   it.each([
     ['off', () => undefined],
     ['on, a key and a value', () => {
@@ -548,7 +563,7 @@ describe('UC12: axe on the switch', () => {
       set('balance-group-by', 'custom');
       set('balance-custom-key', 'web_device');
     }],
-    ['on, a split R10 refuses', () => {
+    ['on, a split that is not in steps of 5', () => {
       fireEvent.click(screen.getByLabelText(SWITCH_LABEL));
       split(34, 33, 33);
     }],
@@ -572,7 +587,7 @@ describe('UC12: axe on the switch', () => {
 
   it('the single page with segments chosen and a refusal at them', async () => {
     routerAt({ advanced: '' });
-    refuse([{ loc: ['body', 'balance_within', 'segments'], msg: R8_TOO_MANY, type: 'value_error' }]);
+    refuse([{ loc: ['body', 'balance_within', 'segments'], msg: TOO_MANY_SEGMENTS_REFUSAL, type: 'value_error' }]);
     const { container } = render(<NewExperimentPage />);
     set('experiment-name', 'A');
     fireEvent.click(screen.getByLabelText(SWITCH_LABEL));
@@ -585,7 +600,7 @@ describe('UC12: axe on the switch', () => {
   });
 
   it('guided: the Variants step with the switch on, and the Review row with a refusal', async () => {
-    refuse([{ loc: ['body', 'balance_within', 'attribute'], msg: R13, type: 'value_error' }]);
+    refuse([{ loc: ['body', 'balance_within', 'attribute'], msg: KEY_REFUSAL, type: 'value_error' }]);
     toVariantsStep();
     fireEvent.click(screen.getByLabelText(SWITCH_LABEL));
     set('balance-group-by', 'custom');
