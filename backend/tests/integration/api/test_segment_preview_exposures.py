@@ -17,6 +17,7 @@ exposure).
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from contextlib import contextmanager
@@ -29,6 +30,7 @@ from sqlalchemy import delete, update
 from sqlalchemy import event as sa_event
 
 from backend.app.api.v1.endpoints.segments import PREVIEW_TIMED_OUT
+from backend.app.core.context_limits import MAX_CONTEXT_BYTES
 from backend.app.core.pattern_match import MAX_REGEX_INPUT
 from backend.app.models.assignment import Assignment
 from backend.app.models.event import Event
@@ -224,6 +226,25 @@ def _preview_read(seen) -> Tuple[str, object]:
     return read
 
 
+@contextmanager
+def _cursor_names(engine) -> Iterator[List[Tuple[str, object]]]:
+    """``(statement, name)`` of the DB-API cursor each statement runs on.
+
+    psycopg2 names a server-side cursor and only that: a client-side cursor's
+    ``name`` is ``None``.
+    """
+    seen: List[Tuple[str, object]] = []
+
+    def _before(conn, cursor, statement, parameters, context, executemany):
+        seen.append((" ".join(statement.split()), cursor.name))
+
+    sa_event.listen(engine, "before_cursor_execute", _before)
+    try:
+        yield seen
+    finally:
+        sa_event.remove(engine, "before_cursor_execute", _before)
+
+
 # ---------------------------------------------------------------------------
 # Row 1: a known population gives its known share
 # ---------------------------------------------------------------------------
@@ -285,6 +306,27 @@ def test_preview_uses_newest_not_oldest_rows(
     assert body["ended_by"] == "sample_size"
     statement, _ = _preview_read(seen)
     assert "ORDER BY test_experimentation.events.created_at DESC" in statement
+
+
+def test_the_read_streams_from_a_server_side_cursor(
+    admin_client, db_session, experiment, segment_id
+):
+    """The rows come ``PREVIEW_ROWS_PER_FETCH`` at a time from a server-side
+    cursor, so the preview holds one fetch of rows at a time, never every row
+    up to the cap."""
+    prefix = _prefix()
+    for i in range(3):
+        _assign(admin_client, experiment, f"{prefix}-{i}", {"country": "US"})
+
+    with _cursor_names(db_session.get_bind()) as seen:
+        body = _preview(admin_client, segment_id)
+    assert body["sample_size"] == 3
+    [name] = [
+        name
+        for statement, name in seen
+        if "FROM test_experimentation.events" in statement
+    ]
+    assert name is not None
 
 
 # ---------------------------------------------------------------------------
@@ -758,11 +800,28 @@ def test_sampled_since_is_the_oldest_row_read_and_ended_by_says_why(
 # ---------------------------------------------------------------------------
 
 
+def _printed_as(size: int) -> dict:
+    """US attributes whose stored JSON is ``size`` bytes as PostgreSQL prints it.
+
+    jsonb prints the shorter key first, with a space after each ``:`` and
+    ``,``, as ``json.dumps`` does here; the test checks the stored size
+    rather than trusting this.
+    """
+    shell = {"pad": "", "country": "US"}
+    return {"pad": "x" * (size - len(json.dumps(shell))), "country": "US"}
+
+
 def test_future_dated_and_oversize_exposures_are_not_sampled(
-    admin_client, no_exposures, segment_id, monkeypatch
+    admin_client, db_session, no_exposures, segment_id, monkeypatch
 ):
+    """Each bound is pinned by a pair of rows, one on each side of it: dated
+    inside the future skew and 60 s past it, and attributes of exactly
+    ``MAX_CONTEXT_BYTES`` and one byte more, as PostgreSQL prints them. The
+    server reads its clock after this test's, by the few seconds the writes
+    take, so 60 s past the skew here is still past it there."""
     prefix = _prefix()
     now = datetime.now(timezone.utc)
+    skew = timedelta(seconds=audience_service.PREVIEW_FUTURE_SKEW_SECONDS)
     _batch(
         admin_client,
         [
@@ -772,15 +831,23 @@ def test_future_dated_and_oversize_exposures_are_not_sampled(
             for i in range(30)
         ],
     )
+    at_limit, over_limit = f"{prefix}-at-limit", f"{prefix}-over-limit"
+    # user: (dated, attributes, is_read)
     planted = {
-        f"{prefix}-future": (now + timedelta(days=1), {"country": "US"}),
-        f"{prefix}-oversize": (
-            now - timedelta(minutes=1),
-            {"country": "US", "pad": "x" * 9000},
+        f"{prefix}-in-skew": (now + timedelta(seconds=60), {"country": "US"}, True),
+        f"{prefix}-past-skew": (
+            now + skew + timedelta(seconds=60),
+            {"country": "US"},
+            False,
         ),
-        f"{prefix}-skewed": (now + timedelta(seconds=60), {"country": "US"}),
+        at_limit: (now - timedelta(minutes=1), _printed_as(MAX_CONTEXT_BYTES), True),
+        over_limit: (
+            now - timedelta(minutes=1),
+            _printed_as(MAX_CONTEXT_BYTES + 1),
+            False,
+        ),
     }
-    for user_id, (at, metadata) in planted.items():
+    for user_id, (at, metadata, _) in planted.items():
         response = admin_client.post(
             TRACK,
             json={
@@ -792,6 +859,21 @@ def test_future_dated_and_oversize_exposures_are_not_sampled(
         )
         assert response.status_code == 200, response.text
 
+    printed = sa.func.octet_length(sa.cast(Event.event_metadata, sa.Text))
+    stored = db_session.execute(
+        sa.select(Event.user_id, printed).where(
+            Event.user_id.in_([at_limit, over_limit])
+        )
+    ).all()
+    assert dict(stored) == {
+        at_limit: MAX_CONTEXT_BYTES,
+        over_limit: MAX_CONTEXT_BYTES + 1,
+    }
+    # As compact JSON, the size assign's own limit counts, the row not read is
+    # within that limit: the spaces PostgreSQL prints are what put it over.
+    compact = json.dumps(planted[over_limit][1], separators=(",", ":"))
+    assert len(compact.encode()) < MAX_CONTEXT_BYTES
+
     reached: List[str] = []
     read = audience_service._read_recent_exposures
 
@@ -802,8 +884,8 @@ def test_future_dated_and_oversize_exposures_are_not_sampled(
 
     monkeypatch.setattr(audience_service, "_read_recent_exposures", recording)
     body = _preview(admin_client, segment_id)
-    # The 30 users and the one dated inside the skew; neither planted row.
-    assert (body["sample_size"], body["matched"]) == (31, 1)
-    assert f"{prefix}-skewed" in reached
-    assert f"{prefix}-future" not in reached
-    assert f"{prefix}-oversize" not in reached
+    # The 30 users and the two planted rows inside the bounds.
+    assert (body["sample_size"], body["matched"]) == (32, 2)
+    assert {user for user in planted if user in reached} == {
+        user for user, (_, _, is_read) in planted.items() if is_read
+    }
