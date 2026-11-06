@@ -44,7 +44,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import text, update
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 
@@ -998,9 +998,14 @@ def test_the_start_date_and_visual_settings_checks_read_the_committed_row(
     holds an uncommitted write of that field, the request waits for its commit
     and answers as if it came after it.
 
-    Planted defect: the row read without for update. The request then checks
-    the row as it was, answers 200, and its own write lands after the other
-    one: a visual draft with a start date.
+    The other transaction writes the field with a plain UPDATE, which holds
+    the row in the mode the other route's own write holds it (FOR NO KEY
+    UPDATE). So the mode the route reads the row in decides the answer.
+
+    Planted defects: the row read without for update, or read FOR KEY SHARE
+    (``with_for_update(read=True, key_share=True)``), which a plain UPDATE does
+    not exclude. The request then checks the row as it was, answers 200, and
+    its own write lands after the other one: a visual draft with a start date.
     """
     created = _create(client, developer, visual_config=None, variants=_variants(None))
     experiment_id = uuid.UUID(created["id"])
@@ -1028,14 +1033,12 @@ def test_the_start_date_and_visual_settings_checks_read_the_committed_row(
     other = _factory(db_session)()
     pool = ThreadPoolExecutor(max_workers=1)
     try:
-        row = (
-            other.query(Experiment)
-            .filter(Experiment.id == experiment_id)
-            .with_for_update()
-            .one()
+        written = other.execute(
+            update(Experiment)
+            .where(Experiment.id == experiment_id)
+            .values({pending: value})
         )
-        setattr(row, pending, value)
-        other.flush()
+        assert written.rowcount == 1
         other_pid = other.execute(text("SELECT pg_backend_pid()")).scalar()
         answer = pool.submit(send)
         try:
