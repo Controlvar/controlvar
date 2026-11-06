@@ -123,3 +123,19 @@ describe('a 401 for a token that is no longer stored (#1579)', () => {
     });
   });
 });
+
+describe('the header a request sent is what its 401 is judged by (#1579)', () => {
+  it('a request whose own Authorization differs from the stored token leaves the stored token alone', async () => {
+    setToken('jwt-first');
+    mockFetch.mockImplementationOnce(() => Promise.resolve(jsonResponse(401, { detail: 'nope' })));
+    const err = await apiFetch('/api/v1/experiments', { headers: { Authorization: 'Bearer jwt-other' } }).then(
+      () => {
+        throw new Error('expected the call to reject');
+      },
+      (e: unknown) => e as ApiError,
+    );
+    expect(err.status).toBe(401);
+    expect(getToken()).toBe('jwt-first');
+    expect(assignSpy).not.toHaveBeenCalled();
+  });
+});

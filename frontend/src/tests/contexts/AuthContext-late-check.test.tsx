@@ -240,3 +240,86 @@ describe('a session check whose answer cannot be read (#1039)', () => {
     expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('jwt-first');
   });
 });
+
+describe('each change of session makes an earlier check stale (#1579)', () => {
+  it('a check from before a sign-in, with no sign-out between, answered 200 after it, leaves the new user', async () => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-first');
+    const held = deferred<Response>();
+    meAnswers = [() => held.promise];
+    render(
+      <AuthProvider>
+        <Consumer />
+      </AuthProvider>,
+    );
+    expect(text('status')).toBe('loading');
+    await click('login');
+    await waitFor(() => expect(text('email')).toBe(second.email));
+    await act(async () => {
+      held.resolve(jsonResponse(200, first));
+    });
+    expect(text('status')).toBe('authenticated');
+    expect(text('email')).toBe(second.email);
+    expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBe('jwt-second');
+  });
+
+  it('a check in flight when another tab signs out, answered 200 after it, leaves the tab signed out', async () => {
+    const held = await signedInWithACheckInFlight('refresh()');
+    await act(async () => {
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      window.dispatchEvent(new StorageEvent('storage', { key: TOKEN_STORAGE_KEY, newValue: null }));
+    });
+    expect(text('status')).toBe('anonymous');
+    await act(async () => {
+      held.resolve(jsonResponse(200, first));
+    });
+    expect(text('status')).toBe('anonymous');
+    expect(text('email')).toBe('none');
+  });
+
+  it('an older check answered after a newer one for a new token leaves the newer answer', async () => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-first');
+    const held = deferred<Response>();
+    meAnswers = [
+      () => Promise.resolve(jsonResponse(200, first)),
+      () => held.promise,
+      () => Promise.resolve(jsonResponse(200, second)),
+    ];
+    render(
+      <AuthProvider>
+        <Consumer />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(text('status')).toBe('authenticated'));
+    await click('refresh');
+    await act(async () => {
+      localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-second');
+      window.dispatchEvent(new StorageEvent('storage', { key: TOKEN_STORAGE_KEY, newValue: 'jwt-second' }));
+    });
+    await waitFor(() => expect(text('email')).toBe(second.email));
+    await act(async () => {
+      held.resolve(jsonResponse(200, first));
+    });
+    expect(text('email')).toBe(second.email);
+  });
+
+  it('a sign-in that is refused while the first check is in flight leaves that check in effect', async () => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, 'jwt-first');
+    const held = deferred<Response>();
+    meAnswers = [() => held.promise];
+    mockFetch.mockImplementation((url: string) => {
+      if (url === ME) return meAnswers.shift()!();
+      return Promise.resolve(jsonResponse(401, { detail: 'Incorrect email or password' }));
+    });
+    render(
+      <AuthProvider>
+        <Consumer />
+      </AuthProvider>,
+    );
+    await click('login');
+    await act(async () => {
+      held.resolve(jsonResponse(200, first));
+    });
+    expect(text('status')).toBe('authenticated');
+    expect(text('email')).toBe(first.email);
+  });
+});
