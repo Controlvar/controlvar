@@ -13,6 +13,8 @@ copy too.
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 
 import pytest
 
@@ -31,6 +33,29 @@ def test_the_vectors_are_current():
 def test_the_check_command_agrees(capsys):
     assert vectors.main(["--check"]) == 0
     assert "is current" in capsys.readouterr().out
+
+
+@pytest.mark.regression
+def test_the_generator_runs_as_its_own_command():
+    """As the docs run it: a fresh interpreter whose first import is the
+    schema module. In this test session the app is already imported, which
+    hides an import cycle through ``backend.app.services``; a new process
+    does not."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-B",
+            "-m",
+            "backend.scripts.generate_visual_vectors",
+            "--check",
+        ],
+        cwd=vectors.REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr[-3000:]
+    assert "is current" in result.stdout
 
 
 def test_every_verdict_is_the_one_the_corpus_was_written_for():

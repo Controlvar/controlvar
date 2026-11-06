@@ -166,10 +166,25 @@ ALLOWED_STYLE_FUNCTIONS = frozenset(
     {"rgb", "rgba", "hsl", "hsla", "calc", "var", "min", "max", "clamp"}
 )
 
-#: A goal's event name, and the event types it may never be: the tracking API
-#: stores an event's name as its type, and these two mark an exposure.
+#: A goal's event name. It may never be an exposure event type (see
+#: :func:`exposure_event_types`): the tracking API stores an event's name as
+#: its type, and those types mark an exposure.
 EVENT_NAME_PATTERN = re.compile(r"^[a-z0-9_]{1,100}$")
-EXPOSURE_EVENT_NAMES = frozenset({"exposure", "experiment_exposure"})
+
+
+def exposure_event_types() -> Tuple[str, ...]:
+    """The event types that mark an exposure: the analysis's own
+    ``event_matching.EXPOSURE_EVENT_TYPES``, imported, never copied.
+
+    Imported here, not at the top of the module: ``backend.app.services``
+    imports ``ExperimentService`` when the package loads, which imports
+    ``schemas.experiment``, which imports this module, so a module-level
+    import is circular for anything that imports this module first (the
+    vectors generator does)."""
+    from backend.app.services.event_matching import EXPOSURE_EVENT_TYPES
+
+    return EXPOSURE_EVENT_TYPES
+
 
 # --- the refusals (fixed text) -------------------------------------------------
 
@@ -177,7 +192,7 @@ SELECTOR_REFUSED = (
     "A selector is 1 to 512 characters, and cannot contain { } ; \\ @ <, the "
     "comment marks /* and */, or a control character such as NUL."
 )
-TEXT_REFUSED = "Text cannot contain a NUL character."
+TEXT_REFUSED = "A NUL character cannot be part of the text."
 ATTRIBUTE_VALUE_REFUSED = "An attribute value cannot contain a control character."
 LINK_REFUSED = (
     "A link must be a full http:// or https:// URL without a user name or "
@@ -187,7 +202,7 @@ IMAGE_REFUSED = (
     "An image must be a full http:// or https:// URL without a user name or "
     "password, or a path on this site that starts with a single /."
 )
-STYLE_COUNT_REFUSED = "set_style takes 1 to 20 properties."
+STYLE_COUNT_REFUSED = "A style change sets 1 to 20 properties."
 STYLE_PROPERTY_REFUSED = (
     "This property cannot be changed. The properties a change may set are "
     "colours, fonts, text alignment and decoration, spacing, borders, sizes, "
@@ -199,18 +214,21 @@ STYLE_VALUE_REFUSED = (
     "clamp."
 )
 MARGIN_REFUSED = "Spacing cannot be less than 0."
-FLEX_DIRECTION_REFUSED = "flex-direction may be row or column."
+FLEX_DIRECTION_REFUSED = "Only row or column is accepted as a flex direction."
 CHANGES_TOO_LARGE = "A variant's page changes are at most 64 KiB."
-VERSION_REFUSED = "version must be 1."
+VERSION_REFUSED = "The format version must be 1."
 PAGE_URL_REFUSED = (
     "A page is a full http:// or https:// URL with an ASCII host, without a "
     "user name, password, query, # fragment, backslash or space."
 )
 EDITOR_URL_REFUSED = (
-    "editor_url is a full http:// or https:// URL with an ASCII host, without a "
-    "user name, password, # fragment, backslash or space."
+    "The page the editor opens must be a full http:// or https:// URL with an "
+    "ASCII host, without a user name, password, # fragment, backslash or "
+    "space. It may carry a query."
 )
-EDITOR_URL_NOT_A_PAGE = "editor_url must be on one of the experiment's pages."
+EDITOR_URL_NOT_A_PAGE = (
+    "The page the editor opens must be one of the experiment's pages."
+)
 EVENT_NAME_REFUSED = (
     "A goal's event_name is 1 to 100 lower-case letters, digits and "
     "underscores, and cannot be exposure or experiment_exposure."
@@ -522,7 +540,7 @@ class _Goal(BaseModel):
     @field_validator("event_name")
     @classmethod
     def _event_name(cls, value: str) -> str:
-        if not EVENT_NAME_PATTERN.match(value) or value in EXPOSURE_EVENT_NAMES:
+        if not EVENT_NAME_PATTERN.match(value) or value in exposure_event_types():
             raise _visual_error(EVENT_NAME_REFUSED, VISUAL_CONFIG_ERROR)
         return value
 
@@ -625,8 +643,8 @@ CONTROL_CHANGES_REFUSED = (
     "The control variant shows the page as it is, so it cannot have page changes."
 )
 CHANGES_WITHOUT_CONFIG_REFUSED = (
-    "Page changes belong to a visual experiment: send visual_config, the pages "
-    "the experiment runs on, with them."
+    "A variant's page changes belong to a visual experiment: send "
+    "visual_config, the pages the experiment runs on, with them."
 )
 GOAL_WITHOUT_METRIC_REFUSED = (
     "A goal's event_name must be the event_name of one of the experiment's metrics."

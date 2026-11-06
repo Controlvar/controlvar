@@ -21,6 +21,7 @@ generates is held to it in ``test_visual_vectors.py``.
 
 from __future__ import annotations
 
+import copy
 import json
 import typing
 
@@ -38,6 +39,7 @@ from backend.app.schemas.visual import (
     page_matches,
     stored_size,
 )
+from backend.app.services import event_matching
 from backend.scripts.generate_visual_vectors import ACCEPTED, PAGE_RULES, REFUSED
 
 pytestmark = pytest.mark.unit
@@ -190,6 +192,44 @@ def test_the_fixed_texts_are_found():
     assert visual.LINK_REFUSED in FIXED_TEXTS and len(FIXED_TEXTS) > 15
 
 
+def _field_names() -> set:
+    """Every name a refusal's place can end in: the visual models' fields, the
+    operations, the attributes and style properties, and the experiment
+    fields the cross-field rules are placed at."""
+    models = [
+        value
+        for value in vars(visual).values()
+        if isinstance(value, type)
+        and issubclass(value, visual.BaseModel)
+        and value.__module__ == visual.__name__
+    ]
+    names = {name for model in models for name in model.model_fields}
+    names |= set(visual.VISUAL_OPS) | set(visual.ALLOWED_ATTRIBUTES)
+    names |= set(visual.ALLOWED_STYLE_PROPERTIES)
+    names |= {"visual_config", "visual_changes", "variants", "metrics", "design_etag"}
+    return names
+
+
+def test_no_refusal_text_begins_with_a_field_name():
+    """The dashboard's messageForDetail puts the field's place before a 422's
+    text ("editor_url: ..."), so a text that began with the field's name would
+    read it twice. Checked for every fixed text of both visual modules."""
+    from backend.app.services import visual as visual_service
+
+    names = _field_names()
+    assert {"editor_url", "version", "flex-direction", "set_style", "text"} <= names
+    texts = [
+        value
+        for module in (visual, visual_service)
+        for name, value in vars(module).items()
+        if name.isupper() and isinstance(value, str) and " " in value
+    ]
+    assert len(texts) > 30
+    starts = {text: text.split()[0].strip(".,:;'\"").lower() for text in texts}
+    assert [text for text, first in starts.items() if first in names] == []
+    assert [text for text in texts if not text[0].isupper()] == []
+
+
 @pytest.mark.parametrize("case_id,document", ACCEPTED, ids=[c[0] for c in ACCEPTED])
 def test_each_accepted_payload_is_accepted(case_id, document):
     assert _errors(document) == []
@@ -250,6 +290,44 @@ def test_at_most_64_kib():
     assert _errors(document) == []
     document["changes"][-1]["text"] += "x"
     assert [e["msg"] for e in _errors(document)] == [visual.CHANGES_TOO_LARGE]
+
+
+def _compact_utf8_bytes(document) -> int:
+    """The size the limit is stated in, measured here and not with
+    ``stored_size``, so a ``stored_size`` that counts characters fails the
+    validator's assertions below, not this arithmetic."""
+    text = json.dumps(document, separators=(",", ":"), ensure_ascii=False)
+    return len(text.encode("utf-8"))
+
+
+@pytest.mark.regression
+def test_the_64_kib_limit_counts_bytes_not_characters():
+    """At the boundary, with multibyte characters: 65536 bytes are accepted
+    and 65537 refused, while the document is far fewer than 65536
+    characters, so a limit counted in characters accepts both."""
+
+    def change(text):
+        return {"op": "set_text", "selector": "h1", "text": text}
+
+    document = {"version": 1, "changes": [change("€" * 2000) for _ in range(10)]}
+    document["changes"].append(change(""))
+    # Fill the last change to two bytes under the limit: "€" is 3 bytes.
+    remaining = MAX_CHANGES_BYTES - 2 - _compact_utf8_bytes(document)
+    document["changes"][-1]["text"] = "€" * (remaining // 3) + "x" * (remaining % 3)
+    assert _compact_utf8_bytes(document) == MAX_CHANGES_BYTES - 2
+
+    at_limit = copy.deepcopy(document)
+    at_limit["changes"][-1]["text"] += "é"  # 2 bytes
+    over = copy.deepcopy(document)
+    over["changes"][-1]["text"] += "€"  # 3 bytes
+    assert _compact_utf8_bytes(at_limit) == MAX_CHANGES_BYTES
+    assert _compact_utf8_bytes(over) == MAX_CHANGES_BYTES + 1
+    assert len(over["changes"][-1]["text"]) <= 2000
+    characters = len(json.dumps(over, separators=(",", ":"), ensure_ascii=False))
+    assert characters < MAX_CHANGES_BYTES // 2
+
+    assert _errors(at_limit) == []
+    assert [e["msg"] for e in _errors(over)] == [visual.CHANGES_TOO_LARGE]
 
 
 def test_a_selector_of_at_most_512_characters():
@@ -394,6 +472,28 @@ def test_the_editor_page_is_one_of_the_pages_and_may_carry_a_query():
 )
 def test_v54_a_goal_event_name_is_lower_case_and_never_an_exposure_type(event_name):
     errors = _config_errors(_config(goals=[_goal(event_name)]))
+    assert visual.EVENT_NAME_REFUSED in [e["msg"] for e in errors], errors
+
+
+@pytest.mark.parametrize("event_type", event_matching.EXPOSURE_EVENT_TYPES)
+def test_v54_a_goal_is_never_one_of_the_analysis_exposure_types(event_type):
+    errors = _config_errors(_config(goals=[_goal(event_type)]))
+    assert visual.EVENT_NAME_REFUSED in [e["msg"] for e in errors], errors
+    assert event_type in visual.EVENT_NAME_REFUSED
+
+
+@pytest.mark.regression
+def test_v54_the_exposure_types_are_the_analysis_own_list(monkeypatch):
+    """Read from event_matching on every check, not copied: a type added
+    there is refused as a goal's event name at once."""
+    assert visual.exposure_event_types() is event_matching.EXPOSURE_EVENT_TYPES
+    assert _config_errors(_config(goals=[_goal("page_seen")])) == []
+    monkeypatch.setattr(
+        event_matching,
+        "EXPOSURE_EVENT_TYPES",
+        (*event_matching.EXPOSURE_EVENT_TYPES, "page_seen"),
+    )
+    errors = _config_errors(_config(goals=[_goal("page_seen")]))
     assert visual.EVENT_NAME_REFUSED in [e["msg"] for e in errors], errors
 
 
