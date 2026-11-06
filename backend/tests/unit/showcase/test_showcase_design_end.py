@@ -45,7 +45,10 @@ DRAWN = {
         "Purchase (purchase, Conversion) — primary metric\n"
         "Add to cart (add_to_cart, Conversion)"
     ),
-    "review-targeting": "Targeting: 1 rule group",
+    "review-targeting": (
+        "Targeting:\n\nPeople who match all of these conditions:\n\n"
+        "user.country is one of US, CA"
+    ),
     "review-analysis": (
         "95% confidence · Benjamini-Hochberg correction · Bayesian analysis on"
     ),
@@ -513,6 +516,56 @@ def test_a_reading_never_recorded_is_refused():
     assert not ok and "no reading 'bayesian' was recorded" in why
 
 
+@pytest.mark.regression
+def test_the_review_targeting_mirror_lists_the_rules_in_words():
+    """#1425: Review lists who can join, in RulesSummary's words. The mirror
+    said "Targeting: 2 rule groups" here, as the old Review did."""
+    rules = {
+        "logical_operator": "OR",
+        "groups": [
+            {
+                "id": "group-0",
+                "logical_operator": "AND",
+                "conditions": [
+                    {
+                        "id": "c-0",
+                        "attribute": "user.country",
+                        "operator": "in",
+                        "value": "US, CA",
+                    },
+                    {
+                        "id": "c-1",
+                        "attribute": "user.plan",
+                        "operator": "is_null",
+                        "value": None,
+                    },
+                ],
+            },
+            {
+                "logical_operator": "OR",
+                "conditions": [
+                    {
+                        "attribute": "app.version",
+                        "operator": "semver_gte",
+                        "value": "2.0.0",
+                    },
+                ],
+            },
+        ],
+    }
+    assert gates.targeting_words(rules) == (
+        "Targeting: People who match any of these groups:"
+        " Group 1: all of these conditions user.country is one of US, CA user.plan is empty"
+        " Group 2: any of these conditions app.version version >= 2.0.0"
+    )
+    one = {"logical_operator": "AND", "groups": [rules["groups"][1]]}
+    assert gates.targeting_words(one) == (
+        "Targeting: People who match any of these conditions: app.version version >= 2.0.0"
+    )
+    for empty in (None, {}, {"logical_operator": "AND", "groups": []}):
+        assert gates.targeting_words(empty) == "Targeting: everyone"
+
+
 def test_the_mirrors_name_each_setting_as_the_product_does():
     assert gates.format_confidence(0.95) == "95%"
     assert gates.format_confidence(0.9) == "90%"
@@ -729,6 +782,8 @@ def source(relative: str) -> str:
 
 
 WIZARD = "components/experiments/new/Wizard.tsx"
+RULES_SUMMARY = "components/experiments/RulesSummary.tsx"
+TARGETING_WORDS = "utils/experimentTargeting.ts"
 SETTINGS = "components/results/shared/analysisSettings.ts"
 DETAIL = "pages/experiments/[id].tsx"
 
@@ -741,9 +796,10 @@ def test_the_review_rows_are_drawn_as_the_mirrors_say():
         "{JSON.stringify(v.configuration)}",
         "{m.name} (<code className=\"font-mono\">{m.event_name}</code>,{' '}",
         "{METRIC_TYPE_LABELS[m.metric_type]}){m.is_primary ? ' — primary metric' : ''}",
-        "? `Targeting: ${state.rules.groups.length} rule ${",
-        "state.rules.groups.length === 1 ? 'group' : 'groups'",
-        ": 'Targeting: everyone'}",
+        "{payload.targeting_rules ? (",
+        '<p className="font-medium">Targeting:</p>',
+        "<RulesSummary value={payload.targeting_rules} draft />",
+        '<span className="font-medium">Targeting:</span> everyone',
         "{payload.bayesian_enabled ? ' · Bayesian analysis on' : ''}",
         "{payload.sequential_testing_enabled ? ' · Sequential testing (beta) on' : ''}",
         'data-testid="review-variants"',
@@ -755,6 +811,38 @@ def test_the_review_rows_are_drawn_as_the_mirrors_say():
     assert gates.CONFIGURATION_SEPARATOR == ", configuration "
     assert gates.BAYESIAN_ON == " · Bayesian analysis on"
     assert gates.SEQUENTIAL_ON == " · Sequential testing (beta) on"
+
+
+def test_the_review_targeting_row_is_rules_summary_as_the_mirror_says():
+    summary = source(RULES_SUMMARY)
+    for piece in (
+        "if (groups.length === 1) {",
+        "<p>People who match {combineWord(groups[0].logical_operator)} of these conditions:</p>",
+        "<p>People who match {combineWord(value.logical_operator)} of these groups:</p>",
+        "Group {gi + 1}: {combineWord(group.logical_operator)} of these conditions",
+        '<code className="font-mono text-slate-800">{describe(condition)}</code>',
+        "const describe = draft ? describeDraftCondition : describeCondition;",
+    ):
+        assert piece in summary, piece
+    words = source(TARGETING_WORDS)
+    for piece in (
+        "const attribute = String(condition.attribute ?? '');",
+        "const operator = String(condition.operator ?? '');",
+        "const label = OPERATOR_LABELS[operator as OperatorType] ?? operator;",
+        "if (operator === 'is_null' || operator === 'is_not_null') return `${attribute} ${label}`;",
+        "const shown = Array.isArray(value) ? value.join(', ') : String(value ?? '');",
+        "return `${attribute} ${label} ${shown}`;",
+        "return logicalOperator === 'OR' ? 'any' : 'all';",
+    ):
+        assert piece in words, piece
+
+
+def test_the_operator_labels_are_the_products():
+    text = source("types/targeting.ts")
+    block = text.split("export const OPERATOR_LABELS")[1].split("};")[0]
+    found = dict(re.findall(r"(\w+): '([^']+)'", block))
+    assert found == gates.OPERATOR_LABELS
+    assert len(found) == 26
 
 
 def test_the_review_analysis_row_is_describe_settings():

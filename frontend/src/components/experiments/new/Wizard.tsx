@@ -31,6 +31,7 @@ import { AnalysisSettingsFields } from './AnalysisSettingsFields';
 import { describeSettings } from '@/components/results/shared/analysisSettings';
 import { CreateError, footMessage } from './createErrors';
 import { TargetingProblems } from './TargetingProblems';
+import { RulesSummary } from '@/components/experiments/RulesSummary';
 
 export const NEW_EXPERIMENT_PATH = '/experiments/new';
 
@@ -489,13 +490,19 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
                     </li>
                   ))}
                 </ul>
-                <p className="mt-1" data-testid="review-targeting">
-                  {payload.targeting_rules
-                    ? `Targeting: ${state.rules.groups.length} rule ${
-                        state.rules.groups.length === 1 ? 'group' : 'groups'
-                      }`
-                    : 'Targeting: everyone'}
-                </p>
+                {/* Who can join, in words: the rules this create sends (#1425). */}
+                <div className="mt-1" data-testid="review-targeting">
+                  {payload.targeting_rules ? (
+                    <>
+                      <p className="font-medium">Targeting:</p>
+                      <RulesSummary value={payload.targeting_rules} draft />
+                    </>
+                  ) : (
+                    <p>
+                      <span className="font-medium">Targeting:</span> everyone
+                    </p>
+                  )}
+                </div>
                 <div className="mt-2">
                   <TargetingProblems error={error}>
                     <button
