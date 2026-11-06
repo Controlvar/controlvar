@@ -439,7 +439,6 @@ class TestSsoUrlIsHttpsWhenSaved:
     @pytest.mark.parametrize(
         "provider",
         [
-            SSOProviderType.SAML,
             SSOProviderType.GOOGLE,
             SSOProviderType.GITHUB,
             SSOProviderType.MICROSOFT,
@@ -465,7 +464,8 @@ class TestSsoUrlIsHttpsWhenSaved:
     def test_the_checked_providers_are_those_whose_endpoints_use_sso_url(
         self, outside_test
     ):
-        """Okta alone today; a provider added with ``{sso_url}`` joins it."""
+        """Okta, whose endpoints use ``sso_url``, and SAML, whose single sign-on
+        URL it is (#1100); a provider added with ``{sso_url}`` joins them."""
         refused = set()
         for provider in SSOProviderType:
             try:
@@ -482,7 +482,8 @@ class TestSsoUrlIsHttpsWhenSaved:
                 ).values()
             )
         }
-        assert refused == uses_sso_url == {SSOProviderType.OKTA}
+        assert uses_sso_url == {SSOProviderType.OKTA}
+        assert refused == uses_sso_url | {SSOProviderType.SAML}
 
     def test_the_test_environment_accepts_http_as_the_sign_in_does(self):
         from backend.app.core.config import settings as core_settings
@@ -497,6 +498,101 @@ class TestSsoUrlIsHttpsWhenSaved:
         with pytest.raises(HTTPException) as exc_info:
             build_oidc_authorization_url(cfg, "okta", "https://app/cb", "s", "v" * 43)
         assert exc_info.value.detail == HTTPS_DETAIL
+
+
+# ---------------------------------------------------------------------------
+# CRUD: a SAML sso_url must be https when it is saved (#1100)
+# ---------------------------------------------------------------------------
+
+SAML_HTTPS_DETAIL = (
+    "SAML single sign-on URL must use https; check this SSO configuration's sso_url"
+)
+
+
+def _saml_data(sso_url: str) -> Dict[str, Any]:
+    return {
+        "org_name": "Acme Corp",
+        "org_domain": "acme.com",
+        "provider_type": SSOProviderType.SAML,
+        "entity_id": "https://idp.acme.example",
+        "sso_url": sso_url,
+        "x509_certificate": "CERT_PLACEHOLDER",
+        "role_mapping": {},
+        "is_enforced": False,
+        "is_active": True,
+    }
+
+
+class TestSamlSsoUrlIsHttpsWhenSaved:
+    """Okta's rule, with its own text, for a SAML configuration's sso_url.
+
+    Checked when it is saved only: the API never contacts a SAML sso_url, and
+    a sign-in does not read it."""
+
+    @pytest.fixture
+    def outside_test(self, monkeypatch):
+        from backend.app.core.config import settings as core_settings
+
+        monkeypatch.setattr(core_settings, "ENVIRONMENT", "development")
+        assert not core_settings.is_test
+
+    @pytest.mark.regression
+    @pytest.mark.parametrize(
+        "sso_url",
+        [
+            "http://idp.acme.example/sso",
+            "idp.acme.example/sso",
+            # urlparse raises ValueError on it.
+            "https://[idp.acme.example",
+        ],
+    )
+    def test_create_refuses_a_saml_sso_url_that_is_not_https(
+        self, outside_test, sso_url
+    ):
+        db = _make_db_session()
+        with pytest.raises(HTTPException) as exc_info:
+            create_sso_config(db, _saml_data(sso_url))
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail == SAML_HTTPS_DETAIL
+        db.add.assert_not_called()
+        db.commit.assert_not_called()
+
+    @pytest.mark.regression
+    def test_update_refuses_a_saml_sso_url_that_is_not_https(self, outside_test):
+        db = _make_db_session()
+        cfg = _make_saml_config(sso_url="https://idp.acme.example/sso")
+        db.first.return_value = cfg
+        with pytest.raises(HTTPException) as exc_info:
+            update_sso_config(db, cfg.id, {"sso_url": "http://idp.acme.example/sso"})
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail == SAML_HTTPS_DETAIL
+        assert cfg.sso_url == "https://idp.acme.example/sso"
+        db.commit.assert_not_called()
+
+    def test_https_in_any_case_and_an_empty_url_are_accepted(self, outside_test):
+        for sso_url in ("HTTPS://idp.acme.example/sso", ""):
+            db = _make_db_session()
+            create_sso_config(db, _saml_data(sso_url))
+            db.commit.assert_called_once()
+
+    @pytest.mark.parametrize("change", [{"org_name": "Renamed"}, {"is_active": False}])
+    def test_a_stored_http_saml_config_can_still_be_changed(self, outside_test, change):
+        """An update that sends neither sso_url nor provider_type is not checked,
+        so a configuration stored before the check can be renamed or switched
+        off."""
+        db = _make_db_session()
+        cfg = _make_saml_config(sso_url="http://legacy.acme.example/sso")
+        db.first.return_value = cfg
+        update_sso_config(db, cfg.id, change)
+        db.commit.assert_called_once()
+
+    def test_the_test_environment_accepts_an_http_saml_url(self):
+        from backend.app.core.config import settings as core_settings
+
+        assert core_settings.is_test
+        db = _make_db_session()
+        create_sso_config(db, _saml_data("http://127.0.0.1:9/sso"))
+        db.commit.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
