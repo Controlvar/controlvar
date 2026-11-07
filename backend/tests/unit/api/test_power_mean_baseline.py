@@ -253,6 +253,19 @@ NO_SIZE = [
 def test_a_size_that_is_zero_or_not_finite_answers_the_fixed_422(client, text):
     response = _raw(client, text)
     assert response.status_code == 422
+    if "Infinity" in text:
+        # Since #1630 an infinite number in a JSON body is refused before the
+        # route runs, at its field; still a 422.
+        assert response.json() == {
+            "detail": [
+                {
+                    "type": "finite_number",
+                    "loc": ["body", "baseline_std"],
+                    "msg": "Input should be a finite number",
+                }
+            ]
+        }
+        return
     assert response.json() == {"detail": OUT_OF_RANGE_MESSAGE}
 
 

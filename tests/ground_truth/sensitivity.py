@@ -15,7 +15,10 @@ it, naming the fault and saying that the TEST is broken:
 * (P-b) the reference without the rule differs in a number the gates compare;
 * for the faults with no rule: F7, exactly the planted users unassigned and
   the reference's sample-ratio p-value below 0.001; F9, every class sent as
-  often as planted and a hostile but valid event counted in a variant; F4,
+  often as planted and a hostile but valid event counted in a variant; F2,
+  exactly its values beyond the bound refused in their ``/batch``'s
+  ``errors``, the rest of its bot events stored, and the refusals moving a
+  number the gates compare; F4,
   nothing at run time (its sensitivity is its planted defect).
 
 With ``combined=True`` the faults were placed together (``faults.combine``,

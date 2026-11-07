@@ -52,7 +52,16 @@ text = "Received after the user is assigned, with an earlier timestamp | Yes | Y
 by = ["test:backend/tests/integration/api/test_how_events_count.py::test_the_variant_is_the_one_at_receipt_whatever_the_timestamp"]
 
 [[unit]]
-text = "With a value larger than 10^12 in size | Yes | Its user counts as converting; the value adds nothing"
+text = "With a value that is not a finite number from -10^12 to 10^12 | No: /track and /events answer 422; /batch reports the entry in errors and stores the others, but refuses the whole request when the number in the JSON is NaN or infinite | No"
+by = [
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_track_refuses_a_value_beyond_the_bound",
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_events_refuses_a_value_beyond_the_bound_at_the_field",
+    "test:backend/tests/unit/api/test_event_value_bound.py::test_batch_reports_the_entry_beyond_the_bound_and_stores_the_others",
+    "test:backend/tests/integration/api/test_tracking_non_finite_numbers.py::test_one_non_finite_number_refuses_the_whole_batch",
+]
+
+[[unit]]
+text = "Stored before the server refused such a value, with a value larger than 10^12 in size | Yes | Its user counts as converting; the value adds nothing"
 by = ["test:backend/tests/integration/api/test_revenue_per_user_results.py::test_values_that_are_not_finite_or_too_large_add_nothing"]
 
 [[unit]]
@@ -194,7 +203,7 @@ by = [
 ]
 
 [[unit]]
-text = "The JavaScript SDK sends the eventId you give it, from its next published version, and makes none itself (Event ids)."
+text = "The JavaScript SDK sends the eventId you give it, and makes none itself (Event ids)."
 by = [
     "test:sdk/js/__tests__/event-id.test.ts::sends event_id on a track with an explicit key",
     "test:sdk/js/__tests__/event-id.test.ts::makes no id of its own: two tracks without an eventId send none",
@@ -202,7 +211,7 @@ by = [
 ]
 
 [[unit]]
-text = "The Python SDK sends the event_id you give it, from its next published version, and makes none itself (Event ids)."
+text = "The Python SDK sends the event_id you give it, and makes none itself (Event ids)."
 by = [
     "test:sdk/python/tests/test_event_id.py::TestEventId::test_sends_event_id_on_a_track_with_an_explicit_key",
     "test:sdk/python/tests/test_event_id.py::TestEventId::test_makes_no_id_of_its_own_two_tracks_without_an_event_id_send_none",
