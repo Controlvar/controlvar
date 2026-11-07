@@ -847,6 +847,11 @@ def test_a_role_that_admits_the_deployment_without_the_external_id_is_refused(
             ("refuse", PROBE, "InvalidClientTokenId", 403),
             WarehouseErrorCode.PERMISSION_DENIED,
         ),
+        # Nor does an auth_failed whose AWS code is not AccessDenied.
+        (
+            ("refuse", PROBE, "SignatureDoesNotMatch", 401),
+            WarehouseErrorCode.AUTH_FAILED,
+        ),
         (("raise", NoCredentialsError()), WarehouseErrorCode.AWS_IDENTITY_UNAVAILABLE),
         (
             (
@@ -858,7 +863,14 @@ def test_a_role_that_admits_the_deployment_without_the_external_id_is_refused(
             WarehouseErrorCode.UNREACHABLE,
         ),
     ],
-    ids=["throttled", "server-error", "other-403", "no-identity", "unreachable"],
+    ids=[
+        "throttled",
+        "server-error",
+        "other-403",
+        "other-401",
+        "no-identity",
+        "unreachable",
+    ],
 )
 def test_only_an_access_denied_check_lets_the_operation_go_on(
     step, code, aws_env, monkeypatch, caplog
