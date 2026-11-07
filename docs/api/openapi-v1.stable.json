@@ -28666,6 +28666,9 @@
           },
           "429": {
             "description": "More requests from this address than the SDK limit allows"
+          },
+          "503": {
+            "description": "The database is not available; send the request again later"
           }
         },
         "security": [

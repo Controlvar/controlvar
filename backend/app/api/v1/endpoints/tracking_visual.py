@@ -25,7 +25,13 @@ visitor gets on a page:
 * ``pages`` lists the page rules of every running visual experiment on the
   host, for the script to keep for 60 seconds.
 * One experiment that cannot be answered is left out and logged; the answer is
-  a 500 only when experiments matched and none could be answered.
+  a 500 only when experiments were tried and none could be answered. One left
+  out for its stored values is not tried: when it is the only match, the
+  answer is a 200 without it.
+* When the database itself fails (the pool times out, or an operation fails
+  with ``OperationalError``, raised or underneath the assign route's own 500),
+  the answer stops there with a 503: every further experiment would wait on
+  the same database. Experiments answered before it keep what they recorded.
 
 The handler stays ``async`` and gives the request's database connection back
 before the answer starts (``db.close()``); the answer then runs in a worker
@@ -56,6 +62,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Response, status
 from pydantic import ValidationError
+from sqlalchemy import exc as sa_exc
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -103,8 +110,21 @@ PREVIEW_NOT_FOUND = (
     "new one on the experiment's page in Controlvar."
 )
 
-#: The sentence of the 500 when experiments matched and none could be answered.
+#: The sentence of the 500 when experiments were tried and none could be answered.
 PAGE_FAILURE_SENTENCE = "Could not answer which visual changes this page gets"
+
+#: The sentence of the 503 when the database fails part-way: the same text
+#: whatever failed, with the request's id.
+PAGE_UNAVAILABLE_SENTENCE = (
+    "Could not answer which visual changes this page gets: the database is "
+    "not available. Try again shortly"
+)
+
+#: Database failures that stop the whole answer: the next experiment would
+#: wait on the same database.
+_DATABASE_DOWN = (sa_exc.TimeoutError, sa_exc.OperationalError)
+#: How far down an exception's chain the database failure is looked for.
+_CHAIN_DEPTH = 8
 
 #: One log line per process when details are dropped, and one per experiment
 #: whose stored settings fail their schema: the same cause on every page view.
@@ -186,6 +206,37 @@ def _matched(
     return matched, rules
 
 
+def _database_failure(exc: BaseException) -> Optional[BaseException]:
+    """The pool timeout or ``OperationalError`` that *exc* is, or was raised
+    from or while handling (the assign route answers its own 500 from inside
+    ``except``), within :data:`_CHAIN_DEPTH` links; else ``None``."""
+    current: Optional[BaseException] = exc
+    for _ in range(_CHAIN_DEPTH):
+        if current is None:
+            return None
+        if isinstance(current, _DATABASE_DOWN):
+            return current
+        current = current.__cause__ or current.__context__
+    return None
+
+
+def _unavailable(db: Session, failure: BaseException) -> HTTPException:
+    """The 503 that stops the answer, after a rollback; logs the class only
+    (a database error's text repeats the statement's parameters)."""
+    try:
+        db.rollback()
+    except Exception:
+        logger.warning("Rollback after a failed visual page answer also failed")
+    logger.error(
+        "Visual page answer stopped: the database failed (%s)",
+        type(failure).__name__,
+    )
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=failure_detail(PAGE_UNAVAILABLE_SENTENCE),
+    )
+
+
 def _log_unreadable(experiment_id: Any, exc: BaseException) -> None:
     if _NOTES.first(str(experiment_id), "unreadable"):
         logger.warning(
@@ -265,7 +316,12 @@ async def _answer(
     summary="The visual changes and goals a visitor gets on a page (beta)",
     response_description="Each running visual experiment on the page, and the host's page rules",
     openapi_extra={"x-stability": "beta"},
-    responses=_RESPONSES,
+    responses={
+        **_RESPONSES,
+        503: {
+            "description": "The database is not available; send the request again later"
+        },
+    },
 )
 async def visual_changes_for_page(
     response: Response,
@@ -335,20 +391,30 @@ async def _answer_page(
         matched = matched[:MAX_EXPERIMENTS_PER_PAGE]
         designs = _designs(db, matched) if matched else {}
     except Exception as exc:
+        failure = _database_failure(exc)
+        if failure is not None:
+            raise _unavailable(db, failure)
         raise unexpected_failure(
             exc, "Visual page answer", PAGE_FAILURE_SENTENCE, db=db, logger=logger
         )
 
     answers: List[VisualExperimentAnswer] = []
+    tried = 0
     for candidate in matched:
         design = designs.get(candidate.id)
         if design is None:
+            # Left out for its stored values (logged in _designs): not tried.
             continue
+        tried += 1
         try:
             answers.append(
                 await _answer(db, owner, candidate, design, request.user_id, context)
             )
         except Exception as exc:
+            failure = _database_failure(exc)
+            if failure is not None:
+                # The next experiment would wait on the same database.
+                raise _unavailable(db, failure)
             # One experiment that cannot be answered is left out: the visitor
             # sees the page as it is for it, and the others still apply.
             try:
@@ -361,7 +427,7 @@ async def _answer_page(
                 type(exc).__name__,
             )
 
-    if matched and not answers:
+    if tried and not answers:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=failure_detail(PAGE_FAILURE_SENTENCE),

@@ -31,8 +31,11 @@ that fails it:
 
 Also: at most 10 experiments, the one that started first first; a format
 newer than the script's, or stored values that fail their schema, leave that
-experiment out with nobody assigned; one experiment that cannot be answered
-leaves only itself out; ``Cache-Control: no-store``; 401 and 422.
+experiment out with nobody assigned, a 200 when it is the only match (plant:
+counting it as tried, 500); one experiment that cannot be answered leaves only
+itself out; a pool timeout or a lost database stops the whole answer with a
+503 after the first experiment (plant: trying the next one, 500);
+``Cache-Control: no-store``; 401 and 422.
 """
 
 from __future__ import annotations
@@ -44,6 +47,7 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 from sqlalchemy import event, text
+from sqlalchemy import exc as sa_exc
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.api import deps
@@ -57,6 +61,7 @@ from backend.app.models.assignment import Assignment
 from backend.app.models.event import Event
 from backend.app.models.global_holdout import GlobalHoldout
 from backend.app.models.user import UserRole
+from backend.app.services.assignment_service import AssignmentService
 from backend.tests.integration.api.route_helpers import (
     api_client,
     api_key,
@@ -543,6 +548,18 @@ def _write_row(db_session, sql: str, **params) -> None:
         session.close()
 
 
+def _break_changes(db_session, experiment_id: str) -> None:
+    """Store page changes that fail their schema, as only a row written
+    outside the API can hold."""
+    _write_row(
+        db_session,
+        'UPDATE variants SET visual_changes = \'{"version": 1, "changes": '
+        '[{"op": "set_html", "selector": "p"}]}\' '
+        "WHERE experiment_id = :id AND NOT is_control",
+        id=uuid.UUID(experiment_id),
+    )
+
+
 def test_a_newer_format_or_a_stored_value_that_fails_its_schema_is_left_out(
     client, db_session, developer, key
 ):
@@ -556,16 +573,23 @@ def test_a_newer_format_or_a_stored_value_that_fails_its_schema_is_left_out(
         "'{version}', '2') WHERE id = :id",
         id=uuid.UUID(newer["id"]),
     )
-    _write_row(
-        db_session,
-        'UPDATE variants SET visual_changes = \'{"version": 1, "changes": '
-        '[{"op": "set_html", "selector": "p"}]}\' '
-        "WHERE experiment_id = :id AND NOT is_control",
-        id=uuid.UUID(broken["id"]),
-    )
+    _break_changes(db_session, broken["id"])
     body = _ask(client, key, host).json()
     assert [e["experiment_key"] for e in body["experiments"]] == [good["key"]]
     assert _assignments(db_session, newer["id"]) == 0
+    assert _assignments(db_session, broken["id"]) == 0
+
+
+@pytest.mark.regression
+def test_when_the_only_match_fails_its_schema_the_page_gets_200_without_it(
+    client, db_session, developer, key
+):
+    """Left out means left out: not tried, so not a 500 on every page view."""
+    host = _host()
+    broken = _running(client, developer, host)
+    _break_changes(db_session, broken["id"])
+    for _view in range(2):
+        assert _ask(client, key, host).json()["experiments"] == []
     assert _assignments(db_session, broken["id"]) == 0
 
 
@@ -594,6 +618,42 @@ def test_one_experiment_that_cannot_be_answered_leaves_only_itself_out(
     monkeypatch.setattr(tracking_endpoints, "assign_user_to_experiment", always_fails)
     failed = _ask(client, key, host, status=500)
     assert failed.json()["detail"].startswith(tracking_visual.PAGE_FAILURE_SENTENCE)
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("where", ["pool timeout in the assignment", "lost database"])
+def test_a_database_failure_stops_the_whole_answer_with_a_503(
+    client, db_session, developer, key, monkeypatch, where
+):
+    """The first experiment's database failure ends the answer: the second
+    is never tried, so a failing database costs one wait, not ten."""
+    host = _host()
+    made = [_running(client, developer, host) for _ in range(2)]
+    tried: List[str] = []
+    if where == "pool timeout in the assignment":
+        # Inside AssignmentService: /tracking/assign's function answers its
+        # own 500 from inside ``except``, with the timeout underneath.
+        def times_out(self, *args, **kwargs):
+            tried.append(kwargs["experiment_id"])
+            raise sa_exc.TimeoutError("planted: the pool timed out")
+
+        monkeypatch.setattr(AssignmentService, "assign_user", times_out)
+    else:
+
+        async def database_gone(request, db, api_key_info):
+            tried.append(request.experiment_key)
+            raise sa_exc.OperationalError(
+                "SELECT 1", {}, Exception("planted: the server closed")
+            )
+
+        monkeypatch.setattr(
+            tracking_endpoints, "assign_user_to_experiment", database_gone
+        )
+    failed = _ask(client, key, host, status=503)
+    assert failed.json()["detail"].startswith(tracking_visual.PAGE_UNAVAILABLE_SENTENCE)
+    assert len(tried) == 1, tried
+    for experiment in made:
+        assert _assignments(db_session, experiment["id"]) == 0
 
 
 # --- the request ------------------------------------------------------------------
