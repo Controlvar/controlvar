@@ -20,6 +20,10 @@ that fails it:
        a page on the dashboard each answer 422 with their text, and no row is
        written.
 * V96  (preview read) a key with any scope is refused with 403.
+* C11  the presented key decides: an owner's key with no scopes is served and
+       the same owner's ``sdk:ruleset`` key refused, on both page routes,
+       whichever of the two was made last. Plant: the check reads the
+       owner's newest key instead of the presented one.
 
 Also: a link works on a draft and on the control, survives a variants save
 that re-creates the variants, lasts 1 to 168 hours, and is shown once (only
@@ -63,6 +67,7 @@ pytestmark = [pytest.mark.integration, pytest.mark.requires_db]
 
 EXPERIMENTS = "/api/v1/experiments"
 PREVIEW = "/api/v1/tracking/visual/preview"
+VISUAL = "/api/v1/tracking/visual"
 PREFIX = "visual1545prev-"
 SCHEMA = "test_experimentation"
 HOST = "shop.example.com"
@@ -451,6 +456,53 @@ def test_a_key_with_any_scope_cannot_read_a_preview(client, developer, scopes):
     scoped = api_key(client, developer, scopes=scopes)
     response = _read(client, scoped, token, status=403)
     assert response.json()["detail"] == SCOPED_KEY_IN_PAGE_DETAIL
+
+
+# --- C11: the presented key decides, not another key of its owner ----------------------
+
+
+def _page_statuses(client, key: Dict[str, str], token: str) -> Dict[str, int]:
+    """The status each page route answers *key* with."""
+    page = client.post(
+        VISUAL,
+        json={
+            "user_id": f"prev1545-{uuid.uuid4().hex[:12]}",
+            "host": f"other-{uuid.uuid4().hex[:8]}.example.com",
+            "path": "/",
+            "format_version": 1,
+        },
+        headers=key,
+    )
+    preview = client.post(
+        PREVIEW, json={"token": token, "host": HOST, "path": "/"}, headers=key
+    )
+    return {"visual": page.status_code, "preview": preview.status_code}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("first", ["unscoped", "scoped"])
+def test_the_presented_key_decides_on_both_page_routes(
+    client, db_session, developer, first
+):
+    """One owner holds a key with no scopes and one with ``sdk:ruleset``,
+    made in either order: on both page routes the first is served and the
+    second refused, whichever of them is the owner's newest."""
+    experiment = _draft(client, developer)
+    token = _token(_make_link(client, developer, experiment))
+    owner = _user(db_session, UserRole.DEVELOPER)
+    scopes = {"unscoped": [], "scoped": ["sdk:ruleset"]}
+    second = "scoped" if first == "unscoped" else "unscoped"
+    keys = {
+        name: api_key(client, owner, scopes=scopes[name]) for name in (first, second)
+    }
+    assert _page_statuses(client, keys["unscoped"], token) == {
+        "visual": 200,
+        "preview": 200,
+    }
+    assert _page_statuses(client, keys["scoped"], token) == {
+        "visual": 403,
+        "preview": 403,
+    }
 
 
 # --- V26: who may make and revoke links -----------------------------------------------
