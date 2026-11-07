@@ -196,7 +196,13 @@ WORKFLOWS: Tuple[Workflow, ...] = (
     Workflow("sdk-unit-tests.yml", "E1", plan="all 16 SDK suites"),
     Workflow("infrastructure-tests.yml", "E1", plan="the CDK stacks"),
     Workflow("chart-kind.yml", "E1", plan="the Helm chart on kind"),
-    Workflow("compose-production.yml", "E1", plan="the production compose file"),
+    Workflow(
+        "compose-production.yml",
+        "E1",
+        plan="the production compose file, and its upgrade from the previous"
+        " release (N-1 is the tag itself); dispatch it only after the tag's"
+        " release.yml run has published the images, which the upgrade pulls",
+    ),
     Workflow(
         "docs-journeys.yml",
         "E2",
@@ -245,6 +251,7 @@ ALLOWED_SKIPS: Dict[Tuple[str, str], str] = {
     ("doc-examples.yml", "Doc Examples (cache)"): "runs on a push or a schedule only",
     ("doc-examples.yml", "File an issue on failure"): "runs only after a failure",
     ("chart-kind.yml", "File an issue on failure"): "runs only after a failure",
+    ("compose-production.yml", "File an issue on failure"): "runs only after a failure",
 }
 
 
@@ -506,7 +513,7 @@ REQUIRED_JOBS: Dict[str, Tuple[str, ...]] = {
     "sdk-unit-tests.yml": ("Select SDKs",) + SDK_JOBS + ("SDK Unit Tests",),
     "infrastructure-tests.yml": ("CDK Stack Tests (Python)",),
     "chart-kind.yml": ("chart-kind (core)", "chart-kind (full)"),
-    "compose-production.yml": ("Compose Production",),
+    "compose-production.yml": ("Compose Production", "Compose Upgrade"),
     "docs-journeys.yml": ("Docs journeys", "Demo journeys"),
     "rc-evidence.yml": tuple(suite_job(name) for name in SUITES) + (VERIFY_JOB,),
 }

@@ -776,6 +776,25 @@ def test_plan_prints_one_dispatch_per_workflow_at_the_tag_and_runs_nothing(capsy
     assert printed.index(checks[-1]) < printed.index(commands[0])
 
 
+def test_plan_dispatches_compose_production_only_after_release_yml_published(capsys):
+    """EM1807-3: the tag's compose-upgrade pulls core-N, which release.yml
+    publishes after the tag; dispatched before that, it is red."""
+
+    def refuse(args):
+        raise AssertionError("--plan called gh")
+
+    assert rc.main(["--plan", TAG], gh=refuse) == 0
+    printed = capsys.readouterr().out.splitlines()
+    (command,) = [
+        number
+        for number, line in enumerate(printed)
+        if line.startswith("gh workflow run compose-production.yml ")
+    ]
+    before = printed[command - 1]
+    assert before.startswith("# "), before
+    assert "only after the tag's release.yml run has published" in before, before
+
+
 #: The repository by another name: what a rename or a transfer makes it.
 RENAMED = "example-org/example-repo"
 
@@ -920,6 +939,30 @@ def test_an_allowed_skip_may_only_be_skipped(world):
     )
     job["conclusion"] = "failure"
     _fails(world, "job 'File an issue on failure' failure")
+
+
+def test_the_compose_production_failure_issue_may_only_be_skipped(world):
+    """C2 (#1807): compose-production gained a failure-issue job, skipped at
+    the tag on a green run; it may be skipped, and only skipped."""
+    assert rc.ALLOWED_SKIPS[("compose-production.yml", "File an issue on failure")]
+    job = next(
+        j
+        for j in world.jobs("compose-production.yml")
+        if j["name"] == "File an issue on failure"
+    )
+    assert job["conclusion"] == "skipped"
+    job["conclusion"] = "failure"
+    _fails(world, "job 'File an issue on failure' failure")
+
+
+def test_the_compose_upgrade_must_have_run_at_the_tag(world):
+    """The tag's dispatch runs compose-upgrade too (N-1 is the tag itself):
+    a run without it is not the evidence."""
+    run_id = world.ids["compose-production.yml"]
+    jobs = list(world.jobs("compose-production.yml"))
+    assert "Compose Upgrade" in [j["name"] for j in jobs]
+    world.set_jobs(run_id, [j for j in jobs if j["name"] != "Compose Upgrade"])
+    _fails(world, "job 'Compose Upgrade' did not run")
 
 
 def test_a_skip_outside_the_allow_list_fails(world):
