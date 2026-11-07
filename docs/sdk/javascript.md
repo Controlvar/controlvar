@@ -136,7 +136,8 @@ interface UserContext {
 
 ### Targeting context
 
-`attributes` is what the platform's targeting rules evaluate against. It is sent as `context` in
+`attributes` is what the platform's targeting rules evaluate against, and what sets the user's
+segment in a breakdown. It is sent as `context` in
 the `POST /api/v1/tracking/assign` body and, when it is a non-empty object, as
 `context=<url-encoded JSON>` on `GET /api/v1/feature-flags/evaluate/{flagKey}` (and on
 `getAllFlags(userId, attributes)`), so a flag whose dashboard rule says

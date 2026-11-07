@@ -84,6 +84,9 @@ ENGINE_FINGERPRINTS: Dict[str, str] = {
     # 1.8.0 is #1496: the difference fields are added to the results' metric
     # results, which this fingerprint does not hash: 1.7.0's.
     "1.8.0": "003234aa770b7f48e4d42ee0e718895523371c24251dadb6e46dc8355b7e346c",
+    # 1.9.0 is #1776: each segment's p-value is Fisher's exact test against
+    # the control, which moves the breakdown's p-values below.
+    "1.9.0": "aaa346cd662b90fd6251edbbffad936d6d0237df68ef7ffd98bc0f9288fa57b5",
 }
 
 # Two ids where the control sorts AFTER the treatment, so an engine that

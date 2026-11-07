@@ -18,8 +18,7 @@ A binary conversion metric counts **converting users**, not conversion events:
 a user assigned to a variant who sent one or more matching conversion events
 counts once (#233).  ``count_converting_users`` is that one definition, and
 every analysis path that reports ``conversions`` next to a ``sample_size`` of
-assigned users must use it (or, in raw SQL, ``CONVERTING_USERS_SQL``), so the
-numerator can never exceed the denominator.
+assigned users must use it, so the numerator can never exceed the denominator.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -34,22 +33,6 @@ from backend.app.models.event import Event, EventType
 
 #: ``event_type`` values that record that a user *saw* a variant, never a conversion.
 EXPOSURE_EVENT_TYPES = (EventType.EXPOSURE.value, "experiment_exposure")
-
-#: SQL fragment for raw ``text()`` queries; binds ``:event_name``.
-CONVERSION_SQL_PREDICATE = (
-    "event_name = :event_name AND event_type NOT IN ('exposure', 'experiment_exposure')"
-)
-
-#: Raw-SQL form of ``count_converting_users`` for ``text()`` queries over an
-#: ``events e`` alias joined to ``assignments a`` with ``CONVERTING_USERS_JOIN``.
-CONVERTING_USERS_SQL = "COUNT(DISTINCT e.user_id)"
-
-#: The join that restricts events to users assigned to the event's variant.
-CONVERTING_USERS_JOIN = (
-    "a.experiment_id = e.experiment_id "
-    "AND a.user_id = e.user_id "
-    "AND a.variant_id = e.variant_id"
-)
 
 
 def conversion_event_filter(event_name: Optional[str]):

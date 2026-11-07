@@ -142,7 +142,8 @@ An experiment that is not ACTIVE answers every user with its control variant, `a
 
 ### Targeting context
 
-`user_attributes` is what the platform's targeting rules evaluate against. It is sent as `context`
+`user_attributes` is what the platform's targeting rules evaluate against, and what sets the
+user's segment in a breakdown. It is sent as `context`
 in the `POST /api/v1/tracking/assign` body and, when non-empty, as `context=<url-encoded JSON>`
 (compact `json.dumps(..., separators=(",", ":"))`, percent-encoded) on
 `GET /api/v1/feature-flags/evaluate/{flag_key}` and `GET /api/v1/feature-flags/user/{user_id}` —

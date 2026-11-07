@@ -1436,7 +1436,7 @@
             "type": "array"
           },
           "engine_version": {
-            "default": "1.8.0",
+            "default": "1.9.0",
             "description": "Statistics engine version that computed the current weights",
             "title": "Engine Version",
             "type": "string"
@@ -1822,7 +1822,7 @@
             ]
           },
           "engine_version": {
-            "default": "1.8.0",
+            "default": "1.9.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -3929,7 +3929,7 @@
             "title": "Covariate Lookback Days"
           },
           "engine_version": {
-            "default": "1.8.0",
+            "default": "1.9.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -4453,7 +4453,7 @@
             "type": "boolean"
           },
           "segments": {
-            "description": "Per-segment breakdown results, one entry per observed dimension value.",
+            "description": "Per-segment results: the 20 values with the most users, then `other` and `unknown`, each listed only when it has users.",
             "items": {
               "$ref": "#/components/schemas/SegmentBreakdown"
             },
@@ -15276,7 +15276,7 @@
                 "type": "null"
               }
             ],
-            "description": "Two-tailed p-value from a two-proportion z-test vs. the control. None for the control variant itself.",
+            "description": "Two-sided p-value of Fisher's exact test against the control, the test the headline uses for a conversion rate. None for the control variant itself.",
             "title": "P Value"
           },
           "sample_size": {

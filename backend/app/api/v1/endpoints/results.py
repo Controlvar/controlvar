@@ -61,6 +61,7 @@ from backend.app.services.power_calculator_service import (
     compute_power,
     sample_size_two_proportions,
 )
+from backend.app.services.segment_breakdown import NUL_IN_DIMENSION, segment_rows
 from backend.app.services.sequential_testing_service import SequentialTestingService
 from backend.app.services.sufficient_stats_analysis import (
     SufficientStatsNotComputed,
@@ -177,31 +178,20 @@ def _compute_dimensional_breakdown(
     base_alpha: float = 0.05,
 ) -> DimensionalBreakdownResponse:
     """
-    Query the database for per-segment event counts and compute breakdown statistics.
+    The per-segment breakdown of an experiment's results by ``dimension``.
 
-    Fetches segment values from event metadata (JSONB field), groups assignment
-    and conversion counts by (segment_value, variant_id), then delegates to
-    DimensionalAnalysisService for statistical computation.
+    The rows come from ``segment_breakdown.segment_rows``: every assigned
+    user in exactly one segment, with the converting users of the metric the
+    response lists first, so per variant the rows add up to that metric's
+    headline.  DimensionalAnalysisService computes the statistics.
 
-    This function is tolerant: any error during data retrieval silently returns
-    an empty-segment breakdown so that the main results response is not affected.
+    A failure to read or compute the breakdown raises: the route answers it
+    as an error, never with a partial breakdown.
     """
-    from sqlalchemy import text
-
-    from backend.app.core.database_config import get_schema_name
-
     dim_service = DimensionalAnalysisService()
     segments: Dict[str, Dict[str, Any]] = {}
 
-    # Conversions are the events named after the experiment's primary metric
-    # (see services/event_matching.py); fall back to the legacy
-    # event_type = 'conversion' convention when no metric row exists.
-    from backend.app.models.experiment import Metric, Variant
-    from backend.app.services.event_matching import (
-        CONVERSION_SQL_PREDICATE,
-        CONVERTING_USERS_JOIN,
-        CONVERTING_USERS_SQL,
-    )
+    from backend.app.models.experiment import Variant
 
     # Every variant of the experiment, with its real name and control flag
     # (#218).  Each segment is seeded from this list, so a variant with no
@@ -216,127 +206,34 @@ def _compute_dimensional_breakdown(
         key=lambda row: (not row[2], row[1], row[0]),
     )
 
-    primary_metric = (
-        db.query(Metric)
-        .filter(Metric.experiment_id == experiment_id)
-        .order_by(Metric.is_primary.desc())
-        .first()
-    )
-    if primary_metric is not None and primary_metric.event_name:
-        conversion_predicate = CONVERSION_SQL_PREDICATE
-        conversion_params: Dict[str, Any] = {"event_name": primary_metric.event_name}
-    else:
-        conversion_predicate = "event_type = 'conversion'"
-        conversion_params = {}
+    # Conversions are the converting users of the metric the response lists
+    # first (AnalysisService orders the metrics); with no metric row, the
+    # legacy event_type = 'conversion' convention (event_matching.py).
+    experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
+    metrics = AnalysisService._ordered_metrics(experiment) if experiment else []
+    event_name = metrics[0].event_name if metrics else None
 
-    try:
-        schema = get_schema_name()
-
-        # Pull distinct segment values for this dimension from event metadata.
-        # `schema` comes from get_schema_name(), which only ever returns one of
-        # two literal identifiers; all request-derived values are bound params.
-        seg_val_q = text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
-            f"""
-            SELECT DISTINCT
-                COALESCE(
-                    jsonb_extract_path_text(event_metadata, :dim_key),
-                    'unknown'
-                ) AS segment_value
-            FROM {schema}.events
-            WHERE experiment_id = :exp_id
-              AND event_metadata IS NOT NULL
-            """  # nosec B608 - schema is a fixed config identifier, not user input
-        )
-        seg_val_rows = db.execute(
-            seg_val_q, {"dim_key": dimension, "exp_id": str(experiment_id)}
-        ).fetchall()
-        segment_values = [row[0] for row in seg_val_rows if row[0]]
-
-        for seg_val in segment_values:
-            # Count assignments per variant for this segment
-            asgn_q = text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
-                f"""
-                SELECT a.variant_id::text, COUNT(DISTINCT a.user_id) AS total
-                FROM {schema}.assignments a
-                JOIN {schema}.events e
-                  ON a.user_id = e.user_id
-                 AND a.experiment_id = e.experiment_id
-                WHERE a.experiment_id = :exp_id
-                  AND e.event_metadata IS NOT NULL
-                  AND COALESCE(
-                      jsonb_extract_path_text(e.event_metadata, :dim_key),
-                      'unknown'
-                  ) = :seg_val
-                GROUP BY a.variant_id
-                """  # nosec B608 - schema is a fixed config identifier, not user input
-            )
-            asgn_rows = db.execute(
-                asgn_q,
-                {
-                    "exp_id": str(experiment_id),
-                    "dim_key": dimension,
-                    "seg_val": seg_val,
-                },
-            ).fetchall()
-
-            # Converting users per variant for this segment: assigned users
-            # with a conversion event in the segment, each counted once
-            # (event_matching.py), as /results counts them.
-            conv_q = text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
-                f"""
-                SELECT e.variant_id::text, {CONVERTING_USERS_SQL} AS conversions
-                FROM {schema}.events e
-                JOIN {schema}.assignments a ON {CONVERTING_USERS_JOIN}
-                WHERE e.experiment_id = :exp_id
-                  AND {conversion_predicate}
-                  AND e.event_metadata IS NOT NULL
-                  AND COALESCE(
-                      jsonb_extract_path_text(e.event_metadata, :dim_key),
-                      'unknown'
-                  ) = :seg_val
-                GROUP BY e.variant_id
-                """  # nosec B608 - schema is a fixed config identifier, not user input
-            )
-            conv_rows = db.execute(
-                conv_q,
-                {
-                    "exp_id": str(experiment_id),
-                    "dim_key": dimension,
-                    "seg_val": seg_val,
-                    **conversion_params,
-                },
-            ).fetchall()
-
-            # Build variant_map for this segment, seeded with every variant
-            variant_map: Dict[str, Any] = {
-                vid: {
-                    "variant_name": name,
-                    "is_control": is_control,
-                    "total": 0,
-                    "conversions": 0,
-                }
-                for vid, name, is_control in experiment_variants
+    for row in segment_rows(db, experiment_id, dimension, [event_name]):
+        # Every variant is listed, with zero counts where it has no users.
+        variant_map: Dict[str, Any] = {
+            vid: {
+                "variant_name": name,
+                "is_control": is_control,
+                "total": 0,
+                "conversions": 0,
             }
-            for vid, total in asgn_rows:
-                variant_map.setdefault(
-                    vid,
-                    {"variant_name": vid, "is_control": False, "conversions": 0},
-                )["total"] = int(total)
-            for vid, conv in conv_rows:
-                variant_map.setdefault(
-                    vid, {"variant_name": vid, "is_control": False, "total": 0}
-                )["conversions"] = int(conv)
-
-            if variant_map:
-                segments[seg_val] = variant_map
-
-    except Exception as exc:
-        # Non-fatal: log and return empty breakdown
-        import logging
-
-        logging.getLogger(__name__).warning(
-            "Failed to fetch segment data for dimension %r: %s", dimension, exc
-        )
+            for vid, name, is_control in experiment_variants
+        }
+        for vid, total in row.users.items():
+            variant_map.setdefault(
+                vid,
+                {"variant_name": vid, "is_control": False, "conversions": 0},
+            )["total"] = total
+        for vid, conv in row.converters[event_name].items():
+            variant_map.setdefault(
+                vid, {"variant_name": vid, "is_control": False, "total": 0}
+            )["conversions"] = conv
+        segments[row.value] = variant_map
 
     # Compute statistics
     segment_results = dim_service.compute_segment_results(
@@ -457,6 +354,9 @@ def get_experiment_results(
     experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
     if experiment is None:
         raise HTTPException(status_code=404, detail="Experiment not found")
+    if breakdown and "\x00" in breakdown:
+        # Refused before the cache: the database driver cannot bind it.
+        raise HTTPException(status_code=400, detail=NUL_IN_DIMENSION)
     try:
         stored = resolve_analysis_settings(experiment)
         settings = resolve_analysis_settings(
