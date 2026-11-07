@@ -990,10 +990,30 @@ text = "Significance | (adjusted) p-value < (1 - confidence level), e.g., < 0.05
 by = ["journey:experiment-results#results-api"]
 
 [[unit]]
-text = "For each variant, GET /api/v1/results/{experiment_id} also returns effect_size, effect_size_label (negligible / small / medium / large) and confidence_interval."
+text = "The table shows the effect size and the interval that GET /api/v1/results/{experiment_id} returns for each variant as effect_size, effect_size_label (negligible / small / medium / large) and confidence_interval."
 by = [
     "test:backend/tests/unit/api/test_results_api.py",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::f4: the treatment reads \"0.34% to 4.66%\" and \"0.32 (small)\", the control \"Control\"",
+    "test:frontend/src/tests/pages/results-reading.test.tsx::are in the table on the page, with the numbers the server sent in each row",
+]
+
+[[unit]]
+text = "Effect size | How large the difference from the control is, in a standardised unit: Cohen's h for a rate, Cohen's d for an average. It is written to two places with the label the server gives it (negligible, small, medium or large), e.g. 0.32 (small). The control's row reads Control."
+by = [
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::f4: the treatment reads \"0.34% to 4.66%\" and \"0.32 (small)\", the control \"Control\"",
+    "test:frontend/src/tests/pages/results-reading.test.tsx::are in the table on the page, with the numbers the server sent in each row",
+]
+
+[[unit]]
+text = "Interval (95%) | This variant's own rate or average with its confidence interval, headed with the experiment's confidence level (Interval (99%) at 99%). A variant with fewer than 2 users reads Not enough data yet. When every user of a variant has the same value, for example none converted, it reads No interval: all 200 users have the same value (with its own user count), because there is nothing to estimate from. The interval of the change is in the Change column."
+by = [
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::f4: the control of 0/200 reads \"No interval: all 200 users have the same value\"",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::d_mean_control_zero: the control of 100 users reads \"No interval: all 100 users have the same value\"",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::f6: an arm with no users reads \"Not enough data yet\", for a rate and a mean",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::f1 at 0.99: the header reads \"Interval (99%)\"",
+    "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::one user reads \"Not enough data yet\"",
+    "test:frontend/src/tests/pages/results-reading.test.tsx::are in the table on the page, with the numbers the server sent in each row",
 ]
 
 [[unit]]

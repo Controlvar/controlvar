@@ -179,7 +179,8 @@ describe('F3: a mean whose control is too uncertain around 0 for a relative inte
       treatment.relative_improvement_pct_ci = null;
       const { unmount } = renderCase(c);
       expect(screen.queryByTestId('change-no-interval')).toBeNull();
-      expect(pageText()).not.toMatch(/No interval/);
+      // The Interval column's "No interval: all N users ..." is a different line.
+      expect(pageText()).not.toMatch(/No interval for the change/);
       unmount();
     }
   });
@@ -530,6 +531,69 @@ describe('F13: the footnotes', () => {
     expect(screen.queryByTestId('interval-footnote')).toBeNull();
     // The Impact column is there (the server reports the field), so its footnote is.
     expect(screen.getByTestId('impact-footnote')).toBeInTheDocument();
+  });
+});
+
+/**
+ * #442: the Effect size and Interval columns, which show what the server
+ * already sent (`effect_size`, `effect_size_label`, `std_dev` and
+ * `confidence_interval`). Every case but the one-user row is the server's:
+ * a new case is generated (`generate_results_interval_fixtures`), never typed.
+ */
+describe('#442: each variant\'s effect size and own interval, from the server', () => {
+  it('f4: the control of 0/200 reads "No interval: all 200 users have the same value"', () => {
+    renderCase(serverCase('f4_control_no_conversions'));
+    expect(visibleText(cell('control', 'Interval (95%)'))).toBe(
+      'No interval: all 200 users have the same value',
+    );
+  });
+
+  it('d_mean_control_zero: the control of 100 users reads "No interval: all 100 users have the same value"', () => {
+    renderCase(serverCase('d_mean_control_zero'));
+    expect(visibleText(cell('control', 'Interval (95%)'))).toBe(
+      'No interval: all 100 users have the same value',
+    );
+  });
+
+  it('f6: an arm with no users reads "Not enough data yet", for a rate and a mean', () => {
+    for (const id of ['f6_empty_treatment_proportion', 'f6_empty_treatment_mean'] as const) {
+      const { unmount } = renderCase(serverCase(id));
+      expect(visibleText(cell('treatment', 'Interval (95%)'))).toBe('Not enough data yet');
+      unmount();
+    }
+  });
+
+  it('f4: the treatment reads "0.34% to 4.66%" and "0.32 (small)", the control "Control"', () => {
+    renderCase(serverCase('f4_control_no_conversions'));
+    expect(visibleText(cell('treatment', 'Interval (95%)'))).toBe('0.34% to 4.66%');
+    expect(visibleText(cell('treatment', 'Effect size'))).toBe('0.32 (small)');
+    expect(visibleText(cell('control', 'Effect size'))).toBe('Control');
+  });
+
+  it('f1 at 0.99: the header reads "Interval (99%)"', () => {
+    renderCase(serverCase('f1_wide_proportion'));
+    const headers = screen
+      .getAllByRole('columnheader')
+      .map((h) => visibleText(h).replace(/[↕↑↓]/g, '').trim());
+    expect(headers).toContain('Interval (99%)');
+    expect(headers).not.toContain('Interval (95%)');
+  });
+
+  it('one user reads "Not enough data yet"', () => {
+    // Hand-built: a rate with one user has std_dev 0 and a collapsed interval,
+    // so only the user count says it is too few (a "No interval: all 1 users"
+    // would be true and useless).
+    const c = serverCase('f4_control_no_conversions');
+    const treatment = c.metric.variants.find((v) => !v.is_control) as VariantResult;
+    Object.assign(treatment, {
+      sample_size: 1,
+      conversions: 0,
+      mean: 0,
+      std_dev: 0,
+      confidence_interval: [0, 0],
+    });
+    renderCase(c);
+    expect(visibleText(cell('treatment', 'Interval (95%)'))).toBe('Not enough data yet');
   });
 });
 

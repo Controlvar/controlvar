@@ -132,7 +132,7 @@ describe.each(['count', 'duration', 'custom'] as const)('a %s metric analysed as
     const [controlRow, treatmentRow] = rowsOf(NAMES[type]);
     expect(cells(controlRow)[3]).toBe(`1.50${LABELS[type]}`);
     expect(cells(treatmentRow)[3]).toBe(`2.00${LABELS[type]}`);
-    expect(cells(treatmentRow)[4]).toContain('+0.50 per user (95% CI +0.14 to +0.86)');
+    expect(cells(treatmentRow)[6]).toContain('+0.50 per user (95% CI +0.14 to +0.86)');
     const text = screen.getByTestId('metric-comparison-table').textContent ?? '';
     // No "share of users", no bare "mean", no currency and no invented unit.
     expect(text).not.toMatch(/share of users|\bmean\b|\$|€|£|¥|\bseconds\b|\bminutes\b/);

@@ -144,7 +144,8 @@ describe('the change column follows lower_is_better', () => {
     expect(screen.queryByRole('columnheader', { name: /Improvement/ })).not.toBeInTheDocument();
     // The header row as the experiment-results docs journey reads it.
     expect(
-      screen.getByRole('row', { name: 'Metric Variant Sample Size Value Change p-value Significance' }),
+      screen.getByRole('row', { name: 'Metric Variant Sample Size Value Effect size Interval (95%) Change p-value Significance',
+      }),
     ).toBeInTheDocument();
 
     await userEvent.click(within(screen.getByRole('columnheader', { name: /^Change/ })).getByRole('button'));

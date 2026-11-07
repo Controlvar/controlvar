@@ -134,20 +134,20 @@ describe('a revenue row reads as revenue per user', () => {
 
   it('gives the difference per user and its interval in the change cell', () => {
     render(<MetricComparisonTable metrics={[revenueMetric()]} confidenceLevel={0.95} />);
-    const change = cells(row(/one_page/))[4];
+    const change = cells(row(/one_page/))[6];
     expect(change).toBe('+21.0% +1.19 per user (95% CI −0.47 to +2.84)');
     // A screen reader hears the abbreviation spelled out (#1496).
-    expect(spokenText(within(row(/one_page/)).getAllByRole('cell')[4])).toBe(
+    expect(spokenText(within(row(/one_page/)).getAllByRole('cell')[6])).toBe(
       '+21.0% +1.19 per user (95% confidence interval −0.47 to +2.84)',
     );
     // The control has no difference of its own.
-    expect(cells(row(/Control/))[4]).toBe('—');
+    expect(cells(row(/Control/))[6]).toBe('—');
   });
 
   it("states the interval at the response's level, not a fixed 95%", () => {
     render(<MetricComparisonTable metrics={[revenueMetric()]} confidenceLevel={0.92} />);
-    expect(cells(row(/one_page/))[4]).toContain('+1.19 per user (92% CI −0.47 to +2.84)');
-    expect(cells(row(/one_page/))[4]).not.toContain('95%');
+    expect(cells(row(/one_page/))[6]).toContain('+1.19 per user (92% CI −0.47 to +2.84)');
+    expect(cells(row(/one_page/))[6]).not.toContain('95%');
   });
 
   it('says "unadjusted" when the row shows an adjusted p-value (a correction with two treatments)', () => {
@@ -172,10 +172,10 @@ describe('a revenue row reads as revenue per user', () => {
         correctionMethod="benjamini_hochberg"
       />,
     );
-    expect(cells(row(/one_page/))[4]).toContain(
+    expect(cells(row(/one_page/))[6]).toContain(
       '+1.19 per user (95% CI, unadjusted, −0.47 to +2.84)',
     );
-    expect(cells(row(/two_step/))[4]).toContain(
+    expect(cells(row(/two_step/))[6]).toContain(
       '+0.24 per user (95% CI, unadjusted, −1.60 to +2.08)',
     );
   });
@@ -188,8 +188,8 @@ describe('a revenue row reads as revenue per user', () => {
         correctionMethod="benjamini_hochberg"
       />,
     );
-    expect(cells(row(/one_page/))[4]).toContain('(95% CI −0.47 to +2.84)');
-    expect(cells(row(/one_page/))[4]).not.toMatch(/unadjusted/);
+    expect(cells(row(/one_page/))[6]).toContain('(95% CI −0.47 to +2.84)');
+    expect(cells(row(/one_page/))[6]).not.toMatch(/unadjusted/);
   });
 
   it('gives the difference alone when there is no interval', () => {
@@ -199,7 +199,7 @@ describe('a revenue row reads as revenue per user', () => {
         confidenceLevel={0.95}
       />,
     );
-    expect(cells(row(/one_page/))[4]).toBe('+21.0% +1.19 per user');
+    expect(cells(row(/one_page/))[6]).toBe('+21.0% +1.19 per user');
   });
 
   it('writes a significant fall with real minus signs, red and "worse" when higher is better', () => {
@@ -218,7 +218,7 @@ describe('a revenue row reads as revenue per user', () => {
         confidenceLevel={0.95}
       />,
     );
-    const change = within(row(/one_page/)).getAllByRole('cell')[4];
+    const change = within(row(/one_page/)).getAllByRole('cell')[6];
     expect(visibleText(change)).toBe('−27.6% · worse −1.56 per user (95% CI −2.90 to −0.22)');
     expect(change).toHaveClass('text-red-700');
     expect(change.textContent).not.toContain('-');
@@ -233,7 +233,7 @@ describe('a revenue row reads as revenue per user', () => {
       .find((r) => r.textContent?.startsWith('Purchase') && r.textContent.includes('one_page'));
     expect(purchase).toBeDefined();
     expect(cells(purchase as HTMLElement)[3]).toBe('6.55%');
-    expect(cells(purchase as HTMLElement)[4]).toBe('+11.0%');
+    expect(cells(purchase as HTMLElement)[6]).toBe('+11.0%');
   });
 });
 
@@ -260,7 +260,7 @@ describe('before the first purchase', () => {
     );
     // The API's difference is 0 with no interval: the cell says there is not
     // enough data, without a 0.00 amount that would read as a measurement.
-    expect(cells(row(/one_page/))[4]).toBe('Not enough data to estimate');
+    expect(cells(row(/one_page/))[6]).toBe('Not enough data to estimate');
     // No one sent the event, so there is nothing to say about values.
     expect(screen.queryByTestId('no-value-note')).not.toBeInTheDocument();
   });
@@ -319,7 +319,7 @@ describe('users sent the event with no value', () => {
 
   it('reads "Not enough data to estimate" in the change cell, with no 0.00 amount', () => {
     render(<MetricComparisonTable metrics={[noValues()]} confidenceLevel={0.95} />);
-    expect(cells(row(/one_page/))[4]).toBe('Not enough data to estimate');
+    expect(cells(row(/one_page/))[6]).toBe('Not enough data to estimate');
   });
 
   it('says "its event" when the event name is not known', () => {
