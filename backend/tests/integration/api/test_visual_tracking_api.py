@@ -33,8 +33,9 @@ Also: at most 10 experiments, the one that started first first; a format
 newer than the script's, or stored values that fail their schema, leave that
 experiment out with nobody assigned, a 200 when it is the only match (plant:
 counting it as tried, 500); one experiment that cannot be answered leaves only
-itself out; a pool timeout or a lost database stops the whole answer with a
-503 after the first experiment (plant: trying the next one, 500);
+itself out; a pool timeout or a lost database stops the answer, no later
+experiment tried: a 503 at the first experiment (plant: trying the next one,
+500), a 200 with exactly the first at the second (plant: always a 503);
 ``Cache-Control: no-store``; 401 and 422.
 """
 
@@ -621,39 +622,72 @@ def test_one_experiment_that_cannot_be_answered_leaves_only_itself_out(
 
 
 @pytest.mark.regression
+@pytest.mark.parametrize("fails_at", [1, 2], ids=["first fails", "second fails"])
 @pytest.mark.parametrize("where", ["pool timeout in the assignment", "lost database"])
-def test_a_database_failure_stops_the_whole_answer_with_a_503(
-    client, db_session, developer, key, monkeypatch, where
+def test_a_database_failure_stops_the_answer(
+    client, db_session, developer, key, monkeypatch, where, fails_at
 ):
-    """The first experiment's database failure ends the answer: the second
-    is never tried, so a failing database costs one wait, not ten."""
+    """A database failure ends the answer: no later experiment is tried, so
+    a failing database costs one wait, not ten. When it is the first, the
+    answer is a 503 and nothing is recorded; when it is the second, the
+    answer is a 200 with exactly the first, which is recorded, so it is
+    shown (a 503 would leave its exposure for a page that showed nothing)."""
     host = _host()
-    made = [_running(client, developer, host) for _ in range(2)]
+    base = datetime.now(timezone.utc) - timedelta(days=30)
+    made = []
+    for index in range(3):
+        experiment = _running(client, developer, host)
+        _set_start(db_session, experiment["id"], base + timedelta(hours=index))
+        made.append(experiment)
+    visitor = _visitor()
     tried: List[str] = []
     if where == "pool timeout in the assignment":
         # Inside AssignmentService: /tracking/assign's function answers its
         # own 500 from inside ``except``, with the timeout underneath.
+        field = "id"
+        real_assign_user = AssignmentService.assign_user
+
         def times_out(self, *args, **kwargs):
             tried.append(kwargs["experiment_id"])
-            raise sa_exc.TimeoutError("planted: the pool timed out")
+            if len(tried) == fails_at:
+                raise sa_exc.TimeoutError("planted: the pool timed out")
+            return real_assign_user(self, *args, **kwargs)
 
         monkeypatch.setattr(AssignmentService, "assign_user", times_out)
     else:
+        field = "key"
+        real_assign = tracking_endpoints.assign_user_to_experiment
 
         async def database_gone(request, db, api_key_info):
             tried.append(request.experiment_key)
-            raise sa_exc.OperationalError(
-                "SELECT 1", {}, Exception("planted: the server closed")
-            )
+            if len(tried) == fails_at:
+                raise sa_exc.OperationalError(
+                    "SELECT 1", {}, Exception("planted: the server closed")
+                )
+            return await real_assign(request=request, db=db, api_key_info=api_key_info)
 
         monkeypatch.setattr(
             tracking_endpoints, "assign_user_to_experiment", database_gone
         )
-    failed = _ask(client, key, host, status=503)
-    assert failed.json()["detail"].startswith(tracking_visual.PAGE_UNAVAILABLE_SENTENCE)
-    assert len(tried) == 1, tried
-    for experiment in made:
+
+    if fails_at == 1:
+        failed = _ask(client, key, host, user_id=visitor, status=503)
+        assert failed.json()["detail"].startswith(
+            tracking_visual.PAGE_UNAVAILABLE_SENTENCE
+        )
+    else:
+        body = _ask(client, key, host, user_id=visitor).json()
+        first = made[0]
+        assert [e["experiment_key"] for e in body["experiments"]] == [first["key"]]
+        assert body["experiments"][0]["assigned"] is True
+        assert body["experiments"][0]["changes"] == CHANGES
+        assert _assignments(db_session, first["id"]) == 1
+        assert len(_exposures(db_session, first["id"], visitor)) == 1
+    # Exactly the experiments up to the failing one were tried.
+    assert tried == [made[i][field] for i in range(fails_at)], tried
+    for experiment in made[fails_at - 1 :]:
         assert _assignments(db_session, experiment["id"]) == 0
+        assert _exposures(db_session, experiment["id"], visitor) == []
 
 
 # --- the request ------------------------------------------------------------------

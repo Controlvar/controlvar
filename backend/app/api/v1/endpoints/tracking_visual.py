@@ -30,8 +30,10 @@ visitor gets on a page:
   answer is a 200 without it.
 * When the database itself fails (the pool times out, or an operation fails
   with ``OperationalError``, raised or underneath the assign route's own 500),
-  the answer stops there with a 503: every further experiment would wait on
-  the same database. Experiments answered before it keep what they recorded.
+  the answer stops there: every further experiment would wait on the same
+  database. When experiments were answered before it, the answer is a 200
+  with exactly those (they are recorded, so they are shown); when none was,
+  a 503.
 
 The handler stays ``async`` and gives the request's database connection back
 before the answer starts (``db.close()``); the answer then runs in a worker
@@ -227,9 +229,9 @@ def _database_failure(exc: BaseException) -> Optional[BaseException]:
     return None
 
 
-def _unavailable(db: Session, failure: BaseException) -> HTTPException:
-    """The 503 that stops the answer, after a rollback; logs the class only
-    (a database error's text repeats the statement's parameters)."""
+def _stop(db: Session, failure: BaseException) -> None:
+    """Roll back after the database failed; logs the class only (a database
+    error's text repeats the statement's parameters)."""
     try:
         db.rollback()
     except Exception:
@@ -238,6 +240,12 @@ def _unavailable(db: Session, failure: BaseException) -> HTTPException:
         "Visual page answer stopped: the database failed (%s)",
         type(failure).__name__,
     )
+
+
+def _unavailable(db: Session, failure: BaseException) -> HTTPException:
+    """The 503 that stops the answer when nothing was answered, after
+    :func:`_stop`."""
+    _stop(db, failure)
     return HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         detail=failure_detail(PAGE_UNAVAILABLE_SENTENCE),
@@ -421,7 +429,11 @@ async def _answer_page(
             failure = _database_failure(exc)
             if failure is not None:
                 # The next experiment would wait on the same database.
-                raise _unavailable(db, failure)
+                if not answers:
+                    raise _unavailable(db, failure)
+                # Those answered are recorded, so they are shown.
+                _stop(db, failure)
+                break
             # One experiment that cannot be answered is left out: the visitor
             # sees the page as it is for it, and the others still apply.
             try:
