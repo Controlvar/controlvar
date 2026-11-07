@@ -289,6 +289,48 @@ def test_the_workflow_runs_on_a_change_to_the_guide() -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_the_compose_page_matches_the_upgrade_job() -> None:
+    """The compose README, under its own marker, against the list
+    compose_upgrade.sh passes: all twelve bash blocks, in page order."""
+    job = COMPOSE_JOB.read_text()
+    guide_blocks = re.search(r"^GUIDE_BLOCKS=(\S+)$", job, re.M)
+    guide_path = re.search(r"^GUIDE=(\S+)$", job, re.M)
+    marker = re.search(r"^MARKER=(\S+)$", job, re.M)
+    assert guide_blocks and guide_path and marker, (
+        "compose_upgrade.sh no longer names GUIDE / GUIDE_BLOCKS / MARKER"
+    )
+    assert REPO_ROOT / guide_path.group(1) == COMPOSE_PAGE
+    assert marker.group(1) == "compose-upgrade"
+    assert guide_blocks.group(1) == COMPOSE_BLOCKS
+    assert (
+        'scripts/guide_blocks.py "$GUIDE" --marker "$MARKER" --expect "$GUIDE_BLOCKS"'
+        in job
+    )
+
+    blocks, problems = gb.extract(
+        COMPOSE_PAGE.read_text(), str(COMPOSE_PAGE), marker="compose-upgrade"
+    )
+    assert problems == []
+    assert [name for name, _ in blocks] == COMPOSE_BLOCKS.split(",")
+
+
+def test_the_compose_workflow_runs_on_a_change_to_the_page_or_its_scripts() -> None:
+    """A pull request that changes the page, the script that runs it or the
+    extractor triggers compose-production (stdlib only: the trigger's text)."""
+    workflow = COMPOSE_WORKFLOW.read_text()
+    assert "\n  pull_request:\n" in workflow and "\n  push:\n" in workflow
+    pull_request = workflow[
+        workflow.index("\n  pull_request:\n") : workflow.index("\n  push:\n") + 1
+    ]
+    for path in (
+        "deploy/compose/README.md",
+        "scripts/compose_upgrade.sh",
+        "scripts/guide_blocks.py",
+        ".github/workflows/compose-production.yml",
+    ):
+        assert f"\n      - {path}\n" in pull_request, path
+
+
 @pytest.mark.parametrize(
     "text, message",
     [

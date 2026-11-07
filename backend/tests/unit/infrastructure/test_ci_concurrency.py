@@ -241,6 +241,9 @@ MAIN_GROUPS = {
         "compose-production-8000",
         True,
     ),
+    # The nightly compose-upgrade run (#1807): the workflow's existing key, the
+    # run's own id off a pull request, so nothing cancels it.
+    ("compose-production.yml", "schedule"): ("compose-production-8000", True),
     ("lint.yml", "push"): ("lint-refs/heads/main", True),
     ("sdk-unit-tests.yml", "schedule"): ("sdk-unit-schedule-refs/heads/main", True),
     ("sdk-unit-tests.yml", "workflow_dispatch"): (

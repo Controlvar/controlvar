@@ -11,6 +11,7 @@ instead.
 
 From this directory:
 
+<!-- compose-upgrade: install -->
 ```bash
 ./generate-env.sh
 docker compose up -d --wait
@@ -22,6 +23,7 @@ docker compose logs api
 `AUDIT_HMAC_KEY`, readable by your user only. Give it the URL people will open
 and the first administrator's email:
 
+<!-- compose-upgrade: install-named -->
 ```bash
 PUBLIC_BASE_URL=https://controlvar.example.com \
 FIRST_SUPERUSER=you@example.com ./generate-env.sh
@@ -118,6 +120,7 @@ connects from that network: give the network's subnet, which
 
 Check it once people have used the dashboard:
 
+<!-- compose-upgrade: addresses -->
 ```bash
 docker compose logs api 2>&1 | grep '"uvicorn.access"' | grep ' /api/' \
   | sed -E 's/.*"event": "([^ ]*):[0-9]+ - .*/\1/' | sort | uniq -c | sort -rn | head
@@ -146,6 +149,7 @@ is the `name:` in `compose.yml`, and none of them deletes a volume.
 
 From this directory:
 
+<!-- compose-upgrade: backup -->
 ```bash
 mkdir -m 700 -p ~/controlvar-backups
 docker compose -p experimently-selfhost exec -T postgres \
@@ -183,6 +187,7 @@ directory, and do not run `generate-env.sh`. Do not run the commands below in
 the directory of a stack that is running: the first replaces its `.env`, and
 the restore loads into whatever database its `postgres` service holds. Then:
 
+<!-- compose-upgrade: restore -->
 ```bash
 cp ~/controlvar-backups/controlvar.env .env
 docker compose -p experimently-selfhost up -d --wait postgres
@@ -229,6 +234,7 @@ requires.
 Take a backup as [Back up](#back-up) shows, then check that the dump reads
 back whole:
 
+<!-- compose-upgrade: check-backup -->
 ```bash
 docker compose -p experimently-selfhost exec -T postgres \
   pg_restore -f /dev/null < ~/controlvar-backups/controlvar.dump
@@ -243,6 +249,7 @@ First note the release you run now, which a rollback in step 7 goes back to:
 the `version` that step 6's `curl` prints, with a `v` in front, such as
 `v0.43.2`. Then get the new release's files:
 
+<!-- compose-upgrade: get-files -->
 ```bash
 git fetch --tags
 git checkout "$RELEASE"
@@ -257,6 +264,7 @@ and `.env.example` from `deploy/compose/` at the release's tag instead.
 
 ### 4. Check the settings
 
+<!-- compose-upgrade: check-settings -->
 ```bash
 docker compose -p experimently-selfhost config --quiet
 ```
@@ -270,6 +278,7 @@ meanwhile.
 
 Pull the release's images:
 
+<!-- compose-upgrade: pull -->
 ```bash
 docker compose -p experimently-selfhost pull
 ```
@@ -278,6 +287,7 @@ PostgreSQL and Redis are pulled as well: `compose.yml` names
 `postgres:16-alpine` and `redis:7-alpine`, which follow the newest 16 and 7
 images. Then start the release:
 
+<!-- compose-upgrade: upgrade -->
 ```bash
 docker compose -p experimently-selfhost up -d --wait --wait-timeout 600
 ```
@@ -293,6 +303,7 @@ as it is and starts the dashboard, which waits for a healthy API.
 
 ### 6. Verify
 
+<!-- compose-upgrade: verify -->
 ```bash
 docker compose -p experimently-selfhost ps
 curl -fsS "$PUBLIC_BASE_URL/api/v1/modules"
@@ -310,6 +321,7 @@ back in place first, and restore the backup only if the old release refuses
 the database. Before you roll back, read the API's log, which tells you
 whether to expect that refusal:
 
+<!-- compose-upgrade: check-migrations -->
 ```bash
 docker compose -p experimently-selfhost logs api 2>&1 \
   | grep -e 'running database bootstrap' -e 'Running upgrade'
