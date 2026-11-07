@@ -570,6 +570,16 @@ describe('#442: each variant\'s effect size and own interval, from the server', 
     expect(visibleText(cell('control', 'Effect size'))).toBe('Control');
   });
 
+  it('f5: the treatment reads "−0.93 (large)" (U+2212, the sign is kept)', () => {
+    renderCase(serverCase('f5_treatment_no_conversions'));
+    expect(visibleText(cell('treatment', 'Effect size'))).toBe('−0.93 (large)');
+  });
+
+  it('f6: an arm with no users has no effect size: "Not computed"', () => {
+    renderCase(serverCase('f6_empty_treatment_proportion'));
+    expect(visibleText(cell('treatment', 'Effect size'))).toBe('Not computed');
+  });
+
   it('f1 at 0.99: the header reads "Interval (99%)"', () => {
     renderCase(serverCase('f1_wide_proportion'));
     const headers = screen
@@ -594,6 +604,22 @@ describe('#442: each variant\'s effect size and own interval, from the server', 
     });
     renderCase(c);
     expect(visibleText(cell('treatment', 'Interval (95%)'))).toBe('Not enough data yet');
+  });
+
+  it('a refused mean arm (5 users, std_dev null, interval [m, m]) reads "Not computed"', () => {
+    // Hand-built, like the one-user case: the server sends this shape for a
+    // mean arm it refused to estimate (std_dev None, interval (mean, mean)).
+    // Without the std_dev rule the cell would read "3.2 to 3.2".
+    const c = serverCase('d_mean_control_zero');
+    const treatment = c.metric.variants.find((v) => !v.is_control) as VariantResult;
+    Object.assign(treatment, {
+      sample_size: 5,
+      mean: 3.2,
+      std_dev: null,
+      confidence_interval: [3.2, 3.2],
+    });
+    renderCase(c);
+    expect(visibleText(cell('treatment', 'Interval (95%)'))).toBe('Not computed');
   });
 });
 

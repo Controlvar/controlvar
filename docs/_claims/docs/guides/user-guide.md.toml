@@ -1006,7 +1006,7 @@ by = [
 ]
 
 [[unit]]
-text = "Interval (95%) | This variant's own rate or average with its confidence interval, headed with the experiment's confidence level (Interval (99%) at 99%). A variant with fewer than 2 users reads Not enough data yet. When every user of a variant has the same value, for example none converted, it reads No interval: all 200 users have the same value (with its own user count), because there is nothing to estimate from. The interval of the change is in the Change column."
+text = "Interval (95%) | This variant's own rate or average with its confidence interval, headed with the experiment's confidence level (Interval (99%) at 99%). A variant with fewer than 2 users reads Not enough data yet. When every user of a variant has the same value, for example none converted, it reads No interval: all 200 users have the same value (with its own user count), because the interval is built from how much users differ, and they do not. The interval of the change is in the Change column."
 by = [
     "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::f4: the control of 0/200 reads \"No interval: all 200 users have the same value\"",
     "test:frontend/src/tests/components/MetricComparisonTable.intervals.test.tsx::d_mean_control_zero: the control of 100 users reads \"No interval: all 100 users have the same value\"",
