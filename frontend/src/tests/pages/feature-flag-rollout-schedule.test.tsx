@@ -1224,7 +1224,7 @@ describe("#442: a schedule's own dates, maximum and minimum stage duration", () 
   const MAX_409 = "The maximum cannot be below a stage's target. Lower that stage's target first.";
 
   const HELPS = {
-    start: 'Recorded with the schedule. Each time-based stage’s own start date decides when that stage starts.',
+    start: "Recorded with the schedule. Each time-based stage's own start date decides when that stage starts.",
     end: 'After this date no stage starts or completes by itself, and the schedule stays active.',
     max: 'No stage may target more than this. Default 100.',
     min: 'Whole hours from 0 to 8760, measured from when each stage started. Leave it empty for no minimum.',

@@ -40,7 +40,7 @@ export const SCHEDULE_NAME_REQUIRED = 'Give the schedule a name.';
 
 // The schedule's own settings (#442): copy, exact.
 export const START_DATE_HELP =
-  'Recorded with the schedule. Each time-based stage’s own start date decides when that stage starts.';
+  "Recorded with the schedule. Each time-based stage's own start date decides when that stage starts.";
 export const END_DATE_HELP = 'After this date no stage starts or completes by itself, and the schedule stays active.';
 export const MAX_HELP = 'No stage may target more than this. Default 100.';
 export const MIN_DURATION_HELP =
