@@ -14,7 +14,7 @@ Full documentation: [the OpenFeature provider page](https://github.com/Controlva
 
 To install it, follow [the OpenFeature provider page](https://github.com/Controlvar/controlvar/blob/main/docs/sdk/openfeature.md#python-provider).
 
-Requires Python 3.9+ and `openfeature-sdk` 0.10.0 or later.
+Requires Python 3.10+ and `openfeature-sdk` 0.10.0 or later.
 The only other dependency is [`controlvar`](https://github.com/Controlvar/controlvar/tree/main/sdk/python), which itself has none.
 
 ## Quick start
@@ -76,8 +76,8 @@ boolean call on a string, number or json flag included.
 | a value that is not of the flag's type | your default | `ERROR`, `PARSE_ERROR` | not set |
 
 That table is for every call type. A boolean call reads `enabled`, so an answer with no
-`value_type` (a server or an SDK without flag values, where every flag is boolean) answers it
-rather than your default. A server reason the provider does not know answers the value with
+`value_type` (from a server without flag values, where every flag is boolean) answers it rather
+than your default. A server reason the provider does not know answers the value with
 reason `UNKNOWN`. An integer call on a number with a fractional part (`2.5`) answers
 `TYPE_MISMATCH`, and `bool` is never a number.
 
@@ -127,9 +127,6 @@ Install the provider and the Python SDK from the root of a clone of this reposit
 ```bash
 pip install -e sdk/python -e sdk/openfeature-python
 ```
-
-Install `controlvar` from the same clone, as above: the `controlvar` 0.2.0 on PyPI reads no flag
-value, so with it every string, integer, float and object call answers your default with `GENERAL`.
 
 To run the tests:
 

@@ -98,3 +98,36 @@ def list_all_segment_ids(client, status: Optional[str] = None) -> List[str]:
         f"GET /api/v1/segments still returned full pages after "
         f"{SEGMENT_MAX_PAGES * SEGMENT_PAGE_SIZE} segments"
     )
+
+
+#: The flag list's default page size.
+FLAG_PAGE_SIZE = 100
+#: Pages fetched before giving up: 100 x 100 = 10,000 flags.
+FLAG_MAX_PAGES = 100
+
+
+def list_all_flags(client, **params) -> List[dict]:
+    """Every item ``GET /api/v1/feature-flags/`` returns, across all pages.
+
+    The flag list pages oldest first (#1732) and the integration database is
+    shared by the whole run, so once earlier tests have left a page of flags
+    behind, a flag a test just created is not on the first page. This pages
+    with ``skip`` and ``limit`` until it holds ``total`` items or reads a short
+    page, so both "is listed" and "is not listed" assertions see the whole
+    list. ``params`` (``status``, ``search``) are sent with every page.
+    """
+    items: List[dict] = []
+    for page in range(FLAG_MAX_PAGES):
+        response = client.get(
+            "/api/v1/feature-flags/",
+            params={**params, "skip": page * FLAG_PAGE_SIZE, "limit": FLAG_PAGE_SIZE},
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        items.extend(body["items"])
+        if len(items) >= body["total"] or len(body["items"]) < FLAG_PAGE_SIZE:
+            return items
+    raise AssertionError(
+        f"GET /api/v1/feature-flags/ still returned full pages after "
+        f"{FLAG_MAX_PAGES * FLAG_PAGE_SIZE} flags"
+    )

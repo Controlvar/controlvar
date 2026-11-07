@@ -11,7 +11,8 @@ SDK, because each one sends its events through `POST /api/v1/tracking/track` and
 | Received before the user is assigned to the experiment | Yes, with no variant | No |
 | Received while the experiment is a draft, paused, completed or archived | Yes, with no variant | No |
 | Received after the user is assigned, with an earlier `timestamp` | Yes | Yes |
-| With a `value` larger than 10^12 in size | Yes | Its user counts as converting; the value adds nothing |
+| With a `value` that is not a finite number from -10^12 to 10^12 | No: `/track` and `/events` answer `422`; `/batch` reports the entry in `errors` and stores the others, but refuses the whole request when the number in the JSON is NaN or infinite | No |
+| Stored before the server refused such a value, with a `value` larger than 10^12 in size | Yes | Its user counts as converting; the value adds nothing |
 | Sent by a bot or a crawler | Yes | Yes |
 
 ## Sending an event again
@@ -46,9 +47,9 @@ or message id. From a browser or an app, let the SDK make the id. Send revenue e
 server. Make the id once, when the event happens, and send that same id each time.
 
 The Java SDK gives every event an `event_id` ([Event ids](../sdk/java.md#event-ids)). The
-JavaScript SDK sends the `eventId` you give it, from its next published version, and makes none
-itself ([Event ids](../sdk/javascript.md#event-ids)). The Python SDK sends the `event_id` you give
-it, from its next published version, and makes none itself ([Event ids](../sdk/python.md#event-ids)).
+JavaScript SDK sends the `eventId` you give it, and makes none itself
+([Event ids](../sdk/javascript.md#event-ids)). The Python SDK sends the `event_id` you give it, and
+makes none itself ([Event ids](../sdk/python.md#event-ids)).
 No other
 SDK has an `event_id` option yet ([Limitations](../getting-started/limitations.md#sdks)): send an
 event that may be sent again to `POST /api/v1/tracking/track` or `POST /api/v1/tracking/batch`

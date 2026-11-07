@@ -79,8 +79,8 @@ NOTHING = {
     "F7": "F7: the definition plants 150 users never assigned; the ledger shows 0"
     " (the fault touched nothing)",
     "F9": "F9: class 'emoji-user-id': the definition plants 1 sends; the run shows 0",
-    "F2": "F2 (R5): the definition plants 6 values beyond the bound on counting"
-    " events (counted only without R5); the ledger shows 0 (the fault touched"
+    "F2": "F2: the definition plants 6 values beyond the bound on bot events, each"
+    " refused in its /batch's errors; the ledger shows 0 (the fault touched"
     " nothing)",
 }
 

@@ -93,6 +93,8 @@ FREE = {"plan": "free"}
 
 SAFE = "9007199254740991"
 MESSAGES = {
+    # The JSON check's, before the flag's own validator (#1630).
+    "finite_number": "Input should be a finite number",
     "value_out_of_range": "{f}: a number is outside -" + SAFE + " to " + SAFE,
     "unstorable_text": "{f} must not contain NUL or unpaired surrogate characters",
     "value_too_deep": "{f} nested more than 10 levels deep",
@@ -644,22 +646,25 @@ def test_a_value_flag_is_created_and_its_values_changed(
 # The hostile battery and the boundaries (QA B4), each counted
 # ---------------------------------------------------------------------------
 
-#: (id, value_type, on_value as JSON text, the refusal's type). Sent as text,
-#: so the number forms are exactly these.
+#: (id, value_type, on_value as JSON text, the refusal's type, where the
+#: refusal is below the value's own field). Sent as text, so the number forms
+#: are exactly these. NaN, the infinities and 1e400 are refused by the check
+#: every JSON body goes through (#1630), at their place in the body, before
+#: the flag's own validator; a 401-digit integer is still the validator's.
 HOSTILE = [
-    ("nan", "number", "NaN", "value_out_of_range"),
-    ("infinity", "number", "Infinity", "value_out_of_range"),
-    ("minus-infinity", "number", "-Infinity", "value_out_of_range"),
-    ("2^53", "number", str(2**53), "value_out_of_range"),
-    ("minus-2^53", "number", str(-(2**53)), "value_out_of_range"),
-    ("1e400", "number", "1e400", "value_out_of_range"),
-    ("10^400", "number", "1" + "0" * 400, "value_out_of_range"),
-    ("nul", "string", '"a\\u0000b"', "unstorable_text"),
-    ("lone-surrogate", "string", '"\\ud800"', "unstorable_text"),
-    ("nul-in-a-key", "json", '{"\\u0000": 1}', "unstorable_text"),
-    ("nan-inside", "json", '{"a": [1, NaN]}', "value_out_of_range"),
-    ("eleven-deep", "json", "[" * 11 + "1" + "]" * 11, "value_too_deep"),
-    ("8193-bytes", "json", '{"a":"' + "x" * 8185 + '"}', "value_too_large"),
+    ("nan", "number", "NaN", "finite_number", ()),
+    ("infinity", "number", "Infinity", "finite_number", ()),
+    ("minus-infinity", "number", "-Infinity", "finite_number", ()),
+    ("2^53", "number", str(2**53), "value_out_of_range", ()),
+    ("minus-2^53", "number", str(-(2**53)), "value_out_of_range", ()),
+    ("1e400", "number", "1e400", "finite_number", ()),
+    ("10^400", "number", "1" + "0" * 400, "value_out_of_range", ()),
+    ("nul", "string", '"a\\u0000b"', "unstorable_text", ()),
+    ("lone-surrogate", "string", '"\\ud800"', "unstorable_text", ()),
+    ("nul-in-a-key", "json", '{"\\u0000": 1}', "unstorable_text", ()),
+    ("nan-inside", "json", '{"a": [1, NaN]}', "finite_number", ("a", 1)),
+    ("eleven-deep", "json", "[" * 11 + "1" + "]" * 11, "value_too_deep", ()),
+    ("8193-bytes", "json", '{"a":"' + "x" * 8185 + '"}', "value_too_large", ()),
 ]
 #: (id, value_type, on_value as JSON text): each limit itself, accepted.
 BOUNDARY = [
@@ -679,14 +684,22 @@ def test_the_battery_is_exactly_this_size():
     assert len({h[0] for h in HOSTILE} | {b[0] for b in BOUNDARY}) == 18
 
 
+def _refused_at(response, refusal, field, below):
+    """The one refusal, its whole ``loc``: the field, and below it for a
+    number inside a JSON value."""
+    _locs_are_in_the_body(response)
+    found = [(e["type"], e["loc"], e["msg"]) for e in response.json()["detail"]]
+    assert found == [(refusal, ["body", field, *below], _message(refusal, field))]
+
+
 @pytest.mark.regression
 @pytest.mark.parametrize(
-    "value_type, value_text, refusal",
+    "value_type, value_text, refusal, below",
     [h[1:] for h in HOSTILE],
     ids=[h[0] for h in HOSTILE],
 )
 def test_the_hostile_battery_is_422_on_create_never_500(
-    client, developer, db_session, value_type, value_text, refusal
+    client, developer, db_session, value_type, value_text, refusal, below
 ):
     key = _key()
     payload = (
@@ -694,18 +707,19 @@ def test_the_hostile_battery_is_422_on_create_never_500(
         f'"on_value": {value_text}, "off_value": {OFF_TEXT[value_type]}}}'
     )
     response = _raw(client, "POST", f"{COLLECTION}/", developer, payload)
-    assert _detail(response) == [(refusal, "on_value", _message(refusal, "on_value"))]
+    assert response.status_code == 422, response.text
+    _refused_at(response, refusal, "on_value", below)
     assert _columns(db_session, key) is None
 
 
 @pytest.mark.regression
 @pytest.mark.parametrize(
-    "value_type, value_text, refusal",
+    "value_type, value_text, refusal, below",
     [h[1:] for h in HOSTILE],
     ids=[h[0] for h in HOSTILE],
 )
 def test_the_hostile_battery_is_422_on_update_never_500(
-    client, developer, db_session, value_type, value_text, refusal
+    client, developer, db_session, value_type, value_text, refusal, below
 ):
     flag = _create(client, developer, value_type)
     before = _columns(db_session, flag["key"])
@@ -716,7 +730,8 @@ def test_the_hostile_battery_is_422_on_update_never_500(
         developer,
         f'{{"off_value": {value_text}}}',
     )
-    assert _detail(response) == [(refusal, "off_value", _message(refusal, "off_value"))]
+    assert response.status_code == 422, response.text
+    _refused_at(response, refusal, "off_value", below)
     assert _columns(db_session, flag["key"]) == before
 
 

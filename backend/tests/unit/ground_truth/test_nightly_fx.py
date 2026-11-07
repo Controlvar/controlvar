@@ -134,7 +134,8 @@ def test_fx_is_sized_at_the_nightly_scale_and_its_reproduce_names_file_and_scale
 @pytest.mark.parametrize("seed", SEEDS)
 def test_fx_reaches_a_correct_server_as_planted(seed):
     """Every row exact: R4 = F1's 120 drops + F3's 20 paused resends;
-    R2-status 80; R2-order 80; R8 160 nowhere and 80 counted; R5 20; F7 4,000
+    R2-status 80; R2-order 80; R8 160 nowhere and 80 counted; F2 20 refused
+    and 4,980 stored; F7 4,000
     defined users never assigned and the alarm; F9 each class once and its 6
     valid users counting; and P-b for every rule."""
     case = nightly.scenario(seed)
