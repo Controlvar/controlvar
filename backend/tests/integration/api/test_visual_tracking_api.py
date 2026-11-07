@@ -37,6 +37,7 @@ leaves only itself out; ``Cache-Control: no-store``; 401 and 422.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
@@ -45,10 +46,13 @@ import pytest
 from sqlalchemy import event, text
 from sqlalchemy.orm import sessionmaker
 
+from backend.app.api import deps
 from backend.app.api.page_key import SCOPED_KEY_IN_PAGE_DETAIL
 from backend.app.api.v1.endpoints import tracking as tracking_endpoints
 from backend.app.api.v1.endpoints import tracking_visual
 from backend.app.core.config import settings
+from backend.app.db import request_sessions
+from backend.app.main import app
 from backend.app.models.assignment import Assignment
 from backend.app.models.event import Event
 from backend.app.models.global_holdout import GlobalHoldout
@@ -131,6 +135,31 @@ def client(db_session):
 
 
 @pytest.fixture
+def registering_client(client, db_session):
+    """``client`` with an async ``get_db`` that registers its session as
+    ``deps.get_db`` does, so a balanced experiment's assignment ends that
+    session's transaction as in production (the shared override registers
+    nothing). ``client`` removes the override when it is torn down, after
+    this fixture."""
+    factory = sessionmaker(bind=db_session.get_bind(), autoflush=False)
+
+    async def registering_get_db():
+        session = factory()
+        session.execute(text(f"SET search_path TO {SCHEMA}"))
+        request_sessions.register(session)
+        try:
+            yield session
+        finally:
+            try:
+                session.close()
+            finally:
+                request_sessions.unregister(session)
+
+    app.dependency_overrides[deps.get_db] = registering_get_db
+    yield client
+
+
+@pytest.fixture
 def developer(db_session):
     return make_user(db_session, UserRole.DEVELOPER, tag="vis2")
 
@@ -174,6 +203,7 @@ def _create(
     targeting: Optional[Dict[str, Any]] = None,
     match: str = "prefix",
     path: str = "/",
+    balance_within: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     body: Dict[str, Any] = {
         "name": f"{PREFIX}{uuid.uuid4().hex[:8]}",
@@ -199,6 +229,8 @@ def _create(
     }
     if targeting is not None:
         body["targeting_rules"] = targeting
+    if balance_within is not None:
+        body["balance_within"] = balance_within
     response = client.post(f"{EXPERIMENTS}/", json=body, headers=auth(user))
     assert response.status_code == 201, response.text
     return response.json()
@@ -375,6 +407,68 @@ def test_the_host_is_matched_in_lower_case_without_its_port(client, developer, k
     body = _ask(client, key, host.upper() + ":8443", path="/a?b=c").json()
     assert [e["experiment_key"] for e in body["experiments"]] == [experiment["key"]]
     assert body["pages"]["host"] == host
+
+
+@pytest.mark.regression
+def test_a_balanced_visual_experiment_gives_each_new_visitor_a_place(
+    registering_client, db_session, developer, key, monkeypatch
+):
+    """An experiment that balances within groups (#448), answered from the
+    page answer's private event loop: ``/tracking/assign``'s function ends the
+    transaction of the request's one session, then takes its worker trip on
+    that private loop. Each new visitor of the group takes the next place in
+    its blocks and gets their variant's changes."""
+    client = registering_client
+    host = _host()
+    experiment = _running(
+        client,
+        developer,
+        host,
+        control=50,
+        balance_within={"attribute": "tier", "values": ["gold", "silver"]},
+    )
+    released: List[List[bool]] = []
+    trip_loops: List[asyncio.AbstractEventLoop] = []
+    real_release = tracking_endpoints.release_request_sessions
+    real_trip = tracking_endpoints.run_in_threadpool
+
+    def release():
+        sessions = request_sessions.current()
+        real_release()
+        released.append([session.in_transaction() for session in sessions])
+
+    async def trip(func, *args, **kwargs):
+        trip_loops.append(asyncio.get_running_loop())
+        return await real_trip(func, *args, **kwargs)
+
+    monkeypatch.setattr(tracking_endpoints, "release_request_sessions", release)
+    monkeypatch.setattr(tracking_endpoints, "run_in_threadpool", trip)
+
+    names = []
+    for _ in range(4):
+        body = _ask(client, key, host, user_id=_visitor(), context={"tier": "gold"})
+        (entry,) = body.json()["experiments"]
+        assert entry["assigned"] is True, entry
+        expected = CHANGES if entry["variant_name"] == "B" else None
+        assert entry["changes"] == expected, entry
+        names.append(entry["variant_name"])
+
+    # Two blocks of a 50/50 split: two visitors in each variant.
+    assert sorted(names) == ["B", "B", "Control", "Control"], names
+    # One session each time, its transaction ended before the trip.
+    assert released == [[False]] * 4, released
+    # Each trip ran on a private loop, closed once its answer was given.
+    assert len(trip_loops) == 4 and all(loop.is_closed() for loop in trip_loops)
+    session = _session(db_session)
+    try:
+        rows = (
+            session.query(Assignment.balance_group, Assignment.balance_seq)
+            .filter(Assignment.experiment_id == uuid.UUID(experiment["id"]))
+            .all()
+        )
+    finally:
+        session.close()
+    assert sorted(rows, key=lambda row: row[1]) == [("gold", seq) for seq in range(4)]
 
 
 # --- V31: running experiments only ----------------------------------------------

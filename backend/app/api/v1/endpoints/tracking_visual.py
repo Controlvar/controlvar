@@ -27,6 +27,16 @@ visitor gets on a page:
 * One experiment that cannot be answered is left out and logged; the answer is
   a 500 only when experiments matched and none could be answered.
 
+The handler stays ``async`` and gives the request's database connection back
+before the answer starts (``db.close()``); the answer then runs in a worker
+thread, as ``POST /tracking/assign/batch`` does, on a private event loop
+(``asyncio.run``, as the rollout scheduler's tick does) because it awaits
+``/tracking/assign``'s function. Every connection it checks out, up to ten
+assignments' worth, is checked out there and never on the API's event loop
+(``test_api_key_routes_under_overload.py``), and the request holds none while
+it waits for the worker thread (#823; ``test_route_worker_steps.py``). The
+answer awaits nothing bound to the API's event loop.
+
 The page's host and path are used only to match page rules: neither is stored.
 
 ``POST /api/v1/tracking/visual/preview`` answers one variant's page changes
@@ -36,6 +46,7 @@ event. A link that is unknown, expired or revoked answers one 404 text.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from datetime import datetime, timezone
@@ -47,6 +58,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Response, status
 from pydantic import ValidationError
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
 from backend.app.api.off_loop_route import OffLoopRoute
@@ -285,6 +297,27 @@ async def visual_changes_for_page(
     any scope is refused with 403: it belongs on a server.
     """
     response.headers["Cache-Control"] = "no-store"
+    # The connection the key lookup holds goes back first; the answer checks
+    # out its own in the worker thread (the module docstring says why).
+    db.close()
+    return await run_in_threadpool(_answer_page_in_worker, request, db, owner)
+
+
+def _answer_page_in_worker(
+    request: VisualTrackingRequest, db: Session, owner: User
+) -> VisualTrackingResponse:
+    """:func:`_answer_page` on a private event loop in this worker thread;
+    closes *db*. The coroutine is created here, inside the thread."""
+    try:
+        return asyncio.run(_answer_page(request, db, owner))
+    finally:
+        db.close()
+
+
+async def _answer_page(
+    request: VisualTrackingRequest, db: Session, owner: User
+) -> VisualTrackingResponse:
+    """The page answer :func:`visual_changes_for_page` documents."""
     check_context(request.context)
     context, dropped = clean_web_details(request.context)
     if dropped and _NOTES.first("tracking_visual", "details dropped"):

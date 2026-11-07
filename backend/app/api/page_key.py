@@ -51,7 +51,12 @@ async def require_page_key(
 ) -> User:
     """The presented key's owner, if the key has no scopes; else 403.
 
-    Reads on the request's session; does no blocking work.
+    Runs one query, the presented key's row, on the request's session and on
+    the event loop, so the loop waits for that one round trip. It checks
+    nothing out: ``deps.get_api_key`` ran first, in a worker thread, and its
+    session still holds the connection it checked out there
+    (``db.connection()``). ``test_api_key_routes_under_overload.py`` counts
+    no checkout on the loop's thread for either page route.
     """
     api_key = (
         db.query(APIKey).filter(APIKey.key == hash_api_key(api_key_header)).first()
