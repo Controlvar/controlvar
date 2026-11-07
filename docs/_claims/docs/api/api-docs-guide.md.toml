@@ -162,8 +162,28 @@ text = "Filtering: Use query parameters (e.g., status_filter=active)"
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
 
 [[unit]]
-text = "Sorting: GET /api/v1/experiments/ takes sort_by and sort_order (e.g., sort_by=created_at&sort_order=desc)"
-by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+text = "Sorting: GET /api/v1/experiments/ takes sort_by and sort_order (e.g., sort_by=created_at&sort_order=desc)."
+by = [
+    "test:backend/tests/integration/api/test_experiment_list_sort_by.py::test_the_dashboards_sorts_answer_byte_for_byte_as_on_main",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "sort_by is a column of the experiment, in exact case: id, created_at, updated_at, name, key, description, hypothesis, status, experiment_type, owner_id, start_date, end_date, resume_at, targeting_rules, metrics, tags, experiment_metadata, optimization_type, sequential_testing_enabled, sequential_testing_method, sequential_testing_config, variance_reduction_config, correction_method, confidence_level, mutual_exclusion_group_id, bayesian_enabled, bayesian_config, bayesian_decision, split_url_config or workspace_id."
+by = [
+    "test:backend/tests/unit/services/test_experiment_sort_by_columns.py::test_the_written_list_is_exactly_the_experiment_tables_columns",
+    "test:backend/tests/unit/services/test_experiment_sort_by_columns.py::test_786_sort_by_accepts_exactly_the_tables_columns",
+    "test:backend/tests/integration/api/test_experiment_list_sort_by.py::test_every_column_sorts_both_ways",
+    "test:backend/tests/integration/api/test_experiment_list_sort_by.py::test_786_a_name_that_is_no_column_answers_422",
+]
+
+[[unit]]
+text = "An empty sort_by applies no sort; any other value answers 422 at [\"query\", \"sort_by\"] with a message that lists the columns."
+by = [
+    "test:backend/tests/integration/api/test_experiment_list_sort_by.py::test_an_empty_sort_by_is_still_no_sort",
+    "test:backend/tests/integration/api/test_experiment_list_sort_by.py::test_786_a_name_that_is_no_column_answers_422",
+    "test:backend/tests/unit/services/test_experiment_sort_by_columns.py::test_786_the_refusal_names_every_column_in_exact_case",
+]
 
 [[unit]]
 text = "Common Workflows"
