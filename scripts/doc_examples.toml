@@ -548,7 +548,7 @@ expects = 5
 path = "docs/mcp-server.md"
 environment = "stack"
 exec = 13
-skip = 2
+skip = 1
 expects = 36
 
 # #1075: the API reference, compliance, RBAC and technical guide pages, each
