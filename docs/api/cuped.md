@@ -137,17 +137,21 @@ create it (`POST /api/v1/experiments/`) or change it (`PUT /api/v1/experiments/{
   listed with `unavailable_reason: "winsorization_needs_mean_metric"`. To limit a whale's
   effect today, cap or filter the value before you send the event.
 
-This sets the demo experiment's method to `cuped` with a 7-day lookback:
+The demo data creates `checkout_button_color` with the method `cuped` and a 7-day
+lookback. This reads the setting the experiment stores:
 
 ```{.bash exec}
-curl -s -o /dev/null -w '%{http_code}\n' -X PUT localhost:8000/api/v1/experiments/$EXP_ID \
+curl -s localhost:8000/api/v1/experiments/$EXP_ID \
   -H "Authorization: Bearer $TOKEN" \
-  -H 'content-type: application/json' \
-  -d '{"variance_reduction_config": {"method": "cuped", "covariate_lookback_days": 7}}'
+  | jq .variance_reduction_config
 ```
-<!-- expect: 200 -->
+<!-- expect: "method": "cuped" -->
+<!-- expect: "covariate_lookback_days": 7 -->
 
-It prints `200`.
+It prints `"method": "cuped"` and `"covariate_lookback_days": 7`, with the other two
+fields at their defaults. A stack whose demo data an earlier release seeded may print
+`null`: start it once with `SEED_FORCE=true`, which runs the demo seed again and sets a
+missing setting, or seed a fresh database.
 
 ---
 
@@ -289,11 +293,8 @@ Three things can surprise:
 
 Any logged-in user can read the results. Changing an experiment's
 `variance_reduction_config` is a change to the experiment, decided by permission and by the
-experiment's state, not by who created it. ADMIN and DEVELOPER may change experiments, and in
-the full profile so may anyone whose custom role or direct grant gives `experiment (update)`;
-for anyone else the `PUT` above answers `403` with
-`"You don't have permission to update experiments"`. Only a superuser may change an experiment
-that is no longer a draft, and the demo experiment is running: for anyone else who may change
-experiments, such as a DEVELOPER or an ADMIN who is not a superuser, the `PUT` above answers
-`400` with `"Cannot update experiments in active status"`. The demo's `admin@demo.com` is a
-superuser, which is why it gets `200`.
+experiment's state, not by who created it. Set it when you create the experiment, or with
+`PUT /api/v1/experiments/{id}` while the experiment is a draft. ADMIN and DEVELOPER may
+change experiments, and in the full profile so may anyone whose custom role or direct grant
+gives `experiment (update)`; for anyone else that `PUT` answers `403` with
+`"You don't have permission to update experiments"`.

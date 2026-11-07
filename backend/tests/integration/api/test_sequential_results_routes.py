@@ -8,9 +8,9 @@
 * the block embedded in ``GET /results/{id}`` is computed at the stored alpha,
   and that route's ``confidence_level`` and ``correction_method`` do not move it;
 * that block is cached with the rest of the results (5 minutes while the
-  experiment runs, 24 hours otherwise), so a change to the sequential settings
-  shows there only once the cache is cleared, while ``/sequential`` is not
-  cached;
+  experiment runs, 24 hours otherwise), so a change to the sequential settings,
+  made here while the experiment is a draft, shows there only once the cache is
+  cleared, while ``/sequential`` is not cached;
 * once the experiment is running, the ``PUT`` that changes those settings
   answers 400 for everyone but a superuser.
 """
@@ -337,19 +337,26 @@ def test_once_running_only_a_superuser_changes_the_sequential_settings(
     assert _boundary(client.get(seq_url, headers=auth(owner))) == pytest.approx(10.0)
 
 
+def _written(redis, experiment) -> list:
+    """The TTLs of the results cache entries written for *experiment*."""
+    prefix = f"results:{experiment['id']}:"
+    return [ttl for key, ttl in redis.sets if key.startswith(prefix)]
+
+
 def test_a_settings_change_reaches_the_cached_results_only_once_cleared(
     client, db_session, monkeypatch
 ):
+    """The change is made while the experiment is a draft, whose results are
+    kept 24 hours; a running experiment's are kept 5 minutes."""
     redis = fake_results_cache(monkeypatch)
-    owner, experiment = _running(client, db_session)
-    exp_url = f"/api/v1/experiments/{experiment['id']}"
-    url = f"/api/v1/results/{experiment['id']}"
+    owner = make_user(db_session, UserRole.ADMIN, superuser=True, tag="seqcache")
+    draft = create_experiment(client, owner)
+    _enable(client, draft, owner, {})
+    exp_url = f"/api/v1/experiments/{draft['id']}"
+    url = f"/api/v1/results/{draft['id']}"
 
     assert _boundary(client.get(url, headers=auth(owner))) == pytest.approx(20.0)
-    written = [
-        ttl for key, ttl in redis.sets if key.startswith(f"results:{experiment['id']}:")
-    ]
-    assert written == [300], redis.sets
+    assert _written(redis, draft) == [86400], redis.sets
 
     accepted = client.put(
         exp_url,
@@ -357,13 +364,21 @@ def test_a_settings_change_reaches_the_cached_results_only_once_cleared(
         headers=auth(owner),
     )
     assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["status"] == "draft"
 
     # /sequential is computed on every request; the results come from the cache.
     assert _boundary(client.get(f"{url}/sequential", headers=auth(owner))) == 10.0
-    assert _boundary(client.get(url, headers=auth(owner))) == 20.0
+    assert _boundary(client.get(url, headers=auth(owner))) == 20.0, "cached 20.0"
     cleared = client.post(f"{url}/invalidate-cache", headers=auth(owner))
     assert cleared.status_code == 200, cleared.text
     assert _boundary(client.get(url, headers=auth(owner))) == pytest.approx(10.0)
+
+    _, running = _running(client, db_session)
+    running_url = f"/api/v1/results/{running['id']}"
+    assert _boundary(client.get(running_url, headers=auth(owner))) == pytest.approx(
+        20.0
+    )
+    assert _written(redis, running) == [300], redis.sets
 
 
 def test_results_of_an_experiment_that_is_not_running_are_kept_24_hours(

@@ -347,7 +347,7 @@ path = "docs/api/cuped.md"
 environment = "stack"
 exec = 5
 skip = 0
-expects = 7
+expects = 8
 
 [[document]]
 path = "docs/api/data-export.md"
@@ -375,7 +375,7 @@ path = "docs/api/sequential-testing.md"
 environment = "stack"
 exec = 4
 skip = 0
-expects = 12
+expects = 14
 
 [[document]]
 path = "docs/statistics/fdr-correction.md"

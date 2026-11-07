@@ -242,7 +242,6 @@ exempt:baseline	docs/api/cuped.md	84e70bf52cca
 exempt:baseline	docs/api/cuped.md	918149ebbfb5
 exempt:baseline	docs/api/cuped.md	989f80ff58af
 exempt:baseline	docs/api/cuped.md	9e8d54c3f063
-exempt:baseline	docs/api/cuped.md	a78388a67d9f
 exempt:baseline	docs/api/cuped.md	aa167bc60953
 exempt:baseline	docs/api/cuped.md	abccc78cc93c
 exempt:baseline	docs/api/cuped.md	ad705ab9d48a
@@ -250,7 +249,6 @@ exempt:baseline	docs/api/cuped.md	b515c3859d7c
 exempt:baseline	docs/api/cuped.md	b8b848390c30
 exempt:baseline	docs/api/cuped.md	c1879525c75c
 exempt:baseline	docs/api/cuped.md	c2d9b7e0b693
-exempt:baseline	docs/api/cuped.md	c4df77c9b026
 exempt:baseline	docs/api/cuped.md	c67c750f70a9
 exempt:baseline	docs/api/cuped.md	dc54d607947c
 exempt:baseline	docs/api/cuped.md	dccf40e12636
@@ -585,14 +583,12 @@ exempt:baseline	docs/api/rbac.md	f8976ac62597
 exempt:baseline	docs/api/rbac.md	fce7fec2a58c
 exempt:baseline	docs/api/rbac.md	fdfa5a028b04
 exempt:baseline	docs/api/rbac.md	ff5c0686b262
-exempt:baseline	docs/api/sequential-testing.md	0849e69b0924
 exempt:baseline	docs/api/sequential-testing.md	0b40234a6136
 exempt:baseline	docs/api/sequential-testing.md	1faf45ed12dc
 exempt:baseline	docs/api/sequential-testing.md	299b559a9510
 exempt:baseline	docs/api/sequential-testing.md	34a4b5c288ed
 exempt:baseline	docs/api/sequential-testing.md	38d7c8f2360c
 exempt:baseline	docs/api/sequential-testing.md	39da01e30baf
-exempt:baseline	docs/api/sequential-testing.md	5966fc04c943
 exempt:baseline	docs/api/sequential-testing.md	694359d446d7
 exempt:baseline	docs/api/sequential-testing.md	737071fe5e42
 exempt:baseline	docs/api/sequential-testing.md	828232e78f06
@@ -601,7 +597,6 @@ exempt:baseline	docs/api/sequential-testing.md	85288292c408
 exempt:baseline	docs/api/sequential-testing.md	8696622f3441
 exempt:baseline	docs/api/sequential-testing.md	918149ebbfb5
 exempt:baseline	docs/api/sequential-testing.md	9a437264617e
-exempt:baseline	docs/api/sequential-testing.md	a78388a67d9f
 exempt:baseline	docs/api/sequential-testing.md	aa167bc60953
 exempt:baseline	docs/api/sequential-testing.md	abccc78cc93c
 exempt:baseline	docs/api/sequential-testing.md	ad705ab9d48a
