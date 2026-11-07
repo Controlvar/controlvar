@@ -91,13 +91,26 @@ def test_a_user_with_an_email_and_a_group_has_the_helper_shape(pool):
     username, sub = _user(
         idp,
         pool_id,
-        [{"Name": "email", "Value": "shape@example.com"}],
+        [
+            {"Name": "email", "Value": "shape@example.com"},
+            {"Name": "email_verified", "Value": "true"},
+        ],
         ["Developers"],
     )
 
     real = service.get_user_with_groups(_token(idp, pool_id, app_client, username))
 
     assert real == identity(username, sub, "shape@example.com", ["Developers"])
+
+
+def test_a_user_whose_email_is_not_verified_has_the_helper_shape(pool):
+    idp, pool_id, app_client, service = pool
+    username, sub = _user(idp, pool_id, [{"Name": "email", "Value": "u@example.com"}])
+
+    real = service.get_user_with_groups(_token(idp, pool_id, app_client, username))
+
+    assert "email_verified" not in real["attributes"]
+    assert real == identity(username, sub, "u@example.com", email_verified=None)
 
 
 def test_a_user_with_no_email_and_no_group_has_neither(pool):

@@ -130,6 +130,7 @@ def test_the_reason_table_lists_exactly_the_codes_the_code_writes():
         "linked_elsewhere",
         "legacy_unlinked",
         "no_email",
+        "email_unverified",
         "email_taken",
         "field_too_long",
         "commit_failed",
