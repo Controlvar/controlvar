@@ -1048,6 +1048,28 @@ describe('trackEvent fan-out (no explicit keys)', () => {
     now.mockRestore();
   });
 
+  const keylessTrackAfter25Hours = async (cacheTtlMs: number) => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(T0);
+    const fetchMock = mockFetchSequence({ body: assignment }, { body: { success_count: 1 } });
+    const client = new ExperimentationClient({ ...baseConfig, cacheTtlMs });
+    await client.assignExperiment(user, 'checkout');
+    now.mockReturnValue(T0 + 25 * HOUR); // the entry never expires, so no request is made
+    expect(client.getAssignments('user-123')).toHaveLength(1);
+
+    await client.trackEvent('user-123', 'purchase');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(call(fetchMock, 1).url).toBe(BATCH_URL);
+    expect(batchKeys(call(fetchMock, 1).body)).toEqual(['checkout']);
+    now.mockRestore();
+  };
+
+  it('#1540: a cacheTtlMs of Infinity keeps the record as long as the cache: a keyless trackEvent 25 h later is still tagged', () =>
+    keylessTrackAfter25Hours(Infinity));
+
+  it('#1540: a cacheTtlMs of NaN keeps the record as long as the cache: a keyless trackEvent 25 h later is still tagged', () =>
+    keylessTrackAfter25Hours(NaN));
+
   it('sends the event once to /api/v1/tracking/track with no key and resolves when nothing is attributed to the user', async () => {
     const fetchMock = mockFetch({});
     const client = new ExperimentationClient(baseConfig);

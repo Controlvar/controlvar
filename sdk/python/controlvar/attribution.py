@@ -10,6 +10,7 @@ change when their attributes do.
 
 from __future__ import annotations
 
+import math
 import threading
 from collections import OrderedDict
 from typing import Dict, FrozenSet, List, Optional, Tuple
@@ -43,8 +44,14 @@ class AttributedKeys:
 
     def __init__(self, cache_ttl_seconds: float = 0) -> None:
         # 24 hours, or the cache lifetime when that is longer, so a cached answer never
-        # outlives the record that tags its events (#1423).
-        self._horizon = max(ATTRIBUTION_HORIZON_SECONDS, cache_ttl_seconds)
+        # outlives the record that tags its events (#1423). ``UserKeyCache`` expires an entry when
+        # ``now >= now + ttl``: never for ``inf`` and ``nan`` (the comparison with nan is false). A
+        # plain ``max`` would give nan the 24 hour floor (``max(86400, nan)`` is 86400), so nan is
+        # mapped to an unbounded record here (#1540).
+        if math.isnan(cache_ttl_seconds):
+            self._horizon = math.inf
+        else:
+            self._horizon = max(ATTRIBUTION_HORIZON_SECONDS, cache_ttl_seconds)
         self._lock = threading.Lock()
         self._users: "OrderedDict[str, Tuple[_Answers, _Answers]]" = OrderedDict()
 
