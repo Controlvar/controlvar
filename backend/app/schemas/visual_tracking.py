@@ -52,12 +52,15 @@ MAX_LANDING_PATH_LENGTH = 255
 
 #: ``web_language``: a primary language subtag, lower case.
 LANGUAGE_PATTERN = re.compile(r"[a-z]{2,3}")
-#: ``web_referrer``: a lower-case host, never a path or a query.
-REFERRER_PATTERN = re.compile(r"[a-z0-9.-]{1,%d}" % MAX_REFERRER_LENGTH)
-#: A campaign value: RFC 3986's unreserved characters only. No ``+`` (it
-#: decodes to a space in one parser and not in another), no ``@`` (an email
-#: address in a link is never stored), no ``%`` and no space.
-UTM_PATTERN = re.compile(r"[A-Za-z0-9._~-]{1,%d}" % MAX_UTM_LENGTH)
+#: ``web_referrer``: a lower-case host, never a path or a query; at most
+#: :data:`MAX_REFERRER_LENGTH` characters (fixed text, as every runtime
+#: pattern is: ``test_visual_visitor_details`` ties the bound to the constant).
+REFERRER_PATTERN = re.compile(r"[a-z0-9.-]{1,253}")
+#: A campaign value: RFC 3986's unreserved characters only, at most
+#: :data:`MAX_UTM_LENGTH`. No ``+`` (it decodes to a space in one parser and
+#: not in another), no ``@`` (an email address in a link is never stored), no
+#: ``%`` and no space.
+UTM_PATTERN = re.compile(r"[A-Za-z0-9._~-]{1,100}")
 
 #: The three campaign keys. ``utm_term`` and ``utm_content`` are never kept.
 UTM_KEYS = ("web_utm_source", "web_utm_medium", "web_utm_campaign")

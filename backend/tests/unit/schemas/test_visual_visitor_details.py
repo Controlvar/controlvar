@@ -30,18 +30,57 @@ pytestmark = pytest.mark.unit
 #: one is its worst case; every other pattern is ASCII.
 WIDEST_LANDING_CHARACTER = "\U0001f600"
 
+#: Far past any limit a detail may have: the probe below looks this far.
+PROBE_LIMIT = 4096
+
+
+def _longest_kept(key, make):
+    """The longest value of *key* the cleaning keeps, ``make(n)`` being the
+    value of length n: read from the rule itself, not from a constant."""
+    kept = [n for n in range(1, PROBE_LIMIT + 1) if vt.web_detail_is_kept(key, make(n))]
+    assert kept, key
+    assert kept == list(range(kept[0], kept[-1] + 1)), f"{key}: kept lengths have a gap"
+    return make(kept[-1])
+
 
 def _worst_case_details():
     return {
         "web_device": max(vt.WEB_DEVICES, key=len),
         "web_browser": max(vt.WEB_BROWSERS, key=len),
-        "web_language": "abc",
+        "web_language": _longest_kept("web_language", lambda n: "a" * n),
         "web_visitor": max(vt.WEB_VISITORS, key=len),
-        "web_referrer": "a" * vt.MAX_REFERRER_LENGTH,
-        **dict.fromkeys(vt.UTM_KEYS, "a" * vt.MAX_UTM_LENGTH),
-        "web_landing_path": "/"
-        + WIDEST_LANDING_CHARACTER * (vt.MAX_LANDING_PATH_LENGTH - 1),
+        "web_referrer": _longest_kept("web_referrer", lambda n: "a" * n),
+        **{key: _longest_kept(key, lambda n: "a" * n) for key in vt.UTM_KEYS},
+        "web_landing_path": _longest_kept(
+            "web_landing_path", lambda n: "/" + WIDEST_LANDING_CHARACTER * (n - 1)
+        ),
     }
+
+
+@pytest.mark.parametrize(
+    "key,limit",
+    [
+        ("web_referrer", vt.MAX_REFERRER_LENGTH),
+        ("web_utm_source", vt.MAX_UTM_LENGTH),
+        ("web_utm_medium", vt.MAX_UTM_LENGTH),
+        ("web_utm_campaign", vt.MAX_UTM_LENGTH),
+        ("web_landing_path", vt.MAX_LANDING_PATH_LENGTH),
+    ],
+)
+def test_each_limit_constant_is_the_rules_own(key, limit):
+    """The documented limits are where the rules stop: N kept, N + 1 dropped."""
+    make = (
+        (lambda n: "/" + "a" * (n - 1))
+        if key == "web_landing_path"
+        else (lambda n: "a" * n)
+    )
+    assert vt.web_detail_is_kept(key, make(limit)), key
+    assert not vt.web_detail_is_kept(key, make(limit + 1)), key
+    assert (vt.MAX_REFERRER_LENGTH, vt.MAX_UTM_LENGTH, vt.MAX_LANDING_PATH_LENGTH) == (
+        253,
+        100,
+        255,
+    )
 
 
 def _attributes_of_bytes(size):

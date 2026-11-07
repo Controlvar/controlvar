@@ -193,6 +193,8 @@ routes = [
   "/api/v1/tracking/split-url/assign",
   "/api/v1/tracking/split-url/routes",
   "/api/v1/tracking/track",
+  "/api/v1/tracking/visual",
+  "/api/v1/tracking/visual/preview",
   "/api/v1/users/",
   "/api/v1/users/me",
   "/api/v1/users/me/password",
