@@ -402,9 +402,16 @@ Each entry that cannot be written logs one ERROR line from the API:
 Failed to create audit log for <action> on <entity type> <entity id> (<exception type>)
 ```
 
-In a deployed stack that line is the only signal that an entry is missing. The API also
-counts these failures in a Prometheus counter, `audit_write_failures_total`, but do not
-rely on it there: the AWS deployment does not collect it.
+The AWS deployment counts those lines: `experimentation-api-audit-write-failed-<env>` goes
+into alarm on the first one in any 5 minutes and emails `ALARM_EMAIL`, once that address
+has [confirmed its subscription](../self-hosting/cdk.md#required-environment-variables).
+It sends one email when it goes into alarm, not one per line, and each line also counts
+toward `experimentation-api-error-logs-<env>`. To find which entries are missing, search
+the log group `/ecs/experimentation-backend-<env>` for `Failed to create audit log`: each
+line names the action and the entity of one missing entry. Nothing writes a missing entry
+later. The API also counts these failures in a Prometheus counter,
+`audit_write_failures_total`, but do not rely on it there: the AWS deployment does not
+collect it.
 
 ### Keeping entries, and deleted users
 

@@ -164,6 +164,44 @@ def api_error_logs_alarm_name(env_name: str) -> str:
     return f"experimentation-api-error-logs-{env_name}"
 
 
+def api_audit_write_failed_alarm_name(env_name: str) -> str:
+    """The alarm on one audit-log entry that could not be written (#834).
+
+    ``docs/api/audit-logging.md`` and the AWS CDK deployment page name it; a
+    backend docs test asserts both pages spell what this returns.
+    """
+    return f"experimentation-api-audit-write-failed-{env_name}"
+
+
+# --- The API's log-line metrics (#205, #811, #834) -----------------------------
+# The fargate stack's metric filters publish these from the API's log group;
+# the monitoring stack's application dashboard graphs them. Both read them
+# from here so the dashboard cannot name a metric no filter publishes.
+
+
+def api_log_metric_namespace(env_name: str) -> str:
+    """``Experimently/<env>``: the namespace of the log-line metrics."""
+    return f"Experimently/{env_name}"
+
+
+#: Error- and critical-level lines from the API's tasks.
+API_ERROR_LOG_LINES_METRIC = "ApiErrorLogLines"
+
+#: Lines saying an audit-log entry could not be written.
+AUDIT_WRITE_FAILURES_METRIC = "AuditWriteFailures"
+
+#: The logger that writes the "Failed to create audit log" lines:
+#: ``logging.getLogger(__name__)`` in ``backend/app/services/audit_service.py``.
+#: The audit-write filter matches this logger name and the line's level, not
+#: the message text. ``backend/tests/unit/services/test_audit_write_failed_line.py``
+#: renders the real lines and checks them against this constant.
+AUDIT_SERVICE_LOGGER = "backend.app.services.audit_service"
+
+#: The text every such line starts with: what the alarm's description and the
+#: audit-logging page tell an operator to search the log group for.
+AUDIT_WRITE_FAILED_SEARCH = "Failed to create audit log"
+
+
 #: The SSM parameter the database stack writes the Aurora cluster's identifier
 #: to (``{"Ref": <cluster>}``) and the monitoring stack's AuroraHighCPU alarm
 #: reads at deploy time. A parameter rather than a CloudFormation export: an

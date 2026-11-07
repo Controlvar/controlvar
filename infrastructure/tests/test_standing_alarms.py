@@ -37,6 +37,10 @@ values of ``api_live_target_group``, and asserts exact values:
   level, and CloudWatch matches case-sensitively, so the ``"ERROR"`` term it
   used to match counted none of them. ``backend/tests/unit/core/test_logger.py``
   pins the logger's half: the level a rendered line carries.
+* **The audit-write filter** (#834) counts the error- and critical-level lines
+  of ``backend.app.services.audit_service``, and its alarm fires on one in 5
+  minutes. ``backend/tests/unit/services/test_audit_write_failed_line.py`` pins
+  the logger's half: the logger name and level of the real lines.
 """
 
 from __future__ import annotations
@@ -125,6 +129,20 @@ def _one(template: dict, prefix: str, rtype: str) -> str:
     ]
     assert len(hits) == 1, f"expected one {rtype} {prefix}<hash>, found {hits}"
     return hits[0]
+
+
+#: The fargate stack's two metric filters, by logical id.
+ERROR_FILTER = "BackendLogGroupApiErrorLogsB9EE50D9"
+AUDIT_FILTER = "BackendLogGroupAuditWriteFailuresABBC23B2"
+
+
+def _filters(synth: dict) -> dict[tuple[str, str], dict]:
+    """Every metric filter in the app: ``{(stack name, logical id): properties}``."""
+    return {
+        (stack_name, lid): r["Properties"]
+        for stack_name, template in synth["templates"].items()
+        for lid, r in _of_type(template, "AWS::Logs::MetricFilter").items()
+    }
 
 
 def _alarms_by_name(template: dict) -> dict[str, tuple[str, dict]]:
@@ -237,7 +255,9 @@ def test_the_new_alarms_do_not_move_with_the_live_colour(synths, env, profile):
             if r["Type"] in (*ALARM_TYPES, "AWS::Logs::MetricFilter")
             and not r["Properties"].get("AlarmName", "").startswith("experimentation-api-5xx-")
         }
-    assert len(new["blue"]) == 5, sorted(new["blue"])
+    # The two healthy-task alarms, the composite, the error-log filter and
+    # alarm, and the audit-write filter and alarm (#834).
+    assert len(new["blue"]) == 7, sorted(new["blue"])
     assert json.dumps(new["blue"], sort_keys=True) == json.dumps(
         new["green"], sort_keys=True
     )
@@ -289,6 +309,7 @@ def test_the_standing_alarms_are_exactly_these(synths, case):
         f"experimentation-api-healthy-green-{env}",
         f"experimentation-api-no-healthy-task-{env}",
         f"experimentation-api-error-logs-{env}",
+        f"experimentation-api-audit-write-failed-{env}",
         f"AuroraHighCPU-{env}",
     } | {f"RedisHighCPU-{i:03d}-{env}" for i in range(1, (3 if env == "prod" else 1) + 1)}
     if profile == "full":
@@ -406,15 +427,14 @@ def test_no_alarm_or_filter_watches_what_nothing_publishes(synths, case):
 def test_the_error_filter_is_on_the_api_tasks_log_group(synths, case):
     env, _, _ = case
     synth = synths[case]
-    filters = {
-        (stack_name, lid): r["Properties"]
-        for stack_name, template in synth["templates"].items()
-        for lid, r in _of_type(template, "AWS::Logs::MetricFilter").items()
-    }
-    assert list(filters) == [
-        (f"experimentation-fargate-{env}", "BackendLogGroupApiErrorLogsB9EE50D9")
-    ], sorted(filters)
-    (props,) = filters.values()
+    filters = _filters(synth)
+    # Exactly these two in the whole app: the error-log filter and the
+    # audit-write filter (#834), both on the API's log group.
+    assert set(filters) == {
+        (f"experimentation-fargate-{env}", ERROR_FILTER),
+        (f"experimentation-fargate-{env}", AUDIT_FILTER),
+    }, sorted(filters)
+    props = filters[(f"experimentation-fargate-{env}", ERROR_FILTER)]
 
     fargate = _stack(synth, "fargate", env)
     (backend,) = [
@@ -470,3 +490,58 @@ def test_the_error_log_alarm_fires_on_10_lines_in_5_minutes(synths, case):
     assert alarm["AlarmActions"] == [
         _topic_action(synth, env, f"experimentation-fargate-{env}")
     ], alarm["AlarmActions"]
+
+
+# --- one audit-log entry that could not be written (#834) ---------------------
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("case", CASES, ids=_ids)
+def test_one_failed_audit_write_raises_the_alarm(synths, case):
+    """#834: one "Failed to create audit log" line raises
+    experimentation-api-audit-write-failed-<env> within one 5-minute period,
+    and it emails the topic. The error-log alarm needs 10."""
+    env, _, _ = case
+    synth = synths[case]
+    fargate = _stack(synth, "fargate", env)
+    props = _filters(synth)[(f"experimentation-fargate-{env}", AUDIT_FILTER)]
+    # The API task's log group, and the line's logger and level -- not its
+    # text (backend/tests/unit/services/test_audit_write_failed_line.py
+    # renders the real lines against this pattern's two values).
+    assert props["LogGroupName"] == {"Ref": "BackendLogGroupDA10F1B2"}
+    assert props["FilterPattern"] == (
+        '{ ($.logger = "backend.app.services.audit_service") && '
+        '(($.level = "error") || ($.level = "critical")) }'
+    )
+    assert props["MetricTransformations"] == [
+        {
+            "MetricNamespace": f"Experimently/{env}",
+            "MetricName": "AuditWriteFailures",
+            "MetricValue": "1",
+            "DefaultValue": 0,
+        }
+    ]
+
+    name = f"experimentation-api-audit-write-failed-{env}"
+    _, alarm = _alarms_by_name(fargate)[name]
+    description = (
+        "At least one audit-log entry could not be written in the last 5 "
+        "minutes. The change each one records was kept; the audit log has no "
+        f"entry for it. Search the log group /ecs/experimentation-backend-{env} "
+        'for "Failed to create audit log". See docs/api/audit-logging.md.'
+    )
+    assert alarm == {
+        "AlarmName": name,
+        "AlarmDescription": description,
+        "Namespace": f"Experimently/{env}",
+        "MetricName": "AuditWriteFailures",
+        "Statistic": "Sum",
+        "Period": 300,
+        "EvaluationPeriods": 1,
+        "Threshold": 1,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [_topic_action(synth, env, f"experimentation-fargate-{env}")],
+    }, alarm
+    # CloudWatch refuses a longer description (botocore's service model).
+    assert len(description) <= 1024

@@ -1014,12 +1014,13 @@ by = [
 ]
 
 [[unit]]
-text = "The fargate stack's alarms publish to it too: the two API 5xx alarms, which roll a deployment back, experimentation-api-no-healthy-task-<env>, which fires when no API task is healthy, and experimentation-api-error-logs-<env>, which fires on 10 or more lines in 5 minutes whose JSON level is error or critical."
+text = "The fargate stack's alarms publish to it too: the two API 5xx alarms, which roll a deployment back, experimentation-api-no-healthy-task-<env>, which fires when no API task is healthy, experimentation-api-error-logs-<env>, which fires on 10 or more lines in 5 minutes whose JSON level is error or critical, and experimentation-api-audit-write-failed-<env>, which fires on one line in 5 minutes saying an audit-log entry could not be written (Audit logging)."
 by = [
     "test:infrastructure/tests/test_standing_alarms.py::test_the_standing_alarms_are_exactly_these",
     "test:infrastructure/tests/test_standing_alarms.py::test_the_composite_is_exactly_blue_and_green_and_emails_the_topic",
     "test:infrastructure/tests/test_standing_alarms.py::test_the_error_filter_is_on_the_api_tasks_log_group",
     "test:infrastructure/tests/test_standing_alarms.py::test_the_error_log_alarm_fires_on_10_lines_in_5_minutes",
+    "test:infrastructure/tests/test_standing_alarms.py::test_one_failed_audit_write_raises_the_alarm",
 ]
 
 [[unit]]
