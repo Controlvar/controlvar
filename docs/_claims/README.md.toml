@@ -515,7 +515,7 @@ text = "Targeting rules: operators, attribute aliases and examples"
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "The Controlvar Books: eight free books (CC BY 4.0) that teach software engineering through this codebase, and a guide to read before your first change"
+text = "The Controlvar Books: free books (CC BY 4.0) that teach software engineering through this codebase, and a guide to read before your first change"
 by = ["exempt:navigation"]
 
 [[unit]]
