@@ -28,9 +28,11 @@ from backend.app.core.rules_engine import (
     TimeWindowUnreadable,
 )
 from backend.app.core.targeting_adapter import (
+    FLAG_RULES_UNREADABLE,
     expand_context,
     match_targeting_rule,
     normalise_targeting_rules,
+    report_unreadable_rules,
     segment_ids_in,
 )
 from backend.app.models.feature_flag import (
@@ -486,7 +488,9 @@ class FeatureFlagService:
             context: Optional context data for rule evaluation
 
         Returns:
-            Dictionary mapping flag keys to their values for this user
+            Dictionary mapping flag keys to their values for this user. A
+            flag whose stored rules cannot be read answers ``False``, and the
+            other flags are unaffected (#1674).
         """
         # Get all active flags
         flags = (
@@ -503,9 +507,18 @@ class FeatureFlagService:
         for flag in flags:
             rules = flag.targeting_rules
             if rules and not isinstance(rules, list):
-                referenced |= segment_ids_in(
-                    normalise_targeting_rules(rules, owner=f"flag:{flag.key}")
-                )
+                owner = f"flag:{flag.key}"
+                # Around the pure read only (#1674): stored rules that raise
+                # (only a direct database write leaves them) cost this flag
+                # its segments, and its own evaluation below raises inside
+                # evaluate_flag_detailed's catch and answers false. The other
+                # flags are answered as before.
+                try:
+                    referenced |= segment_ids_in(
+                        normalise_targeting_rules(rules, owner=owner)
+                    )
+                except Exception as exc:
+                    report_unreadable_rules(owner, exc, FLAG_RULES_UNREADABLE)
         memberships = None
         if referenced:
             memberships = resolve_segment_memberships(

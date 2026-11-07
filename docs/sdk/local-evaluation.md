@@ -155,6 +155,10 @@ Anything else is evaluated by the server, for the flag or for that one evaluatio
   (an ID list can hold a million IDs), so the ruleset marks these flags `"remote"` and carries
   neither their rules nor the segment, `status()` lists them as server-evaluated flags, and each
   evaluation is a request, counted against the SDK rate limit;
+- a flag whose stored rules the server cannot read (only a direct database write leaves one): the
+  ruleset marks it `"remote"`, and the server answers it `enabled: false`, `reason: "error"`. While
+  it is active, every local `getAllFlags` / `get_all_flags` call goes to the server, because a bulk
+  call is answered locally only when every active flag is;
 - an attribute whose type does not match the rule (a string against a number, a boolean, a numeric
   string such as `"10"`); the server's type coercions are not reproduced;
 - a number larger than 2^53 − 1 in magnitude, and a non-finite one;

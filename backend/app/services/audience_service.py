@@ -34,10 +34,12 @@ from backend.app.core.context_limits import MAX_CONTEXT_BYTES
 from backend.app.core.pattern_match import PatternUnevaluable, report_unevaluable
 from backend.app.core.rules_engine import TimeWindowUnreadable, evaluate_condition
 from backend.app.core.targeting_adapter import (
+    SEGMENT_RULES_UNREADABLE,
     TargetingRulesError,
     convert_dashboard_condition,
     expand_context,
     match_targeting_rule,
+    report_unreadable_rules,
     validate_segment_rules,
 )
 from backend.app.models.event import Event
@@ -230,7 +232,9 @@ class SegmentRulesNotValid(Exception):
 
     Rows written before segment rules were checked on save (the legacy
     ``{"operator", "conditions"}`` shape, or an empty or typo'd group) are
-    left as they are. They are never evaluated: ``evaluate`` answers 409 and
+    left as they are, and so are rules that raise when read (an integer too
+    large for a float in a geo value, written directly to the database:
+    #1674). They are never evaluated: ``evaluate`` answers 409 and
     bulk-evaluate reports ``false`` for them. Deliberately not a
     ``ValueError``, which the routes answer as 404.
     """
@@ -244,12 +248,18 @@ def stored_segment_rules(segment: Segment) -> TargetingRules:
     """The rules membership evaluates for ``segment``.
 
     Raises:
-        SegmentRulesNotValid: when the stored rules fail validation.
+        SegmentRulesNotValid: when the stored rules fail validation, or raise
+            when read (#1674: only a direct database write leaves such rules).
     """
+    segment_id = segment.id
+    stored = segment.rules
     try:
-        return validate_segment_rules(segment.rules)
+        return validate_segment_rules(stored)
     except TargetingRulesError:
-        raise SegmentRulesNotValid(segment.id) from None
+        raise SegmentRulesNotValid(segment_id) from None
+    except Exception as exc:
+        report_unreadable_rules(f"segment:{segment_id}", exc, SEGMENT_RULES_UNREADABLE)
+        raise SegmentRulesNotValid(segment_id) from None
 
 
 def _is_member(rules: TargetingRules, context: Dict[str, Any]) -> bool:

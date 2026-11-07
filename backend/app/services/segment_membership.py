@@ -42,12 +42,14 @@ from backend.app.core.balanced_blocks import balance_segments, balances_within_s
 from backend.app.core.pattern_match import PatternUnevaluable, report_unevaluable
 from backend.app.core.rules_engine import SEGMENT_MEMBERSHIP_KEY, TimeWindowUnreadable
 from backend.app.core.targeting_adapter import (
+    SEGMENT_RULES_UNREADABLE,
     TargetingRulesError,
     _is_dashboard_rules_shape,
     _segment_conditions,
     is_segment_id,
     match_targeting_rule,
     normalise_targeting_rules,
+    report_unreadable_rules,
     segment_ids_in,
     validate_segment_rules,
 )
@@ -143,9 +145,9 @@ def resolve_segment_memberships(
     * an id list: a member when the request's ``user_id`` (never one in the
       context) is stored in it.
 
-    Unknown, inactive or archived segments, rules that are not valid, a
-    pattern that cannot be evaluated and a ``time_window`` that cannot be read
-    are ``unavailable``. A database error
+    Unknown, inactive or archived segments, rules that are not valid or that
+    raise when read (#1674), a pattern that cannot be evaluated and a
+    ``time_window`` that cannot be read are ``unavailable``. A database error
     is rolled back and makes every requested id unavailable.
     """
     requested = frozenset(segment_ids)
@@ -173,9 +175,19 @@ def resolve_segment_memberships(
                 if row.kind == SegmentKind.ID_LIST.value:
                     id_lists.append(row.id)
                     continue
+                stored = row.rules
                 try:
-                    rules = validate_segment_rules(row.rules)
+                    rules = validate_segment_rules(stored)
                 except TargetingRulesError:
+                    unavailable.add(sid)
+                    continue
+                except Exception as exc:
+                    # Stored rules that raise (#1674): this segment only. The
+                    # pure check alone is guarded, so a database error still
+                    # reaches the SQLAlchemyError branch below.
+                    report_unreadable_rules(
+                        f"segment:{sid}", exc, SEGMENT_RULES_UNREADABLE
+                    )
                     unavailable.add(sid)
                     continue
                 if seg_ctx is None:
@@ -278,9 +290,17 @@ def segment_reference_problem(db: Session, raw_rules: Any) -> Optional[str]:
         if row is None or row.status != SegmentStatus.ACTIVE:
             return f"{path}.value: {SEGMENT_NOT_ACTIVE}"
         if row.kind != SegmentKind.ID_LIST.value:
+            stored = row.rules
             try:
-                validate_segment_rules(row.rules)
+                validate_segment_rules(stored)
             except TargetingRulesError:
+                return f"{path}.value: {SEGMENT_RULES_NOT_VALID}"
+            except Exception as exc:
+                # Stored rules that raise (#1674): refused like rules that
+                # are not valid, never a 500.
+                report_unreadable_rules(
+                    f"segment:{row.id}", exc, SEGMENT_RULES_UNREADABLE
+                )
                 return f"{path}.value: {SEGMENT_RULES_NOT_VALID}"
     return None
 

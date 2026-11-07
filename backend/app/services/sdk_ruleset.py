@@ -65,6 +65,12 @@ The contract (``schema`` 1, beta)::
   remote entry from their cache of the server's answer for the same user and
   flag, kept up to 300 s by default, and ``getAllFlags`` always asks the
   server.
+* An active flag whose stored rules cannot be read (they raise when read,
+  which only a direct database write leaves: #1674) is the same remote entry,
+  and the server answers it ``enabled: false``, ``reason: "error"``. The rest
+  of the document is built as before. An SDK answers a bulk call locally only
+  when every active flag is local, so while such a flag is active every local
+  ``getAllFlags`` / ``get_all_flags`` call goes to the server.
 * Nothing else about a flag is included: not its name, description, owner,
   tags, variants or workspace.
 * ``version`` is the sha256 of the canonical JSON of everything else
@@ -91,7 +97,11 @@ from backend.app.core.flag_values import (
     is_portable_number,
     servable_values,
 )
-from backend.app.core.targeting_adapter import normalise_targeting_rules
+from backend.app.core.targeting_adapter import (
+    FLAG_RULES_UNREADABLE,
+    normalise_targeting_rules,
+    report_unreadable_rules,
+)
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.schemas.targeting_rule import (
     Condition,
@@ -258,9 +268,16 @@ def build_flag_entry(flag: FeatureFlag) -> Dict[str, Any]:
 
     rules: List[Dict[str, Any]] = []
     default_rule: Optional[Dict[str, Any]] = None
-    native = (
-        normalise_targeting_rules(stored, owner=f"flag:{flag.key}") if stored else None
-    )
+    native = None
+    if stored:
+        owner = f"flag:{flag.key}"
+        # Around the pure read only (#1674): rules that raise make this one
+        # flag remote, which the server answers false (reason "error").
+        try:
+            native = normalise_targeting_rules(stored, owner=owner)
+        except Exception as exc:
+            report_unreadable_rules(owner, exc, FLAG_RULES_UNREADABLE)
+            return remote
     if native is not None:
         for rule in sorted(native.rules, key=lambda r: r.priority):
             match = _group_entry(rule.rule)
