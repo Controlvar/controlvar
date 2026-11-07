@@ -113,6 +113,14 @@ by = [
 ]
 
 [[unit]]
+text = "Like those two, it cannot be changed once the experiment leaves draft."
+by = [
+    "test:backend/tests/integration/api/test_sequential_results_routes.py::test_once_running_nobody_changes_the_sequential_settings",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_superuser_cannot_change_an_analysis_setting_once_out_of_draft",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_developer_meets_the_refusal_of_every_change_outside_draft_first",
+]
+
+[[unit]]
 text = "The Review step's Analysis row then ends Sequential testing (beta) on, as does the single-page form's Analysis settings summary."
 by = [
     "test:frontend/src/tests/pages/experiment-new-sequential.test.tsx::Review: the Analysis row ends \"Sequential testing (beta) on\"",
