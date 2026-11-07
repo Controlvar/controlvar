@@ -151,8 +151,10 @@ with open(os.environ["GH_LOG"], "a", encoding="utf-8") as log:
 
 
 def jq(expression, document):
+    # gh's --jq prints a null as an empty line, where `jq -r` prints "null".
+    gh_like = "(" + expression + ') | if . == null then "" else . end'
     out = subprocess.run(
-        [os.environ["GH_JQ"], "-r", expression],
+        [os.environ["GH_JQ"], "-r", gh_like],
         input=json.dumps(document), check=True, capture_output=True, text=True,
     )
     sys.stdout.write(out.stdout)
@@ -594,6 +596,14 @@ def test_without_the_second_listing_an_unknown_row_waits_an_hour(tmp_path):
         ([_labelled("someone"), _unlabelled("someone"), _labelled(BOT)], True),
         ([_labelled(BOT), _labelled("someone", label="dependencies")], True),
         ([], False),
+        (
+            [
+                _labelled(BOT),
+                _unlabelled(BOT),
+                {"event": "labeled", "label": {"name": LABEL}, "actor": None},
+            ],
+            False,
+        ),
     ],
     ids=[
         "added by the workflow",
@@ -602,6 +612,7 @@ def test_without_the_second_listing_an_unknown_row_waits_an_hour(tmp_path):
         "put back by the workflow",
         "another label added by someone else",
         "no labelling event at all",
+        "put back by an event with no actor",
     ],
 )
 def test_the_sweep_merges_only_what_this_workflow_labelled(tmp_path, history, merges):

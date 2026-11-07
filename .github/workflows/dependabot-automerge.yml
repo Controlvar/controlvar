@@ -262,8 +262,10 @@ jobs:
             esac
             # The label is this workflow's record only if this workflow put it
             # there: the last time it went on, github-actions[bot] added it.
+            # An event with no actor reads as "nobody", never as the workflow:
+            # gh prints a null as an empty line, which $(...) would drop.
             labeller=$(gh api --paginate "repos/$GH_REPO/issues/$number/events" \
-              --jq ".[] | select(.event == \"labeled\" and .label.name == \"$LABEL\") | .actor.login")
+              --jq ".[] | select(.event == \"labeled\" and .label.name == \"$LABEL\") | .actor.login // \"nobody\"")
             labeller=${labeller##*$'\n'}
             if [ "$labeller" != "github-actions[bot]" ]; then
               echo "::error::#$number: $LABEL was last added by '${labeller:-nobody}', not by this workflow; not merged"
