@@ -29,6 +29,24 @@ corsOrigins: []
 # -- Email of the first administrator, created once when the users table is empty.
 firstSuperuser: ""
 
+auth:
+  # -- AUTH_PROVIDER: `local` (the default), accounts with a password kept by
+  # the API, or `cognito`, an Amazon Cognito user pool, which needs
+  # cognito.userPoolId, cognito.clientId and awsRegion.
+  provider: local
+  cognito:
+    # -- COGNITO_USER_POOL_ID, in the form Cognito gives it: `<region>_<id>`.
+    userPoolId: ""
+    # -- COGNITO_CLIENT_ID: the pool's app client, one without a secret.
+    clientId: ""
+    # -- COGNITO_DOMAIN: the Hosted UI's domain name,
+    # `<prefix>.auth.<region>.amazoncognito.com`, no scheme. Optional.
+    domain: ""
+
+# -- AWS_REGION: the region of the API's AWS clients, the user pool's with
+# auth.provider cognito, where it is required. Empty, the chart sets nothing.
+awsRegion: ""
+
 image:
   # -- Leave empty for `<profile>-<appVersion>`. An explicit tag must be a
   # versioned one (`core-0.5.0`) whose prefix equals `profile`.
