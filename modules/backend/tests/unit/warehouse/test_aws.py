@@ -25,7 +25,11 @@ from modules.backend.app.warehouse.aws import (
 )
 from modules.backend.app.warehouse.aws import call as aws_call
 from modules.backend.app.warehouse.deadlines import Deadline
-from modules.backend.app.warehouse.errors import WarehouseError, WarehouseErrorCode
+from modules.backend.app.warehouse.errors import (
+    MESSAGES,
+    WarehouseError,
+    WarehouseErrorCode,
+)
 from modules.backend.tests.unit.warehouse.conftest import FakeClock
 
 REFUSED = WarehouseErrorCode.DESTINATION_NOT_ALLOWED
@@ -79,7 +83,7 @@ def test_boto_before_send_refuses_private(address, probe, aws_env, monkeypatch):
     before botocore sends it, and (for loopback) the probe accepts nothing."""
     port = probe.port if address == "127.0.0.1" else 443
     looked_up = _resolve_everything_to(monkeypatch, address, port)
-    client = make_client(_session(), "sts", "us-east-1")
+    client = make_client(_session(), "sts", "us-east-1", warehouse="athena")
     try:
         client.get_caller_identity()
         outcome = "sent"
@@ -100,7 +104,7 @@ def test_boto_before_send_lets_a_public_address_through(aws_env, monkeypatch):
     """Positive control: a public answer passes the hook (the send is then stopped
     by a later handler, so nothing leaves the machine)."""
     _resolve_everything_to(monkeypatch, "93.184.216.34", 443)
-    client = make_client(_session(), "sts", "us-east-1")
+    client = make_client(_session(), "sts", "us-east-1", warehouse="athena")
     seen = []
 
     class Stop(Exception):
@@ -118,7 +122,9 @@ def test_boto_before_send_lets_a_public_address_through(aws_env, monkeypatch):
 
 def test_boto_hook_refuses_another_host():
     guard = BeforeSendGuard(
-        "sts.us-east-1.amazonaws.com", resolver=lambda h, p: [("93.184.216.34", p)]
+        "sts.us-east-1.amazonaws.com",
+        warehouse="athena",
+        resolver=lambda h, p: [("93.184.216.34", p)],
     )
 
     class Request:
@@ -134,6 +140,7 @@ def test_boto_hook_refuses_after_the_deadline():
     deadline = Deadline(10, clock=clock)
     guard = BeforeSendGuard(
         "athena.us-east-1.amazonaws.com",
+        warehouse="athena",
         deadline=deadline,
         resolver=lambda h, p: [("93.184.216.34", p)],
     )
@@ -159,14 +166,14 @@ def test_boto_hook_refuses_after_the_deadline():
 )
 def test_only_fixed_services_and_regions(service, region, aws_env):
     with pytest.raises(WarehouseError) as err:
-        make_client(_session(), service, region)
+        make_client(_session(), service, region, warehouse="athena")
     assert err.value.code is REFUSED
 
 
 def test_a_configured_endpoint_override_is_refused(aws_env, monkeypatch):
     monkeypatch.setenv("AWS_ENDPOINT_URL", "https://127.0.0.1:4566")
     with pytest.raises(WarehouseError) as err:
-        make_client(_session(), "sts", "us-east-1")
+        make_client(_session(), "sts", "us-east-1", warehouse="athena")
     assert err.value.code is REFUSED
 
 
@@ -257,6 +264,7 @@ def test_boto_call_with_two_seconds_left_is_bounded_by_them(aws_env, monkeypatch
                 "sts",
                 "us-east-1",
                 "get_caller_identity",
+                warehouse="athena",
                 deadline=deadline,
                 resolver=lambda host, port: [("93.184.216.34", port)],
             )
@@ -296,7 +304,12 @@ def test_boto_client_errors_are_coded(aws_env, monkeypatch):
     monkeypatch.setattr(make_client_module, "make_client", stubbed)
     with pytest.raises(WarehouseError) as err:
         aws_call(
-            session, "sts", "us-east-1", "get_caller_identity", deadline=Deadline(30)
+            session,
+            "sts",
+            "us-east-1",
+            "get_caller_identity",
+            warehouse="athena",
+            deadline=Deadline(30),
         )
     assert err.value.code is WarehouseErrorCode.PERMISSION_DENIED
     assert err.value.vendor_code == "AccessDenied"
@@ -304,6 +317,200 @@ def test_boto_client_errors_are_coded(aws_env, monkeypatch):
     assert err.value.__context__ is None
 
 
+# -- every failure names the warehouse it was called for (#826) ---------------
+
+
+class _Request:
+    def __init__(self, url: str) -> None:
+        self.url = url
+
+
+class _Raising:
+    """A client whose every operation raises ``exc`` (no request is built)."""
+
+    def __init__(self, exc: Exception) -> None:
+        self._exc = exc
+
+    def __getattr__(self, name):
+        def operation(**params):
+            raise self._exc
+
+        return operation
+
+
+def _raising_client(monkeypatch, exc: Exception) -> None:
+    monkeypatch.setattr(
+        make_client_module, "make_client", lambda *args, **kwargs: _Raising(exc)
+    )
+
+
+def _host_refused(warehouse, monkeypatch):
+    aws_endpoint_host("s3", "us-east-1", warehouse=warehouse)
+
+
+def _guard_other_host(warehouse, monkeypatch):
+    BeforeSendGuard(
+        "sts.us-east-1.amazonaws.com",
+        warehouse=warehouse,
+        resolver=lambda h, p: [("93.184.216.34", p)],
+    )(_Request("https://sts.us-east-1.amazonaws.com.example.com/"))
+
+
+def _guard_no_answer(warehouse, monkeypatch):
+    def fails(host, port):
+        raise OSError("no answer")
+
+    BeforeSendGuard("sts.us-east-1.amazonaws.com", warehouse=warehouse, resolver=fails)(
+        _Request("https://sts.us-east-1.amazonaws.com/")
+    )
+
+
+def _guard_private_answer(warehouse, monkeypatch):
+    BeforeSendGuard(
+        "sts.us-east-1.amazonaws.com",
+        warehouse=warehouse,
+        resolver=lambda h, p: [("10.1.2.3", p)],
+    )(_Request("https://sts.us-east-1.amazonaws.com/"))
+
+
+def _endpoint_override(warehouse, monkeypatch):
+    monkeypatch.setenv("AWS_ENDPOINT_URL", "https://127.0.0.1:4566")
+    make_client(_session(), "sts", "us-east-1", warehouse=warehouse)
+
+
+def _client_error(warehouse, monkeypatch):
+    from botocore.stub import Stubber
+
+    _resolve_everything_to(monkeypatch, "93.184.216.34", 443)
+    real_make = make_client_module.make_client
+
+    def stubbed(*args, **kwargs):
+        client = real_make(*args, **kwargs)
+        stubber = Stubber(client)
+        stubber.add_client_error(
+            "get_caller_identity",
+            service_error_code="InternalFailure",
+            http_status_code=500,
+        )
+        stubber.activate()
+        return client
+
+    monkeypatch.setattr(make_client_module, "make_client", stubbed)
+    aws_call(
+        _session(),
+        "sts",
+        "us-east-1",
+        "get_caller_identity",
+        warehouse=warehouse,
+        deadline=Deadline(30),
+    )
+
+
+def _timed_out(warehouse, monkeypatch):
+    from botocore.exceptions import ConnectTimeoutError
+
+    _raising_client(monkeypatch, ConnectTimeoutError(endpoint_url="https://x/"))
+    aws_call(
+        _session(),
+        "sts",
+        "us-east-1",
+        "get_caller_identity",
+        warehouse=warehouse,
+        deadline=Deadline(30),
+    )
+
+
+def _not_connected(warehouse, monkeypatch):
+    from botocore.exceptions import EndpointConnectionError
+
+    _raising_client(monkeypatch, EndpointConnectionError(endpoint_url="https://x/"))
+    aws_call(
+        _session(),
+        "sts",
+        "us-east-1",
+        "get_caller_identity",
+        warehouse=warehouse,
+        deadline=Deadline(30),
+    )
+
+
+#: aws.py's eight failures (on main each said warehouse="athena"), with the
+#: code each one is.
+FAILURE_SITES = {
+    "endpoint-host": (_host_refused, REFUSED),
+    "guard-other-host": (_guard_other_host, REFUSED),
+    "guard-no-answer": (_guard_no_answer, WarehouseErrorCode.UNREACHABLE),
+    "guard-private-answer": (_guard_private_answer, REFUSED),
+    "client-endpoint": (_endpoint_override, REFUSED),
+    "call-client-error": (
+        _client_error,
+        WarehouseErrorCode.UNRECOGNISED_WAREHOUSE_ERROR,
+    ),
+    "call-time-limit": (_timed_out, WarehouseErrorCode.TIME_LIMIT),
+    "call-unreachable": (_not_connected, WarehouseErrorCode.UNREACHABLE),
+}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("site", sorted(FAILURE_SITES))
+def test_every_failure_names_the_warehouse_it_was_called_for(
+    site, aws_env, monkeypatch
+):
+    """#826: aws.py said ``warehouse="athena"`` at all eight of its failures, so
+    a Redshift connection's failure would have named Amazon Athena."""
+    failing, code = FAILURE_SITES[site]
+    with pytest.raises(WarehouseError) as err:
+        failing("redshift", monkeypatch)
+    assert err.value.code is code
+    assert err.value.warehouse == "redshift"
+    assert err.value.log_fields()["warehouse"] == "redshift"
+    assert "Athena" not in err.value.message
+    if "{warehouse}" in MESSAGES[code]:
+        assert "Amazon Redshift" in err.value.message
+
+
+def test_every_function_requires_the_warehouse(aws_env):
+    """No default: a caller that forgets says nothing, rather than "Athena"."""
+    attempts = [
+        lambda: aws_endpoint_host("sts", "us-east-1"),
+        lambda: BeforeSendGuard("sts.us-east-1.amazonaws.com"),
+        lambda: make_client(_session(), "sts", "us-east-1"),
+        lambda: aws_call(
+            _session(), "sts", "us-east-1", "get_caller_identity", deadline=Deadline(30)
+        ),
+    ]
+    for attempt in attempts:
+        with pytest.raises(TypeError, match="warehouse"):
+            attempt()
+
+
+@pytest.mark.parametrize("warehouse", ["redshfit", "bigquery", "", None])
+def test_every_function_refuses_a_warehouse_that_is_not_an_aws_one(warehouse, aws_env):
+    attempts = [
+        lambda: aws_endpoint_host("sts", "us-east-1", warehouse=warehouse),
+        lambda: BeforeSendGuard("sts.us-east-1.amazonaws.com", warehouse=warehouse),
+        lambda: make_client(_session(), "sts", "us-east-1", warehouse=warehouse),
+        lambda: aws_call(
+            _session(),
+            "sts",
+            "us-east-1",
+            "get_caller_identity",
+            warehouse=warehouse,
+            deadline=Deadline(30),
+        ),
+    ]
+    for attempt in attempts:
+        with pytest.raises(ValueError):
+            attempt()
+
+
+def test_the_aws_warehouses_are_athena_and_redshift():
+    assert make_client_module.AWS_WAREHOUSES == frozenset({"athena", "redshift"})
+
+
 def test_region_list_is_the_committed_data():
     assert len(AWS_REGIONS) == 34
-    assert aws_endpoint_host("athena", "eu-west-1") == "athena.eu-west-1.amazonaws.com"
+    assert (
+        aws_endpoint_host("athena", "eu-west-1", warehouse="athena")
+        == "athena.eu-west-1.amazonaws.com"
+    )

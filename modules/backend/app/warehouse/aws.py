@@ -16,6 +16,9 @@
   unless the request's host is that endpoint, every address it resolves to is
   public (the same rule as :func:`.egress.refused_address`), and the
   operation's deadline has time left.
+
+Every function names the warehouse it is called for (``warehouse=``, one of
+:data:`AWS_WAREHOUSES`, required): a failure says which warehouse failed.
 """
 
 from __future__ import annotations
@@ -50,6 +53,17 @@ from modules.backend.app.warehouse.errors import (
 
 #: The services a connector may call.
 AWS_SERVICES = frozenset({"sts", "athena", "glue"})
+
+#: The warehouses that reach AWS through this module.
+AWS_WAREHOUSES = frozenset({"athena", "redshift"})
+
+
+def _aws_warehouse(warehouse: str) -> str:
+    """``warehouse`` itself, or ``ValueError`` if it is not an AWS warehouse."""
+    if warehouse not in AWS_WAREHOUSES:
+        raise ValueError(f"not an AWS warehouse: {warehouse!r}")
+    return warehouse
+
 
 #: botocore's regions for athena, sts and glue in the ``aws`` partition
 #: (identical lists; 34 regions as of botocore 1.43).
@@ -93,11 +107,12 @@ AWS_REGIONS = frozenset(
 )
 
 
-def aws_endpoint_host(service: str, region: str) -> str:
+def aws_endpoint_host(service: str, region: str, *, warehouse: str) -> str:
     """``<service>.<region>.amazonaws.com``, for an allowed service and region."""
+    _aws_warehouse(warehouse)
     if service not in AWS_SERVICES or region not in AWS_REGIONS:
         raise WarehouseError(
-            WarehouseErrorCode.DESTINATION_NOT_ALLOWED, warehouse="athena"
+            WarehouseErrorCode.DESTINATION_NOT_ALLOWED, warehouse=warehouse
         )
     return f"{service}.{region}.amazonaws.com"
 
@@ -138,10 +153,12 @@ class BeforeSendGuard:
         self,
         expected_host: str,
         *,
+        warehouse: str,
         deadline: Optional[Deadline] = None,
         resolver: Optional[Resolver] = None,
     ) -> None:
         self.expected_host = expected_host
+        self.warehouse = _aws_warehouse(warehouse)
         self._deadline = deadline
         self._resolve: Resolver = resolver or system_resolver
 
@@ -155,7 +172,7 @@ class BeforeSendGuard:
             or (parts.hostname or "").lower() != self.expected_host
         ):
             raise WarehouseError(
-                WarehouseErrorCode.DESTINATION_NOT_ALLOWED, warehouse="athena"
+                WarehouseErrorCode.DESTINATION_NOT_ALLOWED, warehouse=self.warehouse
             )
         resolve_failed = False
         addresses = []
@@ -164,10 +181,12 @@ class BeforeSendGuard:
         except (OSError, UnicodeError):
             resolve_failed = True
         if resolve_failed or not addresses:
-            raise WarehouseError(WarehouseErrorCode.UNREACHABLE, warehouse="athena")
+            raise WarehouseError(
+                WarehouseErrorCode.UNREACHABLE, warehouse=self.warehouse
+            )
         if any(refused_address(address) for address, _ in addresses):
             raise WarehouseError(
-                WarehouseErrorCode.DESTINATION_NOT_ALLOWED, warehouse="athena"
+                WarehouseErrorCode.DESTINATION_NOT_ALLOWED, warehouse=self.warehouse
             )
         # Returning None lets botocore send the request itself.
         return
@@ -178,6 +197,7 @@ def make_client(
     service: str,
     region: str,
     *,
+    warehouse: str,
     deadline: Optional[Deadline] = None,
     resolver: Optional[Resolver] = None,
 ) -> Any:
@@ -187,14 +207,17 @@ def make_client(
     credentials it holds.  Under ``deadline`` the client's limits are what the
     deadline has left *now*; for a later call, build a new client (:func:`call`).
     """
-    host = aws_endpoint_host(service, region)
+    host = aws_endpoint_host(service, region, warehouse=warehouse)
     client = session.client(service, region_name=region, config=boto_config(deadline))
     if client.meta.endpoint_url.rstrip("/") != f"https://{host}":
         raise WarehouseError(
-            WarehouseErrorCode.DESTINATION_NOT_ALLOWED, warehouse="athena"
+            WarehouseErrorCode.DESTINATION_NOT_ALLOWED, warehouse=warehouse
         )
     client.meta.events.register(
-        "before-send", BeforeSendGuard(host, deadline=deadline, resolver=resolver)
+        "before-send",
+        BeforeSendGuard(
+            host, warehouse=warehouse, deadline=deadline, resolver=resolver
+        ),
     )
     return client
 
@@ -205,6 +228,7 @@ def call(
     region: str,
     operation: str,
     *,
+    warehouse: str,
     deadline: Deadline,
     resolver: Optional[Resolver] = None,
     **params: Any,
@@ -216,7 +240,15 @@ def call(
     errors map by their structured ``Code`` and HTTP status; a connect or read
     limit is ``time_limit``; any other botocore failure is ``unreachable``.
     """
-    client = make_client(session, service, region, deadline=deadline, resolver=resolver)
+    _aws_warehouse(warehouse)
+    client = make_client(
+        session,
+        service,
+        region,
+        warehouse=warehouse,
+        deadline=deadline,
+        resolver=resolver,
+    )
     failure: Optional[WarehouseError] = None
     try:
         return getattr(client, operation)(**params)
@@ -231,14 +263,14 @@ def call(
         )
         failure = error_for_status(
             meta.get("HTTPStatusCode") or 0,
-            warehouse="athena",
+            warehouse=warehouse,
             vendor_code=error.get("Code"),
             request_id=meta.get("RequestId"),
         )
     except (ConnectTimeoutError, ReadTimeoutError):
-        failure = WarehouseError(WarehouseErrorCode.TIME_LIMIT, warehouse="athena")
+        failure = WarehouseError(WarehouseErrorCode.TIME_LIMIT, warehouse=warehouse)
     except BotoCoreError:
-        failure = WarehouseError(WarehouseErrorCode.UNREACHABLE, warehouse="athena")
+        failure = WarehouseError(WarehouseErrorCode.UNREACHABLE, warehouse=warehouse)
     # Outside the handlers: nothing from botocore is chained onto this.
     assert failure is not None
     raise sanitised(failure)
@@ -247,6 +279,7 @@ def call(
 __all__ = [
     "AWS_REGIONS",
     "AWS_SERVICES",
+    "AWS_WAREHOUSES",
     "BeforeSendGuard",
     "aws_endpoint_host",
     "boto_config",

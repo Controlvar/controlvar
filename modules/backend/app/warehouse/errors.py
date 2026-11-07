@@ -114,6 +114,7 @@ _WAREHOUSE_NAMES = {
     "bigquery": "BigQuery",
     "snowflake": "Snowflake",
     "athena": "Amazon Athena",
+    "redshift": "Amazon Redshift",
 }
 
 
