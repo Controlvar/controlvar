@@ -40,8 +40,15 @@ thread, as ``POST /tracking/assign/batch`` does, on a private event loop
 ``/tracking/assign``'s function. Every connection it checks out, up to ten
 assignments' worth, is checked out there and never on the API's event loop
 (``test_api_key_routes_under_overload.py``), and the request holds none while
-it waits for the worker thread (#823; ``test_route_worker_steps.py``). The
-answer awaits nothing bound to the API's event loop.
+it waits for the worker thread (#823; ``test_route_worker_steps.py``).
+The answer awaits only ``/tracking/assign``'s function. That function awaits
+one thing itself, for an experiment that balances its split within groups
+(#448): it ends the transaction of the request's session, which gives its
+connection back, then awaits a worker trip of its own, taken on the private
+loop (``test_visual_tracking_api.py``). Nothing bound to the API's event loop
+may be awaited here (the process-wide Redis pool in ``backend.app.api.deps``
+above all: made on the private loop, later requests would reuse it on a loop
+that has closed).
 
 The page's host and path are used only to match page rules: neither is stored.
 
