@@ -17,12 +17,16 @@ SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlv
 
 ## Installation
 
-**Not yet published.** `@controlvar/react-sdk` is not on npm, so build it from source in a
-clone of this repository and install the packed tarball (the blocks below).
+The `@controlvar/react-sdk` package is on [npm](https://www.npmjs.com/package/@controlvar/react-sdk).
+0.1.0 is a beta release.
+
+```bash
+npm install @controlvar/react-sdk@0.1.0
+```
 
 Its peer dependencies are `react` >= 17 and `react-dom` >= 17.
 
-To install from source, clone the repository and build a package; `npm pack` writes
+To work on the SDK itself, build it from a clone of this repository instead. `npm pack` writes
 `controlvar-react-sdk-0.1.0.tgz`:
 
 ```bash

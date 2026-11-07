@@ -811,7 +811,30 @@ MECHANISMS: Dict[str, Mechanism] = {
             (
                 "docs/getting-started/faq.md",
                 r"\((?:npm|pip) install (?:@controlvar/[A-Za-z0-9_-]{1,60}"
-                r"|controlvar), [0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}, beta\)",
+                r"|controlvar(?:-openfeature)?), [0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4},"
+                r" beta\)",
+            ),
+        ),
+    ),
+    # A sentence that puts SDKs on npm, PyPI, Maven Central or NuGet names
+    # only SDKs on that registry (ON_REGISTRY in test_sdk_doc_versions.py).
+    # The sweep reads every page; these are the units that cite it.
+    "registry-availability": Mechanism(
+        "backend/tests/unit/docs/test_registry_availability.py"
+        "::test_every_registry_sentence_names_only_sdks_on_that_registry",
+        holds=(
+            (
+                "docs/getting-started/faq.md",
+                r"\b(?:is|are) on (?:npm|PyPI|Maven Central|NuGet)\b|^So are the ",
+            ),
+            (
+                "docs/getting-started/limitations.md",
+                r"^Every SDK on a package registry \| ",
+            ),
+            ("demo/DEMO_GUIDE.md", r"\bon (?:npm and PyPI|PyPI and npm)\b"),
+            (
+                "docs/sdk-guide.md",
+                r"^The Java SDK and its Spring Boot starter are on Maven Central:$",
             ),
         ),
     ),

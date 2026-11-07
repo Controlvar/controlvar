@@ -642,9 +642,15 @@ INSTALL_SAMPLES = (
 )
 
 
+#: The SDKs the samples above take as published: the first two, so that each
+#: pattern's sample names a package it refuses whatever ON_REGISTRY holds.
+SAMPLES_PUBLISHED = ("python", "js")
+
+
 @pytest.mark.parametrize("sample, expected", INSTALL_SAMPLES)
 def test_each_install_pattern_reads_what_it_exists_for(sample, expected):
-    assert registry_installs(sample) == expected
+    published = {i for sdk in SAMPLES_PUBLISHED for i in package_identities(sdk)}
+    assert registry_installs(sample, published) == expected
 
 
 # The registry names a package has, read before it joins ON_REGISTRY. The Java
@@ -699,8 +705,8 @@ def test_an_sdk_with_no_registry_name_cannot_be_on_the_registry(sdk, monkeypatch
         published_identities()
 
 
-#: Install lines for the Java and .NET packages: refused today, allowed once
-#: java and dotnet are in ON_REGISTRY.
+#: Install lines for the Java and .NET packages: refused while java and dotnet
+#: are not in ON_REGISTRY, allowed once they are.
 JAVA_AND_DOTNET_INSTALLS = (
     "<groupId>com.controlvar</groupId>\n    <artifactId>controlvar-sdk</artifactId>",
     "<groupId>com.controlvar</groupId>\n"
@@ -717,8 +723,10 @@ JAVA_AND_DOTNET_INSTALLS = (
 def test_a_java_or_dotnet_install_is_allowed_once_its_sdk_is_on_the_registry(
     line, monkeypatch
 ):
+    without = tuple(sdk for sdk in ON_REGISTRY if sdk not in ("java", "dotnet"))
+    monkeypatch.setitem(globals(), "ON_REGISTRY", without)
     assert registry_installs(line) != []
-    monkeypatch.setitem(globals(), "ON_REGISTRY", (*ON_REGISTRY, "java", "dotnet"))
+    monkeypatch.setitem(globals(), "ON_REGISTRY", (*without, "java", "dotnet"))
     assert registry_installs(line) == []
 
 
@@ -737,7 +745,7 @@ def test_a_java_or_dotnet_install_is_allowed_once_its_sdk_is_on_the_registry(
             "dotnet add package Controlvar.SDK.Extras",
             [("nuget", "Controlvar.SDK.Extras")],
         ),
-        ("npm install @controlvar/react-sdk", [("npm", "@controlvar/react-sdk")]),
+        ("npm install @controlvar/edge-sdk", [("npm", "@controlvar/edge-sdk")]),
     ],
 )
 def test_java_and_dotnet_on_the_registry_allow_only_their_own_names(
