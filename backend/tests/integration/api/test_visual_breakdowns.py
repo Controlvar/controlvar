@@ -8,7 +8,10 @@ breakdown to the website details, on both breakdown routes
 that fails it:
 
 * V105 this file imports #1776's ``MAX_LISTED_SEGMENTS`` and asserts 20: before
-       #1776 is on the branch it fails to import, so PR 2 cannot merge first.
+       #1776 is on the branch every test here fails, naming #1776, so PR 2
+       cannot merge first. The import's failure is caught and each test fails
+       on it, never the collection: a collection error would stop every other
+       test of the session, and a skip would turn this red into green.
 * V104 a ``web_*`` breakdown reads in a fixed number of statements: 21 and
        10,000 distinct ``web_referrer`` values take the same number, and list
        exactly 20 values plus ``other`` and ``unknown``. Plant: ``web_*``
@@ -36,17 +39,30 @@ from backend.app.models.assignment import Assignment
 from backend.app.models.event import Event
 from backend.app.models.global_holdout import GlobalHoldout
 from backend.app.models.user import UserRole
-from backend.app.services.segment_breakdown import (  # V105
-    MAX_LISTED_SEGMENTS,
-    OTHER,
-    UNKNOWN,
-)
 from backend.tests.integration.api.route_helpers import (
     api_client,
     api_key,
     auth,
     make_user,
 )
+
+try:  # V105
+    from backend.app.services.segment_breakdown import (
+        MAX_LISTED_SEGMENTS,
+        OTHER,
+        UNKNOWN,
+    )
+except ImportError as missing:
+    _WITHOUT_1776: str | None = (
+        "#1776's breakdown change is not on this branch "
+        f"({type(missing).__name__}: {missing}); these tests hold the visual "
+        "editor's website details to its rules, so #1545's delivery routes "
+        "merge after it"
+    )
+    # Nothing a test could pass on: each fails first, in _needs_1776.
+    MAX_LISTED_SEGMENTS = OTHER = UNKNOWN = None  # type: ignore[assignment]
+else:
+    _WITHOUT_1776 = None
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db]
 
@@ -58,6 +74,14 @@ SCHEMA = "test_experimentation"
 METRIC_EVENT = "click_buy"
 #: Naive UTC, as ``events.updated_at`` stores it.
 BASE = datetime(2026, 11, 1, 12, 0, 0)
+
+
+@pytest.fixture(autouse=True)
+def _needs_1776():
+    """V105: every test here fails, before it touches the database, until
+    #1776 is on the branch. Never a skip."""
+    if _WITHOUT_1776 is not None:
+        pytest.fail(_WITHOUT_1776, pytrace=False)
 
 
 @pytest.fixture(autouse=True)
