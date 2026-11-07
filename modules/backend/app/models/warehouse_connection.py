@@ -46,6 +46,11 @@ from modules.backend.app.core import credential_crypto
 #: on a deployment is decided elsewhere; this is only what the table accepts.
 WAREHOUSE_TYPES: tuple[str, ...] = ("bigquery", "snowflake", "athena")
 
+#: The types that authenticate by assuming a role in the customer's AWS
+#: account, with an external id, and store no secret.  The constraints below
+#: still name 'athena' in their text: changing them is a migration.
+ROLE_TYPES: tuple[str, ...] = ("athena",)
+
 #: The types whose queries are capped in bytes; Snowflake is capped in time.
 BYTE_CAPPED_TYPES: tuple[str, ...] = ("bigquery", "athena")
 
@@ -153,8 +158,8 @@ class WarehouseConnection(Base, BaseModel):
         Raises ``CredentialKeysUnavailable`` when no keys are configured; nothing
         is stored then.
         """
-        if self.warehouse_type == "athena":
-            raise ValueError("an Athena connection stores no credential")
+        if self.warehouse_type in ROLE_TYPES:
+            raise ValueError("a role-based connection stores no credential")
         token = credential_crypto.encrypt(plaintext, keys=keys)
         if pending:
             self.pending_credentials_ciphertext = token
