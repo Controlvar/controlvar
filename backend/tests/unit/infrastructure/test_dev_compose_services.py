@@ -191,16 +191,22 @@ def test_no_feature_key_has_a_default_anywhere_in_the_file():
     assert seen == set(FEATURE_KEYS)
 
 
-def test_the_api_is_not_given_cognito_or_aws_keys(services):
-    """AUTH_PROVIDER=cognito needs them added to the api service by hand."""
+def test_the_api_is_given_the_cognito_settings_and_no_aws_credentials(services):
+    """#708: the user pool, its app client and its Hosted UI domain reach the
+    api from `.env`, empty by default; AWS credentials are still added to the
+    api service by hand."""
     environment = services["api"]["environment"]
-    passed = [
-        name
-        for name in environment
-        if name.startswith("COGNITO_")
-        or name in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN")
-    ]
-    assert passed == []
+    cognito = {
+        name: v for name, v in environment.items() if name.startswith("COGNITO_")
+    }
+    assert cognito == {
+        "COGNITO_USER_POOL_ID": "${COGNITO_USER_POOL_ID:-}",
+        "COGNITO_CLIENT_ID": "${COGNITO_CLIENT_ID:-}",
+        "COGNITO_DOMAIN": "${COGNITO_DOMAIN:-}",
+    }
+    assert environment["AWS_REGION"] == "${AWS_REGION:-us-west-2}"
+    credentials = {"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"}
+    assert not credentials & set(environment), sorted(credentials & set(environment))
 
 
 @pytest.mark.parametrize("app", ["shoplab", "streampulse"])
