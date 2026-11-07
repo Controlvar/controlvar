@@ -25,5 +25,8 @@ export const SECURITY_URL = `${REPO_URL}/blob/main/SECURITY.md`;
 
 export const COMPOSE_GUIDE_URL = `${REPO_URL}/blob/main/deploy/compose/README.md`;
 
+/** The Controlvar Books, free books (CC BY 4.0) that teach software engineering through this codebase. */
+export const BOOKS_URL = 'https://github.com/amarkanday/controlvar-books';
+
 /** The footer's credit. */
 export const BUILDER_URL = 'https://www.linkedin.com/in/ashish-markanday/';

@@ -4,7 +4,7 @@ import { Wordmark } from '@/components/Wordmark';
 import { LOGIN_PATH } from '@/services/api';
 import { docsUrl } from '@/services/docs';
 import { CONTACT_EMAIL, isMarketingSite } from '@/utils/site-mode';
-import { BUILDER_URL, RELEASES_URL, REPO_URL, SECURITY_URL } from '@/content/site-links';
+import { BOOKS_URL, BUILDER_URL, RELEASES_URL, REPO_URL, SECURITY_URL } from '@/content/site-links';
 import { FOCUS, WIDTH } from '@/components/homepage/styles';
 
 const LINK = `text-slate-700 hover:text-slate-900 ${FOCUS}`;
@@ -80,6 +80,11 @@ export function HomeFooter() {
             <li>
               <a href={RELEASES_URL} className={LINK}>
                 Releases
+              </a>
+            </li>
+            <li>
+              <a href={BOOKS_URL} className={LINK}>
+                Books
               </a>
             </li>
             <li>

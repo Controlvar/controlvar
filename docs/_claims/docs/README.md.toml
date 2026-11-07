@@ -39,6 +39,10 @@ text = "Limitations | What Controlvar does not do, and what happens instead"
 by = ["exempt:navigation"]
 
 [[unit]]
+text = "Learning from the code | The Controlvar Books: how the platform is built and why, lesson by lesson"
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "Getting Started"
 by = ["exempt:label"]
 

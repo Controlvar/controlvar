@@ -10,6 +10,7 @@ and the dashboard are Apache-2.0; the client SDKs are MIT.
 | [Quick Start](getting-started/quick-start.md) | Start the local stack with Docker, then create, start and read an experiment, an API key and a feature flag |
 | [Demo guide](https://github.com/Controlvar/controlvar/blob/main/demo/DEMO_GUIDE.md) | ShopLab and StreamPulse, two sample apps that `./demo/setup-local.sh` starts with the platform |
 | [Limitations](getting-started/limitations.md) | What Controlvar does not do, and what happens instead |
+| [Learning from the code](https://github.com/amarkanday/controlvar-books) | The Controlvar Books: how the platform is built and why, lesson by lesson |
 
 ---
 
