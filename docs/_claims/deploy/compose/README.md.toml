@@ -461,6 +461,14 @@ text = "3. Get the files"
 by = ["exempt:label"]
 
 [[unit]]
+text = "First note the release you run now, which a rollback in step 7 goes back to: the version that step 6's curl prints, with a v in front, such as v0.43.2."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_the_release_to_roll_back_to_is_noted_before_the_files_change"]
+
+[[unit]]
+text = "Then get the new release's files:"
+by = ["exempt:instruction"]
+
+[[unit]]
 text = "This checks out the repository at the release, compose.yml included."
 by = ["exempt:third-party"]
 
@@ -516,16 +524,20 @@ by = [
 ]
 
 [[unit]]
-text = "If up fails while docker compose -p experimently-selfhost logs api still shows the migration running, restart nothing: wait until step 6's ps shows the API healthy, as Database migrations says of a long migration."
+text = "If up fails while docker compose -p experimently-selfhost logs api still shows the migration running, restart nothing: wait until step 6's ps shows the API healthy, as Database migrations says of a long migration, then run the up command again."
 by = ["exempt:advice"]
+
+[[unit]]
+text = "It leaves the API as it is and starts the dashboard, which waits for a healthy API."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_after_a_slow_migration_a_second_up_starts_the_dashboard"]
 
 [[unit]]
 text = "6. Verify"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Check that each service is healthy and that the API's version is RELEASE without its v."
-by = ["exempt:instruction"]
+text = "Check that each of the four services is listed and healthy, and that the API's version is RELEASE without its v."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_the_verify_step_counts_every_service"]
 
 [[unit]]
 text = "Then sign in at PUBLIC_BASE_URL and open an experiment you made before the upgrade."
@@ -540,7 +552,15 @@ text = "7. Roll back"
 by = ["exempt:label"]
 
 [[unit]]
-text = "When step 5 or step 6 fails, first find out whether the new release migrated the database:"
+text = "When step 5 or step 6 fails, go back to the release you noted in step 3."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Roll back in place first, and restore the backup only if the old release refuses the database."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Before you roll back, read the API's log, which tells you whether to expect that refusal:"
 by = ["exempt:instruction"]
 
 [[unit]]
@@ -548,40 +568,47 @@ text = "The API logs running database bootstrap each time it starts."
 by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_the_log_check_reads_the_line_every_start_writes"]
 
 [[unit]]
-text = "Each migration it then applies logs a Running upgrade line."
+text = "Alembic logs a Running upgrade line as it starts each migration."
 by = ["exempt:third-party"]
 
 [[unit]]
-text = "No Running upgrade line: the database is still at the old release's revision."
-by = ["exempt:third-party"]
-
-[[unit]]
-text = "Roll back in place: run steps 3 and 5 again with RELEASE set to the tag you upgraded from, and the old release starts on the database as before."
+text = "No Running upgrade line: the new release migrated nothing, and the old release starts on the database as before."
 by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts"]
 
 [[unit]]
-text = "A Running upgrade line: the old release refuses this database."
+text = "A Running upgrade line: expect the old release to refuse the database."
 by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated"]
 
 [[unit]]
-text = "Restore the backup into a fresh stack of the old release, as Restore shows, or take another way back from An Older Image Against a Newer Database."
-by = ["exempt:instruction"]
-
-[[unit]]
-text = "Anything written after the backup is lost."
-by = ["exempt:advice"]
+text = "It does not when the migration failed: a migration that fails is undone with every other migration of that start."
+by = ["mechanism:email-lower-one-transaction"]
 
 [[unit]]
 text = "No running database bootstrap line: the command read no log of this stack."
 by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_the_log_check_reads_the_line_every_start_writes"]
 
 [[unit]]
-text = "Check the directory and the project name before you decide."
+text = "Check the directory and the project name before you go on."
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "If you roll back in place on a database the new release did migrate, nothing is lost: the old release refuses it and changes nothing in it."
-by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated"]
+text = "Then, whatever the log showed, roll back in place: run the commands of steps 3 and 5 again with RELEASE set to the release you noted."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If docker compose -p experimently-selfhost logs api then shows this database was migrated by a newer Controlvar release, the old release refuses the database and has changed nothing in it."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_the_rollback_restores_only_on_the_refusal_bootstrap_prints",
+]
+
+[[unit]]
+text = "Restore the backup into a fresh stack of the old release, as Restore shows, or take another way back from An Older Image Against a Newer Database."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A restore loses anything written since the backup."
+by = ["exempt:advice"]
 
 [[unit]]
 text = "What CI runs"

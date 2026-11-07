@@ -14,6 +14,7 @@ The version on the image lines is pinned by ``scripts/check_version_sources.py``
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import os
 import re
@@ -762,6 +763,42 @@ def _upgrade_section() -> str:
     return text[start:end]
 
 
+def _upgrade_step(number: int) -> str:
+    """Step *number* of the Upgrade section, from its `### ` heading to the next."""
+    section = _upgrade_section()
+    found = re.search(rf"^### {number}\. .*?(?=^### |\Z)", section, re.M | re.S)
+    assert found, f"the Upgrade section has no step {number}"
+    return found.group(0)
+
+
+def _prose(text: str) -> str:
+    """*text* with its fences removed and its lines joined by single spaces."""
+    unfenced = re.sub(r"^```.*?^```$", "", text, flags=re.M | re.S)
+    return " ".join(unfenced.split())
+
+
+def _refusal_bootstrap_prints() -> str:
+    """The literal text of the refusal an older image gives a database a newer
+    release migrated: the last `return` of `unresolvable_revisions_message`,
+    read from bootstrap.py's syntax tree, each `{...}` field as `{}`."""
+    source = (REPO_ROOT / "backend" / "app" / "db" / "bootstrap.py").read_text(
+        encoding="utf-8"
+    )
+    (function,) = [
+        node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "unresolvable_revisions_message"
+    ]
+    message = function.body[-1]
+    assert isinstance(message, ast.Return), ast.dump(message)
+    assert isinstance(message.value, ast.JoinedStr), ast.dump(message.value)
+    return "".join(
+        part.value if isinstance(part, ast.Constant) else "{}"
+        for part in message.value.values
+    )
+
+
 def _upgrade_fences() -> list:
     """Every fence in the section, as (info string, body): all of them, so a
     block in another language, or with a tag, is seen rather than skipped."""
@@ -805,7 +842,8 @@ class TestUpgrade:
 
     A self-hoster runs its blocks in order on the stack that holds their data:
     check the backup, get the release's files, check the settings, pull,
-    start, verify, and read the API's log before rolling back. So each block's
+    start, verify, and roll back in place, restoring the backup only when the
+    old release refuses the database. So each block's
     text is pinned, and the properties that fail silently are held by name:
     every compose command names the stack's project, none deletes a volume or
     runs the generator, the wait is as long as the API's health check allows,
@@ -915,6 +953,60 @@ class TestUpgrade:
         (logs,) = [block for block in self._blocks() if " logs api " in block]
         assert " logs api 2>&1 " in logs, logs
         assert "-e 'running database bootstrap'" in logs, logs
+
+    def test_the_rollback_restores_only_on_the_refusal_bootstrap_prints(self):
+        """Step 7 rolls back in place whatever the log showed, and restores
+        only when the old release then refuses the database, by the sentence
+        bootstrap.py prints. A `Running upgrade` line does not decide it: a
+        migration that fails is undone, and the old release starts as before,
+        so a restore there would lose what was written since the backup."""
+        refusal = "this database was migrated by a newer Controlvar release"
+        assert refusal in _refusal_bootstrap_prints()
+        rollback = _prose(_upgrade_step(7))
+        named = f"shows `{refusal}`"
+        assert named in rollback, f"step 7 does not name the refusal {refusal!r}"
+        in_place = "whatever the log showed, roll back in place"
+        assert in_place in rollback, rollback
+        restore = "[Restore](#restore)"
+        assert rollback.count(restore) == 1, f"step 7 links Restore twice: {rollback}"
+        order = [rollback.index(text) for text in (in_place, named, restore)]
+        assert order == sorted(order), (
+            "step 7 must roll back in place, then name the refusal, then restore"
+        )
+
+    def test_after_a_slow_migration_a_second_up_starts_the_dashboard(self, services):
+        """The dashboard waits for a healthy API, so an `up` that gives up
+        while the migration still runs never starts it, and nothing starts it
+        later: step 5 says to run `up` again once the API is healthy."""
+        assert services["web"]["depends_on"]["api"]["condition"] == "service_healthy"
+        upgrade = _prose(_upgrade_step(5))
+        assert "then run the `up` command again" in upgrade, upgrade
+        assert "starts the dashboard" in upgrade, upgrade
+
+    def test_the_verify_step_counts_every_service(self, services):
+        """`ps` lists only the containers that run, so a dashboard that never
+        started is missing rather than unhealthy: step 6 says how many to look
+        for, and each service has a health check, so each can show `healthy`."""
+        words = ("no", "one", "two", "three", "four", "five", "six")
+        assert len(services) < len(words), sorted(services)
+        verify = _prose(_upgrade_step(6))
+        counted = f"each of the {words[len(services)]} services is listed and `healthy`"
+        assert counted in verify, f"step 6 does not say {counted!r}: {verify}"
+        for name, service in services.items():
+            assert "healthcheck" in service, f"{name} has no health check"
+
+    def test_the_release_to_roll_back_to_is_noted_before_the_files_change(self):
+        """After the checkout, the clone names the new release, and an install
+        cloned from main may never have been on a tag: step 3 has the reader
+        note the running release before its block, and step 7 goes back to it."""
+        get_files = _upgrade_step(3)
+        assert "```bash" in get_files, get_files
+        before = _prose(get_files[: get_files.index("```bash")])
+        assert "note the release you run now" in before, before
+        assert "the `version` that step 6's `curl` prints, with a `v`" in before, before
+        rollback = _prose(_upgrade_step(7))
+        assert "go back to the release you noted in step 3" in rollback, rollback
+        assert "`RELEASE` set to the release you noted" in rollback, rollback
 
     def test_the_env_file_is_not_in_git(self):
         """So checking out a release leaves the install's .env as it was."""

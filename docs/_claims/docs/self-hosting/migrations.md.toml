@@ -1370,7 +1370,7 @@ text = "restore the backup taken before that upgrade, and run the older image ag
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "On Docker Compose, the Compose README's Upgrade procedure takes that backup before it upgrades, and its last step tells whether the database was migrated."
+text = "On Docker Compose, the Compose README's Upgrade procedure takes that backup before it upgrades, and its last step restores it only when the older image refuses the database."
 by = ["exempt:navigation"]
 
 [[unit]]

@@ -30,13 +30,13 @@ reason = "K1: the compose project name sets the volume names; a new name starts 
 [[keep]]
 path = "deploy/compose/README.md"
 literal = "experimently-selfhost"
-count = 14
+count = 15
 reason = "K1: the compose project name sets the volume names; a new name starts an empty database"
 
 [[keep]]
 path = "docs/_claims/deploy/compose/README.md.toml"
 literal = "experimently-selfhost"
-count = 4
+count = 5
 reason = "K1: the compose project name sets the volume names; a new name starts an empty database"
 
 [[keep]]
