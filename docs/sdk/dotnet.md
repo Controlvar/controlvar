@@ -26,9 +26,15 @@ Source: `sdk/dotnet`.
 
 ## Installation
 
-**Not yet published.** `Controlvar.SDK` has no release on NuGet, so build it from source: reference
-the project in `sdk/dotnet/src/Controlvar` of a clone of this repository from your own project
-(this is what the SDK's `examples/` and `tests/` do):
+The `Controlvar.SDK` package is on [NuGet](https://www.nuget.org/packages/Controlvar.SDK). 0.1.0 is
+a beta release.
+
+```bash
+dotnet add package Controlvar.SDK --version 0.1.0
+```
+
+To work on the SDK itself, reference the project in `sdk/dotnet/src/Controlvar` of a clone of this
+repository from your own project instead (this is what the SDK's `examples/` and `tests/` do):
 
 ```xml
 <ProjectReference Include="../../sdk/dotnet/src/Controlvar/Controlvar.csproj" />

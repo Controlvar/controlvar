@@ -298,9 +298,20 @@ def test_the_sdk_package_names():
     assert (
         json.loads(_text("sdk/react/package.json"))["name"] == "@controlvar/react-sdk"
     )
+    assert (
+        json.loads(_text("sdk/react-native/package.json"))["name"]
+        == "@controlvar/react-native-sdk"
+    )
+    openfeature = json.loads(_text("sdk/openfeature/package.json"))
+    assert openfeature["name"] == "@controlvar/openfeature-provider"
+    assert "@openfeature/server-sdk" in openfeature["peerDependencies"]
     python = tomllib.loads(_text("sdk/python/pyproject.toml"))["project"]
     assert python["name"] == "controlvar"
     assert (ROOT / "sdk/python/controlvar/__init__.py").is_file()
+    provider = tomllib.loads(_text("sdk/openfeature-python/pyproject.toml"))
+    assert provider["project"]["name"] == "controlvar-openfeature"
+    csproj = _text("sdk/dotnet/src/Controlvar/Controlvar.csproj")
+    assert "<PackageId>Controlvar.SDK</PackageId>" in csproj
     pom = _text("sdk/java/core/pom.xml")
     assert "<groupId>com.controlvar</groupId>" in pom
     assert re.search(r"</parent>\s*<artifactId>controlvar-sdk</artifactId>", pom)

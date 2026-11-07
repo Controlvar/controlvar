@@ -334,8 +334,8 @@ function CheckoutButton() {
 
 ### Installation
 
-Install it from a clone of this repository: `./mvnw install` in `sdk/java` builds both modules and
-installs them into your local `~/.m2`, where the dependency below resolves.
+The Java SDK and its Spring Boot starter are on
+[Maven Central](https://central.sonatype.com/artifact/com.controlvar/controlvar-sdk):
 
 ```xml
 <dependency>
@@ -345,6 +345,10 @@ installs them into your local `~/.m2`, where the dependency below resolves.
 </dependency>
 <!-- Spring Boot: use controlvar-spring-boot-starter instead -->
 ```
+
+To work on the SDK itself, install it from a clone of this repository instead: `./mvnw install` in
+`sdk/java` builds both modules and installs them into your local `~/.m2`, where the dependency
+above resolves.
 
 ### Quick Start
 

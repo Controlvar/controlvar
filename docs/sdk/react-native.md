@@ -22,22 +22,11 @@ SDK Live Contract job in [pr-qa-gate.yml](https://github.com/Controlvar/controlv
 
 ## Installation
 
-**Not yet published.** `@controlvar/react-native-sdk` is not on npm, so build it from
-source: pack it from a clone of this repository (it ships TypeScript source, so there is no build
-step) and install the tarball. The SDK Unit Tests workflow packs it and type-checks it in a
-TypeScript React Native app on every pull request that changes it; no CI job runs it on a device.
-`npm pack` writes `controlvar-react-native-sdk-0.1.0.tgz`:
+The `@controlvar/react-native-sdk` package is on
+[npm](https://www.npmjs.com/package/@controlvar/react-native-sdk). 0.1.0 is a beta release.
 
 ```bash
-git clone https://github.com/Controlvar/controlvar.git
-cd controlvar/sdk/react-native
-npm pack
-```
-
-Then, in your app, install the tarball:
-
-```bash
-npm install /path/to/controlvar/sdk/react-native/controlvar-react-native-sdk-0.1.0.tgz
+npm install @controlvar/react-native-sdk@0.1.0
 ```
 
 Its peer dependencies are `react` (>= 16.8), `react-native` (>= 0.65) and
@@ -58,6 +47,24 @@ AsyncStorage on that line (such as `@latest`): npm saves it, which moves an app 
 - `md5` is a dependency of the package, imported when the package loads (its entry point
   re-exports `hashUser`), so it must resolve even if you never call `hashUser`. Its type
   declarations, `@types/md5`, are a dependency too, so an app's `tsc` finds them.
+
+To work on the SDK itself, pack it from a clone of this repository instead (it ships TypeScript
+source, so there is no build step). `npm pack` writes `controlvar-react-native-sdk-0.1.0.tgz`:
+
+```bash
+git clone https://github.com/Controlvar/controlvar.git
+cd controlvar/sdk/react-native
+npm pack
+```
+
+Then, in your app, install the tarball:
+
+```bash
+npm install /path/to/controlvar/sdk/react-native/controlvar-react-native-sdk-0.1.0.tgz
+```
+
+The SDK Unit Tests workflow packs it and type-checks it in a TypeScript React Native app on every
+pull request that changes it; no CI job runs it on a device.
 
 ---
 

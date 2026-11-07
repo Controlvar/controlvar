@@ -133,6 +133,7 @@ nav:
   - Elixir SDK: sdk/elixir.md
   - SDK contract & status: sdk-guide.md
   - Local evaluation (server-side, beta): sdk/local-evaluation.md
+  - Exposures to analytics tools: sdk/exposure-hook.md
 - API Reference:
   - Authentication: api/auth.md
   - Experiments: api/endpoints.md
