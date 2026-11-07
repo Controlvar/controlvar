@@ -1148,6 +1148,26 @@ class FlagEvaluationRequest(BaseModel):
     )
 
 
+def evaluation_answer(
+    flag_key: str, db_flag: Any, evaluation: Dict[str, Any]
+) -> Dict[str, Any]:
+    """The body the evaluate endpoints send for *evaluation* of *db_flag*.
+
+    Pure: no database, no metric. ``backend/scripts/generate_value_vectors.py``
+    builds the served half of ``tests/sdk-contract/value-vectors.json`` with it,
+    so the bodies the SDKs' typed getters are tested against are this
+    function's (#1810).
+    """
+    answer: Dict[str, Any] = {"key": flag_key, "enabled": evaluation["enabled"]}
+    servable, value = served_value(db_flag, evaluation["enabled"])
+    if servable:
+        answer["value"] = value
+    answer["value_type"] = flag_value_type(db_flag)
+    answer["config"] = None
+    answer["reason"] = evaluation["reason"]
+    return answer
+
+
 def _evaluate_flag_by_key(
     db: Session, flag_key: str, user_id: str, context: Optional[Dict[str, Any]]
 ) -> Dict[str, Any]:
@@ -1176,15 +1196,7 @@ def _evaluate_flag_by_key(
     feature_flag_service = FeatureFlagService(db)
     evaluation = feature_flag_service.evaluate_flag_detailed(db_flag, user_id, context)
     record_flag_evaluation(flag_key, "enabled" if evaluation["enabled"] else "disabled")
-
-    answer: Dict[str, Any] = {"key": flag_key, "enabled": evaluation["enabled"]}
-    servable, value = served_value(db_flag, evaluation["enabled"])
-    if servable:
-        answer["value"] = value
-    answer["value_type"] = flag_value_type(db_flag)
-    answer["config"] = None
-    answer["reason"] = evaluation["reason"]
-    return answer
+    return evaluation_answer(flag_key, db_flag, evaluation)
 
 
 @router.get(
