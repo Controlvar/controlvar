@@ -199,6 +199,7 @@ nav:
   - Data Export: api/data-export.md
   - Dimensional Analysis: api/dimensional-analysis.md
 - Contributing:
+  - The Controlvar Books: https://github.com/amarkanday/controlvar-books
   - Development Guidelines: development/guidelines.md
   - Testing Guide: development/testing-guide.md
   - Runnable Doc Examples: development/doc-examples.md

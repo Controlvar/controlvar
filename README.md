@@ -186,6 +186,7 @@ instance's feature flags, experiments and results with your API key.
 - [Documentation home](docs/README.md)
 - [Architecture overview](docs/getting-started/architecture.md)
 - [Targeting rules](docs/feature-flags/create.md): operators, attribute aliases and examples
+- [The Controlvar Books](https://github.com/amarkanday/controlvar-books): eight free books (CC BY 4.0) that teach software engineering through this codebase, and a guide to read before your first change
 
 ---
 

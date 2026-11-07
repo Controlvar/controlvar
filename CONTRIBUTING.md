@@ -5,6 +5,10 @@ need: how to sign your work, how to run the stack, and where code lives.
 
 ## Before you start
 
+- **New to the codebase?** [The Controlvar Books](https://github.com/amarkanday/controlvar-books)
+  walk through it, and their
+  [Before You Change Controlvar](https://github.com/amarkanday/controlvar-books/tree/main/before-you-change-controlvar)
+  guide is the place to start.
 - **Bugs and features**: open an issue first for anything non-trivial, so we can
   agree on the shape before you spend an evening on it. Small fixes — a typo, a
   wrong URL, a one-line bug — can go straight to a pull request.

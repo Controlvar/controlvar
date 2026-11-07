@@ -244,6 +244,7 @@ export const TYPED: readonly Row[] = [
   { tag: 'p', text: 'Project', source: `${UX} Footer` },
   { tag: 'li', text: 'Source', source: `${MAIN}:200` },
   { tag: 'li', text: 'Releases', source: `${UX} Footer` },
+  { tag: 'li', text: 'Books', source: `${UX} Footer` },
   { tag: 'li', text: 'Security', source: `${UX} Footer` },
   { tag: 'li', text: 'Privacy', source: `${MAIN}:224` },
   { tag: 'p', text: 'Contact', source: `${UX} Footer` },
