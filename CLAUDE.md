@@ -1233,8 +1233,12 @@ construction. Closing them by hand resets the counter and changes nothing.
 - **majors everywhere else** -- left alone; they are migrations, and
   `dependabot.yml` ignores them anyway
 
-`gh pr merge --auto` bypasses nothing. Branch protection still requires all 20
-checks; a failing bump stays open and red, which is the signal you want.
+The merge bypasses nothing: no `--auto`, no `--admin`, and branch protection
+still requires all 20 checks; a failing bump stays open and red, which is the
+signal you want. It also keeps to founder decision D297's window: the pull
+request's run only labels an eligible bump `dependabot-automerge`, and an
+hourly sweep merges the labelled, mergeable ones, never Monday to Friday
+09:00-17:00 America/Los_Angeles.
 
 So before reaching for the limits again: **if the queue is growing, ask what
 is supposed to drain it.** A rate limit on an undrained queue only changes how
