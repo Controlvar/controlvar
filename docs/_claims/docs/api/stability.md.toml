@@ -1084,3 +1084,17 @@ by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
+
+[[unit]]
+text = "POST /api/v1/auth/logout | #708 | With the Cognito provider the operation answers 204 where it answered 404: it checks the bearer token as every request does, then asks Cognito to sign the user out everywhere (GlobalSignOut), after which the token is refused. With no token, or one Cognito does not accept, it answers 401. If Cognito fails to sign the user out, it still answers 204 and logs the failure. With the local provider nothing changes: 204 with or without a token, and nothing is revoked. The OpenAPI document changes: the operation's description, a 401 response, and security, the bearer token it now reads."
+by = [
+    "test:backend/tests/integration/api/test_cognito_hosted_ui_relay.py::test_signing_out_revokes_the_token_at_cognito",
+    "test:backend/tests/integration/api/test_cognito_hosted_ui_relay.py::test_signing_out_under_cognito_needs_a_token",
+    "test:backend/tests/integration/api/test_cognito_hosted_ui_relay.py::test_a_token_from_another_user_pool_is_refused_and_not_signed_out",
+    "test:backend/tests/integration/api/test_cognito_hosted_ui_relay.py::test_a_token_cognito_does_not_accept_is_refused",
+    "test:backend/tests/integration/api/test_cognito_hosted_ui_relay.py::test_a_failed_global_sign_out_still_answers_204_and_is_logged",
+    "test:backend/tests/integration/api/test_cognito_hosted_ui_relay.py::test_under_local_signing_out_asks_cognito_nothing",
+    "test:backend/tests/unit/api/test_local_auth.py::TestMeAndLogoutEndpoints::test_logout_204",
+    "test:backend/tests/unit/api/test_route_surface_rules.py::test_signing_out_revokes_nothing",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
