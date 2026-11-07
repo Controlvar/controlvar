@@ -1,0 +1,334 @@
+# What verifies each unit of docs/feature-flags/stale-flags.md (#1808).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`. The definition is held by the pure
+# tests in backend/tests/unit/services/test_stale_flags.py; what the database
+# decides (what counts as an evaluation, the guard, the filter) by
+# backend/tests/integration/api/test_stale_flags_api.py.
+document = "docs/feature-flags/stale-flags.md"
+
+[[unit]]
+text = "Stale Flags"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A flag that has served everyone the same answer for weeks, or that nothing has asked about, is usually ready to come out of your code."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "The flag list marks such a flag as stale and says why."
+by = [
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v14_stale_true_false_and_omitted_are_exact_sets",
+]
+
+[[unit]]
+text = "It is a suggestion: listing changes no flag, and nothing is archived or turned off for you."
+by = [
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v19_listing_changes_no_flag_and_records_nothing",
+]
+
+[[unit]]
+text = "The definition is beta: its conditions and threshold may change; the fields will not."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "The examples run against the Quick Start stack, in one terminal, in order: later steps use the $TOKEN, $KEY and $FLAG_ID an earlier one sets."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "When a flag is stale"
+by = ["exempt:label"]
+
+[[unit]]
+text = "N is 30 days by default; STALE_FLAG_DAYS sets it, from 1 to 3650, for the whole installation; a change needs a restart."
+by = [
+    "test:backend/tests/unit/core/test_documented_defaults.py::test_a_flag_is_stale_after_30_days_by_default",
+    "test:backend/tests/unit/core/test_stale_flag_days.py::test_the_default_is_30_days",
+    "test:backend/tests/unit/core/test_stale_flag_days.py::test_the_ends_of_the_range_are_accepted",
+    "test:backend/tests/unit/core/test_stale_flag_days.py::test_the_environment_variable_sets_it",
+    "test:backend/tests/unit/core/test_stale_flag_days.py::test_a_value_outside_the_range_is_refused_naming_it",
+    "test:backend/tests/unit/core/test_stale_flag_days.py::test_a_value_outside_the_range_from_the_environment_is_refused",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_the_list_uses_stale_flag_days",
+]
+
+[[unit]]
+text = "A flag is stale when it was created at least N days ago, is not archived, is not tagged permanent, has no active rollout schedule, and at least one of these reasons applies:"
+by = [
+    "test:backend/tests/unit/services/test_stale_flags.py::test_v2_a_flag_younger_than_n_days_is_never_stale",
+    "test:backend/tests/unit/services/test_stale_flags.py::test_v5_an_archived_flag_is_never_stale",
+    "test:backend/tests/unit/services/test_stale_flags.py::test_v6_a_flag_tagged_permanent_is_never_stale",
+    "test:backend/tests/unit/services/test_stale_flags.py::test_a_flag_with_an_active_rollout_schedule_is_never_stale",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v14_stale_true_false_and_omitted_are_exact_sets",
+]
+
+[[unit]]
+text = "Reason | When"
+by = ["exempt:label"]
+
+[[unit]]
+text = "not_evaluated | No evaluation of the flag was recorded in the last N days, while evaluations of other flags were."
+by = [
+    "test:backend/tests/unit/services/test_stale_flags.py::test_not_evaluated_is_reported_only_when_evaluations_were_seen",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v9_a_server_evaluation_keeps_a_flag_fresh_for_exactly_n_days",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v13_with_no_evaluation_in_n_days_not_evaluated_is_not_reported",
+]
+
+[[unit]]
+text = "on_for_everyone | The flag is on at 100% with no targeting rules, and unchanged for N days."
+by = [
+    "test:backend/tests/unit/services/test_stale_flags.py::test_v3_only_0_and_100_percent_serve_everyone_one_answer",
+    "test:backend/tests/unit/services/test_stale_flags.py::test_v4_rules_that_select_nobody_are_no_rules",
+    "test:backend/tests/unit/services/test_stale_flags.py::test_v4_any_rule_or_unreadable_rules_count_as_rules",
+    "test:backend/tests/unit/services/test_stale_flags.py::test_v1_a_flag_unchanged_for_exactly_n_days_is_unchanged",
+]
+
+[[unit]]
+text = "off_for_everyone | The flag is off, or on at 0% with no targeting rules, and unchanged for N days."
+by = [
+    "test:backend/tests/unit/services/test_stale_flags.py::test_v3_only_0_and_100_percent_serve_everyone_one_answer",
+    "test:backend/tests/unit/services/test_stale_flags.py::test_v4_an_inactive_flag_is_off_for_everyone_whatever_its_rules",
+    "test:backend/tests/unit/services/test_stale_flags.py::test_v4_any_rule_or_unreadable_rules_count_as_rules",
+    "test:backend/tests/unit/services/test_stale_flags.py::test_v1_a_flag_created_exactly_n_days_ago_is_old_enough",
+]
+
+[[unit]]
+text = "stale_reasons lists every reason that applies, in that order."
+by = ["test:backend/tests/unit/services/test_stale_flags.py::test_the_reasons_come_in_their_fixed_order"]
+
+[[unit]]
+text = "A flag created or last changed exactly N days ago is old enough, and an evaluation exactly N days ago still counts."
+by = [
+    "test:backend/tests/unit/services/test_stale_flags.py::test_v1_a_flag_created_exactly_n_days_ago_is_old_enough",
+    "test:backend/tests/unit/services/test_stale_flags.py::test_v1_a_flag_unchanged_for_exactly_n_days_is_unchanged",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v9_a_server_evaluation_keeps_a_flag_fresh_for_exactly_n_days",
+]
+
+[[unit]]
+text = "Targeting rules that select nobody, such as a rule group with no conditions, are no rules; rules that cannot be read count as rules."
+by = [
+    "test:backend/tests/unit/services/test_stale_flags.py::test_v4_rules_that_select_nobody_are_no_rules",
+    "test:backend/tests/unit/services/test_stale_flags.py::test_v4_any_rule_or_unreadable_rules_count_as_rules",
+]
+
+[[unit]]
+text = "A flag at any other percentage serves different users different answers, so neither of the last two reasons applies to it."
+by = ["test:backend/tests/unit/services/test_stale_flags.py::test_v3_only_0_and_100_percent_serve_everyone_one_answer"]
+
+[[unit]]
+text = "An archived flag is never stale, and neither is a flag whose rollout schedule is active, because its next stage will change it."
+by = [
+    "test:backend/tests/unit/services/test_stale_flags.py::test_v5_an_archived_flag_is_never_stale",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v25_an_active_rollout_schedule_exempts_a_flag",
+]
+
+[[unit]]
+text = "A schedule that is paused, a draft, completed or cancelled does not keep a flag off the list."
+by = ["test:backend/tests/integration/api/test_stale_flags_api.py::test_v25_an_active_rollout_schedule_exempts_a_flag"]
+
+[[unit]]
+text = "What counts as an evaluation"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Every evaluation the platform records counts:"
+by = [
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v9_a_server_evaluation_keeps_a_flag_fresh_for_exactly_n_days",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v11_a_local_report_keeps_a_flag_fresh_after_its_counters_are_pruned",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v12_fetching_every_flag_for_a_user_counts_for_every_active_flag",
+]
+
+[[unit]]
+text = "each answer the server gives to GET or POST /api/v1/feature-flags/evaluate/{flag_key}, including the MCP server's evaluate_feature_flag;"
+by = [
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v9_a_server_evaluation_keeps_a_flag_fresh_for_exactly_n_days",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v9_a_post_evaluation_counts_too",
+    "test:sdk/mcp/__tests__/tools.test.ts::evaluate_feature_flag: a POST with the user and context in the body, config dropped",
+]
+
+[[unit]]
+text = "GET /api/v1/feature-flags/user/{user_id}, which answers every active flag for one user, and so counts as an evaluation of every active flag; getAllFlags (JavaScript, React Native, the edge SDK) and get_all_flags (Python) call it;"
+by = [
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v12_fetching_every_flag_for_a_user_counts_for_every_active_flag",
+    "test:sdk/js/__tests__/client.test.ts::GETs /api/v1/feature-flags/user/{user_id} and returns {key: boolean}",
+    "test:sdk/react-native/__tests__/client.test.ts::getAllFlags sends ?context= and nothing for {} or undefined",
+    "test:sdk/edge/__tests__/adapters.test.ts::without flagKeys injects every flag from GET /api/v1/feature-flags/user/{user_id}",
+    "test:sdk/python/tests/test_client.py::TestGetAllFlags::test_url_and_mapping",
+]
+
+[[unit]]
+text = "the counts the JavaScript and Python SDKs report from local evaluation, every 60 seconds and on close(); in local evaluation, getAllFlags and get_all_flags count every flag they answer."
+by = [
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v11_a_local_report_keeps_a_flag_fresh_after_its_counters_are_pruned",
+    "test:sdk/js/__tests__/local.test.ts::counts are sent every 60 seconds, and only when there are some",
+    "test:sdk/js/__tests__/local.test.ts::close() sends one entry per flag; deferred evaluations are not counted",
+    "test:sdk/python/tests/test_local.py::test_the_thread_flushes_every_sixty_seconds",
+    "test:sdk/js/__tests__/local.test.ts::getAllFlags counts every flag it answered",
+    "test:sdk/python/tests/test_local.py::test_get_all_flags_counts_every_flag_it_answered",
+]
+
+[[unit]]
+text = "So one caller that fetches every flag keeps every active flag from being marked not_evaluated."
+by = ["test:backend/tests/integration/api/test_stale_flags_api.py::test_v12_fetching_every_flag_for_a_user_counts_for_every_active_flag"]
+
+[[unit]]
+text = "The edge SDK's Vercel middleware fetches every flag on each request unless flagKeys is set: set flagKeys to the flags your requests need."
+by = [
+    "test:sdk/edge/__tests__/adapters.test.ts::without flagKeys injects every flag from GET /api/v1/feature-flags/user/{user_id}",
+    "test:sdk/edge/__tests__/adapters.test.ts::evaluates each flagKeys entry on the server and injects X-EP-Flag-* headers",
+]
+
+[[unit]]
+text = "Not evaluated means no evaluation was recorded, not that no code uses the flag."
+by = [
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v9_a_server_evaluation_keeps_a_flag_fresh_for_exactly_n_days",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v11_a_local_report_keeps_a_flag_fresh_after_its_counters_are_pruned",
+]
+
+[[unit]]
+text = "A flag read only by a job that runs less often than every N days, a quarterly report for example, is marked not_evaluated between runs."
+by = ["exempt:example"]
+
+[[unit]]
+text = "When the installation recorded no flag evaluation at all in the last N days, not_evaluated is not reported for any flag, and the list says \"evaluations_seen\": false."
+by = ["test:backend/tests/integration/api/test_stale_flags_api.py::test_v13_with_no_evaluation_in_n_days_not_evaluated_is_not_reported"]
+
+[[unit]]
+text = "A new installation, or one whose applications do not reach it, sees this."
+by = ["test:backend/tests/integration/api/test_stale_flags_api.py::test_v13_with_no_evaluation_in_n_days_not_evaluated_is_not_reported"]
+
+[[unit]]
+text = "What unchanged means"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Unchanged means no setting of the flag changed: an edit, including a rename, or a status change, a rollout step or a safety rollback restarts the count."
+by = [
+    "test:backend/tests/unit/services/test_stale_flags.py::test_v7_an_edit_restarts_the_count",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v7_a_rename_through_the_api_restarts_the_count",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v7_every_other_change_restarts_the_count",
+]
+
+[[unit]]
+text = "The count starts from the flag's updated_at."
+by = [
+    "test:backend/tests/unit/services/test_stale_flags.py::test_v1_a_flag_unchanged_for_exactly_n_days_is_unchanged",
+    "test:backend/tests/unit/services/test_stale_flags.py::test_v7_an_edit_restarts_the_count",
+]
+
+[[unit]]
+text = "The request for this feature (#1808) noted that updated_at is not the time the flag's answer last changed, and the platform does not record that time."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "It is used anyway: every change to a flag sets it, so a flag marked unchanged has not changed at all in N days."
+by = [
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v7_a_rename_through_the_api_restarts_the_count",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v7_every_other_change_restarts_the_count",
+]
+
+[[unit]]
+text = "The cost is that a change that leaves the answer as it was, a rename for example, also restarts the count."
+by = ["test:backend/tests/integration/api/test_stale_flags_api.py::test_v7_a_rename_through_the_api_restarts_the_count"]
+
+[[unit]]
+text = "Keeping a flag"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A flag tagged permanent is never stale."
+by = [
+    "test:backend/tests/unit/services/test_stale_flags.py::test_v6_a_flag_tagged_permanent_is_never_stale",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_tagging_a_flag_permanent_through_the_api_keeps_it_off_the_list",
+]
+
+[[unit]]
+text = "The tag must be exactly permanent; case and surrounding spaces are ignored."
+by = [
+    "test:backend/tests/unit/services/test_stale_flags.py::test_v6_a_flag_tagged_permanent_is_never_stale",
+    "test:backend/tests/unit/services/test_stale_flags.py::test_v6_anything_else_is_not_the_permanent_tag_and_never_raises",
+]
+
+[[unit]]
+text = "Tags are set through the API, and a PUT replaces the whole list, so send the flag's tags with permanent added."
+by = [
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_tagging_a_flag_permanent_through_the_api_keeps_it_off_the_list",
+    "docex:docs/feature-flags/stale-flags.md#[\"checkout\",\"permanent\"]",
+]
+
+[[unit]]
+text = "The first block signs in and creates a flag tagged checkout for the example; the second adds permanent and prints the tags:"
+by = [
+    "docex:docs/feature-flags/stale-flags.md#[\"checkout\"]",
+    "docex:docs/feature-flags/stale-flags.md#[\"checkout\",\"permanent\"]",
+]
+
+[[unit]]
+text = "Listing the stale flags"
+by = ["exempt:label"]
+
+[[unit]]
+text = "GET /api/v1/feature-flags/?stale=true lists only the stale flags, and stale=false the others; status and search narrow either."
+by = [
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v14_stale_true_false_and_omitted_are_exact_sets",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v16_the_filter_combines_with_status_and_search",
+]
+
+[[unit]]
+text = "With the filter, total counts the flags that match it, and skip and limit page them in the list's order."
+by = ["test:backend/tests/integration/api/test_stale_flags_api.py::test_v15_the_filter_comes_before_the_paging"]
+
+[[unit]]
+text = "Every item, with the filter or without it, carries stale and stale_reasons, and the answer carries stale_days and evaluations_seen."
+by = [
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v14_stale_true_false_and_omitted_are_exact_sets",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "A sign-in can read it, and so can an API key that carries the mcp:read scope."
+by = [
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v18_every_role_reads_the_marker",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v18_an_mcp_read_key_reads_the_marker",
+]
+
+[[unit]]
+text = "This creates such a key and lists the stale flags with it:"
+by = [
+    "docex:docs/feature-flags/stale-flags.md#\"stale_days\":30",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v18_an_mcp_read_key_reads_the_marker",
+]
+
+[[unit]]
+text = "Listing changes no flag."
+by = ["test:backend/tests/integration/api/test_stale_flags_api.py::test_v19_listing_changes_no_flag_and_records_nothing"]
+
+[[unit]]
+text = "The MCP server's list_feature_flags takes the same filter: see The MCP Server."
+by = [
+    "test:sdk/mcp/__tests__/tools.test.ts::list_feature_flags: stale is sent as true or false, exactly, and only when given",
+    "test:backend/tests/unit/api/test_ai_design_endpoints.py::TestMCPManifestEndpoint::test_the_stale_filter_reads_as_the_flag_list_describes_it",
+]
+
+[[unit]]
+text = "Next steps"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Remove the flag from your code, then archive it with POST /api/v1/feature-flags/bulk-toggle and \"action\": \"archive\"; the dashboard has no archive action yet."
+by = [
+    "test:backend/tests/integration/api/test_bulk_toggle_api.py",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::neither page offers archive or unarchive for an %s flag",
+]
+
+[[unit]]
+text = "An archived flag answers every evaluation as off, and POST /api/v1/feature-flags/{flag_id}/unarchive makes it inactive again."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_evaluation_serves_on_exactly_when_enabled_and_off_otherwise",
+    "test:backend/tests/integration/api/test_archived_flag_verbs.py::test_unarchive_is_the_way_back",
+]
+
+[[unit]]
+text = "See Archived flags."
+by = ["exempt:navigation"]

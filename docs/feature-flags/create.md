@@ -188,7 +188,8 @@ unsupported field is never dropped silently. `null` is refused for `key`, `name`
 answers `422`.
 
 The fields a response carries but no request writes (`id`, `owner_id`, `created_at`,
-`updated_at` and `status`) are accepted and ignored, so a GET body can be sent back
+`updated_at` and `status`, and a list item's `stale` and `stale_reasons`) are accepted
+and ignored, so a GET body can be sent back
 unchanged unless its `targeting_rules` are ones PUT now refuses (422); omitting the field
 still works (see [Add targeting rules](#add-targeting-rules)). A `status` must match:
 `"inactive"` (in any case) on a create without `is_active: true`, and the flag's current
@@ -418,6 +419,7 @@ inactive; turn it on afterwards as usual. A flag is archived with
 `POST /api/v1/feature-flags/bulk-toggle` and `"action": "archive"`. The dashboard has no
 archive or unarchive action yet. It shows an archived flag as **Archived**, with no on/off
 switch and a link to this section, and the flag list has an **Archived** filter.
+[Stale Flags](stale-flags.md) lists the flags that look ready to archive.
 
 ### Deleting a flag
 

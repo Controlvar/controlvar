@@ -254,6 +254,19 @@ by = [
 ]
 
 [[unit]]
+text = "list_feature_flags also takes stale: true lists only the flags that look ready to remove and false the others, and each flag carries stale and stale_reasons; see Stale Flags."
+by = [
+    "test:sdk/mcp/__tests__/tools.test.ts::list_feature_flags: stale is sent as true or false, exactly, and only when given",
+    "test:sdk/mcp/__tests__/tools.test.ts::list_feature_flags: each item keeps stale and stale_reasons, and the answer stale_days and evaluations_seen",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v14_stale_true_false_and_omitted_are_exact_sets",
+]
+
+[[unit]]
+text = "On 2026-11-07 the published server is 0.1.0, and the stale filter and fields come with version 0.2.0."
+by = ["exempt:intent"]
+tag = "X"
+
+[[unit]]
 text = "What leaves your instance"
 by = ["exempt:label"]
 

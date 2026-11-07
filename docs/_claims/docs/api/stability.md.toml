@@ -1084,3 +1084,17 @@ by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
+
+[[unit]]
+text = "GET /api/v1/feature-flags/, POST /api/v1/feature-flags/, PUT /api/v1/feature-flags/{flag_id} | #1808 | The list takes an optional stale parameter: true answers only the flags that look ready to remove, false the others, and a request without it answers as before; a value that is not a boolean answers 422 at [\"query\", \"stale\"]. With stale sent, total counts the flags that match it, and skip and limit page them in the list's order. The items become FeatureFlagListItem, which is FeatureFlagRead with stale and stale_reasons (not_evaluated, on_for_everyone, off_for_everyone), and the answer gains stale_days and evaluations_seen; no existing field changes. Create and update accept stale and stale_reasons and ignore them, as they do the read-only fields, so a list item can still be sent back unchanged. The definition of stale is beta: its conditions and threshold may change; the fields will not. The OpenAPI document changes in the list operation's parameters, description and response (FeatureFlagListItem, FeatureFlagListResponse), and in FeatureFlagCreate and FeatureFlagUpdate, which gain the two read-only fields. See Stale Flags."
+by = [
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v14_stale_true_false_and_omitted_are_exact_sets",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v15_the_filter_comes_before_the_paging",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v17_a_value_that_is_not_a_boolean_answers_422",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_a_list_item_sent_back_is_accepted_and_its_stale_fields_ignored",
+    "test:backend/tests/integration/api/test_flag_contract.py::test_every_response_can_be_put_back_unchanged",
+    "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestFeatureFlagReadStatus::test_a_list_item_is_the_flag_and_its_two_stale_fields",
+    "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestReadOnlySet::test_a_list_item_validates_as_both_request_models",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
