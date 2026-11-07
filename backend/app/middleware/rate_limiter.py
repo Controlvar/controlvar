@@ -304,6 +304,9 @@ RATE_LIMIT_CONFIG: Dict[str, Tuple[int, int]] = {
     "/api/v1/auth/token": (10, 60),
     "/api/v1/auth/login": (10, 60),
     "/api/v1/auth/signup": (5, 60),
+    # Where the 6-digit sign-up code is guessed; its own counter, apart from
+    # sign-up's (#700).
+    "/api/v1/auth/confirm": (5, 60),
     "/api/v1/auth/forgot-password": (5, 60),
     "/api/v1/auth/reset-password": (5, 60),
     # A signed-in user's own password change: it checks the current password,
