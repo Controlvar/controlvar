@@ -255,6 +255,10 @@ const FAILURE_COPY: Record<string, (c: CopyContext) => FailureCopy> = {
     title: 'Stored warehouse credentials can’t be used on this deployment.',
     fix: 'An operator must set WAREHOUSE_CREDENTIALS_KEYS (see Self-hosting › Warehouse).',
   }),
+  aws_identity_unavailable: (c) => ({
+    title: `This deployment has no AWS identity to assume your role from, so ${c.warehouse} can’t be used here.`,
+    fix: `An operator must run the API with an AWS identity that may assume the role ${c.connection} uses.`,
+  }),
   auth_failed: (c) => ({
     title: `${c.warehouse} did not accept the credentials of ${c.connection}.`,
     fix: `An admin can replace them in Warehouse › Connections › ${c.connection}.`,

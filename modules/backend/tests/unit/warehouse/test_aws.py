@@ -508,6 +508,148 @@ def test_the_aws_warehouses_are_athena_and_redshift():
     assert make_client_module.AWS_WAREHOUSES == frozenset({"athena", "redshift"})
 
 
+# -- call()'s codes: no identity, our own parameters, a per-call table (#826) --
+
+
+def _closed_port() -> int:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()
+    return port
+
+
+def _only_loopback_resolves(monkeypatch) -> list:
+    """Every name but 127.0.0.1 fails to resolve; returns the names looked up."""
+    looked_up = []
+    real_getaddrinfo = socket.getaddrinfo
+
+    def getaddrinfo(host, *args, **kwargs):
+        looked_up.append(host)
+        if host != "127.0.0.1":
+            raise socket.gaierror(socket.EAI_NONAME, "not in this test")
+        return real_getaddrinfo(host, *args, **kwargs)
+
+    monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+    return looked_up
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("metadata", ["disabled", "unreachable"])
+def test_a_deployment_with_no_aws_identity_has_its_own_code(
+    metadata, aws_env, monkeypatch
+):
+    """#826: with no AWS identity botocore raises NoCredentialsError, which
+    call() reported as ``unreachable``, so the operator was told the warehouse
+    was down.  Run twice: instance metadata disabled, and at a closed port."""
+    for name in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("BOTO_CONFIG", "/dev/null")
+    if metadata == "unreachable":
+        monkeypatch.delenv("AWS_EC2_METADATA_DISABLED", raising=False)
+        monkeypatch.setenv(
+            "AWS_EC2_METADATA_SERVICE_ENDPOINT", f"http://127.0.0.1:{_closed_port()}/"
+        )
+    looked_up = _only_loopback_resolves(monkeypatch)
+    with pytest.raises(WarehouseError) as err:
+        aws_call(
+            boto3.session.Session(region_name="us-east-1"),
+            "sts",
+            "us-east-1",
+            "get_caller_identity",
+            warehouse="redshift",
+            deadline=Deadline(30),
+        )
+    assert err.value.code is WarehouseErrorCode.AWS_IDENTITY_UNAVAILABLE
+    assert err.value.status_code == 503
+    assert err.value.message == (
+        "This deployment has no AWS identity to assume your role from, "
+        "so Amazon Redshift can't be used here."
+    )
+    assert "credential" not in err.value.message.lower()
+    assert "arn" not in err.value.message.lower()
+    # Positive control: the metadata service was asked when it was on (a token
+    # request, then the fallback), and nothing was looked up when it was off;
+    # no other name was ever resolved.
+    if metadata == "unreachable":
+        assert looked_up and set(looked_up) == {"127.0.0.1"}
+    else:
+        assert looked_up == []
+
+
+def test_our_own_bad_parameters_are_internal_not_unreachable(aws_env, monkeypatch):
+    """botocore refuses a parameter the model does not have before sending
+    anything: that is our mistake, not the warehouse being down."""
+    looked_up = _only_loopback_resolves(monkeypatch)
+    with pytest.raises(WarehouseError) as err:
+        aws_call(
+            _session(),
+            "sts",
+            "us-east-1",
+            "get_caller_identity",
+            warehouse="redshift",
+            deadline=Deadline(30),
+            NotAParameter="x",
+        )
+    assert err.value.code is WarehouseErrorCode.INTERNAL
+    assert err.value.warehouse == "redshift"
+    assert looked_up == []
+
+
+def _client_error_answer(monkeypatch, code: str, status: int) -> None:
+    from botocore.stub import Stubber
+
+    _resolve_everything_to(monkeypatch, "93.184.216.34", 443)
+    real_make = make_client_module.make_client
+
+    def stubbed(*args, **kwargs):
+        client = real_make(*args, **kwargs)
+        stubber = Stubber(client)
+        stubber.add_client_error(
+            "get_caller_identity",
+            service_error_code=code,
+            service_message="not for you: MESSAGE-TEXT-92",
+            http_status_code=status,
+        )
+        stubber.activate()
+        return client
+
+    monkeypatch.setattr(make_client_module, "make_client", stubbed)
+
+
+@pytest.mark.parametrize(
+    "codes,expected",
+    [
+        (
+            {"AccessDenied": WarehouseErrorCode.AUTH_FAILED},
+            WarehouseErrorCode.AUTH_FAILED,
+        ),
+        # A table without the code: the status decides, as with no table.
+        (
+            {"Throttling": WarehouseErrorCode.WAREHOUSE_BUSY},
+            WarehouseErrorCode.PERMISSION_DENIED,
+        ),
+        (None, WarehouseErrorCode.PERMISSION_DENIED),
+    ],
+    ids=["mapped", "not-in-the-table", "no-table"],
+)
+def test_a_per_call_code_table_maps_the_aws_code(codes, expected, aws_env, monkeypatch):
+    _client_error_answer(monkeypatch, "AccessDenied", 403)
+    with pytest.raises(WarehouseError) as err:
+        aws_call(
+            _session(),
+            "sts",
+            "us-east-1",
+            "get_caller_identity",
+            warehouse="redshift",
+            deadline=Deadline(30),
+            codes=codes,
+        )
+    assert err.value.code is expected
+    assert err.value.vendor_code == "AccessDenied"
+    assert "MESSAGE-TEXT-92" not in repr(err.value) + err.value.message
+
+
 def test_region_list_is_the_committed_data():
     assert len(AWS_REGIONS) == 34
     assert (

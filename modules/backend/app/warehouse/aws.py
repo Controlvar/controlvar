@@ -23,7 +23,7 @@ Every function names the warehouse it is called for (``warehouse=``, one of
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 from urllib.parse import urlsplit
 
 from botocore.config import Config
@@ -31,6 +31,8 @@ from botocore.exceptions import (
     BotoCoreError,
     ClientError,
     ConnectTimeoutError,
+    NoCredentialsError,
+    ParamValidationError,
     ReadTimeoutError,
 )
 
@@ -231,14 +233,19 @@ def call(
     warehouse: str,
     deadline: Deadline,
     resolver: Optional[Resolver] = None,
+    codes: Optional[Mapping[str, WarehouseErrorCode]] = None,
     **params: Any,
 ) -> Any:
     """One boto3 call under ``deadline``, on a client built for it, errors coded.
 
     The client is built for this call, so its connect and read limits and its
     attempts are sized from what the deadline has left at this moment.  AWS
-    errors map by their structured ``Code`` and HTTP status; a connect or read
-    limit is ``time_limit``; any other botocore failure is ``unreachable``.
+    errors map by their structured ``Code`` -- through ``codes``, this call's
+    own table, when it is given -- and then by HTTP status
+    (:func:`.errors.error_for_status`).  A connect or read limit is
+    ``time_limit``; no AWS identity to sign with is ``aws_identity_unavailable``;
+    a parameter botocore refuses before sending is ours, so ``internal``; any
+    other botocore failure is ``unreachable``.
     """
     _aws_warehouse(warehouse)
     client = make_client(
@@ -266,9 +273,16 @@ def call(
             warehouse=warehouse,
             vendor_code=error.get("Code"),
             request_id=meta.get("RequestId"),
+            codes=codes,
         )
     except (ConnectTimeoutError, ReadTimeoutError):
         failure = WarehouseError(WarehouseErrorCode.TIME_LIMIT, warehouse=warehouse)
+    except NoCredentialsError:
+        failure = WarehouseError(
+            WarehouseErrorCode.AWS_IDENTITY_UNAVAILABLE, warehouse=warehouse
+        )
+    except ParamValidationError:
+        failure = WarehouseError(WarehouseErrorCode.INTERNAL, warehouse=warehouse)
     except BotoCoreError:
         failure = WarehouseError(WarehouseErrorCode.UNREACHABLE, warehouse=warehouse)
     # Outside the handlers: nothing from botocore is chained onto this.

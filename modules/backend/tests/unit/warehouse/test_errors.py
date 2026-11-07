@@ -223,6 +223,22 @@ def test_every_code_has_copy_and_admission_statuses():
     assert WarehouseError(WarehouseErrorCode.RUN_IN_PROGRESS).status_code == 409
 
 
+def test_no_aws_identity_is_a_503_that_names_neither_credentials_nor_an_arn():
+    err = WarehouseError(
+        WarehouseErrorCode.AWS_IDENTITY_UNAVAILABLE, warehouse="redshift"
+    )
+    assert err.status_code == 503
+    assert err.to_body() == {
+        "code": "aws_identity_unavailable",
+        "message": (
+            "This deployment has no AWS identity to assume your role from, "
+            "so Amazon Redshift can't be used here."
+        ),
+    }
+    assert "credential" not in err.message.lower()
+    assert "arn" not in err.message.lower()
+
+
 def test_error_has_no_free_text_constructor():
     with pytest.raises(TypeError):
         WarehouseError(WarehouseErrorCode.INTERNAL, "free text")  # type: ignore[misc]

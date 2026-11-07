@@ -321,6 +321,7 @@ a route that answers with the code directly.
 | Code | Status | What it means | What to check |
 |---|---|---|---|
 | `credentials_unavailable` | 503 | `WAREHOUSE_CREDENTIALS_KEYS` is not set, so no stored credential can be used. | An operator sets it: see [For operators](#for-operators). |
+| `aws_identity_unavailable` | 503 | This deployment has no AWS identity to assume a connection's AWS role from. Not raised for Snowflake or BigQuery, which use no AWS role. | An operator runs the API with an AWS identity that may call `sts:AssumeRole` on the connection's role. |
 | `auth_failed` | 502 | The warehouse did not accept the connection's credentials. | Snowflake: the public key registered on the user is the one Controlvar shows, and the account identifier is right. BigQuery: the service account and its JSON key still exist. Then test the connection. |
 | `key_revoked` | 502 | BigQuery reports that the key's service account client was disabled or deleted. | Enable the service account or create a new JSON key, and paste it into the connection. Snowflake does not report this. |
 | `permission_denied` | 502 | The role may not run this query. | Snowflake: `USAGE` on the warehouse, database and schema, and `SELECT` on the table. BigQuery: BigQuery Job User on the billing project, and BigQuery Data Viewer on each dataset. |

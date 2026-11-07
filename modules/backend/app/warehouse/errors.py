@@ -32,6 +32,7 @@ class WarehouseErrorCode(str, enum.Enum):
     """The fixed set.  A code is stable once shipped; the copy may change."""
 
     CREDENTIALS_UNAVAILABLE = "credentials_unavailable"
+    AWS_IDENTITY_UNAVAILABLE = "aws_identity_unavailable"
     AUTH_FAILED = "auth_failed"
     KEY_REVOKED = "key_revoked"
     PERMISSION_DENIED = "permission_denied"
@@ -63,6 +64,10 @@ _C = WarehouseErrorCode
 #: substitutions, and both are sanitised before they get here.
 MESSAGES: Mapping[WarehouseErrorCode, str] = {
     _C.CREDENTIALS_UNAVAILABLE: "Stored warehouse credentials can't be used on this deployment.",
+    _C.AWS_IDENTITY_UNAVAILABLE: (
+        "This deployment has no AWS identity to assume your role from, "
+        "so {warehouse} can't be used here."
+    ),
     _C.AUTH_FAILED: "{warehouse} did not accept the connection's credentials.",
     _C.KEY_REVOKED: "{warehouse} reports that the connection's key has been revoked or disabled.",
     _C.PERMISSION_DENIED: "The warehouse role does not have permission for this query.",
@@ -99,6 +104,7 @@ HTTP_STATUS: Mapping[WarehouseErrorCode, int] = {
     _C.WAREHOUSE_BUSY: 429,
     _C.RUN_IN_PROGRESS: 409,
     _C.CREDENTIALS_UNAVAILABLE: 503,
+    _C.AWS_IDENTITY_UNAVAILABLE: 503,
     _C.TIME_LIMIT: 504,
     _C.INTERNAL: 500,
 }
