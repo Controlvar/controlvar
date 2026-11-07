@@ -73,10 +73,6 @@ text = "The export has no adjusted p-value column; /results reports it as adjust
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Empty in this release: experiments_with_winners in the overview is 0 (#244)."
-by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_overview_fields"]
-
-[[unit]]
 text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
 by = ["exempt:baseline"]
 
@@ -482,12 +478,29 @@ text = "total_events | integer | Total tracking events"
 by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_overview_fields"]
 
 [[unit]]
-text = "experiments_with_winners | integer | Counts saved reports that have a summary; nothing saves one in this release, so it is 0"
-by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_overview_fields"]
+text = "experiments_with_winners | integer | Experiments created in the period that are significant on their primary metric now, whatever the recommendation and whatever the status: the same test that fills the winner_variant column of the experiment export. An experiment counts even when its recommendation is still CONTINUE_TESTING (below the minimum sample) or INCONCLUSIVE (a sample ratio mismatch), and a draft, paused or archived experiment counts if its analysis finds a winner. Computed on every call, so it costs as much as GET /export/experiments for the same period. Narrow start_date and end_date to make the call faster."
+by = [
+    "test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_overview_fields",
+    "test:backend/tests/unit/services/test_export_overview_winners.py::test_the_count_is_the_export_winner_column_for_the_same_period",
+    "test:backend/tests/unit/services/test_export_overview_winners.py::test_each_analysis_is_the_call_the_export_makes",
+    "test:backend/tests/unit/services/test_export_overview_winners.py::test_one_analysis_per_experiment_and_none_for_an_empty_period",
+    "test:backend/tests/integration/api/test_export_overview_winners.py::test_the_overview_counts_a_completed_experiment_with_a_winner",
+]
 
 [[unit]]
 text = "average_experiment_duration_days | float | Average duration (days) of completed experiments, or null"
 by = ["test:backend/tests/unit/services/test_export_columns_and_rules.py::test_the_overview_fields"]
+
+[[unit]]
+text = "An experiment whose results cannot be computed, for example because it has no control variant, is not counted."
+by = ["test:backend/tests/unit/services/test_export_overview_winners.py::test_an_experiment_whose_results_cannot_be_computed_is_not_counted"]
+
+[[unit]]
+text = "Any other error in an analysis fails the overview with 500; it never reports 0 in its place."
+by = [
+    "test:backend/tests/unit/services/test_export_overview_winners.py::test_an_analysis_error_fails_the_overview",
+    "test:backend/tests/unit/services/test_export_overview_winners.py::test_an_analysis_error_answers_500_and_never_0",
+]
 
 [[unit]]
 text = "On the Quick Start's demo data it prints three experiments, two of them active and one completed."

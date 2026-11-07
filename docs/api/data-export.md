@@ -31,9 +31,6 @@ one. With two or more treatments a row can therefore show `p_value` 0.035 and
 0.071. The export has no adjusted p-value column; `/results` reports it as
 `adjusted_p_value`.
 
-**Empty in this release:** `experiments_with_winners` in the overview is `0`
-([#244](https://github.com/Controlvar/controlvar/issues/244)).
-
 Run the commands on this page in one terminal, in order, against the stack from the
 [Quick Start](../getting-started/quick-start.md). Each uses the shell variables set by the
 ones before it. Log in first:
@@ -285,8 +282,11 @@ Returns a JSON summary of platform-wide activity. Always returns `application/js
 | `active_feature_flags`             | integer | Feature flags in ACTIVE status                           |
 | `total_assignments`                | integer | Total user-experiment assignments                        |
 | `total_events`                     | integer | Total tracking events                                    |
-| `experiments_with_winners`         | integer | Counts saved reports that have a summary; nothing saves one in this release, so it is `0` |
+| `experiments_with_winners`         | integer | Experiments created in the period that are significant on their primary metric now, whatever the recommendation and whatever the status: the same test that fills the `winner_variant` column of the experiment export. An experiment counts even when its recommendation is still CONTINUE_TESTING (below the minimum sample) or INCONCLUSIVE (a sample ratio mismatch), and a draft, paused or archived experiment counts if its analysis finds a winner. Computed on every call, so it costs as much as `GET /export/experiments` for the same period. Narrow start_date and end_date to make the call faster. |
 | `average_experiment_duration_days` | float   | Average duration (days) of completed experiments, or null |
+
+An experiment whose results cannot be computed, for example because it has no control variant,
+is not counted. Any other error in an analysis fails the overview with 500; it never reports 0 in its place.
 
 #### Example curl
 
