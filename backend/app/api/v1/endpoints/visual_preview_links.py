@@ -15,9 +15,9 @@ Mounted under ``/experiments`` (``backend/app/api/api.py``):
 Both need a caller who may change the experiment
 (``deps.get_experiment_change_access``: READ and UPDATE on experiments), and
 both write an audit entry. Making a link also checks the experiment's page
-origins (``backend/app/services/visual_origins.py``), as opening the editor
-does, so a link is never made for a site this server does not accept
-requests from.
+origins (``backend/app/services/visual_origins.py``, the check opening the
+editor is meant to share), so a link is never made for a site this server
+does not accept requests from.
 
 Opening a link (``POST /api/v1/tracking/visual/preview``) records nothing;
 see ``tracking_visual.py``.
@@ -141,9 +141,9 @@ async def create_preview_link(
     Needs a caller who may change experiments (READ and UPDATE). Refused with
     422 when one of the experiment's pages, or its editor page, is on a site
     this server does not accept requests from (CORS_ORIGINS), or on the
-    dashboard's own address, or when the server does not know the dashboard's
-    address (DASHBOARD_ORIGINS or PUBLIC_BASE_URL): the same checks as opening
-    the visual editor. Sent with `Cache-Control: no-store`.
+    dashboard's own address, when CORS_ORIGINS is `*`, or when the server does
+    not know the dashboard's address (DASHBOARD_ORIGINS or PUBLIC_BASE_URL).
+    Sent with `Cache-Control: no-store`.
     """
     experiment = _experiment_to_change(db, experiment_id, current_user)
     if not is_visual(experiment):
