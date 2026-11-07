@@ -5,6 +5,8 @@
   "experiment_create",
   "experiment_delete",
   "experiment_pause",
+  "experiment_preview_link_create",
+  "experiment_preview_links_revoke",
   "experiment_start",
   "experiment_update",
   "feature_flag_activate",

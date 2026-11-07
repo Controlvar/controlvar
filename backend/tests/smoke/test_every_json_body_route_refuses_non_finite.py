@@ -13,8 +13,10 @@ and the counts are pinned per profile, so a walk that sees fewer routes fails
 instead of passing on fewer. The profile is decided as the application decides
 it: whether ``modules`` imports.
 
-* JSON-body operations: 74 in the core profile, 104 in the full one (#1545
-  gave ``POST /api/v1/experiments/{experiment_id}/start`` an optional one). A new
+* JSON-body operations: 77 in the core profile, 107 in the full one (#1545
+  gave ``POST /api/v1/experiments/{experiment_id}/start`` an optional one, and
+  added ``POST /api/v1/tracking/visual``, ``POST /api/v1/tracking/visual/preview``
+  and ``POST /api/v1/experiments/{experiment_id}/visual/preview-links``). A new
   route with a JSON body changes the count here: it is refused like the others
   (this test sends it the probe), and the number is bumped.
 * Form-body operations, named: FastAPI reads them with ``request.form()``, so
@@ -42,8 +44,8 @@ from backend.app.main import app
 
 pytestmark = [pytest.mark.smoke]
 
-CORE_JSON_BODY_COUNT = 74
-FULL_JSON_BODY_COUNT = 104
+CORE_JSON_BODY_COUNT = 77
+FULL_JSON_BODY_COUNT = 107
 
 FORM_OPERATIONS = {("POST", "/api/v1/auth/token")}
 MODULE_FORM_OPERATIONS = {("POST", "/api/v1/auth/sso/saml/{config_id}/acs")}
