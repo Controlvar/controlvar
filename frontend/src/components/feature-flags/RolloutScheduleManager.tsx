@@ -4,6 +4,7 @@ import { isApiError } from '@/services/api';
 import type { RolloutSchedule, RolloutStage } from '@/services/featureFlags';
 import {
   DashboardTrigger,
+  RolloutScheduleUpdateRequest,
   RolloutSchedulesService,
   RolloutStageCreateRequest,
   RolloutStageUpdateRequest,
@@ -36,6 +37,20 @@ export const START_HELP = 'Leave blank to start as soon as the stages before it 
 export const DISCARD_AND_CLOSE = 'Discard unsaved changes and close';
 export const TARGET_RANGE = 'Enter a whole number from 0 to 100.';
 export const SCHEDULE_NAME_REQUIRED = 'Give the schedule a name.';
+
+// The schedule's own settings (#442): copy, exact.
+export const START_DATE_HELP =
+  'Recorded with the schedule. Each time-based stage’s own start date decides when that stage starts.';
+export const END_DATE_HELP = 'After this date no stage starts or completes by itself, and the schedule stays active.';
+export const MAX_HELP = 'No stage may target more than this. Default 100.';
+export const MIN_DURATION_HELP =
+  'Whole hours from 0 to 8760, measured from when each stage started. Leave it empty for no minimum.';
+export const END_BEFORE_START = 'The end date must be after the start date.';
+export const MIN_DURATION_RANGE = 'Enter a whole number of hours from 0 to 8760, or leave it empty.';
+/** A refused change to the schedule's maximum (409): the only conflict `PUT /{id}` answers. */
+export const MAX_BELOW_STAGE = "The maximum cannot be below a stage's target. Lower that stage's target first.";
+export const SETTINGS_NOT_ACCEPTED =
+  'The settings were not accepted. Check the dates, the maximum (0 to 100) and the minimum stage duration (0 to 8760).';
 
 export const stageNameRequired = (n: number) => `Give stage ${n} a name.`;
 export const targetBelowPrevious = (n: number, previous: number) =>
@@ -72,6 +87,15 @@ export function rolloutErrorCopy(err: unknown): string {
   if (err.timedOut) return err.message;
   if (err.status === 0) return UNREACHABLE;
   return ROLLOUT_ERROR_COPY[err.status] ?? ROLLOUT_ERROR_COPY.fallback;
+}
+
+/** The same, for a save of the schedule's own settings: its 409 and 422 have their own sentences. */
+export function settingsErrorCopy(err: unknown): string {
+  if (isApiError(err) && !err.timedOut) {
+    if (err.status === 409) return MAX_BELOW_STAGE;
+    if (err.status === 422) return SETTINGS_NOT_ACCEPTED;
+  }
+  return rolloutErrorCopy(err);
 }
 
 export function activateConfirm(schedule: Pick<RolloutSchedule, 'name'>): string {
@@ -304,6 +328,89 @@ export function checkStages(stages: Array<{ name: string; target: string }>, max
   });
   return problems;
 }
+
+/** The schedule's own settings as the form holds them (#442). The dates are UTC. */
+export interface SettingsDraft {
+  /** A `datetime-local` value read as UTC, or ''. */
+  start: string;
+  end: string;
+  /** Whole percent, as typed. */
+  max: string;
+  /** Whole hours, as typed, or '' for none. */
+  min: string;
+}
+
+export const DEFAULT_SETTINGS: SettingsDraft = { start: '', end: '', max: '100', min: '' };
+
+const UTC_INPUT = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(?::(\d{2}))?$/;
+
+/** A `datetime-local` value, read as UTC, as `YYYY-MM-DDTHH:MM:SSZ`; null when it is not a time. */
+export function utcInputToZ(value: string): string | null {
+  const m = UTC_INPUT.exec(value);
+  if (!m) return null;
+  const text = `${m[1]}:${m[2] ?? '00'}Z`;
+  return Number.isNaN(new Date(text).getTime()) ? null : text;
+}
+
+/** A stored API time as a `datetime-local` value in UTC ('' if none). */
+export function apiTimeToUtcInput(value: string | null | undefined): string {
+  if (!value) return '';
+  const d = parseApiTimestamp(value);
+  return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 16);
+}
+
+function settingsFromSchedule(schedule: RolloutSchedule): SettingsDraft {
+  return {
+    start: apiTimeToUtcInput(schedule.start_date),
+    end: apiTimeToUtcInput(schedule.end_date),
+    max: String(schedule.max_percentage),
+    min: schedule.min_stage_duration == null ? '' : String(schedule.min_stage_duration),
+  };
+}
+
+export interface SettingsProblem {
+  field: keyof SettingsDraft;
+  message: string;
+}
+
+function wholeHours(value: string): number | null {
+  const t = value.trim();
+  if (!/^\d{1,4}$/.test(t)) return null;
+  const n = Number(t);
+  return n <= 8760 ? n : null;
+}
+
+/** What the API would refuse in the four settings, found before any request. */
+export function checkSettings(draft: SettingsDraft): SettingsProblem[] {
+  const problems: SettingsProblem[] = [];
+  if (wholePercent(draft.max) === null) problems.push({ field: 'max', message: TARGET_RANGE });
+  if (draft.min.trim() !== '' && wholeHours(draft.min) === null) {
+    problems.push({ field: 'min', message: MIN_DURATION_RANGE });
+  }
+  const start = draft.start ? utcInputToZ(draft.start) : null;
+  const end = draft.end ? utcInputToZ(draft.end) : null;
+  if (start && end && new Date(end).getTime() <= new Date(start).getTime()) {
+    problems.push({ field: 'end', message: END_BEFORE_START });
+  }
+  return problems;
+}
+
+const SETTINGS_FIELDS: Array<{
+  key: keyof SettingsDraft;
+  label: string;
+  help: string;
+  input: { type: 'datetime-local' } | { type: 'number'; min: number; max: number };
+}> = [
+  { key: 'start', label: 'Schedule start date (UTC)', help: START_DATE_HELP, input: { type: 'datetime-local' } },
+  { key: 'end', label: 'Schedule end date (UTC)', help: END_DATE_HELP, input: { type: 'datetime-local' } },
+  { key: 'max', label: 'Maximum percentage', help: MAX_HELP, input: { type: 'number', min: 0, max: 100 } },
+  {
+    key: 'min',
+    label: 'Minimum stage duration (hours)',
+    help: MIN_DURATION_HELP,
+    input: { type: 'number', min: 0, max: 8760 },
+  },
+];
 
 function draftFromStage(stage: RolloutStage): StageDraft {
   return {
@@ -562,6 +669,7 @@ export function RolloutScheduleManager({
   const [createName, setCreateName] = useState('');
   const [createDescription, setCreateDescription] = useState('');
   const [createStages, setCreateStages] = useState<StageDraft[]>([]);
+  const [settings, setSettings] = useState<SettingsDraft>(DEFAULT_SETTINGS);
   const [editDrafts, setEditDrafts] = useState<Record<string, StageDraft>>({});
   const [newStage, setNewStage] = useState<StageDraft | null>(null);
   const [problems, setProblems] = useState<FormProblem[]>([]);
@@ -632,14 +740,19 @@ export function RolloutScheduleManager({
     setReturnFocus(null);
   }, [returnFocus, busy, headingRef, uid]);
 
-  const run = async (key: string, request: () => Promise<unknown>, flagMoved = false): Promise<boolean> => {
+  const run = async (
+    key: string,
+    request: () => Promise<unknown>,
+    flagMoved = false,
+    copy: (err: unknown) => string = rolloutErrorCopy,
+  ): Promise<boolean> => {
     setError(null);
     setNotice(null);
     setPending(key);
     try {
       await request();
     } catch (err) {
-      setError(rolloutErrorCopy(err));
+      setError(copy(err));
       setPending(null);
       return false;
     }
@@ -660,6 +773,7 @@ export function RolloutScheduleManager({
     setCreateName('');
     setCreateDescription('');
     setCreateStages([{ ...EMPTY_STAGE }]);
+    setSettings(DEFAULT_SETTINGS);
     setMode('create');
   };
 
@@ -675,18 +789,29 @@ export function RolloutScheduleManager({
     event.preventDefault();
     const found: FormProblem[] = [];
     if (createName.trim() === '') found.push({ inputId: `${uid}-schedule-name`, message: SCHEDULE_NAME_REQUIRED });
-    for (const p of checkStages(createStages, 100)) {
+    for (const p of checkSettings(settings)) {
+      found.push({ inputId: `${uid}-settings-${p.field}`, message: p.message });
+    }
+    // Stages are checked against the maximum the field holds; an unreadable
+    // maximum is already a problem above, so the default stands in for it.
+    const max = wholePercent(settings.max) ?? 100;
+    for (const p of checkStages(createStages, max)) {
       found.push({ inputId: `${uid}-create-${p.index}-${p.field}`, message: p.message });
     }
     setProblems(found);
     if (found.length > 0) return;
     const description = createDescription.trim();
+    const start = settings.start ? utcInputToZ(settings.start) : null;
+    const end = settings.end ? utcInputToZ(settings.end) : null;
     const ok = await run('create', () =>
       RolloutSchedulesService.create({
         name: createName.trim(),
         ...(description ? { description } : {}),
         feature_flag_id: flagId,
-        max_percentage: 100,
+        ...(start ? { start_date: start } : {}),
+        ...(end ? { end_date: end } : {}),
+        max_percentage: max,
+        ...(settings.min.trim() !== '' ? { min_stage_duration: Number(settings.min.trim()) } : {}),
         stages: createStages.map((draft, i) => stageToCreate(draft, i + 1)),
       }),
     );
@@ -704,6 +829,7 @@ export function RolloutScheduleManager({
     setConfirm(null);
     setEditDrafts({});
     setNewStage(null);
+    setSettings(schedule ? settingsFromSchedule(schedule) : DEFAULT_SETTINGS);
     setMode('edit');
   };
 
@@ -712,13 +838,22 @@ export function RolloutScheduleManager({
   const storedAsChecked = stored.map((s) => ({ name: s.name, target: String(s.target_percentage) }));
   // What closing the edit form would drop: a stage changed but not saved, or
   // a stage being added. The close button says so instead of "Done".
+  const storedSettings = schedule ? settingsFromSchedule(schedule) : DEFAULT_SETTINGS;
+  const settingsChanged = (Object.keys(storedSettings) as Array<keyof SettingsDraft>).some(
+    (key) => settings[key].trim() !== storedSettings[key],
+  );
   const unsaved =
     newStage !== null ||
+    settingsChanged ||
     stored.some((s) => isEditable(s) && s.id in editDrafts && Object.keys(stageChanges(s, editDrafts[s.id])).length > 0);
 
   /** Problems of the whole list with one change applied; stored stages map to their inputs. */
-  const editProblems = (list: Array<{ name: string; target: string }>, newIndex: number | null) =>
-    checkStages(list, schedule?.max_percentage ?? 100).map((p): FormProblem => {
+  const editProblems = (
+    list: Array<{ name: string; target: string }>,
+    newIndex: number | null,
+    max: number = schedule?.max_percentage ?? 100,
+  ) =>
+    checkStages(list, max).map((p): FormProblem => {
       const isNew = newIndex !== null && p.index === newIndex;
       const stage = stored[p.index];
       const inputId = isNew
@@ -747,6 +882,32 @@ export function RolloutScheduleManager({
         return rest;
       });
     }
+  };
+
+  /** Save the schedule's own settings: `PUT /{id}` with exactly the fields that changed. */
+  const saveSettings = async () => {
+    if (!schedule) return;
+    const found: FormProblem[] = checkSettings(settings).map((p) => ({
+      inputId: `${uid}-settings-${p.field}`,
+      message: p.message,
+    }));
+    if (found.length === 0) {
+      // Every stage, as stored, against the maximum the field holds.
+      found.push(...editProblems(storedAsChecked, null, wholePercent(settings.max) ?? 100));
+    }
+    setProblems(found);
+    if (found.length > 0) return;
+    const body: RolloutScheduleUpdateRequest = {};
+    if (settings.start !== storedSettings.start) body.start_date = settings.start ? utcInputToZ(settings.start) : null;
+    if (settings.end !== storedSettings.end) body.end_date = settings.end ? utcInputToZ(settings.end) : null;
+    if (settings.max.trim() !== storedSettings.max) body.max_percentage = Number(settings.max.trim());
+    if (settings.min.trim() !== storedSettings.min) {
+      body.min_stage_duration = settings.min.trim() === '' ? null : Number(settings.min.trim());
+    }
+    if (Object.keys(body).length === 0) return;
+    const ok = await run('settings', () => RolloutSchedulesService.update(schedule.id, body), false, settingsErrorCopy);
+    // Refused: nothing changed, so focus goes back to the button that asked, beside the error.
+    if (!ok) setReturnFocus('save-settings');
   };
 
   const removeStage = async (stage: RolloutStage) => {
@@ -1116,6 +1277,55 @@ export function RolloutScheduleManager({
               </div>
             </>
           )}
+
+          <fieldset className="space-y-3" data-testid="rollout-schedule-settings">
+            <legend className="text-sm font-medium text-slate-800">Schedule settings</legend>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {SETTINGS_FIELDS.map((f) => {
+                const id = `${uid}-settings-${f.key}`;
+                const problem = problems.find((p) => p.inputId === id);
+                return (
+                  <div key={f.key}>
+                    <label htmlFor={id} className="block text-sm font-medium text-slate-700">
+                      {f.label}
+                    </label>
+                    <input
+                      id={id}
+                      {...f.input}
+                      {...(f.input.type === 'number' ? { inputMode: 'numeric' as const, step: 1 } : {})}
+                      value={settings[f.key]}
+                      disabled={busy}
+                      aria-invalid={problem ? true : undefined}
+                      aria-describedby={problem ? `${id}-help ${id}-error` : `${id}-help`}
+                      onChange={(e) => setSettings((current) => ({ ...current, [f.key]: e.target.value }))}
+                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                      data-testid={`rollout-schedule-${f.key}-input`}
+                    />
+                    <p id={`${id}-help`} className="mt-1 text-xs text-slate-600">
+                      {f.help}
+                    </p>
+                    {problem && (
+                      <p id={`${id}-error`} className="mt-1 text-xs text-red-700">
+                        {problem.message}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {editing && (
+              <button
+                type="button"
+                id={`${uid}-save-settings`}
+                onClick={() => void saveSettings()}
+                disabled={busy}
+                className={PRIMARY}
+                data-testid="rollout-schedule-settings-save"
+              >
+                {pending === 'settings' ? 'Saving…' : 'Save schedule settings'}
+              </button>
+            )}
+          </fieldset>
 
           <fieldset className="space-y-4" aria-describedby={`${uid}-help`}>
             <legend className="text-sm font-medium text-slate-800">Stages, in order</legend>

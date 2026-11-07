@@ -124,8 +124,8 @@ WITNESSES: Dict[str, str] = {
     "Create or edit a rollout schedule and its stages": "rollout-schedule-form",
     "Activate, pause, resume or cancel a rollout schedule, and advance a manual "
     "stage": "rollout-schedule-actions",
-    # #1456 leaves these to the API: the dashboard sends no schedule dates and
-    # no minimum duration, and always the default maximum, 100.
+    # #442: the schedule form's Schedule settings group (start and end dates,
+    # maximum, minimum stage duration), in the create form and the edit form.
     "Set a rollout schedule's own start and end dates, maximum percentage and "
     "minimum stage duration": "rollout-schedule-settings",
     "Delete a feature flag": "flag-delete",

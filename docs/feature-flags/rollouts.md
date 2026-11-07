@@ -51,8 +51,14 @@ changes nothing.
   is offered.
 - When something has changed since the page loaded (a stage started, or another schedule of
   the flag became active), the page says so; reload it to see the rollout as it is.
-- A schedule made in the dashboard has no start or end date of its own, a maximum of 100% and
-  no minimum stage duration. Those are set through the API only.
+- A schedule has four settings of its own, in the **Schedule settings** group of the form: a
+  start date, an end date, a maximum percentage and a minimum stage duration in whole hours.
+  The dates are in UTC, the maximum is 100% and there is no minimum until you change them. On
+  a draft or paused schedule, **Edit stages** shows them too, with **Save schedule settings**.
+- The form refuses an end date that is not after the start date, a stage target above the
+  maximum, and a maximum or a minimum outside its range, before it sends anything. A maximum
+  below a stage's target is refused by the API too, and the page then says to lower that
+  stage's target first.
 
 ---
 
