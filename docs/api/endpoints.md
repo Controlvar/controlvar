@@ -434,9 +434,30 @@ three levels deep.
 - The feature flags list is ordered by creation time, oldest first (ties by `id`), so
   paging with `skip` reads each flag once unless flags are created or deleted meanwhile
 - The default and the largest `limit` differ by route (the experiments list: 100, at most
-  500; the feature flags list: 100, with no maximum). The API's OpenAPI document,
-  `GET /api/v1/openapi.json`, gives each route's default `limit` and, where it has one, its
-  maximum
+  500; the feature flags list: 100, at most 9223372036854775807). The API's OpenAPI
+  document, `GET /api/v1/openapi.json`, gives each route's default `limit` and its maximum;
+  a bound of 9223372036854775807 is given as `"format": "int64"`
+- `skip` (and `offset`, where a route takes it instead) is at most 9223372036854775807, the
+  largest offset PostgreSQL takes; a larger one answers 422 and nothing is read
+- `page`, where a route takes it, is from 1 to 9223372036854775808, and the page must start
+  within the largest offset: `(page - 1)` times the route's `limit` (or its `page_size`) at
+  most 9223372036854775807. Otherwise the route answers 422 at `["query", "page"]`
+
+A `skip` one past the largest:
+
+```{.bash exec}
+curl -s "http://localhost:8000/api/v1/feature-flags/?skip=9223372036854775808" \
+  -H "Authorization: Bearer $TOKEN" | jq -c '.detail[0] | {loc, type}'
+```
+<!-- expect: {"loc":["query","skip"],"type":"less_than_equal"} -->
+
+A page that starts past it, though `page` and `limit` are each in range:
+
+```{.bash exec}
+curl -s "http://localhost:8000/api/v1/audit-logs/?page=4611686018427387905&limit=2" \
+  -H "Authorization: Bearer $TOKEN" | jq -r '.detail[0].msg'
+```
+<!-- expect: (page - 1) * limit must be at most 9223372036854775807 -->
 
 ### Caching
 - `GET /api/v1/experiments/{experiment_id}` and its `daily-results` and `segmented-results` are cached for 3,600 seconds (an hour) when `CACHE_ENABLED` is on (it is off by default). A change to the experiment clears its cached detail; its cached daily and segmented results stay until they expire
@@ -908,8 +929,8 @@ replaces them, so a metric resent without `expected_effect` no longer has one.
 - **Query Parameters**:
   - status: string (optional): `ACTIVE`, `INACTIVE` or `ARCHIVED`, in upper case (each
     item's own `status` is lower case)
-  - skip: int (default: 0)
-  - limit: int (default: 100; the route sets no maximum)
+  - skip: int (default: 0; 0 to 9223372036854775807)
+  - limit: int (default: 100; 0 to 9223372036854775807, and `0` answers no items)
   - search: string (optional): matches part of the name or the key, in any case
 - **Response**: 200 OK. `total` counts every flag that matches `status` and `search`, not
   only the ones on this page.

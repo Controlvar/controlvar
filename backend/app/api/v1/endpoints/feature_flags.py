@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 from backend.app.api import deps
 from backend.app.api.enum_filters import enum_filter
 from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.query_params import MAX_OFFSET, describe_as_int64
 from backend.app.api.read_scope import get_current_reader
 from backend.app.api.segment_rules import refuse_unusable_segments
 from backend.app.core.config import settings
@@ -310,8 +311,9 @@ router = APIRouter(
 async def list_feature_flags(
     *,
     db: Session = Depends(deps.get_db),
-    skip: int = 0,
-    limit: int = 100,
+    # The database's own limit, and no smaller cap: limit=0 stays 200 (#1001).
+    skip: int = Query(0, ge=0, le=MAX_OFFSET, json_schema_extra=describe_as_int64),
+    limit: int = Query(100, ge=0, le=MAX_OFFSET, json_schema_extra=describe_as_int64),
     # `status` in the URL only: a Python parameter called `status` hid the
     # `fastapi.status` module in this body, so reaching the 403 below raised
     # AttributeError and answered 500.

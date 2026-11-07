@@ -30,6 +30,11 @@ from sqlalchemy.orm import Session
 from backend.app.api import deps
 from backend.app.api.datetime_bounds import refuse_unstorable_offset
 from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.query_params import (
+    MAX_PAGE,
+    check_page_offset,
+    describe_as_int64,
+)
 from backend.app.db.session import get_db
 from backend.app.models.user import User, UserRole
 from modules.backend.app.schemas.hipaa import (
@@ -204,7 +209,13 @@ def list_audit_logs(
         None, description="Filter by resource type: experiment, feature_flag, user_data"
     ),
     user_id: Optional[uuid.UUID] = Query(None, description="Filter by user UUID"),
-    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page: int = Query(
+        1,
+        ge=1,
+        le=MAX_PAGE,
+        description="Page number (1-indexed)",
+        json_schema_extra=describe_as_int64,
+    ),
     page_size: int = Query(50, ge=1, le=200, description="Records per page"),
     current_user: User = Depends(deps.get_current_active_user),
     db: Session = Depends(get_db),
@@ -215,6 +226,8 @@ def list_audit_logs(
     **Access**: ADMIN only.
     """
     _require_admin(current_user)
+    # After the role check: a caller it refuses is answered 403 (#1001).
+    check_page_offset(page, page_size, "page_size")
     refuse_unstorable_offset("start_date", start_date)
     refuse_unstorable_offset("end_date", end_date)
     svc = HIPAAService()

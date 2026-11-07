@@ -64,6 +64,10 @@
 # with, and GET, PUT and DELETE /api/v1/users/{user_id} and
 # POST /api/v1/llm-experiments/{experiment_id}/evaluate answer 400 for an id
 # that is not a UUID.
+# #1001 is fixed: every skip and offset accepts at most 2**63 - 1 and every
+# page at most 2**63, and a page whose (page - 1) * size is past 2**63 - 1
+# answers 422, so the entries of GET /api/v1/users/ (superuser) and
+# GET /api/v1/audit-logs/ (viewer) were removed.
 
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
@@ -73,13 +77,6 @@ operation = "POST /api/v1/api-keys"
 status = 500
 issue = 957
 reason = "A field of the wrong type reaches the handler before validation."
-
-[[known]]
-pass = "superuser"
-operation = "GET /api/v1/users/"
-status = 500
-issue = 1001
-reason = "A skip or page beyond the database's offset range reaches the query."
 
 [[known]]
 pass = "superuser"
@@ -173,13 +170,6 @@ operation = "POST /api/v1/api-keys"
 status = 500
 issue = 957
 reason = "A field of the wrong type reaches the handler before validation."
-
-[[known]]
-pass = "viewer"
-operation = "GET /api/v1/audit-logs/"
-status = 500
-issue = 1001
-reason = "A skip or page beyond the database's offset range reaches the query."
 
 [[known]]
 pass = "viewer"

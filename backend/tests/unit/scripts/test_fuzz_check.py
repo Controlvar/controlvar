@@ -994,6 +994,19 @@ def test_the_sdk_prefixes_are_the_rate_limiters():
     assert fuzz_check.SDK_PATH_PREFIXES == tuple(SDK_PATH_PREFIXES)
 
 
+@pytest.mark.regression
+def test_no_known_entry_cites_1001():
+    """#1001 is fixed: a skip, offset or page past the largest offset the
+    database takes answers 422, not 500, on every list route. An entry still
+    citing it would be a stale waiver."""
+    import tomllib
+
+    data = tomllib.loads(fuzz_check.KNOWN_5XX.read_text(encoding="utf-8"))
+    citing = [e for e in data.get("known", []) if e.get("issue") == 1001]
+    assert citing == []
+    assert "offset range" not in " ".join(e["reason"] for e in data.get("known", []))
+
+
 def test_the_sdk_regex_selects_what_the_evaluation_selects(full_operations):
     """Schemathesis selects by --include-path-regex, the evaluation by prefix;
     over the whole document they must agree."""

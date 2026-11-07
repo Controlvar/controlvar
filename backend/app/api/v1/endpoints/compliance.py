@@ -35,6 +35,11 @@ from sqlalchemy.orm import Session
 from backend.app.api import deps
 from backend.app.api.datetime_bounds import refuse_unstorable_offset
 from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.query_params import (
+    MAX_PAGE,
+    check_page_offset,
+    describe_as_int64,
+)
 from backend.app.core.optional_modules import (
     COMPLIANCE_REPORTING_UNAVAILABLE_DETAIL,
     compliance_export_handler,
@@ -102,7 +107,13 @@ def list_audit_events(
         None,
         description="Only return events at or before this UTC datetime (ISO 8601)",
     ),
-    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page: int = Query(
+        1,
+        ge=1,
+        le=MAX_PAGE,
+        description="Page number (1-indexed)",
+        json_schema_extra=describe_as_int64,
+    ),
     limit: int = Query(50, ge=1, le=200, description="Records per page"),
     current_user: User = Depends(deps.get_current_active_user),
     db: Session = Depends(get_db),
@@ -127,6 +138,8 @@ def list_audit_events(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Compliance audit logs require ADMIN or ANALYST role",
             )
+    # After the role check: a caller it refuses is answered 403 (#1001).
+    check_page_offset(page, limit, "limit")
 
     refuse_unstorable_offset("start_time", start_time)
     refuse_unstorable_offset("end_time", end_time)

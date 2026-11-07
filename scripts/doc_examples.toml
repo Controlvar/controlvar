@@ -13,7 +13,7 @@
 
 [meta]
 documents = 58
-exec = 331
+exec = 333
 universe = [
     ".github/pull_request_template.md",
     ".github/qa-templates/README.md",
@@ -567,9 +567,9 @@ expects = 36
 [[document]]
 path = "docs/api/endpoints.md"
 environment = "stack"
-exec = 21
+exec = 23
 skip = 3
-expects = 40
+expects = 42
 
 [[document]]
 path = "docs/architecture/technical-guide.md"
