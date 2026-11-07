@@ -143,8 +143,16 @@ def _inject_context(
 #: ``HTTP Request: POST https://<account>.snowflakecomputing.com/... "HTTP/1.1
 #: 200 OK"`` -- with the full URL, so at the default ``LOG_LEVEL=INFO`` every
 #: call to a warehouse put its host (the customer's account or project) in the
-#: API log.  httpcore traces connections at DEBUG, host included.
-HTTP_CLIENT_LOGGERS: tuple[str, ...] = ("httpx", "httpcore")
+#: API log.  httpcore traces connections at DEBUG, host included.  botocore,
+#: boto3 and s3transfer join httpx and httpcore in HTTP_CLIENT_LOGGERS, so a
+#: DEBUG root no longer turns on the AWS SDK's request tracing.
+HTTP_CLIENT_LOGGERS: tuple[str, ...] = (
+    "httpx",
+    "httpcore",
+    "botocore",
+    "boto3",
+    "s3transfer",
+)
 
 
 def quiet_http_client_loggers() -> None:
