@@ -989,8 +989,12 @@ text = "experimentation-monitoring-<env>"
 by = ["exempt:label"]
 
 [[unit]]
-text = "CloudWatch dashboards experimentation-platform-<env> and experimentation-application-metrics-<env> (some of their widgets graph metrics nothing publishes, #424)"
-by = ["test:infrastructure/tests/test_stack_graph.py::test_the_two_dashboards_and_a_widget_nothing_publishes_to"]
+text = "CloudWatch dashboards experimentation-platform-<env>, which graphs the Aurora writer and each Redis node, and experimentation-application-metrics-<env>, which graphs the API service's CPU and memory, its running tasks, its log lines at level error or critical, and the audit-log entries it could not write."
+by = [
+    "test:infrastructure/tests/test_dashboards.py::test_the_dashboards_have_exactly_these_widgets",
+    "test:infrastructure/tests/test_dashboards.py::test_every_widget_graphs_a_published_metric_of_a_deployed_resource",
+    "test:infrastructure/tests/test_stack_graph.py::test_the_two_dashboards_graph_no_api_gateway",
+]
 
 [[unit]]
 text = "CloudWatch alarms: AuroraHighCPU-<env> on the Aurora writer, and one RedisHighCPU-00N-<env> per Redis node."

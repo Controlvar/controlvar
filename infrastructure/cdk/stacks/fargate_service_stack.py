@@ -34,6 +34,7 @@ from stacks.names import (
     api_healthy_alarm_name,
     api_log_metric_namespace,
     api_no_healthy_task_alarm_name,
+    api_service_name,
     codedeploy_application_name,
     counters_table_name,
     glue_names,
@@ -710,7 +711,7 @@ class FargateServiceStack(Stack):
         self.fargate_service = ecs.FargateService(
             self,
             "BackendService",
-            service_name=f"experimentation-backend-{env_name}",
+            service_name=api_service_name(env_name),
             cluster=ecs_cluster,
             task_definition=self.task_definition,
             # Per environment, from app.py (DECISIONS D13: staging runs 2).

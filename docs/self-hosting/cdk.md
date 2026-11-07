@@ -600,9 +600,11 @@ unless you deploy with `-c bastion_ssh_cidr=<cidr>`.
 
 ### experimentation-monitoring-<env> {#experimentation-monitoring}
 
-- CloudWatch dashboards `experimentation-platform-<env>` and
-  `experimentation-application-metrics-<env>` (some of their widgets graph
-  metrics nothing publishes, #424)
+- CloudWatch dashboards `experimentation-platform-<env>`, which graphs the
+  Aurora writer and each Redis node, and
+  `experimentation-application-metrics-<env>`, which graphs the API service's
+  CPU and memory, its running tasks, its log lines at level `error` or
+  `critical`, and the audit-log entries it could not write.
 - CloudWatch alarms: `AuroraHighCPU-<env>` on the Aurora writer, and one
   `RedisHighCPU-00N-<env>` per Redis node. The Aurora alarm reads the cluster's
   identifier from the SSM parameter

@@ -29,9 +29,9 @@ values of ``api_live_target_group``, and asserts exact values:
   cluster is not renamed.
 * **Redis.** One alarm per node, and the node ids are the replication group's
   id with ``-001`` .. ``-00N``, N the group's own node count.
-* **Namespaces.** No alarm or metric filter uses a namespace or log group
-  nothing publishes to, and the error-log filter is on the log group the
-  API's task definition writes to.
+* **Namespaces.** No alarm, metric filter or dashboard (#424) uses a
+  namespace or log group nothing publishes to, and the error-log filter is on
+  the log group the API's task definition writes to.
 * **The error-log filter** counts the lines whose JSON ``level`` is
   ``error`` or ``critical`` (#811): the API's lines are JSON with a lower-case
   level, and CloudWatch matches case-sensitively, so the ``"ERROR"`` term it
@@ -413,11 +413,16 @@ def test_redis_cpu_alarms_are_the_replication_groups_nodes(synths, case):
 
 @pytest.mark.parametrize("case", CASES, ids=_ids)
 def test_no_alarm_or_filter_watches_what_nothing_publishes(synths, case):
+    """Nor does a dashboard graph it (#424)."""
     env, _, _ = case
     dead = [target.format(env=env) for target in DEAD_TARGETS]
     for stack_name, template in synths[case]["templates"].items():
         for lid, r in template.get("Resources", {}).items():
-            if r["Type"] in (*ALARM_TYPES, "AWS::Logs::MetricFilter"):
+            if r["Type"] in (
+                *ALARM_TYPES,
+                "AWS::Logs::MetricFilter",
+                "AWS::CloudWatch::Dashboard",
+            ):
                 text = json.dumps(r)
                 for target in dead:
                     assert target not in text, (stack_name, lid, target)

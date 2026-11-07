@@ -73,6 +73,16 @@ def ecs_cluster_name(env_name: str) -> str:
     return f"experimentation-{env_name}"
 
 
+def api_service_name(env_name: str) -> str:
+    """The API's ECS service, ``experimentation-backend-<env>``.
+
+    The fargate stack creates the service under this name, and the monitoring
+    stack's application dashboard graphs it by this name: the monitoring stack
+    cannot take the service's token, because the fargate stack depends on it.
+    """
+    return f"experimentation-backend-{env_name}"
+
+
 def codedeploy_application_name(env_name: str) -> str:
     """The CodeDeploy application, ``experimentation-platform-<env>``.
 
