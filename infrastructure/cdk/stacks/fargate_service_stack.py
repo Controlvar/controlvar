@@ -104,6 +104,11 @@ class FargateServiceStack(Stack):
     ``include_modules`` is the deployment's profile (``app.py`` passes
     ``ENABLE_MODULE_STACKS``). ``True`` adds the full profile's own secret,
     ``AUDIT_HMAC_KEY``; see the comment beside it.
+
+    ``cognito_hosted_ui`` is the auth stack's ``hosted_ui``: ``None`` (the
+    default) unless the app is synthesised with ``-c cognito_hosted_ui=true``
+    (#708). Given, the API container is told to sign users in with Cognito,
+    by reference to the auth stack's pool, client and Hosted UI domain.
     """
 
     def __init__(
@@ -126,6 +131,7 @@ class FargateServiceStack(Stack):
         redis_host: str = None,
         redis_port: str = None,
         alarm_topic=None,
+        cognito_hosted_ui=None,
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -435,6 +441,24 @@ class FargateServiceStack(Stack):
                 # and infrastructure/tests/test_api_task_forwarded_allow_ips.py
                 # holds it to the synthesised VPC.
                 "FORWARDED_ALLOW_IPS": "10.0.0.0/16",
+                # Dashboard sign-in through the Cognito Hosted UI (#708), only
+                # with `-c cognito_hosted_ui=true` (`cognito_hosted_ui` is the
+                # auth stack's `hosted_ui`, None otherwise). The ids are
+                # references to the auth stack, so this stack imports its
+                # exports; COGNITO_DOMAIN is the Hosted UI's domain name,
+                # `<prefix>.auth.<region>.amazoncognito.com`. AWS_REGION is the
+                # pool's: unset, the Cognito client would use us-east-1.
+                **(
+                    {
+                        "AUTH_PROVIDER": "cognito",
+                        "COGNITO_USER_POOL_ID": cognito_hosted_ui.user_pool_id,
+                        "COGNITO_CLIENT_ID": cognito_hosted_ui.client_id,
+                        "COGNITO_DOMAIN": cognito_hosted_ui.domain,
+                        "AWS_REGION": cognito_hosted_ui.region,
+                    }
+                    if cognito_hosted_ui is not None
+                    else {}
+                ),
             },
             secrets={
                 # Both halves from the secret Aurora generated its master
