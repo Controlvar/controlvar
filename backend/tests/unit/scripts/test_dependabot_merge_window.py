@@ -138,25 +138,52 @@ def _sweep_script(doc: Optional[Dict[str, Any]] = None) -> str:
 # A gh that records, a date that answers for a chosen instant
 # --------------------------------------------------------------------------
 
+#: `pr list` answers the next listing in $GH_PRS (a list of listings; the
+#: last repeats). `api .../issues/N/events` answers N's events from
+#: $GH_EVENTS, by default one `labeled` event by github-actions[bot]. Both
+#: go through the real jq with the expression the script passed.
 _FAKE_GH = """\
-import json, os, subprocess, sys
+import json, os, re, subprocess, sys
 
 args = sys.argv[1:]
 with open(os.environ["GH_LOG"], "a", encoding="utf-8") as log:
     log.write(json.dumps(args) + "\\n")
-if args[:2] == ["pr", "list"]:
-    expression = args[args.index("--jq") + 1]
+
+
+def jq(expression, document):
     out = subprocess.run(
-        [os.environ["GH_JQ"], "-r", expression, os.environ["GH_PRS"]],
-        check=True, capture_output=True, text=True,
+        [os.environ["GH_JQ"], "-r", expression],
+        input=json.dumps(document), check=True, capture_output=True, text=True,
     )
     sys.stdout.write(out.stdout)
+
+
+if args[:2] == ["pr", "list"]:
+    counter = os.environ["GH_PRS"] + ".calls"
+    n = int(open(counter).read()) if os.path.exists(counter) else 0
+    with open(counter, "w") as handle:
+        handle.write(str(n + 1))
+    listings = json.load(open(os.environ["GH_PRS"]))
+    jq(args[args.index("--jq") + 1], listings[min(n, len(listings) - 1)])
     sys.exit(0)
 if args[:2] == ["pr", "merge"]:
     # The worst case: a gh that reads its stdin, which inside the sweep's
     # `while read` would swallow the rows still to come.
     sys.stdin.read()
     sys.exit(int(os.environ.get("GH_MERGE_STATUS", "0")))
+events = [a for a in args if re.fullmatch(r"repos/[^/]+/[^/]+/issues/[0-9]+/events", a)]
+if args[:1] == ["api"] and events:
+    number = events[0].split("/")[-2]
+    default = [
+        {
+            "event": "labeled",
+            "label": {"name": os.environ["LABEL"]},
+            "actor": {"login": "github-actions[bot]"},
+        }
+    ]
+    every = json.load(open(os.environ["GH_EVENTS"])) if os.environ.get("GH_EVENTS") else {}
+    jq(args[args.index("--jq") + 1], every.get(number, default))
+    sys.exit(0)
 if args[:1] == ["api"] and "--method" not in args:
     sys.exit(int(os.environ.get("GH_API_STATUS", "0")))
 if args[:1] == ["api"] or args[:2] == ["label", "create"]:
@@ -164,6 +191,9 @@ if args[:1] == ["api"] or args[:2] == ["label", "create"]:
 sys.stderr.write("fake gh: not modelled: %r\\n" % (args,))
 sys.exit(2)
 """
+
+#: Records how long it was asked to sleep, and does not.
+_FAKE_SLEEP = '#!/bin/bash\necho "$*" >> "$SLEEP_LOG"\n'
 
 #: Each call answers for the next instant in $FAKE_CLOCK (the last repeats),
 #: through the real date, with the TZ the caller set (or $FAKE_TZ instead).
@@ -203,16 +233,40 @@ def _pr(number: int, state: str = "CLEAN", draft: bool = False) -> Dict[str, Any
     }
 
 
+def _labelled(login: str, label: str = LABEL) -> Dict[str, Any]:
+    return {"event": "labeled", "label": {"name": label}, "actor": {"login": login}}
+
+
+def _unlabelled(login: str, label: str = LABEL) -> Dict[str, Any]:
+    return {"event": "unlabeled", "label": {"name": label}, "actor": {"login": login}}
+
+
+BOT = "github-actions[bot]"
+
+
 class Run:
-    def __init__(self, result: subprocess.CompletedProcess, log: Path) -> None:
+    def __init__(
+        self, result: subprocess.CompletedProcess, log: Path, sleeps: Path
+    ) -> None:
         self.returncode = result.returncode
         self.output = result.stdout + result.stderr
         lines = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
         self.calls: List[List[str]] = [json.loads(line) for line in lines]
+        self.sleeps = (
+            sleeps.read_text(encoding="utf-8").split() if sleeps.exists() else []
+        )
 
     @property
     def merges(self) -> List[List[str]]:
         return [c for c in self.calls if c[:2] == ["pr", "merge"]]
+
+    @property
+    def listings(self) -> List[List[str]]:
+        return [c for c in self.calls if c[:2] == ["pr", "list"]]
+
+    @property
+    def merged(self) -> List[str]:
+        return [m[-1].rsplit("/", 1)[-1] for m in self.merges]
 
     @property
     def outcome(self) -> str:
@@ -226,6 +280,8 @@ def _run(
     script: str,
     instants: List[int],
     prs: Optional[List[Dict[str, Any]]] = None,
+    listings: Optional[List[List[Dict[str, Any]]]] = None,
+    events: Optional[Dict[int, List[Dict[str, Any]]]] = None,
     **extra_env: str,
 ) -> Run:
     for leftover in tmp_path.iterdir():
@@ -242,15 +298,26 @@ def _run(
             encoding="utf-8",
         )
         wrapper.chmod(0o755)
+    sleeper = bin_dir / "sleep"
+    sleeper.write_text(_FAKE_SLEEP, encoding="utf-8")
+    sleeper.chmod(0o755)
     clock = tmp_path / "clock"
     clock.write_text("\n".join(str(i) for i in instants) + "\n", encoding="utf-8")
     listing = tmp_path / "prs.json"
-    listing.write_text(json.dumps(prs if prs is not None else [_pr(1)]))
+    if listings is None:
+        listings = [prs if prs is not None else [_pr(1)]]
+    listing.write_text(json.dumps(listings))
+    if events is not None:
+        events_file = tmp_path / "events.json"
+        events_file.write_text(json.dumps({str(n): e for n, e in events.items()}))
+        extra_env = {"GH_EVENTS": str(events_file), **extra_env}
     log = tmp_path / "gh.log"
+    sleeps = tmp_path / "sleep.log"
     env = {
         "PATH": f"{bin_dir}:/usr/bin:/bin",
         "RUNNER_TEMP": str(tmp_path),
         "GH_LOG": str(log),
+        "SLEEP_LOG": str(sleeps),
         "GH_JQ": str(JQ),
         "GH_PRS": str(listing),
         "FAKE_CLOCK": str(clock),
@@ -270,7 +337,7 @@ def _run(
         text=True,
         timeout=60,
     )
-    return Run(result, log)
+    return Run(result, log, sleeps)
 
 
 def _outcomes(tmp_path: Path, script: str) -> Dict[str, str]:
@@ -451,6 +518,159 @@ def test_a_zone_that_does_not_resolve_merges_nothing(tmp_path):
 
 
 # --------------------------------------------------------------------------
+# Mergeability GitHub has not computed yet
+# --------------------------------------------------------------------------
+
+#: The condition that sends the sweep round again, as the script writes it.
+RELIST = """awk -F '\\t' '$4 == "UNKNOWN" { found = 1 } END { exit (found ? 0 : 1) }'"""
+
+
+@needs_tools
+def test_an_unknown_row_makes_the_sweep_wait_and_list_once_more(tmp_path):
+    """GitHub computes mergeability when something asks for it, and after main
+    moves most rows read UNKNOWN until then; the sweep's own listing is the
+    ask, so it waits and reads the answer."""
+    run = _run(
+        tmp_path,
+        _sweep_script(),
+        [SATURDAY_NOON],
+        listings=[[_pr(1, "UNKNOWN"), _pr(2)], [_pr(1), _pr(2)]],
+    )
+    assert run.returncode == 0, run.output
+    assert len(run.listings) == 2, run.calls
+    assert run.sleeps == ["30"], run.sleeps
+    assert run.merged == ["1", "2"], run.merges
+
+
+@needs_tools
+def test_no_unknown_row_means_no_wait(tmp_path):
+    run = _run(tmp_path, _sweep_script(), [SATURDAY_NOON], [_pr(1), _pr(2, "BLOCKED")])
+    assert run.returncode == 0, run.output
+    assert len(run.listings) == 1 and run.sleeps == [], (run.calls, run.sleeps)
+    assert run.merged == ["1"]
+
+
+@needs_tools
+def test_a_row_still_unknown_after_the_second_listing_waits_for_a_later_run(
+    tmp_path,
+):
+    run = _run(
+        tmp_path,
+        _sweep_script(),
+        [SATURDAY_NOON],
+        listings=[[_pr(1, "UNKNOWN")], [_pr(1, "UNKNOWN")]],
+    )
+    assert run.returncode == 0, run.output
+    assert len(run.listings) == 2 and run.sleeps == ["30"], (run.calls, run.sleeps)
+    assert run.merges == []
+
+
+@needs_tools
+def test_without_the_second_listing_an_unknown_row_waits_an_hour(tmp_path):
+    """The plant for the tests above: the condition never true."""
+    script = _sweep_script()
+    assert RELIST in script, "the second listing's condition is not in the script"
+    run = _run(
+        tmp_path,
+        script.replace(RELIST, "false"),
+        [SATURDAY_NOON],
+        listings=[[_pr(1, "UNKNOWN"), _pr(2)], [_pr(1), _pr(2)]],
+    )
+    assert run.merged == ["2"], run.merges
+
+
+# --------------------------------------------------------------------------
+# The label counts only when this workflow put it there
+# --------------------------------------------------------------------------
+
+
+@needs_tools
+@pytest.mark.parametrize(
+    "history, merges",
+    [
+        ([_labelled(BOT)], True),
+        ([_labelled("someone")], False),
+        ([_labelled(BOT), _unlabelled("someone"), _labelled("someone")], False),
+        ([_labelled("someone"), _unlabelled("someone"), _labelled(BOT)], True),
+        ([_labelled(BOT), _labelled("someone", label="dependencies")], True),
+        ([], False),
+    ],
+    ids=[
+        "added by the workflow",
+        "added by someone else",
+        "taken off and put back by someone else",
+        "put back by the workflow",
+        "another label added by someone else",
+        "no labelling event at all",
+    ],
+)
+def test_the_sweep_merges_only_what_this_workflow_labelled(tmp_path, history, merges):
+    run = _run(
+        tmp_path,
+        _sweep_script(),
+        [SATURDAY_NOON],
+        [_pr(1), _pr(2)],
+        events={1: history},
+    )
+    # #2 carries the default history, labelled by the workflow: the sweep
+    # goes on past a refused #1.
+    assert run.merged == (["1", "2"] if merges else ["2"]), (run.merges, run.output)
+    if merges:
+        assert run.returncode == 0, run.output
+    else:
+        assert run.returncode == 1 and "::error::#1:" in run.output, run.output
+    events = [c for c in run.calls if c[:1] == ["api"]]
+    assert ["repos/o/r/issues/1/events" in c for c in events] == [True, False]
+    assert all("--paginate" in c for c in events), events
+
+
+@needs_tools
+def test_the_labeller_check_planted_out_is_caught(tmp_path):
+    """The plant for the test above: the refusal never taken."""
+    script = _sweep_script()
+    anchor = 'if [ "$labeller" != "github-actions[bot]" ]; then'
+    assert anchor in script
+    run = _run(
+        tmp_path,
+        script.replace(anchor, "if false; then"),
+        [SATURDAY_NOON],
+        [_pr(1)],
+        events={1: [_labelled("someone")]},
+    )
+    assert run.merged == ["1"], run.merges
+
+
+@needs_tools
+@pytest.mark.parametrize("labelled, removes", [("true", True), ("false", False)])
+def test_a_bump_the_decide_step_refuses_loses_the_label(tmp_path, labelled, removes):
+    step = _step(_doc(), "automerge", "refuse")
+    assert step["if"] == "steps.decide.outputs.ok != 'yes'"
+    assert step["env"]["LABELLED"] == (
+        "${{ contains(github.event.pull_request.labels.*.name, env.LABEL) }}"
+    )
+    run = _run(
+        tmp_path,
+        str(step["run"]),
+        [SATURDAY_NOON],
+        LABELLED=labelled,
+        NUMBER="9",
+        ECOSYSTEM="pip",
+        UPDATE_TYPE="version-update:semver-major",
+    )
+    assert run.returncode == 0, run.output
+    expected = [
+        [
+            "api",
+            "--method",
+            "DELETE",
+            f"repos/o/r/issues/9/labels/{LABEL}",
+            "--silent",
+        ]
+    ]
+    assert run.calls == (expected if removes else []), run.calls
+
+
+# --------------------------------------------------------------------------
 # The pull-request job labels; only the sweep merges
 # --------------------------------------------------------------------------
 
@@ -566,3 +786,72 @@ def test_the_mark_step_creates_the_label_once_then_adds_it(
     assert run.returncode == 0, run.output
     assert len(run.calls) == len(expected), run.calls
     assert [c[: len(e)] for c, e in zip(run.calls, expected)] == expected
+
+
+# --------------------------------------------------------------------------
+# Dependabot opens its pull requests after 17:00 Pacific
+# --------------------------------------------------------------------------
+
+DEPENDABOT = wg.REPO_ROOT / ".github" / "dependabot.yml"
+
+
+def dependabot_schedule_problems(config: Dict[str, Any]) -> List[str]:
+    """Every update entry whose schedule could open a pull request inside
+    Monday to Friday 09:00-17:00 America/Los_Angeles: each names that zone
+    and a time from 17:00 to 23:59, on its weekly or monthly interval."""
+    problems = []
+    updates = config.get("updates") or []
+    if not updates:
+        problems.append("no update entries")
+    for entry in updates:
+        where = f"{entry.get('package-ecosystem')} {entry.get('directory') or entry.get('directories')}"
+        schedule = entry.get("schedule") or {}
+        if schedule.get("timezone") != "America/Los_Angeles":
+            problems.append(f"{where}: timezone {schedule.get('timezone')!r}")
+        time = schedule.get("time")
+        hour, _, minute = str(time).partition(":")
+        if not (
+            isinstance(time, str)
+            and hour.isdigit()
+            and minute.isdigit()
+            and len(minute) == 2
+            and 17 * 60 <= int(hour) * 60 + int(minute) < 24 * 60
+        ):
+            problems.append(f"{where}: time {time!r} is not from 17:00 to 23:59")
+        interval = schedule.get("interval")
+        if interval not in ("weekly", "monthly"):
+            problems.append(f"{where}: interval {interval!r}")
+        if interval == "weekly" and not schedule.get("day"):
+            problems.append(f"{where}: a weekly entry with no day")
+    return problems
+
+
+def _dependabot() -> Dict[str, Any]:
+    return wg.load(DEPENDABOT)
+
+
+def test_every_dependabot_entry_opens_its_pull_requests_after_17_pacific():
+    assert dependabot_schedule_problems(_dependabot()) == []
+
+
+@pytest.mark.parametrize(
+    "key, value, expected",
+    [
+        ("time", "12:00", "is not from 17:00 to 23:59"),
+        ("time", "16:59", "is not from 17:00 to 23:59"),
+        ("time", "7:30", "is not from 17:00 to 23:59"),
+        ("time", None, "is not from 17:00 to 23:59"),
+        ("timezone", "UTC", "timezone 'UTC'"),
+        ("timezone", None, "timezone None"),
+        ("interval", "daily", "interval 'daily'"),
+    ],
+)
+def test_a_planted_schedule_is_caught(key, value, expected):
+    config = copy.deepcopy(_dependabot())
+    schedule = config["updates"][-1]["schedule"]
+    if value is None:
+        schedule.pop(key, None)
+    else:
+        schedule[key] = value
+    problems = dependabot_schedule_problems(config)
+    assert any(expected in p for p in problems), problems
