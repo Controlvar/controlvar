@@ -336,7 +336,7 @@ def cognito(monkeypatch):
         def returns(self, username: str, email: str, sub: str) -> None:
             self.user_data = {
                 "username": username,
-                "attributes": {"sub": sub, "email": email},
+                "attributes": {"sub": sub, "email": email, "email_verified": "true"},
                 "groups": [],
             }
 

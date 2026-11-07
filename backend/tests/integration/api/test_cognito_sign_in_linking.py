@@ -485,6 +485,30 @@ def test_a_first_sign_in_needs_a_verified_email(signin, caplog, email_verified):
     _assert_refused(signin, response, caplog, "email_unverified", {}, count)
 
 
+def test_an_unverified_email_is_refused_before_the_address_is_looked_up(signin, caplog):
+    """The cases are evaluated in order: with an address another account
+    holds, an unverified email is still refused as ``email_unverified``, and
+    the record names no row."""
+    sfx = _suffix()
+    held = f"held.{sfx}@example.com"
+    holder = _add_user(
+        signin.db,
+        username=f"holder_{sfx}",
+        email=held,
+        hashed_password=HASHED_PASSWORD,
+        role=UserRole.DEVELOPER,
+    )
+    before = {holder.id: signin.rows.snapshot(holder.id)}
+    count = signin.rows.count()
+    signin.use(identity(f"cog_{sfx}", str(uuid.uuid4()), held, email_verified="false"))
+
+    response = _sign_in(signin, caplog)
+
+    _assert_refused(signin, response, caplog, "email_unverified", before, count)
+    (record,) = [r for r in caplog.records if r.name == SIGN_IN_LOGGER]
+    assert record.row_id is None
+
+
 @pytest.mark.parametrize("email_verified", ["true", "True"], ids=["true", "True"])
 def test_a_first_sign_in_with_a_verified_email_gets_an_account(
     signin, caplog, email_verified
