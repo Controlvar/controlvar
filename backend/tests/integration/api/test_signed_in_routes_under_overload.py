@@ -57,6 +57,7 @@ from backend.app.core.security import create_local_access_token, get_password_ha
 from backend.app.db import request_sessions
 from backend.app.db import session as session_module
 from backend.app.main import app
+from backend.app.models.experiment import Experiment, Metric, MetricType, Variant
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.models.rollout_schedule import (
     RolloutSchedule,
@@ -83,6 +84,9 @@ BURST_DEADLINE_SECONDS = 90
 DRAIN_SECONDS = 30
 #: Schedules on the flag page's list, each with two stages.
 SCHEDULES = 20
+#: Experiments the export row makes and exports, each with two variants and
+#: a primary metric.
+EXPERIMENTS = 3
 OLD_PASSWORD = "Overload-Old-1"
 NEW_PASSWORD = "Overload-New-1"
 
@@ -295,7 +299,68 @@ def _users_me(world: World) -> Send:
 
 
 def _export(world: World) -> Send:
-    return _get("/api/v1/export/experiments", world.user(), format="json")
+    """The export of the experiments this row makes, chosen by the route's
+    ``start_date`` and ``end_date``; the answer before the burst has exactly
+    those experiments."""
+    owner = world.user()
+    made = []
+    for _ in range(EXPERIMENTS):
+        suffix = uuid.uuid4().hex[:8]
+        experiment = Experiment(
+            name=f"Overload {suffix}", key=f"overload-{suffix}", owner_id=owner.id
+        )
+        world.db.add(experiment)
+        world.db.flush()
+        for name, control in (("control", True), ("treatment", False)):
+            world.db.add(
+                Variant(
+                    experiment_id=experiment.id,
+                    name=name,
+                    is_control=control,
+                    traffic_allocation=50,
+                )
+            )
+        world.db.add(
+            Metric(
+                experiment_id=experiment.id,
+                name="Purchase",
+                event_name="purchase",
+                metric_type=MetricType.CONVERSION,
+                is_primary=True,
+            )
+        )
+        made.append(experiment)
+    world.db.commit()
+    ids = sorted(str(experiment.id) for experiment in made)
+    created = [experiment.created_at for experiment in made]
+
+    def remove():
+        # Each experiment's variants and metrics go with it.
+        for experiment in made:
+            world.db.delete(experiment)
+        world.db.commit()
+
+    world.cleanups.append(remove)
+    headers = _bearer(owner)
+    params = {
+        "format": "json",
+        "start_date": min(created).isoformat(),
+        "end_date": max(created).isoformat(),
+    }
+
+    async def send(http, index):
+        response = await http.get(
+            "/api/v1/export/experiments", headers=headers, params=params
+        )
+        if index == 0 and response.status_code == 200:
+            exported = sorted(row["experiment_id"] for row in response.json())
+            assert exported == ids, (
+                f"the export before the burst has {len(exported)} experiments, "
+                f"want the {EXPERIMENTS} this row made"
+            )
+        return response
+
+    return send
 
 
 def _admin_stats(world: World) -> Send:
