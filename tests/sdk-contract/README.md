@@ -120,7 +120,7 @@ directory. A harness (`harness/published_js_ruleset.cjs` under node, required by
   reaches them as on or off).
 
 Every run also plants a defect into the inputs, against the same releases, and checks the
-failure by its text: P1 an unknown `evaluation` (fails, naming the flag), P2 a rule with no
+failure by its text: P1 a malformed flag, a string percentage (fails, naming the flag; an unknown `evaluation` is deferred to the server by 0.3.0, not refused), P2 a rule with no
 integer percentage, P3 a percentage of `50.0` (fails for Python, passes for JavaScript, whose
 `JSON.parse` makes it 50), P4 schema 2 under `accepted` (fails; passes under `format-refused`),
 P5 keys the releases do not know at every level (passes), P6 the same files loaded from outside
