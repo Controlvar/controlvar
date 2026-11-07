@@ -807,6 +807,138 @@ by = [
 ]
 
 [[unit]]
+text = "Troubleshooting"
+by = ["mechanism:warehouse-troubleshooting-pointer"]
+
+[[unit]]
+text = "The codes below are the whole set."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "A failed call answers with one as code, and a failed run reports one as its error_code."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "A metric that could not be computed can carry fewer_than_2_units, no_units or join_key_mismatch as its \"Not computed\" reason while the run itself succeeds."
+by =["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "Status is the HTTP status of a route that answers with the code directly."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "Code | Status | What it means | What to check"
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "credentials_unavailable | 503 | WAREHOUSE_CREDENTIALS_KEYS is not set, so no stored credential can be used. | An operator sets it: see For operators."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "auth_failed | 502 | The warehouse did not accept the connection's credentials. | Snowflake: the public key registered on the user is the one Controlvar shows, and the account identifier is right. BigQuery: the service account and its JSON key still exist. Then test the connection."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "key_revoked | 502 | BigQuery reports that the key's service account client was disabled or deleted. | Enable the service account or create a new JSON key, and paste it into the connection. Snowflake does not report this."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "permission_denied | 502 | The role may not run this query. | Snowflake: USAGE on the warehouse, database and schema, and SELECT on the table. BigQuery: BigQuery Job User on the billing project, and BigQuery Data Viewer on each dataset."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "object_not_found | 502 | A table, view or column the query names was not found. | The table is named in full, with each part as the warehouse stores it, and every mapped column exists. On Snowflake a table the role may not see is reported the same way."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "not_a_select | 502 | The statement was not a single SELECT, so it was not run. | Controlvar writes the SQL itself, so this is unexpected: report it."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "bytes_limit | 502 | The query would read more than the connection's bytes cap, by Controlvar's dry-run check or BigQuery's own limit, so it was not run. | Raise \"Most data a query may read\" (up to WAREHOUSE_MAX_BYTES_PER_QUERY), or point the source at a smaller or partitioned table. Snowflake has no byte limit."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "time_limit | 504 | The warehouse did not finish within query_timeout_seconds. | Raise it (up to WAREHOUSE_MAX_QUERY_TIMEOUT_SECONDS), or give the source a smaller table or a shorter window."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "cancelled | 502 | The warehouse cancelled the query. | Whether someone, or a resource monitor, cancelled it: see the warehouse's own query history."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "workgroup_unsafe | 502 | Not raised for Snowflake or BigQuery. | Nothing."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "timezone_not_utc | 502 | Snowflake reported a session time zone other than UTC, after Controlvar set it. The run is refused because times would be compared in another zone. | Start the analysis again; if it recurs, report it. BigQuery does not report this."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "result_invalid | 502 | The warehouse returned a result in a shape Controlvar does not accept, or one that was too large. | Start the analysis again; if it recurs, check that the source maps the columns you mean, and report it."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "too_many_variant_values | 502 | The variant column has more distinct values than allowed. | The assignment source's variant column holds a variant label, not an id that differs per unit."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "join_key_mismatch | 502 | The metric source has rows in the window, but none has the unit id of an exposed unit. | Both sources map the same identifier, with the same type and form."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "no_units | 502 | No exposed units were found in the window. | The experiment key in the assignment source, the window, and the source's filters."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "fewer_than_2_units | 502 | A variant has fewer than 2 units, so a mean cannot be compared. | Wait for more exposures, or widen the window."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "abandoned | 502 | The run stopped reporting progress and was marked as failed. | Start the analysis again. The run still counts toward the daily limit."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "warehouse_busy | 429 | This deployment is already running as many warehouse jobs as it allows. | Try again after the Retry-After seconds; see Limits and cost."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "run_in_progress | 409 | An analysis or preview on this connection has not finished. | Wait for it to finish, then start yours."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "destination_not_allowed | 502 | The warehouse address is not one this deployment connects to. | Snowflake: the account is the organisation-account identifier, not a locator or a URL. An address that resolves to a private network is refused."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "redirect_refused | 502 | The warehouse answered with a redirect, which Controlvar does not follow. | The account identifier or the location in the connection."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "unreachable | 502 | The warehouse could not be reached. | That the API can open an outbound HTTPS connection to the warehouse, and that its firewall or network policy allows the API's address."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "unrecognised_warehouse_error | 502 | The warehouse sent an error code that Controlvar has no entry for. | The vendor code, as described below."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "internal | 500 | Something went wrong on Controlvar's side while talking to the warehouse. | An operator reads the API's log, where a warehouse failure is logged with its code."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "For unrecognised_warehouse_error, the message and the body's vendor_code give the warehouse's own code: for BigQuery the reason of the error, for Snowflake its error code."
+by = ["test:modules/backend/tests/unit/warehouse/test_errors.py::test_upstream_error_text_absent_from_responses_and_logs", "test:modules/backend/tests/unit/warehouse/test_snowflake.py", "test:modules/backend/tests/unit/warehouse/test_bigquery.py"]
+
+[[unit]]
+text = "Look that code up in the warehouse's documentation, and find the statement in its query or job history."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Controlvar never repeats the warehouse's own error text."
+by = ["test:modules/backend/tests/unit/warehouse/test_errors.py::test_upstream_error_text_absent_from_responses_and_logs"]
+
+[[unit]]
 text = "If you ran an earlier full-profile release"
 by = ["exempt:baseline"]
 
