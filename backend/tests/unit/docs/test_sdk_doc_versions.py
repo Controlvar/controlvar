@@ -92,8 +92,18 @@ PUBLISHED = ("python", "js")
 #: directory joins in the change that says it is on its registry, once the
 #: registry serves it. test_deferred_sdk_pages.py reads it (a registry install
 #: line, and "not yet published"), and so does test_registry_availability.py
-#: (every sentence that says an SDK is on a registry).
-ON_REGISTRY = ("python", "js")
+#: (every sentence that says an SDK is on a registry). The SDK sitting of
+#: 2026-11-06 published the others here (#1498), and the MCP server.
+ON_REGISTRY = (
+    "python",
+    "js",
+    "react",
+    "react-native",
+    "openfeature",
+    "openfeature-python",
+    "mcp",
+    "dotnet",
+)
 #: Pages on which the bare name `controlvar` means the Python SDK.
 PYTHON_PAGES = {
     "docs/sdk/python.md",
@@ -168,11 +178,10 @@ FORMS: Tuple[Tuple[str, "re.Pattern[str]"], ...] = (
         re.compile(r"\bdotnet package add (Controlvar\.SDK) --version " + VERSION),
     ),
 )
-#: The NuGet forms that no page quotes yet: D's install line is the first.
-#: Each is held to a sample below instead, and the scan fails once a page
-#: quotes it, so that this set is emptied then.
+#: The NuGet forms that no page quotes yet (docs/sdk/dotnet.md's install line
+#: is ``nuget add``). Each is held to a sample below instead, and the scan
+#: fails once a page quotes it, so that it leaves this set then.
 NOT_ON_A_PAGE_YET = {
-    "nuget add",
     "nuget reference",
     "nuget package add, at",
     "nuget package add, version",

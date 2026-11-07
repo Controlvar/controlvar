@@ -217,13 +217,26 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("Steps 3 to 5 need a provider key"),
     ),
     # SDKs
-    "Client libraries for web, mobile and server. The JavaScript SDK is on npm and the Python SDK is on PyPI.": (
+    "Client libraries for web, mobile and server. The JavaScript, React, React Native, Python and .NET SDKs and the OpenFeature providers are on npm, PyPI or NuGet.": (
         lede("for Node >= 18 and browsers", "docs/sdk/javascript.md"),
         lede("iOS 14+", "docs/sdk/ios.md"),
         lede("Android applications", "docs/sdk/android.md"),
         lede("for Go services", "docs/sdk/go.md"),
         says("The @controlvar/js-sdk package is on npm", "docs/sdk/javascript.md"),
+        says("The @controlvar/react-sdk package is on npm", "docs/sdk/react.md"),
+        says(
+            "The @controlvar/react-native-sdk package is on npm",
+            "docs/sdk/react-native.md",
+        ),
         says("The controlvar package is on PyPI", "docs/sdk/python.md"),
+        says("The Controlvar.SDK package is on NuGet", "docs/sdk/dotnet.md"),
+        says(
+            "The @controlvar/openfeature-provider package is on npm",
+            "docs/sdk/openfeature.md",
+        ),
+        says(
+            "The controlvar-openfeature package is on PyPI", "docs/sdk/openfeature.md"
+        ),
     ),
     "Browser and Node.js": (lede("for Node >= 18 and browsers"),),
     "A synchronous Python client with no dependencies": (

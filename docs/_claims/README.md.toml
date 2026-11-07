@@ -463,6 +463,26 @@ text = "Go | go get github.com/controlvar/controlvar/sdk/go"
 by = ["journey:sdk-go#quick-start-user-on"]
 
 [[unit]]
+text = "React | npm install @controlvar/react-sdk"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "React Native | npm install @controlvar/react-native-sdk"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "OpenFeature (Node) | npm install @controlvar/openfeature-provider @openfeature/server-sdk"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "OpenFeature (Python) | pip install controlvar-openfeature"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = ".NET | dotnet add package Controlvar.SDK"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
 text = "Every other SDK installs from a clone of this repository."
 by = ["exempt:instruction"]
 

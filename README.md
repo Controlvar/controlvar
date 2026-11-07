@@ -165,6 +165,11 @@ tracking against a live API in CI (the SDK Live Contract job of `pr-qa-gate.yml`
 | JavaScript | `npm install @controlvar/js-sdk` |
 | Python | `pip install controlvar` |
 | Go | `go get github.com/controlvar/controlvar/sdk/go` |
+| React | `npm install @controlvar/react-sdk` |
+| React Native | `npm install @controlvar/react-native-sdk` |
+| OpenFeature (Node) | `npm install @controlvar/openfeature-provider @openfeature/server-sdk` |
+| OpenFeature (Python) | `pip install controlvar-openfeature` |
+| .NET | `dotnet add package Controlvar.SDK` |
 
 Every other SDK installs from a clone of this repository. The [SDK guide](docs/sdk-guide.md) says
 how, and what CI runs for each one.

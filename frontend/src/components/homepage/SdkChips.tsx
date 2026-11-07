@@ -2,8 +2,20 @@ import React from 'react';
 import { SDK_GUIDES, SDKS } from '@/content/sdks';
 import { FOCUS, WIDTH } from '@/components/homepage/styles';
 
-/** The two SDKs on a package registry, both as betas (the install sentence below). */
-const BETA: ReadonlySet<string> = new Set(['js', 'python']);
+/**
+ * The SDKs with a release, all betas (the install sentence below): the ones on
+ * a package registry, and Go, whose release is its module's tag.
+ */
+const BETA: ReadonlySet<string> = new Set([
+  'js',
+  'python',
+  'react',
+  'react-native',
+  'openfeature',
+  'openfeature-python',
+  'dotnet',
+  'go',
+]);
 
 export interface Chip {
   name: string;
@@ -62,9 +74,9 @@ export function SdkChips() {
           ))}
         </ul>
         <p className="mt-6 max-w-3xl text-sm leading-relaxed text-slate-600">
-          The JavaScript SDK is on npm (npm install @controlvar/js-sdk) and the Python SDK is on PyPI (pip install
-          controlvar), both as betas; the others are not on npm or the other package registries yet, and each of their
-          guides shows how to install it from the repository.
+          The SDKs marked beta have a release: the JavaScript, React, React Native, Python and .NET SDKs and the
+          OpenFeature providers are on npm, PyPI or NuGet, and the Go SDK installs by module path. The others install
+          from the repository. Each guide shows how to install its SDK.
         </p>
       </div>
     </section>

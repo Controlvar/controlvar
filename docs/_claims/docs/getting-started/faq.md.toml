@@ -314,12 +314,21 @@ by = ["exempt:label"]
 text = "The JavaScript SDK is on npm (npm install @controlvar/js-sdk, 0.3.0, beta) and the Python SDK is on PyPI (pip install controlvar, 0.3.0, beta)."
 by = [
     "mechanism:sdk-doc-versions",
+    "mechanism:registry-availability",
     "journey:sdk-javascript#quick-start-user-on",
     "journey:sdk-python#quick-start-user-on",
 ]
 
 [[unit]]
-text = "The Go SDK installs by module path, and the other SDKs from a clone of this repository: each SDK's page (Go, Java, React) says how."
+text = "So are the React SDK (npm install @controlvar/react-sdk, 0.1.0, beta), the React Native SDK (npm install @controlvar/react-native-sdk, 0.1.0, beta) and the two OpenFeature providers (npm install @controlvar/openfeature-provider, 0.1.0, beta; pip install controlvar-openfeature, 0.1.0, beta)."
+by = ["mechanism:sdk-doc-versions", "mechanism:registry-availability"]
+
+[[unit]]
+text = "The .NET SDK is on NuGet."
+by = ["mechanism:registry-availability"]
+
+[[unit]]
+text = "The Go SDK installs by module path, and the other SDKs from a clone of this repository: each SDK's page (Go, Ruby) says how."
 by = ["journey:sdk-go#quick-start-user-on"]
 
 [[unit]]
@@ -340,6 +349,22 @@ by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the
 
 [[unit]]
 text = "React | @controlvar/react-sdk (npm)"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "React Native | @controlvar/react-native-sdk (npm)"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "OpenFeature (Node) | @controlvar/openfeature-provider (npm)"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "OpenFeature (Python) | controlvar-openfeature (PyPI)"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = ".NET | Controlvar.SDK (NuGet)"
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
 
 [[unit]]
