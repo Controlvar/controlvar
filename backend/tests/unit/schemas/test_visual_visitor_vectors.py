@@ -106,6 +106,17 @@ def test_campaign_values_are_kept_only_in_the_unreserved_set():
         {"web_utm_campaign": "a" * 101}
     )
     assert cleaned == {} and dropped == ["web_utm_campaign"]
+    # The server, now, gives the answers the file records.
+    live = {
+        case_id: visual_tracking.web_detail_is_kept(key, value)
+        for case_id, key, value, _ in vectors.DETAILS
+        if key in visual_tracking.UTM_KEYS
+    }
+    assert live == {i: v for i, v in kept.items() if i in live}
+    for case_id, query, param, expected in vectors.UTM_QUERIES:
+        value = vectors.utm_value(query, param)
+        answer = visual_tracking.web_detail_is_kept(f"web_{param}", value)
+        assert answer is expected, case_id
 
 
 def test_every_audience_verdict_is_the_one_the_corpus_was_written_for():
@@ -129,6 +140,12 @@ def test_an_absent_detail_matches_no_negative_rule():
     for unknown_device in ("aud-05", "aud-14", "aud-15", "aud-16"):
         assert answers[unknown_device] is False, unknown_device
     assert answers["aud-04"] is True  # a known device that is not a phone
+    # The server, now, gives the answers the file records.
+    for case in absent + [
+        c for c in data["audiences"] if c["id"] in ("aud-04", "aud-14")
+    ]:
+        live = vectors.server_matches(case["context"], case["rule"], case["id"])
+        assert live is case["matches"], case["id"]
 
 
 def test_the_file_carries_the_vocabulary_and_limits():
