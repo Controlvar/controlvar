@@ -31,6 +31,7 @@ from backend.app.core.settings_rules import (
     MIN_SECRET_KEY_LENGTH,
     PUBLIC_BASE_URL_EXAMPLE,
     allowed_host_pattern_error,
+    cognito_domain_error,
     parse_allowed_hosts,
     public_base_url_error,
     secret_is_placeholder,
@@ -516,6 +517,19 @@ class Settings(BaseSettings):
     # Ignored under ``local``, where both routes always answer 404.  Read at
     # request time, so a test can flip it on the singleton.
     COGNITO_SELF_SIGNUP_ENABLED: bool = False
+    # Dashboard sign-in through the Cognito Hosted UI (#708). The Hosted UI's
+    # domain name alone, e.g. `<prefix>.auth.<region>.amazoncognito.com`: the
+    # dashboard sends the browser to `https://<COGNITO_DOMAIN>/oauth2/authorize`
+    # (GET /api/v1/auth/config serves it), and POST /api/v1/auth/cognito/exchange
+    # asks `https://<COGNITO_DOMAIN>/oauth2/token` for the tokens. Unset (the
+    # default), the dashboard under cognito says sign-in is not set up. A value
+    # that is not a domain name refuses to start the API
+    # (`settings_rules.cognito_domain_error`).
+    COGNITO_DOMAIN: Optional[str] = None
+    # How long the code exchange waits for Cognito's token endpoint: httpx's
+    # connect, read, write and pool timeouts, each. Past it the exchange
+    # answers 504.
+    COGNITO_TOKEN_TIMEOUT_SECONDS: float = Field(default=10, gt=0, le=60)
 
     model_config = SettingsConfigDict(
         case_sensitive=True,
@@ -799,6 +813,23 @@ class Settings(BaseSettings):
         if error:
             raise ValueError(error)
         return v.strip().rstrip("/")
+
+    @field_validator("COGNITO_DOMAIN")
+    @classmethod
+    def validate_cognito_domain(cls, v: Optional[str]) -> Optional[str]:
+        """The Hosted UI's domain name, or ``None`` when unset or blank.
+
+        Unset never stops the API: every Cognito deployment from before this
+        setting has none, and the dashboard then says sign-in is not set up.
+        A value that is not a domain name does, under any provider: it would
+        send every sign-in to a page that does not exist.
+        """
+        if v is None or not v.strip():
+            return None
+        error = cognito_domain_error(v)
+        if error:
+            raise ValueError(error)
+        return v
 
     @field_validator("ALLOWED_HOSTS", mode="before")
     @classmethod
