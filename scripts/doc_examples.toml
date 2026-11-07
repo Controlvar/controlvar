@@ -21,6 +21,7 @@ universe = [
     "CODE_OF_CONDUCT.md",
     "CONTRIBUTING.md",
     "README.md",
+    "ROADMAP.md",
     "SECURITY.md",
     "THIRD_PARTY_LICENSES.md",
     "backend/app/api/v1/endpoints/README_SAFETY.md",

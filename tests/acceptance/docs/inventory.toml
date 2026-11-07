@@ -705,9 +705,9 @@ note = "sign-in per role and a password change, a first API key used for an assi
 # above says what each field means.
 # ---------------------------------------------------------------------------
 [meta]
-walked = 157
+walked = 158
 
-# The front door, and the policy beside it.
+# The front door, the policy beside it, and the plan.
 
 [documents."README.md"]
 scope = "in"
@@ -718,6 +718,11 @@ reason = "the repository's front page on GitHub: its runnable blocks run in Doc 
 scope = "in"
 class = "reference"
 reason = "how to report a problem privately and which versions are supported; no steps to follow"
+
+[documents."ROADMAP.md"]
+scope = "in"
+class = "reference"
+reason = "what is planned Now, Next and Later, and how to influence it; no steps to follow"
 
 # The demo, walked on the stack demo/setup-local.sh starts (demo-local), in the
 # demo job of docs-journeys.yml.
