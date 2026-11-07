@@ -53,7 +53,7 @@ const sections = [
   {
     category: 'SDKs',
     icon: '📦',
-    description: 'Client libraries for web, mobile and server. The JavaScript, React, React Native, Python and .NET SDKs and the OpenFeature providers are on npm, PyPI or NuGet.',
+    description: 'Client libraries for web, mobile and server. The JavaScript, React, React Native, Python, Java and .NET SDKs and the OpenFeature providers are on npm, PyPI, Maven Central or NuGet.',
     links: [
       { label: 'JavaScript SDK', href: docsUrl('sdk/javascript'), desc: 'Browser and Node.js' },
       { label: 'Python SDK', href: docsUrl('sdk/python'), desc: 'A synchronous Python client with no dependencies' },

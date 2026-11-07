@@ -80,15 +80,15 @@ Python SDK is on PyPI (`pip install controlvar`, 0.3.0, beta). So are the React 
 (`npm install @controlvar/react-sdk`, 0.1.0, beta), the React Native SDK
 (`npm install @controlvar/react-native-sdk`, 0.1.0, beta) and the two OpenFeature providers
 (`npm install @controlvar/openfeature-provider`, 0.1.0, beta; `pip install controlvar-openfeature`,
-0.1.0, beta). The .NET SDK is on NuGet. The Go SDK installs by module path, and the other SDKs
-from a clone of this repository: each SDK's page ([Go](../sdk/go.md), [Ruby](../sdk/ruby.md))
-says how.
+0.1.0, beta). The Java SDK is on Maven Central and the .NET SDK on NuGet. The Go SDK installs by
+module path, and the other SDKs from a clone of this repository: each SDK's page
+([Go](../sdk/go.md), [Ruby](../sdk/ruby.md)) says how.
 
 | SDK | Package |
 |-----|---------|
 | JavaScript / TypeScript | `@controlvar/js-sdk` (npm) |
 | Python | `controlvar` (PyPI) |
-| Java / JVM | `com.controlvar:controlvar-sdk` (Maven/Gradle) |
+| Java / JVM | `com.controlvar:controlvar-sdk` (Maven Central) |
 | React | `@controlvar/react-sdk` (npm) |
 | React Native | `@controlvar/react-native-sdk` (npm) |
 | OpenFeature (Node) | `@controlvar/openfeature-provider` (npm) |

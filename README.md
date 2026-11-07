@@ -169,6 +169,7 @@ tracking against a live API in CI (the SDK Live Contract job of `pr-qa-gate.yml`
 | React Native | `npm install @controlvar/react-native-sdk` |
 | OpenFeature (Node) | `npm install @controlvar/openfeature-provider @openfeature/server-sdk` |
 | OpenFeature (Python) | `pip install controlvar-openfeature` |
+| Java | `com.controlvar:controlvar-sdk` (Maven Central) |
 | .NET | `dotnet add package Controlvar.SDK` |
 
 Every other SDK installs from a clone of this repository. The [SDK guide](docs/sdk-guide.md) says

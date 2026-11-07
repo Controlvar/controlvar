@@ -479,6 +479,10 @@ text = "OpenFeature (Python) | pip install controlvar-openfeature"
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
 
 [[unit]]
+text = "Java | com.controlvar:controlvar-sdk (Maven Central)"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
 text = ".NET | dotnet add package Controlvar.SDK"
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
 

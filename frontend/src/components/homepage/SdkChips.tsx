@@ -13,6 +13,7 @@ const BETA: ReadonlySet<string> = new Set([
   'react-native',
   'openfeature',
   'openfeature-python',
+  'java',
   'dotnet',
   'go',
 ]);
@@ -74,9 +75,9 @@ export function SdkChips() {
           ))}
         </ul>
         <p className="mt-6 max-w-3xl text-sm leading-relaxed text-slate-600">
-          The SDKs marked beta have a release: the JavaScript, React, React Native, Python and .NET SDKs and the
-          OpenFeature providers are on npm, PyPI or NuGet, and the Go SDK installs by module path. The others install
-          from the repository. Each guide shows how to install its SDK.
+          The SDKs marked beta have a release: the JavaScript, React, React Native, Python, Java and .NET SDKs and the
+          OpenFeature providers are on npm, PyPI, Maven Central or NuGet, and the Go SDK installs by module path. The
+          others install from the repository. Each guide shows how to install its SDK.
         </p>
       </div>
     </section>

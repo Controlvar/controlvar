@@ -240,7 +240,7 @@ See `demo/streampulse/README.md`.
 - An audit log of changes to flags, experiments, users and roles, and with the
   `compliance` module HMAC-SHA256 signed compliance events and report exports
 - RBAC with four built-in roles, plus custom roles and time-limited grants
-- Full REST API + SDKs: JavaScript, React, React Native and Python on npm and PyPI, .NET on NuGet, Go with `go get`, Java built from `sdk/`
+- Full REST API + SDKs: JavaScript, React, React Native and Python on npm and PyPI, Java on Maven Central, .NET on NuGet, Go with `go get`
 - Deployable to your own AWS account with the AWS CDK
 
 ---
@@ -254,7 +254,7 @@ See `demo/streampulse/README.md`.
 > The platform is not certified and we do not claim it. What it gives you are controls that support your own program: an audit log of changes to flags, experiments, API keys, users and roles, made by people or by the platform itself, in the core profile, where no API edits or deletes an entry, and with the `compliance` module HMAC-SHA256 signed audit events with exportable report packs. Your auditor decides what they satisfy.
 
 **"What about our tech stack?"**
-> The Python, JavaScript/TypeScript, React and React Native SDKs are on PyPI and npm, the .NET SDK is on NuGet, and the Go SDK installs with `go get`. The Java SDK (with Spring Boot auto-configuration) builds from the repository's `sdk/` directory. The REST API means you can integrate from anything.
+> The Python, JavaScript/TypeScript, React and React Native SDKs are on PyPI and npm, the Java SDK (with Spring Boot auto-configuration) is on Maven Central, the .NET SDK is on NuGet, and the Go SDK installs with `go get`. The REST API means you can integrate from anything.
 
 **"How do we deploy? What's the infrastructure cost?"**
 > Into your own AWS account with the AWS CDK — ECS Fargate, Aurora PostgreSQL, ElastiCache Redis — following docs/self-hosting/cdk.md, then dispatching the Deploy workflow for staging or prod. You own all the infrastructure. It is not one command, and the stacks create resources that AWS bills for (Aurora, NAT gateways, a load balancer); cdk.md says what a teardown leaves behind.

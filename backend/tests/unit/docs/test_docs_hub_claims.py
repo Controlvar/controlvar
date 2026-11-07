@@ -217,7 +217,7 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("Steps 3 to 5 need a provider key"),
     ),
     # SDKs
-    "Client libraries for web, mobile and server. The JavaScript, React, React Native, Python and .NET SDKs and the OpenFeature providers are on npm, PyPI or NuGet.": (
+    "Client libraries for web, mobile and server. The JavaScript, React, React Native, Python, Java and .NET SDKs and the OpenFeature providers are on npm, PyPI, Maven Central or NuGet.": (
         lede("for Node >= 18 and browsers", "docs/sdk/javascript.md"),
         lede("iOS 14+", "docs/sdk/ios.md"),
         lede("Android applications", "docs/sdk/android.md"),
@@ -229,6 +229,10 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
             "docs/sdk/react-native.md",
         ),
         says("The controlvar package is on PyPI", "docs/sdk/python.md"),
+        says(
+            "com.controlvar:controlvar-sdk and the Spring Boot starter are on Maven Central",
+            "docs/sdk/java.md",
+        ),
         says("The Controlvar.SDK package is on NuGet", "docs/sdk/dotnet.md"),
         says(
             "The @controlvar/openfeature-provider package is on npm",

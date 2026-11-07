@@ -427,15 +427,16 @@ def test_every_registry_sentence_names_only_sdks_on_that_registry():
     assert not found, "\n".join(found)
 
 
-#: The SDKs the sitting put on npm, PyPI and NuGet, with the first two: what
-#: D's cross-page sentences name.
-ON_NPM_PYPI_NUGET = (
+#: The SDKs the sitting put on npm, PyPI, Maven Central and NuGet, with the
+#: first two: what D's cross-page sentences name.
+NAMED_BY_D = (
     "js",
     "python",
     "react",
     "react-native",
     "openfeature",
     "openfeature-python",
+    "java",
     "dotnet",
 )
 #: Pages whose registry sentences today name these SDKs, which the sweep must
@@ -455,6 +456,9 @@ FOUND_TODAY = {
     ("docs/sdk/openfeature.md", "openfeature"),
     ("docs/sdk/openfeature.md", "openfeature-python"),
     ("docs/sdk/dotnet.md", "dotnet"),
+    ("docs/sdk/java.md", "java"),
+    ("sdk/java/README.md", "java"),
+    ("docs/sdk-guide.md", "java"),
     *(
         (page, sdk)
         for page in (
@@ -463,11 +467,11 @@ FOUND_TODAY = {
             "frontend/src/pages/docs/index.tsx",
             "frontend/src/components/homepage/SdkChips.tsx",
         )
-        for sdk in ON_NPM_PYPI_NUGET
+        for sdk in NAMED_BY_D
     ),
     *(
         ("demo/DEMO_GUIDE.md", sdk)
-        for sdk in ("js", "python", "react", "react-native", "dotnet")
+        for sdk in ("js", "python", "react", "react-native", "java", "dotnet")
     ),
 }
 
@@ -668,7 +672,7 @@ REFUSED = (
         "The `@controlvar/edge-sdk` package is on [npm](https://npmjs.com).",
         "sdk/edge is not in ON_REGISTRY",
     ),
-    ("The Java SDK is on Maven Central.", "sdk/java is not in ON_REGISTRY"),
+    ("The Android SDK is on Maven Central.", "sdk/android is not in ON_REGISTRY"),
     (
         "`@controlvar/edge-sdk` is published to the npm registry.",
         "sdk/edge is not in ON_REGISTRY",

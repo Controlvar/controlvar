@@ -192,7 +192,7 @@ export const TYPED: readonly Row[] = [
   { tag: 'p', text: 'All MIT-licensed. By default, flag evaluation and experiment assignment happen on the server.', source: `${MAIN}:124` },
   {
     tag: 'p',
-    text: 'The SDKs marked beta have a release: the JavaScript, React, React Native, Python and .NET SDKs and the OpenFeature providers are on npm, PyPI or NuGet, and the Go SDK installs by module path. The others install from the repository. Each guide shows how to install its SDK.',
+    text: 'The SDKs marked beta have a release: the JavaScript, React, React Native, Python, Java and .NET SDKs and the OpenFeature providers are on npm, PyPI, Maven Central or NuGet, and the Go SDK installs by module path. The others install from the repository. Each guide shows how to install its SDK.',
     source: 'SdkChips.tsx, as the packages published for #1498 made it',
   },
 

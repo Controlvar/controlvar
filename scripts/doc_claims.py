@@ -832,6 +832,10 @@ MECHANISMS: Dict[str, Mechanism] = {
                 r"^Every SDK on a package registry \| ",
             ),
             ("demo/DEMO_GUIDE.md", r"\bon (?:npm and PyPI|PyPI and npm)\b"),
+            (
+                "docs/sdk-guide.md",
+                r"^The Java SDK and its Spring Boot starter are on Maven Central:$",
+            ),
         ),
     ),
     # The one sentence per SDK page about the live contract job.

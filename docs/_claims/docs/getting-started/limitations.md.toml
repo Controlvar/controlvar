@@ -350,7 +350,7 @@ by = [
 ]
 
 [[unit]]
-text = "Every SDK on a package registry | The JavaScript, React and React Native SDKs and the OpenFeature provider for Node are on npm; the Python SDK and the OpenFeature provider for Python are on PyPI; the .NET SDK is on NuGet. The Go SDK installs by module path, and every other SDK installs from a clone of this repository."
+text = "Every SDK on a package registry | The JavaScript, React and React Native SDKs and the OpenFeature provider for Node are on npm; the Python SDK and the OpenFeature provider for Python are on PyPI; the Java SDK and its Spring Boot starter are on Maven Central; the .NET SDK is on NuGet. The Go SDK installs by module path, and every other SDK installs from a clone of this repository."
 by = [
     "mechanism:registry-availability",
     "journey:sdk-javascript#quick-start-user-on",

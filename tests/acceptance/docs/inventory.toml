@@ -237,7 +237,7 @@ reason = "the page's pip install, run as written in a fresh virtual environment,
 
 [pages."sdk/java.md"]
 class = "reference"
-reason = "not walked: the page says the package is not yet on Maven Central; the SDK live contract (tests/sdk-contract/live/run_live_contract.py) runs the SDK against a live API in the PR QA Gate"
+reason = "not walked: no docs journey installs the package from Maven Central yet; the SDK live contract (tests/sdk-contract/live/run_live_contract.py) runs the SDK against a live API in the PR QA Gate"
 
 [pages."sdk/react.md"]
 class = "reference"
@@ -815,7 +815,7 @@ reason = "not walked: no docs journey installs the provider from PyPI yet (the R
 [documents."sdk/java/README.md"]
 scope = "in"
 class = "reference"
-reason = "not walked: the README says the package is not on Maven Central yet; #1107 tests its flows"
+reason = "not walked: no docs journey installs the package from Maven Central yet; #1107 tests its flows"
 
 [documents."sdk/react/README.md"]
 scope = "in"

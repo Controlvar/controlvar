@@ -324,7 +324,7 @@ text = "So are the React SDK (npm install @controlvar/react-sdk, 0.1.0, beta), t
 by = ["mechanism:sdk-doc-versions", "mechanism:registry-availability"]
 
 [[unit]]
-text = "The .NET SDK is on NuGet."
+text = "The Java SDK is on Maven Central and the .NET SDK on NuGet."
 by = ["mechanism:registry-availability"]
 
 [[unit]]
@@ -344,7 +344,7 @@ text = "Python | controlvar (PyPI)"
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
 
 [[unit]]
-text = "Java / JVM | com.controlvar:controlvar-sdk (Maven/Gradle)"
+text = "Java / JVM | com.controlvar:controlvar-sdk (Maven Central)"
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
 
 [[unit]]

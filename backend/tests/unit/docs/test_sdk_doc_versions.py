@@ -103,6 +103,7 @@ ON_REGISTRY = (
     "openfeature-python",
     "mcp",
     "dotnet",
+    "java",
 )
 #: Pages on which the bare name `controlvar` means the Python SDK.
 PYTHON_PAGES = {
