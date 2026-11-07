@@ -423,3 +423,14 @@ def test_each_flags_evaluations_are_read_newest_first_in_one_statement():
     assert "JOIN LATERAL" in sql, sql
     assert NEWEST_FIRST.search(sql), sql
     assert "EXISTS" not in sql
+
+
+async def test_the_clock_the_list_classifies_at_is_an_aware_utc_time():
+    before = datetime.now(timezone.utc)
+    moment = await stale_flags.stale_clock()
+    after = datetime.now(timezone.utc)
+    assert moment.tzinfo is not None
+    assert moment.utcoffset() == timedelta(0)
+    # Between two readings of the real UTC clock, so a local-time clock on a
+    # host that is not on UTC lands hours outside.
+    assert before <= moment <= after

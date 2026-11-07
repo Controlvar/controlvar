@@ -142,8 +142,8 @@ most 100 items and the total, and the assistant asks for the next page with
 `list_feature_flags` also takes `stale`: `true` lists only the flags that look
 ready to remove and `false` the others, and each flag carries `stale` and
 `stale_reasons`; see [Stale Flags](feature-flags/stale-flags.md). On 2026-11-07
-the published server is 0.1.0, and the `stale` filter and fields come with
-version 0.2.0.
+the published server is 0.1.0, and the `stale` filter, and the stale fields in
+`list_feature_flags`, come with version 0.2.0.
 
 ## What leaves your instance
 

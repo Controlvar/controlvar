@@ -430,6 +430,23 @@ def test_v13_with_no_evaluation_in_n_days_not_evaluated_is_not_reported(
     assert reasons_of(body) == {target.key: [NO_EVAL], other.key: []}
 
 
+def test_v13_an_evaluation_exactly_at_the_cutoff_lifts_the_guard(
+    admin_client, db_session, prefix
+):
+    now = far_now()
+    at = naive(now)
+    old = at - timedelta(days=400)
+    target = add_flag(db_session, f"{prefix}-target", created_at=old)
+    other = add_flag(db_session, f"{prefix}-other", created_at=old)
+    # The only evaluation is exactly N days old: inside the window.
+    add_row(db_session, other, at - timedelta(days=days()))
+    set_now(now)
+
+    body = listing(admin_client, prefix)
+    assert body["evaluations_seen"] is True
+    assert reasons_of(body) == {target.key: [NO_EVAL], other.key: []}
+
+
 # ---------------------------------------------------------------------------
 # V14: the filter's exact sets
 # ---------------------------------------------------------------------------
@@ -806,7 +823,8 @@ def test_v20_the_statements_do_not_grow_with_the_number_of_flags(
     db_session.commit()
     # The installation has seen evaluations, so every flag's are looked up.
     add_row(db_session, rows[0], at - timedelta(hours=1))
-    add_row(db_session, rows[5], at - timedelta(hours=1))
+    # The last of the big set: a cap on the per-flag lookup would miss it.
+    add_row(db_session, rows[-1], at - timedelta(hours=1))
     set_now(now)
 
     engine = db_session.get_bind()

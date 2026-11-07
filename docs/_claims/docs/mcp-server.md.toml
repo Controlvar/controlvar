@@ -262,7 +262,7 @@ by = [
 ]
 
 [[unit]]
-text = "On 2026-11-07 the published server is 0.1.0, and the stale filter and fields come with version 0.2.0."
+text = "On 2026-11-07 the published server is 0.1.0, and the stale filter, and the stale fields in list_feature_flags, come with version 0.2.0."
 by = ["exempt:intent"]
 tag = "X"
 
