@@ -205,18 +205,20 @@ by = [
 ]
 
 [[unit]]
-text = "Every endpoint that accepts an API key, except the ones listed below for each, accepts any active key, whatever its scopes."
+text = "Every endpoint that accepts an API key, except the ones listed below for each and the two a web page calls (Refused in a web page), accepts any active key, whatever its scopes."
 by = [
     "test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these",
+    "test:backend/tests/smoke/test_page_key_routes.py::test_the_page_key_routes_are_exactly_these",
     "test:backend/tests/unit/api/test_route_surface_rules.py::test_the_ruleset_scope_and_its_owner_rule",
     "test:backend/tests/unit/api/test_route_surface_rules.py::test_an_api_key_is_accepted_only_by_the_sdk_routes_and_the_mcp_read_routes",
 ]
 
 [[unit]]
-text = "Names such as read, write or admin on existing keys are labels only; nothing checks them."
+text = "Names such as read, write or admin on existing keys are labels only: no route requires one, though the two routes a web page calls refuse a key that carries any scope."
 by = [
     "test:backend/tests/integration/api/test_api_keys_api.py::TestRulesetScopeNeedsFlagChangeRole::test_near_misses_are_labels_not_the_scope",
     "test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_key_without_the_exact_scope_is_refused_on_each_operation",
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_key_with_any_scope_is_refused",
 ]
 
 [[unit]]
@@ -431,6 +433,65 @@ by = ["test:backend/tests/integration/api/test_mcp_read_scope_api.py::test_a_sto
 [[unit]]
 text = "An ADMIN lists every user's keys, with their scopes, with GET /api/v1/api-keys?all=true."
 by = ["test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_admin_all_sees_everyone"]
+
+[[unit]]
+text = "Refused in a web page"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A key in a web page can be read by anyone who opens the page."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "So the two routes the visual editor's browser script calls answer 403 to a key that carries any scope, whatever its name:"
+by = [
+    "test:backend/tests/smoke/test_page_key_routes.py::test_the_page_key_routes_are_exactly_these",
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_key_with_any_scope_is_refused",
+    "test:backend/tests/integration/api/test_visual_preview_links_api.py::test_a_key_with_any_scope_cannot_read_a_preview",
+]
+
+[[unit]]
+text = "POST /api/v1/tracking/visual (beta), which answers the visual changes and goals a visitor gets on a page;"
+by = [
+    "test:backend/tests/smoke/test_page_key_routes.py::test_the_page_key_routes_are_exactly_these",
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_an_assigned_visitor_gets_the_changes_the_goals_and_one_exposure_per_view",
+]
+
+[[unit]]
+text = "POST /api/v1/tracking/visual/preview (beta), which answers the variant a preview link shows."
+by = [
+    "test:backend/tests/smoke/test_page_key_routes.py::test_the_page_key_routes_are_exactly_these",
+    "test:backend/tests/integration/api/test_visual_preview_links_api.py::test_a_link_shows_its_variant_on_the_page",
+]
+
+[[unit]]
+text = "The 403 says This API key has scopes, so it must stay on a server: a key in a web page can be read by anyone who opens the page."
+by = [
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_key_with_any_scope_is_refused",
+    "test:backend/tests/integration/api/test_visual_preview_links_api.py::test_a_key_with_any_scope_cannot_read_a_preview",
+]
+
+[[unit]]
+text = "Use a key with no scopes on your website."
+by = [
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_key_with_any_scope_is_refused",
+    "test:backend/tests/integration/api/test_visual_preview_links_api.py::test_a_key_with_any_scope_cannot_read_a_preview",
+]
+
+[[unit]]
+text = "Use a key with no scopes on a website: through the API, send \"scopes\": [] or leave scopes out."
+by = [
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_key_with_no_scopes_is_served",
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_an_assigned_visitor_gets_the_changes_the_goals_and_one_exposure_per_view",
+]
+
+[[unit]]
+text = "A key with a scope keeps working on every other route that takes a key."
+by = [
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_server_key_still_works_on_the_other_sdk_routes",
+    "test:backend/tests/smoke/test_page_key_routes.py::test_the_page_key_routes_are_exactly_these",
+    "test:backend/tests/smoke/test_page_key_routes.py::test_get_api_key_reads_no_scope",
+]
 
 [[unit]]
 text = "Using an API Key"

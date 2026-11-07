@@ -519,10 +519,11 @@ text = "Targeting Context Limits"
 by = ["exempt:label"]
 
 [[unit]]
-text = "The routes that take a targeting context hold it to two limits before it is matched against any rule: GET and POST /api/v1/feature-flags/evaluate/{flag_key}, GET /api/v1/feature-flags/user/{user_id}, POST /api/v1/tracking/assign, and each user's context in POST /api/v1/tracking/assign/batch."
+text = "The routes that take a targeting context hold it to two limits before it is matched against any rule: GET and POST /api/v1/feature-flags/evaluate/{flag_key}, GET /api/v1/feature-flags/user/{user_id}, POST /api/v1/tracking/assign, each user's context in POST /api/v1/tracking/assign/batch, and POST /api/v1/tracking/visual (beta)."
 by = [
     "test:backend/tests/integration/api/test_targeting_context_limits.py::test_a_context_over_the_limits_answers_422_and_nothing_is_recorded",
     "test:backend/tests/integration/api/test_targeting_context_limits.py::test_the_batch_is_refused_whole_before_the_first_user_is_assigned",
+    "test:backend/tests/integration/api/test_visual_tracking_api.py::test_a_context_over_the_limits_is_refused",
 ]
 
 [[unit]]

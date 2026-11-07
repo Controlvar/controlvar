@@ -88,8 +88,10 @@ The request takes:
 
 Scopes are stored with the key and returned when you list keys. **Two scopes are enforced:
 `sdk:ruleset` and `mcp:read`.** Every endpoint that accepts an API key, except the ones
-listed below for each, accepts any active key, whatever its scopes. Names such as `read`,
-`write` or `admin` on existing keys are labels only; nothing checks them.
+listed below for each and the two a web page calls
+([Refused in a web page](#refused-in-a-web-page)), accepts any active key, whatever its
+scopes. Names such as `read`, `write` or `admin` on existing keys are labels only: no route
+requires one, though the two routes a web page calls refuse a key that carries any scope.
 
 Scope names are matched exactly and case-sensitively: the stored list is split on commas and
 each entry is trimmed, so `"read, sdk:ruleset "` carries `sdk:ruleset`, while `SDK:RULESET`,
@@ -162,6 +164,22 @@ Every role can create a key with `mcp:read`: through the API, send `"scopes": ["
 Keys already labelled `mcp:read` gain that access when the instance is upgraded to a
 version that enforces the scope. An ADMIN lists every user's keys, with their scopes, with
 `GET /api/v1/api-keys?all=true`.
+
+#### Refused in a web page
+
+A key in a web page can be read by anyone who opens the page. So the two routes the visual
+editor's browser script calls answer `403` to a key that carries any scope, whatever its name:
+
+- `POST /api/v1/tracking/visual` (beta), which answers the visual changes and goals a
+  visitor gets on a page;
+- `POST /api/v1/tracking/visual/preview` (beta), which answers the variant a preview link
+  shows.
+
+The `403` says
+`This API key has scopes, so it must stay on a server: a key in a web page can be read by anyone who opens the page. Use a key with no scopes on your website.`
+
+Use a key with no scopes on a website: through the API, send `"scopes": []` or leave
+`scopes` out. A key with a scope keeps working on every other route that takes a key.
 
 ---
 
