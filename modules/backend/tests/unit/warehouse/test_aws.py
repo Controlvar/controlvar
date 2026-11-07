@@ -8,12 +8,16 @@ dummies.
 
 from __future__ import annotations
 
+import logging
 import socket
 import threading
 import time
+from datetime import datetime, timezone
+from urllib.parse import parse_qs, urlsplit
 
 import boto3
 import pytest
+from botocore.exceptions import EndpointConnectionError, NoCredentialsError
 
 from modules.backend.app.warehouse import aws as make_client_module
 from modules.backend.app.warehouse.aws import (
@@ -421,8 +425,6 @@ def _timed_out(warehouse, monkeypatch):
 
 
 def _not_connected(warehouse, monkeypatch):
-    from botocore.exceptions import EndpointConnectionError
-
     _raising_client(monkeypatch, EndpointConnectionError(endpoint_url="https://x/"))
     aws_call(
         _session(),
@@ -648,6 +650,430 @@ def test_a_per_call_code_table_maps_the_aws_code(codes, expected, aws_env, monke
     assert err.value.code is expected
     assert err.value.vendor_code == "AccessDenied"
     assert "MESSAGE-TEXT-92" not in repr(err.value) + err.value.message
+
+
+# -- assume_role_session: the customer's role, through the guard (#826) -------
+
+ROLE_ARN = "arn:aws:iam::123456789012:role/controlvar-warehouse/analysis-reader"
+EXTERNAL_ID = "exp-" + "0123456789abcdef" * 2
+#: Stands in for the temporary credentials STS hands out.
+TEMP_SENTINEL = "TEMPCREDSENTINEL4C1F"
+ASSUMED = {
+    "Credentials": {
+        "AccessKeyId": "ASIA" + TEMP_SENTINEL,
+        "SecretAccessKey": "secret-" + TEMP_SENTINEL,
+        "SessionToken": "token-" + TEMP_SENTINEL,
+        "Expiration": datetime(2026, 11, 7, 12, 15, tzinfo=timezone.utc),
+    },
+    "AssumedRoleUser": {
+        "AssumedRoleId": "AROA0123456789ABCDEFG:controlvar-warehouse",
+        "Arn": "arn:aws:sts::123456789012:assumed-role/analysis-reader/x",
+    },
+}
+#: The two AssumeRole calls, in order: without the external id, then with it.
+PROBE = {
+    "RoleArn": ROLE_ARN,
+    "RoleSessionName": "controlvar-warehouse",
+    "DurationSeconds": 900,
+}
+REAL = {**PROBE, "ExternalId": EXTERNAL_ID}
+
+
+class _Recording:
+    """Records each operation's parameters, then lets the real client run it."""
+
+    def __init__(self, client, calls: list) -> None:
+        self._client = client
+        self._calls = calls
+
+    def __getattr__(self, name):
+        def operation(**params):
+            self._calls.append((name, params))
+            return getattr(self._client, name)(**params)
+
+        return operation
+
+
+class _StsScript:
+    """Every client make_client builds answers the next step of the script.
+
+    A step is ``("answer", expected_params, response)``, ``("refuse",
+    expected_params, code, status)`` -- both on the real client under a
+    Stubber, which refuses any other parameters -- or ``("raise", exc)``.  A
+    client built past the end of the script fails the test.
+    """
+
+    def __init__(self, monkeypatch, steps) -> None:
+        from botocore.stub import Stubber
+
+        self.steps = list(steps)
+        self.calls: list = []
+        self.guards: list = []
+        self.stubbers: list = []
+        real_make = make_client_module.make_client
+        real_guard = make_client_module.BeforeSendGuard
+        script = self
+
+        class RecordedGuard(real_guard):
+            def __init__(self, host, **kwargs):
+                super().__init__(host, **kwargs)
+                script.guards.append((host, self.warehouse))
+
+        def build(session, service, region, **kwargs):
+            client = real_make(session, service, region, **kwargs)
+            assert self.steps, "an AWS call the script does not expect"
+            step = self.steps.pop(0)
+            if step[0] == "raise":
+                return _Recording(_Raising(step[1]), self.calls)
+            stubber = Stubber(client)
+            if step[0] == "answer":
+                stubber.add_response("assume_role", step[2], expected_params=step[1])
+            else:
+                stubber.add_client_error(
+                    "assume_role",
+                    service_error_code=step[2],
+                    service_message=f"refused: {TEMP_SENTINEL}-MESSAGE",
+                    http_status_code=step[3],
+                    expected_params=step[1],
+                )
+            stubber.activate()
+            self.stubbers.append(stubber)
+            return _Recording(client, self.calls)
+
+        monkeypatch.setattr(make_client_module, "BeforeSendGuard", RecordedGuard)
+        monkeypatch.setattr(make_client_module, "make_client", build)
+
+    def assert_played(self) -> None:
+        assert self.steps == []
+        for stubber in self.stubbers:
+            stubber.assert_no_pending_responses()
+
+
+@pytest.fixture
+def no_direct_clients(monkeypatch):
+    """boto3's module-level shortcuts refuse: every client comes from make_client."""
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("boto3.client/resource called directly")
+
+    monkeypatch.setattr(boto3, "client", refuse)
+    monkeypatch.setattr(boto3, "resource", refuse)
+
+
+def _assume(warehouse="redshift", role_arn=ROLE_ARN, external_id=EXTERNAL_ID):
+    return make_client_module.assume_role_session(
+        _session(),
+        role_arn,
+        external_id,
+        "us-east-1",
+        warehouse=warehouse,
+        deadline=Deadline(30),
+        resolver=lambda host, port: [("93.184.216.34", port)],
+    )
+
+
+def _surfaces(err: WarehouseError, caplog) -> str:
+    return "\n".join(
+        [
+            str(err),
+            repr(err),
+            err.message,
+            repr(err.to_body()),
+            repr(err.log_fields()),
+            caplog.text,
+            "\n".join(repr(r.__dict__) for r in caplog.records),
+        ]
+    )
+
+
+def test_assume_role_session_checks_the_trust_policy_then_assumes_the_role(
+    aws_env, monkeypatch, no_direct_clients
+):
+    """Two AssumeRole calls, in this order, each on a client make_client built
+    (so under the guard): without the external id, which STS must refuse;
+    then with it.  The session that comes back holds the role's credentials."""
+    _only_loopback_resolves(monkeypatch)
+    script = _StsScript(
+        monkeypatch,
+        [("refuse", PROBE, "AccessDenied", 403), ("answer", REAL, ASSUMED)],
+    )
+    session = _assume()
+    script.assert_played()
+    assert script.calls == [("assume_role", PROBE), ("assume_role", REAL)]
+    assert script.guards == [("sts.us-east-1.amazonaws.com", "redshift")] * 2
+    held = session.get_credentials()
+    assert (held.access_key, held.secret_key, held.token) == (
+        "ASIA" + TEMP_SENTINEL,
+        "secret-" + TEMP_SENTINEL,
+        "token-" + TEMP_SENTINEL,
+    )
+    assert session.region_name == "us-east-1"
+    assert TEMP_SENTINEL not in repr(session)
+
+
+@pytest.mark.regression
+def test_a_role_that_admits_the_deployment_without_the_external_id_is_refused(
+    aws_env, monkeypatch, caplog
+):
+    """#826: a role whose trust policy does not require the external id is
+    refused, and the credentials STS gave for it are dropped unused."""
+    caplog.set_level(logging.DEBUG)
+    _only_loopback_resolves(monkeypatch)
+    script = _StsScript(monkeypatch, [("answer", PROBE, ASSUMED)])
+    with pytest.raises(WarehouseError) as err:
+        _assume()
+    script.assert_played()
+    assert script.calls == [("assume_role", PROBE)]
+    assert err.value.code is WarehouseErrorCode.ROLE_TRUST_UNSAFE
+    assert err.value.status_code == 502
+    assert err.value.warehouse == "redshift"
+    assert err.value.message == (
+        "The role's trust policy must require this connection's external ID."
+    )
+    assert TEMP_SENTINEL not in _surfaces(err.value, caplog)
+    assert err.value.__context__ is None
+
+
+@pytest.mark.parametrize(
+    "step,code",
+    [
+        (("refuse", PROBE, "Throttling", 400), WarehouseErrorCode.WAREHOUSE_BUSY),
+        (
+            ("refuse", PROBE, "InternalFailure", 500),
+            WarehouseErrorCode.UNRECOGNISED_WAREHOUSE_ERROR,
+        ),
+        # A 403 that is not AccessDenied does not count as the refusal.
+        (
+            ("refuse", PROBE, "InvalidClientTokenId", 403),
+            WarehouseErrorCode.PERMISSION_DENIED,
+        ),
+        (("raise", NoCredentialsError()), WarehouseErrorCode.AWS_IDENTITY_UNAVAILABLE),
+        (
+            (
+                "raise",
+                EndpointConnectionError(
+                    endpoint_url="https://sts.us-east-1.amazonaws.com/"
+                ),
+            ),
+            WarehouseErrorCode.UNREACHABLE,
+        ),
+    ],
+    ids=["throttled", "server-error", "other-403", "no-identity", "unreachable"],
+)
+def test_only_an_access_denied_check_lets_the_operation_go_on(
+    step, code, aws_env, monkeypatch, caplog
+):
+    """Any other outcome of the first call is the operation's failure, and the
+    role is never assumed without the check having been refused."""
+    caplog.set_level(logging.DEBUG)
+    _only_loopback_resolves(monkeypatch)
+    script = _StsScript(monkeypatch, [step])
+    with pytest.raises(WarehouseError) as err:
+        _assume()
+    script.assert_played()
+    assert script.calls == [("assume_role", PROBE)]
+    assert err.value.code is code
+    assert err.value.warehouse == "redshift"
+    assert TEMP_SENTINEL not in _surfaces(err.value, caplog)
+
+
+@pytest.mark.parametrize(
+    "refusal,code",
+    [
+        (("AccessDenied", 403), WarehouseErrorCode.AUTH_FAILED),
+        (("Throttling", 400), WarehouseErrorCode.WAREHOUSE_BUSY),
+    ],
+    ids=["access-denied", "throttled"],
+)
+def test_sts_refusing_the_role_is_mapped_by_assume_role_sessions_table(
+    refusal, code, aws_env, monkeypatch
+):
+    """STS AccessDenied is auth_failed here, and only here: call() without a
+    table still says permission_denied (test_boto_client_errors_are_coded)."""
+    _only_loopback_resolves(monkeypatch)
+    script = _StsScript(
+        monkeypatch,
+        [("refuse", PROBE, "AccessDenied", 403), ("refuse", REAL, *refusal)],
+    )
+    with pytest.raises(WarehouseError) as err:
+        _assume()
+    script.assert_played()
+    assert err.value.code is code
+    assert err.value.vendor_code == refusal[0]
+    assert err.value.warehouse == "redshift"
+    assert "Athena" not in err.value.message
+
+
+@pytest.mark.parametrize(
+    "role_arn,external_id",
+    [
+        (ROLE_ARN, None),
+        (ROLE_ARN, ""),
+        (ROLE_ARN, "exp-" + "0" * 31),
+        (ROLE_ARN, "exp-" + "A" * 32),
+        (ROLE_ARN, EXTERNAL_ID + "\n"),
+        (None, EXTERNAL_ID),
+        ("arn:aws:iam::12345:role/x", EXTERNAL_ID),
+        ("arn:aws:s3:::bucket", EXTERNAL_ID),
+        (ROLE_ARN + "\n", EXTERNAL_ID),
+    ],
+    ids=[
+        "no-external-id",
+        "empty-external-id",
+        "short-external-id",
+        "upper-case-external-id",
+        "external-id-newline",
+        "no-role",
+        "short-account",
+        "not-a-role",
+        "role-newline",
+    ],
+)
+def test_a_bad_role_or_external_id_is_refused_before_any_call(
+    role_arn, external_id, aws_env, monkeypatch
+):
+    script = _StsScript(monkeypatch, [])
+    with pytest.raises(WarehouseError) as err:
+        _assume(role_arn=role_arn, external_id=external_id)
+    assert err.value.code is WarehouseErrorCode.INTERNAL
+    assert script.calls == [] and script.guards == []
+
+
+def test_assume_role_session_requires_an_aws_warehouse(aws_env, monkeypatch):
+    _StsScript(monkeypatch, [])
+    with pytest.raises(TypeError, match="warehouse"):
+        make_client_module.assume_role_session(
+            _session(), ROLE_ARN, EXTERNAL_ID, "us-east-1", deadline=Deadline(30)
+        )
+    with pytest.raises(ValueError):
+        _assume(warehouse="bigquery")
+
+
+# The same calls on the wire: botocore serialises each request, the guard
+# sees it, and botocore's parser reads an STS answer.  So whatever botocore
+# itself logs -- the request it sends, what it signs, the body it parses --
+# is in caplog.
+
+
+class _RawBody:
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+
+    def stream(self, **kwargs):
+        yield self._body
+
+
+_STS_NS = 'xmlns="https://sts.amazonaws.com/doc/2011-06-15/"'
+
+
+def _sts_denied() -> bytes:
+    return (
+        f"<ErrorResponse {_STS_NS}><Error><Type>Sender</Type>"
+        f"<Code>AccessDenied</Code><Message>not for you</Message></Error>"
+        f"<RequestId>req-denied</RequestId></ErrorResponse>"
+    ).encode()
+
+
+def _sts_assumed() -> bytes:
+    return (
+        f"<AssumeRoleResponse {_STS_NS}><AssumeRoleResult><Credentials>"
+        f"<AccessKeyId>ASIA{TEMP_SENTINEL}</AccessKeyId>"
+        f"<SecretAccessKey>secret-{TEMP_SENTINEL}</SecretAccessKey>"
+        f"<SessionToken>token-{TEMP_SENTINEL}</SessionToken>"
+        f"<Expiration>2026-11-07T12:15:00Z</Expiration></Credentials>"
+        f"<AssumedRoleUser><AssumedRoleId>AROA0123456789ABCDEFG:x</AssumedRoleId>"
+        f"<Arn>arn:aws:sts::123456789012:assumed-role/r/x</Arn></AssumedRoleUser>"
+        f"</AssumeRoleResult><ResponseMetadata><RequestId>req-ok</RequestId>"
+        f"</ResponseMetadata></AssumeRoleResponse>"
+    ).encode()
+
+
+def _sts_identity() -> bytes:
+    return (
+        f"<GetCallerIdentityResponse {_STS_NS}><GetCallerIdentityResult>"
+        f"<Arn>arn:aws:sts::123456789012:assumed-role/r/x</Arn>"
+        f"<UserId>AROA0123456789ABCDEFG:x</UserId><Account>123456789012</Account>"
+        f"</GetCallerIdentityResult><ResponseMetadata><RequestId>req-id</RequestId>"
+        f"</ResponseMetadata></GetCallerIdentityResponse>"
+    ).encode()
+
+
+def test_the_temporary_credentials_reach_no_log_and_no_repr(
+    aws_env, monkeypatch, caplog
+):
+    """At DEBUG, through botocore's own serialiser, signer and parser: the
+    credentials STS hands out appear in no log record and no repr -- not when
+    the answer is parsed, and not when the session they make signs a call."""
+    from botocore.awsrequest import AWSResponse
+
+    caplog.set_level(logging.DEBUG)
+    _only_loopback_resolves(monkeypatch)
+    answers = [(403, _sts_denied()), (200, _sts_assumed()), (200, _sts_identity())]
+    sent = []
+    guarded = []
+    real_make = make_client_module.make_client
+    real_guard_call = make_client_module.BeforeSendGuard.__call__
+
+    def guard_call(self, request, **kwargs):
+        guarded.append(urlsplit(request.url).hostname)
+        return real_guard_call(self, request, **kwargs)
+
+    def answer(request, **kwargs):
+        body = request.body
+        sent.append(
+            (
+                parse_qs(body.decode() if isinstance(body, bytes) else body),
+                dict(request.headers),
+            )
+        )
+        status, payload = answers.pop(0)
+        return AWSResponse(
+            request.url, status, {"Content-Type": "text/xml"}, _RawBody(payload)
+        )
+
+    def build(*args, **kwargs):
+        client = real_make(*args, **kwargs)
+        client.meta.events.register("before-send", answer)
+        return client
+
+    monkeypatch.setattr(make_client_module.BeforeSendGuard, "__call__", guard_call)
+    monkeypatch.setattr(make_client_module, "make_client", build)
+
+    session = _assume()
+    identity = aws_call(
+        session,
+        "sts",
+        "us-east-1",
+        "get_caller_identity",
+        warehouse="redshift",
+        deadline=Deadline(30),
+        resolver=lambda host, port: [("93.184.216.34", port)],
+    )
+
+    assert answers == []
+    assert guarded == ["sts.us-east-1.amazonaws.com"] * 3
+    probe, real, signed = sent
+    assert probe[0]["Action"] == ["AssumeRole"] and "ExternalId" not in probe[0]
+    assert real[0]["ExternalId"] == [EXTERNAL_ID]
+    assert real[0]["RoleSessionName"] == ["controlvar-warehouse"]
+    assert real[0]["DurationSeconds"] == ["900"]
+    # Positive controls: the session signs with the role's credentials, and
+    # botocore did log at DEBUG, so the absence below looked at real records.
+    assert signed[1]["X-Amz-Security-Token"] in (
+        "token-" + TEMP_SENTINEL,
+        ("token-" + TEMP_SENTINEL).encode(),
+    )
+    assert identity["Account"] == "123456789012"
+    assert any(
+        r.name.startswith("botocore") and r.levelno == logging.DEBUG
+        for r in caplog.records
+    )
+    logged = caplog.text + "\n".join(repr(r.__dict__) for r in caplog.records)
+    leaks = sorted(
+        {r.name for r in caplog.records if TEMP_SENTINEL in repr(r.__dict__)}
+    )
+    assert TEMP_SENTINEL not in logged, leaks
+    assert TEMP_SENTINEL not in repr(session)
 
 
 def test_region_list_is_the_committed_data():

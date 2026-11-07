@@ -239,6 +239,15 @@ def test_no_aws_identity_is_a_503_that_names_neither_credentials_nor_an_arn():
     assert "arn" not in err.message.lower()
 
 
+def test_a_role_that_does_not_require_the_external_id_is_a_502():
+    err = WarehouseError(WarehouseErrorCode.ROLE_TRUST_UNSAFE, warehouse="redshift")
+    assert err.status_code == 502
+    assert err.to_body() == {
+        "code": "role_trust_unsafe",
+        "message": "The role's trust policy must require this connection's external ID.",
+    }
+
+
 def test_error_has_no_free_text_constructor():
     with pytest.raises(TypeError):
         WarehouseError(WarehouseErrorCode.INTERNAL, "free text")  # type: ignore[misc]

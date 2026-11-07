@@ -19,13 +19,20 @@
 
 Every function names the warehouse it is called for (``warehouse=``, one of
 :data:`AWS_WAREHOUSES`, required): a failure says which warehouse failed.
+
+:func:`assume_role_session` is how a role-based connector gets the customer's
+role: AssumeRole through :func:`call`, with the connection's external id, and
+only for a role whose trust policy requires that id.
 """
 
 from __future__ import annotations
 
+import logging
+import re
 from typing import Any, Mapping, Optional
 from urllib.parse import urlsplit
 
+import boto3
 from botocore.config import Config
 from botocore.exceptions import (
     BotoCoreError,
@@ -36,6 +43,7 @@ from botocore.exceptions import (
     ReadTimeoutError,
 )
 
+from modules.backend.app.schemas.warehouse_connections import ROLE_ARN_PATTERN
 from modules.backend.app.warehouse.deadlines import (
     CONNECT_SECONDS,
     READ_SECONDS,
@@ -52,6 +60,16 @@ from modules.backend.app.warehouse.errors import (
     error_for_status,
     sanitised,
 )
+
+#: botocore's loggers that, at DEBUG, write an assumed role's temporary
+#: credentials into the log (measured, botocore 1.43): ``botocore.endpoint``
+#: the request it sends, headers included; ``botocore.auth`` the canonical
+#: request it signs; ``botocore.parsers`` every response body -- an
+#: AssumeRole answer, and the vendor's own error text.  They never go below
+#: INFO, whatever the deployment's LOG_LEVEL (test_aws.py holds this).
+BOTOCORE_QUIET_LOGGERS = ("botocore.auth", "botocore.endpoint", "botocore.parsers")
+for _name in BOTOCORE_QUIET_LOGGERS:
+    logging.getLogger(_name).setLevel(logging.INFO)
 
 #: The services a connector may call.
 AWS_SERVICES = frozenset({"sts", "athena", "glue"})
@@ -290,11 +308,104 @@ def call(
     raise sanitised(failure)
 
 
+#: STS's codes for the customer's role, used by :func:`assume_role_session`
+#: only: STS answers ``AccessDenied`` when the role's trust policy does not
+#: admit this deployment with this external id (or there is no such role).
+STS_CODES: Mapping[str, WarehouseErrorCode] = {
+    "AccessDenied": WarehouseErrorCode.AUTH_FAILED,
+    "Throttling": WarehouseErrorCode.WAREHOUSE_BUSY,
+}
+
+#: The session name of every assumed role (the customer's CloudTrail shows it).
+ROLE_SESSION_NAME = "controlvar-warehouse"
+#: The shortest session STS issues.
+ROLE_SESSION_SECONDS = 900
+
+_ROLE_ARN = re.compile(ROLE_ARN_PATTERN)
+_EXTERNAL_ID = re.compile(r"exp-[0-9a-f]{32}")
+
+
+def assume_role_session(
+    platform_session: Any,
+    role_arn: str,
+    external_id: str,
+    region: str,
+    *,
+    warehouse: str,
+    deadline: Deadline,
+    resolver: Optional[Resolver] = None,
+) -> Any:
+    """A boto3 session holding the customer's role, for one operation.
+
+    ``platform_session`` holds this deployment's own AWS identity.  Refused
+    before any call, as ``internal``: a ``role_arn`` that is not a role ARN,
+    and an ``external_id`` that is not ``exp-`` and 32 hex characters.
+
+    Then two AssumeRole calls, each through :func:`call` (so under the guard
+    and the deadline), with :data:`STS_CODES`:
+
+    1. Without the external id.  Only STS's ``AccessDenied`` lets the
+       operation go on.  If STS assumes the role, its trust policy does not
+       require the external id: the credentials are dropped unused and the
+       operation is refused as ``role_trust_unsafe``.  Any other failure is
+       the operation's failure.
+    2. With the external id.  ``AccessDenied`` is ``auth_failed``.
+
+    The temporary credentials go into the returned session only; nothing
+    here logs them or keeps them.
+    """
+    _aws_warehouse(warehouse)
+    if not isinstance(role_arn, str) or not _ROLE_ARN.fullmatch(role_arn):
+        raise WarehouseError(WarehouseErrorCode.INTERNAL, warehouse=warehouse)
+    if not isinstance(external_id, str) or not _EXTERNAL_ID.fullmatch(external_id):
+        raise WarehouseError(WarehouseErrorCode.INTERNAL, warehouse=warehouse)
+    request = {
+        "RoleArn": role_arn,
+        "RoleSessionName": ROLE_SESSION_NAME,
+        "DurationSeconds": ROLE_SESSION_SECONDS,
+    }
+    sts = {
+        "warehouse": warehouse,
+        "deadline": deadline,
+        "resolver": resolver,
+        "codes": STS_CODES,
+    }
+    try:
+        # The answer, if there is one, is not kept.
+        call(platform_session, "sts", region, "assume_role", **sts, **request)
+    except WarehouseError as refused:
+        if not (
+            refused.code is WarehouseErrorCode.AUTH_FAILED
+            and refused.vendor_code == "AccessDenied"
+        ):
+            raise
+    else:
+        raise WarehouseError(WarehouseErrorCode.ROLE_TRUST_UNSAFE, warehouse=warehouse)
+    answer = call(
+        platform_session,
+        "sts",
+        region,
+        "assume_role",
+        **sts,
+        **request,
+        ExternalId=external_id,
+    )
+    credentials = answer["Credentials"]
+    return boto3.session.Session(
+        aws_access_key_id=credentials["AccessKeyId"],
+        aws_secret_access_key=credentials["SecretAccessKey"],
+        aws_session_token=credentials["SessionToken"],
+        region_name=region,
+    )
+
+
 __all__ = [
     "AWS_REGIONS",
     "AWS_SERVICES",
     "AWS_WAREHOUSES",
+    "STS_CODES",
     "BeforeSendGuard",
+    "assume_role_session",
     "aws_endpoint_host",
     "boto_config",
     "call",

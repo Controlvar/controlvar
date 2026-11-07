@@ -875,6 +875,10 @@ text = "workgroup_unsafe | 502 | Not raised for Snowflake or BigQuery. | Nothing
 by = ["mechanism:warehouse-troubleshooting"]
 
 [[unit]]
+text = "role_trust_unsafe | 502 | The trust policy of a connection's AWS role admits this deployment without the connection's external ID, so the role is refused. Not raised for Snowflake or BigQuery, which use no AWS role. | The role's trust policy has a condition that requires sts:ExternalId to equal the external ID shown on the connection's page."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
 text = "timezone_not_utc | 502 | Snowflake reported a session time zone other than UTC, after Controlvar set it. The run is refused because times would be compared in another zone. | Start the analysis again; if it recurs, report it. BigQuery does not report this."
 by = ["mechanism:warehouse-troubleshooting"]
 

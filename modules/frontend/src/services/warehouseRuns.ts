@@ -302,6 +302,12 @@ const FAILURE_COPY: Record<string, (c: CopyContext) => FailureCopy> = {
     title: 'The Athena workgroup’s settings don’t meet the requirements.',
     fix: 'An admin can check the workgroup settings listed in Warehouse › Connections.',
   }),
+  role_trust_unsafe: (c) => ({
+    title: `The trust policy of the role ${c.connection} uses doesn’t require its external ID, so the role was refused.`,
+    fix:
+      `An admin adds a condition requiring the external ID shown in Warehouse › Connections › ${c.connection} ` +
+      'to the role’s trust policy.',
+  }),
   timezone_not_utc: (c) => ({
     title: `The ${c.warehouse} session was not in UTC, so the results were refused.`,
     fix: 'Report this with the run ID.',

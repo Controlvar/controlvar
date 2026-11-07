@@ -42,6 +42,7 @@ class WarehouseErrorCode(str, enum.Enum):
     TIME_LIMIT = "time_limit"
     CANCELLED = "cancelled"
     WORKGROUP_UNSAFE = "workgroup_unsafe"
+    ROLE_TRUST_UNSAFE = "role_trust_unsafe"
     TIMEZONE_NOT_UTC = "timezone_not_utc"
     RESULT_INVALID = "result_invalid"
     TOO_MANY_VARIANT_VALUES = "too_many_variant_values"
@@ -77,6 +78,9 @@ MESSAGES: Mapping[WarehouseErrorCode, str] = {
     _C.TIME_LIMIT: "The warehouse did not finish within the time limit.",
     _C.CANCELLED: "The query was cancelled.",
     _C.WORKGROUP_UNSAFE: "The workgroup's settings do not meet the requirements.",
+    _C.ROLE_TRUST_UNSAFE: (
+        "The role's trust policy must require this connection's external ID."
+    ),
     _C.TIMEZONE_NOT_UTC: "The warehouse session is not in UTC.",
     _C.RESULT_INVALID: "The warehouse returned a result in an unexpected shape.",
     _C.TOO_MANY_VARIANT_VALUES: "The variant column has more distinct values than allowed.",
