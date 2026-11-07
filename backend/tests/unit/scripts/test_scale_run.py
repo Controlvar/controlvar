@@ -1787,12 +1787,15 @@ class FakeWorld:
         seconds = int(variables["SCALE_DURATION_S"])
         settle_us = int(variables["SCALE_SETTLE_MS"]) * 1000
         step = int(variables["SCALE_STEP"])
-        scheduled = se.scheduled_count(rate, unit, seconds)
+        # What k6 starts, worked out here rather than taken from the code under
+        # test: one iteration at t = 0 and one every unit / rate ms after it, up
+        # to and including the end, so the floor of rate x duration plus one.
+        started = rate * seconds * 1000 // unit + 1
         start = self.now + 100
         failing = self.failing_from is not None and step >= self.failing_from
         mix = json.loads(variables["SCALE_MIX"])
         records = []
-        for i in range(scheduled):
+        for i in range(started):
             scenario = variables["SCALE_SCENARIO"]
             if scenario == "mix":
                 slot, scenario = i % 100, None
@@ -1830,8 +1833,8 @@ class FakeWorld:
         self.k6 = {"start": self.now, "seconds": seconds, "code": 0, "step": step}
         if step == self.tick_in_step:
             self.ticks_ended.append(("safety", self.now + 1000, 950))
-        if scheduled:
-            self.last_sends[step] = start + (scheduled - 1) * unit // rate
+        if started:
+            self.last_sends[step] = start + (started - 1) * unit // rate
         assert variables["SCALE_BASE_URL"] == "http://web:8080"
         assert variables["SCALE_HOST"] == "localhost:18080"
         assert argv[argv.index("--cpuset-cpus") + 1] == "3"
@@ -2111,7 +2114,7 @@ def test_a_smoke_step_with_a_failed_request_fails_the_smoke(tmp_path):
     world = FakeWorld(tmp_path, errors_from=2)
     status, _, said = _run(world, tmp_path)
     assert status == 1
-    assert "smoke: step 2: 20 of 200 requests failed" in said
+    assert "smoke: step 2: 21 of 201 requests failed" in said
 
 
 def test_an_invalid_smoke_step_fails_the_smoke(tmp_path):
@@ -2120,7 +2123,7 @@ def test_an_invalid_smoke_step_fails_the_smoke(tmp_path):
     status, _, said = _run(world, tmp_path)
     assert status == 1
     assert "smoke: step 2: INVALID (client-server)" in said
-    assert "step 2: client 250, server 247: 3 requests unaccounted" in said
+    assert "step 2: client 251, server 248: 3 requests unaccounted" in said
 
 
 def test_a_slow_smoke_step_is_reported_but_never_fails_the_smoke(tmp_path):

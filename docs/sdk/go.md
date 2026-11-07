@@ -30,12 +30,9 @@ go get github.com/controlvar/controlvar/sdk/go
 
 Adding the SDK to a program that already has a `go.mod`? Run only the `go get`.
 
-The module has no tagged release yet, so `go get` resolves the head of the
-`main` branch and records it in your `go.mod` as a pseudo-version
-(`v0.0.0-<date>-<commit>`). Your builds stay on that version until you run
-`go get` again. To pin a particular commit, name it:
-`go get github.com/controlvar/controlvar/sdk/go@<commit>`, where
-`<commit>` is a commit hash from this repository.
+`go get` resolves the module's latest release and records it in your `go.mod`.
+Your builds stay on that version until you run `go get` again. To pin a
+release, name it: `go get github.com/controlvar/controlvar/sdk/go@v0.1.0`.
 
 ---
 

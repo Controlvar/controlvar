@@ -35,8 +35,20 @@ The live runner:
 
 ### Installation
 
-**Not yet published.** `@controlvar/openfeature-provider` is not on npm, so build it from
-source: build both from a clone of this repository (the provider's build also builds `sdk/js`):
+The `@controlvar/openfeature-provider` package is on
+[npm](https://www.npmjs.com/package/@controlvar/openfeature-provider). 0.1.0 is a beta release.
+
+```bash
+npm install @controlvar/openfeature-provider@0.1.0 @openfeature/server-sdk
+```
+
+`@openfeature/server-sdk` is a **peer dependency** of the provider (`^1.7.0`), so your app installs
+it. Installed as a package (from npm, or an `npm pack` tarball of `sdk/openfeature`), the provider
+resolves your app's copy rather than bringing its own. A directory install, as below, is a symlink,
+so the provider resolves the copy in `sdk/openfeature/node_modules` instead.
+
+To work on the provider itself, build both from a clone of this repository instead (the provider's
+build also builds `sdk/js`):
 
 ```bash
 git clone https://github.com/Controlvar/controlvar.git
@@ -44,11 +56,6 @@ npm --prefix controlvar/sdk/js ci
 npm --prefix controlvar/sdk/openfeature ci
 npm --prefix controlvar/sdk/openfeature run build
 ```
-
-`@openfeature/server-sdk` is a **peer dependency** of the provider (`^1.7.0`), so your app installs
-it. Installed as a package (from npm, or an `npm pack` tarball of `sdk/openfeature`), the provider
-resolves your app's copy rather than bringing its own. A directory install, as below, is a symlink,
-so the provider resolves the copy in `sdk/openfeature/node_modules` instead.
 
 Then, in your app, install the two directories (`@openfeature/server-sdk` itself is on npm):
 
@@ -218,22 +225,24 @@ evaluation to the [`controlvar` Python SDK](python.md), which calls
 `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=<targeting_key>&context=<attributes>` and
 caches the answer per user + flag. Flags are decided **by the server**; nothing is bucketed locally
 and no flag definitions are downloaded, unless you pass a `client=` built with `evaluation="local"`.
-Boolean, string, integer, float and object calls are answered. Requires Python 3.9+ and
+Boolean, string, integer, float and object calls are answered. Requires Python 3.10+ and
 `openfeature-sdk >= 0.10.0`.
 
 ### Installation
 
-**Not yet published.** This package is not on PyPI: the `controlvar-openfeature` name there
-holds a 0.0.0 placeholder, which installs but cannot be imported. Build it from source: install
-both from the root of a clone of this repository (`openfeature-sdk` is installed as a
-dependency):
+The `controlvar-openfeature` package is on
+[PyPI](https://pypi.org/project/controlvar-openfeature/). 0.1.0 is a beta release.
+`openfeature-sdk` and the `controlvar` Python SDK are installed as its dependencies.
+
+```bash
+pip install controlvar-openfeature==0.1.0
+```
+
+To work on the provider itself, install both from the root of a clone of this repository instead:
 
 ```bash
 pip install -e sdk/python -e sdk/openfeature-python
 ```
-
-Install the Python SDK from the same clone, as above: the `controlvar` 0.2.0 on PyPI reads no flag
-value, so with it every string, integer, float and object call answers your default with `GENERAL`.
 
 ### Quick start
 
@@ -289,8 +298,8 @@ Every call reads the value the flag serves: its on value when the flag is on for
 off value otherwise; a boolean flag's is `enabled`. There is no coercion: a call of another type
 gets the caller's default, a boolean call on a string, number or json flag and an integer call
 on a number with a fractional part (`2.5`) included, and `bool` is never a number. A boolean call
-reads `enabled`, so an answer with no `value_type` (a server or an SDK without flag values, where
-every flag is boolean) answers it rather than the caller's default.
+reads `enabled`, so an answer with no `value_type` (from a server without flag values, where every
+flag is boolean) answers it rather than the caller's default.
 
 | The server's answer | Value | Reason | Variant |
 |---|---|---|---|

@@ -399,8 +399,15 @@ text = "This means:"
 by = ["exempt:theory"]
 
 [[unit]]
-text = "The same user always gets the same variant for a given experiment (sticky assignment)"
-by = ["test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_assigns_user_to_a_variant_and_is_sticky"]
+text = "The same user_id always gets the same variant for a given experiment (sticky assignment)."
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_assigns_user_to_a_variant_and_is_sticky",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_assignment_hashes_the_experiment_key_and_the_user",
+]
+
+[[unit]]
+text = "A person known by two ids, such as a visitor who signs in, is two users: see Limitations."
+by = ["test:backend/tests/unit/api/test_documented_limits.py::test_no_call_says_that_two_user_ids_are_one_user"]
 
 [[unit]]
 text = "The API stores each assignment, and a user who already has one gets it back unchanged, even if the weights have changed since"
