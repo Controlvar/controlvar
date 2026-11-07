@@ -178,7 +178,7 @@ Pre-built compliance reports are available at:
 - `GET /api/v1/compliance/reports/soc2` — SOC 2 report, by default over the last 365 days
 - `GET /api/v1/compliance/reports/iso27001` — ISO 27001 report, by default over the last 730 days
 
-Full audit log export (JSON or CSV) is available for SIEM ingestion at `GET /api/v1/compliance/export`.
+The compliance trail exports as JSON or CSV at `GET /api/v1/compliance/export` (compliance module; a core deployment answers `501`): flag and experiment creates, changes and deletes, without their old and new values. Toggles, rollbacks, sign-ins and role changes are in the audit log, which exports at `GET /api/v1/audit-logs/export` (beta) in every profile. For a SIEM, take both.
 
 See [Compliance Audit Trail API](../api/compliance.md) for full documentation.
 

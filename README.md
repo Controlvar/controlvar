@@ -117,7 +117,7 @@ step: [Guided examples](docs/guides/guided-examples.md).
 - **Real-time Metrics**: Error rate, latency, custom metrics tracking
 - **Auto-Rollback**: Automatic rollback on threshold violations
 - **Configurable Thresholds**: Per-feature flag safety configuration
-- **Complete Audit Trail**: All rollbacks logged with reasoning
+- **Rollback History**: every rollback, automatic or manual, is stored with its reason; it also appears in the flag's audit history, unless that entry could not be written
 
 ---
 

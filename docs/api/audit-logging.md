@@ -88,7 +88,7 @@ curl -s -X POST localhost:8000/api/v1/feature-flags/bulk-toggle \
 
 It prints `"succeeded": 2` and `"failed": 1`, with the error `"Feature flag not found"`
 for the third id. The full response lists each flag's result, and the id of the audit
-entry written for each flag that changed:
+entry written for each flag that succeeded, including one that was already in the requested state:
 
 ```json
 {
@@ -312,6 +312,8 @@ an API key, or a request body.
 | `feature_flag_update` | `feature_flag` | The rollout scheduler starts a rollout stage and sets the flag's rollout percentage. `reason` is `rollout schedule stage started` |
 | `user_create` | `user` | A user's first Cognito sign-in creates their account. The actor is the new user; `reason` is `first sign-in` |
 | `role_assign` | `user` | Cognito group sync (`SYNC_ROLES_ON_LOGIN`) changes a user's role or superuser flag when they sign in; `old_value` and `new_value` are `{"role", "is_superuser"}` |
+
+`/enable`, `/disable` and bulk toggle also record a request that leaves the status unchanged: one `toggle_enable` or `toggle_disable` entry (`feature_flag_update` for bulk `archive`), with `old_value` equal to `new_value`, such as `INACTIVE` and `INACTIVE` for a flag that was already off. `/activate` and `/deactivate` write nothing then.
 
 With the modules installed (the full profile), these are written too:
 
