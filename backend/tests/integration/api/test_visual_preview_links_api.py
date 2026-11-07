@@ -45,7 +45,10 @@ from sqlalchemy.orm import sessionmaker
 
 from backend.app.api.page_key import SCOPED_KEY_IN_PAGE_DETAIL
 from backend.app.api.v1.endpoints import tracking_visual
-from backend.app.api.v1.endpoints.visual_preview_links import NOT_VISUAL
+from backend.app.api.v1.endpoints.visual_preview_links import (
+    NOT_VISUAL,
+    VARIANT_NOT_FOUND,
+)
 from backend.app.core.config import settings
 from backend.app.core.permissions import (
     Action,
@@ -363,6 +366,24 @@ def test_what_is_refused_before_a_link_is_made(client, db_session, developer):
     assert not_visual.json()["detail"] == NOT_VISUAL
     assert _rows(db_session, experiment["id"]) == []
     assert _rows(db_session, code["id"]) == []
+
+
+@pytest.mark.regression
+def test_a_variant_of_another_experiment_makes_no_link(client, db_session, developer):
+    """A real variant id, of another visual experiment the caller may change,
+    is not one of this experiment's: 404, and no row on either."""
+    experiment = _draft(client, developer)
+    other = _draft(client, developer)
+    for name in ("B", "Control"):
+        refused = client.post(
+            f"{EXPERIMENTS}/{experiment['id']}/visual/preview-links",
+            json={"variant_id": _variant(other, name)},
+            headers=auth(developer),
+        )
+        assert refused.status_code == 404, refused.text
+        assert refused.json()["detail"] == VARIANT_NOT_FOUND
+    assert _rows(db_session, experiment["id"]) == []
+    assert _rows(db_session, other["id"]) == []
 
 
 # --- V32: a preview is isolated --------------------------------------------------------
