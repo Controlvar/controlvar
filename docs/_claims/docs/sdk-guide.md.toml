@@ -697,7 +697,7 @@ by = [
 text = "evaluateFeatureFlag(user, flagKey) | FlagEvaluation (getKey, isEnabled, getConfig, getConfigMap) | throws ExperimentationException"
 by = [
     "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::sends GET /api/v1/feature-flags/evaluate/{key}?user_id= with the key and user encoded",
-    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::throws ExperimentationException(404) when the flag is unknown or not ACTIVE",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExperimentationClientTest.java::throws ExperimentationException(404) when the flag key is unknown",
 ]
 
 [[unit]]

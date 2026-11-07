@@ -282,7 +282,7 @@ describe('evaluateFeatureFlag result', () => {
     await expect(client.evaluateFeatureFlag(user, 'my-flag')).rejects.toThrow('API error: 500');
   });
 
-  it('throws an Error on a 404 response (flag not active)', async () => {
+  it('throws an Error on a 404 response (unknown flag key)', async () => {
     mockFetch({ detail: 'not found' }, 404);
     const client = new ExperimentationClient(baseConfig);
     await expect(client.evaluateFeatureFlag(user, 'my-flag')).rejects.toThrow('API error: 404');

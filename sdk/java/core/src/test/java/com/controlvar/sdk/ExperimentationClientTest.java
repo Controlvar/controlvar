@@ -284,7 +284,7 @@ class ExperimentationClientTest {
         }
 
         @Test
-        @DisplayName("throws ExperimentationException(404) when the flag is unknown or not ACTIVE")
+        @DisplayName("throws ExperimentationException(404) when the flag key is unknown")
         void notFound() {
             mockServer.enqueue(json(404, "{\"detail\":\"Feature flag not found\"}"));
 
