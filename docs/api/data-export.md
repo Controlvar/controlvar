@@ -321,6 +321,8 @@ Returns a report for a single experiment. As JSON (the default) it has the exper
 row from `/export/experiments` and its variant rows from `/export/variants`; with
 `format=csv` it is the variant rows as CSV, with the same columns as `/export/variants`.
 An id that no experiment has answers `404`, and one that is not a UUID answers `422`.
+**Download CSV** on an experiment's results page in the dashboard sends one request to this
+path with `format=csv` and saves the response unchanged.
 
 #### Path Parameters
 

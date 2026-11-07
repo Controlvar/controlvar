@@ -50,7 +50,7 @@ The table lists each capability and where you do it today:
 | Split-URL experiments (full profile) | API only | [Split URL testing](../api/split-url.md) |
 | CUPED-adjusted results (beta) | API only | [CUPED](../api/cuped.md) |
 | The interaction scan and the pair test (beta) | API only | [Interaction detection](../api/interaction-detection.md) |
-| Download results as CSV | API only | [Data export](../api/data-export.md) |
+| Download results as CSV | Dashboard | [Exporting results](user-guide.md#exporting-results) |
 | The effect size in the metric comparison table | Dashboard | [Running experiments](user-guide.md) |
 | Each variant's confidence interval on the results page | Dashboard | [Running experiments](user-guide.md) |
 | Bayesian priors, loss threshold and credible level | API only | [Bayesian analysis](../api/bayesian.md) |

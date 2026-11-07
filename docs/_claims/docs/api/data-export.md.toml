@@ -524,6 +524,13 @@ by = [
 ]
 
 [[unit]]
+text = "Download CSV on an experiment's results page in the dashboard sends one request to this path with format=csv and saves the response unchanged."
+by = [
+    "test:frontend/src/tests/pages/results-export-csv.test.tsx::one click is exactly one GET of /api/v1/export/reports/experiments/{id}?format=csv",
+    "test:frontend/src/tests/pages/results-export-csv.test.tsx::saves the response body byte for byte, as results-{id}.csv",
+]
+
+[[unit]]
 text = "Path Parameters"
 by = ["exempt:baseline"]
 

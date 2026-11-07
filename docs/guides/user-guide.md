@@ -512,7 +512,11 @@ Filter by status: All / Draft / Active / Paused / Completed.
 
 ### Exporting Results
 
-Export results through the API:
+On an experiment's results page, **Download CSV** saves its variant rows as a CSV file.
+The file covers the primary metric only, with the experiment's saved correction and
+confidence level, and has no adjusted p-value.
+
+Through the API:
 - **CSV export**: `GET /api/v1/export/variants` downloads per-variant results as CSV
   (`?format=json` for JSON); see [Data Export](../api/data-export.md)
 - **Full results**: `GET /api/v1/results/{experiment_id}` returns JSON with all statistics
