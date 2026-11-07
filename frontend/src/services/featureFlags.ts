@@ -84,11 +84,24 @@ export interface UpdateFeatureFlagRequest {
   off_value?: unknown;
 }
 
+/** Why the list marks a flag stale (#1808); a reason a later release adds is read as any string. */
+export type StaleReason = 'not_evaluated' | 'on_for_everyone' | 'off_for_everyone' | (string & {});
+
+/** An item of `GET /feature-flags/`: the flag plus the stale marker (#1808). */
+export interface FeatureFlagListItem extends FeatureFlag {
+  stale?: boolean;
+  stale_reasons?: StaleReason[];
+}
+
 export interface FeatureFlagListResponse {
-  items: FeatureFlag[];
+  items: FeatureFlagListItem[];
   total: number;
   skip: number;
   limit: number;
+  /** N: the days the stale definition uses (`STALE_FLAG_DAYS`). */
+  stale_days?: number;
+  /** False when the installation recorded no flag evaluation in the last `stale_days` days. */
+  evaluations_seen?: boolean;
 }
 
 /** `ToggleResponse` from `POST /feature-flags/{id}/toggle|enable|disable`. */
@@ -160,6 +173,8 @@ export const FeatureFlagsService = {
     skip?: number;
     limit?: number;
     search?: string;
+    /** `true` lists only stale flags, `false` the rest; leave it out for all (#1808). */
+    stale?: boolean;
   }): Promise<FeatureFlagListResponse> {
     return apiFetch<FeatureFlagListResponse>(BASE, {
       query: {
@@ -167,6 +182,7 @@ export const FeatureFlagsService = {
         skip: params?.skip,
         limit: params?.limit,
         search: params?.search,
+        stale: params?.stale,
       },
     });
   },
