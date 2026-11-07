@@ -26,7 +26,7 @@ Cognito client is created.
 Under ``cognito``, ``/signup`` and ``/confirm`` (self sign-up) also need
 ``COGNITO_SELF_SIGNUP_ENABLED=true``; without it they answer 404 with
 ``SELF_SIGNUP_DISABLED_DETAIL``, at the same point and with no Cognito call,
-and an administrator creates users in the user pool.  The other three are
+and an administrator creates users in the user pool.  The other four are
 unaffected by that setting.
 """
 
@@ -71,6 +71,7 @@ from backend.app.services.auth_service import (
     configured_pool_and_client,
     log_token_refused,
     sign_in_logger,
+    unset_hosted_ui_settings,
 )
 from backend.app.services.cognito_accounts import cognito_external_id
 from backend.app.services.local_auth_service import (
@@ -286,15 +287,8 @@ def _credentials_refused(detail: str = CREDENTIALS_REFUSED_DETAIL) -> HTTPExcept
 
 
 def _hosted_ui_missing() -> List[str]:
-    """The settings sign-in through the Hosted UI needs that are unset, by
-    name, in a fixed order. Names only: a value is never returned."""
-    user_pool_id, client_id = configured_pool_and_client()
-    values = (
-        ("COGNITO_DOMAIN", settings.COGNITO_DOMAIN),
-        ("COGNITO_CLIENT_ID", client_id),
-        ("COGNITO_USER_POOL_ID", user_pool_id),
-    )
-    return [name for name, value in values if not value]
+    """The names of the unset settings sign-in through the Hosted UI needs."""
+    return unset_hosted_ui_settings(settings.COGNITO_DOMAIN)
 
 
 def _log_code_exchange_failed(failure: cognito_hosted_ui.CodeExchangeFailed) -> None:

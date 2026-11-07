@@ -12,14 +12,17 @@ What is asked, and of whom, is fixed here: ``https://<domain>/oauth2/token``,
 a form body with ``grant_type=authorization_code``, the app client id, the
 code, the redirect URI and the PKCE verifier (AWS's token endpoint
 reference: https://docs.aws.amazon.com/cognito/latest/developerguide/token-endpoint.html).
-The app client is public (it has no secret), so there is no Authorization
-header. The caller passes the domain and client id from the configuration.
+No Authorization header is sent: the app client is meant to be a public one,
+with no secret, as the CDK's is. A client with a secret is not supported (the
+token endpoint wants the secret too). The caller passes the domain and client
+id from the configuration.
 
-Every failure is one of four exceptions, each standing for one fixed answer.
-None carries anything Cognito said: its ``error_description`` is text the
-caller must never repeat, and only the ``error`` code, when it is one of the
-OAuth 2.0 codes, is kept, for the log. The id token and the refresh token in
-Cognito's answer are dropped here and never returned, logged or stored.
+Every failure raises one of three exceptions, each a :class:`CodeExchangeFailed`
+standing for one fixed answer. None carries anything Cognito said: its
+``error_description`` is text the caller must never repeat, and only the
+``error`` code, when it is one of the OAuth 2.0 codes, is kept, for the log.
+The id token and the refresh token in Cognito's answer are dropped here and
+never returned, logged or stored.
 """
 
 from __future__ import annotations

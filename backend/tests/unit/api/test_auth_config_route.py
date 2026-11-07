@@ -175,9 +175,9 @@ def test_nothing_in_the_answer_comes_from_the_request(
     client, cognito, monkeypatch, header, provider
 ):
     monkeypatch.setattr(settings, "AUTH_PROVIDER", provider)
-    response = client.get(CONFIG, headers={header: "evil.example"})
+    response = client.get(CONFIG, headers={header: "elsewhere.example"})
     assert response.status_code == 200, response.text
-    assert "evil" not in response.text
+    assert "elsewhere" not in response.text
 
 
 @pytest.mark.regression

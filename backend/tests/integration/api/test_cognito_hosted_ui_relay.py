@@ -331,7 +331,7 @@ def test_under_local_the_exchange_answers_404_and_asks_no_one(hosted_ui, monkeyp
 def test_the_domain_and_client_are_never_taken_from_the_request(hosted_ui):
     hu = hosted_ui
     _, code, verifier, _ = _signed_in_at_hosted_ui(hu)
-    elsewhere = "evil.example"
+    elsewhere = "elsewhere.example"
 
     response = _exchange(
         hu,
@@ -339,7 +339,7 @@ def test_the_domain_and_client_are_never_taken_from_the_request(hosted_ui):
         verifier,
         domain=elsewhere,
         hosted_ui_domain=elsewhere,
-        client_id="evil-client",
+        client_id="elsewhere-client",
         headers={
             "Host": elsewhere,
             "X-Forwarded-Host": elsewhere,
@@ -352,7 +352,7 @@ def test_the_domain_and_client_are_never_taken_from_the_request(hosted_ui):
     seen = hu.issuer.requests[0]
     assert seen["host"] == DOMAIN
     assert seen["form"]["client_id"] == hu.app_client
-    assert "evil" not in repr(seen)
+    assert "elsewhere" not in repr(seen)
 
 
 def test_without_the_hosted_ui_settings_the_exchange_asks_no_one(
@@ -406,7 +406,8 @@ def test_an_issuer_that_cannot_be_reached_is_a_502(hosted_ui, monkeypatch):
 
 # --- R7 and the refusals: fixed answers, nothing of Cognito's repeated -------
 
-MARKER = "call 0800-000-0000 to restore access"
+#: Stands for anything Cognito writes; none of it may reach the answer or the log.
+MARKER = "cognito-wrote-this-7f3a9c"
 
 
 @pytest.mark.regression

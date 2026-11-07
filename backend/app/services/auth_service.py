@@ -7,7 +7,7 @@ This module provides a service for handling authentication operations using AWS 
 import logging
 import os
 import re
-from typing import Any, Dict, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import boto3
 import jwt
@@ -129,6 +129,19 @@ def configured_pool_and_client() -> Tuple[Optional[str], Optional[str]]:
     """``COGNITO_USER_POOL_ID`` and ``COGNITO_CLIENT_ID``, from the process
     environment, where :class:`CognitoAuthService` reads them."""
     return os.environ.get("COGNITO_USER_POOL_ID"), os.environ.get("COGNITO_CLIENT_ID")
+
+
+def unset_hosted_ui_settings(cognito_domain: Optional[str]) -> List[str]:
+    """The settings sign-in through the Hosted UI needs that are unset, by
+    name, in a fixed order: ``COGNITO_DOMAIN`` (given, from the settings),
+    ``COGNITO_CLIENT_ID``, ``COGNITO_USER_POOL_ID``. Names only, never a value."""
+    user_pool_id, client_id = configured_pool_and_client()
+    values = (
+        ("COGNITO_DOMAIN", cognito_domain),
+        ("COGNITO_CLIENT_ID", client_id),
+        ("COGNITO_USER_POOL_ID", user_pool_id),
+    )
+    return [name for name, value in values if not value]
 
 
 class CognitoAuthService:
