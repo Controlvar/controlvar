@@ -535,6 +535,9 @@ RUN_BLOCK_CALL = re.compile(
     r"\brun_block ([a-z][a-z0-9-]*)((?: [A-Za-z_][A-Za-z0-9_]*=\S+)*)"
 )
 
+#: A call of the script's dc (its own `docker compose`), as a command or in $(...).
+DC_CALL = re.compile(r"(?<![\w$-])dc\s")
+
 
 def _function(script: str, name: str) -> str:
     """The body of shell function *name* in *script*, `name() {` to `}`."""
@@ -805,6 +808,41 @@ class TestWorkflow:
         assert _code(script).count("down -v") == 2, (
             "the rollback's and the teardown's only"
         )
+
+    def test_a_check_settings_refusal_is_reported_without_compose(self, script):
+        """Compose loads the whole compose.yml for every subcommand, `ps`
+        included, so after check-settings refuses the file a `dc` call fails
+        before the refusal is reported. The refusal branch, and the
+        api_image_id it calls, find the api container by the labels Compose
+        put on it; the refusal is reported whether or not its image is read;
+        diagnose finds the containers the same way, and teardown falls back to
+        the labels when `down` fails."""
+        branch = re.search(
+            r"^    if ! run_block check-settings; then\n(.*?)^    fi$",
+            _function(script, "do_prepare"),
+            re.M | re.S,
+        )
+        assert branch, "do_prepare has no `if ! run_block check-settings` branch"
+        refusal = _code(branch.group(1))
+        lookup = _code(_function(script, "api_image_id"))
+        for name, body in (
+            ("the check-settings refusal branch", refusal),
+            ("api_image_id", lookup),
+            ("do_diagnose", _code(_function(script, "do_diagnose"))),
+        ):
+            calls = [line.strip() for line in body.splitlines() if DC_CALL.search(line)]
+            assert not calls, f"{name} calls dc, which loads the refused file: {calls}"
+        project = '"label=com.docker.compose.project=$PROJECT"'
+        assert project in lookup
+        assert "--filter label=com.docker.compose.service=api" in lookup
+        assert "if still=$(api_image_id); then" in refusal, (
+            "the refusal is reported only when the api's image can be read"
+        )
+        last = refusal.strip().splitlines()[-1].strip()
+        assert last.startswith("fail \"the page's check-settings block refused "), last
+        teardown = _code(_function(script, "do_teardown"))
+        assert "if dc down -v --remove-orphans; then" in teardown
+        assert teardown.count('--filter "$label"') == 4
 
     def test_restart_is_waited_for_by_the_bootstrap_line(self, script):
         """C5(b): `restart` returns before the entrypoint runs again; the job

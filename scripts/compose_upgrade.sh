@@ -62,7 +62,8 @@ PROFILE=core
 # This change's builds, under local names (the workflow's build steps).
 BUILD_API=compose-upgrade-api:core
 BUILD_WEB=compose-upgrade-web:core
-# Made at this change's commit after the clone, for get-files to check out.
+# Made at this change's commit after the clone, for get-files to switch the
+# clone to.
 CHANGE_TAG=ci-compose-upgrade
 # The bound on the wait for the API after `restart api`, in seconds.
 RESTART_WAIT=300
@@ -231,12 +232,18 @@ alembic_rows() {
         'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA -c "SELECT version_num FROM experimentation.alembic_version ORDER BY 1"'
 }
 
-# api_image_id: the ID of the image the stack's api container runs, in the
-# form `docker image inspect` gives it, which the builds are recorded in.
+# api_image_id: the ID of the image the stack's running api container runs,
+# in the form `docker image inspect` gives it, which the builds are recorded
+# in. The container is found by the labels Compose put on it, not by `dc ps`:
+# Compose loads the whole compose.yml for every subcommand, `ps` included, so
+# `dc ps` fails on a file check-settings has just refused, and do_prepare
+# needs this ID then.
 api_image_id() {
-    local cid image
-    cid=$(dc ps -q api)
-    [ -n "$cid" ] || fail "the stack has no api container"
+    local cid n image
+    cid=$(docker ps -q --filter "label=com.docker.compose.project=$PROJECT" \
+        --filter label=com.docker.compose.service=api)
+    n=$(printf '%s' "$cid" | grep -c . || true)
+    [ "$n" = 1 ] || fail "the stack has $n running api containers, expected 1"
     image=$(docker inspect --format '{{.Image}}' "$cid")
     docker image inspect --format '{{.Id}}' "$image"
 }
@@ -311,8 +318,8 @@ image_ref() {
 }
 
 # tag_images VERSION: the api and web images vVERSION's own
-# deploy/compose/compose.yml names, read from the tag's tree, never from this
-# checkout. Sets TAG_API and TAG_WEB.
+# deploy/compose/compose.yml names, read from the tag's tree, never from the
+# working tree. Sets TAG_API and TAG_WEB.
 tag_images() {
     local v=$1 file ref
     mkdir -p "$WORK/tags"
@@ -357,7 +364,7 @@ do_previous() {
     local version prev tags candidates newest older note
     version=$(cat VERSION)
     tags=$(git tag --list 'v*' | sed -n 's#^v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)$#\1#p')
-    [ -n "$tags" ] || fail "N-1 cannot be resolved: no vX.Y.Z tags in this checkout (it needs fetch-depth: 0)"
+    [ -n "$tags" ] || fail "N-1 cannot be resolved: no vX.Y.Z tags in the clone the job runs in (it needs fetch-depth: 0)"
     if [ -n "${PREVIOUS_VERSION:-}" ]; then
         prev=$PREVIOUS_VERSION
         printf '%s\n' "$prev" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+' ||
@@ -477,7 +484,7 @@ do_prepare() {
         fail "(C5a) the clone has $CHANGE_TAG before get-files"
     fi
     run_block get-files RELEASE="$CHANGE_TAG" || fail "the page's get-files block failed"
-    # C5(a), second half: the page's checkout moved the clone to this change.
+    # C5(a), second half: the page's get-files moved the clone to this change.
     head=$(git -C "$SELFHOST" rev-parse HEAD)
     want=$(git -C "$REPO_ROOT" rev-parse HEAD)
     [ "$head" = "$want" ] || fail "(C5a) after get-files the clone HEAD is not this change: $head, expected $want"
@@ -488,11 +495,16 @@ do_prepare() {
     fi
 
     if ! run_block check-settings; then
-        still=$(api_image_id)
-        if [ "$still" = "$before" ]; then
-            say "the old release still serves: the api runs N-1's image $still"
-        else
-            say "the api runs $still, not N-1's image $before"
+        # No dc in this branch: Compose would load the file it just refused
+        # and fail before the refusal below is reported. api_image_id reads
+        # the container's labels, and the refusal is reported whether or not
+        # it can.
+        if still=$(api_image_id); then
+            if [ "$still" = "$before" ]; then
+                say "the old release still serves: the api runs N-1's image $still"
+            else
+                say "the api runs $still, not N-1's image $before"
+            fi
         fi
         fail "the page's check-settings block refused this change's compose.yml: $(tr '\n' ' ' <"$OUT/check-settings.err")"
     fi
@@ -691,23 +703,46 @@ do_rollback() {
     summary "restored the backup into v$prev: it serves the seeded rows, and the first administrator signs in"
 }
 
+# diagnose: the stack's containers and the end of each one's log, found by the
+# labels Compose put on them: `dc ps` and `dc logs` load compose.yml, and so
+# fail on a file Compose refuses (a check-settings failure).
 do_diagnose() {
+    local label="label=com.docker.compose.project=$PROJECT" id
     set +e
     [ -f "$DIR/.env" ] || {
         say "no stack to diagnose"
         return 0
     }
-    dc ps -a
-    dc logs --no-color --tail=200
+    docker ps -a --filter "$label"
+    for id in $(docker ps -aq --filter "$label"); do
+        say "--- $(docker inspect --format '{{.Name}}' "$id"): the last 200 lines of its log"
+        docker logs --tail=200 "$id" 2>&1
+    done
     return 0
 }
 
+# teardown: `down -v`; when that fails (it loads compose.yml too, so it fails
+# on a file Compose refuses), the stack's containers, volumes and networks are
+# removed by the labels Compose put on them.
 do_teardown() {
+    local label="label=com.docker.compose.project=$PROJECT"
+    local -a ids
     [ -f "$DIR/.env" ] || {
         say "no stack to remove"
         return 0
     }
-    dc down -v --remove-orphans
+    if dc down -v --remove-orphans; then
+        return 0
+    fi
+    say "docker compose down failed (above): removing the stack's containers, volumes and networks by their labels"
+    mapfile -t ids < <(docker ps -aq --filter "$label")
+    [ "${#ids[@]}" -eq 0 ] || docker rm -f "${ids[@]}"
+    mapfile -t ids < <(docker volume ls -q --filter "$label")
+    [ "${#ids[@]}" -eq 0 ] || docker volume rm "${ids[@]}"
+    mapfile -t ids < <(docker network ls -q --filter "$label")
+    [ "${#ids[@]}" -eq 0 ] || docker network rm "${ids[@]}"
+    [ -z "$(docker ps -aq --filter "$label")" ] ||
+        fail "the stack's containers are still there after removing them by their labels"
 }
 
 case "${1:-}" in
