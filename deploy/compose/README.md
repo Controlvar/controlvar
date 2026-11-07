@@ -357,3 +357,17 @@ was. It starts the stack with `docker compose up -d --wait` and signs in as
 the first administrator through the dashboard's port. It checks that a request
 for another host name answers `400`, that the demo login answers `401`, and
 that PostgreSQL, Redis and the API publish no port.
+
+The same workflow's `compose-upgrade` job runs every command block of this
+page, taken from the page as it is written, on those pull requests, every
+night, and when it is started by hand. It installs the previous release from
+a clone at its tag with the commands of [Run it](#run-it), which pull that
+release's published images, and adds an experiment and a feature flag. Then it
+follows [Upgrade](#upgrade) with the change's images under the published
+names, and checks that the experiment and the flag are still there, that the
+first administrator signs in with the password in `.env`, and that the API
+applied each migration the change adds once. Last, it rolls back in place,
+removes the stack and its volumes, and restores the backup into the previous
+release. It rehearses one step, from the previous release to the change, in
+the core profile on Linux: the full profile and longer jumps are not
+rehearsed.

@@ -903,7 +903,7 @@ reason = "the Helm chart's README: chart-kind installs the chart on kind with th
 scope = "in"
 class = "workflow"
 workflow = "compose-production"
-reason = "how to run deploy/compose/compose.yml: compose-production runs generate-env.sh and docker compose up --wait on that file and signs in"
+reason = "how to run and upgrade deploy/compose/compose.yml: compose-production runs generate-env.sh and docker compose up --wait on that file and signs in, and its compose-upgrade job runs the page's blocks from the previous release's images to the change's"
 
 # Not for users of the product.
 
