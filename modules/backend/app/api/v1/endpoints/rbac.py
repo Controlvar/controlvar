@@ -368,6 +368,35 @@ def get_effective_permissions(
     return RBACService.get_effective_permissions(db, target_user)
 
 
+def _require_body_user_matches_path(*, path_user_id: UUID, body_user_id: str) -> None:
+    """Refuse a grant whose body names a different user than the URL (#1789).
+
+    The grant is made for the **path** user and the body's ``user_id`` used to
+    be ignored, so a request that named two users was granted to one of them.
+    A request whose body and URL disagree has no correct interpretation, and
+    answering 400 says so -- the counter routes' rule (#95), with the ids
+    compared as UUIDs: the same id in capitals or without its dashes is the
+    same user. A body value that is not a UUID names no user, so it is a
+    mismatch too, never a 500.
+
+    400 rather than 422, as there: FastAPI's 422 for this body's own schema
+    keeps its list-shaped ``detail``. Keyword-only, as there, so a call cannot
+    swap the two ids by position.
+    """
+    try:
+        same = UUID(body_user_id) == path_user_id
+    except ValueError:
+        same = False
+    if not same:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"user_id in the body ({body_user_id!r}) does not match the one "
+                f"in the path ({str(path_user_id)!r})"
+            ),
+        )
+
+
 @router.post("/users/{user_id}/grant", status_code=201)
 def grant_permission(
     user_id: UUID,
@@ -375,8 +404,15 @@ def grant_permission(
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_active_user),
 ):
-    """Grant a direct permission to a user. ADMIN only. Supports expiry."""
+    """Grant a direct permission to a user. ADMIN only. Supports expiry.
+
+    The body's ``user_id`` must name the same user as the path: any other
+    value answers 400, and nothing is written.
+    """
     _require_admin(current_user)
+    # After the admin check, so a caller who may not grant learns nothing
+    # about the body; before this handler reads or writes the database (#1789).
+    _require_body_user_matches_path(path_user_id=user_id, body_user_id=data.user_id)
     # Looked up before the insert: the foreign key refused a grant for an id
     # with no account on flush, a 500 (#1002). Nothing is written.
     if db.query(User).filter(User.id == user_id).first() is None:

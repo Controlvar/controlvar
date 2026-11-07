@@ -31598,7 +31598,7 @@
     },
     "/api/v1/rbac/users/{user_id}/grant": {
       "post": {
-        "description": "Grant a direct permission to a user. ADMIN only. Supports expiry.",
+        "description": "Grant a direct permission to a user. ADMIN only. Supports expiry.\n\nThe body's ``user_id`` must name the same user as the path: any other\nvalue answers 400, and nothing is written.",
         "operationId": "grant_permission_api_v1_rbac_users__user_id__grant_post",
         "parameters": [
           {
