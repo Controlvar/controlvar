@@ -83,6 +83,14 @@
 # viewer pass may not write flags (403), and its list does not change. Both
 # read from fuzz_check's evaluation of local runs at this seed on the pull
 # request's earlier head; its CI runs gave the same counts.
+#
+# Then #708 added POST /api/v1/auth/cognito/exchange, the Cognito Hosted UI's
+# code exchange. It exists only for the Cognito provider and the stack signs in
+# with the local one, so it answers 404 in the superuser and viewer passes (and
+# 429 once its 10 a minute are spent): those lists are 106 and 176 (the 105
+# and 175 above, plus this one each). It is not an SDK route, so the sdk pass does not select it. GET /api/v1/auth/config,
+# added beside it, answers 200 with no credentials, so it needs no entry.
+# Listed from that reasoning before the pull request's own fuzz run.
 
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
@@ -110,6 +118,11 @@ reason = "Cognito sign-up and recovery: the stack signs in with the local provid
 pass = "superuser"
 operation = "POST /api/v1/auth/refresh"
 reason = "Cognito sign-up and recovery: the stack signs in with the local provider, so it answers 404 (and 429 once the sign-in limit is spent)."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/auth/cognito/exchange"
+reason = "The Cognito Hosted UI's code exchange: the stack signs in with the local provider, so it answers 404 (and 429 once its limit is spent)."
 
 [[unreached]]
 pass = "superuser"
@@ -637,6 +650,11 @@ reason = "Cognito sign-up and recovery: the stack signs in with the local provid
 pass = "viewer"
 operation = "POST /api/v1/auth/refresh"
 reason = "Cognito sign-up and recovery: the stack signs in with the local provider, so it answers 404 (and 429 once the sign-in limit is spent)."
+
+[[unreached]]
+pass = "viewer"
+operation = "POST /api/v1/auth/cognito/exchange"
+reason = "The Cognito Hosted UI's code exchange: the stack signs in with the local provider, so it answers 404 (and 429 once its limit is spent)."
 
 [[unreached]]
 pass = "viewer"
