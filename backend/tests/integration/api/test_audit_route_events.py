@@ -602,6 +602,11 @@ def test_experiment_create_update_delete(client, fresh, developer):
     created = _values(row)[1]
     assert created["status"] == "draft"
     assert {"correction_method", "confidence_level"} <= set(created)
+    # #848: whether sequential and Bayesian analysis are on, as values.
+    assert (created["sequential_testing_enabled"], created["bayesian_enabled"]) == (
+        False,
+        False,
+    )
 
     w = Written(fresh)
     response = client.put(
@@ -623,7 +628,13 @@ def test_experiment_create_update_delete(client, fresh, developer):
         headers=_auth(developer),
     )
     assert response.status_code == 204, response.text
-    _one(w, "experiment_delete", "experiment", exp["id"], developer, v2_delta=1)
+    row = _one(w, "experiment_delete", "experiment", exp["id"], developer, v2_delta=1)
+    deleted, after = _values(row)
+    assert after is None
+    assert (deleted["sequential_testing_enabled"], deleted["bayesian_enabled"]) == (
+        False,
+        False,
+    )
 
 
 def test_a_design_save_records_the_save_but_not_which_parts_changed(
