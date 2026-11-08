@@ -15,7 +15,7 @@ from decimal import Decimal
 
 import boto3
 import pytest
-from moto import mock_dynamodb
+from moto import mock_aws
 
 from modules.backend.app.schemas.realtime_counters import (
     CounterType,
@@ -68,7 +68,7 @@ def aws_credentials(monkeypatch):
 @pytest.fixture
 def dynamodb_resource(aws_credentials):
     """Provide a moto-mocked DynamoDB resource with the counters table created."""
-    with mock_dynamodb():
+    with mock_aws():
         resource = boto3.resource("dynamodb", region_name=AWS_REGION)
         create_table(resource)
         yield resource

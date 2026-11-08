@@ -15,7 +15,7 @@ import uuid
 
 import boto3
 import pytest
-from moto import mock_cognitoidp
+from moto import mock_aws
 
 from backend.app.services.auth_service import CognitoAuthService
 from backend.tests.integration.cognito_identity import identity
@@ -35,7 +35,7 @@ def pool(monkeypatch):
     monkeypatch.setenv("AWS_CONFIG_FILE", os.devnull)
     monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", os.devnull)
     monkeypatch.setenv("AWS_EC2_METADATA_DISABLED", "true")
-    with mock_cognitoidp():
+    with mock_aws():
         idp = boto3.client("cognito-idp", region_name=REGION)
         pool_id = idp.create_user_pool(PoolName="shape")["UserPool"]["Id"]
         app_client = idp.create_user_pool_client(

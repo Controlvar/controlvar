@@ -42,7 +42,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from moto import mock_cognitoidp
+from moto import mock_aws
 from sqlalchemy import text, update
 from sqlalchemy.orm import sessionmaker
 
@@ -796,7 +796,7 @@ def cognito(monkeypatch, db_session):
     app.dependency_overrides[deps.get_db] = override_get_db
     app.dependency_overrides[session_get_db] = override_get_db
     try:
-        with mock_cognitoidp():
+        with mock_aws():
             monkeypatch.setattr(
                 deps.auth_service, "get_user_with_groups", lambda token: answer["value"]
             )
