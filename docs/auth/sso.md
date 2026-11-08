@@ -213,6 +213,8 @@ curl -X POST https://app.example.com/api/v1/auth/sso/configs \
 
 The response carries the configuration's `id`: the ACS URL to register is `https://app.example.com/api/v1/auth/sso/saml/<id>/acs`.
 
+A SAML configuration's `sso_url` must be `https` when it is saved: creating one, or an update that sets `sso_url` or `provider_type`, with another scheme is answered 400 `SAML single sign-on URL must use https; check this SSO configuration's sso_url`, in every environment except `test`. An update that sends neither, such as one that changes only `org_name` or `is_active`, is not checked, so a configuration stored earlier with an `http` URL can still be renamed or switched off.
+
 ### OIDC Configuration
 
 ```{.bash skip reason="idp: needs a Google OAuth client"}
@@ -399,6 +401,10 @@ SAML_SP_ACS_URL=https://app.example.com/api/v1/auth/sso/saml/3f1c2b9e-0000-4000-
 
 - An Okta configuration's `sso_url` is `http://`. Use the `https` URL of the authorization server.
 - Creating or updating an Okta configuration with an `sso_url` that is not `https` is answered 400 with this message.
+
+### "SAML single sign-on URL must use https; check this SSO configuration's sso_url"
+
+- Creating or updating a SAML configuration with an `sso_url` that is not `https` is answered 400 with this message. Use the https single sign-on URL your IdP gives.
 
 ### "OIDC ID token was not accepted (iss)"
 

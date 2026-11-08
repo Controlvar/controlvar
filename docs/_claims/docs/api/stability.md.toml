@@ -1013,3 +1013,15 @@ by = [
     "test:backend/tests/integration/api/test_experiment_metadata_text_refused.py::test_authentication_still_answers_401_first",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
 ]
+
+[[unit]]
+text = "POST /api/v1/auth/sso/configs, PUT /api/v1/auth/sso/configs/{config_id} (full profile) | #1100 | Creating a SAML configuration, or an update that sets sso_url or provider_type, whose sso_url is not https answers 400 with SAML single sign-on URL must use https; check this SSO configuration's sso_url, where it answered 201 or 200; nothing is saved. An update that sends neither sso_url nor provider_type is not checked, so a configuration stored earlier can still be changed. The test environment is exempt, as it is for Okta. The OpenAPI document does not change."
+by = [
+    "test:modules/backend/tests/integration/api/test_sso_api.py::TestASamlSsoUrlMustBeHttps::test_create_with_an_http_sso_url_is_refused",
+    "test:modules/backend/tests/integration/api/test_sso_api.py::TestASamlSsoUrlMustBeHttps::test_update_to_an_http_sso_url_is_refused",
+    "test:modules/backend/tests/integration/api/test_sso_api.py::TestASamlSsoUrlMustBeHttps::test_a_stored_http_config_can_still_be_renamed_and_switched_off",
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestSamlSsoUrlIsHttpsWhenSaved::test_create_refuses_a_saml_sso_url_that_is_not_https",
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestSamlSsoUrlIsHttpsWhenSaved::test_update_refuses_a_saml_sso_url_that_is_not_https",
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestSamlSsoUrlIsHttpsWhenSaved::test_the_test_environment_accepts_an_http_saml_url",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
