@@ -6925,10 +6925,44 @@
             "type": "string"
           },
           "off_value": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "object"
+              },
+              {
+                "type": "array"
+              }
+            ],
             "description": "What everyone else gets, and what everyone gets while the flag is off. Required for a string, number or json flag, and of that type; a boolean flag's is `false`. At most 8192 bytes as compact JSON and 10 levels deep; every number in it finite and from -9007199254740991 to 9007199254740991; no NUL or unpaired surrogate character; the two values differ.",
             "title": "Off Value"
           },
           "on_value": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "object"
+              },
+              {
+                "type": "array"
+              }
+            ],
             "description": "What a user the flag is on for gets: a user who matches a targeting rule and falls inside its percentage, or matches no rule and falls inside `rollout_percentage`. Required for a string, number or json flag, and of that type; a boolean flag's is `true`. At most 8192 bytes as compact JSON and 10 levels deep; every number in it finite and from -9007199254740991 to 9007199254740991; no NUL or unpaired surrogate character; the two values differ.",
             "title": "On Value"
           },
@@ -7313,10 +7347,44 @@
             "type": "string"
           },
           "off_value": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "object"
+              },
+              {
+                "type": "array"
+              }
+            ],
             "description": "What everyone else gets, and what everyone gets while the flag is off. Required for a string, number or json flag, and of that type; a boolean flag's is `false`. At most 8192 bytes as compact JSON and 10 levels deep; every number in it finite and from -9007199254740991 to 9007199254740991; no NUL or unpaired surrogate character; the two values differ.",
             "title": "Off Value"
           },
           "on_value": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "object"
+              },
+              {
+                "type": "array"
+              }
+            ],
             "description": "What a user the flag is on for gets: a user who matches a targeting rule and falls inside its percentage, or matches no rule and falls inside `rollout_percentage`. Required for a string, number or json flag, and of that type; a boolean flag's is `true`. At most 8192 bytes as compact JSON and 10 levels deep; every number in it finite and from -9007199254740991 to 9007199254740991; no NUL or unpaired surrogate character; the two values differ.",
             "title": "On Value"
           },

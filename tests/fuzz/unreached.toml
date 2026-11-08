@@ -74,6 +74,15 @@
 # The superuser list is 106 and the viewer's 175, read from fuzz_check's
 # evaluation of local runs of both passes at this seed on the pull request's
 # earlier head; its CI runs gave the same counts.
+#
+# Then #1571 typed on_value and off_value in the flag request schemas as any
+# JSON value but null. That changed the requests the seed generates, and with
+# them the ids Schemathesis reuses from earlier answers: the superuser pass
+# now sends a DELETE /api/v1/rollout-schedules/{schedule_id} that names a
+# stored schedule (204), so it reaches it again, and its list is 105. The
+# viewer pass may not write flags (403), and its list does not change. Both
+# read from fuzz_check's evaluation of local runs at this seed on the pull
+# request's earlier head; its CI runs gave the same counts.
 
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
@@ -251,11 +260,6 @@ reason = "The handler refuses the generated values (400); ids that name no store
 pass = "superuser"
 operation = "PUT /api/v1/rollout-schedules/{schedule_id}"
 reason = "The ids sent name no stored schedule (404), and the other requests fail validation (422) or, once, body parsing (400)."
-
-[[unreached]]
-pass = "superuser"
-operation = "DELETE /api/v1/rollout-schedules/{schedule_id}"
-reason = "The ids sent name no stored schedule (404), and the other requests fail validation (422)."
 
 [[unreached]]
 pass = "superuser"

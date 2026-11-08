@@ -1061,3 +1061,16 @@ by = [
     "test:modules/backend/tests/integration/api/test_rbac_api.py::TestEffectivePermissions::test_get_permissions_nonexistent_user_returns_404",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
+
+[[unit]]
+text = "POST /api/v1/feature-flags/, PUT /api/v1/feature-flags/{flag_id} | #1571 | The OpenAPI document changes: on_value and off_value in FeatureFlagCreate and FeatureFlagUpdate are typed as a string, number, boolean, object or array (an anyOf of the five), so it no longer allows null, which the API has refused with 422 (\"type\": \"null_not_allowed\") since #1497. The API's answers do not change."
+by = [
+    "test:backend/tests/smoke/test_openapi_request_properties_typed.py::test_no_request_body_property_is_untyped",
+    "test:backend/tests/smoke/test_openapi_request_properties_typed.py::test_a_flag_value_allows_every_json_value_but_null",
+    "test:backend/tests/smoke/test_openapi_request_properties_typed.py::test_only_the_two_flag_writes_take_the_four",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestRequestModels::test_explicit_null_is_refused",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_a_create_outside_the_contract_is_422_and_stores_nothing",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_an_update_outside_the_contract_is_422_and_changes_nothing",
+]
