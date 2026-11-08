@@ -1233,7 +1233,25 @@ by = [
 text = "A flag entry this SDK cannot read (an evaluation or value_type from a newer server, or a value of the wrong type) is evaluated by the server, the rest of the ruleset is still answered locally, and, while the flag is active, status().serverEvaluatedFlags lists it."
 by = [
     "test:sdk/js/__tests__/local.test.ts::an entry this SDK cannot read sends that flag to the server; the ruleset still loads and the rest stay local (Q12)",
-    "test:sdk/js/__tests__/evaluator.test.ts::an entry this SDK cannot read defers that one flag, and the document still loads (Q12)",
+    "test:sdk/js/__tests__/evaluator.test.ts::an evaluation it does not know",
+    "test:sdk/js/__tests__/evaluator.test.ts::no evaluation at all",
+    "test:sdk/js/__tests__/evaluator.test.ts::a value_type it does not know (date)",
+    "test:sdk/js/__tests__/evaluator.test.ts::value_type boolean, which a ruleset never names",
+    "test:sdk/js/__tests__/evaluator.test.ts::a value_type that is not a string",
+    "test:sdk/js/__tests__/evaluator.test.ts::a null value_type",
+    "test:sdk/js/__tests__/evaluator.test.ts::an inactive entry with a value_type it does not know",
+    "test:sdk/js/__tests__/evaluator.test.ts::a string flag whose on_value is a number",
+    "test:sdk/js/__tests__/evaluator.test.ts::a string flag with no on_value",
+    "test:sdk/js/__tests__/evaluator.test.ts::a string flag with no off_value",
+    "test:sdk/js/__tests__/evaluator.test.ts::a number flag whose off_value is a string",
+    "test:sdk/js/__tests__/evaluator.test.ts::a number flag whose on_value is a boolean",
+    "test:sdk/js/__tests__/evaluator.test.ts::a number flag whose on_value is past 2^53-1",
+    "test:sdk/js/__tests__/evaluator.test.ts::a json flag whose on_value is a string",
+    "test:sdk/js/__tests__/evaluator.test.ts::a json flag whose off_value is null",
+    "test:sdk/js/__tests__/evaluator.test.ts::an inactive string flag with no off_value",
+    "test:sdk/js/__tests__/evaluator.test.ts::an inactive number flag whose off_value is a string",
+    "test:sdk/js/__tests__/evaluator.test.ts::a number value written 1e400 parses to Infinity and defers",
+    "test:sdk/js/__tests__/evaluator.test.ts::a malformed entry of a known shape still rejects the whole document",
 ]
 
 [[unit]]
@@ -1284,6 +1302,17 @@ by = ["test:sdk/js/__tests__/package.test.ts::runs on Node 18 or later and in br
 [[unit]]
 text = "In the browser the API key is visible to end users, and keys are not scoped for browser use: every active key, including one shipped to a browser, can evaluate flags and track events as the user who created it."
 by = ["test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these"]
+
+[[unit]]
+text = "Such a key answers for whichever user id it is sent: what that id is served, whether it is in a segment, and which experiments it is assigned to."
+by = [
+    "test:backend/tests/integration/api/test_plain_key_answers_for_any_user_id.py::test_a_flag_answers_for_any_user_id_and_an_id_list_decides_by_that_id",
+    "test:backend/tests/integration/api/test_plain_key_answers_for_any_user_id.py::test_assign_and_the_assignments_list_answer_for_any_user_id",
+]
+
+[[unit]]
+text = "Where that matters, use user ids that do not identify a person (not email addresses), in ID lists too, and read assignments from your server."
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Use a dedicated key for browser traffic so it can be revoked on its own, and never give it the sdk:ruleset scope, which lets a key download every flag's targeting rules."

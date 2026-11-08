@@ -6,7 +6,8 @@
  * everyone was eligible while Review said "Targeting: 1 rule group". Now the
  * page checks the rules with `validateRules` before sending, and a 422 the API
  * gives for `targeting_rules` is shown at the rules, not as a raw array message
- * at the foot of the form.
+ * at the foot of the form. Review lists the rules in words, as the
+ * experiment's page will show them (#1425).
  *
  * Like `experiment-new-create-errors.test.tsx`, the real API client runs
  * against a stubbed `fetch`, so a 422 body goes through `ApiError` as it would
@@ -25,6 +26,7 @@ import {
   TARGETING_REFUSED,
 } from '@/components/experiments/new/createErrors';
 import { checkTargeting } from '@/components/experiments/new/formState';
+import { NO_CONDITIONS } from '@/components/experiments/RulesSummary';
 import vocabularyRefusal from '@/tests/fixtures/targeting-vocabulary-refusal.json';
 import { makeRouter } from './helpers/apiMock';
 
@@ -306,6 +308,45 @@ it('guided: "Edit targeting" goes to the step with the rule builder and clears t
   );
   expect(screen.queryByTestId('targeting-error')).not.toBeInTheDocument();
   expect(screen.getByTestId('condition-attribute')).toHaveValue('');
+});
+
+it('guided: Review lists who can join, each group’s conditions in words, before anything is created (#1425)', async () => {
+  await fillIn('guided', () => {
+    addCountryCondition();
+    fireEvent.click(screen.getByTestId('root-logical-or'));
+    fireEvent.click(screen.getByTestId('add-group'));
+    setValue(screen.getAllByTestId('condition-attribute')[1], 'user.plan');
+    setValue(screen.getAllByTestId('condition-operator')[1], 'in');
+    setValue(screen.getAllByTestId('condition-value')[1], 'pro, business');
+    // A second condition in group 2, left blank: Review shows it as not set.
+    fireEvent.click(screen.getAllByTestId('add-condition')[1]);
+  });
+
+  const review = screen.getByTestId('review-targeting');
+  // Before, all Review said was "Targeting: 2 rule groups".
+  expect(review).not.toHaveTextContent('rule group');
+  expect(review).toHaveTextContent('People who match any of these groups:');
+  expect(within(review).getAllByText(/^Group \d: /).map((p) => p.textContent)).toEqual([
+    'Group 1: all of these conditions',
+    'Group 2: all of these conditions',
+  ]);
+  expect(Array.from(review.querySelectorAll('code')).map((c) => c.textContent)).toEqual([
+    'user.country equals US',
+    'user.plan is one of pro, business',
+    '(attribute not set) equals (value not set)',
+  ]);
+  expect(creates()).toHaveLength(0);
+});
+
+it('guided: Review says so when a group has no conditions left (#1425)', async () => {
+  await fillIn('guided', () => {
+    fireEvent.click(screen.getByTestId('add-group'));
+    fireEvent.click(screen.getByTestId('condition-remove'));
+  });
+
+  const review = screen.getByTestId('review-targeting');
+  expect(review).toHaveTextContent('People who match all of these conditions:');
+  expect(within(review).getByRole('listitem')).toHaveTextContent(NO_CONDITIONS);
 });
 
 describe('describeTargetingIssue', () => {

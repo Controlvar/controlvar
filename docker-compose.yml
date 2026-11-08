@@ -13,7 +13,10 @@
 #                                          #   and their traffic simulators
 #   docker compose --profile tools up -d   # + pgAdmin (:5050)
 #   docker compose --profile aws up -d     # + LocalStack (:4566)
-#   docker compose down -v                 # stop and drop the volumes
+#   docker compose --profile demo --profile tools --profile aws down -v
+#                                          # stop everything and drop the volumes;
+#                                          # a plain `down -v` leaves the profile
+#                                          # services (demo, pgAdmin, LocalStack) running
 #
 # Every ${VAR:-default} below can be set in a `.env` file next to this file
 # (compose reads it automatically) or in the shell. Defaults are for a local

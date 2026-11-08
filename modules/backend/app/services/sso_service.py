@@ -286,6 +286,12 @@ ORG_DOMAIN_TAKEN_DETAIL = "An SSO configuration already exists for this domain"
 SSO_URL_HTTPS_DETAIL = (
     "OIDC provider endpoints must use https; check this SSO configuration's sso_url"
 )
+#: The 400 for a SAML configuration whose ``sso_url``, the IdP's single sign-on
+#: URL, is not https, when the configuration is saved (#1100). A sign-in does
+#: not check it: the API never contacts a SAML ``sso_url``.
+SAML_SSO_URL_HTTPS_DETAIL = (
+    "SAML single sign-on URL must use https; check this SSO configuration's sso_url"
+)
 
 
 def _endpoints_use_sso_url(provider_type: Any) -> bool:
@@ -300,18 +306,26 @@ def _endpoints_use_sso_url(provider_type: Any) -> bool:
 
 
 def refuse_non_https_sso_url(provider_type: Any, sso_url: Any) -> None:
-    """400 when an endpoint built from ``sso_url`` would not be https, outside test.
+    """400 when a configuration's ``sso_url`` must be https and is not, outside test.
 
     The rule a sign-in applies to the provider endpoints built from
     ``sso_url`` (:func:`_provider_endpoint`), applied when the configuration is
     created or updated, so an ``http://`` URL is refused when it is saved
     rather than at the first sign-in. It applies to the same providers: those
-    whose endpoints contain ``{sso_url}`` (Okta today). Google, GitHub and the
-    other providers ignore ``sso_url``, SAML is not OIDC, and an empty value
-    is not checked. The test environment, whose fake provider is local, is
-    exempt, as it is at sign-in.
+    whose endpoints contain ``{sso_url}`` (Okta today), with
+    ``SSO_URL_HTTPS_DETAIL``. It applies to SAML too, whose ``sso_url`` is the
+    IdP's single sign-on URL, with ``SAML_SSO_URL_HTTPS_DETAIL`` (#1100); a
+    SAML sign-in does not check it. Google, GitHub and the other providers
+    ignore ``sso_url``, and an empty value is not checked. The test
+    environment, whose fake provider is local, is exempt, as it is at sign-in.
     """
-    if not sso_url or not _endpoints_use_sso_url(provider_type):
+    if not sso_url:
+        return
+    if _endpoints_use_sso_url(provider_type):
+        detail = SSO_URL_HTTPS_DETAIL
+    elif getattr(provider_type, "value", provider_type) == "saml":
+        detail = SAML_SSO_URL_HTTPS_DETAIL
+    else:
         return
     if core_settings.is_test:
         return
@@ -322,7 +336,7 @@ def refuse_non_https_sso_url(provider_type: Any, sso_url: Any) -> None:
     if scheme != "https":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=SSO_URL_HTTPS_DETAIL,
+            detail=detail,
         )
 
 
@@ -357,7 +371,8 @@ def create_sso_config(db: Session, config_data: Dict[str, Any]) -> SSOConfig:
     Raises:
         HTTPException 400 if ``org_domain`` is empty once normalised.
         HTTPException 400 if the provider builds its endpoints from
-        ``sso_url`` and it is not https (:func:`refuse_non_https_sso_url`).
+        ``sso_url``, or is SAML, and it is not https
+        (:func:`refuse_non_https_sso_url`).
         HTTPException 409 if another configuration's ``org_domain``
         normalises to the same domain.
     """
@@ -407,7 +422,8 @@ def update_sso_config(
         HTTPException 400 if a given ``org_domain`` is empty once normalised.
         HTTPException 400 if the update sets ``sso_url`` or ``provider_type``
         and the result is a provider that builds its endpoints from an
-        ``sso_url`` that is not https (:func:`refuse_non_https_sso_url`).
+        ``sso_url`` that is not https, or a SAML configuration whose
+        ``sso_url`` is not https (:func:`refuse_non_https_sso_url`).
         HTTPException 409 if a given ``org_domain`` normalises to another
         configuration's.
 

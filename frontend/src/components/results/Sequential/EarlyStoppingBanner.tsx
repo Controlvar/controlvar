@@ -5,6 +5,7 @@ import {
   MSPRTResult,
   RecommendedAction,
 } from '@/types/sequential';
+import { SRM_QUALIFIER } from '@/components/results/ResultsDashboard/SrmNotice';
 
 interface EarlyStoppingBannerProps {
   msprtResult: MSPRTResult | null;
@@ -22,6 +23,14 @@ interface EarlyStoppingBannerProps {
    * sent the event, and the banner does not judge direction.
    */
   lowerIsBetter?: boolean;
+  /**
+   * The server's sample-ratio warning (`srm.warning` from `GET /results/{id}`,
+   * true when the split's p-value is below the server's threshold). The
+   * sequential analysis runs on the same split, so under a mismatch every
+   * answer here, "Ready to stop" above all, carries the qualifier the
+   * Bayesian panel carries (#1737). No threshold is applied here.
+   */
+  srmWarning?: boolean;
 }
 
 /**
@@ -116,6 +125,7 @@ export function EarlyStoppingBanner({
   recommendedAction,
   confidenceSequence,
   lowerIsBetter,
+  srmWarning,
 }: EarlyStoppingBannerProps) {
   let direction: ChangeDirection | null = null;
   let config: BannerConfig;
@@ -142,6 +152,12 @@ export function EarlyStoppingBanner({
           {config.detail && (
             <p className="text-xs mt-1" data-testid="action-detail">
               {config.detail}
+            </p>
+          )}
+          {srmWarning === true && (
+            <p className="text-xs mt-1 font-medium" data-testid="sequential-srm-qualifier">
+              <span aria-hidden="true">⚠ </span>
+              {SRM_QUALIFIER}
             </p>
           )}
           {msprtResult && (

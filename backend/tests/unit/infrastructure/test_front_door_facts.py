@@ -140,7 +140,11 @@ def test_the_header_describes_the_profiles_and_the_port_overrides():
         "*_HOST_PORT",
     ):
         assert needle in header, needle
-    demo = [line for line in header.split("\n") if "--profile demo" in line]
+    demo = [
+        line
+        for line in header.split("\n")
+        if re.search(r"--profile demo\b.*\bup\b", line)
+    ]
     assert [line.lstrip("#").strip() for line in demo] == [DEMO_COMMAND], demo
 
 

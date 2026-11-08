@@ -30,6 +30,11 @@ import {
 import type { SafetyCheckResponse } from '@/types/safety';
 import { PageTitle } from '@/components/PageTitle';
 import { FlagToggle } from '@/components/feature-flags/FlagToggle';
+import {
+  ARCHIVED_LABEL,
+  ArchivedFlagNote,
+  isFlagArchived,
+} from '@/components/feature-flags/ArchivedFlag';
 import { RolloutScheduleManager } from '@/components/feature-flags/RolloutScheduleManager';
 import {
   FlagValueFields,
@@ -444,6 +449,9 @@ export default function FeatureFlagDetailPage() {
   }
 
   const on = isFlagOn(flag);
+  // The API refuses to turn an archived flag on (400), so the page offers no
+  // switch for one: it says how to unarchive it instead (#1748).
+  const archived = isFlagArchived(flag);
   const schedule = schedules ? pickSchedule(schedules) : null;
   // A boolean flag (or one from a server without values) keeps the page it
   // had: no type, no Values section, "Serving" / "Not serving".
@@ -477,12 +485,16 @@ export default function FeatureFlagDetailPage() {
                 </h1>
                 <span
                   className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    on ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-700'
+                    on
+                      ? 'bg-green-100 text-green-800'
+                      : archived
+                        ? 'bg-slate-200 text-slate-800'
+                        : 'bg-slate-100 text-slate-700'
                   }`}
                   data-testid="flag-status"
-                  data-status={on ? 'active' : 'inactive'}
+                  data-status={archived ? 'archived' : on ? 'active' : 'inactive'}
                 >
-                  {on ? 'On' : 'Off'}
+                  {archived ? ARCHIVED_LABEL : on ? 'On' : 'Off'}
                 </span>
                 {valueFlag && (
                   <span
@@ -505,7 +517,7 @@ export default function FeatureFlagDetailPage() {
 
             <div className="flex items-center gap-3 shrink-0">
               <span className="text-sm text-slate-600">{statusText}</span>
-              {canChange && (
+              {canChange && !archived && (
                 <FlagToggle
                   on={on}
                   disabled={toggling}
@@ -516,6 +528,7 @@ export default function FeatureFlagDetailPage() {
               )}
             </div>
           </div>
+          {archived && <ArchivedFlagNote />}
           {!canChange && !changePending && (
             <p className="mt-4 text-sm text-slate-600" data-testid="flag-role-note">
               {FLAG_ROLE_NOTE}

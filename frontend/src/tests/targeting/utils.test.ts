@@ -7,8 +7,9 @@ import {
   jsonToRules,
   getAttributeType,
   getOperatorsForAttribute,
+  FLAG_OPERATOR_OPTIONS,
 } from '@/utils/targeting';
-import { TargetingRules } from '@/types/targeting';
+import { COMMON_ATTRIBUTES, OPERATORS_BY_TYPE, TargetingRules } from '@/types/targeting';
 
 describe('createEmptyCondition', () => {
   it('returns an object with id, attribute, operator, value', () => {
@@ -285,6 +286,30 @@ describe('getAttributeType', () => {
   it('defaults to string for unknown attributes', () => {
     expect(getAttributeType('custom.attribute')).toBe('string');
   });
+
+  it.each([
+    ['device_type', 'string'],
+    ['app_version', 'semver'],
+    ['account_age_days', 'number'],
+  ])('returns the docs table type for the suggestion %s (#1775)', (attribute, type) => {
+    expect(getAttributeType(attribute)).toBe(type);
+  });
+});
+
+describe('the former suggestions (#1775)', () => {
+  // No longer suggested, but a rule saved with one keeps the operators it was
+  // built with on both builders, so it stays editable.
+  it.each([
+    ['user.age', 'number'],
+    ['device.type', 'string'],
+    ['app.version', 'semver'],
+    ['session.new_user', 'boolean'],
+  ])('%s keeps its %s type and operators', (attribute, type) => {
+    expect(COMMON_ATTRIBUTES.map((a) => a.value)).not.toContain(attribute);
+    expect(getAttributeType(attribute)).toBe(type);
+    expect(getOperatorsForAttribute(attribute)).toEqual(OPERATORS_BY_TYPE[type]);
+    expect(getOperatorsForAttribute(attribute, FLAG_OPERATOR_OPTIONS)).toEqual(OPERATORS_BY_TYPE[type]);
+  });
 });
 
 describe('getOperatorsForAttribute', () => {
@@ -334,5 +359,16 @@ describe('getOperatorsForAttribute', () => {
     const ops = getOperatorsForAttribute('unknown.attr');
     expect(ops).toContain('equals');
     expect(ops).toContain('contains');
+  });
+
+  it.each([
+    ['app_version', 'semver_eq', ['equals', 'in', 'is_not_null']],
+    ['account_age_days', 'equals', ['greater_than', 'contains', 'regex']],
+    ['device_type', 'equals', ['in', 'starts_with']],
+  ])('offers %s its typed operators first, then the ones it had as a custom attribute (#1775)', (attribute, first, kept) => {
+    const ops = getOperatorsForAttribute(attribute);
+    expect(ops[0]).toBe(first);
+    expect(ops).toEqual(expect.arrayContaining(kept));
+    expect(new Set(ops).size).toBe(ops.length);
   });
 });

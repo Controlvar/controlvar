@@ -132,6 +132,27 @@ export function describeCondition(condition: Record<string, unknown>): string {
   return `${attribute} ${label} ${shown}`;
 }
 
+/** How a condition still in the rule builder names a part not filled in yet. */
+export const ATTRIBUTE_NOT_SET = '(attribute not set)';
+export const VALUE_NOT_SET = '(value not set)';
+
+/**
+ * A condition still in the rule builder, in words: `describeCondition`, with
+ * a blank attribute or value named as not set. Blank means what
+ * `validateRules` refuses (an attribute of spaces; a value of null or "" for
+ * an operator that takes one), so the creation that follows says what to fix.
+ * Rules already stored are described as stored, by `describeCondition`.
+ */
+export function describeDraftCondition(condition: Record<string, unknown>): string {
+  const attribute = String(condition.attribute ?? '');
+  const value = condition.value;
+  return describeCondition({
+    ...condition,
+    attribute: attribute.trim() === '' ? ATTRIBUTE_NOT_SET : attribute,
+    value: value === null || value === undefined || value === '' ? VALUE_NOT_SET : value,
+  });
+}
+
 /** "all" for AND (or absent), "any" for OR: how a list of things combines, in words. */
 export function combineWord(logicalOperator: unknown): 'all' | 'any' {
   return logicalOperator === 'OR' ? 'any' : 'all';

@@ -767,8 +767,11 @@ def test_what_is_accepted_is_what_the_flag_evaluator_applies(monkeypatch):
     corpus = _accepted_corpus()
     # The vectors' 153 accepted rows: 141 (143 until #1204 refused
     # op-json-path and op-percentage-bucket), and since #1497 (F5) the 12
-    # value flags' (each value type, four ways a flag reaches an SDK).
-    assert len(corpus) == len(ACCEPTED) + 153 + 529
+    # value flags' (each value type, four ways a flag reaches an SDK). The
+    # builder grid's 641 accepted rows: 529 until #1775, which stopped
+    # suggesting session.new_user and suggests device_type, app_version and
+    # account_age_days with every operator they had as custom attributes.
+    assert len(corpus) == len(ACCEPTED) + 153 + 641
     with_rules = 0
     diverged = []
     for name, raw in corpus:

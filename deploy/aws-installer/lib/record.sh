@@ -166,6 +166,18 @@ cv_sleep() {
     cv_wait "$CV_CHILD" || :
 }
 
+# cv_now: the clock, in whole seconds, in CV_NOW; 0 when it cannot be read. It runs no
+# command substitution, $(...), so a wait can call it (#1558, #1565): the clock is read
+# through a file.
+cv_now() {
+    CV_NOW=0
+    date +%s > "$CV_RECORD/tmp/now" 2> /dev/null || :
+    read -r CV_NOW 2> /dev/null < "$CV_RECORD/tmp/now" || CV_NOW=0
+    case "$CV_NOW" in
+        '' | *[!0-9]*) CV_NOW=0 ;;
+    esac
+}
+
 # cv_stop_children: every child still running is stopped, with what it started, and
 # waited for.
 cv_stop_children() {

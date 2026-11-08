@@ -70,7 +70,7 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "The installer is in releases from v0.37.0 on."
-by = ["untested:T"]
+by = ["test:backend/tests/installer_sweeps/test_install_run.py::test_help_says_beta_and_lists_only_the_options"]
 
 [[unit]]
 text = "It installs the core profile in us-west-2, in the shape staging has in What Gets Deployed, and the platform answers at a name you choose in your own Route 53 zone."
@@ -639,6 +639,7 @@ text = "If you press Ctrl-C, AWS carries on creating the stacks that it started,
 by = [
     "test:backend/tests/installer_sweeps/test_install_checks.py::test_an_interrupt_leaves_a_usable_record_and_no_child",
     "test:backend/tests/installer_sweeps/test_install_checks.py::test_an_interrupt_while_the_deploy_wait_reads_the_clock_stops_the_install",
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_an_interrupt_while_the_certificate_wait_reads_the_clock_stops_the_install",
     "test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules",
 ]
 
@@ -923,14 +924,15 @@ text = "Removing what is left says how to remove them when nothing else does."
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "If the report names anything under Not explained, the installer has left it alone, because someone else may have made it."
+text = "If the report names anything under Not explained, the installer has left it alone: someone else may have made it, or it may be the install's own."
 by = [
     "test:backend/tests/installer_sweeps/test_sweep_verdict.py::test_anything_off_the_list_is_not_explained_and_counted",
     "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_nothing_the_install_did_not_make_is_deleted",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_a_residue_does_not_say_nothing_else_the_install_made_is_there",
 ]
 
 [[unit]]
-text = "Look at it before you delete it."
+text = "Look at each one before you delete it."
 by = ["exempt:advice"]
 
 [[unit]]
@@ -1104,7 +1106,9 @@ by = [
 text = "130 | You pressed Ctrl-C, or the installer was stopped. AWS carries on with the stacks it started | If the message says something was made, run uninstall. Otherwise run the command again when you are ready"
 by = [
     "test:backend/tests/installer_sweeps/test_install_checks.py::test_an_interrupt_leaves_a_usable_record_and_no_child",
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_an_interrupt_while_the_certificate_wait_reads_the_clock_stops_the_install",
     "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_an_interrupt_during_the_destroy_then_a_run_again_completes",
+    "test:backend/tests/installer_sweeps/test_uninstall_run.py::test_an_interrupt_while_the_stack_wait_reads_the_clock_stops_the_uninstall",
 ]
 
 [[unit]]

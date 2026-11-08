@@ -193,6 +193,23 @@ cv_uninstall_state() {
     done
     done_list="nothing yet"
     if [ "${#deleted[@]}" -gt 0 ]; then done_list=$(cv_join ${deleted[@]+"${deleted[@]}"}); fi
+    # The comparison found something it could not explain, or could not read a list: it
+    # cannot say nothing else of the install is there (#1381).
+    case "${#still[@]}:${CV_UN_VERDICT:-}" in
+        0:RESIDUE | 0:INCOMPLETE)
+            if cv_fact CDKTOOLKIT_STACK_ID; then
+                kept=" Uninstall keeps the CDK's setup stack this install made (other CDK apps may use it)."
+            fi
+            if [ "$CV_UN_VERDICT" = RESIDUE ]; then
+                printf 'Deleted so far: %s.%s The %s thing(s) under "Not explained" above may include some of what the install made.' \
+                    "$done_list" "$kept" "${CV_UN_VERDICT_N:-0}"
+            else
+                printf 'Deleted so far: %s.%s The %s list(s) that could not be read may hold more of what the install made.' \
+                    "$done_list" "$kept" "${CV_UN_VERDICT_N:-0}"
+            fi
+            return 0
+            ;;
+    esac
     if [ "${#still[@]}" -eq 0 ]; then
         if cv_fact CDKTOOLKIT_STACK_ID; then
             printf "Deleted so far: %s. Nothing else the install made is in your account but the CDK's setup stack, which uninstall keeps." "$done_list"
