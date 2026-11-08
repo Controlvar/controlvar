@@ -20,6 +20,15 @@
       "expectation": "accepted"
     },
     {
+      "language": "js",
+      "registry": "npm",
+      "package": "@controlvar/js-sdk",
+      "version": "0.3.0",
+      "url": "https://registry.npmjs.org/@controlvar/js-sdk/-/js-sdk-0.3.0.tgz",
+      "digest": "sha512-4bcH/bNpQKwfzKPBICf3JlYqYmzWCS4ER9mmLmnXgNGZiJvHbPShPa3oOvvJYRWyxHpyBPqNf75e7FdD4hv8UQ==",
+      "expectation": "accepted"
+    },
+    {
       "language": "python",
       "registry": "pypi",
       "package": "controlvar",
@@ -35,6 +44,15 @@
       "version": "0.2.0",
       "url": "https://files.pythonhosted.org/packages/ea/fa/ac440ee7714c00b02feaa2371e591daeb94509a6086d2fe9af18f91c2fce/controlvar-0.2.0-py3-none-any.whl",
       "digest": "sha256:fff64e87a5c7c1b2867d54e0759b8f987a36bc7eeab543c943af47530bc0e0a3",
+      "expectation": "accepted"
+    },
+    {
+      "language": "python",
+      "registry": "pypi",
+      "package": "controlvar",
+      "version": "0.3.0",
+      "url": "https://files.pythonhosted.org/packages/0b/20/15449ccdf7a6c752c20362527a4d43673d17b35be72ef7808bde2481ba46/controlvar-0.3.0-py3-none-any.whl",
+      "digest": "sha256:f2f7018b20a16ebd0087bcd1dc66755b50dcebb726f01b0991eeed17023f13a7",
       "expectation": "accepted"
     }
   ]

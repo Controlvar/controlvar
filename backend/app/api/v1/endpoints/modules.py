@@ -15,11 +15,12 @@ from typing import List, Literal
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core import hooks
 from backend.app.core.config import settings
 from backend.app.modules_loader import modules_active, modules_failure
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 
 class ModulesResponse(BaseModel):

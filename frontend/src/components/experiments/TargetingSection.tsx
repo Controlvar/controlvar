@@ -1,18 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { TargetingRuleBuilder } from '@/components/targeting';
-import { useSegmentList } from '@/hooks/useSegmentList';
 import { docsUrl } from '@/services/docs';
 import { ExperimentsService } from '@/services/experiments';
 import { Experiment } from '@/types/experiments';
-import { TargetingRules, isSegmentOperator } from '@/types/targeting';
+import { TargetingRules } from '@/types/targeting';
 import { checkTargeting } from '@/components/experiments/new/formState';
 import { createEmptyRules, jsonToRules } from '@/utils/targeting';
+import { RulesSummary } from '@/components/experiments/RulesSummary';
 import {
   TARGETING_SAVE_INCOMPLETE,
-  SEGMENT_NOT_FOUND,
   TargetingSaveError,
-  combineWord,
-  describeCondition,
   describeTargetingSaveError,
   isEditableTargeting,
   isNoRules,
@@ -80,58 +77,6 @@ export function SaveAlert({ error }: { error: TargetingSaveError }) {
           ))}
         </ul>
       )}
-    </div>
-  );
-}
-
-/**
- * The stored rules in words, for every reader. A segment condition shows the
- * segment's name once the list has loaded: the id while it loads, and the id
- * (no banner) when the list cannot be read, as for a role without segment
- * access. An id the list does not contain is shown with "(segment not found)".
- */
-export function RulesSummary({ value }: { value: Record<string, unknown> }) {
-  const groups = (value.groups as Record<string, unknown>[]) ?? [];
-  const usesSegment = groups.some((group) =>
-    ((group.conditions as Record<string, unknown>[]) ?? []).some((condition) => isSegmentOperator(condition.operator)),
-  );
-  const segmentList = useSegmentList(usesSegment);
-  const segmentName = (id: string): string => {
-    if (segmentList.state !== 'ready') return id;
-    const found = segmentList.segments.find((segment) => segment.id === id);
-    return found ? found.name : `${id} ${SEGMENT_NOT_FOUND}`;
-  };
-  const conditionList = (group: Record<string, unknown>) => (
-    <ul className="mt-1 list-disc pl-5 space-y-0.5">
-      {((group.conditions as Record<string, unknown>[]) ?? []).map((condition, ci) => (
-        <li key={ci}>
-          <code className="font-mono text-slate-800">{describeCondition(condition, segmentName)}</code>
-        </li>
-      ))}
-    </ul>
-  );
-
-  if (groups.length === 1) {
-    return (
-      <div className="text-sm text-slate-700" data-testid="targeting-summary">
-        <p>People who match {combineWord(groups[0].logical_operator)} of these conditions:</p>
-        {conditionList(groups[0])}
-      </div>
-    );
-  }
-  return (
-    <div className="text-sm text-slate-700" data-testid="targeting-summary">
-      <p>People who match {combineWord(value.logical_operator)} of these groups:</p>
-      <ol className="mt-1 space-y-2">
-        {groups.map((group, gi) => (
-          <li key={gi}>
-            <p className="font-medium">
-              Group {gi + 1}: {combineWord(group.logical_operator)} of these conditions
-            </p>
-            {conditionList(group)}
-          </li>
-        ))}
-      </ol>
     </div>
   );
 }

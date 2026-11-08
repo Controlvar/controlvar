@@ -1,7 +1,9 @@
 # Event collection endpoints
 from fastapi import APIRouter
 
-router = APIRouter()
+from backend.app.api.off_loop_route import OffLoopRoute
+
+router = APIRouter(route_class=OffLoopRoute)
 
 
 @router.get("/")

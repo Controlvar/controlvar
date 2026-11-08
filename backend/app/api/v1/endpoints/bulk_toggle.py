@@ -17,6 +17,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.logger import failure_detail
 from backend.app.core.permissions import (
     Action,
@@ -50,7 +51,7 @@ _ACTIONS = {
     "archive": (FlagVerb.ARCHIVE, ActionType.FEATURE_FLAG_UPDATE),
 }
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 
 @router.post(

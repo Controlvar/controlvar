@@ -48,6 +48,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.v1.endpoints.auth import user_to_me
 from backend.app.core.config import normalise_origin, settings
 from backend.app.core.security import create_local_access_token
@@ -60,14 +61,14 @@ from modules.backend.app.services import sso_service
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 #: The login flow: SP metadata, the SAML ACS and the OIDC login/callback.
 #: Reached by a browser that has no session yet, so it carries no user
 #: authentication; the registration mounts it behind nothing.  The
 #: configuration CRUD stays on `router`, which is mounted behind
 #: authentication.
-public_router = APIRouter()
+public_router = APIRouter(route_class=OffLoopRoute)
 
 
 # ---------------------------------------------------------------------------

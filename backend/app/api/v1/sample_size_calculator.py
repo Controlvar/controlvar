@@ -13,6 +13,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.models.user import User
 from backend.app.services.power_calculator_service import (
     SAMPLE_SIZE_NOT_FINITE_MESSAGE,
@@ -22,7 +23,7 @@ from backend.app.services.power_calculator_service import (
 )
 
 # Create router
-router = APIRouter(prefix="/utils")
+router = APIRouter(prefix="/utils", route_class=OffLoopRoute)
 
 
 class SampleSizeRequest(BaseModel):

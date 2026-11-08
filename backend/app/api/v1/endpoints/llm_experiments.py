@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import deps
 from backend.app.api.enum_filters import enum_filter
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.permissions import Action, ResourceType, check_permission
 from backend.app.models.llm_experiment import LLMExperimentStatus, LLMTaskType
 from backend.app.models.user import User
@@ -27,7 +28,7 @@ from backend.app.schemas.llm_experiments import (
 )
 from backend.app.services.llm_experiment_service import LLMExperimentService
 
-router = APIRouter(tags=["LLM Experiments"])
+router = APIRouter(route_class=OffLoopRoute, tags=["LLM Experiments"])
 _service = LLMExperimentService()
 
 #: The list's filter values, as the responses spell them (#955).

@@ -443,6 +443,65 @@ def test_flag_activate_that_changes_nothing_writes_nothing(
     assert w.rows() == []
 
 
+def test_flag_deactivate_that_changes_nothing_writes_nothing(
+    client, fresh, db_session, developer
+):
+    flag = _flag(db_session, FeatureFlagStatus.INACTIVE)
+    w = Written(fresh)
+    response = client.post(
+        f"{V1}/feature-flags/{flag.id}/deactivate", headers=_auth(developer)
+    )
+    assert response.status_code == 200, response.text
+    assert w.rows() == []
+
+
+@pytest.mark.parametrize(
+    "via,verb,start,action",
+    [
+        ("route", "enable", FeatureFlagStatus.ACTIVE, "toggle_enable"),
+        ("route", "disable", FeatureFlagStatus.INACTIVE, "toggle_disable"),
+        ("route", "disable", FeatureFlagStatus.ARCHIVED, "toggle_disable"),
+        ("bulk", "enable", FeatureFlagStatus.ACTIVE, "toggle_enable"),
+        ("bulk", "disable", FeatureFlagStatus.INACTIVE, "toggle_disable"),
+        ("bulk", "disable", FeatureFlagStatus.ARCHIVED, "toggle_disable"),
+        ("bulk", "archive", FeatureFlagStatus.ARCHIVED, "feature_flag_update"),
+    ],
+)
+def test_enable_and_disable_that_change_nothing_still_write_one_entry(
+    client, fresh, db_session, developer, via, verb, start, action
+):
+    """audit-logging.md: a request that leaves the status unchanged writes one
+    entry with old_value equal to new_value (``/activate`` and ``/deactivate``
+    write none, pinned beside this test)."""
+    flag = _flag(db_session, start)
+    w = Written(fresh)
+    if via == "route":
+        response = client.post(
+            f"{V1}/feature-flags/{flag.id}/{verb}", json={}, headers=_auth(developer)
+        )
+        assert response.status_code == 200, response.text
+    else:
+        # A second id that does not exist fails and must get no entry or id.
+        response = client.post(
+            f"{V1}/feature-flags/bulk-toggle",
+            json={"flag_ids": [str(flag.id), str(uuid.uuid4())], "action": verb},
+            headers=_auth(developer),
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert (body["succeeded"], body["failed"]) == (1, 1), body
+    row = _one(w, action, "feature_flag", flag.id, developer)
+    # The status words are stored as they are, not as JSON.
+    assert row.old_value == row.new_value == start.value, (
+        row.old_value,
+        row.new_value,
+    )
+    if via == "bulk":
+        assert body["audit_log_ids"] == [str(row.id)]
+    flag_status = db_session.query(FeatureFlag.status).filter_by(id=flag.id).scalar()
+    assert flag_status == start
+
+
 def test_bulk_toggle_one_entry_per_flag(client, fresh, db_session, developer):
     flags = [_flag(db_session) for _ in range(2)]
     w = Written(fresh)
@@ -563,6 +622,38 @@ def test_experiment_create_update_delete(client, fresh, developer):
     )
     assert response.status_code == 204, response.text
     _one(w, "experiment_delete", "experiment", exp["id"], developer, v2_delta=1)
+
+
+def test_a_design_save_records_the_save_but_not_which_parts_changed(
+    client, fresh, developer
+):
+    """Today a design save names neither variants nor metrics in the entry.
+
+    A PUT of ``{variants, metrics}`` on a draft writes one ``experiment_update``
+    entry with the user and the time, but ``old_value`` and ``new_value`` are
+    both null, so ``changed_fields`` does not name the variants or the metrics.
+    The audit-logging page says so (#1782). This pins that fact; #1782 will
+    name them, and this test then changes with it.
+    """
+    exp = _create_experiment(client, developer)
+
+    w = Written(fresh)
+    payload = _experiment_payload()
+    payload["variants"][0]["name"] = "Control renamed"
+    payload["metrics"][0]["name"] = "Conversion Rate renamed"
+    response = client.put(
+        f"{V1}/experiments/{exp['id']}",
+        json={"variants": payload["variants"], "metrics": payload["metrics"]},
+        headers=_auth(developer),
+    )
+    assert response.status_code == 200, response.text
+    row = _one(w, "experiment_update", "experiment", exp["id"], developer, v2_delta=1)
+    assert row.timestamp is not None
+    old, new = _values(row)
+    named = set((old or {}).keys()) | set((new or {}).keys())
+    assert "variants" not in named and "metrics" not in named
+    assert "variants" not in (new or {}).get("changed_fields", [])
+    assert "metrics" not in (new or {}).get("changed_fields", [])
 
 
 def test_experiment_lifecycle(client, fresh, developer):

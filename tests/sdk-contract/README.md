@@ -99,8 +99,8 @@ The SDKs in this tree are not the only ones reading the ruleset. Every release a
 registry with a local evaluator keeps reading what the server sends, and a document it cannot read
 is dropped whole: it keeps answering from its last ruleset, so a later kill switch never reaches
 it, and nothing on the server says so. `published-sdks.json` pins each such release by URL and
-digest (npm `@controlvar/js-sdk` and PyPI `controlvar`, 0.1.1 and 0.2.0), with a declared
-`expectation`: `accepted` for all four.
+digest (npm `@controlvar/js-sdk` and PyPI `controlvar`, from 0.1.1 on; the file is the list),
+with a declared `expectation`: `accepted` for every one today.
 
 `test_published_ruleset.py` (G1) downloads each one (`published_sdks.py`: three attempts, five
 seconds apart), checks the digest before unpacking it and on every later load, refuses an archive
@@ -115,11 +115,12 @@ directory. A harness (`harness/published_js_ruleset.cjs` under node, required by
   and the sentinel answers `{enabled: false, reason: "inactive"}`. A release that refuses the
   format passes only if its pin says `format-refused`, which is a decision taken in that file;
 - answers: every case is DEFER or exactly the server's `{enabled, reason}`, and the cases it
-  answers locally are exactly the `must_local` ones (1333 today; the count is logged). The
-  releases read no value: a value flag reaches them as on or off.
+  answers locally are exactly the `must_local` ones (1333 today; the count is logged). Only
+  `enabled` and `reason` are compared, never a value: 0.1.1 and 0.2.0 read none (a value flag
+  reaches them as on or off).
 
-Every run also plants a defect into the inputs, against the same four releases, and checks the
-failure by its text: P1 an unknown `evaluation` (fails, naming the flag), P2 a rule with no
+Every run also plants a defect into the inputs, against the same releases, and checks the
+failure by its text: P1 a malformed flag, a string percentage (fails, naming the flag; an unknown `evaluation` is deferred to the server by 0.3.0, not refused), P2 a rule with no
 integer percentage, P3 a percentage of `50.0` (fails for Python, passes for JavaScript, whose
 `JSON.parse` makes it 50), P4 schema 2 under `accepted` (fails; passes under `format-refused`),
 P5 keys the releases do not know at every level (passes), P6 the same files loaded from outside
@@ -127,7 +128,7 @@ the verified extraction (fails on identity), P7 one expected answer flipped, P8 
 (fails before anything is unpacked).
 
 `backend/tests/integration/api/test_ruleset_published_sdk_compat.py` (G2) does the same for the
-two Python releases with the route's own response bytes: a DEVELOPER creates flags of every shape
+pinned Python releases with the route's own response bytes: a DEVELOPER creates flags of every shape
 through the API, the releases load `GET /api/v1/sdk/ruleset`, answer exactly as `/evaluate`
 does, and both kill switches (deactivate, and a safety rollback to 0%) reach them.
 

@@ -19,6 +19,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.models.user import User
 from backend.app.schemas.ai_design import (
     DesignRequest,
@@ -34,7 +35,7 @@ from backend.app.services.experiment_template_service import ExperimentTemplateS
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 
 # ---------------------------------------------------------------------------

@@ -10,9 +10,11 @@
  *       baseline_rate=..., minimum_detectable_effect=..., alpha=..., power=...,
  *       n_variants=...).per_variant
  *
- * If the server's formula changes, these fail and someone has to decide
- * whether the browser follows. That is the point: they are not decoration, and
- * an "approximately equal" assertion would defeat it, so the sample sizes are
+ * The vectors are frozen: this test never runs the server, so a change to the
+ * server's formula shows up here only when someone regenerates them (see
+ * `power.ts`), and then someone has to decide whether the browser follows.
+ * They are not decoration, and an "approximately equal" assertion would
+ * defeat them, so the sample sizes are
  * compared EXACTLY. Both sides take a ceiling, so exactness is achievable and
  * any disagreement in the normal quantile shows up as an off-by-one rather
  * than hiding inside a tolerance.

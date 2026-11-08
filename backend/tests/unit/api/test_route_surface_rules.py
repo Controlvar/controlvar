@@ -156,7 +156,7 @@ def test_signing_out_revokes_nothing(monkeypatch):
     row = SimpleNamespace(id=user.id, is_active=True)
     db = MagicMock()
     db.query.return_value.filter.return_value.first.return_value = row
-    signed_in = deps.get_current_active_user(deps.get_current_user(token=token, db=db))
+    signed_in = deps.require_active_user(deps.get_current_user(token=token, db=db))
     assert signed_in is row
     assert decode_local_token(token)["sub"] == str(user.id)
 
