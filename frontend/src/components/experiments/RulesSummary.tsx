@@ -1,5 +1,12 @@
 import React from 'react';
-import { combineWord, describeCondition, describeDraftCondition } from '@/utils/experimentTargeting';
+import { useSegmentList } from '@/hooks/useSegmentList';
+import { isSegmentOperator } from '@/types/targeting';
+import {
+  SEGMENT_NOT_FOUND,
+  combineWord,
+  describeCondition,
+  describeDraftCondition,
+} from '@/utils/experimentTargeting';
 
 /** Shown for a group whose conditions have all been removed in the rule builder. */
 export const NO_CONDITIONS = '(no conditions)';
@@ -19,10 +26,27 @@ interface RulesSummaryProps {
  * Targeting rules in words: who can join. The experiment page shows its
  * stored rules with this, and the new-experiment Review shows the rules it is
  * about to send, so the two read the same.
+ *
+ * A stored segment condition shows the segment's name once the list has
+ * loaded: the id while it loads, and the id (no banner) when the list cannot
+ * be read, as for a role without segment access. An id the list does not
+ * contain is shown with "(segment not found)".
  */
 export function RulesSummary({ value, draft = false }: RulesSummaryProps) {
   const groups = (value.groups as Record<string, unknown>[]) ?? [];
-  const describe = draft ? describeDraftCondition : describeCondition;
+  const usesSegment =
+    !draft &&
+    groups.some((group) =>
+      ((group.conditions as Record<string, unknown>[]) ?? []).some((condition) => isSegmentOperator(condition.operator)),
+    );
+  const segmentList = useSegmentList(usesSegment);
+  const segmentName = (id: string): string => {
+    if (segmentList.state !== 'ready') return id;
+    const found = segmentList.segments.find((segment) => segment.id === id);
+    return found ? found.name : `${id} ${SEGMENT_NOT_FOUND}`;
+  };
+  const describe = (condition: Record<string, unknown>): string =>
+    draft ? describeDraftCondition(condition) : describeCondition(condition, segmentName);
   const conditionList = (group: Record<string, unknown>) => {
     const conditions = (group.conditions as Record<string, unknown>[]) ?? [];
     return (
