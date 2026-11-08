@@ -2,13 +2,15 @@
 
 ``GET /api/v1/results/{id}?breakdown=<key>`` tests each variant against the
 control within each segment, with a Bonferroni threshold and an ``unknown``
-segment for events without the key. ``GET /experiments/{id}/segmented-results``
+segment for users without the key. ``GET /experiments/{id}/segmented-results``
 counts users and conversions per segment, variant and metric, and runs no test.
-Any signed-in user may read both.
+Both put each assigned user in one segment (``segment_breakdown``). Any
+signed-in user may read both.
 """
 
 from __future__ import annotations
 
+import math
 import uuid
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -22,6 +24,7 @@ from backend.app.main import app
 from backend.app.models.experiment import ExperimentStatus
 from backend.app.models.user import UserRole
 from backend.app.schemas.dimensional import DimensionalBreakdownResponse
+from backend.app.services import segment_breakdown
 from backend.app.services.analysis_service import AnalysisService
 from backend.app.services.dimensional_analysis_service import (
     DimensionalAnalysisService,
@@ -164,65 +167,143 @@ def test_a_draft_experiment_has_no_segmented_results(as_role):
 # ---------------------------------------------------------------------------
 
 
-class _Rows:
-    def __init__(self, rows):
-        self.rows = rows
+def _fisher_two_sided(control_conv, control_n, treatment_conv, treatment_n):
+    """Two-sided Fisher's exact p-value, written out with math.comb: the sum of
+    the probabilities of every table with the same margins that is no more
+    likely than the observed one."""
+    converted = control_conv + treatment_conv
+    total = control_n + treatment_n
 
-    def fetchall(self):
-        return self.rows
+    def weight(x):
+        return math.comb(treatment_n, x) * math.comb(control_n, converted - x)
+
+    observed = weight(treatment_conv)
+    lowest, highest = max(0, converted - control_n), min(treatment_n, converted)
+    as_extreme = sum(
+        w for w in (weight(x) for x in range(lowest, highest + 1)) if w <= observed
+    )
+    return as_extreme / math.comb(total, converted)
 
 
-def _breakdown_db(segment_values):
+class _Readers:
+    """The reads ``segment_breakdown.segment_rows`` makes, from plain values.
+
+    ``assigned`` maps a variant id to its users, ``values`` a user to the value
+    of the dimension, and ``converters`` an event name to each variant's
+    converting users.  Every call is recorded."""
+
+    def __init__(self, assigned, values, converters):
+        self.assigned = assigned
+        self.values = values
+        self.converters = converters
+        self.converter_reads = []
+
+    def install(self, monkeypatch):
+        monkeypatch.setattr(
+            segment_breakdown,
+            "assignment_times",
+            lambda db, experiment_id: {
+                v: dict.fromkeys(users) for v, users in self.assigned.items()
+            },
+        )
+        monkeypatch.setattr(
+            segment_breakdown,
+            "user_values",
+            lambda db, experiment_id, dimension: dict(self.values),
+        )
+        monkeypatch.setattr(
+            segment_breakdown, "converting_user_ids", self.converting_user_ids
+        )
+
+    def converting_user_ids(self, db, experiment_id, variant_id, event_name):
+        self.converter_reads.append((variant_id, event_name))
+        return set(self.converters.get(event_name, {}).get(variant_id, ()))
+
+
+#: Three desktop users and two mobile users per variant, and in each variant
+#: one user with no device (never tracked with it, or never tracked at all).
+DEVICE_USERS = {
+    CONTROL: ["c1", "c2", "c3", "c4", "c5", "c6"],
+    TREATMENT: ["t1", "t2", "t3", "t4", "t5", "t6"],
+}
+DEVICE_VALUES = {
+    **dict.fromkeys(("c1", "c2", "c3", "t1", "t2", "t3"), "desktop"),
+    **dict.fromkeys(("c4", "c5", "t4", "t5"), "mobile"),
+}
+DEVICE_CONVERTERS = {
+    "checkout_completed": {CONTROL: ["c1", "c6"], TREATMENT: ["t1", "t2", "t4"]},
+    "add_to_cart": {CONTROL: ["c1", "c2", "c3"], TREATMENT: ["t6"]},
+}
+
+
+def _breakdown_db():
     variants = [
         SimpleNamespace(id=CONTROL, name="blue_button", is_control=True),
         SimpleNamespace(id=TREATMENT, name="green_button", is_control=False),
     ]
-    metric = SimpleNamespace(event_name="checkout_completed")
-    statements = []
+    # The primary metric is the one listed first; the other has a name that
+    # sorts first and no is_primary at all.
+    experiment = SimpleNamespace(
+        metric_definitions=[
+            SimpleNamespace(
+                name="Add to cart", is_primary=None, event_name="add_to_cart"
+            ),
+            SimpleNamespace(
+                name="Checkout", is_primary=True, event_name="checkout_completed"
+            ),
+        ]
+    )
 
     def query(model):
         q = MagicMock()
         if model.__name__ == "Variant":
             q.filter.return_value = variants
         else:
-            q.filter.return_value.order_by.return_value.first.return_value = metric
+            q.filter.return_value.first.return_value = experiment
         return q
-
-    def execute(statement, params):
-        sql = str(statement)
-        statements.append(sql)
-        if "SELECT DISTINCT" in sql:
-            return _Rows([(v,) for v in segment_values])
-        if "COUNT(DISTINCT a.user_id) AS total" in sql:
-            return _Rows([(CONTROL, 1), (TREATMENT, 3)])
-        return _Rows([(CONTROL, 1), (TREATMENT, 2)])
 
     db = MagicMock()
     db.query.side_effect = query
-    db.execute.side_effect = execute
-    return db, statements
+    return db
 
 
-def test_events_without_the_key_form_an_unknown_segment_under_a_bonferroni_threshold():
-    db, statements = _breakdown_db(["desktop", "mobile", "unknown"])
+def test_users_without_the_key_form_an_unknown_segment_under_a_bonferroni_threshold(
+    monkeypatch,
+):
+    readers = _Readers(DEVICE_USERS, DEVICE_VALUES, DEVICE_CONVERTERS)
+    readers.install(monkeypatch)
+
     breakdown = results_endpoint._compute_dimensional_breakdown(
-        experiment_id=uuid.uuid4(), dimension="device", db=db, base_alpha=0.05
+        experiment_id=uuid.uuid4(),
+        dimension="device",
+        db=_breakdown_db(),
+        base_alpha=0.05,
     )
+
     assert breakdown.dimension == "device"
     assert breakdown.is_exploratory is True
+    # The values by users, then the users with no device, last.
     assert [s.segment_value for s in breakdown.segments] == [
         "desktop",
         "mobile",
         "unknown",
     ]
     assert breakdown.adjusted_alpha == pytest.approx(0.05 / 3)
-    # An event whose metadata lacks the key is counted under "unknown".
-    distinct = next(s for s in statements if "SELECT DISTINCT" in s)
-    assert "jsonb_extract_path_text(event_metadata, :dim_key)" in distinct
-    assert "'unknown'" in distinct and "COALESCE" in distinct
+    # Each user in one segment, with the primary metric's converting users.
+    assert {
+        s.segment_value: {
+            v.variant_name: (v.sample_size, v.conversions) for v in s.variants
+        }
+        for s in breakdown.segments
+    } == {
+        "desktop": {"blue_button": (3, 1), "green_button": (3, 2)},
+        "mobile": {"blue_button": (2, 0), "green_button": (2, 1)},
+        "unknown": {"blue_button": (1, 1), "green_button": (1, 0)},
+    }
+    assert {name for _, name in readers.converter_reads} == {"checkout_completed"}
 
 
-def test_the_control_has_no_p_value_and_each_treatment_is_tested_against_it():
+def test_the_control_has_no_p_value_and_each_treatment_has_fishers_exact_test_against_it():
     service = DimensionalAnalysisService()
     segments = {
         "desktop": {
@@ -233,17 +314,31 @@ def test_the_control_has_no_p_value_and_each_treatment_is_tested_against_it():
             CONTROL: {"total": 300, "conversions": 60, "is_control": True},
             TREATMENT: {"total": 300, "conversions": 45, "is_control": False},
         },
+        "tablet": {
+            CONTROL: {"total": 3, "conversions": 0, "is_control": True},
+            TREATMENT: {"total": 3, "conversions": 3, "is_control": False},
+        },
     }
-    for segment in service.compute_segment_results(segments, base_alpha=0.05):
+    results = service.compute_segment_results(segments, base_alpha=0.05)
+    assert [s.segment_value for s in results] == ["desktop", "mobile", "tablet"]
+    for segment in results:
         counts = segments[segment.segment_value]
         by_id = {v.variant_id: v for v in segment.variants}
         assert by_id[CONTROL].p_value is None
-        assert by_id[TREATMENT].p_value == service._two_prop_z_test(
-            counts[CONTROL]["conversions"],
-            counts[CONTROL]["total"],
-            counts[TREATMENT]["conversions"],
-            counts[TREATMENT]["total"],
+        assert by_id[TREATMENT].p_value == pytest.approx(
+            _fisher_two_sided(
+                counts[CONTROL]["conversions"],
+                counts[CONTROL]["total"],
+                counts[TREATMENT]["conversions"],
+                counts[TREATMENT]["total"],
+            ),
+            rel=1e-6,
         )
+    # Three users in each arm, all of one and none of the other: 0.1, which is
+    # not significant at 0.05 / 3.
+    tablet = {v.variant_id: v for v in results[2].variants}
+    assert tablet[TREATMENT].p_value == pytest.approx(0.1, rel=1e-6)
+    assert tablet[TREATMENT].is_significant is False
 
 
 # ---------------------------------------------------------------------------
@@ -251,7 +346,9 @@ def test_the_control_has_no_p_value_and_each_treatment_is_tested_against_it():
 # ---------------------------------------------------------------------------
 
 
-def test_segmented_results_are_counts_for_segments_that_carry_the_key():
+def test_segmented_results_count_each_user_in_one_segment_with_no_test(monkeypatch):
+    readers = _Readers(DEVICE_USERS, DEVICE_VALUES, DEVICE_CONVERTERS)
+    readers.install(monkeypatch)
     variants = [
         SimpleNamespace(id=CONTROL, name="blue_button", is_control=True),
         SimpleNamespace(id=TREATMENT, name="green_button", is_control=False),
@@ -259,33 +356,38 @@ def test_segmented_results_are_counts_for_segments_that_carry_the_key():
     metric = SimpleNamespace(
         id=uuid.uuid4(), name="Checkout", event_name="checkout_completed"
     )
-    experiment = SimpleNamespace(variants=variants, metric_definitions=[metric])
+    experiment = SimpleNamespace(
+        id=uuid.uuid4(), variants=variants, metric_definitions=[metric]
+    )
     db = MagicMock()
     db.query.return_value.options.return_value.filter.return_value.first.return_value = experiment
-    statements = []
-    scalars = iter([4, 1, 4, 3, 5, 2, 5, 1])
 
-    def execute(statement, params):
-        statements.append(str(statement))
-        result = MagicMock()
-        result.__iter__.return_value = iter([("desktop",), ("mobile",)])
-        result.scalar.side_effect = lambda: next(scalars)
-        return result
+    result = AnalysisService(db).get_segmented_results(uuid.uuid4(), "device")
 
-    db.execute.side_effect = execute
-    with patch(
-        "backend.app.services.analysis_service.get_schema_name",
-        return_value="experimentation",
-    ):
-        result = AnalysisService(db).get_segmented_results(uuid.uuid4(), "device")
-
-    # Only events that carry the key are segmented: no "unknown".
-    assert "event_metadata ? :segment_key" in statements[0]
-    assert [s["segment_value"] for s in result["segments"]] == ["desktop", "mobile"]
+    # The same segments as /results?breakdown=, unknown included.
+    assert [s["segment_value"] for s in result["segments"]] == [
+        "desktop",
+        "mobile",
+        "unknown",
+    ]
+    counts = {
+        s["segment_value"]: [
+            (v["variant_name"], v["sample_size"], v["conversions"])
+            for v in s["metrics"][0]["variants"]
+        ]
+        for s in result["segments"]
+    }
+    assert counts == {
+        "desktop": [("blue_button", 3, 1), ("green_button", 3, 2)],
+        "mobile": [("blue_button", 2, 0), ("green_button", 2, 1)],
+        "unknown": [("blue_button", 1, 1), ("green_button", 1, 0)],
+    }
     desktop = result["segments"][0]["metrics"][0]["variants"]
-    assert [(v["sample_size"], v["conversions"]) for v in desktop] == [(4, 1), (4, 3)]
     # A percentage, and no significance test.
-    assert [v["conversion_rate"] for v in desktop] == [25.0, 75.0]
+    assert [v["conversion_rate"] for v in desktop] == [
+        pytest.approx(100 / 3),
+        pytest.approx(200 / 3),
+    ]
     for v in desktop:
         assert set(v) == {
             "variant_id",

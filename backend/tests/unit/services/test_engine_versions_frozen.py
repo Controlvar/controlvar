@@ -115,6 +115,9 @@ FROZEN_DIGESTS: Dict[str, str] = {
     # 1.8.0 (#1496): every treatment carries its difference from the control,
     # the intervals and the impact.
     "1.8.0": "91f5a1aa619dfced9f782544d9ddfefd5553c8323ccee13b43b374cf45b126fd",
+    # 1.9.0 (#1776): 1.8.0's entries, except ENGINE_FINGERPRINTS, whose
+    # dataset runs the segment breakdown (Fisher's exact test per segment).
+    "1.9.0": "c358e3eb90dce1f4f767c4a9ce600ded5ccacb9fb33c1dc84ed17b626c65198b",
 }
 
 
@@ -131,6 +134,7 @@ FROZEN_VERSIONS: Tuple[str, ...] = (
     "1.6.0",
     "1.7.0",
     "1.8.0",
+    "1.9.0",
 )
 
 

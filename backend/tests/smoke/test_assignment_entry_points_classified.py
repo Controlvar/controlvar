@@ -68,8 +68,6 @@ INVENTORY: Dict[str, str] = {
     "backend/app/services/assignment_service.py::AssignmentService.reassign_user": UNRECORDED,
     "backend/app/services/assignment_service.py::AssignmentService.delete_assignments_by_experiment": DELETES,
     "backend/app/api/v1/endpoints/results.py::_get_sequential_data._count_assignments": READS,
-    # Raw SQL in an f-string (FROM {schema}.assignments).
-    "backend/app/api/v1/endpoints/results.py::_compute_dimensional_breakdown": READS,
     "backend/app/api/v1/endpoints/results.py::get_sample_size_status": READS,
     # /track and /batch read the user's stored variant through it.
     "backend/app/api/v1/endpoints/tracking.py::_variant_at_receipt": READS,
@@ -79,7 +77,6 @@ INVENTORY: Dict[str, str] = {
     "backend/app/services/analysis_service.py::AnalysisService.calculate_experiment_summary": READS,
     "backend/app/services/analysis_service.py::AnalysisService.calculate_metric_results": READS,
     "backend/app/services/analysis_service.py::AnalysisService.get_daily_results": READS,
-    "backend/app/services/analysis_service.py::AnalysisService.get_segmented_results": READS,
     # assign_user's helpers: the stored-row lookup, and the sticky answer
     # (named here by its ``Assignment`` annotation; it reads through
     # get_assignment).

@@ -177,8 +177,11 @@ def test_converting_users_per_variant_across_pause_resume_and_complete(
     # What the readers that filter on the experiment alone answer: every
     # event is kept with its experiment, so the summary's event total counts
     # all six (its converting users only the four counted in a variant), and
-    # the breakdown finds the paused event's and the completed event's
-    # countries, with their users in the sample and no conversion.
+    # the breakdown places users by the paused event's and the completed
+    # event's countries too.  Each assigned user is in one segment, the
+    # country of their first event: treatment[1] in FR, where the purchase
+    # after the resume counts; control[2] in DE, with no conversion; the users
+    # with no event in unknown.
     assert results["summary"]["total_events"] == 6
     assert results["summary"]["total_conversions"] == 4
     assert {
@@ -188,9 +191,10 @@ def test_converting_users_per_variant_across_pause_resume_and_complete(
         }
         for segment in results["breakdown"]["segments"]
     } == {
-        "US": {"control": (2, 2), "treatment": (2, 2)},
-        "FR": {"control": (0, 0), "treatment": (1, 0)},
+        "US": {"control": (2, 2), "treatment": (1, 1)},
+        "FR": {"control": (0, 0), "treatment": (1, 1)},
         "DE": {"control": (1, 0), "treatment": (0, 0)},
+        "unknown": {"control": (1, 0), "treatment": (2, 0)},
     }
     since = (exp.created_at - timedelta(seconds=1)).isoformat()
     exported = admin_client.get(
@@ -208,8 +212,7 @@ def test_converting_users_per_variant_across_pause_resume_and_complete(
         name: (stats[str(variant_id)].pulls, stats[str(variant_id)].successes)
         for name, variant_id in variant_ids.items()
     } == {"control": (4, 2), "treatment": (4, 2)}
-    # The segmented results find the same segments: the paused and completed
-    # events put their users in FR's and DE's samples, with no conversion.
+    # The segmented results find the same segments, with the same users.
     segmented = admin_client.get(
         f"/api/v1/experiments/{exp.id}/segmented-results/country"
     )
@@ -222,9 +225,10 @@ def test_converting_users_per_variant_across_pause_resume_and_complete(
         }
         for segment in segmented.json()["segments"]
     } == {
-        "US": {"control": (2, 2), "treatment": (2, 2)},
-        "FR": {"control": (0, 0), "treatment": (1, 0)},
+        "US": {"control": (2, 2), "treatment": (1, 1)},
+        "FR": {"control": (0, 0), "treatment": (1, 1)},
         "DE": {"control": (1, 0), "treatment": (0, 0)},
+        "unknown": {"control": (1, 0), "treatment": (2, 0)},
     }
 
     db_session.expire_all()

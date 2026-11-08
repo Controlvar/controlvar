@@ -473,6 +473,8 @@ VALUE_RESULTS_FINGERPRINTS: Dict[str, str] = {
     # the impact; without them the output is 1.7.0's
     # (test_difference_intervals.py).
     "1.8.0": "01ce8332a03c5cf0032f72277011ac993875cd40c4a6b3c8d127c74e24da2e96",
+    # 1.9.0 (#1776) changes the segment breakdown only: 1.8.0's.
+    "1.9.0": "01ce8332a03c5cf0032f72277011ac993875cd40c4a6b3c8d127c74e24da2e96",
 }
 
 

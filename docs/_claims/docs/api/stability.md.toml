@@ -1074,3 +1074,13 @@ by = [
     "test:backend/tests/integration/api/test_flag_values_api.py::test_a_create_outside_the_contract_is_422_and_stores_nothing",
     "test:backend/tests/integration/api/test_flag_values_api.py::test_an_update_outside_the_contract_is_422_and_changes_nothing",
 ]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id} (with breakdown), GET /api/v1/experiments/{experiment_id}/segmented-results/{segment_by} | #1776 | Each assigned user is in one segment, the value the user was first assigned with, or else the first value tracked for them, and their conversions count there, so per variant the segments' sample_size and conversions add up to the experiment's. A user used to be counted in every segment their events named, and a conversion without the key went under unknown (/results) or nowhere (segmented-results). segmented-results lists unknown. A breakdown lists the 20 values with the most users and counts the rest under other. A value longer than 255 characters is counted under other. Each segment's p-value is Fisher's exact test against the control, the test the headline uses for a conversion rate. Existing breakdowns change, and adjusted_alpha with them. A breakdown that cannot be computed answers 500 as a whole and is not cached; the headline stays available without breakdown=. It used to answer 200 with the segments done so far. A dimension containing a NUL character answers 400. Engine version 1.9.0, so /results serves no answer cached before the upgrade; a segmented-results answer can be served for up to an hour after it when CACHE_ENABLED is on. The OpenAPI document changes in two descriptions and the engine_version default. See Where the segments come from."
+by = [
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py",
+    "test:backend/tests/unit/services/test_engine_versions_frozen.py",
+    "test:backend/tests/unit/api/test_experiment_cache_scope.py::test_an_entry_is_kept_for_an_hour",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
