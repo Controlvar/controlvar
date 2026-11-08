@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.config import settings
 from backend.app.core.security import get_password_hash, unwrap_secret
 from backend.app.models.audit_log import ActionType, EntityType
@@ -42,7 +43,7 @@ from backend.app.services.local_auth_service import (
     local_auth_service,
 )
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 #: The answer when a non-superuser's request would change an account's email
 #: address or username. An administrator changes those through

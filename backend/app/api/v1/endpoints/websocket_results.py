@@ -43,6 +43,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.config import settings
 from backend.app.services.results_streaming_service import ResultsStreamingService
 from backend.app.services.websocket_manager import ConnectionManager
@@ -53,7 +54,7 @@ logger = logging.getLogger(__name__)
 # (4000-4999 is the private-use range of RFC 6455).
 WS_CLOSE_UNAUTHORIZED = 4401
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 # Module-level singleton so all requests share the same ConnectionManager state.
 manager = ConnectionManager()
@@ -118,7 +119,7 @@ def _authenticate_websocket(
         return False
     try:
         user = deps.get_current_user(token=bearer, db=db)
-        deps.get_current_active_user(user)
+        deps.require_active_user(user)
         return True
     except HTTPException as exc:
         logger.info("WebSocket auth rejected (%s): %s", exc.status_code, exc.detail)

@@ -16,6 +16,7 @@ from fastapi.openapi.utils import get_openapi
 
 # Import routers and settings
 from backend.app.api.api import api_router, tags_metadata
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.bandit_scheduler import bandit_scheduler_runner
 from backend.app.core.config import cors_start_up_messages, settings
 from backend.app.core.finite_json import refuse_non_finite_json
@@ -195,6 +196,8 @@ app = FastAPI(
     # added to the application after the routers are included is not run.
     dependencies=[Depends(refuse_non_finite_json)],
 )
+# Routes declared on the app itself use the route class every router uses.
+app.router.route_class = OffLoopRoute
 
 # A request that fails validation is answered with each error's type, loc, msg
 # and ctx, and without the submitted values (#500). Every route included below,
