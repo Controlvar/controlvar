@@ -35,6 +35,12 @@ from backend.app.schemas.variance_reduction import VarianceReductionConfig
 
 logger = logging.getLogger(__name__)
 
+#: The columns the experiment list can be sorted by. The list route refuses
+#: anything else with 422; the service ignores anything else, so an attribute
+#: of the model that is not a column (``metadata``, ``variants``) is never used
+#: as a sort key.
+EXPERIMENT_SORT_FIELDS = ("created_at", "updated_at", "name", "status")
+
 #: Postgres error code for a unique constraint violation.
 _UNIQUE_VIOLATION = "23505"
 
@@ -506,7 +512,7 @@ class ExperimentService:
             )
 
         # Apply sorting
-        if sort_by and hasattr(Experiment, sort_by):
+        if sort_by in EXPERIMENT_SORT_FIELDS:
             sort_field = getattr(Experiment, sort_by)
             if sort_order and sort_order.lower() == "asc":
                 query = query.order_by(sort_field.asc())
@@ -570,7 +576,7 @@ class ExperimentService:
             )
 
         # Apply sorting
-        if sort_by and hasattr(Experiment, sort_by):
+        if sort_by in EXPERIMENT_SORT_FIELDS:
             sort_field = getattr(Experiment, sort_by)
             if sort_order and sort_order.lower() == "asc":
                 query = query.order_by(sort_field.asc())

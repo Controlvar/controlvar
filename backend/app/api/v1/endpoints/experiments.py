@@ -24,6 +24,7 @@ from fastapi import (
     status,
 )
 from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -90,6 +91,7 @@ from backend.app.services.audit_service import (
 )
 from backend.app.services.experiment_service import (
     END_DATE_PASSED,
+    EXPERIMENT_SORT_FIELDS,
     AnalysisConfigError,
     EndDatePassedError,
     ExperimentService,
@@ -479,6 +481,24 @@ async def list_experiments(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to list experiments",
+        )
+
+    # Checked here, not with a pattern on the Query, so the published OpenAPI
+    # document does not change. The 422 is the published HTTPValidationError
+    # shape, as the enum filters answer (enum_filters.py): the location and a
+    # fixed message, never the value sent. An empty value keeps meaning "no
+    # ordering".
+    if sort_by and sort_by not in EXPERIMENT_SORT_FIELDS:
+        raise RequestValidationError(
+            [
+                {
+                    "type": "enum",
+                    "loc": ("query", "sort_by"),
+                    "msg": (
+                        "sort_by must be one of: " + ", ".join(EXPERIMENT_SORT_FIELDS)
+                    ),
+                }
+            ]
         )
 
     try:
