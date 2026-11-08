@@ -41,7 +41,7 @@ const grid = flagBuilderGrid();
 
 describe('flag builder outputs (#535 V8)', () => {
   it('covers exactly the grid the builder offers, row for row', () => {
-    expect(grid).toHaveLength(1137);
+    expect(grid).toHaveLength(1335);
     expect(fixture.rows.map((r) => r.name)).toEqual(grid.map((r) => r.name));
   });
 
@@ -49,7 +49,7 @@ describe('flag builder outputs (#535 V8)', () => {
     const counted: Record<string, number> = {};
     for (const row of fixture.rows) counted[row.outcome] = (counted[row.outcome] ?? 0) + 1;
     expect(counted).toEqual(fixture.counts);
-    expect(fixture.counts).toEqual({ accepted: 529, blocked_in_browser: 240, refused_by_server: 368 });
+    expect(fixture.counts).toEqual({ accepted: 641, blocked_in_browser: 262, refused_by_server: 432 });
   });
 
   it('records what the flag page sends for each row', () => {

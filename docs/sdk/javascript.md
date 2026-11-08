@@ -528,7 +528,10 @@ troubleshooting: [Local evaluation](local-evaluation.md).
 
 The SDK is isomorphic. In the browser the API key is visible to end users, and keys are not scoped
 for browser use: every active key, including one shipped to a browser, can evaluate flags and track
-events as the user who created it. Use a dedicated key for browser traffic so it can be revoked on its
+events as the user who created it. Such a key answers for whichever user id it is sent: what that id
+is served, whether it is in a segment, and which experiments it is assigned to. Where that matters, use
+user ids that do not identify a person (not email addresses), in ID lists too, and read assignments from
+your server. Use a dedicated key for browser traffic so it can be revoked on its
 own, and never give it the `sdk:ruleset` scope, which lets a key download every flag's targeting
 rules. Server-side, lower `timeoutMs` if the SDK sits on a request path:
 

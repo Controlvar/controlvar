@@ -10,15 +10,31 @@
  *    to change it: the detail page has no key field, and what it sends never
  *    carries `key`;
  *  - neither the list nor the detail page offers an archive or unarchive
- *    action, for an active, an inactive or an archived flag.
+ *    action, for an active, an inactive or an archived flag: no button, no
+ *    menu item, no request, and the only links that name archiving go to the
+ *    docs;
+ *  - an archived flag (#1748) reads "Archived", never "Off", on both pages;
+ *    it has no on/off switch, which the API would refuse with 400; and each
+ *    page says how to unarchive it (through the API) and links the docs. The
+ *    list filters it with "Archived".
  */
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import axe from 'axe-core';
 import NewFeatureFlagPage from '@/pages/feature-flags/new';
 import FeatureFlagDetailPage from '@/pages/feature-flags/[id]';
 import FeatureFlagsPage from '@/pages/feature-flags/index';
 import { ApiFetchOptions, apiFetch } from '@/services/api';
 import { makeRouter, routedApi } from './helpers/apiMock';
+
+/** Where the "Archived flags" section of the flag guide is, in either docs mode. */
+const ARCHIVED_DOCS_HREF = /feature-flags\/create(\.md|\/)#archived-flags$/;
+
+/** The sentence the flag page shows for an archived flag, pinned word for word. */
+const ARCHIVED_NOTE_TEXT =
+  'This flag is archived: every evaluation answers it as off, and it cannot be turned on until it ' +
+  'is unarchived. Unarchiving is an API call for now, POST /api/v1/feature-flags/{id}/unarchive ' +
+  '(beta), and the flag comes back off.';
 
 jest.mock('@/services/api', () => ({
   ...jest.requireActual('@/services/api'),
@@ -130,24 +146,152 @@ describe('the key', () => {
 });
 
 describe('archiving', () => {
+  /** The verb, not the state: "Archived" (a filter, a status) is not an action. */
+  const ACTION = /\b(un)?archive\b/i;
+
+  /** Every link that names archiving goes to the docs, never to an action. */
+  function linksNamingArchiveGoToTheDocs() {
+    for (const link of screen.queryAllByRole('link', { name: /archiv/i })) {
+      expect(link).toHaveAttribute('href', expect.stringMatching(ARCHIVED_DOCS_HREF));
+    }
+  }
+
   it.each(['active', 'inactive', 'archived'])(
     'neither page offers archive or unarchive for an %s flag',
     async (status) => {
       install(status);
       const { unmount } = render(<FeatureFlagDetailPage />);
       await screen.findByTestId('flag-key');
-      expect(screen.queryAllByRole('button', { name: /archive/i })).toEqual([]);
-      expect(screen.queryAllByRole('link', { name: /archive/i })).toEqual([]);
+      expect(screen.queryAllByRole('button', { name: ACTION })).toEqual([]);
       expect(screen.queryAllByRole('menuitem', { name: /archive/i })).toEqual([]);
+      linksNamingArchiveGoToTheDocs();
       unmount();
 
       render(<FeatureFlagsPage />);
       await screen.findByTestId('flags-table');
-      expect(screen.queryAllByRole('button', { name: /archive/i })).toEqual([]);
-      expect(screen.queryAllByRole('link', { name: /archive/i })).toEqual([]);
+      expect(screen.queryAllByRole('button', { name: ACTION })).toEqual([]);
       expect(screen.queryAllByRole('option', { name: /archive/i })).toEqual([]);
+      linksNamingArchiveGoToTheDocs();
       const calls = mockedApiFetch.mock.calls.map(([path]) => String(path));
       expect(calls.filter((path) => /archive|bulk-toggle/.test(path))).toEqual([]);
     },
   );
+});
+
+// ---------------------------------------------------------------------------
+// #1748: an archived flag is shown as archived, with no switch the API refuses
+// ---------------------------------------------------------------------------
+
+describe('an archived flag (#1748)', () => {
+  function listOf(items: Array<{ id: string; key: string; status: string }>) {
+    mockedApiFetch.mockImplementation(
+      routedApi([
+        {
+          path: '/api/v1/feature-flags',
+          handler: () => ({
+            items: items.map(({ id, key, status }) => ({
+              ...detailFlag(status),
+              id,
+              key,
+              name: key,
+              is_active: status === 'active',
+            })),
+            total: items.length,
+            skip: 0,
+            limit: 100,
+          }),
+        },
+      ]) as unknown as typeof apiFetch,
+    );
+  }
+
+  it('reads Archived on its page, with no switch, and says how to unarchive it', async () => {
+    install('archived');
+    render(<FeatureFlagDetailPage />);
+    const pill = await screen.findByTestId('flag-status');
+    expect(pill).toHaveTextContent(/^Archived$/);
+    expect(pill).toHaveAttribute('data-status', 'archived');
+    expect(screen.queryByRole('switch')).toBeNull();
+    expect(screen.queryByTestId('flag-toggle')).toBeNull();
+
+    const note = screen.getByTestId('flag-archived-note');
+    expect(note).toHaveTextContent(ARCHIVED_NOTE_TEXT);
+    expect(within(note).getByRole('link', { name: 'Read about archived flags' })).toHaveAttribute(
+      'href',
+      expect.stringMatching(ARCHIVED_DOCS_HREF),
+    );
+  });
+
+  it('an inactive flag keeps reading Off, with its switch and no archived note', async () => {
+    install('inactive');
+    render(<FeatureFlagDetailPage />);
+    expect(await screen.findByTestId('flag-status')).toHaveTextContent(/^Off$/);
+    expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false');
+    expect(screen.queryByTestId('flag-archived-note')).toBeNull();
+  });
+
+  it('reads Archived in the list, with no switch in its row and a link saying how to unarchive it', async () => {
+    listOf([
+      { id: 'flag-1', key: 'old_banner', status: 'archived' },
+      { id: 'flag-2', key: 'dark_mode', status: 'inactive' },
+      { id: 'flag-3', key: 'new_nav', status: 'active' },
+    ]);
+    render(<FeatureFlagsPage />);
+    const table = await screen.findByTestId('flags-table');
+    const [archived, off, on] = within(table).getAllByTestId('flag-row');
+
+    expect(within(archived).getByTestId('flag-status-pill')).toHaveTextContent(/^Archived$/);
+    expect(within(archived).queryByRole('switch')).toBeNull();
+    const help = within(archived).getByRole('link', { name: /unarchive through the api/i });
+    expect(help).toHaveTextContent('Unarchive through the API');
+    expect(help).toHaveAccessibleName('Unarchive through the API (old_banner: read about archived flags)');
+    expect(help).toHaveAttribute('href', expect.stringMatching(ARCHIVED_DOCS_HREF));
+
+    // The other rows are as they were.
+    expect(within(off).getByTestId('flag-status-pill')).toHaveTextContent(/^Off$/);
+    expect(within(off).getByRole('switch')).toHaveAttribute('aria-checked', 'false');
+    expect(within(on).getByTestId('flag-status-pill')).toHaveTextContent(/^On$/);
+    expect(within(on).getByRole('switch')).toHaveAttribute('aria-checked', 'true');
+    expect(within(off).queryByRole('link', { name: /unarchive/i })).toBeNull();
+  });
+
+  it('axe finds nothing on either page for an archived flag', async () => {
+    // Scoped to what the page renders, as the other axe checks here are: the
+    // pages render without the app shell's landmarks.
+    const noViolations = async (container: HTMLElement) => {
+      const result = await axe.run(container, { rules: { 'color-contrast': { enabled: false } } });
+      expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`)).toEqual([]);
+    };
+    install('archived');
+    const detail = render(<FeatureFlagDetailPage />);
+    await screen.findByTestId('flag-archived-note');
+    await noViolations(detail.container);
+    detail.unmount();
+
+    listOf([{ id: 'flag-1', key: 'old_banner', status: 'archived' }]);
+    const list = render(<FeatureFlagsPage />);
+    await screen.findByTestId('flags-table');
+    await noViolations(list.container);
+  });
+
+  it('the list filters archived flags, asking the API for status ARCHIVED', async () => {
+    listOf([{ id: 'flag-1', key: 'old_banner', status: 'archived' }]);
+    render(<FeatureFlagsPage />);
+    await screen.findByTestId('flags-table');
+    const filter = screen.getByTestId('flag-filter-archived');
+    expect(filter).toHaveTextContent(/^Archived$/);
+    expect(filter).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(filter);
+    await waitFor(() => expect(filter).toHaveAttribute('aria-pressed', 'true'));
+    await waitFor(() =>
+      expect(
+        mockedApiFetch.mock.calls.some(
+          ([path, options]) =>
+            path === '/api/v1/feature-flags' &&
+            (options as ApiFetchOptions | undefined)?.query?.status === 'ARCHIVED',
+        ),
+      ).toBe(true),
+    );
+  });
 });

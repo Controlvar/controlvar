@@ -254,6 +254,24 @@ by = [
 ]
 
 [[unit]]
+text = "A key in a browser or a mobile app answers for any user id."
+by = [
+    "test:backend/tests/integration/api/test_plain_key_answers_for_any_user_id.py::test_a_flag_answers_for_any_user_id_and_an_id_list_decides_by_that_id",
+    "test:backend/tests/integration/api/test_plain_key_answers_for_any_user_id.py::test_assign_and_the_assignments_list_answer_for_any_user_id",
+]
+
+[[unit]]
+text = "A key used in a browser or a mobile app is visible to the people who use the app, and it answers for whichever user id it is sent: what that id is served, whether it is in a segment, and which experiments it is assigned to."
+by = [
+    "test:backend/tests/integration/api/test_plain_key_answers_for_any_user_id.py::test_a_flag_answers_for_any_user_id_and_an_id_list_decides_by_that_id",
+    "test:backend/tests/integration/api/test_plain_key_answers_for_any_user_id.py::test_assign_and_the_assignments_list_answer_for_any_user_id",
+]
+
+[[unit]]
+text = "Where that matters, use user ids that do not identify a person (not email addresses), in ID lists too, and read assignments from your server."
+by = ["exempt:advice"]
+
+[[unit]]
 text = "At most 10 segments per ruleset, one per condition; put several conditions in an OR group to match any of them."
 by = ["test:backend/tests/unit/core/test_segment_targeting_validation.py::test_ten_segments_accepted_eleven_refused"]
 
