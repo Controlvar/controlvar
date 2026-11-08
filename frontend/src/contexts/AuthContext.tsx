@@ -25,6 +25,7 @@ import {
 import { useAuthConfig } from '@/contexts/AuthConfigContext';
 import type { AuthConfig } from '@/services/authConfig';
 import {
+  CALLBACK_PATH,
   beginSilentSignIn,
   hostedUiLogoutUrl,
   silentSignInAllowed,
@@ -125,9 +126,15 @@ function isCognito(config: AuthConfig): boolean {
   return config.kind !== 'local';
 }
 
-function onLoginPage(): boolean {
+/**
+ * The pages a silent re-sign-in never starts from: the sign-in page (which
+ * never sends anyone anywhere without a click) and the Hosted UI's callback
+ * (which is finishing a sign-in of its own).
+ */
+function onSignInPage(): boolean {
   if (typeof window === 'undefined' || !window.location) return false;
-  return window.location.pathname.replace(/\/+$/, '') === '/login';
+  const path = window.location.pathname.replace(/\/+$/, '');
+  return path === '/login' || path === CALLBACK_PATH;
 }
 
 /** Copy for a session that could not be restored for a reason other than 401. */
@@ -170,6 +177,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const cognito = isCognito(config);
 
   const loadMe = useCallback(async (): Promise<UserMe | null> => {
+    // Which route says who the user is depends on the configuration; the
+    // check waits for it (the effect below runs it once it is known).
+    if (configLoading) return null;
     const check = ++generation.current;
     const sent = getToken();
     if (!sent) {
@@ -195,11 +205,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         applyAnonymous();
         // Under Cognito a session that has run out is started again once,
         // without a page while the Hosted UI's own session lasts; never from
-        // the sign-in page, and never twice in ten minutes.
+        // the sign-in pages, and never twice in ten minutes.
         if (
           config.kind === 'cognito' &&
           !getToken() &&
-          !onLoginPage() &&
+          !onSignInPage() &&
           silentSignInAllowed()
         ) {
           void beginSilentSignIn(config, navigation.currentPath()).catch(() => undefined);
@@ -221,17 +231,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       applyAnonymous();
       return null;
     }
-  }, [applyAnonymous, cognito, config]);
+  }, [applyAnonymous, cognito, config, configLoading]);
 
   useEffect(() => {
     mounted.current = true;
-    // The session check waits for the configuration: it decides which
-    // route says who the user is.
-    if (!configLoading) void loadMe();
+    // loadMe does nothing until the configuration is known, and is a new
+    // function once it is: this runs the session check then.
+    void loadMe();
     return () => {
       mounted.current = false;
     };
-  }, [loadMe, configLoading]);
+  }, [loadMe]);
 
   // Keep tabs in sync: logging out (or in) elsewhere updates this tab too.
   useEffect(() => {

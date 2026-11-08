@@ -435,6 +435,31 @@ describe('the silent re-sign-in happens once at most (row L1)', () => {
     expect(authorizeHits()).toHaveLength(1);
   });
 
+  row('a token that ran out, still stored when the callback opens, starts no second sign-in', async () => {
+    apiSignsIn();
+    api.routes[USERS_ME] = (init) =>
+      (init.headers as Record<string, string>).Authorization === 'Bearer tok-1'
+        ? jsonResponse(200, ACCOUNT)
+        : jsonResponse(401, { detail: 'Could not validate credentials' });
+    // The exchange answers only once the session check has refused the old token.
+    let release: () => void = () => undefined;
+    api.routes[RELAY] = () =>
+      new Promise<Response>((resolve) => {
+        release = () => resolve(jsonResponse(200, { access_token: 'tok-1', expires_in: 3600 }));
+      });
+    const back = await startSignIn();
+    localStorage.setItem(TOKEN_STORAGE_KEY, 'expired-1');
+    await renderCallback(back);
+    expect(
+      callsTo(USERS_ME).map((c) => (c.init.headers as Record<string, string>).Authorization),
+    ).toEqual(['Bearer expired-1']);
+    release();
+    await settle();
+    expect(authorizeHits()).toHaveLength(1);
+    expect(storedToken()).toBe('tok-1');
+    expect(mockReplace).toHaveBeenLastCalledWith('/experiments');
+  });
+
   row('on the sign-in page a session that ran out starts nothing', async () => {
     localStorage.setItem(TOKEN_STORAGE_KEY, 'expired-1');
     api.routes[USERS_ME] = () => jsonResponse(401, { detail: 'Could not validate credentials' });
@@ -467,6 +492,6 @@ describe('the callback page', () => {
 
 describe('this file', () => {
   it('collects every test it declares', () => {
-    expect(registered).toBe(22);
+    expect(registered).toBe(23);
   });
 });
