@@ -28,6 +28,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.datetime_bounds import refuse_unstorable_offset
 from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.db.session import get_db
 from backend.app.models.user import User, UserRole
@@ -214,6 +215,8 @@ def list_audit_logs(
     **Access**: ADMIN only.
     """
     _require_admin(current_user)
+    refuse_unstorable_offset("start_date", start_date)
+    refuse_unstorable_offset("end_date", end_date)
     svc = HIPAAService()
     result = svc.get_phi_audit_logs(
         db=db,
@@ -292,6 +295,8 @@ def get_hipaa_report(
     **Access**: ADMIN only.
     """
     _require_admin(current_user)
+    refuse_unstorable_offset("start_date", start_date)
+    refuse_unstorable_offset("end_date", end_date)
     svc = HIPAAService()
     report = svc.generate_hipaa_report(db=db, start_date=start_date, end_date=end_date)
     return HIPAAReportResponse(**report)

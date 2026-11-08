@@ -33,6 +33,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.datetime_bounds import refuse_unstorable_offset
 from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.optional_modules import (
     COMPLIANCE_REPORTING_UNAVAILABLE_DETAIL,
@@ -127,6 +128,9 @@ def list_audit_events(
                 detail="Compliance audit logs require ADMIN or ANALYST role",
             )
 
+    refuse_unstorable_offset("start_time", start_time)
+    refuse_unstorable_offset("end_time", end_time)
+
     service = AuditLogService(db)
     result = service.get_events(
         resource_type=resource_type,
@@ -193,6 +197,8 @@ def generate_compliance_report(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail=COMPLIANCE_REPORTING_UNAVAILABLE_DETAIL,
         )
+    refuse_unstorable_offset("start_time", start_time)
+    refuse_unstorable_offset("end_time", end_time)
     return handler(
         standard=standard,
         start_time=start_time,
@@ -251,6 +257,8 @@ def export_audit_events(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail=COMPLIANCE_REPORTING_UNAVAILABLE_DETAIL,
         )
+    refuse_unstorable_offset("start_time", start_time)
+    refuse_unstorable_offset("end_time", end_time)
     return handler(
         format=format,
         start_time=start_time,

@@ -9,6 +9,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
+from backend.app.api.datetime_bounds import storable_offset
 from backend.app.core.permissions import GRANTABLE
 
 # ``GRANTABLE`` is every (resource, action) pair a custom role or a direct
@@ -163,6 +164,14 @@ class DelegatePermissionRequest(BaseModel):
     actions: List[PermissionAction] = Field(..., min_length=1)
     reason: Optional[str] = Field(None, max_length=256)
     expires_at: Optional[datetime] = None  # Optional expiry for temporary grants
+
+    @field_validator("expires_at")
+    @classmethod
+    def _storable_expiry(cls, value: Optional[datetime]) -> Optional[datetime]:
+        # A UTC offset of 16 hours or more reaches the database as "time zone
+        # displacement out of range", a 500 (#956): refused as a 422 at
+        # ["body", "expires_at"], without the value.
+        return storable_offset(value)
 
     @model_validator(mode="after")
     def _only_grantable(self) -> "DelegatePermissionRequest":

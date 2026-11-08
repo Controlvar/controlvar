@@ -9,14 +9,16 @@ GET  /api/v1/export/reports/experiments/{id} — Single-experiment report (JSON 
 """
 
 from datetime import datetime
-from typing import Any, Dict, Optional, Union
+from typing import Annotated, Any, Dict, Optional, Union
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import JSONResponse
+from pydantic import AfterValidator
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.datetime_bounds import storable_offset
 from backend.app.api.deps import get_db
 from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.models.user import User
@@ -67,12 +69,16 @@ def export_experiments(
         ExportFormat.CSV, description="Output format: csv or json"
     ),
     scope: ExportScope = Query(ExportScope.SUMMARY, description=_SCOPE_DESCRIPTION),
-    start_date: Optional[datetime] = Query(
-        None, description="Filter by created_at >= start_date (inclusive)"
-    ),
-    end_date: Optional[datetime] = Query(
-        None, description="Filter by created_at <= end_date (inclusive)"
-    ),
+    start_date: Annotated[
+        Optional[datetime],
+        Query(description="Filter by created_at >= start_date (inclusive)"),
+        AfterValidator(storable_offset),
+    ] = None,
+    end_date: Annotated[
+        Optional[datetime],
+        Query(description="Filter by created_at <= end_date (inclusive)"),
+        AfterValidator(storable_offset),
+    ] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_active_user),
 ) -> Response:
@@ -124,12 +130,16 @@ def export_variants(
         ExportFormat.CSV, description="Output format: csv or json"
     ),
     scope: ExportScope = Query(ExportScope.SUMMARY, description=_SCOPE_DESCRIPTION),
-    start_date: Optional[datetime] = Query(
-        None, description="Filter experiments created at or after this date"
-    ),
-    end_date: Optional[datetime] = Query(
-        None, description="Filter experiments created at or before this date"
-    ),
+    start_date: Annotated[
+        Optional[datetime],
+        Query(description="Filter experiments created at or after this date"),
+        AfterValidator(storable_offset),
+    ] = None,
+    end_date: Annotated[
+        Optional[datetime],
+        Query(description="Filter experiments created at or before this date"),
+        AfterValidator(storable_offset),
+    ] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_active_user),
 ) -> Response:
@@ -178,12 +188,16 @@ def export_feature_flags(
     format: ExportFormat = Query(
         ExportFormat.CSV, description="Output format: csv or json"
     ),
-    start_date: Optional[datetime] = Query(
-        None, description="Filter flags created at or after this date"
-    ),
-    end_date: Optional[datetime] = Query(
-        None, description="Filter flags created at or before this date"
-    ),
+    start_date: Annotated[
+        Optional[datetime],
+        Query(description="Filter flags created at or after this date"),
+        AfterValidator(storable_offset),
+    ] = None,
+    end_date: Annotated[
+        Optional[datetime],
+        Query(description="Filter flags created at or before this date"),
+        AfterValidator(storable_offset),
+    ] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_active_user),
 ) -> Response:
@@ -227,12 +241,16 @@ def export_feature_flags(
     tags=["Reports"],
 )
 def get_overview_report(
-    start_date: Optional[datetime] = Query(
-        None, description="Report period start (inclusive)"
-    ),
-    end_date: Optional[datetime] = Query(
-        None, description="Report period end (inclusive)"
-    ),
+    start_date: Annotated[
+        Optional[datetime],
+        Query(description="Report period start (inclusive)"),
+        AfterValidator(storable_offset),
+    ] = None,
+    end_date: Annotated[
+        Optional[datetime],
+        Query(description="Report period end (inclusive)"),
+        AfterValidator(storable_offset),
+    ] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_active_user),
 ) -> JSONResponse:
