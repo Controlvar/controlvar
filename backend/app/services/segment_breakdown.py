@@ -24,6 +24,10 @@ first value tracked for them, and ``unknown`` when there is none:
   ``other``.  The first carrying event decides: a long first value is not
   skipped for a later short one.
 
+``user_values`` reads these values, and is what both routes use:
+``segment_rows`` takes another per-user value source only when its caller
+passes one (``value_source``).
+
 The ``MAX_LISTED_SEGMENTS`` values with the most users (all variants together)
 are listed, by users descending and then by value; every other value is
 counted under ``other``, listed after them, and a user with no value under
@@ -43,7 +47,17 @@ statement, and they are put together in Python (see
 
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import Any, Container, Dict, Iterable, List, Mapping, Optional, Tuple
+from typing import (
+    Any,
+    Callable,
+    Container,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Tuple,
+)
 
 from sqlalchemy import bindparam, case, func
 from sqlalchemy.orm import Session
@@ -87,6 +101,15 @@ class Segment:
     value: str
     users: Dict[str, int] = field(default_factory=dict)
     converters: Dict[Optional[str], Dict[str, int]] = field(default_factory=dict)
+
+
+#: A per-user value source, as ``segment_rows`` calls it:
+#: ``source(db, experiment_id, dimension)`` maps each user id (``str``) to the
+#: user's value; a user with no value is absent.  ``user_values`` is the
+#: default.  A source must return no value longer than ``MAX_VALUE_LENGTH``
+#: characters (``user_values`` reads such a value as ``OTHER``), because
+#: ``segment_rows`` folds the values as they come.
+ValueSource = Callable[[Session, Any, str], Mapping[str, str]]
 
 
 def user_values(db: Session, experiment_id: Any, dimension: str) -> Dict[str, str]:
@@ -166,6 +189,8 @@ def segment_rows(
     experiment_id: Any,
     dimension: str,
     event_names: Iterable[Optional[str]],
+    *,
+    value_source: Optional[ValueSource] = None,
 ) -> List[Segment]:
     """
     The breakdown of ``experiment_id`` by ``dimension``, one row per segment.
@@ -177,7 +202,13 @@ def segment_rows(
     counts the variant's converting users in that segment, the users
     ``converting_user_ids`` returns.
 
-    The rule is in the module docstring.  It is applied here, before any
+    ``value_source`` (a ``ValueSource``) gives each user's value.  ``None``,
+    the default, is ``user_values``, looked up when this is called: the rule
+    in the module docstring.  The source is called once, as
+    ``value_source(db, experiment_id, dimension)``, after the assignments are
+    read and only when there are any.
+
+    The values are folded here (``fold``), whatever their source, before any
     per-row statistics, cache write or snapshot, so both routes list at most
     ``MAX_LISTED_SEGMENTS`` values plus ``OTHER`` and ``UNKNOWN``.
     """
@@ -190,7 +221,8 @@ def segment_rows(
     if not variant_of:
         return []
 
-    values = user_values(db, experiment_id, dimension)
+    read_values = user_values if value_source is None else value_source
+    values = read_values(db, experiment_id, dimension)
     row_of, order = fold({user_id: values.get(user_id) for user_id in variant_of})
 
     variants = sorted(assigned)
