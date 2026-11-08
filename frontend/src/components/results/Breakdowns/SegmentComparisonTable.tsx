@@ -12,6 +12,23 @@ import {
   formatRate,
   isFiniteNumber,
 } from '@/components/results/shared/resultFormat';
+import { docsUrl } from '@/services/docs';
+
+/**
+ * How many values a breakdown lists before it counts the rest under `other`
+ * (the API's MAX_LISTED_SEGMENTS). The caption below says this number, so the
+ * two move together.
+ */
+export const MAX_LISTED_SEGMENTS = 20;
+
+/** The rows the API puts a user in when no listed value fits. */
+const OTHER_SEGMENT = 'other';
+const UNKNOWN_SEGMENT = 'unknown';
+
+export const NO_ASSIGNED_USERS = 'No users are assigned to this experiment yet.';
+export const ATTRIBUTION_CAPTION =
+  'Each user is counted once, in the segment of the value the user was first assigned with, or else the first value tracked for them; unknown is users with none.';
+export const OTHER_CAPTION = `Values beyond the ${MAX_LISTED_SEGMENTS} with the most users are counted together under other.`;
 
 export interface SegmentComparisonTableProps {
   breakdown: DimensionalBreakdownResponse;
@@ -34,6 +51,10 @@ export function SegmentComparisonTable({
 }: SegmentComparisonTableProps) {
   const { segments, is_exploratory, has_heterogeneous_effects, hte_warning } =
     breakdown;
+  // Every row is `unknown`: no user carries the dimension at all.
+  const onlyUnknown =
+    segments.length > 0 && segments.every((s) => s.segment_value === UNKNOWN_SEGMENT);
+  const hasOther = segments.some((s) => s.segment_value === OTHER_SEGMENT);
 
   return (
     <div className="space-y-4" data-testid="segment-comparison-table">
@@ -71,10 +92,22 @@ export function SegmentComparisonTable({
       )}
 
       {segments.length === 0 ? (
-        <p className="text-sm text-slate-500">
-          No segment data available for this dimension.
-        </p>
+        <p className="text-sm text-slate-500">{NO_ASSIGNED_USERS}</p>
       ) : (
+        <>
+        {onlyUnknown && (
+          <p className="text-sm text-slate-700" data-testid="segment-unknown-only">
+            No user of this experiment was assigned or tracked with{' '}
+            <code className="rounded bg-slate-100 px-1 text-xs">{breakdown.dimension}</code>.
+            Send it in the user&apos;s attributes when you assign them.{' '}
+            <a
+              href={docsUrl('api/dimensional-analysis', 'where-the-segments-come-from')}
+              className="text-blue-700 underline hover:text-blue-900"
+            >
+              How a user gets a segment
+            </a>
+          </p>
+        )}
         <div className="overflow-x-auto rounded-lg border border-slate-200">
           <table className="min-w-full divide-y divide-slate-200">
             <thead className="bg-slate-50">
@@ -151,6 +184,15 @@ export function SegmentComparisonTable({
             </tbody>
           </table>
         </div>
+        <p className="text-xs text-slate-500" data-testid="segment-attribution-caption">
+          {ATTRIBUTION_CAPTION}
+        </p>
+        {hasOther && (
+          <p className="text-xs text-slate-500" data-testid="segment-other-caption">
+            {OTHER_CAPTION}
+          </p>
+        )}
+        </>
       )}
     </div>
   );

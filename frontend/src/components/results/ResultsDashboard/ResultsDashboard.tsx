@@ -133,6 +133,9 @@ async function readExperiment(experimentId: string): Promise<ExperimentReading> 
 export const RESULTS_LOAD_FAILED = 'The results could not be loaded.';
 export const RESULTS_NOT_FOUND = 'No results were found for this experiment.';
 export const RESULTS_FORBIDDEN = 'You do not have access to these results.';
+/** A breakdown request that failed. Fixed words: the server's text is never shown. */
+export const BREAKDOWN_FAILED =
+  'The breakdown could not be computed. Try again; if it keeps failing, check the API logs.';
 export const RESULTS_SERVER_ERROR =
   'The server could not compute the results. Try again; if it keeps failing, check the API logs.';
 
@@ -234,6 +237,7 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
   const [selectedBreakdown, setSelectedBreakdown] = useState<string | null>(null);
   const [breakdown, setBreakdown] = useState<DimensionalBreakdownResponse | null>(null);
   const [breakdownLoading, setBreakdownLoading] = useState(false);
+  const [breakdownFailed, setBreakdownFailed] = useState(false);
   // The settings every results request sends (D49), once the experiment is read.
   const [stored, setStored] = useState<StoredAnalysisSettings | null>(null);
   const [bayesianEnabled, setBayesianEnabled] = useState<boolean | undefined>(undefined);
@@ -325,9 +329,11 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
   const fetchBreakdown = useCallback(async (dim: string | null) => {
     if (!dim) {
       setBreakdown(null);
+      setBreakdownFailed(false);
       return;
     }
     setBreakdownLoading(true);
+    setBreakdownFailed(false);
     try {
       const r = await ResultsService.getResults(
         experimentId,
@@ -335,7 +341,10 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
       );
       setBreakdown(r.breakdown ?? null);
     } catch {
+      // The server answers a breakdown it cannot compute with an error. It is
+      // shown as one, in fixed words: the server's text is never put on the page.
       setBreakdown(null);
+      setBreakdownFailed(true);
     } finally {
       setBreakdownLoading(false);
     }
@@ -570,7 +579,30 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
                 <SegmentComparisonTable breakdown={breakdown} />
               )}
 
-              {!breakdownLoading && !breakdown && selectedBreakdown && (
+              {!breakdownLoading && breakdownFailed && selectedBreakdown && (
+                <div className="space-y-3" data-testid="breakdown-failed">
+                  <div
+                    role="alert"
+                    className="rounded-lg border border-red-200 bg-red-50 px-4 py-3"
+                  >
+                    <p className="text-sm text-red-700">{BREAKDOWN_FAILED}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // The button unmounts while the request runs; hand focus
+                      // to the select (which keeps it) so it never drops to the page.
+                      document.getElementById('breakdown-selector')?.focus();
+                      void fetchBreakdown(selectedBreakdown);
+                    }}
+                    className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    Try again
+                  </button>
+                </div>
+              )}
+
+              {!breakdownLoading && !breakdownFailed && !breakdown && selectedBreakdown && (
                 <p className="text-sm text-slate-500">
                   No breakdown data available for the selected dimension.
                 </p>
