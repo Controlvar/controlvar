@@ -13,16 +13,17 @@ from typing import Any, Dict, Optional, Union
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
 from backend.app.api.deps import get_db
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.models.user import User
 from backend.app.schemas.export import ExportFormat, ExportRequest, ExportScope
 from backend.app.services.export_service import ExportService
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 # The 200 of a route that can answer CSV: FastAPI documents application/json
 # by default, and this adds the text/csv the route also returns.
@@ -74,12 +75,12 @@ def export_experiments(
     ),
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_active_user),
-) -> StreamingResponse:
+) -> Response:
     """
     Download all experiments as CSV (default) or JSON.
 
     Supports optional date filtering using `start_date` and `end_date`.
-    The file is streamed as an attachment.
+    The file is sent as an attachment, built before the response starts.
     """
     _require_summary_scope(scope)
     request = ExportRequest(
@@ -94,8 +95,8 @@ def export_experiments(
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"experiments_{timestamp}.{format.value}"
 
-    return StreamingResponse(
-        iter([content]),
+    return Response(
+        content=content,
         media_type=content_type,
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
@@ -131,7 +132,7 @@ def export_variants(
     ),
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_active_user),
-) -> StreamingResponse:
+) -> Response:
     """
     Download variant-level results as CSV (default) or JSON.
 
@@ -151,8 +152,8 @@ def export_variants(
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"variants_{timestamp}.{format.value}"
 
-    return StreamingResponse(
-        iter([content]),
+    return Response(
+        content=content,
         media_type=content_type,
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
@@ -185,7 +186,7 @@ def export_feature_flags(
     ),
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_active_user),
-) -> StreamingResponse:
+) -> Response:
     """
     Download feature flag data as CSV (default) or JSON.
 
@@ -204,8 +205,8 @@ def export_feature_flags(
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"feature_flags_{timestamp}.{format.value}"
 
-    return StreamingResponse(
-        iter([content]),
+    return Response(
+        content=content,
         media_type=content_type,
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )

@@ -994,6 +994,88 @@ by = [
 ]
 
 [[unit]]
+text = "POST /api/v1/experiments/{experiment_id}/clone (full profile) | #1781 | A clone of a split URL experiment carries the source's split_url_config, where it carried null and its start answered 400. Its start makes the usual split URL checks, so it cannot start while an active split URL experiment has the same control URL. Other experiments clone as before. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_clone_split_url_experiment.py::test_a_clone_of_a_split_url_draft_carries_its_config_and_starts",
+    "test:backend/tests/integration/api/test_clone_split_url_experiment.py::test_while_the_clone_is_active_the_source_does_not_start",
+    "test:backend/tests/unit/services/test_clone_keeps_analysis_settings.py::test_a_clone_carries_the_split_url_config_as_its_own_copy",
+    "test:backend/tests/integration/api/test_clone_keeps_analysis_settings.py::test_a_clone_through_the_api_keeps_every_analysis_setting",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/experiments/{experiment_id}/metadata | #961 | A body holding NUL (U+0000) or an unpaired surrogate anywhere, in a key or a value, nested or not, answers 422 at [\"body\"] with the msg Value error, metadata must not contain NUL or unpaired surrogate characters; nothing is stored and no audit entry is made. It used to answer 500, because the database cannot store such text. The message does not repeat the value sent. Authentication still answers 401 first, and the 422 now comes before the 403 and 404 the operation answers for a role without UPDATE and for an unknown experiment. Every other body answers as before. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_experiment_metadata_text_refused.py::test_metadata_holding_unstorable_text_answers_422_and_nothing_is_written",
+    "test:backend/tests/integration/api/test_experiment_metadata_text_refused.py::test_storable_metadata_is_merged_as_before",
+    "test:backend/tests/integration/api/test_experiment_metadata_text_refused.py::test_the_422_comes_before_the_403_for_a_role_without_update",
+    "test:backend/tests/integration/api/test_experiment_metadata_text_refused.py::test_the_422_comes_before_the_404_for_an_unknown_experiment",
+    "test:backend/tests/integration/api/test_experiment_metadata_text_refused.py::test_authentication_still_answers_401_first",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/auth/sso/configs, PUT /api/v1/auth/sso/configs/{config_id} (full profile) | #1100 | Creating a SAML configuration, or an update that sets sso_url or provider_type, whose sso_url is not https answers 400 with SAML single sign-on URL must use https; check this SSO configuration's sso_url, where it answered 201 or 200; nothing is saved. An update that sends neither sso_url nor provider_type is not checked, so a configuration stored earlier can still be changed. The test environment is exempt, as it is for Okta. The OpenAPI document does not change."
+by = [
+    "test:modules/backend/tests/integration/api/test_sso_api.py::TestASamlSsoUrlMustBeHttps::test_create_with_an_http_sso_url_is_refused",
+    "test:modules/backend/tests/integration/api/test_sso_api.py::TestASamlSsoUrlMustBeHttps::test_update_to_an_http_sso_url_is_refused",
+    "test:modules/backend/tests/integration/api/test_sso_api.py::TestASamlSsoUrlMustBeHttps::test_a_stored_http_config_can_still_be_renamed_and_switched_off",
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestSamlSsoUrlIsHttpsWhenSaved::test_create_refuses_a_saml_sso_url_that_is_not_https",
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestSamlSsoUrlIsHttpsWhenSaved::test_update_refuses_a_saml_sso_url_that_is_not_https",
+    "test:modules/backend/tests/unit/services/test_sso_service.py::TestSamlSsoUrlIsHttpsWhenSaved::test_the_test_environment_accepts_an_http_saml_url",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "GET /api/v1/ai/sample-size, POST /api/v1/utils/utils/sample-size | #958 | GET /api/v1/ai/sample-size answers 422 with fixed text, checked in this order: a baseline_rate, confidence or power that is NaN or outside 0 to 1 gets <param> must be a number from 0 to 1, with the parameter's name; an mde of 0 gets This baseline raised by this effect changes too little to estimate a sample size. Raise the baseline rate or the effect.; a treatment rate (baseline_rate + mde) above 1 gets This baseline raised by this effect reaches 100% or more. Lower the baseline rate or the effect.; and a treatment rate below 0, or a size or a day count that is not a finite number above 0, gets These values are too large or too small to calculate with. Use values nearer those of a real experiment. Most of these answered 500; these answered 200 with a size that is not one, and now answer 422: a treatment rate outside 0 to 1 (sizes such as -10, 7 and 0), a baseline_rate or confidence outside 0 to 1, and inputs whose size came to 0. POST /api/v1/utils/utils/sample-size answers 422 with the same out-of-range text, where it answered 500, when the users per variant per day come to 0, the day count is not finite, or daily_traffic or variant_count is too large for a floating-point number. Every other input answers as before, a baseline_rate of 0 or 1, a confidence of 0 and a treatment rate of exactly 0 or 1 included. The message does not repeat the value sent. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/unit/api/test_sample_size_inputs_answer_422.py::test_the_ai_sample_size_refuses_with_fixed_text",
+    "test:backend/tests/unit/api/test_sample_size_inputs_answer_422.py::test_ai_answers_that_worked_do_not_change",
+    "test:backend/tests/unit/api/test_sample_size_inputs_answer_422.py::test_the_largest_sizes_are_still_answered",
+    "test:backend/tests/unit/api/test_sample_size_inputs_answer_422.py::test_no_input_on_the_grid_answers_5xx_or_a_size_below_1",
+    "test:backend/tests/unit/api/test_sample_size_inputs_answer_422.py::test_the_utils_day_arithmetic_refuses_with_the_out_of_range_text",
+    "test:backend/tests/unit/api/test_sample_size_inputs_answer_422.py::test_utils_answers_that_worked_do_not_change",
+    "test:backend/tests/unit/api/test_sample_size_not_finite.py::test_answers_that_worked_do_not_change",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "GET/PUT/DELETE /api/v1/users/{user_id}, POST /api/v1/llm-experiments/{experiment_id}/evaluate | #959 | A {user_id} that is not a UUID, such as abc, answers 400 Invalid user ID format on PUT and DELETE for every caller and on a superuser's GET, where an id without a - answered 500; a caller who is not a superuser still gets 403 first on a GET of another account. me is such an id on PUT and DELETE, so DELETE /api/v1/users/me answers 400; GET /api/v1/users/me is its own operation and is unchanged. A UUID written without its dashes still names its account. An evaluation_id that is not a UUID answers 400 Invalid evaluation_id format, where it answered 500; the permission check still comes first. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_a_superuser_gets_400_for_an_id_that_is_not_a_uuid",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_a_viewer_gets_403_on_get_and_400_on_put_and_delete",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_me_is_an_id_that_is_not_a_uuid_on_put_and_delete",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_get_users_me_still_returns_the_callers_account",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_an_id_without_dashes_still_names_its_account",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_llm_evaluate_answers_400_for_an_evaluation_id_that_is_not_a_uuid",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_llm_evaluate_checks_permission_first_and_still_answers_404",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/rbac/users/{user_id}/grant (full profile) | #1002 | A grant for a user id that names no account answers 404 User not found, the answer of GET /api/v1/rbac/users/{user_id}/permissions, where it answered 500; nothing is written and no audit entry is made. The user is looked up after the admin check, so a caller who is not an admin still gets 403 first. The OpenAPI document does not change."
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_grant_unknown_user.py::test_a_grant_to_an_id_with_no_account_answers_404_and_writes_nothing",
+    "test:modules/backend/tests/integration/rbac/test_rbac_grant_unknown_user.py::test_a_grant_to_a_known_user_is_made_and_recorded",
+    "test:modules/backend/tests/integration/rbac/test_rbac_grant_unknown_user.py::test_a_viewer_is_refused_before_the_lookup",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestEffectivePermissions::test_get_permissions_nonexistent_user_returns_404",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/feature-flags/, PUT /api/v1/feature-flags/{flag_id} | #1571 | The OpenAPI document changes: on_value and off_value in FeatureFlagCreate and FeatureFlagUpdate are typed as a string, number, boolean, object or array (an anyOf of the five), so it no longer allows null, which the API has refused with 422 (\"type\": \"null_not_allowed\") since #1497. The API's answers do not change."
+by = [
+    "test:backend/tests/smoke/test_openapi_request_properties_typed.py::test_no_request_body_property_is_untyped",
+    "test:backend/tests/smoke/test_openapi_request_properties_typed.py::test_a_flag_value_allows_every_json_value_but_null",
+    "test:backend/tests/smoke/test_openapi_request_properties_typed.py::test_only_the_two_flag_writes_take_the_four",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestRequestModels::test_explicit_null_is_refused",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_a_create_outside_the_contract_is_422_and_stores_nothing",
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_an_update_outside_the_contract_is_422_and_changes_nothing",
+]
+
+[[unit]]
 text = "GET /api/v1/results/{experiment_id} (with breakdown), GET /api/v1/experiments/{experiment_id}/segmented-results/{segment_by} | #1776 | Each assigned user is in one segment, the value the user was first assigned with, or else the first value tracked for them, and their conversions count there, so per variant the segments' sample_size and conversions add up to the experiment's. A user used to be counted in every segment their events named, and a conversion without the key went under unknown (/results) or nowhere (segmented-results). segmented-results lists unknown. A breakdown lists the 20 values with the most users and counts the rest under other. A value longer than 255 characters is counted under other. Each segment's p-value is Fisher's exact test against the control, the test the headline uses for a conversion rate. Existing breakdowns change, and adjusted_alpha with them. A breakdown that cannot be computed answers 500 as a whole and is not cached; the headline stays available without breakdown=. It used to answer 200 with the segments done so far. A dimension containing a NUL character answers 400. Engine version 1.9.0, so /results serves no answer cached before the upgrade; a segmented-results answer can be served for up to an hour after it when CACHE_ENABLED is on. The OpenAPI document changes in two descriptions and the engine_version default. See Where the segments come from."
 by = [
     "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py",

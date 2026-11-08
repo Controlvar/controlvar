@@ -30,7 +30,8 @@ pytestmark = [pytest.mark.smoke]
 REPO = pathlib.Path(__file__).resolve().parents[4]
 RBAC = REPO / "modules" / "backend" / "tests" / "integration" / "rbac"
 
-#: Checks #30, #34, #35, #36 (requests through the API).
+#: Checks #30, #34, #35, #36 (requests through the API), and #1002's grant to
+#: a user id with no account.
 REQUEST_FILES = (
     "test_rbac_enforcement_routes.py",
     "test_rbac_revocation.py",
@@ -39,6 +40,7 @@ REQUEST_FILES = (
     "test_rbac_activation.py",
     "test_rbac_effective_permissions_display.py",
     "test_rbac_statement_count.py",
+    "test_rbac_grant_unknown_user.py",
 )
 #: Check #29 (the provider, called directly) and check #33 (the writers, called
 #: directly on one session).

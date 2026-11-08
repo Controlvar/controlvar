@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.config import settings
 from backend.app.core.security import get_password_hash, unwrap_secret
 from backend.app.models.audit_log import ActionType, EntityType
@@ -42,7 +43,7 @@ from backend.app.services.local_auth_service import (
     local_auth_service,
 )
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 #: The answer when a non-superuser's request would change an account's email
 #: address or username. An administrator changes those through
@@ -88,11 +89,30 @@ EMAIL_TAKEN_DETAIL = "Email already registered"
 #: the unique constraint compares it).
 USERNAME_TAKEN_DETAIL = "Username already registered"
 
+#: The answer of GET (a superuser's), PUT and DELETE /users/{user_id} when the
+#: id is not a UUID, ``me`` included (#959).
+INVALID_USER_ID_DETAIL = "Invalid user ID format"
+
 #: SQLSTATE ``unique_violation``.
 _UNIQUE_VIOLATION = "23505"
 
 #: The same parser ``UserUpdate.email`` applies to the request body.
 _EMAIL = TypeAdapter(EmailStr)
+
+
+def _user_uuid(user_id: str) -> uuid.UUID:
+    """The path's ``{user_id}`` as a UUID, or 400 ``INVALID_USER_ID_DETAIL``.
+
+    Every id is parsed, so one that is not a UUID never reaches the query: an
+    id without a ``-`` used to go to it as text, and the database's refusal
+    answered 500 (#959). The dashes stay optional, as they were.
+    """
+    try:
+        return uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=INVALID_USER_ID_DETAIL
+        )
 
 
 def _parsed_email(value: Optional[str]) -> Optional[str]:
@@ -720,20 +740,7 @@ async def get_user(
         )
 
     # Get and return the requested user
-    try:
-        # Try to parse as UUID if possible
-        if isinstance(user_id, str) and "-" in user_id:
-            uid = uuid.UUID(user_id)
-        else:
-            uid = user_id
-
-        user = db.query(User).filter(User.id == uid).first()
-    except (ValueError, TypeError):
-        # Handle invalid UUID format
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid user ID format",
-        )
+    user = db.query(User).filter(User.id == _user_uuid(user_id)).first()
 
     if not user:
         raise HTTPException(
@@ -776,20 +783,7 @@ async def update_user(
     For regular users: can only update their own user and only non-privileged fields
     """
     # Get the user to update
-    try:
-        # Try to parse as UUID if possible
-        if isinstance(user_id, str) and "-" in user_id:
-            uid = uuid.UUID(user_id)
-        else:
-            uid = user_id
-
-        user = db.query(User).filter(User.id == uid).first()
-    except (ValueError, TypeError):
-        # Handle invalid UUID format
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid user ID format",
-        )
+    user = db.query(User).filter(User.id == _user_uuid(user_id)).first()
 
     if not user:
         raise HTTPException(
@@ -894,20 +888,7 @@ async def delete_user(
     For regular users: can only delete themselves
     """
     # Get the user to delete
-    try:
-        # Try to parse as UUID if possible
-        if isinstance(user_id, str) and "-" in user_id:
-            uid = uuid.UUID(user_id)
-        else:
-            uid = user_id
-
-        user = db.query(User).filter(User.id == uid).first()
-    except (ValueError, TypeError):
-        # Handle invalid UUID format
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid user ID format",
-        )
+    user = db.query(User).filter(User.id == _user_uuid(user_id)).first()
 
     if not user:
         raise HTTPException(

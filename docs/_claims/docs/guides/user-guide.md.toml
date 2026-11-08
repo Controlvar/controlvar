@@ -837,6 +837,14 @@ by = [
 ]
 
 [[unit]]
+text = "So does the stopping banner on the Sequential tab, whatever it recommends."
+by = [
+    "test:frontend/src/tests/components/ResultsDashboard.test.tsx::says \"Ready to stop\" with the caution when the results carry srm.warning",
+    "test:frontend/src/tests/components/ResultsDashboard.test.tsx::gives %s with the caution too when the results carry srm.warning",
+    "test:frontend/src/tests/components/ResultsDashboard.test.tsx::says \"Ready to stop\" without it when %s",
+]
+
+[[unit]]
 text = "A mismatch usually means assignment or tracking is broken, so do not use the numbers for a decision until you find out why."
 by = ["exempt:baseline"]
 
@@ -1389,6 +1397,14 @@ text = "Archiving and unarchiving are API calls for now (bulk toggle with archiv
 by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
     "test:backend/tests/integration/api/test_archived_flag_verbs.py",
+]
+
+[[unit]]
+text = "The dashboard shows an archived flag as Archived, with no on/off switch, and the flag list has an Archived filter."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::reads Archived on its page, with no switch, and says how to unarchive it",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::reads Archived in the list, with no switch in its row and a link saying how to unarchive it",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::the list filters archived flags, asking the API for status ARCHIVED",
 ]
 
 [[unit]]

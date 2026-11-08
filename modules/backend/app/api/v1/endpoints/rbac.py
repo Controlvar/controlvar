@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import deps
 from backend.app.api.deps import get_db
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.permissions import forget_granted_permissions
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.user import User, UserRole
@@ -45,7 +46,7 @@ from modules.backend.app.services.rbac_service import RBACService
 if TYPE_CHECKING:
     from modules.backend.app.models.custom_role import CustomRole
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 
 def _require_admin(current_user: User) -> None:
@@ -376,6 +377,10 @@ def grant_permission(
 ):
     """Grant a direct permission to a user. ADMIN only. Supports expiry."""
     _require_admin(current_user)
+    # Looked up before the insert: the foreign key refused a grant for an id
+    # with no account on flush, a 500 (#1002). Nothing is written.
+    if db.query(User).filter(User.id == user_id).first() is None:
+        raise HTTPException(status_code=404, detail="User not found")
     actor = AuditActor.of(current_user)
     grant = RBACService.grant_direct_permission(
         db,

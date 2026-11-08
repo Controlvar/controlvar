@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import deps, experiment_cache
 from backend.app.api.enum_filters import enum_filter
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.permissions import Action, ResourceType, check_permission
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.experiment import Experiment
@@ -48,7 +49,7 @@ from backend.app.services.mutual_exclusion_service import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 #: The list's ``status`` filter values, as the responses spell them (#955).
 GROUP_STATUS_SPELLINGS = ("active", "archived")

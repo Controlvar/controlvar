@@ -3,8 +3,8 @@ serves from a real database (#1497, G2).
 
 ``tests/sdk-contract/test_published_ruleset.py`` (G1) feeds every published
 release with a local evaluator the generator's in-memory build of the ruleset.
-This test feeds the published ``controlvar`` wheels (0.1.1 and 0.2.0, pinned in
-``tests/sdk-contract/published-sdks.json``) the route's own response bytes, for
+This test feeds every published ``controlvar`` wheel pinned in
+``tests/sdk-contract/published-sdks.json`` the route's own response bytes, for
 flags a non-superuser DEVELOPER created through the API in every shape the
 ruleset serves today: a plain rollout, dashboard rules, native rules with a
 ``default_rule``, the legacy list, a pattern (regex) rule and a segment rule
@@ -17,8 +17,9 @@ number, json) served by the rollout, by a dashboard rule, by a native
 one's on value exactly when ``enabled`` and its off value otherwise. Since
 F5 the ruleset carries each string, number and json flag's ``value_type`` and
 values (both on a local entry, the off value on an inactive one), and the
-published wheels, which read no value, must still answer every value flag's
-``enabled`` and ``reason`` exactly as the server does.
+published wheels must still answer every value flag's ``enabled`` and
+``reason`` exactly as the server does. No wheel's value is compared (0.1.1 and
+0.2.0 read none).
 
 * The route answers 200 with exactly one entry per stored flag.
 * Each wheel runs in its own ``python -I -S`` process with only its verified

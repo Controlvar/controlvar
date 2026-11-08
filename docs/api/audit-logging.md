@@ -88,7 +88,7 @@ curl -s -X POST localhost:8000/api/v1/feature-flags/bulk-toggle \
 
 It prints `"succeeded": 2` and `"failed": 1`, with the error `"Feature flag not found"`
 for the third id. The full response lists each flag's result, and the id of the audit
-entry written for each flag that changed:
+entry written for each flag that succeeded, including one that was already in the requested state:
 
 ```json
 {
@@ -282,8 +282,9 @@ writes it after the change is saved, with the signed-in user as the actor; the
 written. An update records only the fields that changed, as
 `old_value` and `new_value` JSON; a create records the new entity's identifying fields in
 `new_value`, and a delete the old ones in `old_value`. Descriptions, hypotheses, targeting
-rules, segment rules, variants and metrics are never stored: when they change, their names
-are listed in `new_value.changed_fields`. No entry holds a password, a token, any part of
+rules, segment rules, variants and metrics are never stored. A change to a description, a hypothesis or
+a rule is named in `new_value.changed_fields`; a change to an experiment's variants or metrics is not yet
+named there (the entry records who saved and when; #1782 tracks naming them). No entry holds a password, a token, any part of
 an API key, or a request body.
 
 | Action Type | Entity | Written when |
@@ -312,6 +313,8 @@ an API key, or a request body.
 | `feature_flag_update` | `feature_flag` | The rollout scheduler starts a rollout stage and sets the flag's rollout percentage. `reason` is `rollout schedule stage started` |
 | `user_create` | `user` | A user's first Cognito sign-in creates their account. The actor is the new user; `reason` is `first sign-in` |
 | `role_assign` | `user` | Cognito group sync (`SYNC_ROLES_ON_LOGIN`) changes a user's role or superuser flag when they sign in; `old_value` and `new_value` are `{"role", "is_superuser"}` |
+
+`/enable`, `/disable` and bulk toggle also record a request that leaves the status unchanged: one `toggle_enable` or `toggle_disable` entry (`feature_flag_update` for bulk `archive`), with `old_value` equal to `new_value`, such as `INACTIVE` and `INACTIVE` for a flag that was already off. `/activate` and `/deactivate` write nothing then.
 
 With the modules installed (the full profile), these are written too:
 
@@ -372,7 +375,8 @@ entry. No entry ever holds:
 - passwords or their hashes, tokens, or any part of an API key or its hash;
 - request bodies, IP addresses or user agents;
 - the contents of descriptions, hypotheses, targeting rules, segment rules, variants and
-  metrics (only their names, under `changed_fields`);
+  metrics (descriptions, hypotheses and rules are named under `changed_fields`; an experiment's
+  variants and metrics are not yet named, #1782);
 - error text;
 - changes made directly in the database rather than through the platform.
 

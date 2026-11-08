@@ -8,7 +8,7 @@ text = "JavaScript SDK"
 by = ["exempt:label"]
 
 [[unit]]
-text = "@controlvar/js-sdk (v0.2.0) is the JavaScript/TypeScript client for the Controlvar public API: experiment assignment, feature flag evaluation and event tracking for Node >= 18 and browsers."
+text = "@controlvar/js-sdk (v0.3.0) is the JavaScript/TypeScript client for the Controlvar public API: experiment assignment, feature flag evaluation and event tracking for Node >= 18 and browsers."
 by = [
     "mechanism:sdk-doc-versions",
     "test:sdk/js/__tests__/package.test.ts::runs on Node 18 or later and in browsers: no source imports a module",
@@ -67,7 +67,7 @@ by = [
 ]
 
 [[unit]]
-text = "0.2.0 is a beta release."
+text = "0.3.0 is a beta release."
 by = [
     "mechanism:sdk-doc-versions",
     "journey:sdk-javascript#quick-start-user-on",
@@ -78,7 +78,7 @@ text = "To work on the SDK itself, build it from a clone of this repository inst
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "npm pack writes controlvar-js-sdk-0.2.0.tgz:"
+text = "npm pack writes controlvar-js-sdk-0.3.0.tgz:"
 by = ["mechanism:sdk-doc-versions"]
 
 [[unit]]
@@ -146,10 +146,11 @@ by = [
 ]
 
 [[unit]]
-text = "cacheTtlMs | number | 300000 | TTL of successful evaluations/assignments, per user + key"
+text = "cacheTtlMs | number | 300000 | TTL of successful evaluations/assignments, per user + key; 0 caches nothing"
 by = [
     "test:sdk/js/__tests__/client.test.ts::caches a success for 300000 ms by default",
     "test:sdk/js/__tests__/client.test.ts::serves from cache until the TTL elapses, then re-fetches",
+    "test:sdk/js/__tests__/client.test.ts::cacheTtlMs: 0 caches nothing, even within the same millisecond",
 ]
 
 [[unit]]
@@ -167,7 +168,7 @@ by = [
 ]
 
 [[unit]]
-text = "onError | (error: ExperimentationError, op: 'track' | 'trackBatch' | 'refresh' | 'flush' | 'evaluate' | 'reportError') => void | — | Only way to observe swallowed failures; a throwing handler is itself swallowed. 'refresh', 'flush' and 'evaluate' occur only in local mode"
+text = "onError | (error: ExperimentationError, op: 'track' | 'trackBatch' | 'refresh' | 'flush' | 'evaluate' | 'reportError' | 'value' | 'exposure') => void | — | Only way to observe swallowed failures; a throwing handler is itself swallowed. 'refresh', 'flush' and 'evaluate' occur only in local mode"
 by = [
     "test:sdk/js/__tests__/client.test.ts::reports swallowed failures through onError",
     "test:sdk/js/__tests__/client.test.ts::resolves false on %s and passes the failure to onError as reportError",
@@ -176,6 +177,16 @@ by = [
     "test:sdk/js/__tests__/local.test.ts::a failed report goes to onError as flush",
     "test:sdk/js/__tests__/local.test.ts::is reported as evaluate, and the call goes to the server",
     "test:sdk/js/__tests__/local.test.ts::5xx after a load keeps serving the last ruleset and reports each failure",
+    "test:sdk/js/__tests__/client.test.ts::each returns the default and reports %s to onError(err, \"value\")",
+    "test:sdk/js/__tests__/exposure.test.ts::is reported to onError once, with the operation exposure and an ExperimentationError whose code is HOOK_ERROR and whose cause is what it threw",
+    "test:sdk/js/__tests__/exposure.test.ts::an onError that throws too leaves the answer unchanged",
+]
+
+[[unit]]
+text = "onExposure | (exposure: Exposure) => void | — | Called once each time the server enrols the user and the answer is not cached; see Exposure hook"
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::is called once, with exactly the experiment key, user id, variant id and variant name, for an assigned: true answer",
+    "test:sdk/js/__tests__/exposure.test.ts::a cached answer calls nothing: however often the answer is asked for, one request and one call",
 ]
 
 [[unit]]
@@ -303,10 +314,11 @@ by = [
 ]
 
 [[unit]]
-text = "evaluateFlag | (flagKey, user) => Promise<FlagEvaluation> | { key, enabled, config, reason? } (user.attributes sent as context) | Rejects with ExperimentationError (404 for an unknown key); a flag that exists but is not ACTIVE resolves enabled: false, reason: \"inactive\""
+text = "evaluateFlag | (flagKey, user) => Promise<FlagEvaluation> | { key, enabled, config, reason?, value?, valueType? } (user.attributes sent as context) | Rejects with ExperimentationError (404 for an unknown key); a flag that exists but is not ACTIVE resolves enabled: false, reason: \"inactive\""
 by = [
     "test:sdk/js/__tests__/client.test.ts::maps {key, enabled, config}",
     "test:sdk/js/__tests__/client.test.ts::exposes the server reason when the response carries one",
+    "test:sdk/js/__tests__/client.test.ts::copies the server's value and value_type",
     "test:sdk/js/__tests__/client.test.ts::appends context=<url-encoded JSON of user.attributes> when the user has attributes",
     "test:sdk/js/__tests__/client.test.ts::throws ExperimentationError with status 404 when no flag has the key",
     "test:backend/tests/integration/api/test_feature_flag_kill_switch.py::TestKillSwitch::test_disabled_flag_evaluates_off_for_sdk_clients",
@@ -318,6 +330,30 @@ text = "isFeatureEnabled | (flagKey, user) => Promise<boolean> | evaluation.enab
 by = [
     "test:sdk/js/__tests__/client.test.ts::returns true for an enabled flag and false for a disabled one",
     "test:sdk/js/__tests__/client.test.ts::returns false on failure",
+]
+
+[[unit]]
+text = "getStringValue | (flagKey, user, defaultValue: string) => Promise<string> | The string a string flag serves this user; see Flag values | defaultValue; never rejects; onError(err, 'value')"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::%s returns the value the flag serves: %j",
+    "test:sdk/js/__tests__/client.test.ts::each returns the default and reports %s to onError(err, \"value\")",
+    "test:sdk/js/__tests__/client.test.ts::never rejects: no userId, no onError, or a throwing onError handler",
+]
+
+[[unit]]
+text = "getNumberValue | (flagKey, user, defaultValue: number) => Promise<number> | The number a number flag serves this user | defaultValue; never rejects; onError(err, 'value')"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::%s returns the value the flag serves: %j",
+    "test:sdk/js/__tests__/client.test.ts::each returns the default and reports %s to onError(err, \"value\")",
+    "test:sdk/js/__tests__/client.test.ts::never rejects: no userId, no onError, or a throwing onError handler",
+]
+
+[[unit]]
+text = "getJsonValue | <T>(flagKey, user, defaultValue: T) => Promise<T> | A new copy of the object or array a json flag serves this user | defaultValue; never rejects; onError(err, 'value')"
+by = [
+    "test:sdk/js/__tests__/client.test.ts::%s returns the value the flag serves: %j",
+    "test:sdk/js/__tests__/client.test.ts::getJsonValue returns a new copy on every call: changing one changes nothing the SDK keeps",
+    "test:sdk/js/__tests__/client.test.ts::each returns the default and reports %s to onError(err, \"value\")",
 ]
 
 [[unit]]
@@ -585,11 +621,7 @@ by = [
 ]
 
 [[unit]]
-text = "Use this option from the next published version of this package, not from the version on npm now."
-by = ["exempt:instruction"]
-
-[[unit]]
-text = "It also needs a Controlvar server that includes the event_id change (#1640), which the platform release after 0.39.0 is to carry; an older server ignores the field and stores an event sent again a second time."
+text = "It needs a Controlvar server that includes the event_id change (#1640), which the platform release after 0.39.0 is to carry; an older server ignores the field and stores an event sent again a second time."
 by = [
     "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
     "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r8_without_an_event_id_two_identical_purchases_are_both_stored",
@@ -796,6 +828,227 @@ by = [
 ]
 
 [[unit]]
+text = "TYPE_MISMATCH | Only passed to onError, with the operation 'value': a typed getter was called for a flag that serves another type | undefined"
+by = ["test:sdk/js/__tests__/client.test.ts::%s on a flag that serves %s: the default, and TYPE_MISMATCH"]
+
+[[unit]]
+text = "HOOK_ERROR | Only passed to onError, with the operation 'exposure': your onExposure threw, or its Promise rejected; cause is what it threw | undefined"
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::is reported to onError once, with the operation exposure and an ExperimentationError whose code is HOOK_ERROR and whose cause is what it threw",
+    "test:sdk/js/__tests__/exposure.test.ts::an async hook that rejects is reported to onError with exposure, and the answer is unchanged",
+]
+
+[[unit]]
+text = "Flag values"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A flag serves two values: its on value to the users it is on for, and its off value to everyone else, and to everyone while it is turned off."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::returns the off value the server sends when the flag is off for the user (reason %s)",
+    "test:sdk/js/__tests__/local.test.ts::turning a value flag off reaches the client at the next refresh: everyone gets the off value",
+]
+
+[[unit]]
+text = "For a string, number or json flag, read the value with the getter of its type: getStringValue, getNumberValue or getJsonValue."
+by = ["test:sdk/js/__tests__/client.test.ts::%s returns the value the flag serves: %j"]
+
+[[unit]]
+text = "Pass the flag's off value as your default, so that a flag your code cannot reach behaves as off."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "Each getter takes the user before the default, as every method of this client does."
+by = ["test:sdk/js/__tests__/client.test.ts::%s returns the value the flag serves: %j"]
+
+[[unit]]
+text = "OpenFeature's getStringValue takes the default first; a call written in that order is a TypeScript error here."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "A getter never rejects."
+by = ["test:sdk/js/__tests__/client.test.ts::never rejects: no userId, no onError, or a throwing onError handler"]
+
+[[unit]]
+text = "It returns your default, and passes the reason to onError(err, 'value'), when the request fails (including a 404 for a flag the server does not know), when the server's answer carries no value (in server mode, from a server from before flag values, err.code 'INVALID_RESPONSE'; in local mode, every flag the client answers locally from such a server's ruleset reads as boolean, so the getter reports 'TYPE_MISMATCH'), or when the flag serves another type (err.code 'TYPE_MISMATCH', with a message such as Flag \"checkout-button-label\" serves a string; getNumberValue returned your default)."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::each returns the default and reports %s to onError(err, \"value\")",
+    "test:sdk/js/__tests__/client.test.ts::names what an older server lacks",
+    "test:sdk/js/__tests__/client.test.ts::%s on a flag that serves %s: the default, and TYPE_MISMATCH",
+    "test:sdk/js/__tests__/evaluator.test.ts::a boolean flag (no value_type) serves enabled, whatever else its entry carries",
+]
+
+[[unit]]
+text = "A boolean flag is another type; read it with isFeatureEnabled."
+by = ["test:sdk/js/__tests__/client.test.ts::%s on a flag that serves %s: the default, and TYPE_MISMATCH"]
+
+[[unit]]
+text = "Nothing is coerced: \"10\" is not a number."
+by = ["test:sdk/js/__tests__/client.test.ts::never coerces: \"10\" is not a number and 10 is not a string"]
+
+[[unit]]
+text = "getJsonValue checks that the value is an object or an array, not that it matches your type parameter, and returns a new copy on every call."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::getJsonValue returns a new copy on every call: changing one changes nothing the SDK keeps",
+    "test:sdk/js/__tests__/client.test.ts::a value that is not of the type the server names is the default too, never a wrong value",
+]
+
+[[unit]]
+text = "A getter is evaluated as evaluateFlag is: cached per user and flag for cacheTtlMs, and in local mode answered from the ruleset."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::is evaluated once per user and flag for cacheTtlMs, like evaluateFlag",
+    "test:sdk/js/__tests__/local.test.ts::the typed getters answer value flags from the ruleset, with no request",
+]
+
+[[unit]]
+text = "evaluateFlag returns the same answer with value and valueType; in server mode both are undefined from a server without flag values."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::copies the server's value and value_type",
+    "test:sdk/js/__tests__/client.test.ts::leaves both undefined when an older server sends neither",
+]
+
+[[unit]]
+text = "Exposure hook"
+by = ["exempt:label"]
+
+[[unit]]
+text = "onExposure is a function you give the client when you create it."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::is called once, with exactly the experiment key, user id, variant id and variant name, for an assigned: true answer",
+    "test:sdk/js/__tests__/exposure.test.ts::onExposure %s sets no hook, and the assignment works as before",
+]
+
+[[unit]]
+text = "The client calls it once each time the server enrols the user in an experiment and the answer did not come from the client's cache: the moment the server records the exposure."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::is called once, with exactly the experiment key, user id, variant id and variant name, for an assigned: true answer",
+    "test:sdk/js/__tests__/exposure.test.ts::a cached answer calls nothing: however often the answer is asked for, one request and one call",
+    "test:sdk/js/__tests__/exposure.test.ts::is called once per user and experiment: another user or another experiment is another request and another call",
+    "test:backend/tests/integration/services/test_assignment_service_coverage.py::TestAssignUser::test_track_exposure_called_on_existing_assignment",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+]
+
+[[unit]]
+text = "Use it to send the exposure to your analytics tool or warehouse."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "It receives an Exposure: experimentKey, userId, variantId (null when the server sends none) and variantName, in a new object for each call."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::is called once, with exactly the experiment key, user id, variant id and variant name, for an assigned: true answer",
+    "test:sdk/js/__tests__/exposure.test.ts::passes variantId null when the server sends no variant_id",
+    "test:sdk/js/__tests__/exposure.test.ts::the hook's object is its own: changing it changes nothing the client keeps",
+]
+
+[[unit]]
+text = "Nothing else: not the user's attributes and not the variant's configuration."
+by = ["test:sdk/js/__tests__/exposure.test.ts::is called once, with exactly the experiment key, user id, variant id and variant name, for an assigned: true answer"]
+
+[[unit]]
+text = "It is not called for:"
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::a cached answer calls nothing: however often the answer is asked for, one request and one call",
+    "test:sdk/js/__tests__/exposure.test.ts::is not called for assigned: false (%s): the control answer comes back unchanged",
+    "test:sdk/js/__tests__/exposure.test.ts::a failed call calls nothing: %s",
+    "test:sdk/js/__tests__/exposure.test.ts::flags never call it: evaluateFlag, isFeatureEnabled, getAllFlags and the typed getters, in server mode",
+]
+
+[[unit]]
+text = "an answer from the client's cache, or a call that shares a request already in flight;"
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::a cached answer calls nothing: however often the answer is asked for, one request and one call",
+    "test:sdk/js/__tests__/exposure.test.ts::concurrent first calls share one request and make one call",
+]
+
+[[unit]]
+text = "a user the experiment did not enrol (assigned: false, with reason 'holdout', 'mutual_exclusion' or 'targeting'), or an experiment that is not running ('draft', 'paused', 'completed' or 'archived'): the server records no exposure for them, and the client returns the control variant;"
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::is not called for assigned: false (%s): the control answer comes back unchanged",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_an_answer_for_an_experiment_that_is_not_running_records_nothing",
+]
+
+[[unit]]
+text = "a call that fails, including one that times out after the server recorded the exposure;"
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::a failed call calls nothing: %s",
+    "test:sdk/js/__tests__/exposure.test.ts::a call that times out calls nothing, even if the server recorded the exposure",
+]
+
+[[unit]]
+text = "a feature flag, in either evaluation mode."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::flags never call it: evaluateFlag, isFeatureEnabled, getAllFlags and the typed getters, in server mode",
+    "test:sdk/js/__tests__/exposure.test.ts::flags never call it in local mode either, and experiments still do",
+]
+
+[[unit]]
+text = "It is not called when the server does not send assigned; every Controlvar server release sends it."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::is not called when the answer has no assigned field (a server that does not send it)",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "It is called again, and the server records another exposure, after the cache lifetime (cacheTtlMs, 5 minutes by default; with cacheTtlMs: 0, on every call), after clearCache(), and in every new client: each page load in a browser, each process on a server."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::after the cache lifetime",
+    "test:sdk/js/__tests__/exposure.test.ts::after clearCache()",
+    "test:sdk/js/__tests__/exposure.test.ts::in a new client",
+    "test:sdk/js/__tests__/exposure.test.ts::on every call with cacheTtlMs 0, which asks the server every time",
+    "test:sdk/js/__tests__/client.test.ts::caches a success for 300000 ms by default",
+    "test:backend/tests/integration/services/test_assignment_service_coverage.py::TestAssignUser::test_track_exposure_called_on_existing_assignment",
+]
+
+[[unit]]
+text = "So your tool can receive several exposures for one user and experiment: count users, not events."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "It never receives one the server did not record."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::is not called for assigned: false (%s): the control answer comes back unchanged",
+    "test:sdk/js/__tests__/exposure.test.ts::is not called when the answer has no assigned field (a server that does not send it)",
+    "test:sdk/js/__tests__/exposure.test.ts::a failed call calls nothing: %s",
+]
+
+[[unit]]
+text = "It is called when your code asks for the assignment, whether or not you then show the variant, so ask for it where the variant is shown."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "It runs before getAssignment resolves, and before every call that is waiting on the same request, so keep it quick: hand the exposure to your analytics library, which sends it later."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::runs before getAssignment resolves",
+    "test:sdk/js/__tests__/exposure.test.ts::concurrent first calls share one request and make one call",
+]
+
+[[unit]]
+text = "The client does not wait for a Promise it returns."
+by = ["test:sdk/js/__tests__/exposure.test.ts::the client does not wait for a Promise the hook returns"]
+
+[[unit]]
+text = "If it throws, or returns a Promise that rejects, the answer is unchanged, and the error goes to onError with the operation 'exposure': an ExperimentationError whose code is 'HOOK_ERROR', whose message starts with onExposure failed:, and whose cause is what your function threw."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::changes nothing: getVariant returns the variant and getAssignment resolves",
+    "test:sdk/js/__tests__/exposure.test.ts::is reported to onError once, with the operation exposure and an ExperimentationError whose code is HOOK_ERROR and whose cause is what it threw",
+    "test:sdk/js/__tests__/exposure.test.ts::an async hook that rejects is reported to onError with exposure, and the answer is unchanged",
+    "test:sdk/js/__tests__/exposure.test.ts::reports the rejection of the Promise an async hook returns",
+]
+
+[[unit]]
+text = "The constructor throws onExposure must be a function for any other value; null and undefined set none."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::the constructor refuses %s as onExposure",
+    "test:sdk/js/__tests__/exposure.test.ts::onExposure %s sets no hook, and the assignment works as before",
+]
+
+[[unit]]
+text = "In a test, a faked /assign answer must include \"assigned\": true, or the hook is not called."
+by = ["test:sdk/js/__tests__/exposure.test.ts::is not called when the answer has no assigned field (a server that does not send it)"]
+
+[[unit]]
 text = "Backend endpoints used"
 by = ["exempt:label"]
 
@@ -818,10 +1071,11 @@ text = "SDK call | Method and path | Body / query | 200 response"
 by = ["exempt:label"]
 
 [[unit]]
-text = "getAssignment, getVariant | POST /api/v1/tracking/assign | {\"experiment_key\",\"user_id\",\"context\"?: object} | {\"experiment_key\",\"user_id\",\"variant_id\",\"variant_name\",\"is_control\",\"configuration\"}"
+text = "getAssignment, getVariant | POST /api/v1/tracking/assign | {\"experiment_key\",\"user_id\",\"context\"?: object} | {\"experiment_key\",\"user_id\",\"variant_id\",\"variant_name\",\"is_control\",\"configuration\",\"assigned\",\"reason\"}"
 by = [
     "test:sdk/js/__tests__/client.test.ts::sends {experiment_key, user_id, context: attributes} as the JSON body",
     "test:sdk/js/__tests__/client.test.ts::maps the server response to an Assignment",
+    "test:sdk/js/__tests__/client.test.ts::carries assigned: true and reason from a server that enrolled the user",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
 
@@ -969,6 +1223,54 @@ by = [
 ]
 
 [[unit]]
+text = "A value flag's value is answered locally too: its on value when the flag is on for the user, its off value otherwise, and its off value to everyone while it is turned off."
+by = [
+    "test:sdk/js/__tests__/local.test.ts::the typed getters answer value flags from the ruleset, with no request",
+    "test:sdk/js/__tests__/local.test.ts::turning a value flag off reaches the client at the next refresh: everyone gets the off value",
+    "test:sdk/js/__tests__/evaluator.test.ts::every value flag's must_local case is answered locally with the server's value and type",
+]
+
+[[unit]]
+text = "A flag entry this SDK cannot read (an evaluation or value_type from a newer server, or a value of the wrong type) is evaluated by the server, the rest of the ruleset is still answered locally, and, while the flag is active, status().serverEvaluatedFlags lists it."
+by = [
+    "test:sdk/js/__tests__/local.test.ts::an entry this SDK cannot read sends that flag to the server; the ruleset still loads and the rest stay local (Q12)",
+    "test:sdk/js/__tests__/evaluator.test.ts::an evaluation it does not know",
+    "test:sdk/js/__tests__/evaluator.test.ts::no evaluation at all",
+    "test:sdk/js/__tests__/evaluator.test.ts::a value_type it does not know (date)",
+    "test:sdk/js/__tests__/evaluator.test.ts::value_type boolean, which a ruleset never names",
+    "test:sdk/js/__tests__/evaluator.test.ts::a value_type that is not a string",
+    "test:sdk/js/__tests__/evaluator.test.ts::a null value_type",
+    "test:sdk/js/__tests__/evaluator.test.ts::an inactive entry with a value_type it does not know",
+    "test:sdk/js/__tests__/evaluator.test.ts::a string flag whose on_value is a number",
+    "test:sdk/js/__tests__/evaluator.test.ts::a string flag with no on_value",
+    "test:sdk/js/__tests__/evaluator.test.ts::a string flag with no off_value",
+    "test:sdk/js/__tests__/evaluator.test.ts::a number flag whose off_value is a string",
+    "test:sdk/js/__tests__/evaluator.test.ts::a number flag whose on_value is a boolean",
+    "test:sdk/js/__tests__/evaluator.test.ts::a number flag whose on_value is past 2^53-1",
+    "test:sdk/js/__tests__/evaluator.test.ts::a json flag whose on_value is a string",
+    "test:sdk/js/__tests__/evaluator.test.ts::a json flag whose off_value is null",
+    "test:sdk/js/__tests__/evaluator.test.ts::an inactive string flag with no off_value",
+    "test:sdk/js/__tests__/evaluator.test.ts::an inactive number flag whose off_value is a string",
+    "test:sdk/js/__tests__/evaluator.test.ts::a number value written 1e400 parses to Infinity and defers",
+    "test:sdk/js/__tests__/evaluator.test.ts::a malformed entry of a known shape still rejects the whole document",
+]
+
+[[unit]]
+text = "A flag whose stored values the server cannot serve reaches every local client as a server-evaluated flag, whatever its status (only a direct database write, or a rollback past a release with wider value limits, produces one)."
+by = ["test:backend/tests/unit/services/test_sdk_ruleset.py::test_a_flag_whose_stored_value_breaks_the_rules_is_remote"]
+
+[[unit]]
+text = "Turning such a flag off does not change the ruleset."
+by = ["test:backend/tests/unit/services/test_sdk_ruleset.py::test_a_flag_whose_stored_value_breaks_the_rules_is_remote"]
+
+[[unit]]
+text = "So a local client of any version keeps the server's answer it cached for that user and flag for up to cacheTtlMs (5 minutes by default) before it sees the flag off, and while the flag exists getAllFlags asks the server on every call."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::caches a success for 300000 ms by default",
+    "test:sdk/js/__tests__/local.test.ts::getAllFlags: one remote flag sends the whole call to the server",
+]
+
+[[unit]]
 text = "A change made in the dashboard reaches the process at its next successful refresh."
 by = [
     "test:sdk/js/__tests__/local.test.ts::polls send the ETag, and a 304 keeps the ruleset",
@@ -1001,6 +1303,17 @@ by = ["test:sdk/js/__tests__/package.test.ts::runs on Node 18 or later and in br
 [[unit]]
 text = "In the browser the API key is visible to end users, and keys are not scoped for browser use: every active key, including one shipped to a browser, can evaluate flags and track events as the user who created it."
 by = ["test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these"]
+
+[[unit]]
+text = "Such a key answers for whichever user id it is sent: what that id is served, whether it is in a segment, and which experiments it is assigned to."
+by = [
+    "test:backend/tests/integration/api/test_plain_key_answers_for_any_user_id.py::test_a_flag_answers_for_any_user_id_and_an_id_list_decides_by_that_id",
+    "test:backend/tests/integration/api/test_plain_key_answers_for_any_user_id.py::test_assign_and_the_assignments_list_answer_for_any_user_id",
+]
+
+[[unit]]
+text = "Where that matters, use user ids that do not identify a person (not email addresses), in ID lists too, and read assignments from your server."
+by = ["exempt:advice"]
 
 [[unit]]
 text = "Use a dedicated key for browser traffic so it can be revoked on its own, and never give it the sdk:ruleset scope, which lets a key download every flag's targeting rules."

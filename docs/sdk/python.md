@@ -1,6 +1,6 @@
 # Python SDK
 
-`controlvar` (v0.2.0) is a synchronous, dependency-free Python client for the
+`controlvar` (v0.3.0) is a synchronous, dependency-free Python client for the
 Controlvar public API: experiment assignment, feature-flag evaluation and event
 tracking. Requires Python 3.9+; HTTP goes through the standard library (`urllib`).
 
@@ -20,11 +20,11 @@ client (see [openfeature.md](openfeature.md)).
 
 If you installed `experimently`, the name this package had before the project was renamed, uninstall it and install `controlvar`.
 
-The `controlvar` package is on [PyPI](https://pypi.org/project/controlvar/). 0.2.0 is a
+The `controlvar` package is on [PyPI](https://pypi.org/project/controlvar/). 0.3.0 is a
 beta release.
 
 ```bash
-pip install controlvar==0.2.0
+pip install controlvar==0.3.0
 ```
 
 To work on the SDK itself, install it from the root of a clone of this repository instead:
@@ -63,7 +63,7 @@ assignment.variant_name, assignment.is_control, assignment.configuration
 # Feature flags (GET /api/v1/feature-flags/evaluate/{key}?user_id=…&context=<url-encoded attributes>)
 if client.is_feature_enabled("new_search", "user-123", user_attributes={"plan": "pro"}):
     use_new_search()        # your own code
-flag = client.get_feature_flag("new_search", "user-123")          # FlagEvaluation(key, enabled, config, reason)
+flag = client.get_feature_flag("new_search", "user-123")          # FlagEvaluation(key, enabled, config, reason, source, value, value_type)
 flags = client.get_all_flags("user-123", {"plan": "pro"})          # {"new_search": True, ...}
 
 # Tracking (never raises)
@@ -84,7 +84,8 @@ ExperimentationClient(
     evaluation: str = "server",      # "server" (default) or "local" (server-side only; see Local evaluation)
     refresh_interval_seconds: float = 30,  # local mode: ruleset refresh (minimum 5, ±10% jitter)
     max_stale_seconds: float | None = None,  # local mode: evaluate on the server once the ruleset is this old
-    on_error=None,                   # local mode: on_error(error, "refresh" | "flush" | "evaluate")
+    on_error=None,                   # on_error(error, operation): "value" and "exposure" in either mode; "refresh" | "flush" | "evaluate" in local mode
+    on_exposure=None,                # on_exposure(exposure): see Exposure hook
 )
 ```
 
@@ -100,8 +101,11 @@ every experiment the user is in.
 |---|---|---|
 | `get_assignment(experiment_key, user_id, user_attributes=None)` | `Assignment(experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason)` | raises `ExperimentationError` (`status == 404` when no experiment has the key, or for a draft with no control variant); an experiment that is not ACTIVE returns its control variant with `assigned` False and `reason` its status |
 | `get_variant(experiment_key, user_id, user_attributes=None)` | `str` — the variant name | returns `default_variant` (`"control"`) |
-| `get_feature_flag(flag_key, user_id, user_attributes=None)` | `FlagEvaluation(key, enabled, config, reason)` | raises `ExperimentationError` (`status == 404` when the flag key is unknown; a flag that is not ACTIVE returns `enabled=False`, `reason="inactive"`) |
+| `get_feature_flag(flag_key, user_id, user_attributes=None)` | `FlagEvaluation(key, enabled, config, reason, source, value, value_type)` | raises `ExperimentationError` (`status == 404` when the flag key is unknown; a flag that is not ACTIVE returns `enabled=False`, `reason="inactive"`) |
 | `is_feature_enabled(flag_key, user_id, user_attributes=None)` | `bool` | returns `False` |
+| `get_string_value(flag_key, user_id, user_attributes=None, *, default)` | `str`, the string a string flag serves this user; see [Flag values](#flag-values) | returns `default`; never raises; logs a warning and calls `on_error(error, "value")` |
+| `get_number_value(flag_key, user_id, user_attributes=None, *, default)` | `int` or `float` as saved (never a `bool`), the number a number flag serves this user | returns `default`; never raises; logs a warning and calls `on_error(error, "value")` |
+| `get_json_value(flag_key, user_id, user_attributes=None, *, default)` | a new copy of the `dict` or `list` a json flag serves this user | returns `default`; never raises; logs a warning and calls `on_error(error, "value")` |
 | `get_all_flags(user_id, user_attributes=None)` | `dict[str, bool]` (not cached) | raises `ExperimentationError` |
 | `track(user_id, event_name, event_value=None, properties=None, experiment_key=None, feature_flag_key=None, event_type=None, timestamp=None, event_id=None)` | `bool` — `True` when it was sent and the server answered 2xx | never raises; `False` on failure |
 | `track_batch(events)` | `BatchResult(success_count, failure_count, errors)`, `.ok` | never raises; sends chunks of 100, a failed chunk counts all its events as failures |
@@ -114,8 +118,11 @@ every experiment the user is in.
 | `close()`, `with ExperimentationClient(...) as client:` | local mode: stops the refresh thread and sends the remaining evaluation counts; a no-op in server mode | never raises |
 | `consistent_hash(user_id, flag_key)` / `md5_hex(user_id, flag_key)` | cross-SDK MD5 bucket in `[0, 1)` / hex digest | pure functions; **not** the flag bucketing function and not used to decide variants or flags |
 
-`Assignment` and `FlagEvaluation` are frozen dataclasses. `ExperimentationError` carries
-`.status` (HTTP status, `None` for network errors and timeouts) and `.body` (raw response text).
+`Assignment`, `FlagEvaluation` and `Exposure` are frozen dataclasses. `ExperimentationError` carries
+`.status` (HTTP status, `None` for network errors and timeouts), `.body` (raw response text) and
+`.code`: `"TYPE_MISMATCH"` or `"INVALID_RESPONSE"` on an error a typed getter makes itself, and
+`"HOOK_ERROR"` on the error `on_error` receives with `"exposure"`. Other errors carry no code in this
+version; `.status` describes them.
 `FlagEvaluation.reason` (`"targeting_rule"`, `"rollout"`, `"inactive"` or `"error"`) says why the
 server decided; it is `None` when the server does not send one. `FlagEvaluation.source` is set only
 in local mode: `"local"` when answered in-process, `"server"` when the server evaluated it.
@@ -187,8 +194,8 @@ only, so call `clear_cache()` after changing a user's attributes.
 `datetime` (naive values are treated as UTC) or an ISO-8601 string. Conversions are matched to
 experiment metrics by **event name**.
 
-From the next published version, `track` returns `False`, and sends nothing, when `event_value`
-or `properties` holds NaN or an infinite number. `get_assignment` raises `ExperimentationError`
+`track` returns `False`, and sends nothing, when `event_value` or `properties` holds NaN or an
+infinite number. `get_assignment` raises `ExperimentationError`
 for the same in `user_attributes`, and `get_variant` returns the default for a user with no
 cached assignment (a cached assignment is returned as before).
 
@@ -196,8 +203,7 @@ cached assignment (a cached assignment is returned as before).
 
 `event_id` is your id for one event. The server stores an event sent again with the same
 `event_id`, user, experiment, flag and event name only once (see
-[How events count](../guides/how-events-count.md#sending-an-event-again)). Use this option from
-the next published version of this package, not from the version on PyPI now. It also needs a
+[How events count](../guides/how-events-count.md#sending-an-event-again)). It needs a
 Controlvar server that includes the `event_id` change ([#1640](https://github.com/Controlvar/controlvar/pull/1640)),
 which the platform release after 0.39.0 is to carry; an older server ignores the field and stores
 an event sent again a second time.
@@ -239,6 +245,145 @@ SDK sends the report without checking it.
 
 ---
 
+## Flag values
+
+A flag serves two values: its on value to the users it is on for, and its off value to everyone
+else, and to everyone while it is turned off. For a string, number or json flag, read the value
+with the getter of its type: `get_string_value`, `get_number_value` or `get_json_value`.
+
+```python
+label = client.get_string_value("checkout-button-label", "user-123", {"plan": "pro"}, default="Buy now")
+limit = client.get_number_value("free-shipping-threshold", "user-123", default=50)
+theme = client.get_json_value("checkout-theme", "user-123", default={"color": "gray"})
+```
+
+Pass the flag's off value as your default, so that a flag your code cannot reach behaves as off.
+`default` is keyword-only, so a call that passes it by position raises `TypeError` rather than
+evaluating the flag for a user named after your default. OpenFeature's `get_string_value` takes the
+default second; this client takes the user id second.
+
+A getter never raises. It returns your default, logs a warning, and passes the reason to
+`on_error(error, "value")` when the request fails (including a 404 for a flag the server does not
+know; `error.status` says which), when the server's answer carries no value (in server mode, from a
+server from before flag values, `error.code` `"INVALID_RESPONSE"`; in local mode, every flag the
+client answers locally from such a server's ruleset reads as boolean, so the getter reports
+`"TYPE_MISMATCH"`), or when the flag serves another type (`error.code` `"TYPE_MISMATCH"`, with a
+message such as `Flag "checkout-button-label" serves a string; get_number_value returned your default`).
+A boolean flag is another type; read it with `is_feature_enabled`. Nothing is coerced: `"10"` is not
+a number, and neither is `True`.
+
+`get_number_value` returns the number as it was saved: an `int`, or a `float` (`10.0` stays a
+`float`). `get_json_value` checks that the value is a `dict` or a `list`, and returns a new copy on
+every call.
+
+A getter is evaluated as `get_feature_flag` is: cached per user and flag for `cache_ttl_seconds`
+(`0` caches nothing), and in local mode answered from the ruleset. `get_feature_flag` returns the
+same answer with `value` and `value_type`; in server mode both are `None` from a server without
+flag values.
+
+---
+
+## Exposure hook
+
+`on_exposure` is a function you give the client when you create it. The client calls it once each
+time the server enrols the user in an experiment and the answer did not come from the client's
+cache: the moment the server records the exposure. Use it to send the exposure to your analytics
+tool or warehouse.
+
+The example needs an ACTIVE experiment with the key `checkout_flow`; put your own key in its place.
+It prints `exposure checkout_flow <variant> user-123` once, or nothing for a user the experiment
+did not enrol.
+
+```python
+import os
+import queue
+import threading
+
+from controlvar import ExperimentationClient
+
+exposures = queue.Queue(maxsize=10_000)
+
+
+def send_exposures():
+    while True:
+        exposure = exposures.get()
+        # Your analytics tool's call goes here: it runs on this thread, not inside get_variant.
+        print("exposure", exposure.experiment_key, exposure.variant_name, exposure.user_id)
+        exposures.task_done()
+
+
+threading.Thread(target=send_exposures, daemon=True).start()
+
+
+def on_exposure(exposure):
+    try:
+        exposures.put_nowait(exposure)
+    except queue.Full:
+        pass  # drop it rather than make get_variant wait
+
+
+client = ExperimentationClient(
+    api_url=os.environ.get("CONTROLVAR_API_URL", "http://localhost:8000"),
+    api_key=os.environ["CONTROLVAR_API_KEY"],
+    on_exposure=on_exposure,
+)
+client.get_variant("checkout_flow", "user-123")
+exposures.join()
+```
+
+It receives an `Exposure`: `experiment_key`, `user_id`, `variant_id` (`None` when the server sends
+none) and `variant_name`, in a new object for each call. Nothing else: not the user's attributes
+and not the variant's configuration. `Exposure` is a frozen dataclass, exported from `controlvar`.
+
+It is not called for:
+
+- an answer from the client's cache;
+- a user the experiment did not enrol (`assigned` False, with `reason` `"holdout"`,
+  `"mutual_exclusion"` or `"targeting"`), or an experiment that is not running (`"draft"`,
+  `"paused"`, `"completed"` or `"archived"`): the server records no exposure for them, and the
+  client returns the control variant;
+- a call that fails, including one that times out after the server recorded the exposure;
+- a feature flag, in either evaluation mode.
+
+It is not called when the server does not send `assigned`; every Controlvar server release sends it.
+
+It is called again, and the server records another exposure, after the cache lifetime
+(`cache_ttl_seconds`, 300 seconds by default; with `cache_ttl_seconds=0`, on every call), after
+`clear_cache()`, and in every new client: each process, such as each worker of a web server, has
+its own. So your tool can receive several exposures for one user and experiment: count users, not
+events. It never receives one the server did not record.
+
+It is called when your code asks for the assignment, whether or not you then show the variant, so
+ask for it where the variant is shown.
+
+It runs in the thread that called `get_assignment` or `get_variant`, after the answer is cached and
+before the call returns, so its running time is added to that call. The client cannot time it out:
+a function that blocks for a second makes that call a second slower. Calls for other users and
+experiments are not held up. Put the exposure on a queue, as above, so a slow analytics request
+never sits inside an assignment.
+
+It can run on several threads at once: make it safe for that. Two threads that ask for the same new
+user and experiment at the same moment send two requests, and the server records two exposures; the
+hook is called once.
+
+If it raises, the answer is unchanged. The client logs the error at ERROR, with its traceback, on
+the `controlvar.client` logger, and passes it to `on_error` with the operation `"exposure"`: an
+`ExperimentationError` whose `code` is `"HOOK_ERROR"`, whose message starts with
+`on_exposure failed:`, and whose `__cause__` is what your function raised. `KeyboardInterrupt` and
+`SystemExit` are not caught.
+
+An `async def`, or a `functools.partial` of one, is refused with `TypeError` when you create the
+client: the client never awaits it, so its body would never run. An object whose `__call__` is
+`async def` is not detected then: the coroutine it returns is closed without running, and reported
+as above. Anything else it returns, such as an `asyncio` task it scheduled itself, is left alone.
+
+The constructor raises `TypeError` for a value that is not callable; `None` sets none.
+
+In a test, a `FakeTransport` answer for `POST /api/v1/tracking/assign` must include
+`"assigned": True`, or the hook is not called.
+
+---
+
 ## Backend endpoints used
 
 Every request carries `X-API-Key: <key>`, `Content-Type: application/json` and
@@ -246,7 +391,7 @@ Every request carries `X-API-Key: <key>`, `Content-Type: application/json` and
 
 | SDK call | Method and path | Body / query | Response used |
 |---|---|---|---|
-| `get_assignment`, `get_variant` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
+| `get_assignment`, `get_variant` | `POST /api/v1/tracking/assign` | `{experiment_key, user_id, context?}` | `{experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}`; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with `assigned: false` |
 | `get_feature_flag`, `is_feature_enabled` | `GET /api/v1/feature-flags/evaluate/{flag_key}?user_id=…&context=<url-encoded JSON>` | `context` = `user_attributes` (omitted when empty) | `{key, enabled, config, reason}`; `enabled: false`, `reason: "inactive"` when the flag is not ACTIVE; 404 only for an unknown key |
 | `get_all_flags` | `GET /api/v1/feature-flags/user/{user_id}?context=<url-encoded JSON>` | `context` = `user_attributes` (omitted when empty) | `{"<flag_key>": bool, …}` |
 | `track` with a key | `POST /api/v1/tracking/track` | `{event_type, event_name, user_id, experiment_key?, feature_flag_key?, value?, metadata?, timestamp?, event_id?}` | ignored |
@@ -279,6 +424,19 @@ with ExperimentationClient(api_url, server_key, evaluation="local") as client:
     flag = client.get_feature_flag("new_search", "user-123", {"country": "US"})
     print(flag.enabled, flag.reason, flag.source)         # source: "local" or "server"
 ```
+
+A value flag's value is answered locally too: its on value when the flag is on for the user, its
+off value otherwise, and its off value to everyone while it is turned off. A flag entry this SDK
+cannot read (an `evaluation` or `value_type` from a newer server, or a value of the wrong type) is
+evaluated by the server, the rest of the ruleset is still answered locally, and, while the flag is
+active, `status().server_evaluated_flags` lists it.
+
+A flag whose stored values the server cannot serve reaches every local client as a
+server-evaluated flag, whatever its status (only a direct database write, or a rollback past a
+release with wider value limits, produces one). Turning such a flag off does not change the
+ruleset. So a local client of any version keeps the server's answer it cached for that user and
+flag for up to `cache_ttl_seconds` (5 minutes by default) before it sees the flag off, and while
+the flag exists `get_all_flags` asks the server on every call.
 
 A change made in the dashboard reaches the process at its next successful refresh. While the API
 is unreachable the last ruleset keeps being served (set `max_stale_seconds` to bound that); a 401
@@ -313,7 +471,9 @@ assert transport.last.headers["X-API-Key"] == "key"
 ## Contract smoke
 
 Runs the four contract steps (sticky assignment, flag evaluation, keyed track, key-less fan-out
-plus a 2-event batch) against a live backend and prints one JSON line:
+plus a 2-event batch), sends one event twice with the same `event_id`, and runs two exposure hook
+steps (a new client assigns twice and its hook is called once; a hook that raises is reported)
+against a live backend and prints one JSON line:
 
 ```bash
 CONTROLVAR_API_KEY=<key> python sdk/python/examples/contract_smoke.py
@@ -322,7 +482,7 @@ CONTROLVAR_API_KEY=<key> python sdk/python/examples/contract_smoke.py
 It prints:
 
 ```text
-{"sdk":"python","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true}}
+{"sdk":"python","assign":{"variant_name":"control","is_control":true,"sticky":true},"flag":{"enabled":true},"track":{"ok":true},"fanout":{"ok":true},"event_id":{"user_id":"smoke-<uuid>","event_name":"contract_dedup_<uuid>","id":"contract-<uuid>","sends":2},"exposure":{"calls":1,"payload":{"experiment_key":"sdk_contract_ab","variant_name":"control","variant_id":"<id>","user_id":"smoke-<uuid>"}}}
 ```
 
 Env: `CONTROLVAR_API_URL` (default `http://localhost:8000`), `CONTROLVAR_API_KEY` (required),

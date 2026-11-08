@@ -290,7 +290,8 @@ The results page compares how many users each variant received with its traffic 
 chi-square test of the assignment counts). If they differ by more than chance allows
 (p < 0.001), a notice above the tabs says so, with each variant's users and the number expected.
 The recommendation is then **INCONCLUSIVE**, and a "Leading" variant and the Bayesian analysis
-carry a warning. A mismatch usually means assignment or tracking is broken, so do not use the
+carry a warning. So does the stopping banner on the **Sequential** tab, whatever it recommends.
+A mismatch usually means assignment or tracking is broken, so do not use the
 numbers for a decision until you find out why.
 
 When the split matches, one line below the summary card says so, with the check's p-value.
@@ -490,7 +491,8 @@ unarchived: the API refuses every request that would turn it on with "This flag 
 archived. Unarchive it before turning it on." Turning it off succeeds and changes
 nothing. Archiving and unarchiving are API calls for now (bulk toggle with
 `archive`, and `POST /api/v1/feature-flags/{id}/unarchive`, which is beta); an
-unarchived flag comes back inactive. See
+unarchived flag comes back inactive. The dashboard shows an archived flag as **Archived**, with
+no on/off switch, and the flag list has an **Archived** filter. See
 [Archived flags](../feature-flags/create.md#archived-flags).
 
 ---

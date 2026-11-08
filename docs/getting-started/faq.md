@@ -75,17 +75,25 @@ dashboard shows.
 
 ### What SDKs are available?
 
-The JavaScript SDK is on npm (`npm install @controlvar/js-sdk`, 0.2.0, beta) and the
-Python SDK is on PyPI (`pip install controlvar`, 0.2.0, beta). The Go SDK installs by module
-path, and the other SDKs from a clone of this repository: each SDK's page
-([Go](../sdk/go.md), [Java](../sdk/java.md), [React](../sdk/react.md)) says how.
+The JavaScript SDK is on npm (`npm install @controlvar/js-sdk`, 0.3.0, beta) and the
+Python SDK is on PyPI (`pip install controlvar`, 0.3.0, beta). So are the React SDK
+(`npm install @controlvar/react-sdk`, 0.1.0, beta), the React Native SDK
+(`npm install @controlvar/react-native-sdk`, 0.1.0, beta) and the two OpenFeature providers
+(`npm install @controlvar/openfeature-provider`, 0.1.0, beta; `pip install controlvar-openfeature`,
+0.1.0, beta). The Java SDK is on Maven Central and the .NET SDK on NuGet. The Go SDK installs by
+module path, and the other SDKs from a clone of this repository: each SDK's page
+([Go](../sdk/go.md), [Ruby](../sdk/ruby.md)) says how.
 
 | SDK | Package |
 |-----|---------|
 | JavaScript / TypeScript | `@controlvar/js-sdk` (npm) |
 | Python | `controlvar` (PyPI) |
-| Java / JVM | `com.controlvar:controlvar-sdk` (Maven/Gradle) |
+| Java / JVM | `com.controlvar:controlvar-sdk` (Maven Central) |
 | React | `@controlvar/react-sdk` (npm) |
+| React Native | `@controlvar/react-native-sdk` (npm) |
+| OpenFeature (Node) | `@controlvar/openfeature-provider` (npm) |
+| OpenFeature (Python) | `controlvar-openfeature` (PyPI) |
+| .NET | `Controlvar.SDK` (NuGet) |
 
 13 of the 16 SDKs run experiment variant assignment, feature flag evaluation and event tracking against a live API in CI, in the SDK Live Contract job of `pr-qa-gate.yml`. The Java SDK includes Spring Boot auto-configuration. The React SDK includes hooks, an HOC, and SSR support for Next.js.
 
@@ -170,7 +178,7 @@ Pre-built compliance reports are available at:
 - `GET /api/v1/compliance/reports/soc2` — SOC 2 report, by default over the last 365 days
 - `GET /api/v1/compliance/reports/iso27001` — ISO 27001 report, by default over the last 730 days
 
-Full audit log export (JSON or CSV) is available for SIEM ingestion at `GET /api/v1/compliance/export`.
+The compliance trail exports as JSON or CSV at `GET /api/v1/compliance/export` (compliance module; a core deployment answers `501`): flag and experiment creates, changes and deletes, without their old and new values. Toggles, rollbacks, sign-ins and role changes are in the audit log, which exports at `GET /api/v1/audit-logs/export` (beta) in every profile. For a SIEM, take both.
 
 See [Compliance Audit Trail API](../api/compliance.md) for full documentation.
 

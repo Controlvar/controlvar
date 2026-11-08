@@ -12,10 +12,9 @@ Modules: `core/` (`controlvar-sdk`) and `spring-boot-starter/`
 
 ## Installation
 
-**Not yet published.** `com.controlvar:controlvar-sdk` and the Spring Boot starter are not
-on Maven Central, so build them from source: in a clone of this repository,
-`cd sdk/java && ./mvnw install` installs both into your local `~/.m2`, and the dependencies
-below then resolve from there.
+`com.controlvar:controlvar-sdk` and the Spring Boot starter are on
+[Maven Central](https://central.sonatype.com/artifact/com.controlvar/controlvar-sdk). 0.1.0 is a
+beta release.
 
 ```xml
 <dependency>
@@ -31,8 +30,13 @@ below then resolve from there.
 </dependency>
 ```
 
-Gradle reads `~/.m2` only through `mavenLocal()`: add it to `repositories`, then
-`implementation 'com.controlvar:controlvar-sdk:0.1.0'`.
+With Gradle, add `implementation 'com.controlvar:controlvar-sdk:0.1.0'`, with `mavenCentral()` in
+`repositories`.
+
+To work on the SDK itself, build it from a clone of this repository instead:
+`cd sdk/java && ./mvnw install` installs both into your local `~/.m2`, and the dependencies
+above then resolve from there. Gradle reads `~/.m2` only through `mavenLocal()`: add it to
+`repositories`.
 
 ## Quick Start (core client)
 

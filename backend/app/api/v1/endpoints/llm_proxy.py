@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.logger import unexpected_failure
 from backend.app.core.permissions import Action, ResourceType, check_permission
 from backend.app.models.llm_experiment import LLMEvaluation, LLMExperimentStatus
@@ -28,7 +29,7 @@ from backend.app.services.llm_analytics_service import LLMEvaluationAnalyticsSer
 from backend.app.services.llm_experiment_service import LLMExperimentService
 from backend.app.services.llm_proxy_service import GeminiError, LLMProxyService
 
-router = APIRouter(tags=["LLM Proxy"])
+router = APIRouter(route_class=OffLoopRoute, tags=["LLM Proxy"])
 logger = logging.getLogger(__name__)
 _experiment_service = LLMExperimentService()
 _proxy_service = LLMProxyService()
@@ -163,10 +164,17 @@ def submit_evaluation(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions"
         )
 
+    # An id that is not a UUID is the judge route's 400, not a 500 (#959).
+    try:
+        evaluation_id = UUID(body.evaluation_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid evaluation_id format",
+        )
+
     evaluation = (
-        db.query(LLMEvaluation)
-        .filter(LLMEvaluation.id == UUID(body.evaluation_id))
-        .first()
+        db.query(LLMEvaluation).filter(LLMEvaluation.id == evaluation_id).first()
     )
     if evaluation is None:
         raise HTTPException(
@@ -180,11 +188,11 @@ def submit_evaluation(
 
     if body.human_rating is not None:
         evaluation = _analytics_service.submit_human_rating(
-            db, UUID(body.evaluation_id), body.human_rating
+            db, evaluation_id, body.human_rating
         )
     if body.business_metric_value is not None:
         evaluation = _analytics_service.submit_business_metric(
-            db, UUID(body.evaluation_id), body.business_metric_value
+            db, evaluation_id, body.business_metric_value
         )
 
     return _eval_to_response(evaluation)

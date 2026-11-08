@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.sdk_scope import require_sdk_ruleset_key
 from backend.app.models.api_key import APIKey
 from backend.app.schemas.storable_text import StorableTextModel
@@ -32,7 +33,7 @@ from backend.app.services.sdk_evaluation_service import (
     record_local_evaluations,
 )
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 #: Most entries accepted in one report.
 MAX_ENTRIES = 1000

@@ -81,18 +81,6 @@ text = "If your instance runs on a private network you trust and has no HTTPS, a
 by = ["test:sdk/mcp/__tests__/config.test.ts::http://10.0.0.5:8000 answers initialize, with exactly one W1 line at every start"]
 
 [[unit]]
-text = "Build the server"
-by = ["exempt:label"]
-
-[[unit]]
-text = "Not yet published."
-by = ["mechanism:mcp-page-state"]
-
-[[unit]]
-text = "@controlvar/mcp-server is not on npm, so build it from a clone of this repository:"
-by = ["mechanism:mcp-page-state"]
-
-[[unit]]
 text = "Create an API key"
 by = ["exempt:label"]
 
@@ -157,7 +145,7 @@ text = "Claude Code"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Run this in the sdk/mcp directory you built, with the key in $KEY:"
+text = "Run this in the project directory where you want the server, with the key in $KEY:"
 by = ["mechanism:mcp-page-snippets"]
 
 [[unit]]
@@ -548,6 +536,13 @@ by = [
 [[unit]]
 text = "mde is an absolute change in the rate: 0.004 on a baseline of 0.08 plans for 8% against 8.4%, a 5% relative lift."
 by = ["docex:docs/mcp-server.md#\"required_per_variant\": 73855"]
+
+[[unit]]
+text = "Inputs it cannot calculate with answer 422 with a fixed message: a baseline_rate, confidence or power outside 0 to 1, an mde of 0, and a treatment rate (baseline_rate + mde) above 1 or below 0."
+by = [
+    "test:backend/tests/unit/api/test_sample_size_inputs_answer_422.py::test_the_ai_sample_size_refuses_with_fixed_text",
+    "test:backend/tests/unit/api/test_sample_size_inputs_answer_422.py::test_no_input_on_the_grid_answers_5xx_or_a_size_below_1",
+]
 
 [[unit]]
 text = "The estimate is for a control and one treatment."

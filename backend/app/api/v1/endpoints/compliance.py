@@ -33,6 +33,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.optional_modules import (
     COMPLIANCE_REPORTING_UNAVAILABLE_DETAIL,
     compliance_export_handler,
@@ -48,7 +49,7 @@ from backend.app.services.audit_log_service import AuditLogService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 # Roles that may read the core compliance audit event listing
 _ALLOWED_ROLES = (UserRole.ADMIN, UserRole.ANALYST)

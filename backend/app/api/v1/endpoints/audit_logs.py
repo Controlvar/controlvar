@@ -18,6 +18,7 @@ from fastapi import (
     HTTPException,
     Path,
     Query,
+    Response,
     status,
 )
 from fastapi.responses import StreamingResponse
@@ -26,6 +27,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.logger import unexpected_failure
 from backend.app.core.permissions import can_read_all_audit_logs
 from backend.app.models.audit_log import ActionType, AuditLog, EntityType
@@ -53,6 +55,7 @@ INVALID_ACTION_TYPE = (
 
 # Create router with tag for documentation grouping
 router = APIRouter(
+    route_class=OffLoopRoute,
     tags=["Audit Logs"],
     responses={
         status.HTTP_401_UNAUTHORIZED: {
@@ -291,8 +294,9 @@ def _stream_items(query, fmt: str) -> Iterator[str]:
             for row in rows:
                 yield audit_export.entry_item(row)
         except Exception as e:
-            # The status line has gone: the body ends here, short of
-            # X-Total-Count. Only the exception type is logged.
+            # The body ends here, short of X-Total-Count, as it did when the
+            # body was sent while it was read. Only the exception type is
+            # logged.
             logger.error("Audit log export stopped early (%s)", type(e).__name__)
 
     if fmt == "csv":
@@ -359,7 +363,7 @@ def export_audit_logs(
     to_date: Optional[datetime] = Query(
         None, description="Entries at or before this time (ISO format)"
     ),
-) -> StreamingResponse:
+) -> Response:
     """
     Download every audit entry the filters match, as CSV or JSON.
 
@@ -403,8 +407,11 @@ def export_audit_logs(
         )
 
     filename = audit_export.export_filename(requested_at, export_format)
-    return StreamingResponse(
-        _stream_items(query, export_format),
+    # The whole body is built here, before the response starts: at most
+    # EXPORT_MAX_ROWS entries, read EXPORT_BATCH_SIZE at a time.
+    body = "".join(_stream_items(query, export_format))
+    return Response(
+        content=body,
         media_type=audit_export.MEDIA_TYPES[export_format],
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',

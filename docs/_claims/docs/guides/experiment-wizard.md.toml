@@ -108,7 +108,7 @@ by = ["journey:experiment-wizard#estimate-next"]
 [[unit]]
 text = "Below them, Also test the primary metric sequentially (beta) turns on sequential testing for the new experiment; it is off by default."
 by = [
-    "test:frontend/src/tests/pages/experiment-new-sequential.test.tsx::is off by default, labelled, explains itself, and links to how it works",
+    "test:frontend/src/tests/pages/experiment-new-sequential.test.tsx::%s: is off by default, labelled, explains itself, and links to how it works",
     "test:frontend/src/tests/pages/experiment-new-sequential.test.tsx::guided setup sends a twelfth key, sequential_testing_enabled: true, only when it is ticked, and no config",
 ]
 

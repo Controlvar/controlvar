@@ -10,10 +10,11 @@ published" that is the clone-path form, ``node`` on the built ``dist/index.js``
 whatever was published last. A block that gives a server a ``url`` is refused:
 the server is started by command, and nothing on the API answers an MCP client.
 
-Until the package is on npm the page names no ``npx`` command at all.
+A page that says "Not yet published" names no ``npx`` command at all, so a
+note put back beside the published snippets is refused.
 
-Reads files only; no git. ``mechanism:mcp-page-snippets`` and
-``mechanism:mcp-page-state`` in ``scripts/doc_claims.py``.
+Reads files only; no git. ``mechanism:mcp-page-snippets`` in
+``scripts/doc_claims.py``.
 """
 
 from __future__ import annotations
@@ -139,14 +140,6 @@ def test_every_client_snippet_names_the_real_server():
     assert not found, "\n".join(found)
 
 
-def test_an_unpublished_page_names_no_install_by_npx():
-    text = PAGE.read_text(encoding="utf-8")
-    if not _UNPUBLISHED.search(text):
-        pytest.skip("the page no longer says the package is unpublished")
-    assert not _NPX.search(text)
-    assert f"npm install {shipped()['name']}" not in text
-
-
 def test_the_page_has_one_claude_code_command_and_one_config_block():
     text = PAGE.read_text(encoding="utf-8")
     assert len(re.findall(r"claude mcp add", text)) == 1
@@ -183,8 +176,8 @@ def test_a_misspelled_variable_on_the_claude_code_line_is_refused():
 def test_a_url_in_a_server_entry_is_refused():
     found = problems(
         _planted(
-            '"command": "node",',
-            '"url": "http://localhost:8000/api/v1/mcp/manifest",\n      "command": "node",',
+            '"command": "npx",',
+            '"url": "http://localhost:8000/api/v1/mcp/manifest",\n      "command": "npx",',
         ),
         shipped(),
     )
@@ -193,16 +186,43 @@ def test_a_url_in_a_server_entry_is_refused():
     )
 
 
-def test_an_npx_command_before_publication_is_refused():
-    found = problems(_planted('"command": "node",', '"command": "npx",'), shipped())
-    assert any("starts the server with npx" in p for p in found), found
-    assert any("still names an npx command" in p for p in found), found
-
-
-def test_a_wrong_bin_path_is_refused():
+def test_a_not_yet_published_note_beside_the_npx_snippets_is_refused():
     found = problems(
-        _planted("/sdk/mcp/dist/index.js", "/sdk/mcp/dist/main.js"), shipped()
+        _planted(
+            "### Claude Code\n",
+            "### Claude Code\n\n**Not yet published.** Build it from a clone.\n",
+        ),
+        shipped(),
     )
+    assert any("still names an npx command" in p for p in found), found
+    assert any("before publication that is" in p for p in found), found
+
+
+@pytest.mark.parametrize(
+    "site", ['"{}"', "-- npx -y {}\n"], ids=["the config block", "claude mcp add"]
+)
+@pytest.mark.parametrize("other", ["{name}@latest", "{name}@0.0.9", "{name}"])
+def test_a_snippet_not_pinned_to_the_packages_version_is_refused(site, other):
+    ship = shipped()
+    pinned = f"{ship['name']}@{ship['version']}"
+    other = other.format(name=ship["name"])
+    found = problems(_planted(site.format(pinned), site.format(other)), ship)
+    assert any("the published form is" in p for p in found), found
+
+
+def test_before_publication_a_wrong_bin_path_is_refused_and_the_built_one_passes():
+    ship = shipped()
+    unpublished = (
+        "**Not yet published.**\n\n"
+        "```json\n"
+        '{"mcpServers": {"controlvar": {"command": "node", "args": ["%s"], '
+        '"env": {"CONTROLVAR_API_URL": "http://localhost:8000", '
+        '"CONTROLVAR_API_KEY": "k"}}}}\n'
+        "```\n"
+    )
+    built = f"/path/to/controlvar/sdk/mcp/{ship['bin']}"
+    assert problems(unpublished % built, ship) == []
+    found = problems(unpublished % "/path/to/controlvar/sdk/mcp/dist/main.js", ship)
     assert any("a snippet starts the server with node" in p for p in found), found
 
 

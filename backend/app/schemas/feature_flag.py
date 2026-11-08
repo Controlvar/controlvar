@@ -123,6 +123,23 @@ STATUS_READ_ONLY = "status is read-only. Use is_active to turn a flag on or off.
 
 _READ_ONLY = {"readOnly": True}
 
+
+def _flag_value_schema() -> Dict[str, Any]:
+    """What the request documents say ``on_value`` and ``off_value`` accept:
+    any JSON value but null (#1571). Only the documents change: the fields
+    stay ``Any``, so the value rules and the null refusal decide, as before.
+    A fresh dict for each field."""
+    return {
+        "anyOf": [
+            {"type": "boolean"},
+            {"type": "string"},
+            {"type": "number"},
+            {"type": "object"},
+            {"type": "array"},
+        ]
+    }
+
+
 #: The description of ``targeting_rules`` on a create and an update.
 TARGETING_RULES_DESCRIPTION = (
     "Who gets the flag: the dashboard rule builder's shape "
@@ -260,10 +277,14 @@ class FeatureFlagCreate(_FeatureFlagRequest):
     )
     value_type: ValueType = Field(BOOLEAN, description=VALUE_TYPE_DESCRIPTION)
     on_value: Any = Field(
-        None, description=ON_VALUE_DESCRIPTION + VALUE_LIMITS_DESCRIPTION
+        None,
+        description=ON_VALUE_DESCRIPTION + VALUE_LIMITS_DESCRIPTION,
+        json_schema_extra=_flag_value_schema(),
     )
     off_value: Any = Field(
-        None, description=OFF_VALUE_DESCRIPTION + VALUE_LIMITS_DESCRIPTION
+        None,
+        description=OFF_VALUE_DESCRIPTION + VALUE_LIMITS_DESCRIPTION,
+        json_schema_extra=_flag_value_schema(),
     )
     tags: Optional[List[str]] = None
 
@@ -314,10 +335,14 @@ class FeatureFlagUpdate(_FeatureFlagRequest):
     )
     value_type: ValueType = Field(None, description=VALUE_TYPE_DESCRIPTION)
     on_value: Any = Field(
-        None, description=ON_VALUE_DESCRIPTION + VALUE_LIMITS_DESCRIPTION
+        None,
+        description=ON_VALUE_DESCRIPTION + VALUE_LIMITS_DESCRIPTION,
+        json_schema_extra=_flag_value_schema(),
     )
     off_value: Any = Field(
-        None, description=OFF_VALUE_DESCRIPTION + VALUE_LIMITS_DESCRIPTION
+        None,
+        description=OFF_VALUE_DESCRIPTION + VALUE_LIMITS_DESCRIPTION,
+        json_schema_extra=_flag_value_schema(),
     )
     tags: Optional[List[str]] = None
 

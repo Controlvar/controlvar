@@ -891,6 +891,20 @@ text = "The ids are in the rollback response's details.paused_schedules."
 by = ["test:backend/tests/integration/api/test_rollback_to_zero_off.py::test_p11_the_documented_restore_steps_restore_every_user"]
 
 [[unit]]
+text = "After an automatic rollback they are in the safety_rollback audit entry's new_value.paused_schedules."
+by = [
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_manual_rollback_is_recorded_by_the_calling_user",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_monitor_rollback_is_recorded_by_the_safety_monitor",
+]
+
+[[unit]]
+text = "If that entry is missing, list the flag's paused schedules with GET /api/v1/rollout-schedules/?feature_flag_id=$FLAG_ID&status=paused; a schedule paused by hand is listed too."
+by = [
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestListRolloutSchedules::test_filter_by_feature_flag_id",
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestListRolloutSchedules::test_filter_by_status_draft",
+]
+
+[[unit]]
 text = "Check the flag's thresholds."
 by = ["exempt:instruction"]
 

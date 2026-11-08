@@ -345,7 +345,7 @@ If you made the zone for this install, removing it is the page's last step: http
 Controlvar is uninstalled from account 123456789012, us-west-2. The record stays in /Users/you/.controlvar-aws/123456789012-us-west-2/ (its logs and both records of the account).
 ```
 
-[What `cdk destroy` leaves behind and bills](cdk.md#what-cdk-destroy-leaves-behind-and-bills) says what each of these is. The CDK's setup stack and its bucket stay because other CDK apps in the account may use them. [Removing what is left](cdk.md#removing-what-is-left) says how to remove them when nothing else does. If the report names anything under `Not explained`, the installer has left it alone, because someone else may have made it. Look at it before you delete it.
+[What `cdk destroy` leaves behind and bills](cdk.md#what-cdk-destroy-leaves-behind-and-bills) says what each of these is. The CDK's setup stack and its bucket stay because other CDK apps in the account may use them. [Removing what is left](cdk.md#removing-what-is-left) says how to remove them when nothing else does. If the report names anything under `Not explained`, the installer has left it alone: someone else may have made it, or it may be the install's own. Look at each one before you delete it.
 
 ### The cache's automatic backup
 
