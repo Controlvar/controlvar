@@ -28,7 +28,7 @@ import React from 'react';
 import { createHash } from 'crypto';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { AuthConfigProvider, __resetAuthConfigCache } from '@/contexts/AuthConfigContext';
-import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { AuthProvider, INACTIVE_ACCOUNT_MESSAGE, useAuth } from '@/contexts/AuthContext';
 import LoginPage, { SIGNED_OUT_MESSAGE, SIGN_IN_NOT_SET_UP_MESSAGE } from '@/pages/login';
 import { TOKEN_STORAGE_KEY } from '@/services/api';
 import { safeAfterSignInPath } from '@/services/hostedUi';
@@ -390,8 +390,20 @@ describe('accessibility of the Cognito sign-in page (row 29)', () => {
   });
 });
 
+describe('the session check under Cognito (row 15)', () => {
+  row('an account the API reports inactive (400) does not keep its token, and /login says why', async () => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, 'tok-1');
+    api.routes['/api/v1/users/me'] = () => jsonResponse(400, { detail: 'Inactive user' });
+    await renderLogin();
+    expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull();
+    expect(screen.getByRole('alert')).toHaveTextContent(INACTIVE_ACCOUNT_MESSAGE);
+    expect(callsTo('/api/v1/auth/me')).toHaveLength(0);
+    expect(assigned).toEqual([]);
+  });
+});
+
 describe('this file', () => {
   it('collects every test it declares', () => {
-    expect(registered).toBe(20);
+    expect(registered).toBe(21);
   });
 });
