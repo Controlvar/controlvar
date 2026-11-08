@@ -26,6 +26,11 @@ why the item was refused (for example, a key that was given was not found), or r
 `Could not store this event (request ID: <id>).` when the server failed to store it; quote that ID
 when you report the failure.
 
+On `/tracking/track`, `/tracking/batch` and `/tracking/events` an event's `metadata` may be at most
+16,384 bytes as compact JSON in UTF-8 and nest at most 64 levels
+([Event limits](api/endpoints.md#track-event)): over either limit, `/track` and `/events` answer
+422 and `/batch` reports the entry in `errors`.
+
 An assign call for a user who is not eligible (global holdout, mutual exclusion group or targeting
 rules) still answers 200 with the control variant, `assigned: false` and `reason` set to `holdout`,
 `mutual_exclusion` or `targeting`; nothing is recorded for that user. An experiment that is not

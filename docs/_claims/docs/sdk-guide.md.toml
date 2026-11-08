@@ -131,6 +131,16 @@ by = [
 ]
 
 [[unit]]
+text = "On /tracking/track, /tracking/batch and /tracking/events an event's metadata may be at most 16,384 bytes as compact JSON in UTF-8 and nest at most 64 levels (Event limits): over either limit, /track and /events answer 422 and /batch reports the entry in errors."
+by = [
+    "test:backend/tests/unit/schemas/test_event_metadata_size.py::test_the_limit_counts_bytes_not_characters",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_metadata_within_the_limit_is_stored_as_sent",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_metadata_over_the_limit_is_refused_and_nothing_is_stored",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_over_deep_metadata_is_refused_and_nothing_is_stored",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_metadata_at_the_limit_is_stored",
+]
+
+[[unit]]
 text = "An assign call for a user who is not eligible (global holdout, mutual exclusion group or targeting rules) still answers 200 with the control variant, assigned: false and reason set to holdout, mutual_exclusion or targeting; nothing is recorded for that user."
 by = [
     "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",

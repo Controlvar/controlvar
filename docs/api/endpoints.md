@@ -402,6 +402,8 @@ the API answers `429` with a
 ### Request Size Limits
 - Maximum request body size: 5 MiB (5,242,880 bytes); a larger body is answered `413`, with or without a `Content-Length` header
 - A targeting `context` has limits of its own, below
+- An event's `metadata` on `/tracking/track`, `/tracking/batch` and `/tracking/events` has limits
+  of its own: 16,384 bytes and 64 levels ([Track Event](#track-event))
 
 ### Targeting Context Limits
 The routes that take a targeting `context` hold it to two limits before it is matched against
@@ -1157,9 +1159,15 @@ A 422 names positions and fields, never the ids that were sent.
   [How events count](../guides/how-events-count.md#sending-an-event-again).
 - **Event limits**: `metadata` may nest at most 64 levels,
   every JSON object and array a level and the object itself the first, so `{"a": {"b": 1}}` is 2
-  levels. Deeper answers 422 and nothing is stored. `/tracking/events` accepts `properties` as well
-  as `metadata`, with the same limit. A refusal on `/tracking/track` and `/tracking/batch` names
-  `properties`, which is what the stored event calls `metadata`. A `timestamp` at the very edge of the date
+  levels. `/tracking/track`, `/tracking/batch` and `/tracking/events` also hold it to 16,384 bytes
+  as compact JSON (no spaces, characters not escaped) in UTF-8, and check depth first. Over either
+  limit `/tracking/track` and `/tracking/events` answer 422 and `/tracking/batch` reports the entry
+  in `errors`; nothing is stored for the event, even when one with that `event_id` is already
+  stored, and events stored before the limits are not changed. `/tracking/events` accepts
+  `properties` as well as `metadata`, with the same limits. A refusal on `/tracking/track` and
+  `/tracking/batch` reads `Invalid event: properties not valid` for either limit, `properties`
+  being what the stored event calls `metadata`; `/tracking/events` names the field and the limit.
+  A `timestamp` at the very edge of the date
   range whose UTC offset moves it past 0001-01-01 or 9999-12-31 answers 422 too. `/tracking/batch`
   and `/tracking/events` hold events to the same limits; in a batch the entry is reported in
   `errors` and the others are stored.
@@ -1190,7 +1198,7 @@ A 422 names positions and fields, never the ids that were sent.
   `errors` and the others are stored. A non-finite number anywhere in a `/batch` body refuses the
   whole request and stores none of its events, while a `value` outside -1e12 to 1e12 fails only
   its own entry.
-- **Response**: 200 OK `{"success_count": int, "failure_count": int, "duplicate_count": int, "errors": [...]|null}`; 422 above 100 events, or one entry invalid (its `event_id` among them), and none is stored. An entry that is valid as a request but refused when its event is built (metadata nested too deep, an edge `timestamp`, a key not found) is reported in `errors` and the others are stored
+- **Response**: 200 OK `{"success_count": int, "failure_count": int, "duplicate_count": int, "errors": [...]|null}`; 422 above 100 events, or one entry invalid (its `event_id` among them), and none is stored. An entry that is valid as a request but refused when its event is built (metadata nested too deep or larger than 16,384 bytes, an edge `timestamp`, a key not found) is reported in `errors` and the others are stored
 
 ### Track Event by Ids
 - **Endpoint**: `POST /api/v1/tracking/events`

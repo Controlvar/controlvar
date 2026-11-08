@@ -1290,3 +1290,19 @@ by = [
     "test:backend/tests/integration/api/test_rollout_update_null_required.py::test_a_stage_update_that_leaves_the_fields_out_is_unchanged",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
 ]
+
+[[unit]]
+text = "POST /api/v1/tracking/track, POST /api/v1/tracking/batch, POST /api/v1/tracking/events | #1085 | Event metadata (properties on /events) larger than 16,384 bytes as compact JSON in UTF-8 is refused, where it was stored up to the 5 MiB body limit: /track answers 422 (Invalid event: properties not valid), /events answers 422 at [\"body\", \"properties\"] (or \"metadata\"), and /batch reports the entry in errors and stores the others. Depth (64 levels) is checked first. Nothing is stored for a refused event, and events already stored are not changed. Metadata of 16,384 bytes or fewer is stored as before. The OpenAPI document does not change. See Track Event."
+by = [
+    "test:backend/tests/unit/schemas/test_event_metadata_size.py::test_the_limit_in_the_schema_is_the_documented_one",
+    "test:backend/tests/unit/schemas/test_event_metadata_size.py::test_metadata_over_the_limit_is_refused_naming_the_field",
+    "test:backend/tests/unit/schemas/test_event_metadata_size.py::test_a_value_over_both_limits_gets_the_depth_message",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_metadata_within_the_limit_is_stored_as_sent",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_metadata_over_the_limit_is_refused_and_nothing_is_stored",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_the_events_refusal_names_the_field_and_the_limit_never_the_value",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_events_checks_depth_before_size",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_batch_reports_the_oversize_entry_and_stores_the_others",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_an_oversize_retry_of_a_stored_event_id_is_refused_not_a_duplicate",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
