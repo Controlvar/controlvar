@@ -427,9 +427,20 @@ def test_every_registry_sentence_names_only_sdks_on_that_registry():
     assert not found, "\n".join(found)
 
 
+#: The SDKs the sitting put on npm, PyPI, Maven Central and NuGet, with the
+#: first two: what D's cross-page sentences name.
+NAMED_BY_D = (
+    "js",
+    "python",
+    "react",
+    "react-native",
+    "openfeature",
+    "openfeature-python",
+    "java",
+    "dotnet",
+)
 #: Pages whose registry sentences today name these SDKs, which the sweep must
-#: find (a pattern that stopped matching would pass every page). Only pages
-#: that stay as they are when Plan P's last part, D, changes the others.
+#: find (a pattern that stopped matching would pass every page).
 FOUND_TODAY = {
     ("docs/sdk/javascript.md", "js"),
     ("docs/sdk/python.md", "python"),
@@ -439,6 +450,29 @@ FOUND_TODAY = {
     ("docs/sdk-guide.md", "python"),
     ("frontend/src/components/homepage/HowItWorks.tsx", "js"),
     ("frontend/src/components/homepage/HowItWorks.tsx", "python"),
+    # Plan P's D: each SDK page, and the pages that list them.
+    ("docs/sdk/react.md", "react"),
+    ("docs/sdk/react-native.md", "react-native"),
+    ("docs/sdk/openfeature.md", "openfeature"),
+    ("docs/sdk/openfeature.md", "openfeature-python"),
+    ("docs/sdk/dotnet.md", "dotnet"),
+    ("docs/sdk/java.md", "java"),
+    ("sdk/java/README.md", "java"),
+    ("docs/sdk-guide.md", "java"),
+    *(
+        (page, sdk)
+        for page in (
+            "docs/getting-started/faq.md",
+            "docs/getting-started/limitations.md",
+            "frontend/src/pages/docs/index.tsx",
+            "frontend/src/components/homepage/SdkChips.tsx",
+        )
+        for sdk in NAMED_BY_D
+    ),
+    *(
+        ("demo/DEMO_GUIDE.md", sdk)
+        for sdk in ("js", "python", "react", "react-native", "java", "dotnet")
+    ),
 }
 
 
@@ -452,9 +486,9 @@ def test_the_sweep_finds_the_sentences_it_exists_for():
     assert FOUND_TODAY <= found, sorted(FOUND_TODAY - found)
 
 
-#: The limitations page's registry row, as it reads today and as Plan P's D
-#: words it.
-LIMITATIONS_TODAY = (
+#: The limitations page's registry row, as it read before Plan P's D and as
+#: the plan words it.
+LIMITATIONS_BEFORE_D = (
     "| Every SDK on a package registry | The JavaScript SDK is on npm and the"
     " Python SDK is on PyPI. The Go SDK installs by module path. |"
 )
@@ -476,7 +510,7 @@ PLAN_P = (
 
 #: (page, sentence, the SDKs a claim in it names). Each form the sweep reads.
 READ = (
-    ("docs/x.md", LIMITATIONS_TODAY, {"js", "python"}),
+    ("docs/x.md", LIMITATIONS_BEFORE_D, {"js", "python"}),
     (
         "docs/x.md",
         "The JavaScript SDK is on npm (`npm install @controlvar/js-sdk`, 0.2.0, beta)"
@@ -629,28 +663,29 @@ def test_a_sentence_that_puts_no_sdk_on_a_registry_is_not_read_as_one(page, sent
     assert [c for c in registry_claims(page, sentence) if c.sdks or c.unresolved] == []
 
 
-#: (sentence, what the sweep says): each claim it refuses while ON_REGISTRY
-#: is js and python, as it is until Plan P's packages are published.
+#: (sentence, what the sweep says): each claim it refuses with ON_REGISTRY as
+#: it is, after the SDK sitting published Plan P's packages.
 REFUSED = (
     ("The JavaScript and Edge SDKs are on npm.", "sdk/edge is not in ON_REGISTRY"),
-    ("The React SDK is on npm.", "sdk/react is not in ON_REGISTRY"),
+    ("The Edge SDK is on npm.", "sdk/edge is not in ON_REGISTRY"),
     (
-        "The `@controlvar/react-native-sdk` package is on [npm](https://npmjs.com).",
-        "sdk/react-native is not in ON_REGISTRY",
+        "The `@controlvar/edge-sdk` package is on [npm](https://npmjs.com).",
+        "sdk/edge is not in ON_REGISTRY",
     ),
-    ("The Java SDK is on Maven Central.", "sdk/java is not in ON_REGISTRY"),
+    ("The Android SDK is on Maven Central.", "sdk/android is not in ON_REGISTRY"),
     (
-        "`@controlvar/react-native-sdk` is published to the npm registry.",
-        "sdk/react-native is not in ON_REGISTRY",
+        "`@controlvar/edge-sdk` is published to the npm registry.",
+        "sdk/edge is not in ON_REGISTRY",
     ),
     (
-        "The .NET SDK is available in the NuGet gallery.",
-        "sdk/dotnet is not in ON_REGISTRY",
+        "The iOS SDK is available in the CocoaPods trunk.",
+        "sdk/ios is not in ON_REGISTRY",
     ),
-    ("The .NET SDK is on NuGet.", "sdk/dotnet is not in ON_REGISTRY"),
+    ("The Flutter SDK is on pub.dev.", "sdk/flutter is not in ON_REGISTRY"),
+    ("The .NET SDK is on npm.", "sdk/dotnet on npm; it is released to nuget"),
     (
-        "`pip install controlvar-openfeature` works: `controlvar-openfeature` is on PyPI.",
-        "sdk/openfeature-python is not in ON_REGISTRY",
+        "`pip install controlvar-openfeature` works: `controlvar-openfeature` is on npm.",
+        "puts controlvar-openfeature on npm, where no package of ours has that name",
     ),
     ("The Ruby SDK is on RubyGems.", "sdk/ruby is not in ON_REGISTRY"),
     ("The Go SDK is on npm.", "sdk/go is not in ON_REGISTRY"),
@@ -678,20 +713,36 @@ def test_a_claim_about_an_sdk_not_on_that_registry_is_refused(sentence, expected
 
 @pytest.mark.parametrize(
     "row, on_registry",
-    [(LIMITATIONS_TODAY, ()), (LIMITATIONS_D, PLAN_P)],
-    ids=["today", "D"],
+    [(LIMITATIONS_BEFORE_D, ()), (LIMITATIONS_D, PLAN_P)],
+    ids=["before D", "D"],
 )
 def test_an_sdk_added_to_the_limitations_npm_list_is_refused(
     row, on_registry, monkeypatch
 ):
     """Plan P's C10 plant: a name added to the limitations page's npm
-    sentence, as the row reads today and as D words it (with D's SDKs in
-    ON_REGISTRY)."""
+    sentence, as the row read before D and as the plan words it (with D's
+    SDKs in ON_REGISTRY)."""
     monkeypatch.setitem(globals(), "ON_REGISTRY", (*ON_REGISTRY, *on_registry))
     page = "docs/getting-started/limitations.md"
     planted = row.replace("The JavaScript", "The Edge, JavaScript", 1)
     assert planted != row
     assert problems(page, row) == []
+    assert [p for p in problems(page, planted) if "sdk/edge is not in ON_REGISTRY" in p]
+
+
+def test_an_sdk_added_to_the_limitations_pages_own_row_is_refused():
+    """The C10 plant on the row as the page reads now, with ON_REGISTRY as
+    it is."""
+    page = "docs/getting-started/limitations.md"
+    rows = [
+        line
+        for line in read(page).splitlines()
+        if line.startswith("| Every SDK on a package registry |")
+    ]
+    assert len(rows) == 1, rows
+    planted = rows[0].replace("The JavaScript", "The Edge, JavaScript", 1)
+    assert planted != rows[0]
+    assert problems(page, rows[0]) == []
     assert [p for p in problems(page, planted) if "sdk/edge is not in ON_REGISTRY" in p]
 
 
@@ -701,19 +752,22 @@ def test_an_sdk_added_to_the_limitations_npm_list_is_refused(
 def test_a_registry_sentence_planted_on_a_real_page_is_refused(page):
     """The page itself is clean, and a sentence added to it is read."""
     assert problems(page, read(page)) == []
-    planted = read(page) + "\n\nThe React SDK is on npm.\n"
-    assert [p for p in problems(page, planted) if "sdk/react " in p]
+    planted = read(page) + "\n\nThe Edge SDK is on npm.\n"
+    assert [p for p in problems(page, planted) if "sdk/edge " in p]
 
 
-@pytest.mark.parametrize("sdk", PLAN_P)
+@pytest.mark.parametrize("sdk", (*PLAN_P, "mcp"))
 def test_once_an_sdk_is_on_the_registry_a_page_may_say_so(sdk, monkeypatch):
-    """What D does: add the SDK to ON_REGISTRY, and the sentence passes."""
+    """What D does: add the SDK to ON_REGISTRY, and the sentence passes; out
+    of it, the sentence is refused."""
     registry = _check_sdk_version().ECOSYSTEMS[sdk]
     name = sorted(name for _, name in package_identities(sdk))[0]
     words = {"npm": "npm", "pypi": "PyPI", "maven": "Maven Central", "nuget": "NuGet"}
     sentence = f"The `{name}` package is on {words[registry]}."
+    without = tuple(other for other in ON_REGISTRY if other != sdk)
+    monkeypatch.setitem(globals(), "ON_REGISTRY", without)
     assert problems("docs/x.md", sentence)
-    monkeypatch.setitem(globals(), "ON_REGISTRY", (*ON_REGISTRY, sdk))
+    monkeypatch.setitem(globals(), "ON_REGISTRY", (*without, sdk))
     assert problems("docs/x.md", sentence) == []
 
 
@@ -734,3 +788,36 @@ def test_the_sweep_reads_the_pages_that_say_what_is_on_a_registry():
     assert not [p for p in read_pages if p.endswith("CHANGELOG.md")]
     frontend = [p for p in read_pages if p.startswith(FRONTEND_ROOTS)]
     assert frontend and not [p for p in frontend if NOT_A_PAGE.search(p)]
+
+
+# ---------------------------------------------------------------------------
+# The homepage's beta chips
+# ---------------------------------------------------------------------------
+
+CHIPS = "frontend/src/components/homepage/SdkChips.tsx"
+#: The SDK directories the homepage names (``SDKS`` in content/sdks.ts).
+HOMEPAGE_SDKS = "frontend/src/content/sdks.ts"
+#: An SDK whose release is its tag, not a registry upload (``tag-only`` in
+#: ECOSYSTEMS): Go, whose v0.1.0 the Go proxy serves since the sitting.
+RELEASED_BY_TAG = ("go",)
+
+
+def _quoted_keys(source: str, start: str) -> Set[str]:
+    """The quoted names in the literal that follows *start* in *source*."""
+    at = source.index(start) + len(start)
+    body = source[at : source.index("}" if start.endswith("{") else "]", at)]
+    return set(re.findall(r"""^\s{0,8}['"]?([a-z][a-z-]{0,40})['"]?[:,]""", body, re.M))
+
+
+def test_the_homepages_beta_chips_are_the_sdks_with_a_release():
+    """SdkChips.tsx marks an SDK beta, and its sentence says those have a
+    release: each one the homepage names that is in ON_REGISTRY, and Go."""
+    beta = _quoted_keys(read(CHIPS), "const BETA: ReadonlySet<string> = new Set([")
+    named = _quoted_keys(
+        read(HOMEPAGE_SDKS), "export const SDKS: Readonly<Record<string, string>> = {"
+    )
+    assert {"js", "react-native", "go"} <= named, named
+    assert all(
+        _check_sdk_version().ECOSYSTEMS[s] == "tag-only" for s in RELEASED_BY_TAG
+    )
+    assert beta == (set(ON_REGISTRY) & named) | set(RELEASED_BY_TAG)

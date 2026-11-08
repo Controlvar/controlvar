@@ -17,7 +17,7 @@ The contract, in this order:
 
 1. **The bearer path, exactly as before.** When the dev-auth bypass is active,
    when the request carries a bearer token, or when it carries no
-   ``X-API-Key``, the answer is ``get_current_active_user(get_current_user())``
+   ``X-API-Key``, the answer is ``require_active_user(get_current_user())``
    with today's answers (401, or 400 "Inactive user"). The key is not read. A
    request with a bearer token is judged on the token alone, even when the
    token is invalid and the key is valid. ``Authorization: Bearer `` with an
@@ -34,10 +34,12 @@ The contract, in this order:
 4. **The owner is returned.** The route's own role checks then run unchanged;
    the scope itself carries no role rule.
 
-``get_current_user`` and ``get_current_active_user`` are not changed. Tests
-that override them with ``app.dependency_overrides`` must also override
-:func:`get_current_reader`: FastAPI keys an override by the callable, and this
-function calls those two as plain functions.
+Tests that override ``get_current_user`` or ``get_current_active_user`` with
+``app.dependency_overrides`` must also override :func:`get_current_reader`:
+FastAPI keys an override by the callable, and this function calls
+``get_current_user`` as a plain function and makes the active check with
+``deps.require_active_user`` (``get_current_active_user`` is ``async``, so it
+cannot be called here).
 """
 
 from typing import Optional
@@ -47,7 +49,7 @@ from fastapi.security import APIKeyHeader
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
-from backend.app.api.deps import get_api_key, get_current_active_user, get_current_user
+from backend.app.api.deps import get_api_key, get_current_user, require_active_user
 from backend.app.core.api_key_scopes import MCP_READ_SCOPE, has_scope
 from backend.app.core.security import hash_api_key, oauth2_scheme
 from backend.app.models.api_key import APIKey
@@ -82,7 +84,7 @@ def get_current_reader(
 ) -> User:
     """The signed-in user, or the owner of a presented ``mcp:read`` key."""
     if token or not api_key_header or deps.dev_auth_bypass_active():
-        return get_current_active_user(get_current_user(token=token, db=db))
+        return require_active_user(get_current_user(token=token, db=db))
 
     owner = get_api_key(db=db, api_key_header=api_key_header)
     api_key = (

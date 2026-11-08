@@ -93,7 +93,7 @@ text = "Compare GPT-4o with Claude 3.5 Sonnet (steps 3–5 need provider API key
 by = ["mechanism:docs-hub"]
 
 [[unit]]
-text = "Client libraries for web, mobile and server. The JavaScript SDK is on npm and the Python SDK is on PyPI."
+text = "Client libraries for web, mobile and server. The JavaScript, React, React Native, Python, Java and .NET SDKs and the OpenFeature providers are on npm, PyPI, Maven Central or NuGet."
 by = ["mechanism:docs-hub"]
 
 [[unit]]

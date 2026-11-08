@@ -32,18 +32,6 @@ network unencrypted. If your instance runs on a private network you trust and
 has no HTTPS, add `CONTROLVAR_ALLOW_INSECURE_HTTP=1` to the server's `env`; the
 server then prints a warning each time it starts.
 
-## Build the server
-
-**Not yet published.** `@controlvar/mcp-server` is not on npm, so build it from
-a clone of this repository:
-
-```{.bash skip reason="registry: the package is not on npm yet; npm ci installs its dependencies"}
-git clone https://github.com/Controlvar/controlvar.git
-cd controlvar/sdk/mcp
-npm ci
-npm run build
-```
-
 ## Create an API key
 
 The server needs an API key that carries the `mcp:read` scope. It acts as the
@@ -83,13 +71,14 @@ is your instance's address and `CONTROLVAR_API_KEY` is the key.
 
 ### Claude Code
 
-Run this in the `sdk/mcp` directory you built, with the key in `$KEY`:
+Run this in the project directory where you want the server, with the key in
+`$KEY`:
 
 ```{.bash skip reason="toolchain: needs the Claude Code CLI and the key from the step above"}
 claude mcp add controlvar \
   -e CONTROLVAR_API_URL=http://localhost:8000 \
   -e CONTROLVAR_API_KEY="$KEY" \
-  -- node "$PWD/dist/index.js"
+  -- npx -y @controlvar/mcp-server@0.1.0
 ```
 
 The shell expands `$KEY`, so your shell history keeps `$KEY`, but Claude Code
@@ -106,8 +95,8 @@ Desktop fully and open it again.
 {
   "mcpServers": {
     "controlvar": {
-      "command": "node",
-      "args": ["/path/to/controlvar/sdk/mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "@controlvar/mcp-server@0.1.0"],
       "env": {
         "CONTROLVAR_API_URL": "http://localhost:8000",
         "CONTROLVAR_API_KEY": "paste the key here"

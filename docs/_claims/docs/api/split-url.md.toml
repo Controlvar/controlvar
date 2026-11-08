@@ -1244,6 +1244,13 @@ by = [
 ]
 
 [[unit]]
+text = "A clone copies split_url_config and starts after the same checks."
+by = [
+    "test:backend/tests/integration/api/test_clone_split_url_experiment.py::test_a_clone_of_a_split_url_draft_carries_its_config_and_starts",
+    "test:backend/tests/integration/api/test_clone_split_url_experiment.py::test_while_the_clone_is_active_the_source_does_not_start",
+]
+
+[[unit]]
 text = "Error Responses"
 by = ["exempt:baseline"]
 

@@ -14,6 +14,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.v1.endpoints.users import (
     OWN_DEACTIVATION_REFUSED,
     OWN_ROLE_REFUSED,
@@ -44,7 +45,7 @@ from backend.app.services.audit_service import (
     role_value,
 )
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 
 #: The columns ``search`` matches, named one by one. Never build this list from

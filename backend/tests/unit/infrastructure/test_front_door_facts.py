@@ -267,8 +267,9 @@ def test_sdk_mcp_is_the_mcp_server_and_not_an_sdk():
     assert package["name"] == "@controlvar/mcp-server"
     assert package["license"] == "MIT"
     assert "mcp" not in _live_contract_sdks()
-    # The README and the SDK guide say it is not yet published. Publishing it
-    # puts it in PUBLISHED, and this fails until both sentences say so.
+    # Its README is a packaged one (I_README in scripts/check_packaged_readme.py),
+    # which quotes no version and no registry install, so it is not one of the
+    # STRICT READMEs in PUBLISHED.
     assert "mcp" not in PUBLISHED
     tools = json.loads(_text("sdk/mcp/tools.json"))
     # It reads flags, experiments and results; the one tool that is not
@@ -297,9 +298,20 @@ def test_the_sdk_package_names():
     assert (
         json.loads(_text("sdk/react/package.json"))["name"] == "@controlvar/react-sdk"
     )
+    assert (
+        json.loads(_text("sdk/react-native/package.json"))["name"]
+        == "@controlvar/react-native-sdk"
+    )
+    openfeature = json.loads(_text("sdk/openfeature/package.json"))
+    assert openfeature["name"] == "@controlvar/openfeature-provider"
+    assert "@openfeature/server-sdk" in openfeature["peerDependencies"]
     python = tomllib.loads(_text("sdk/python/pyproject.toml"))["project"]
     assert python["name"] == "controlvar"
     assert (ROOT / "sdk/python/controlvar/__init__.py").is_file()
+    provider = tomllib.loads(_text("sdk/openfeature-python/pyproject.toml"))
+    assert provider["project"]["name"] == "controlvar-openfeature"
+    csproj = _text("sdk/dotnet/src/Controlvar/Controlvar.csproj")
+    assert "<PackageId>Controlvar.SDK</PackageId>" in csproj
     pom = _text("sdk/java/core/pom.xml")
     assert "<groupId>com.controlvar</groupId>" in pom
     assert re.search(r"</parent>\s*<artifactId>controlvar-sdk</artifactId>", pom)

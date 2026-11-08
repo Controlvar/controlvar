@@ -14,6 +14,7 @@ from sqlalchemy.schema import CreateSchema
 
 from backend.app.core.config import settings
 from backend.app.core.database_config import get_schema_name
+from backend.app.db import request_sessions
 from backend.app.db.url import postgres_url
 from backend.app.models.base import Base
 
@@ -65,14 +66,21 @@ async def get_db() -> Generator:
     """
     Get a database session.
 
+    The session is registered as one of the request's sessions
+    (``backend.app.db.request_sessions``) until it is closed.
+
     Yields:
         Generator: A SQLAlchemy session
     """
     db = SessionLocal()
+    request_sessions.register(db)
     try:
         yield db
     finally:
-        db.close()
+        try:
+            db.close()
+        finally:
+            request_sessions.unregister(db)
 
 
 def init_db() -> None:

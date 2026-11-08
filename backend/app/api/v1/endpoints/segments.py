@@ -30,6 +30,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.context_limits import check_context
 from backend.app.core.permissions import Action, ResourceType, check_permission
 from backend.app.core.segment_preview_limits import preview_ruleset_violations
@@ -66,7 +67,7 @@ from backend.app.services.audit_service import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 #: The 409 ``detail`` for a stored segment whose rules fail validation. Fixed
 #: text: it never carries the stored rules.

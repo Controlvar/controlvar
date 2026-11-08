@@ -75,9 +75,11 @@ def test_the_pins_match_a_registry_that_holds_exactly_them():
 
 
 def test_an_unpinned_release_with_an_evaluator_fails():
-    found = _found(PINS, add=[("npm", "@controlvar/js-sdk", "0.3.0")])
+    # A version no release will carry: a real one stops being unpinned once
+    # published-sdks.json pins it, and this test would then fail for that reason.
+    found = _found(PINS, add=[("npm", "@controlvar/js-sdk", "9.9.9")])
     assert check.compare(found, PINS) == [
-        "@controlvar/js-sdk 0.3.0 (npm) ships a local evaluator (package/dist/local.js) "
+        "@controlvar/js-sdk 9.9.9 (npm) ships a local evaluator (package/dist/local.js) "
         "and is not in the gate: pin it in tests/sdk-contract/published-sdks.json"
     ]
 

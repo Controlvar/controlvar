@@ -26,8 +26,8 @@
 #   rollout decide who gets the on value"). The switch-on beat is the payoff.
 # * The card quotes docs/sdk/go.md's "Flag values" block, checked against the
 #   recorded release's docs (C10) and against this tree's
-#   (test_showcase_quoted_docs.py). Its note says what go.md says: the module
-#   has no tagged release, so `go get` takes the head of main. The default
+#   (test_showcase_quoted_docs.py). Its note says what go.md says: `go get`
+#   takes the module's latest release. The default
 #   line is held by sdk/go/value_test.go (NilReceiver,
 #   ServerWithoutFlagValues). No sentence names the JavaScript SDK.
 # * Gate 10 ("flag") reads the flag back through the API: one flag with this
@@ -182,8 +182,8 @@ scenes:
           - 'label, _ := client.EvaluateFlag(ctx, "checkout-button-label", user) // a string flag'
           - 'fmt.Println(label.StringValue("Buy now"))'
       note: >-
-        As the docs give it, for the flag made above. The Go SDK has no tagged
-        release yet: go get takes the head of the main branch.
+        As the docs give it, for the flag made above; go get installs the Go
+        SDK's latest release.
     beats:
       - cue: Your app reads the value, with a default.
         focus: {css: "#code"}

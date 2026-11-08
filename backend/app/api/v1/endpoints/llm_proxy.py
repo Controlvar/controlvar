@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.logger import unexpected_failure
 from backend.app.core.permissions import Action, ResourceType, check_permission
 from backend.app.models.llm_experiment import LLMEvaluation, LLMExperimentStatus
@@ -28,7 +29,7 @@ from backend.app.services.llm_analytics_service import LLMEvaluationAnalyticsSer
 from backend.app.services.llm_experiment_service import LLMExperimentService
 from backend.app.services.llm_proxy_service import GeminiError, LLMProxyService
 
-router = APIRouter(tags=["LLM Proxy"])
+router = APIRouter(route_class=OffLoopRoute, tags=["LLM Proxy"])
 logger = logging.getLogger(__name__)
 _experiment_service = LLMExperimentService()
 _proxy_service = LLMProxyService()
