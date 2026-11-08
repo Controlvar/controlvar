@@ -195,6 +195,7 @@ routes = [
   "/api/v1/users/me",
   "/api/v1/users/me/password",
   "/api/v1/users/{user_id}",
+  "/api/v1/utils/utils/sample-size",
   "/api/v1/warehouse/analysis/connectors",
   "/api/v1/warehouse/analysis/experiments/{experiment_id}/runs",
   "/api/v1/wizard/drafts",

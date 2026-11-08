@@ -164,10 +164,17 @@ def submit_evaluation(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions"
         )
 
+    # An id that is not a UUID is the judge route's 400, not a 500 (#959).
+    try:
+        evaluation_id = UUID(body.evaluation_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid evaluation_id format",
+        )
+
     evaluation = (
-        db.query(LLMEvaluation)
-        .filter(LLMEvaluation.id == UUID(body.evaluation_id))
-        .first()
+        db.query(LLMEvaluation).filter(LLMEvaluation.id == evaluation_id).first()
     )
     if evaluation is None:
         raise HTTPException(
@@ -181,11 +188,11 @@ def submit_evaluation(
 
     if body.human_rating is not None:
         evaluation = _analytics_service.submit_human_rating(
-            db, UUID(body.evaluation_id), body.human_rating
+            db, evaluation_id, body.human_rating
         )
     if body.business_metric_value is not None:
         evaluation = _analytics_service.submit_business_metric(
-            db, UUID(body.evaluation_id), body.business_metric_value
+            db, evaluation_id, body.business_metric_value
         )
 
     return _eval_to_response(evaluation)

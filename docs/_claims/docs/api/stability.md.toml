@@ -1025,3 +1025,39 @@ by = [
     "test:modules/backend/tests/unit/services/test_sso_service.py::TestSamlSsoUrlIsHttpsWhenSaved::test_the_test_environment_accepts_an_http_saml_url",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
+
+[[unit]]
+text = "GET /api/v1/ai/sample-size, POST /api/v1/utils/utils/sample-size | #958 | GET /api/v1/ai/sample-size answers 422 with fixed text, checked in this order: a baseline_rate, confidence or power that is NaN or outside 0 to 1 gets <param> must be a number from 0 to 1, with the parameter's name; an mde of 0 gets This baseline raised by this effect changes too little to estimate a sample size. Raise the baseline rate or the effect.; a treatment rate (baseline_rate + mde) above 1 gets This baseline raised by this effect reaches 100% or more. Lower the baseline rate or the effect.; and a treatment rate below 0, or a size or a day count that is not a finite number above 0, gets These values are too large or too small to calculate with. Use values nearer those of a real experiment. Most of these answered 500; these answered 200 with a size that is not one, and now answer 422: a treatment rate outside 0 to 1 (sizes such as -10, 7 and 0), a baseline_rate or confidence outside 0 to 1, and inputs whose size came to 0. POST /api/v1/utils/utils/sample-size answers 422 with the same out-of-range text, where it answered 500, when the users per variant per day come to 0, the day count is not finite, or daily_traffic or variant_count is too large for a floating-point number. Every other input answers as before, a baseline_rate of 0 or 1, a confidence of 0 and a treatment rate of exactly 0 or 1 included. The message does not repeat the value sent. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/unit/api/test_sample_size_inputs_answer_422.py::test_the_ai_sample_size_refuses_with_fixed_text",
+    "test:backend/tests/unit/api/test_sample_size_inputs_answer_422.py::test_ai_answers_that_worked_do_not_change",
+    "test:backend/tests/unit/api/test_sample_size_inputs_answer_422.py::test_the_largest_sizes_are_still_answered",
+    "test:backend/tests/unit/api/test_sample_size_inputs_answer_422.py::test_no_input_on_the_grid_answers_5xx_or_a_size_below_1",
+    "test:backend/tests/unit/api/test_sample_size_inputs_answer_422.py::test_the_utils_day_arithmetic_refuses_with_the_out_of_range_text",
+    "test:backend/tests/unit/api/test_sample_size_inputs_answer_422.py::test_utils_answers_that_worked_do_not_change",
+    "test:backend/tests/unit/api/test_sample_size_not_finite.py::test_answers_that_worked_do_not_change",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "GET/PUT/DELETE /api/v1/users/{user_id}, POST /api/v1/llm-experiments/{experiment_id}/evaluate | #959 | A {user_id} that is not a UUID, such as abc, answers 400 Invalid user ID format on PUT and DELETE for every caller and on a superuser's GET, where an id without a - answered 500; a caller who is not a superuser still gets 403 first on a GET of another account. me is such an id on PUT and DELETE, so DELETE /api/v1/users/me answers 400; GET /api/v1/users/me is its own operation and is unchanged. A UUID written without its dashes still names its account. An evaluation_id that is not a UUID answers 400 Invalid evaluation_id format, where it answered 500; the permission check still comes first. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_a_superuser_gets_400_for_an_id_that_is_not_a_uuid",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_a_viewer_gets_403_on_get_and_400_on_put_and_delete",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_me_is_an_id_that_is_not_a_uuid_on_put_and_delete",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_get_users_me_still_returns_the_callers_account",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_an_id_without_dashes_still_names_its_account",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_llm_evaluate_answers_400_for_an_evaluation_id_that_is_not_a_uuid",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_llm_evaluate_checks_permission_first_and_still_answers_404",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/rbac/users/{user_id}/grant (full profile) | #1002 | A grant for a user id that names no account answers 404 User not found, the answer of GET /api/v1/rbac/users/{user_id}/permissions, where it answered 500; nothing is written and no audit entry is made. The user is looked up after the admin check, so a caller who is not an admin still gets 403 first. The OpenAPI document does not change."
+by = [
+    "test:modules/backend/tests/integration/rbac/test_rbac_grant_unknown_user.py::test_a_grant_to_an_id_with_no_account_answers_404_and_writes_nothing",
+    "test:modules/backend/tests/integration/rbac/test_rbac_grant_unknown_user.py::test_a_grant_to_a_known_user_is_made_and_recorded",
+    "test:modules/backend/tests/integration/rbac/test_rbac_grant_unknown_user.py::test_a_viewer_is_refused_before_the_lookup",
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestEffectivePermissions::test_get_permissions_nonexistent_user_returns_404",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]

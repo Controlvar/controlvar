@@ -16,7 +16,11 @@ from typing import Any, Dict, List, Optional
 
 from backend.app.core.anthropic_compat import first_text
 from backend.app.core.config import settings
-from backend.app.services.power_calculator_service import PowerCalculatorService
+from backend.app.services.power_calculator_service import (
+    SAMPLE_SIZE_NOT_FINITE_MESSAGE,
+    TREATMENT_RATE_CEILING_MESSAGE,
+    PowerCalculatorService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +34,40 @@ CLAUDE_MAX_RETRIES = 1
 #: The sample-size estimate plans a control and one treatment: ``total_required``
 #: is twice ``required_per_variant``, and the daily traffic is split between them.
 SAMPLE_SIZE_VARIANTS = 2
+
+
+class SampleSizeInputError(ValueError):
+    """``estimate_sample_size`` cannot calculate with these inputs (#958).
+
+    ``str()`` is ``sample_size_input_problem``'s fixed text.
+    """
+
+
+class SampleSizeOutOfRangeError(ValueError):
+    """The treatment rate is below 0, or the size or the days are not a finite
+    number above 0 (#958); the route answers 422 with its out-of-range text."""
+
+
+def sample_size_input_problem(
+    baseline_rate: float, mde: float, confidence: float, power: float
+) -> Optional[str]:
+    """The fixed text ``GET /api/v1/ai/sample-size`` answers with a 422 for
+    inputs it cannot calculate with, or None (#958). It never repeats a value
+    sent. Checked in this order; NaN fails every comparison, so it is refused
+    too.
+    """
+    for name, value in (
+        ("baseline_rate", baseline_rate),
+        ("confidence", confidence),
+        ("power", power),
+    ):
+        if not 0 <= value <= 1:
+            return f"{name} must be a number from 0 to 1"
+    if mde == 0:
+        return SAMPLE_SIZE_NOT_FINITE_MESSAGE
+    if baseline_rate + mde > 1:
+        return TREATMENT_RATE_CEILING_MESSAGE
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -191,8 +229,22 @@ class AIDesignService:
 
         Returns:
             SampleSizeEstimate with per-variant and total counts.
+
+        Raises:
+            SampleSizeInputError: ``sample_size_input_problem`` names a
+                problem: ``baseline_rate``, ``confidence`` or ``power`` is NaN
+                or outside 0 to 1, ``mde`` is 0, or the treatment rate
+                ``baseline_rate + mde`` is above 1 (#958).
+            SampleSizeOutOfRangeError: the treatment rate is below 0, or the
+                size or the days are not a finite number above 0 (#958).
         """
         from scipy import stats
+
+        problem = sample_size_input_problem(baseline_rate, mde, confidence, power)
+        if problem is not None:
+            raise SampleSizeInputError(problem)
+        if baseline_rate + mde < 0:
+            raise SampleSizeOutOfRangeError()
 
         alpha = 1 - confidence
         z_alpha = stats.norm.ppf(1 - alpha / 2)
@@ -203,6 +255,11 @@ class AIDesignService:
         p_bar = (p1 + p2) / 2
 
         n = (z_alpha + z_beta) ** 2 * 2 * p_bar * (1 - p_bar) / (mde**2)
+        # Not a size: NaN (an mde of NaN), infinity (a confidence or power of
+        # 1, or an effect whose square underflows) and 0 (a confidence of 0
+        # with a power of 0.5).
+        if not (math.isfinite(n) and n > 0):
+            raise SampleSizeOutOfRangeError()
         n = math.ceil(n)
 
         days: Optional[int] = None
@@ -210,12 +267,16 @@ class AIDesignService:
             # Each variant receives only its share of the day's users, so the
             # days are the power calculator's runtime estimate, not
             # required_per_variant / daily_traffic (which counts one variant).
-            runtime = PowerCalculatorService().compute_runtime_estimate(
-                required_sample_size=n,
-                daily_traffic=daily_traffic,
-                traffic_allocation=1.0,
-                n_variants=SAMPLE_SIZE_VARIANTS,
-            )
+            try:
+                runtime = PowerCalculatorService().compute_runtime_estimate(
+                    required_sample_size=n,
+                    daily_traffic=daily_traffic,
+                    traffic_allocation=1.0,
+                    n_variants=SAMPLE_SIZE_VARIANTS,
+                )
+            except OverflowError:
+                # The days leave floating-point range (a size near its top).
+                raise SampleSizeOutOfRangeError()
             days = math.ceil(runtime.days_to_significance)
 
         return SampleSizeEstimate(

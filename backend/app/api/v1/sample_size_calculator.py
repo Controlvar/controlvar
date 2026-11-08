@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from backend.app.api import deps
 from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.v1.endpoints.power_calculator import OUT_OF_RANGE_MESSAGE
 from backend.app.models.user import User
 from backend.app.services.power_calculator_service import (
     SAMPLE_SIZE_NOT_FINITE_MESSAGE,
@@ -176,14 +177,34 @@ async def calculate_sample_size(
                 detail="Traffic allocation must be between 0 and 1",
             )
 
-        # Calculate daily experiment traffic
-        daily_experiment_traffic = daily_traffic * traffic_allocation
+        # The daily traffic per variant. A daily_traffic or variant_count too
+        # large for a float cannot be calculated with (#958).
+        try:
+            daily_variant_traffic = daily_traffic * traffic_allocation / variant_count
+        except OverflowError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=OUT_OF_RANGE_MESSAGE,
+            )
 
-        # Calculate daily traffic per variant
-        daily_variant_traffic = daily_experiment_traffic / variant_count
+        # As in GET /experiments/analysis/sample-size (#820): a traffic share
+        # so small that the users per variant per day come to 0 (5e-324 of
+        # one user), or a day count too large to be a finite number, answers
+        # the fixed out-of-range 422, not a 500 (#958).
+        if not daily_variant_traffic > 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=OUT_OF_RANGE_MESSAGE,
+            )
+        days = samples_per_variant / daily_variant_traffic
+        if not math.isfinite(days):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=OUT_OF_RANGE_MESSAGE,
+            )
 
         # Calculate days needed
-        days_needed = math.ceil(samples_per_variant / daily_variant_traffic)
+        days_needed = math.ceil(days)
 
         # Add estimates for different time periods
         estimated_duration_days = {

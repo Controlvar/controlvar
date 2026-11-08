@@ -973,6 +973,21 @@ def test_no_known_entry_cites_955():
     assert "955" not in " ".join(e["reason"] for e in data.get("known", []))
 
 
+@pytest.mark.regression
+def test_no_known_entry_cites_958_or_959():
+    """#958 and #959 are fixed: the two sample-size routes answer 422 for the
+    inputs they cannot calculate with, and an id that is not a UUID answers
+    400 on the user routes and LLM evaluate. An entry still citing either
+    would be a stale waiver hiding a new 500 on those routes."""
+    import tomllib
+
+    data = tomllib.loads(fuzz_check.KNOWN_5XX.read_text(encoding="utf-8"))
+    citing = [e for e in data.get("known", []) if e.get("issue") in (958, 959)]
+    assert citing == []
+    reasons = " ".join(e["reason"] for e in data.get("known", []))
+    assert "958" not in reasons and "959" not in reasons
+
+
 def test_the_sdk_prefixes_are_the_rate_limiters():
     from backend.app.middleware.rate_limiter import SDK_PATH_PREFIXES
 

@@ -43,14 +43,20 @@
 # because the bugs were fixed: both still answer 500 to the requests sent
 # before, and both issues stay open.
 #
-# The same for the superuser entry of POST /api/v1/rbac/users/{user_id}/grant
-# (#1002), removed by #891: the grant validation refuses the seed's bodies with
-# 422 before the insert, so the run no longer sends a request that answers 500.
-# The 500 for a valid resource and a user id with no account remains, and #1002
-# stays open.
+# The superuser entry of POST /api/v1/rbac/users/{user_id}/grant (#1002) was
+# removed by #891: the grant validation refuses the seed's bodies with 422
+# before the insert, so the run stopped sending a request that answered 500.
+# The 500 that remained, for a valid resource and a user id with no account,
+# is fixed too: the user is looked up before the insert, and such a grant
+# answers 404 "User not found".
 # GET /api/v1/metrics/errors (#956) is fixed, as GET /api/v1/metrics/summary
 # was (#1572): a start_date or end_date with a UTC offset of 16 hours or more
 # answers 422, so both its entries (superuser and viewer) were removed.
+# #958 and #959 are fixed, so their entries were removed from both passes:
+# the two sample-size routes answer 422 for the inputs they cannot calculate
+# with, and GET, PUT and DELETE /api/v1/users/{user_id} and
+# POST /api/v1/llm-experiments/{experiment_id}/evaluate answer 400 for an id
+# that is not a UUID.
 
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
@@ -70,31 +76,10 @@ reason = "A skip or page beyond the database's offset range reaches the query."
 
 [[known]]
 pass = "superuser"
-operation = "DELETE /api/v1/users/{user_id}"
-status = 500
-issue = 959
-reason = "A path id that is not a UUID reaches the database query."
-
-[[known]]
-pass = "superuser"
-operation = "PUT /api/v1/users/{user_id}"
-status = 500
-issue = 959
-reason = "A path id that is not a UUID reaches the database query."
-
-[[known]]
-pass = "superuser"
 operation = "GET /api/v1/audit-logs/export"
 status = 500
 issue = 956
 reason = "A date-time with a UTC offset beyond 15:59 reaches the database."
-
-[[known]]
-pass = "superuser"
-operation = "POST /api/v1/utils/utils/sample-size"
-status = 500
-issue = 958
-reason = "A zero or near-zero input reaches the sample-size arithmetic."
 
 [[known]]
 pass = "superuser"
@@ -126,13 +111,6 @@ reason = "A field of the wrong type reaches the handler before validation."
 
 [[known]]
 pass = "superuser"
-operation = "GET /api/v1/ai/sample-size"
-status = 500
-issue = 958
-reason = "A zero or near-zero input reaches the sample-size arithmetic."
-
-[[known]]
-pass = "superuser"
 operation = "GET /api/v1/compliance/export"
 status = 500
 issue = 956
@@ -144,13 +122,6 @@ operation = "POST /api/v1/results/{experiment_id}/post-stratification"
 status = 501
 issue = 963
 reason = "Published, and always answers 501: not implemented."
-
-[[known]]
-pass = "superuser"
-operation = "POST /api/v1/llm-experiments/{experiment_id}/evaluate"
-status = 500
-issue = 959
-reason = "A path id that is not a UUID reaches the database query."
 
 [[known]]
 pass = "superuser"
@@ -219,24 +190,10 @@ reason = "A field of the wrong type reaches the handler before validation."
 
 [[known]]
 pass = "viewer"
-operation = "DELETE /api/v1/users/{user_id}"
-status = 500
-issue = 959
-reason = "A path id that is not a UUID reaches the database query."
-
-[[known]]
-pass = "viewer"
 operation = "GET /api/v1/audit-logs/"
 status = 500
 issue = 1001
 reason = "A skip or page beyond the database's offset range reaches the query."
-
-[[known]]
-pass = "viewer"
-operation = "POST /api/v1/utils/utils/sample-size"
-status = 500
-issue = 958
-reason = "A zero or near-zero input reaches the sample-size arithmetic."
 
 [[known]]
 pass = "viewer"
@@ -265,13 +222,6 @@ operation = "PUT /api/v1/holdout/{holdout_id}"
 status = 500
 issue = 957
 reason = "A field of the wrong type reaches the handler before validation."
-
-[[known]]
-pass = "viewer"
-operation = "GET /api/v1/ai/sample-size"
-status = 500
-issue = 958
-reason = "A zero or near-zero input reaches the sample-size arithmetic."
 
 [[known]]
 pass = "viewer"
