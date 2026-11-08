@@ -1,7 +1,16 @@
 import React, { FormEvent, useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
-import { useAuth } from '@/contexts/AuthContext';
+import { INACTIVE_ACCOUNT_MESSAGE, useAuth } from '@/contexts/AuthContext';
+import { useAuthConfig } from '@/contexts/AuthConfigContext';
 import { ApiError, safeNextPath, signInTimeoutMessage, unreachableMessage } from '@/services/api';
+import type { AuthConfig } from '@/services/authConfig';
+import {
+  SignInNotice,
+  beginHostedUiSignIn,
+  canStartHostedUiSignIn,
+  safeAfterSignInPath,
+  takeSignInNotice,
+} from '@/services/hostedUi';
 import { PageTitle } from '@/components/PageTitle';
 import { Wordmark } from '@/components/Wordmark';
 // The SSO button and `/login?sso_error=` copy: the SSO module's; a core build
@@ -63,7 +72,193 @@ function firstQueryValue(value: string | string[] | undefined): string | undefin
   return Array.isArray(value) ? value[0] : value;
 }
 
+/**
+ * `/login`. Which sign-in it offers comes from `GET /api/v1/auth/config`
+ * (#708): the Cognito Hosted UI's one button when the API answers with a
+ * well-formed Cognito configuration, and otherwise -- the local provider, or
+ * any answer that is not one (an older API's 404, no answer, a page that is
+ * not JSON) -- the email and password form. Until the answer arrives the page
+ * says it is loading and shows neither.
+ */
 export default function LoginPage() {
+  const { loading, config } = useAuthConfig();
+  if (loading) return <SignInLoading />;
+  if (config.kind === 'local') return <LocalSignIn />;
+  return <HostedUiSignIn config={config} />;
+}
+
+function SignInLoading() {
+  return (
+    <>
+      <PageTitle title="Sign in" />
+      <main className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-12">
+        <p role="status" data-testid="login-loading" className="text-sm text-slate-600">
+          Loading…
+        </p>
+      </main>
+    </>
+  );
+}
+
+/** The sign-in page's sentence for each notice; never text from a URL. */
+export function signInNoticeMessage(notice: SignInNotice): string {
+  switch (notice.code) {
+    case 'signed_out':
+      return SIGNED_OUT_MESSAGE;
+    case 'cancelled':
+      return SIGN_IN_CANCELLED_MESSAGE;
+    case 'expired':
+      return SIGN_IN_EXPIRED_MESSAGE;
+    case 'refused':
+      return SIGN_IN_REFUSED_MESSAGE;
+    case 'inactive':
+      return INACTIVE_ACCOUNT_MESSAGE;
+    case 'rate_limited':
+      return RATE_LIMITED_MESSAGE;
+    case 'unreachable':
+      return unreachableMessage();
+    case 'timed_out':
+      return signInTimeoutMessage();
+    case 'server_error':
+      return notice.status
+        ? `Sign-in did not finish: the server answered with an error (HTTP ${notice.status}). Try again in a moment.`
+        : 'Sign-in did not finish: the server answered with an error. Try again in a moment.';
+    default:
+      return SIGN_IN_EXPIRED_MESSAGE;
+  }
+}
+
+export const SIGNED_OUT_MESSAGE = 'You have signed out.';
+export const SIGN_IN_CANCELLED_MESSAGE = 'Sign-in was cancelled. You can try again.';
+export const SIGN_IN_EXPIRED_MESSAGE = 'That sign-in link has expired or was already used. Start again.';
+export const SIGN_IN_REFUSED_MESSAGE = 'Your account could not be signed in. Ask an administrator.';
+export const SIGN_IN_NOT_SET_UP_MESSAGE =
+  'Sign-in is not set up correctly on this server. Ask an administrator.';
+export const SIGN_IN_NEEDS_HTTPS_MESSAGE =
+  'Sign-in needs a secure connection. Open this page over https and try again.';
+export const SIGN_IN_CANNOT_START_MESSAGE =
+  'Sign-in could not start in this browser. Allow this site to store data for the session and try again.';
+
+type CognitoSignInConfig = Exclude<AuthConfig, { kind: 'local' }>;
+
+/** `/login` under Cognito: one button to the Hosted UI, and no form. */
+function HostedUiSignIn({ config }: { config: CognitoSignInConfig }) {
+  const router = useRouter();
+  const { status, sessionError } = useAuth();
+  const [notice, setNotice] = useState<SignInNotice | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [redirecting, setRedirecting] = useState(false);
+  const messageRef = useRef<HTMLDivElement>(null);
+
+  // What the last redirect left for this page: read once, then gone.
+  useEffect(() => {
+    const taken = takeSignInNotice();
+    if (taken) setNotice(taken);
+  }, []);
+
+  const nextPath = safeAfterSignInPath(firstQueryValue(router.query.next) ?? notice?.next);
+
+  useEffect(() => {
+    if (status === 'authenticated' && !redirecting && router.isReady) {
+      void router.replace(nextPath);
+    }
+  }, [status, redirecting, router, nextPath]);
+
+  const signedOut = notice?.code === 'signed_out';
+  const alertText =
+    error ?? (notice && !signedOut ? signInNoticeMessage(notice) : null) ?? sessionError ?? null;
+
+  useEffect(() => {
+    if (alertText) messageRef.current?.focus();
+  }, [alertText]);
+
+  const start = () => {
+    if (redirecting || config.kind !== 'cognito') return;
+    if (!canStartHostedUiSignIn()) {
+      setError(SIGN_IN_NEEDS_HTTPS_MESSAGE);
+      return;
+    }
+    setError(null);
+    setRedirecting(true);
+    beginHostedUiSignIn(config, nextPath).catch(() => {
+      setRedirecting(false);
+      setError(SIGN_IN_CANNOT_START_MESSAGE);
+    });
+  };
+
+  return (
+    <>
+      <PageTitle title="Sign in" />
+      <main className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-12">
+        <div className="w-full max-w-sm">
+          <div className="flex justify-center mb-8">
+            <Wordmark href={null} />
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 sm:p-8">
+            <h1 className="text-xl font-semibold text-slate-900 mb-1">Sign in</h1>
+
+            {config.kind === 'cognito-unconfigured' ? (
+              <div
+                ref={messageRef}
+                tabIndex={-1}
+                role="alert"
+                data-testid="login-error"
+                className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+              >
+                {SIGN_IN_NOT_SET_UP_MESSAGE}
+                {config.missing.length > 0 && (
+                  <span className="mt-1 block" data-testid="login-missing-settings">
+                    Not set: {config.missing.join(', ')}.
+                  </span>
+                )}
+              </div>
+            ) : (
+              <>
+                <p className="text-sm text-slate-500 mb-6">
+                  You will sign in on your organisation&apos;s Cognito page.
+                </p>
+                {signedOut && !alertText && (
+                  <div
+                    role="status"
+                    data-testid="login-signed-out"
+                    className="mb-4 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                  >
+                    {SIGNED_OUT_MESSAGE}
+                  </div>
+                )}
+                {alertText && (
+                  <div
+                    ref={messageRef}
+                    tabIndex={-1}
+                    role="alert"
+                    data-testid="login-error"
+                    className="login-error mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+                  >
+                    {alertText}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  data-testid="hosted-ui-sign-in"
+                  onClick={start}
+                  aria-disabled={redirecting ? true : undefined}
+                  aria-busy={redirecting ? true : undefined}
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 aria-disabled:opacity-60 aria-disabled:cursor-not-allowed transition-colors"
+                >
+                  {redirecting ? 'Redirecting…' : alertText ? 'Try again' : 'Sign in'}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </main>
+    </>
+  );
+}
+
+/** `/login` under the local provider: the email and password form. */
+function LocalSignIn() {
   const router = useRouter();
   const { login, status, sessionError } = useAuth();
   const emailId = useId();
