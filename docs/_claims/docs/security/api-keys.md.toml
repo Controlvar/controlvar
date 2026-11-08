@@ -693,6 +693,21 @@ text = "Because no other scope limits a key, a separate key per service is what 
 by = ["test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these"]
 
 [[unit]]
+text = "Remember that a browser key answers for any user id"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A key used in a browser or a mobile app is visible to the people who use the app, and it answers for whichever user id it is sent: what that id is served, whether it is in a segment, and which experiments it is assigned to."
+by = [
+    "test:backend/tests/integration/api/test_plain_key_answers_for_any_user_id.py::test_a_flag_answers_for_any_user_id_and_an_id_list_decides_by_that_id",
+    "test:backend/tests/integration/api/test_plain_key_answers_for_any_user_id.py::test_assign_and_the_assignments_list_answer_for_any_user_id",
+]
+
+[[unit]]
+text = "Where that matters, use user ids that do not identify a person (not email addresses), in ID lists too, and read assignments from your server."
+by = ["exempt:advice"]
+
+[[unit]]
 text = "Remember that a key acts as its owner"
 by = ["test:backend/tests/unit/api/test_route_surface_rules.py::test_the_ruleset_scope_and_its_owner_rule"]
 
