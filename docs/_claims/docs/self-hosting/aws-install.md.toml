@@ -70,7 +70,7 @@ by = ["exempt:instruction"]
 
 [[unit]]
 text = "The installer is in releases from v0.37.0 on."
-by = ["untested:T"]
+by = ["test:backend/tests/installer_sweeps/test_install_run.py::test_help_says_beta_and_lists_only_the_options"]
 
 [[unit]]
 text = "It installs the core profile in us-west-2, in the shape staging has in What Gets Deployed, and the platform answers at a name you choose in your own Route 53 zone."
