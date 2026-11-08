@@ -97,7 +97,7 @@ def test_the_header_and_the_two_pages_print_the_same_command():
     demo = [
         line.lstrip("#").strip()
         for line in header.split("\n")
-        if "--profile demo" in line
+        if STARTS_DEMO.search(line)
     ]
     assert demo == [COMMAND], demo
     for page in (

@@ -79,8 +79,8 @@ up: ## Run the core stack in Docker (API, dashboard, Postgres, Redis)
 	$(COMPOSE) up -d --build --wait
 
 .PHONY: down
-down: ## Stop the stack and drop its volumes
-	$(COMPOSE) down -v --remove-orphans
+down: ## Stop the stack, demo, tools and aws profiles included, and drop its volumes
+	$(COMPOSE) --profile demo --profile tools --profile aws down -v --remove-orphans
 
 .PHONY: logs
 logs: ## Follow the API and dashboard logs
