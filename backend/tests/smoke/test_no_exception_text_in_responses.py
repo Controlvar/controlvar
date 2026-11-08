@@ -645,10 +645,7 @@ ALLOWED: Dict[Tuple[str, str, str], Tuple[int, str]] = {
         SERVICE_VALUEERROR,
     ),
     (f"{E}/segments.py", "update_segment", "ValueError"): (1, SERVICE_VALUEERROR),
-    (f"{E}/tracking.py", "assign_user_to_experiment", "ValueError"): (
-        1,
-        SERVICE_VALUEERROR,
-    ),
+    (f"{E}/tracking.py", "assign_one", "ValueError"): (1, SERVICE_VALUEERROR),
     (f"{E}/tracking.py", "link_anonymous_id", "AliasConflict"): (1, ALIAS_CONFLICT),
     (f"{E}/tracking.py", "track_event", "ValidationError"): (1, FIELD_NAMES),
     (f"{E}/tracking.py", "track_event", "ValueError"): (1, SERVICE_VALUEERROR),

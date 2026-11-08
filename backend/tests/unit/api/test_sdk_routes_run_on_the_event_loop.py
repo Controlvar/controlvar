@@ -1,9 +1,14 @@
-"""The single-assignment, event-tracking and flag-evaluation routes are
-``async def`` handlers that take the synchronous database session, so their
-database work runs on the API process's event loop, one request at a time.
+"""The event-tracking and flag-evaluation routes are ``async def`` handlers
+that take the synchronous database session, so their database work runs on
+the API process's event loop, one request at a time.
 
 Routes are read through ``effective_route_contexts`` (FastAPI keeps
 ``include_router`` lazy), as in ``test_sdk_scoped_routes.py``.
+
+A route listed here cannot also be one that
+``test_api_key_routes_under_overload.py`` holds to no checkout on the event
+loop's thread: when a route's database work moves off the loop, it moves from
+this list to that one.
 """
 
 import inspect
@@ -16,7 +21,6 @@ from backend.app.main import app
 pytestmark = [pytest.mark.unit]
 
 ROUTES = {
-    ("POST", "/api/v1/tracking/assign"),
     ("POST", "/api/v1/tracking/track"),
     ("GET", "/api/v1/feature-flags/evaluate/{flag_key}"),
     ("POST", "/api/v1/feature-flags/evaluate/{flag_key}"),
@@ -45,3 +49,15 @@ def test_each_route_is_a_coroutine_that_takes_the_synchronous_session():
     for key, ctx in found.items():
         assert inspect.iscoroutinefunction(ctx.dependant.call), key
         assert deps.get_db in set(_dependency_calls(ctx.dependant)), key
+
+
+def test_no_route_here_is_held_off_the_event_loop_by_the_burst_test():
+    from backend.tests.integration.api import test_api_key_routes_under_overload
+
+    burst = {param.values[0] for param in test_api_key_routes_under_overload.ROUTES}
+    here = {f"{method} {path}" for method, path in ROUTES}
+    assert burst and here
+    assert not here & burst, (
+        f"listed here and in test_api_key_routes_under_overload.ROUTES: "
+        f"{sorted(here & burst)}"
+    )
