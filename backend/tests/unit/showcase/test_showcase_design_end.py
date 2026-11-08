@@ -821,7 +821,7 @@ def test_the_review_targeting_row_is_rules_summary_as_the_mirror_says():
         "<p>People who match {combineWord(value.logical_operator)} of these groups:</p>",
         "Group {gi + 1}: {combineWord(group.logical_operator)} of these conditions",
         '<code className="font-mono text-slate-800">{describe(condition)}</code>',
-        "draft ? describeDraftCondition(condition) : describeCondition(condition, segmentName);",
+        "draft ? describeDraftCondition(condition, segmentName) : describeCondition(condition, segmentName);",
     ):
         assert piece in summary, piece
     words = source(TARGETING_WORDS)
