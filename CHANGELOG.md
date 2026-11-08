@@ -10,6 +10,32 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.44.1](https://github.com/Controlvar/controlvar/compare/v0.44.0...v0.44.1) (2026-11-08)
+
+
+### Bug Fixes
+
+* **api:** a clone of a split URL experiment can start, and metadata with a NUL answers 422 ([#1788](https://github.com/Controlvar/controlvar/issues/1788)) ([6b4bee0](https://github.com/Controlvar/controlvar/commit/6b4bee0a6e873e65867e917f99141e8e2252fcc6))
+* **api:** sample-size, user-id and permission-grant mistakes answer 4xx, not 500 ([#1790](https://github.com/Controlvar/controlvar/issues/1790)) ([89245dc](https://github.com/Controlvar/controlvar/commit/89245dcbb0eb117106d26dd79ef1a4684a30c9b6))
+* **api:** the OpenAPI document no longer allows null for a flag's on_value and off_value ([#1791](https://github.com/Controlvar/controlvar/issues/1791)) ([145640f](https://github.com/Controlvar/controlvar/commit/145640fccaf3712ebc25f3308d0c1230227b52c6))
+* **auth:** an http SSO URL is refused when a SAML configuration is saved ([#1792](https://github.com/Controlvar/controlvar/issues/1792)) ([e676e14](https://github.com/Controlvar/controlvar/commit/e676e147796c7bb43ebd453043a8a5f2384be17f))
+* **dashboard:** a failed breakdown shows an error and a Try again button ([#1825](https://github.com/Controlvar/controlvar/issues/1825)) ([db08fa4](https://github.com/Controlvar/controlvar/commit/db08fa4e33b1dec0b5030ae3ced292cd916fbcdb))
+* **dashboard:** a segment condition shows the segment's name ([#1785](https://github.com/Controlvar/controlvar/issues/1785)) ([11bdd0d](https://github.com/Controlvar/controlvar/commit/11bdd0df34fa2e291e807c5225c0ef74a8bdb6bd))
+* **dashboard:** a session check cannot undo a sign-out, and an unreadable answer is an error ([#1822](https://github.com/Controlvar/controlvar/issues/1822)) ([ae5fb7f](https://github.com/Controlvar/controlvar/commit/ae5fb7ff183eb1a83764a41a0f416758c6ee01b1))
+* **dashboard:** an emptied traffic share takes the number typed, and Review lists who can join ([#1780](https://github.com/Controlvar/controlvar/issues/1780)) ([9d9f3fa](https://github.com/Controlvar/controlvar/commit/9d9f3fa4db18817c2a1202369606e56efa028357))
+* **dashboard:** archived flags read Archived; SRM caution on Ready to stop; split URL copy ([#1779](https://github.com/Controlvar/controlvar/issues/1779)) ([0c575a8](https://github.com/Controlvar/controlvar/commit/0c575a84466ffed8857ec0668c5ddaa777ae3d38))
+* **dashboard:** the rule builder suggests the attribute names the docs document (device_type) ([#1777](https://github.com/Controlvar/controlvar/issues/1777)) ([66bea46](https://github.com/Controlvar/controlvar/commit/66bea46d895d15c4993b912f7e71bf3ef7739793))
+* **dev:** make down stops the profile services ([#1786](https://github.com/Controlvar/controlvar/issues/1786)) ([1208a19](https://github.com/Controlvar/controlvar/commit/1208a19255df22621c5198cc4a2aa7f7697e8b55))
+* **installer:** Ctrl-C always stops the certificate and stack waits, and uninstall claims only what it shows ([#1794](https://github.com/Controlvar/controlvar/issues/1794)) ([a06e7f8](https://github.com/Controlvar/controlvar/commit/a06e7f8776dadd7c726d9a078a61215f1513aa8b))
+* **results:** a breakdown counts each user in one segment, so its rows add up to the totals ([#1793](https://github.com/Controlvar/controlvar/issues/1793)) ([f7f94ec](https://github.com/Controlvar/controlvar/commit/f7f94ecff99d02cc6b4552939840366f715ff9f5))
+
+
+### Documentation
+
+* **audit:** an experiment's variants and metrics are not yet named in an audit entry ([#1783](https://github.com/Controlvar/controlvar/issues/1783)) ([f1ae1ed](https://github.com/Controlvar/controlvar/commit/f1ae1ed75199081f7a86b9d3dad1dfdca0845352))
+* **claims:** name each jest test by its exact title, and test the installer's release claim ([#1821](https://github.com/Controlvar/controlvar/issues/1821)) ([a2fb9ca](https://github.com/Controlvar/controlvar/commit/a2fb9cad43dec17820667ba1d27b69273d5d42ab))
+* **security:** a browser key answers for any user id; use ids that do not identify a person ([#1784](https://github.com/Controlvar/controlvar/issues/1784)) ([5228876](https://github.com/Controlvar/controlvar/commit/5228876681caf68318df34b410a46a6ca47f1b54))
+
 ## [0.44.0](https://github.com/Controlvar/controlvar/compare/v0.43.2...v0.44.0) (2026-11-08)
 
 
