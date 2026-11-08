@@ -26,12 +26,14 @@ import {
 } from './hostedUiHarness';
 import React from 'react';
 import { createHash } from 'crypto';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { AuthConfigProvider, __resetAuthConfigCache } from '@/contexts/AuthConfigContext';
+import { ModulesProvider, __resetModulesCache } from '@/contexts/ModulesContext';
 import { AuthProvider, INACTIVE_ACCOUNT_MESSAGE, useAuth } from '@/contexts/AuthContext';
 import LoginPage, { SIGNED_OUT_MESSAGE, SIGN_IN_NOT_SET_UP_MESSAGE } from '@/pages/login';
 import { TOKEN_STORAGE_KEY } from '@/services/api';
 import { safeAfterSignInPath } from '@/services/hostedUi';
+const { modulesTreeAvailable } = require('../../../modules-alias') as { modulesTreeAvailable: () => boolean };
 
 let registered = 0;
 function row(name: string, fn: () => unknown) {
@@ -343,7 +345,37 @@ describe('no password form before the configuration is known (row 21)', () => {
   });
 });
 
+/** `/login` inside the providers `_app.tsx` mounts, with the SSO module installed. */
+async function renderLoginWithSso(): Promise<void> {
+  __resetModulesCache();
+  api.routes['/api/v1/modules'] = () => jsonResponse(200, { profile: 'full', modules: ['sso'], version: '0.0.0' });
+  render(
+    <ModulesProvider>
+      <AuthConfigProvider>
+        <AuthProvider>
+          <LoginPage />
+        </AuthProvider>
+      </AuthConfigProvider>
+    </ModulesProvider>,
+  );
+  await settle();
+}
+
 describe('one button under Cognito (row 22)', () => {
+  row('no SSO button under Cognito, where the local form offers one with the module installed', async () => {
+    // The control needs the SSO module's component; a core run has its stub.
+    if (modulesTreeAvailable()) {
+      resetHarness({ provider: 'local' });
+      await renderLoginWithSso();
+      expect(screen.getByRole('button', { name: 'Sign in with SSO' })).toBeInTheDocument();
+      cleanup();
+    }
+    resetHarness(POOL_A);
+    await renderLoginWithSso();
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Sign in with SSO' })).toBeNull();
+  });
+
   row('exactly one button, no inputs, no SSO and no password help', async () => {
     const view = await renderLogin();
     expect(screen.getAllByRole('button')).toHaveLength(1);
@@ -404,6 +436,6 @@ describe('the session check under Cognito (row 15)', () => {
 
 describe('this file', () => {
   it('collects every test it declares', () => {
-    expect(registered).toBe(21);
+    expect(registered).toBe(22);
   });
 });

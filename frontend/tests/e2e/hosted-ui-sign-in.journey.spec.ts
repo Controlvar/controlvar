@@ -3,7 +3,18 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { join } from "node:path";
-import { test, expect, type BrowserContext, type Page, type Route } from "@playwright/test";
+import {
+  test,
+  expect,
+  type BrowserContext,
+  type Page,
+  type PlaywrightTestArgs,
+  type PlaywrightTestOptions,
+  type PlaywrightWorkerArgs,
+  type PlaywrightWorkerOptions,
+  type Route,
+  type TestInfo,
+} from "@playwright/test";
 import { TOKEN_STORAGE_KEY } from "./env";
 
 /**
@@ -210,7 +221,22 @@ function shippedCsp(): string {
 
 let stub: Server;
 let dashboard: ChildProcess;
-const ran: string[] = [];
+
+/**
+ * Every journey this file declares, counted as it is declared, as the jest
+ * files count theirs: a retry runs in a new worker, which loads the file and
+ * declares them all again, so a journey that passes on its retry leaves the
+ * count whole. The last test checks the count.
+ */
+const declared: string[] = [];
+type JourneyBody = (
+  fixtures: PlaywrightTestArgs & PlaywrightTestOptions & PlaywrightWorkerArgs & PlaywrightWorkerOptions,
+  testInfo: TestInfo,
+) => Promise<void>;
+function journey(name: string, body: JourneyBody): void {
+  declared.push(name);
+  test(name, body);
+}
 
 async function waitFor(url: string): Promise<void> {
   for (let i = 0; i < 100; i += 1) {
@@ -226,8 +252,8 @@ async function waitFor(url: string): Promise<void> {
 }
 
 test.describe("Journey: sign in through the Cognito Hosted UI (built dashboard, shipped CSP)", () => {
-  test.describe.configure({ mode: "serial" });
-
+  // Not serial: each journey resets the fakes and opens its own context, so
+  // one that fails does not stop the others from reporting.
   test.beforeAll(async () => {
     expect(existsSync(join(FRONTEND, "out", "auth", "callback.html")), "run `npm run build` first").toBe(true);
     stub = createServer((req, res) => void api(req, res));
@@ -241,8 +267,17 @@ test.describe("Journey: sign in through the Cognito Hosted UI (built dashboard, 
   });
 
   test.afterAll(async () => {
-    dashboard?.kill("SIGTERM");
-    await new Promise<void>((resolve) => (stub ? stub.close(() => resolve()) : resolve()));
+    // Both servers are this spec's own; a worker restarted after a failure
+    // starts them again on the same ports, so they are gone before it does.
+    if (dashboard && dashboard.exitCode === null) {
+      const exited = new Promise((resolve) => dashboard.once("exit", resolve));
+      dashboard.kill("SIGKILL");
+      await exited;
+    }
+    if (stub) {
+      stub.closeAllConnections();
+      await new Promise<void>((resolve) => stub.close(() => resolve()));
+    }
   });
 
   /** A fresh browser context with the fake Hosted UI, and every CSP report the page logs. */
@@ -263,7 +298,7 @@ test.describe("Journey: sign in through the Cognito Hosted UI (built dashboard, 
     await page.getByRole("button", { name: "Sign in" }).click();
   }
 
-  test("a user signs in: the browser never calls the token endpoint, and nothing breaks the CSP", async ({ browser }) => {
+  journey("a user signs in: the browser never calls the token endpoint, and nothing breaks the CSP", async ({ browser }) => {
     resetFake("cognito");
     const context = await browser.newContext();
     const { page, violations } = await open(context);
@@ -272,7 +307,10 @@ test.describe("Journey: sign in through the Cognito Hosted UI (built dashboard, 
     await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
     expect(fake.authorizeHits).toBe(0);
     await page.getByRole("button", { name: "Sign in" }).click();
-    await page.waitForURL(`${DASHBOARD}/experiments`, { timeout: 20_000 });
+    // The first CSP report, if one comes before the landing page, is the failure.
+    await expect
+      .poll(() => violations[0] ?? page.url(), { timeout: 20_000 })
+      .toBe(`${DASHBOARD}/experiments`);
     await expect(page.getByTestId("user-menu-role")).toContainText(/analyst/i);
     expect(await page.evaluate((key) => window.localStorage.getItem(key), TOKEN_STORAGE_KEY)).toBe("e2e-access-1");
     expect(fake.authorizeHits).toBe(1);
@@ -280,26 +318,37 @@ test.describe("Journey: sign in through the Cognito Hosted UI (built dashboard, 
     expect(fake.tokenCallsFromBrowser).toBe(0);
     expect(violations).toEqual([]);
     await context.close();
-    ran.push("sign-in");
   });
 
-  test("/auth/callback is served from the export, with the shipped CSP and no referrer", async ({ request }) => {
+  journey("/auth/callback is served from the export, with the shipped CSP, and its referrer <meta> comes before the stylesheets and scripts", async ({ request }) => {
     const response = await request.get(`${DASHBOARD}/auth/callback?code=x&state=y`);
     expect(response.status()).toBe(200);
-    expect(response.headers()["content-security-policy"]).toBe(shippedCsp());
-    expect(shippedCsp()).toContain("connect-src 'self' ws: wss:");
+    const policy = response.headers()["content-security-policy"];
+    expect(policy).toBe(shippedCsp());
+    // The sign-in needs no other origin to connect to: the exchange is the API's.
+    expect(/(?:^|;\s*)connect-src ([^;]*)/.exec(policy)?.[1]).toBe("'self' ws: wss:");
     const html = await response.text();
     expect(html).toMatch(/<meta name="referrer" content="no-referrer"/);
+    // In the head, ahead of the first stylesheet, preload and script tag.
+    const head = html.slice(0, html.indexOf("</head>"));
+    const meta = head.indexOf('<meta name="referrer" content="no-referrer"');
+    const assets = ['<link rel="stylesheet"', '<link rel="preload"', "<script"]
+      .map((tag) => [tag, html.indexOf(tag)] as const)
+      .filter(([, at]) => at >= 0);
+    expect(meta, "the referrer <meta> is in the exported head").toBeGreaterThan(-1);
+    expect(assets.length, "the export has stylesheets and scripts").toBeGreaterThan(0);
+    for (const [tag, at] of assets) {
+      expect(meta, `the referrer <meta> comes before the first ${tag}`).toBeLessThan(at);
+    }
     expect(html).toMatch(/role="status"[^>]*>Signing you in…</);
     // No-referrer is the page's own <meta>: an nginx `location` for it would
     // lose the server block's headers, the CSP with them.
     const conf = readFileSync(join(FRONTEND, "nginx.conf"), "utf8");
     expect(conf).not.toMatch(/location[^{]*\/auth/);
     expect(conf).toMatch(/location \/ \{\s*try_files \$uri \$uri\.html/);
-    ran.push("callback-served");
   });
 
-  test("sign-out: the API gets the POST even though the page leaves at once, then Cognito's /logout, then /login", async ({ browser, request }) => {
+  journey("sign-out: the API gets the POST even though the page leaves at once, then Cognito's /logout, then /login", async ({ browser, request }) => {
     resetFake("cognito");
     const context = await browser.newContext();
     const { page } = await open(context);
@@ -320,19 +369,24 @@ test.describe("Journey: sign in through the Cognito Hosted UI (built dashboard, 
     });
     expect(after.status()).toBe(401);
     await context.close();
-    ran.push("sign-out");
   });
 
-  test("an account the API refuses: the click, one silent re-sign-in, then the copy and the button", async ({ browser }) => {
+  journey("an account the API refuses: the click, one silent re-sign-in, then the copy and the button", async ({ browser }) => {
     resetFake("refuse");
     const context = await browser.newContext();
     const { page } = await open(context);
     await signIn(page);
     // getByTestId: Next's route announcer is a second role="alert" on every page.
     const alert = page.getByTestId("login-error");
-    await expect(alert).toHaveText("Your account could not be signed in. Ask an administrator.", {
-      timeout: 20_000,
-    });
+    await expect
+      .poll(
+        async () =>
+          fake.authorizeHits > 2
+            ? `a silent authorize past the first (${fake.authorizeHits} authorize hits)`
+            : await alert.textContent({ timeout: 250 }).catch(() => null),
+        { timeout: 20_000 },
+      )
+      .toBe("Your account could not be signed in. Ask an administrator.");
     await expect(alert).toHaveAttribute("role", "alert");
     await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
     expect(page.url()).toBe(`${DASHBOARD}/login`);
@@ -340,10 +394,9 @@ test.describe("Journey: sign in through the Cognito Hosted UI (built dashboard, 
     expect(fake.logoutHits).toEqual([`${DASHBOARD}/login`]);
     expect(await page.evaluate((key) => window.localStorage.getItem(key), TOKEN_STORAGE_KEY)).toBeNull();
     await context.close();
-    ran.push("loop-guard");
   });
 
-  test("an API with no /auth/config: the local form, and a local user signs in", async ({ browser }) => {
+  journey("an API with no /auth/config: the local form, and a local user signs in", async ({ browser }) => {
     resetFake("no-config");
     const context = await browser.newContext();
     const { page } = await open(context);
@@ -355,17 +408,20 @@ test.describe("Journey: sign in through the Cognito Hosted UI (built dashboard, 
     expect(await page.evaluate((key) => window.localStorage.getItem(key), TOKEN_STORAGE_KEY)).toBe("e2e-local-1");
     expect(fake.authorizeHits).toBe(0);
     await context.close();
-    ran.push("no-config");
   });
 
-  test("accessibility: axe on /login and on a failed callback, a keyboard walk, no navigation without a click", async ({ browser }) => {
+  journey("accessibility: axe on /login and on a failed callback, a keyboard walk, no navigation without a click", async ({ browser }) => {
     resetFake("cognito");
     const { default: AxeBuilder } = await import("@axe-core/playwright");
     const context = await browser.newContext();
     const { page } = await open(context);
     await page.goto(`${DASHBOARD}/login`);
     const button = page.getByRole("button", { name: "Sign in" });
-    await expect(button).toBeVisible();
+    await expect
+      .poll(async () =>
+        fake.authorizeHits > 0 ? "navigated to the Hosted UI without a click" : (await button.isVisible()) ? "button" : "",
+      )
+      .toBe("button");
     expect(await button.evaluate((el) => el.tagName)).toBe("BUTTON");
     const login = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze();
     expect(login.violations.map((v) => `${v.id}: ${v.nodes.length}`)).toEqual([]);
@@ -393,10 +449,9 @@ test.describe("Journey: sign in through the Cognito Hosted UI (built dashboard, 
     await page.waitForURL(`${DASHBOARD}/experiments`, { timeout: 20_000 });
     expect(fake.authorizeHits).toBe(1);
     await context.close();
-    ran.push("a11y");
   });
 
-  test("every journey above ran", () => {
-    expect(ran).toEqual(["sign-in", "callback-served", "sign-out", "loop-guard", "no-config", "a11y"]);
+  test("this file declares every journey", () => {
+    expect(declared, "journeys declared with journey()").toHaveLength(6);
   });
 });
