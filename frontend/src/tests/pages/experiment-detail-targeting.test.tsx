@@ -192,6 +192,8 @@ describe('an untouched open and save keeps what is stored', () => {
     ['not_in a list', one(cond('user.country', 'not_in', ['DE']))],
     ['in a comma-separated string', one(cond('user.country', 'in', 'US, CA'))],
     ['equals text with commas', one(cond('user.email', 'equals', 'a,b, c'))],
+    ['app_version semver_gte (StreamPulse story step 5, #1775)', one(cond('app_version', 'semver_gte', '3.2.1'))],
+    ['device.type, no longer suggested (#1775)', one(cond('device.type', 'equals', 'mobile'))],
     ['OR at both levels', one(cond('user.plan', 'equals', 'pro'), 'OR')],
     [
       'two groups, AND of OR',
@@ -301,6 +303,26 @@ describe('Who can join — read', () => {
   });
 });
 
+describe('Who can join — rules on the formerly custom attributes (#1775)', () => {
+  // Custom attributes until #1775 made them suggestions: a rule built on one
+  // before then still opens in the builder, never as JSON under the note.
+  it.each([
+    ['app_version', 'equals', '3.2.0'],
+    ['app_version', 'in', ['3.2.0', '3.2.1']],
+    ['app_version', 'is_not_null', null],
+    ['account_age_days', 'contains', '3'],
+  ])('opens a saved %s %s rule in the builder, offering Edit', async (attribute, operator, value) => {
+    install({
+      targeting_rules: { logical_operator: 'AND', groups: [{ logical_operator: 'AND', conditions: [{ attribute, operator, value }] }] },
+    });
+    render(<ExperimentDetailPage />);
+    const s = await section();
+    expect(within(s).queryByTestId('targeting-raw')).toBeNull();
+    expect(within(s).queryByText(OUTSIDE_BUILDER_NOTE)).toBeNull();
+    expect(editButton()).toBeInTheDocument();
+  });
+});
+
 describe('Who can join — the Edit gate', () => {
   it.each(['ADMIN', 'DEVELOPER'])('offers Edit to %s in draft and in paused', async (role) => {
     for (const status of ['draft', 'paused'] as const) {
@@ -376,10 +398,11 @@ describe('Who can join — the Edit gate', () => {
 describe('Who can join — rules the builder cannot show', () => {
   // The flag page offers version operators on any attribute outside the
   // suggested ones (#535); the experiment page does not, so the same rules
-  // stay read-only here.
+  // stay read-only here. app_version is a suggestion since #1775, typed semver,
+  // so its version rule opens in both builders (see "an untouched open and
+  // save keeps what is stored").
   it.each([
     ['os_version semver_gte (StreamPulse AI search)', 'os_version'],
-    ['app_version semver_gte (StreamPulse story step 5)', 'app_version'],
   ])('keeps %s read-only, offering only Replace rules', async (_name, attribute) => {
     const stored = {
       logical_operator: 'AND',

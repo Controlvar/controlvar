@@ -456,19 +456,30 @@ describe('version operators on the flag page', () => {
     expect(isEditableFlagTargeting(rules)).toBe(true);
   });
 
-  it.each([
-    ['StreamPulse AI search', STREAMPULSE.ai_search],
-    ['StreamPulse player v2 after story step 5', STREAMPULSE.player_v2_after_story_step_5],
-  ])('%s stays read-only for the experiment page predicate', (_name, rules) => {
-    expect(isEditableTargeting(rules)).toBe(false);
+  it('StreamPulse AI search stays read-only for the experiment page predicate', () => {
+    expect(isEditableTargeting(STREAMPULSE.ai_search)).toBe(false);
   });
 
-  it('the flag builder offers semver for attributes outside the suggestions only', () => {
+  it('StreamPulse player v2 after story step 5 is editable for the experiment page predicate too (#1775)', () => {
+    // app_version is a suggestion, typed semver, so both builders offer semver_gte on it.
+    expect(isEditableTargeting(STREAMPULSE.player_v2_after_story_step_5)).toBe(true);
+  });
+
+  it('the flag builder offers semver for attributes outside the suggestions, and for the formerly custom ones', () => {
     expect(getOperatorsForAttribute('os_version', FLAG_OPERATOR_OPTIONS)).toEqual(
       expect.arrayContaining(['equals', 'semver_gte', 'semver_lte']),
     );
-    expect(getOperatorsForAttribute('app.version', FLAG_OPERATOR_OPTIONS)).toEqual(getOperatorsForAttribute('app.version'));
-    for (const attribute of ['user.country', 'user.age', 'session.new_user', 'user.tags']) {
+    for (const attribute of ['app_version', 'app.version']) {
+      expect(getOperatorsForAttribute(attribute, FLAG_OPERATOR_OPTIONS)).toEqual(getOperatorsForAttribute(attribute));
+    }
+    // Custom attributes before #1775: they keep the version operators a custom attribute gets here.
+    for (const attribute of ['account_age_days', 'device_type']) {
+      expect(getOperatorsForAttribute(attribute, FLAG_OPERATOR_OPTIONS)).toEqual(
+        expect.arrayContaining([...getOperatorsForAttribute(attribute), 'semver_gte']),
+      );
+      expect(getOperatorsForAttribute(attribute)).not.toContain('semver_gte');
+    }
+    for (const attribute of ['user.country', 'user.tags', 'user.age', 'device.type', 'session.new_user']) {
       expect(getOperatorsForAttribute(attribute, FLAG_OPERATOR_OPTIONS)).toEqual(getOperatorsForAttribute(attribute));
       expect(getOperatorsForAttribute(attribute, FLAG_OPERATOR_OPTIONS)).not.toContain('semver_gte');
     }
@@ -485,6 +496,24 @@ describe('version operators on the flag page', () => {
     expect(within(operator).getByRole('option', { name: 'version >=' })).toBeInTheDocument();
     await slideAndSave('10');
     expect(puts).toEqual([{ rollout_percentage: 10 }]);
+  });
+
+  // Custom attributes until #1775 made them suggestions: a rule built on one
+  // before then still opens in the builder, never as JSON under the note.
+  it.each([
+    ['app_version', 'equals', '3.2.0'],
+    ['app_version', 'in', ['3.2.0', '3.2.1']],
+    ['app_version', 'is_not_null', null],
+    ['account_age_days', 'contains', '3'],
+    ['account_age_days', 'semver_gte', '1.0.0'],
+    ['device_type', 'semver_gte', '1.0.0'],
+  ])('opens a saved %s %s rule in the builder with its operator selected (#1775)', async (attribute, operator, value) => {
+    install({ logical_operator: 'AND', groups: [{ logical_operator: 'AND', conditions: [{ attribute, operator, value }] }] });
+    render(<FeatureFlagDetailPage />);
+    const s = await section();
+    expect(within(s).queryByTestId('targeting-raw')).toBeNull();
+    expect(within(s).queryByText(OUTSIDE_BUILDER_NOTE)).toBeNull();
+    expect((within(s).getByLabelText('Group 1, condition 1 operator') as HTMLSelectElement).value).toBe(operator);
   });
 });
 
