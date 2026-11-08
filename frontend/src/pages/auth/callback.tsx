@@ -7,8 +7,8 @@
  * Once per page load (a module-scope latch, so React StrictMode's second
  * mount starts nothing), in this order:
  *
- * 1. the started sign-in is taken out of `sessionStorage`, so this code can
- *    be exchanged once at most;
+ * 1. the started sign-in is taken out of `sessionStorage`, so the dashboard
+ *    asks for one exchange at most per sign-in it started;
  * 2. the query is taken out of the address bar (`history.replaceState`);
  * 3. the answer is checked: an `error`, no code, no started sign-in, an old
  *    one or a `state` that is not its own sends the browser to `/login`;
@@ -19,8 +19,10 @@
  *
  * Nothing in the query but `code`, `state` and the `error` code is read, and
  * nothing of it is shown: `/login` says what happened in its own words. A
- * user the API refuses goes through Cognito's `/logout` on the way there.
- * The page asks for no referrer (`<meta name="referrer">`).
+ * user the API refuses (401 or 403) is sent round the Hosted UI once more,
+ * silently, unless that was done in the last ten minutes; then, as an
+ * inactive account (400) is at once, through Cognito's `/logout` on the way
+ * there. The page asks for no referrer (`<meta name="referrer">`).
  */
 import React, { useEffect } from 'react';
 import Head from 'next/head';

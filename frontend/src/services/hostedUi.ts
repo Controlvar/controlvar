@@ -10,8 +10,8 @@
  *   hands the code and the verifier to the API's
  *   `POST /api/v1/auth/cognito/exchange`. The browser never calls Cognito's
  *   token endpoint; the dashboard's Content-Security-Policy would refuse it.
- * - {@link hostedUiLogoutUrl} is Cognito's `/logout`, which ends the Hosted
- *   UI's own session. Its `logout_uri` is always this origin's `/login`.
+ * - {@link hostedUiLogoutUrl} is Cognito's `/logout`, the way to end the
+ *   Hosted UI's own session. Its `logout_uri` is always this origin's `/login`.
  *
  * What the sign-in page says after a redirect it cannot carry in the URL
  * (Cognito's `/logout` returns to `logout_uri` exactly) is a notice in
@@ -333,9 +333,9 @@ export async function beginHostedUiSignIn(config: CognitoConfig, next: string): 
 
 /**
  * Whether a silent re-sign-in may start now: at most one in any ten
- * minutes. The Hosted UI signs a user in again without a page while its own
- * session lasts, so a user the API keeps refusing would otherwise be sent
- * round for ever.
+ * minutes. While its own session lasts the Hosted UI can sign a user in again
+ * without showing a page, so without this a user the API keeps refusing
+ * could be sent round for ever.
  */
 export function silentSignInAllowed(now: number = Date.now()): boolean {
   const last = readJson(SILENT_SIGN_IN_KEY);
@@ -350,9 +350,9 @@ export async function beginSilentSignIn(config: CognitoConfig, next: string): Pr
 }
 
 /**
- * End a refused sign-in: say why on the sign-in page, then end the Hosted
- * UI's session through Cognito's `/logout`, so its cookie cannot sign the
- * same user in again without a page.
+ * End a refused sign-in: say why on the sign-in page, then go through
+ * Cognito's `/logout` to end the Hosted UI's session, so that the next
+ * "Sign in" can be made as another user.
  */
 export function endRefusedSignIn(config: CognitoConfig, notice: SignInNotice): void {
   writeSignInNotice(notice);

@@ -294,10 +294,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // token is passed by hand with `auth: false`, so an answer arriving
       // after the next sign-in (even a 401) cannot clear that session's
       // token. Under the local provider the API revokes nothing (its tokens
-      // are stateless). Under Cognito it signs the user out at Cognito
-      // (GlobalSignOut), so the token stops working everywhere; there the
-      // request is sent with `keepalive`, so that it still goes out when the
-      // page leaves for Cognito's `/logout` straight after.
+      // are stateless). Under Cognito the API asks Cognito to sign the user
+      // out (GlobalSignOut); there the request is sent with `keepalive`, so
+      // that it still goes out when the page leaves for Cognito's `/logout`
+      // straight after.
       if (token) {
         void apiFetch<void>(LOGOUT_PATH, {
           method: 'POST',
@@ -307,9 +307,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           headers: { Authorization: `Bearer ${token}` },
         }).catch(() => undefined);
       }
-      // Under Cognito, the Hosted UI's own session ends too: otherwise the
-      // next "Sign in" on this browser signs the same user in without a page.
-      // Its logout_uri is always this origin's /login, which then says so.
+      // Under Cognito the browser then goes to Cognito's /logout, to end the
+      // Hosted UI's own session too, so that the next "Sign in" on this
+      // browser asks for the user again. Its logout_uri is always this
+      // origin's /login, which then says the user signed out.
       if (config.kind === 'cognito') {
         writeSignInNotice({ code: 'signed_out', next: options.next ?? '' });
         navigation.assign(hostedUiLogoutUrl(config));
