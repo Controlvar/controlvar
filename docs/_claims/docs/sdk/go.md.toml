@@ -87,7 +87,7 @@ text = "Run only the go get."
 by = ["exempt:instruction"]
 
 [[unit]]
-text = "The module has no tagged release yet, so go get resolves the head of the main branch and records it in your go.mod as a pseudo-version (v0.0.0-<date>-<commit>)."
+text = "go get resolves the module's latest release and records it in your go.mod."
 by = [
     "journey:sdk-go#quick-start-user-on",
     "journey:sdk-go#quick-start-user-off",
@@ -98,7 +98,7 @@ text = "Your builds stay on that version until you run go get again."
 by = ["exempt:third-party"]
 
 [[unit]]
-text = "To pin a particular commit, name it: go get github.com/controlvar/controlvar/sdk/go@<commit>, where <commit> is a commit hash from this repository."
+text = "To pin a release, name it: go get github.com/controlvar/controlvar/sdk/go@v0.1.0."
 by = ["exempt:third-party"]
 
 [[unit]]

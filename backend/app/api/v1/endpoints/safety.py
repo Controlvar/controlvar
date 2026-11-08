@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from backend.app.api.deps import get_current_active_user, get_current_superuser, get_db
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.models.user import User
 from backend.app.schemas.safety import (
     FeatureFlagSafetyConfigResponse,
@@ -23,7 +24,7 @@ from backend.app.schemas.safety import (
 )
 from backend.app.services.safety_service import SafetyService
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 
 @router.get("/settings", response_model=SafetySettingsResponse)

@@ -184,11 +184,11 @@ def test_saying_javascript_is_caught():
 
 
 def test_the_card_note_says_what_go_md_says_about_installing():
-    """The note is true for go.md: no tagged release, so go get takes main
+    """The note is true for go.md: go get takes the module's latest release
     (its words in go.md are checked in test_showcase_quoted_docs.py)."""
     note = board().scenes[1].card.note
-    assert "no tagged release" in note
-    assert "go get takes the head of the main branch" in note
+    assert "go get installs the Go SDK's latest release" in note
+    assert "head of the main branch" not in note
 
 
 def test_the_type_is_chosen_by_role_and_the_values_typed_by_label():

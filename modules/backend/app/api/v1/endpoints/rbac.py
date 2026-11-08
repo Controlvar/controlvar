@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import deps
 from backend.app.api.deps import get_db
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.permissions import forget_granted_permissions
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.user import User, UserRole
@@ -45,7 +46,7 @@ from modules.backend.app.services.rbac_service import RBACService
 if TYPE_CHECKING:
     from modules.backend.app.models.custom_role import CustomRole
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 
 def _require_admin(current_user: User) -> None:

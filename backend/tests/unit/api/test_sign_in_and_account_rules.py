@@ -7,6 +7,7 @@ and a deactivated account's tokens, refused only while it stays deactivated.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -171,12 +172,12 @@ def test_the_admin_role_is_not_a_superuser():
         id=uuid.uuid4(), role=UserRole.ADMIN, is_active=True, is_superuser=False
     )
     with pytest.raises(HTTPException) as refused:
-        deps.get_current_superuser(current_user=admin_role)
+        asyncio.run(deps.get_current_superuser(current_user=admin_role))
     assert refused.value.status_code == 403
     superuser = SimpleNamespace(
         id=uuid.uuid4(), role=UserRole.VIEWER, is_active=True, is_superuser=True
     )
-    assert deps.get_current_superuser(current_user=superuser) is superuser
+    assert asyncio.run(deps.get_current_superuser(current_user=superuser)) is superuser
 
 
 def test_registration_needs_an_email_a_strong_password_and_a_name():

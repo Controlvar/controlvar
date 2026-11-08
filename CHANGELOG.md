@@ -10,6 +10,36 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.44.0](https://github.com/Controlvar/controlvar/compare/v0.43.2...v0.44.0) (2026-11-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** the tracking routes answer 422 where they answered 200 for a body holding NaN, Infinity or a number too large for a double, and for an event value outside -1e12 to 1e12. One non-finite number anywhere in a /batch body refuses the whole request and stores none of its events; a value outside the range fails only its own entry.
+
+### Features
+
+* **sdk:** version 0.3.0 of the JavaScript and Python SDKs ([#1770](https://github.com/Controlvar/controlvar/issues/1770)) ([09d815e](https://github.com/Controlvar/controlvar/commit/09d815ea18273982d710fb444ba76f05a18bc5c6))
+
+
+### Bug Fixes
+
+* **api:** daily and segmented experiment results no longer hold up other requests ([#1768](https://github.com/Controlvar/controlvar/issues/1768)) ([93726b9](https://github.com/Controlvar/controlvar/commit/93726b909ec312c1f9c7edff28cc840962307106))
+* **api:** dashboard use during sustained overload no longer stops the API for good ([#1816](https://github.com/Controlvar/controlvar/issues/1816)) ([fa64976](https://github.com/Controlvar/controlvar/commit/fa649762daa5eae9176ee656668c30e26279943f))
+* **api:** deleting a flag removes its metrics and error logs set-wise ([#1750](https://github.com/Controlvar/controlvar/issues/1750)) ([cb10af3](https://github.com/Controlvar/controlvar/commit/cb10af3132d6887f08d4e1a91b583c696250c29c))
+* **api:** GET /api/v1/experiments/{id}/results no longer holds up other requests ([#1763](https://github.com/Controlvar/controlvar/issues/1763)) ([0b0c96b](https://github.com/Controlvar/controlvar/commit/0b0c96b1f9d919d8ebe171dca9bd3f0ad762ed22))
+* **api:** refuse NaN, Infinity and out-of-range event values in request bodies with 422 ([#1765](https://github.com/Controlvar/controlvar/issues/1765)) ([67c3f67](https://github.com/Controlvar/controlvar/commit/67c3f67a26baf6cab63704b8d33700aca4a060ee))
+* **rc-evidence:** read build logs in two GETs, not through gh, and say why a read fails ([#1764](https://github.com/Controlvar/controlvar/issues/1764)) ([c545eb7](https://github.com/Controlvar/controlvar/commit/c545eb75ca868dba2cc0e8a0661b9c231bde850d))
+* **scale:** count the request k6 sends at t=0, and allow fewer 499s than timeouts ([#1773](https://github.com/Controlvar/controlvar/issues/1773)) ([695e51c](https://github.com/Controlvar/controlvar/commit/695e51c74b2a3dc12cb8bf747f55c1648be9eedb))
+
+
+### Documentation
+
+* **audit:** the audit and rollback pages say what is recorded and where ([#1743](https://github.com/Controlvar/controlvar/issues/1743)) ([5761b52](https://github.com/Controlvar/controlvar/commit/5761b524648e68229844306ff14a53040350db98))
+* **mcp:** connect a client with npx @controlvar/mcp-server@0.1.0 ([#1800](https://github.com/Controlvar/controlvar/issues/1800)) ([38f1b9e](https://github.com/Controlvar/controlvar/commit/38f1b9e08bc0b106956efdacf3b89e98dc19e756))
+* **sdk:** send experiment exposures to Segment, GA4, Amplitude, Mixpanel or RudderStack ([#1799](https://github.com/Controlvar/controlvar/issues/1799)) ([aefb277](https://github.com/Controlvar/controlvar/commit/aefb277587247125af62577c107575d31791fdb7))
+* **sdk:** the React, React Native, OpenFeature, MCP, Go, .NET and Java SDKs are published ([#1802](https://github.com/Controlvar/controlvar/issues/1802)) ([67b6786](https://github.com/Controlvar/controlvar/commit/67b67866e21eeb36704519262793e3b4336bb9f7))
+
 ## [0.43.2](https://github.com/Controlvar/controlvar/compare/v0.43.1...v0.43.2) (2026-11-05)
 
 

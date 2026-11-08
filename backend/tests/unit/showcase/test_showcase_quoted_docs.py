@@ -926,9 +926,8 @@ def test_a_video_10_claim_whose_product_copy_is_gone_is_refused():
 
 #: What the card's note says about installing, and the words of go.md it rests on.
 GO_INSTALL = (
-    "no tagged release",
-    "The module has no tagged release yet, so `go get` resolves the head of the"
-    " `main` branch",
+    "latest release",
+    "`go get` resolves the module's latest release and records it in your `go.mod`",
 )
 
 
@@ -939,9 +938,11 @@ def test_video_10s_card_note_says_what_go_md_says_about_installing():
     assert squeezed(GO_INSTALL[1]) in squeezed(read_page(GO))
 
 
-def test_a_tagged_go_release_makes_the_note_false():
-    """The plant: go.md says the module is tagged; the note no longer holds."""
+def test_an_untagged_go_module_makes_the_note_false():
+    """The plant: go.md says go get takes the head of main, as it did before
+    the module's first tag; the note no longer holds."""
     page = read_page(GO).replace(
-        "The module has no tagged release yet", "The module is tagged"
+        "resolves the module's latest release", "resolves the head of the `main` branch"
     )
+    assert page != read_page(GO)
     assert squeezed(GO_INSTALL[1]) not in squeezed(page)

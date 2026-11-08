@@ -1183,6 +1183,10 @@ class ExperimentService:
             # not re-judged. Only the rule id the server stamped from the
             # source's own id is dropped, so the clone gets its own (#533).
             targeting_rules=rules_for_clone(experiment),
+            # Copied as stored, like the rules: start checks it, as it checks
+            # any split URL experiment's (#1781). A clone without it could
+            # never start.
+            split_url_config=copy.deepcopy(experiment.split_url_config),
             status=ExperimentStatus.DRAFT,
             owner_id=str(user_id),
             tags=experiment.tags,

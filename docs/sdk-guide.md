@@ -89,7 +89,7 @@ when touched.
 | Android (Kotlin) | `sdk/android` | JUnit 5 | yes, in CI — the smoke runs the JVM build of the Kotlin sources (no emulator); the Android library tests run in the nightly tier | [android.md](sdk/android.md) |
 | Flutter / Dart | `sdk/flutter` | `flutter test` | not yet (unit tests run in the nightly tier) | [flutter.md](sdk/flutter.md) |
 | Elixir | `sdk/elixir` | ExUnit | not yet (unit tests run in the nightly tier) | [elixir.md](sdk/elixir.md) |
-| MCP server (not an SDK; not yet published) | `sdk/mcp` | jest | no: it is not an SDK, and has no contract smoke | [sdk/mcp/README.md](https://github.com/Controlvar/controlvar/blob/main/sdk/mcp/README.md) |
+| MCP server (not an SDK) | `sdk/mcp` | jest | no: it is not an SDK, and has no contract smoke | [sdk/mcp/README.md](https://github.com/Controlvar/controlvar/blob/main/sdk/mcp/README.md) |
 
 Rows marked "not yet" have a `contract_smoke` entry point that no CI job runs against a live backend;
 their unit tests run in the nightly tier and on pull requests that touch them. Run `run_live_contract.py --sdk <name> --strict` on a
@@ -104,10 +104,10 @@ synchronous. Full reference: [Python SDK](sdk/python.md).
 
 ### Installation
 
-The `controlvar` package is on [PyPI](https://pypi.org/project/controlvar/) (0.2.0, beta):
+The `controlvar` package is on [PyPI](https://pypi.org/project/controlvar/) (0.3.0, beta):
 
 ```bash
-pip install controlvar==0.2.0
+pip install controlvar==0.3.0
 ```
 
 To work on the SDK itself, install it from a clone of this repository instead:
@@ -199,14 +199,14 @@ Smoke against a live backend: `python sdk/python/examples/contract_smoke.py`.
 
 ### Installation
 
-The `@controlvar/js-sdk` package is on [npm](https://www.npmjs.com/package/@controlvar/js-sdk) (0.2.0, beta):
+The `@controlvar/js-sdk` package is on [npm](https://www.npmjs.com/package/@controlvar/js-sdk) (0.3.0, beta):
 
 ```bash
-npm install @controlvar/js-sdk@0.2.0
+npm install @controlvar/js-sdk@0.3.0
 ```
 
 To work on the SDK itself, build it from a clone of this repository instead. `npm pack` writes
-`controlvar-js-sdk-0.2.0.tgz`:
+`controlvar-js-sdk-0.3.0.tgz`:
 
 ```bash
 cd sdk/js
@@ -216,7 +216,7 @@ npm ci && npm run build && npm pack
 Then, in your app, install the packed tarball:
 
 ```bash
-npm install /path/to/controlvar/sdk/js/controlvar-js-sdk-0.2.0.tgz
+npm install /path/to/controlvar/sdk/js/controlvar-js-sdk-0.3.0.tgz
 ```
 
 ### Quick Start
@@ -334,8 +334,8 @@ function CheckoutButton() {
 
 ### Installation
 
-Install it from a clone of this repository: `./mvnw install` in `sdk/java` builds both modules and
-installs them into your local `~/.m2`, where the dependency below resolves.
+The Java SDK and its Spring Boot starter are on
+[Maven Central](https://central.sonatype.com/artifact/com.controlvar/controlvar-sdk):
 
 ```xml
 <dependency>
@@ -345,6 +345,10 @@ installs them into your local `~/.m2`, where the dependency below resolves.
 </dependency>
 <!-- Spring Boot: use controlvar-spring-boot-starter instead -->
 ```
+
+To work on the SDK itself, install it from a clone of this repository instead: `./mvnw install` in
+`sdk/java` builds both modules and installs them into your local `~/.m2`, where the dependency
+above resolves.
 
 ### Quick Start
 

@@ -121,15 +121,50 @@ export function isEditableTargeting(value: Stored, options: OperatorOptions = {}
   });
 }
 
-/** One condition in words: `country is one of US, CA`. */
-export function describeCondition(condition: Record<string, unknown>): string {
+/** Shown after a segment id the segment list does not contain. */
+export const SEGMENT_NOT_FOUND = '(segment not found)';
+
+/**
+ * One condition in words: `country is one of US, CA`.
+ *
+ * `segmentName` turns a segment condition's id into what to show for it (the
+ * segment's name); without it the id is shown, as it is until names arrive.
+ */
+export function describeCondition(
+  condition: Record<string, unknown>,
+  segmentName?: (segmentId: string) => string,
+): string {
   const attribute = String(condition.attribute ?? '');
   const operator = String(condition.operator ?? '');
   const label = OPERATOR_LABELS[operator as OperatorType] ?? operator;
   if (operator === 'is_null' || operator === 'is_not_null') return `${attribute} ${label}`;
   const value = condition.value;
+  if (segmentName && isSegmentOperator(operator) && typeof value === 'string') {
+    return `${attribute} ${label} ${segmentName(value)}`;
+  }
   const shown = Array.isArray(value) ? value.join(', ') : String(value ?? '');
   return `${attribute} ${label} ${shown}`;
+}
+
+/** How a condition still in the rule builder names a part not filled in yet. */
+export const ATTRIBUTE_NOT_SET = '(attribute not set)';
+export const VALUE_NOT_SET = '(value not set)';
+
+/**
+ * A condition still in the rule builder, in words: `describeCondition`, with
+ * a blank attribute or value named as not set. Blank means what
+ * `validateRules` refuses (an attribute of spaces; a value of null or "" for
+ * an operator that takes one), so the creation that follows says what to fix.
+ * Rules already stored are described as stored, by `describeCondition`.
+ */
+export function describeDraftCondition(condition: Record<string, unknown>): string {
+  const attribute = String(condition.attribute ?? '');
+  const value = condition.value;
+  return describeCondition({
+    ...condition,
+    attribute: attribute.trim() === '' ? ATTRIBUTE_NOT_SET : attribute,
+    value: value === null || value === undefined || value === '' ? VALUE_NOT_SET : value,
+  });
 }
 
 /** "all" for AND (or absent), "any" for OR: how a list of things combines, in words. */

@@ -136,24 +136,13 @@ export function VariantsEditor({
                   {...marks(index, 'name')}
                 />
                 <div className="flex items-center gap-1">
-                  <input
-                    type="number"
-                    name={`variant_allocation_${index}`}
-                    min={0}
-                    max={100}
+                  <ShareInput
+                    index={index}
                     value={variant.traffic_allocation}
-                    onChange={(e) =>
-                      dispatch({
-                        type: 'changeVariant',
-                        index,
-                        field: 'traffic_allocation',
-                        value: Number(e.target.value),
-                      })
+                    onChange={(value) =>
+                      dispatch({ type: 'changeVariant', index, field: 'traffic_allocation', value })
                     }
-                    aria-label={`Variant ${index + 1} allocation`}
-                    className={`w-16 text-center ${smallInputClass}`}
-                    data-testid={`variant-allocation-${index}`}
-                    {...marks(index, 'traffic_allocation')}
+                    marks={marks(index, 'traffic_allocation')}
                   />
                   <span className="text-xs text-slate-500">%</span>
                 </div>
@@ -198,6 +187,47 @@ export function VariantsEditor({
         ))}
       </div>
     </>
+  );
+}
+
+interface ShareInputProps {
+  index: number;
+  /** The share the form holds. A blank box holds 0, as before. */
+  value: number;
+  onChange: (value: number) => void;
+  marks: Pick<React.InputHTMLAttributes<HTMLInputElement>, 'aria-invalid' | 'aria-describedby'>;
+}
+
+/**
+ * One version's traffic share box (#1428).
+ *
+ * The form holds a number, so an emptied box holds 0. Given the number, React
+ * wrote "0" into the emptied box, the caret stayed at its end, and the digits
+ * typed next landed after it: emptying the box and typing 34 showed "034"
+ * (React leaves "034" alone, because it reads as 34). So the box shows what
+ * was typed while that text still reads as the share the form holds, and an
+ * emptied box stays empty. Leaving the box shows the number the form holds.
+ */
+function ShareInput({ index, value, onChange, marks }: ShareInputProps) {
+  const [typed, setTyped] = useState<string | null>(null);
+  const shown = typed !== null && Number(typed) === value ? typed : String(value);
+  return (
+    <input
+      type="number"
+      name={`variant_allocation_${index}`}
+      min={0}
+      max={100}
+      value={shown}
+      onChange={(e) => {
+        setTyped(e.target.value);
+        onChange(Number(e.target.value));
+      }}
+      onBlur={() => setTyped(null)}
+      aria-label={`Variant ${index + 1} allocation`}
+      className={`w-16 text-center ${smallInputClass}`}
+      data-testid={`variant-allocation-${index}`}
+      {...marks}
+    />
   );
 }
 

@@ -53,7 +53,10 @@ export interface AuthContextValue {
    * (#1006). `null` until this tab logs out, and again after a sign-in.
    */
   afterLogoutPath: string | null;
-  /** Re-fetch `/auth/me` (e.g. after a profile change). */
+  /**
+   * Re-fetch `/auth/me` (e.g. after a profile change). Resolves `null`, and
+   * changes nothing, when a sign-in, sign-out or newer check came first.
+   */
   refresh: () => Promise<UserMe | null>;
   /** True when the current user has one of the given roles. */
   hasRole: (...roles: Role[]) => boolean;
@@ -93,6 +96,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [afterLogoutPath, setAfterLogoutPath] = useState<string | null>(null);
   const mounted = useRef(true);
+  // Bumped by every sign-in, sign-out and session check (#1579). A check that
+  // is no longer the latest when its answer arrives changes nothing, whatever
+  // the answer: it was about a session that has since ended or been replaced.
+  const generation = useRef(0);
 
   const applyAnonymous = useCallback(() => {
     if (!mounted.current) return;
@@ -101,12 +108,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadMe = useCallback(async (): Promise<UserMe | null> => {
+    const check = ++generation.current;
     if (!getToken()) {
       applyAnonymous();
       return null;
     }
     try {
       const me = await apiFetch<UserMe>(ME_PATH, { redirectOn401: false });
+      if (check !== generation.current) return null;
       if (mounted.current) {
         setUser(me);
         setStatus('authenticated');
@@ -115,8 +124,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return me;
     } catch (err) {
+      if (check !== generation.current) return null;
       if (err instanceof ApiError && err.status === 401) {
-        // apiFetch already cleared the token.
+        // apiFetch cleared the token if it was still the one this check sent.
         applyAnonymous();
         return null;
       }
@@ -143,6 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const onStorage = (event: StorageEvent) => {
       if (event.key !== TOKEN_STORAGE_KEY && event.key !== null) return;
       if (!getToken()) {
+        generation.current += 1;
         applyAnonymous();
       } else {
         void loadMe();
@@ -158,6 +169,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       json: { email, password },
       auth: false,
     });
+    // A check still in flight from before this sign-in must not undo it.
+    generation.current += 1;
     setToken(result.access_token);
     if (mounted.current) {
       setUser(result.user);
@@ -171,6 +184,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(
     async (options: LogoutOptions = {}): Promise<void> => {
       const token = getToken();
+      // A session check still in flight must not sign this tab back in (#1579).
+      generation.current += 1;
       // Sign out here first (#1040): awaiting the server left the user signed
       // in for as long as a stalled API took to answer. These updates are made
       // together, so a protected page sees `anonymous` and `afterLogoutPath`

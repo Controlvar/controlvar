@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import deps
 from backend.app.api.enum_filters import enum_filter
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.read_scope import get_current_reader
 from backend.app.api.segment_rules import refuse_unusable_segments
 from backend.app.core.context_limits import (
@@ -197,6 +198,7 @@ async def _skip_cache_ignored(skip_cache: bool = False) -> None:
 
 # Create router with tag for documentation grouping
 router = APIRouter(
+    route_class=OffLoopRoute,
     tags=["Feature Flags"],
     responses={
         status.HTTP_401_UNAUTHORIZED: {
@@ -1289,7 +1291,8 @@ async def toggle_feature_flag(
     The toggle operation includes:
     - Status change (ACTIVE ↔ INACTIVE). An archived flag would be turned on,
       so it answers 400 and stays archived: unarchive it first
-    - Complete audit logging with user information and optional reason
+    - One audit entry with user information and optional reason; a failed
+      audit write does not fail the request
     - Response with new status and audit log ID
 
     **Authentication**: Requires valid user authentication.
@@ -1403,10 +1406,14 @@ async def enable_feature_flag(
 
     This endpoint explicitly enables a feature flag. An archived flag answers
     400 and stays archived: unarchive it first.
-    Includes complete audit logging with user information and optional reason.
+    Writes one audit entry with user information and optional reason, also
+    when the flag already has that status; a failed audit write does not fail
+    the request.
 
     **Authentication**: Requires valid user authentication.
-    **Permissions**: User must own the feature flag or be a superuser.
+    **Permissions**: Needs the feature_flag (update) permission, which ADMIN
+    and DEVELOPER hold; in the full profile a custom role or direct grant can
+    add it, and a superuser always has it. Anyone else gets 403.
 
     Returns:
         ToggleResponse: Updated feature flag details with audit log ID
@@ -1498,10 +1505,14 @@ async def disable_feature_flag(
 
     This endpoint explicitly disables a feature flag. An archived flag is
     already off: it answers 200 and stays archived.
-    Includes complete audit logging with user information and optional reason.
+    Writes one audit entry with user information and optional reason, also
+    when the flag already has that status; a failed audit write does not fail
+    the request.
 
     **Authentication**: Requires valid user authentication.
-    **Permissions**: User must own the feature flag or be a superuser.
+    **Permissions**: Needs the feature_flag (update) permission, which ADMIN
+    and DEVELOPER hold; in the full profile a custom role or direct grant can
+    add it, and a superuser always has it. Anyone else gets 403.
 
     Returns:
         ToggleResponse: Updated feature flag details with audit log ID

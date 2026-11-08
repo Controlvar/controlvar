@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.sdk_scope import require_batch_assign_key
 from backend.app.core.context_limits import check_context
 from backend.app.core.logger import failure_detail, unexpected_failure
@@ -51,7 +52,7 @@ from backend.app.services.bandit_routing import bandit_chooser
 from backend.app.services.event_service import EventService
 
 # Create router
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 logger = logging.getLogger(__name__)
 

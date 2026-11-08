@@ -274,7 +274,7 @@ describe('SafetyDashboard', () => {
     await openRollbackModalForSecondFlag();
     expect(screen.getByTestId('rollback-modal-effect')).toHaveTextContent(
       'The flag will be turned off for every user, including users matched by a targeting ' +
-        "rule. They get the flag's default value. Its rollout schedule is paused. To serve " +
+        "rule. They get the flag's off value. Its rollout schedule is paused. To serve " +
         "it again, turn it on from the flag's page.",
     );
     expect(screen.getByTestId('rollback-modal')).not.toHaveTextContent(/stays active/i);
@@ -447,7 +447,7 @@ describe('SafetyDashboard rollback dialog: keyboard and screen reader (#629)', (
   it('says automatic rollbacks are not listed under the session table', async () => {
     render(<SafetyDashboard />);
     expect(await screen.findByTestId('rollback-history-automatic-note')).toHaveTextContent(
-      'Automatic rollbacks are not listed here yet.',
+      'Automatic rollbacks are not listed here. Find them in the Audit Log under Safety rollback.',
     );
   });
 });

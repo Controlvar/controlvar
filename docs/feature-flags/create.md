@@ -416,7 +416,8 @@ archived flag is already off. The way back is
 `POST /api/v1/feature-flags/$FLAG_ID/unarchive` (beta), which makes the flag
 inactive; turn it on afterwards as usual. A flag is archived with
 `POST /api/v1/feature-flags/bulk-toggle` and `"action": "archive"`. The dashboard has no
-archive or unarchive action yet.
+archive or unarchive action yet. It shows an archived flag as **Archived**, with no on/off
+switch and a link to this section, and the flag list has an **Archived** filter.
 
 ### Deleting a flag
 

@@ -1600,6 +1600,36 @@ CORRECTION_NAMES: Dict[str, str] = {
     "benjamini_hochberg": "Benjamini-Hochberg",
     "bonferroni": "Bonferroni",
 }
+#: How the rules in words name each operator (frontend/src/types/targeting.ts
+#: ``OPERATOR_LABELS``; a unit test keeps them equal).
+OPERATOR_LABELS: Dict[str, str] = {
+    "equals": "equals",
+    "not_equals": "does not equal",
+    "contains": "contains",
+    "not_contains": "does not contain",
+    "starts_with": "starts with",
+    "ends_with": "ends with",
+    "greater_than": "greater than",
+    "less_than": "less than",
+    "greater_than_or_equal": "greater than or equal to",
+    "less_than_or_equal": "less than or equal to",
+    "in": "is one of",
+    "not_in": "is not one of",
+    "regex": "matches regex",
+    "is_null": "is empty",
+    "is_not_null": "is not empty",
+    "semver_eq": "version equals",
+    "semver_gt": "version greater than",
+    "semver_lt": "version less than",
+    "semver_gte": "version >=",
+    "semver_lte": "version <=",
+    "geo_within_radius": "within radius of",
+    "time_window": "within time window",
+    "array_contains": "array contains",
+    "array_intersects": "array intersects",
+    "in_segment": "is in segment",
+    "not_in_segment": "is not in segment",
+}
 #: The Review row's addition when Bayesian analysis is on (Wizard.tsx).
 BAYESIAN_ON = " · Bayesian analysis on"
 #: ...and when sequential testing is on (Wizard.tsx, #1463).
@@ -1682,6 +1712,69 @@ def describe_settings(level: float, method: str) -> str:
         "no correction" if method == "none" else f"{correction_name(method)} correction"
     )
     return f"{format_confidence(level)} confidence · {correction}"
+
+
+def _text(value: Any) -> str:
+    """``String(value ?? '')`` for the values the rule builder sends: text, or
+    null for ``is_null`` / ``is_not_null``. A stored value of another type
+    cannot reach the readings: check 6 has refused it first."""
+    return "" if value is None else str(value)
+
+
+def condition_words(condition: Mapping[str, Any]) -> str:
+    """``describeCondition`` (frontend/src/utils/experimentTargeting.ts): one
+    condition in words, ``user.country is one of US, CA``."""
+    attribute = _text(condition.get("attribute"))
+    operator = _text(condition.get("operator"))
+    label = OPERATOR_LABELS.get(operator, operator)
+    if operator in ("is_null", "is_not_null"):
+        return f"{attribute} {label}"
+    value = condition.get("value")
+    shown = (
+        ", ".join(_text(v) for v in value) if isinstance(value, list) else _text(value)
+    )
+    return f"{attribute} {label} {shown}"
+
+
+def combine_word(logical_operator: Any) -> str:
+    """``combineWord``: "any" for OR, "all" for AND or none."""
+    return "any" if logical_operator == "OR" else "all"
+
+
+def targeting_words(rules: Any) -> str:
+    """The Review's targeting row (Wizard.tsx, #1425) as one line: "Targeting:"
+    then ``RulesSummary`` (frontend/src/components/experiments/RulesSummary.tsx)
+    for rules that hold groups, "Targeting: everyone" for none."""
+    if _stored_rules_empty(rules):
+        return "Targeting: everyone"
+    rules = rules if isinstance(rules, dict) else {}
+    groups = [g for g in rules.get("groups") or [] if isinstance(g, dict)]
+
+    def conditions(group: Mapping[str, Any]) -> List[str]:
+        return [
+            condition_words(c)
+            for c in group.get("conditions") or []
+            if isinstance(c, dict)
+        ]
+
+    if len(groups) == 1:
+        parts = [
+            f"People who match {combine_word(groups[0].get('logical_operator'))}"
+            " of these conditions:",
+            *conditions(groups[0]),
+        ]
+    else:
+        parts = [
+            f"People who match {combine_word(rules.get('logical_operator'))}"
+            " of these groups:"
+        ]
+        for index, group in enumerate(groups, start=1):
+            parts.append(
+                f"Group {index}: {combine_word(group.get('logical_operator'))}"
+                " of these conditions"
+            )
+            parts.extend(conditions(group))
+    return _one_line(" ".join(["Targeting:", *parts]))
 
 
 def _one_line(text: Optional[str]) -> str:
@@ -1785,13 +1878,7 @@ def design_mirrors(
         if api["is_primary"]:
             line += " — primary metric"
         metric_lines.append(line)
-    rules = saved["targeting_rules"]
-    if _stored_rules_empty(rules):
-        targeting = "Targeting: everyone"
-    else:
-        groups = rules.get("groups") if isinstance(rules, dict) else None
-        count = len(groups) if isinstance(groups, list) else 0
-        targeting = f"Targeting: {count} rule {'group' if count == 1 else 'groups'}"
+    targeting = targeting_words(saved["targeting_rules"])
     level = float(saved["confidence_level"])
     method = str(saved["correction_method"])
     detail = "no correction" if method == "none" else correction_name(method)

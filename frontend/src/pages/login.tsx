@@ -15,6 +15,10 @@ type FormState = 'idle' | 'submitting';
 /** C1b's copy for a rate-limited sign-in; the SSO exchange's 429 shows it too. */
 export const RATE_LIMITED_MESSAGE = 'Too many attempts. Please wait a moment and try again.';
 
+/** The copy for a sign-in whose 2xx answer could not be read (#1039). */
+export const SIGN_IN_UNREADABLE_MESSAGE =
+  "Sign-in did not finish: the API's answer could not be read. Try again in a moment.";
+
 /** The API's terse 400 when the request's Host is not one it answers on. */
 export const INVALID_HOST_DETAIL = 'Invalid host header';
 
@@ -46,6 +50,7 @@ export function loginErrorMessage(err: unknown): string {
         : 'Too many failed attempts. Try again in a few minutes.';
     }
     if (err.status === 429) return RATE_LIMITED_MESSAGE;
+    if (err.unreadableAnswer) return SIGN_IN_UNREADABLE_MESSAGE;
     if (err.timedOut) return signInTimeoutMessage();
     if (err.status === 0) return unreachableMessage();
     return err.message;
