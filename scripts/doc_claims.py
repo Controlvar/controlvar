@@ -765,18 +765,8 @@ MECHANISMS: Dict[str, Mechanism] = {
             "Each assistant starts the server itself, with two settings: "
             "CONTROLVAR_API_URL is your instance's address and "
             "CONTROLVAR_API_KEY is the key.",
-            "Run this in the sdk/mcp directory you built, with the key in $KEY:",
-        ),
-    ),
-    # "Not yet published": while the page says so it names no npx command.
-    "mcp-page-state": Mechanism(
-        "backend/tests/unit/docs/test_mcp_page_config.py"
-        "::test_an_unpublished_page_names_no_install_by_npx",
-        holds=_whole(
-            "docs/mcp-server.md",
-            "Not yet published.",
-            "@controlvar/mcp-server is not on npm, so build it from a clone of "
-            "this repository:",
+            "Run this in the project directory where you want the server, "
+            "with the key in $KEY:",
         ),
     ),
     "integrations-claims": Mechanism(
@@ -811,7 +801,30 @@ MECHANISMS: Dict[str, Mechanism] = {
             (
                 "docs/getting-started/faq.md",
                 r"\((?:npm|pip) install (?:@controlvar/[A-Za-z0-9_-]{1,60}"
-                r"|controlvar), [0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}, beta\)",
+                r"|controlvar(?:-openfeature)?), [0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4},"
+                r" beta\)",
+            ),
+        ),
+    ),
+    # A sentence that puts SDKs on npm, PyPI, Maven Central or NuGet names
+    # only SDKs on that registry (ON_REGISTRY in test_sdk_doc_versions.py).
+    # The sweep reads every page; these are the units that cite it.
+    "registry-availability": Mechanism(
+        "backend/tests/unit/docs/test_registry_availability.py"
+        "::test_every_registry_sentence_names_only_sdks_on_that_registry",
+        holds=(
+            (
+                "docs/getting-started/faq.md",
+                r"\b(?:is|are) on (?:npm|PyPI|Maven Central|NuGet)\b|^So are the ",
+            ),
+            (
+                "docs/getting-started/limitations.md",
+                r"^Every SDK on a package registry \| ",
+            ),
+            ("demo/DEMO_GUIDE.md", r"\bon (?:npm and PyPI|PyPI and npm)\b"),
+            (
+                "docs/sdk-guide.md",
+                r"^The Java SDK and its Spring Boot starter are on Maven Central:$",
             ),
         ),
     ),

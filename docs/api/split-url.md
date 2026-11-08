@@ -935,7 +935,8 @@ host is neither the same control URL nor a chain. An active split URL experiment
 stored configuration breaks a rule is left out of the last two checks. When the scheduler
 starts a draft at its `start_date`, it makes the first two checks and leaves a draft that
 fails them as a draft. The routes table applies the last two checks too, so of two active
-experiments that clash, only the one started first is split.
+experiments that clash, only the one started first is split. A clone copies
+`split_url_config` and starts after the same checks.
 
 ---
 

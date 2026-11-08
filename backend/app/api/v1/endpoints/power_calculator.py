@@ -14,6 +14,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, status
 
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.logger import unexpected_failure
 from backend.app.schemas.power_calculator import (
     MDERequest,
@@ -34,7 +35,7 @@ from backend.app.services.power_calculator_service import PowerCalculatorService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 _calculator = PowerCalculatorService()
 _planner = AIExperimentPlannerService()
 

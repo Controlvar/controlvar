@@ -28,6 +28,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.db.session import get_db
 from backend.app.models.user import User, UserRole
 from modules.backend.app.schemas.hipaa import (
@@ -48,7 +49,7 @@ from modules.backend.app.services.hipaa_service import HIPAAService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 # Roles allowed for HIPAA admin operations
 _ADMIN_ROLES = (UserRole.ADMIN,)

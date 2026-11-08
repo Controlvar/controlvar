@@ -443,6 +443,65 @@ def test_flag_activate_that_changes_nothing_writes_nothing(
     assert w.rows() == []
 
 
+def test_flag_deactivate_that_changes_nothing_writes_nothing(
+    client, fresh, db_session, developer
+):
+    flag = _flag(db_session, FeatureFlagStatus.INACTIVE)
+    w = Written(fresh)
+    response = client.post(
+        f"{V1}/feature-flags/{flag.id}/deactivate", headers=_auth(developer)
+    )
+    assert response.status_code == 200, response.text
+    assert w.rows() == []
+
+
+@pytest.mark.parametrize(
+    "via,verb,start,action",
+    [
+        ("route", "enable", FeatureFlagStatus.ACTIVE, "toggle_enable"),
+        ("route", "disable", FeatureFlagStatus.INACTIVE, "toggle_disable"),
+        ("route", "disable", FeatureFlagStatus.ARCHIVED, "toggle_disable"),
+        ("bulk", "enable", FeatureFlagStatus.ACTIVE, "toggle_enable"),
+        ("bulk", "disable", FeatureFlagStatus.INACTIVE, "toggle_disable"),
+        ("bulk", "disable", FeatureFlagStatus.ARCHIVED, "toggle_disable"),
+        ("bulk", "archive", FeatureFlagStatus.ARCHIVED, "feature_flag_update"),
+    ],
+)
+def test_enable_and_disable_that_change_nothing_still_write_one_entry(
+    client, fresh, db_session, developer, via, verb, start, action
+):
+    """audit-logging.md: a request that leaves the status unchanged writes one
+    entry with old_value equal to new_value (``/activate`` and ``/deactivate``
+    write none, pinned beside this test)."""
+    flag = _flag(db_session, start)
+    w = Written(fresh)
+    if via == "route":
+        response = client.post(
+            f"{V1}/feature-flags/{flag.id}/{verb}", json={}, headers=_auth(developer)
+        )
+        assert response.status_code == 200, response.text
+    else:
+        # A second id that does not exist fails and must get no entry or id.
+        response = client.post(
+            f"{V1}/feature-flags/bulk-toggle",
+            json={"flag_ids": [str(flag.id), str(uuid.uuid4())], "action": verb},
+            headers=_auth(developer),
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert (body["succeeded"], body["failed"]) == (1, 1), body
+    row = _one(w, action, "feature_flag", flag.id, developer)
+    # The status words are stored as they are, not as JSON.
+    assert row.old_value == row.new_value == start.value, (
+        row.old_value,
+        row.new_value,
+    )
+    if via == "bulk":
+        assert body["audit_log_ids"] == [str(row.id)]
+    flag_status = db_session.query(FeatureFlag.status).filter_by(id=flag.id).scalar()
+    assert flag_status == start
+
+
 def test_bulk_toggle_one_entry_per_flag(client, fresh, db_session, developer):
     flags = [_flag(db_session) for _ in range(2)]
     w = Written(fresh)

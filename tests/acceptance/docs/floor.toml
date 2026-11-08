@@ -77,6 +77,7 @@ routes = [
   "/api/v1/experiments/{experiment_id}/archive",
   "/api/v1/experiments/{experiment_id}/clone",
   "/api/v1/experiments/{experiment_id}/complete",
+  "/api/v1/experiments/{experiment_id}/metadata",
   "/api/v1/experiments/{experiment_id}/pause",
   "/api/v1/experiments/{experiment_id}/results",
   "/api/v1/experiments/{experiment_id}/schedule",

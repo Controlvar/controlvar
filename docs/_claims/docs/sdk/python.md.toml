@@ -8,7 +8,7 @@ text = "Python SDK"
 by = ["exempt:label"]
 
 [[unit]]
-text = "controlvar (v0.2.0) is a synchronous, dependency-free Python client for the Controlvar public API: experiment assignment, feature-flag evaluation and event tracking."
+text = "controlvar (v0.3.0) is a synchronous, dependency-free Python client for the Controlvar public API: experiment assignment, feature-flag evaluation and event tracking."
 by = [
     "mechanism:sdk-doc-versions",
     "test:sdk/python/tests/test_package.py::test_the_client_is_synchronous",
@@ -62,7 +62,7 @@ by = [
 ]
 
 [[unit]]
-text = "0.2.0 is a beta release."
+text = "0.3.0 is a beta release."
 by = [
     "mechanism:sdk-doc-versions",
     "journey:sdk-python#quick-start-user-on",
@@ -123,10 +123,11 @@ text = "get_variant(experiment_key, user_id, user_attributes=None) | str — the
 by = ["test:sdk/python/tests/test_client.py::TestGetVariant::test_returns_default_on_404"]
 
 [[unit]]
-text = "get_feature_flag(flag_key, user_id, user_attributes=None) | FlagEvaluation(key, enabled, config, reason) | raises ExperimentationError (status == 404 when the flag key is unknown; a flag that is not ACTIVE returns enabled=False, reason=\"inactive\")"
+text = "get_feature_flag(flag_key, user_id, user_attributes=None) | FlagEvaluation(key, enabled, config, reason, source, value, value_type) | raises ExperimentationError (status == 404 when the flag key is unknown; a flag that is not ACTIVE returns enabled=False, reason=\"inactive\")"
 by = [
     "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_maps_response",
     "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_404_raises_and_is_not_cached",
+    "test:sdk/python/tests/test_client.py::TestFlagEvaluationValue::test_value_and_value_type_come_after_every_older_field",
     "test:backend/tests/integration/api/test_feature_flag_kill_switch.py::TestKillSwitch::test_disabled_flag_evaluates_off_for_sdk_clients",
     "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_unknown_key_returns_404",
 ]
@@ -136,6 +137,32 @@ text = "is_feature_enabled(flag_key, user_id, user_attributes=None) | bool | ret
 by = [
     "test:sdk/python/tests/test_client.py::TestIsFeatureEnabled::test_false_on_404",
     "test:sdk/python/tests/test_client.py::TestIsFeatureEnabled::test_false_on_network_error",
+]
+
+[[unit]]
+text = "get_string_value(flag_key, user_id, user_attributes=None, , default) | str, the string a string flag serves this user; see Flag values | returns default; never raises; logs a warning and calls on_error(error, \"value\")"
+by = [
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_returns_the_value_the_flag_serves",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_each_returns_the_default_and_reports",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_logs_a_warning_as_is_feature_enabled_does",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_default_is_keyword_only_so_a_swapped_call_is_a_type_error",
+]
+
+[[unit]]
+text = "get_number_value(flag_key, user_id, user_attributes=None, , default) | int or float as saved (never a bool), the number a number flag serves this user | returns default; never raises; logs a warning and calls on_error(error, \"value\")"
+by = [
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_returns_the_value_the_flag_serves",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_an_integral_float_is_a_number_and_stays_a_float",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_never_coerces_a_string_10_is_not_a_number_and_10_is_not_a_string",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_each_returns_the_default_and_reports",
+]
+
+[[unit]]
+text = "get_json_value(flag_key, user_id, user_attributes=None, , default) | a new copy of the dict or list a json flag serves this user | returns default; never raises; logs a warning and calls on_error(error, \"value\")"
+by = [
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_returns_the_value_the_flag_serves",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_get_json_value_returns_a_new_copy_on_every_call",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_each_returns_the_default_and_reports",
 ]
 
 [[unit]]
@@ -210,14 +237,26 @@ by = [
 ]
 
 [[unit]]
-text = "Assignment and FlagEvaluation are frozen dataclasses."
-by = ["test:sdk/python/tests/test_package.py::test_assignment_and_flag_evaluation_are_frozen_dataclasses"]
+text = "Assignment, FlagEvaluation and Exposure are frozen dataclasses."
+by = [
+    "test:sdk/python/tests/test_package.py::test_assignment_and_flag_evaluation_are_frozen_dataclasses",
+    "test:sdk/python/tests/test_exposure.py::TestTheClientAroundIt::test_exposure_is_a_frozen_dataclass_of_exactly_the_four_fields_exported_from_controlvar",
+]
 
 [[unit]]
-text = "ExperimentationError carries .status (HTTP status, None for network errors and timeouts) and .body (raw response text)."
+text = "ExperimentationError carries .status (HTTP status, None for network errors and timeouts), .body (raw response text) and .code: \"TYPE_MISMATCH\" or \"INVALID_RESPONSE\" on an error a typed getter makes itself, and \"HOOK_ERROR\" on the error on_error receives with \"exposure\"."
 by = [
     "test:sdk/python/tests/test_client.py::TestGetAssignment::test_404_raises_with_status_and_body",
     "test:sdk/python/tests/test_client.py::TestGetAssignment::test_transport_failure_raises_experimentation_error",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_each_returns_the_default_and_reports",
+    "test:sdk/python/tests/test_exposure.py::TestAHookThatRaises::test_is_reported_to_on_error_once_with_exposure_and_an_experimentation_error_whose_code_is_hook_error",
+]
+
+[[unit]]
+text = "Other errors carry no code in this version; .status describes them."
+by = [
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_each_returns_the_default_and_reports",
+    "test:sdk/python/tests/test_client.py::TestFlagEvaluationValue::test_an_experimentation_error_built_by_position_keeps_working",
 ]
 
 [[unit]]
@@ -481,7 +520,7 @@ by = [
 ]
 
 [[unit]]
-text = "From the next published version, track returns False, and sends nothing, when event_value or properties holds NaN or an infinite number."
+text = "track returns False, and sends nothing, when event_value or properties holds NaN or an infinite number."
 by = [
     "test:sdk/python/tests/test_client.py::TestNaNAndInfinityAreNotSent::test_track_returns_false_and_sends_nothing",
 ]
@@ -510,11 +549,7 @@ by = [
 ]
 
 [[unit]]
-text = "Use this option from the next published version of this package, not from the version on PyPI now."
-by = ["exempt:instruction"]
-
-[[unit]]
-text = "It also needs a Controlvar server that includes the event_id change (#1640), which the platform release after 0.39.0 is to carry; an older server ignores the field and stores an event sent again a second time."
+text = "It needs a Controlvar server that includes the event_id change (#1640), which the platform release after 0.39.0 is to carry; an older server ignores the field and stores an event sent again a second time."
 by = [
     "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
     "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r8_without_an_event_id_two_identical_purchases_are_both_stored",
@@ -661,6 +696,294 @@ text = "Conversions are matched to experiment metrics by event name."
 by = ["test:backend/tests/integration/services/test_conversion_event_matching.py::TestConversionEventFilter::test_matches_both_producer_shapes_and_excludes_exposures"]
 
 [[unit]]
+text = "Flag values"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A flag serves two values: its on value to the users it is on for, and its off value to everyone else, and to everyone while it is turned off."
+by = [
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_returns_the_off_value_the_server_sends_when_the_flag_is_off_for_the_user",
+    "test:sdk/python/tests/test_local.py::test_turning_a_value_flag_off_reaches_the_client_at_the_next_refresh",
+]
+
+[[unit]]
+text = "For a string, number or json flag, read the value with the getter of its type: get_string_value, get_number_value or get_json_value."
+by = ["test:sdk/python/tests/test_client.py::TestTypedValues::test_returns_the_value_the_flag_serves"]
+
+[[unit]]
+text = "Pass the flag's off value as your default, so that a flag your code cannot reach behaves as off."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "default is keyword-only, so a call that passes it by position raises TypeError rather than evaluating the flag for a user named after your default."
+by = ["test:sdk/python/tests/test_client.py::TestTypedValues::test_default_is_keyword_only_so_a_swapped_call_is_a_type_error"]
+
+[[unit]]
+text = "OpenFeature's get_string_value takes the default second; this client takes the user id second."
+by = ["test:sdk/python/tests/test_client.py::TestTypedValues::test_default_is_keyword_only_so_a_swapped_call_is_a_type_error"]
+
+[[unit]]
+text = "A getter never raises."
+by = [
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_each_returns_the_default_and_reports",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_never_raises_for_attributes_it_cannot_send_without_on_error_or_with_a_raising_on_error",
+]
+
+[[unit]]
+text = "It returns your default, logs a warning, and passes the reason to on_error(error, \"value\") when the request fails (including a 404 for a flag the server does not know; error.status says which), when the server's answer carries no value (in server mode, from a server from before flag values, error.code \"INVALID_RESPONSE\"; in local mode, every flag the client answers locally from such a server's ruleset reads as boolean, so the getter reports \"TYPE_MISMATCH\"), or when the flag serves another type (error.code \"TYPE_MISMATCH\", with a message such as Flag \"checkout-button-label\" serves a string; get_number_value returned your default)."
+by = [
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_each_returns_the_default_and_reports",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_logs_a_warning_as_is_feature_enabled_does",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_names_what_an_older_server_lacks",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_on_a_flag_of_another_type_the_default_and_type_mismatch",
+    "test:sdk/python/tests/test_local.py::test_against_a_server_from_before_flag_values_every_local_flag_reads_as_boolean",
+]
+
+[[unit]]
+text = "A boolean flag is another type; read it with is_feature_enabled."
+by = ["test:sdk/python/tests/test_client.py::TestTypedValues::test_on_a_flag_of_another_type_the_default_and_type_mismatch"]
+
+[[unit]]
+text = "Nothing is coerced: \"10\" is not a number, and neither is True."
+by = [
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_never_coerces_a_string_10_is_not_a_number_and_10_is_not_a_string",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_a_value_that_is_not_of_the_type_the_server_names_is_the_default_never_a_wrong_value",
+]
+
+[[unit]]
+text = "get_number_value returns the number as it was saved: an int, or a float (10.0 stays a float)."
+by = ["test:sdk/python/tests/test_client.py::TestTypedValues::test_an_integral_float_is_a_number_and_stays_a_float"]
+
+[[unit]]
+text = "get_json_value checks that the value is a dict or a list, and returns a new copy on every call."
+by = [
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_get_json_value_returns_a_new_copy_on_every_call",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_a_value_that_is_not_of_the_type_the_server_names_is_the_default_never_a_wrong_value",
+]
+
+[[unit]]
+text = "A getter is evaluated as get_feature_flag is: cached per user and flag for cache_ttl_seconds (0 caches nothing), and in local mode answered from the ruleset."
+by = [
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_is_evaluated_once_per_user_and_flag_for_cache_ttl_seconds_like_get_feature_flag",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_cache_ttl_zero_caches_nothing",
+    "test:sdk/python/tests/test_local.py::test_the_typed_getters_answer_value_flags_from_the_ruleset_with_no_request",
+]
+
+[[unit]]
+text = "get_feature_flag returns the same answer with value and value_type; in server mode both are None from a server without flag values."
+by = [
+    "test:sdk/python/tests/test_client.py::TestFlagEvaluationValue::test_copies_the_servers_value_and_value_type",
+    "test:sdk/python/tests/test_client.py::TestFlagEvaluationValue::test_both_are_none_when_an_older_server_sends_neither",
+]
+
+[[unit]]
+text = "Exposure hook"
+by = ["exempt:label"]
+
+[[unit]]
+text = "on_exposure is a function you give the client when you create it."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_called_once_with_exactly_the_experiment_key_user_id_variant_id_and_variant_name",
+    "test:sdk/python/tests/test_exposure.py::TestTheClientAroundIt::test_on_exposure_none_sets_no_hook_and_the_assignment_works_as_before",
+]
+
+[[unit]]
+text = "The client calls it once each time the server enrols the user in an experiment and the answer did not come from the client's cache: the moment the server records the exposure."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_called_once_with_exactly_the_experiment_key_user_id_variant_id_and_variant_name",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_a_cached_answer_calls_nothing_however_often_the_answer_is_asked_for",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_called_once_per_user_and_experiment",
+    "test:backend/tests/integration/services/test_assignment_service_coverage.py::TestAssignUser::test_track_exposure_called_on_existing_assignment",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+]
+
+[[unit]]
+text = "Use it to send the exposure to your analytics tool or warehouse."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "The example needs an ACTIVE experiment with the key checkout_flow; put your own key in its place."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints exposure checkout_flow <variant> user-123 once, or nothing for a user the experiment did not enrol."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_called_once_with_exactly_the_experiment_key_user_id_variant_id_and_variant_name",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_not_called_for_assigned_false_and_the_control_answer_comes_back_unchanged",
+]
+
+[[unit]]
+text = "It receives an Exposure: experiment_key, user_id, variant_id (None when the server sends none) and variant_name, in a new object for each call."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_called_once_with_exactly_the_experiment_key_user_id_variant_id_and_variant_name",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_passes_variant_id_none_when_the_server_sends_no_variant_id",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_passes_the_user_id_the_assignment_was_asked_for",
+]
+
+[[unit]]
+text = "Nothing else: not the user's attributes and not the variant's configuration."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_called_once_with_exactly_the_experiment_key_user_id_variant_id_and_variant_name",
+    "test:sdk/python/tests/test_exposure.py::TestTheClientAroundIt::test_exposure_is_a_frozen_dataclass_of_exactly_the_four_fields_exported_from_controlvar",
+]
+
+[[unit]]
+text = "Exposure is a frozen dataclass, exported from controlvar."
+by = ["test:sdk/python/tests/test_exposure.py::TestTheClientAroundIt::test_exposure_is_a_frozen_dataclass_of_exactly_the_four_fields_exported_from_controlvar"]
+
+[[unit]]
+text = "It is not called for:"
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_a_cached_answer_calls_nothing_however_often_the_answer_is_asked_for",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_not_called_for_assigned_false_and_the_control_answer_comes_back_unchanged",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_a_failed_call_calls_nothing",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_flags_never_call_it_in_server_mode",
+]
+
+[[unit]]
+text = "an answer from the client's cache;"
+by = ["test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_a_cached_answer_calls_nothing_however_often_the_answer_is_asked_for"]
+
+[[unit]]
+text = "a user the experiment did not enrol (assigned False, with reason \"holdout\", \"mutual_exclusion\" or \"targeting\"), or an experiment that is not running (\"draft\", \"paused\", \"completed\" or \"archived\"): the server records no exposure for them, and the client returns the control variant;"
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_not_called_for_assigned_false_and_the_control_answer_comes_back_unchanged",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+    "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_an_answer_for_an_experiment_that_is_not_running_records_nothing",
+]
+
+[[unit]]
+text = "a call that fails, including one that times out after the server recorded the exposure;"
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_a_failed_call_calls_nothing",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_a_call_that_times_out_calls_nothing_even_if_the_server_recorded_the_exposure",
+]
+
+[[unit]]
+text = "a feature flag, in either evaluation mode."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_flags_never_call_it_in_server_mode",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_flags_never_call_it_in_local_mode_either_and_experiments_still_do",
+]
+
+[[unit]]
+text = "It is not called when the server does not send assigned; every Controlvar server release sends it."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_not_called_when_assigned_is_missing_or_not_a_boolean",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "It is called again, and the server records another exposure, after the cache lifetime (cache_ttl_seconds, 300 seconds by default; with cache_ttl_seconds=0, on every call), after clear_cache(), and in every new client: each process, such as each worker of a web server, has its own."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestCalledAgainWhenTheClientAsksTheServerAgain::test_after_the_cache_lifetime",
+    "test:sdk/python/tests/test_exposure.py::TestCalledAgainWhenTheClientAsksTheServerAgain::test_after_clear_cache",
+    "test:sdk/python/tests/test_exposure.py::TestCalledAgainWhenTheClientAsksTheServerAgain::test_in_a_new_client",
+    "test:sdk/python/tests/test_exposure.py::TestCalledAgainWhenTheClientAsksTheServerAgain::test_on_every_call_with_cache_ttl_seconds_0_which_asks_the_server_every_time",
+    "test:sdk/python/tests/test_client.py::TestConstruction::test_defaults_and_trailing_slash",
+    "test:backend/tests/integration/services/test_assignment_service_coverage.py::TestAssignUser::test_track_exposure_called_on_existing_assignment",
+]
+
+[[unit]]
+text = "So your tool can receive several exposures for one user and experiment: count users, not events."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "It never receives one the server did not record."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_not_called_for_assigned_false_and_the_control_answer_comes_back_unchanged",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_not_called_when_assigned_is_missing_or_not_a_boolean",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_a_failed_call_calls_nothing",
+]
+
+[[unit]]
+text = "It is called when your code asks for the assignment, whether or not you then show the variant, so ask for it where the variant is shown."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "It runs in the thread that called get_assignment or get_variant, after the answer is cached and before the call returns, so its running time is added to that call."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestTheClientAroundIt::test_runs_in_the_calling_thread_before_get_assignment_returns",
+    "test:sdk/python/tests/test_exposure.py::TestTheClientAroundIt::test_runs_after_the_answer_is_stored_and_recorded_a_key_less_track_in_the_hook_reaches_the_experiment",
+]
+
+[[unit]]
+text = "The client cannot time it out: a function that blocks for a second makes that call a second slower."
+by = ["test:sdk/python/tests/test_exposure.py::TestTheClientAroundIt::test_runs_in_the_calling_thread_before_get_assignment_returns"]
+
+[[unit]]
+text = "Calls for other users and experiments are not held up."
+by = ["test:sdk/python/tests/test_exposure.py::TestTheClientAroundIt::test_a_hook_that_asks_for_the_same_assignment_gets_the_cached_answer_with_no_lock_held"]
+
+[[unit]]
+text = "Put the exposure on a queue, as above, so a slow analytics request never sits inside an assignment."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "It can run on several threads at once: make it safe for that."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestTheClientAroundIt::test_a_hook_that_asks_for_the_same_assignment_gets_the_cached_answer_with_no_lock_held",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_concurrent_first_calls_each_send_a_request_and_make_one_call",
+]
+
+[[unit]]
+text = "Two threads that ask for the same new user and experiment at the same moment send two requests, and the server records two exposures; the hook is called once."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_concurrent_first_calls_each_send_a_request_and_make_one_call",
+    "test:sdk/python/tests/test_exposure.py::TestUserKeyCacheSetNew::test_true_for_an_empty_slot_false_for_a_live_one_and_true_for_an_expired_one",
+    "test:backend/tests/integration/services/test_assignment_service_coverage.py::TestAssignUser::test_track_exposure_called_on_existing_assignment",
+]
+
+[[unit]]
+text = "If it raises, the answer is unchanged."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestAHookThatRaises::test_changes_nothing_get_variant_returns_the_variant_and_get_assignment_returns",
+    "test:sdk/python/tests/test_exposure.py::TestAHookThatRaises::test_leaves_the_answer_cached_a_second_call_makes_no_request_and_calls_nothing",
+]
+
+[[unit]]
+text = "The client logs the error at ERROR, with its traceback, on the controlvar.client logger, and passes it to on_error with the operation \"exposure\": an ExperimentationError whose code is \"HOOK_ERROR\", whose message starts with on_exposure failed:, and whose __cause__ is what your function raised."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestAHookThatRaises::test_is_logged_at_error_with_its_traceback_on_the_controlvar_client_logger",
+    "test:sdk/python/tests/test_exposure.py::TestAHookThatRaises::test_is_reported_to_on_error_once_with_exposure_and_an_experimentation_error_whose_code_is_hook_error",
+    "test:sdk/python/tests/test_exposure.py::TestAHookThatRaises::test_an_on_error_that_raises_too_leaves_the_answer_unchanged",
+]
+
+[[unit]]
+text = "KeyboardInterrupt and SystemExit are not caught."
+by = ["test:sdk/python/tests/test_exposure.py::TestAHookThatRaises::test_keyboard_interrupt_and_system_exit_are_not_caught"]
+
+[[unit]]
+text = "An async def, or a functools.partial of one, is refused with TypeError when you create the client: the client never awaits it, so its body would never run."
+by = ["test:sdk/python/tests/test_exposure.py::TestTheClientAroundIt::test_the_constructor_refuses_an_async_function_and_a_partial_of_one"]
+
+[[unit]]
+text = "An object whose __call__ is async def is not detected then: the coroutine it returns is closed without running, and reported as above."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestAsync::test_a_coroutine_from_an_async_call_is_not_run_and_is_reported",
+    "test:sdk/python/tests/test_exposure.py::TestAsync::test_a_returned_coroutine_is_closed_so_it_never_runs_and_never_warns_that_it_was_not_awaited",
+]
+
+[[unit]]
+text = "Anything else it returns, such as an asyncio task it scheduled itself, is left alone."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestAsync::test_a_task_the_hook_schedules_on_a_running_loop_is_left_alone_runs_and_is_not_reported",
+    "test:sdk/python/tests/test_exposure.py::TestCallExposureHook::test_passes_the_hook_the_exposure_only_and_reports_nothing_for_a_value",
+]
+
+[[unit]]
+text = "The constructor raises TypeError for a value that is not callable; None sets none."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestTheClientAroundIt::test_the_constructor_refuses_a_value_that_is_not_callable",
+    "test:sdk/python/tests/test_exposure.py::TestTheClientAroundIt::test_on_exposure_none_sets_no_hook_and_the_assignment_works_as_before",
+]
+
+[[unit]]
+text = "In a test, a FakeTransport answer for POST /api/v1/tracking/assign must include \"assigned\": True, or the hook is not called."
+by = ["test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_not_called_when_assigned_is_missing_or_not_a_boolean"]
+
+[[unit]]
 text = "Backend endpoints used"
 by = ["exempt:label"]
 
@@ -673,9 +996,10 @@ text = "SDK call | Method and path | Body / query | Response used"
 by = ["exempt:label"]
 
 [[unit]]
-text = "get_assignment, get_variant | POST /api/v1/tracking/assign | {experiment_key, user_id, context?} | {experiment_key, user_id, variant_id, variant_name, is_control, configuration}; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with assigned: false"
+text = "get_assignment, get_variant | POST /api/v1/tracking/assign | {experiment_key, user_id, context?} | {experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with assigned: false"
 by = [
     "test:sdk/python/tests/test_client.py::TestGetAssignment::test_sends_post_with_context",
+    "test:sdk/python/tests/test_client.py::TestGetAssignment::test_carries_assigned_true_and_reason",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
     "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_a_draft_with_no_control_variant_returns_404",
     "test:backend/tests/integration/api/test_tracking_assign_not_running.py::test_each_status_answers_an_enrolled_and_a_new_user",
@@ -781,6 +1105,35 @@ text = "It needs an Controlvar server at 0.11.0 or later and a key with the sdk:
 by = ["test:backend/tests/smoke/test_sdk_scoped_routes.py::test_the_scoped_routes_are_exactly_these"]
 
 [[unit]]
+text = "A value flag's value is answered locally too: its on value when the flag is on for the user, its off value otherwise, and its off value to everyone while it is turned off."
+by = [
+    "test:sdk/python/tests/test_local.py::test_the_typed_getters_answer_value_flags_from_the_ruleset_with_no_request",
+    "test:sdk/python/tests/test_local.py::test_turning_a_value_flag_off_reaches_the_client_at_the_next_refresh",
+]
+
+[[unit]]
+text = "A flag entry this SDK cannot read (an evaluation or value_type from a newer server, or a value of the wrong type) is evaluated by the server, the rest of the ruleset is still answered locally, and, while the flag is active, status().server_evaluated_flags lists it."
+by = [
+    "test:sdk/python/tests/test_local.py::test_an_entry_this_sdk_cannot_read_sends_that_flag_to_the_server_and_the_rest_stay_local",
+    "test:sdk/python/tests/test_evaluator.py::test_an_entry_this_sdk_cannot_read_defers_that_flag_and_the_document_still_loads",
+]
+
+[[unit]]
+text = "A flag whose stored values the server cannot serve reaches every local client as a server-evaluated flag, whatever its status (only a direct database write, or a rollback past a release with wider value limits, produces one)."
+by = ["test:backend/tests/unit/services/test_sdk_ruleset.py::test_a_flag_whose_stored_value_breaks_the_rules_is_remote"]
+
+[[unit]]
+text = "Turning such a flag off does not change the ruleset."
+by = ["test:backend/tests/unit/services/test_sdk_ruleset.py::test_a_flag_whose_stored_value_breaks_the_rules_is_remote"]
+
+[[unit]]
+text = "So a local client of any version keeps the server's answer it cached for that user and flag for up to cache_ttl_seconds (5 minutes by default) before it sees the flag off, and while the flag exists get_all_flags asks the server on every call."
+by = [
+    "test:sdk/python/tests/test_client.py::TestConstruction::test_defaults_and_trailing_slash",
+    "test:sdk/python/tests/test_local.py::test_get_all_flags_one_remote_flag_sends_the_whole_call",
+]
+
+[[unit]]
 text = "A change made in the dashboard reaches the process at its next successful refresh."
 by = [
     "test:sdk/python/tests/test_local.py::test_5xx_after_a_load_keeps_serving_and_reports_each_failure",
@@ -826,8 +1179,11 @@ text = "Contract smoke"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Runs the four contract steps (sticky assignment, flag evaluation, keyed track, key-less fan-out plus a 2-event batch) against a live backend and prints one JSON line:"
-by = ["test:sdk/python/tests/test_contract_smoke.py::test_it_runs_the_four_contract_steps"]
+text = "Runs the four contract steps (sticky assignment, flag evaluation, keyed track, key-less fan-out plus a 2-event batch), sends one event twice with the same event_id, and runs two exposure hook steps (a new client assigns twice and its hook is called once; a hook that raises is reported) against a live backend and prints one JSON line:"
+by = [
+    "test:sdk/python/tests/test_contract_smoke.py::test_it_runs_the_four_contract_steps",
+    "test:sdk/python/tests/test_contract_smoke.py::test_without_assigned_in_the_answer_no_hook_is_called_and_it_fails_on_the_raising_hook",
+]
 
 [[unit]]
 text = "It prints:"

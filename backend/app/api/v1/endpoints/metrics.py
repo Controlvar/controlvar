@@ -15,6 +15,7 @@ from pydantic import AfterValidator
 from sqlalchemy.orm import Session
 
 from backend.app.api.deps import get_current_user, get_db
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.models.user import User
 from backend.app.schemas.metrics import (
     AggregatedMetricResponse,
@@ -26,7 +27,7 @@ from backend.app.schemas.metrics import (
 )
 from backend.app.services.metrics_service import SUMMARY_DEFAULT_PERIOD, MetricsService
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 #: PostgreSQL stores a UTC offset of at most 15:59:59 either way, and fails a
 #: query that compares with a larger one ("time zone displacement out of

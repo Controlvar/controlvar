@@ -23,6 +23,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.models.user import User, UserRole
 from modules.backend.app.schemas.etl import (
     ETLJobRequest,
@@ -35,7 +36,7 @@ from modules.backend.app.services.etl_service import ETLService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 # ---------------------------------------------------------------------------
 # Dependency — shared ETLService instance (override-able in tests)
@@ -44,9 +45,12 @@ router = APIRouter()
 _etl_service: Optional[ETLService] = None
 
 
-def get_etl_service() -> ETLService:
+async def get_etl_service() -> ETLService:
     """
     Dependency that returns a singleton ETLService.
+
+    ``async`` so that FastAPI calls it on the event loop rather than in a
+    worker thread; the service is built once per process, on first use.
 
     Can be overridden in tests via app.dependency_overrides.
     """

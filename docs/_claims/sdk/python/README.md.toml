@@ -61,7 +61,7 @@ text = "The controlvar package is on PyPI."
 by = ["journey:sdk-python#quick-start-user-on"]
 
 [[unit]]
-text = "0.2.0 is a beta release."
+text = "0.3.0 is a beta release."
 by = [
     "mechanism:sdk-doc-versions",
     "journey:sdk-python#quick-start-user-on",
@@ -81,49 +81,127 @@ text = "Changes in this version"
 by = ["exempt:label"]
 
 [[unit]]
-text = "report_error() is new: it sends one error report to the server and returns True when the server stored it."
+text = "get_string_value, get_number_value and get_json_value are new: they read the value a string, number or json flag serves."
+by = ["test:sdk/python/tests/test_client.py::TestTypedValues::test_returns_the_value_the_flag_serves"]
+
+[[unit]]
+text = "Each returns your default (keyword-only) when it cannot, logs a warning, and passes the reason to on_error(error, \"value\")."
 by = [
-    "test:sdk/python/tests/test_client.py::TestReportError::test_posts_one_report_with_the_server_field_names_and_returns_true_on_201",
-    "test:sdk/python/tests/test_client.py::TestReportError::test_returns_false_on_a_2xx_that_is_not_201",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_each_returns_the_default_and_reports",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_logs_a_warning_as_is_feature_enabled_does",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_default_is_keyword_only_so_a_swapped_call_is_a_type_error",
 ]
 
 [[unit]]
-text = "track() returns True when the event was sent and the server answered 2xx, and False otherwise."
+text = "See Flag values."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "FlagEvaluation gains value and value_type, after source, so building one by position still works."
 by = [
-    "test:sdk/python/tests/test_client.py::TestTrackWithKey::test_experiment_key_posts_to_track",
-    "test:sdk/python/tests/test_client.py::TestTrackNeverRaises::test_http_error",
-    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_a_fan_out_answered_non_2xx_returns_false",
-    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_an_untagged_send_answered_non_2xx_returns_false",
+    "test:sdk/python/tests/test_client.py::TestFlagEvaluationValue::test_value_and_value_type_come_after_every_older_field",
+    "test:sdk/python/tests/test_client.py::TestFlagEvaluationValue::test_positional_construction_by_existing_callers_keeps_working",
 ]
 
 [[unit]]
-text = "Before this version, a track() without a key returned True only when the server accepted every entry it was fanned out to."
-by = ["test:sdk/python/tests/test_client.py::TestTrackFanOut::test_a_batch_answered_2xx_returns_true_even_when_an_entry_failed"]
+text = "FlagEvaluation equality, repr and astuple/asdict include the two new fields."
+by = ["test:sdk/python/tests/test_client.py::TestFlagEvaluationValue::test_value_and_value_type_come_after_every_older_field"]
 
 [[unit]]
-text = "Now a batch answered 2xx returns True even when the server refused one of its entries; track_batch() returns the per-entry results."
+text = "ExperimentationError gains code: \"TYPE_MISMATCH\" or \"INVALID_RESPONSE\" on the errors the typed getters make, and \"HOOK_ERROR\" on the error on_error receives with \"exposure\"."
 by = [
-    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_a_batch_answered_2xx_returns_true_even_when_an_entry_failed",
-    "test:sdk/python/tests/test_client.py::TestTrackBatch::test_chunks_aggregates_and_offsets_error_indexes",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_each_returns_the_default_and_reports",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_on_a_flag_of_another_type_the_default_and_type_mismatch",
+    "test:sdk/python/tests/test_exposure.py::TestAHookThatRaises::test_is_reported_to_on_error_once_with_exposure_and_an_experimentation_error_whose_code_is_hook_error",
 ]
 
 [[unit]]
-text = "A track() without a key still reaches the experiments and flags this client answered for the user in the last 24 hours (with the exceptions under Tracking fan-out rule) after their cached answers expire; before this version it reached only the answers still in the cache."
+text = "Other errors carry no code in this version; status describes them."
 by = [
-    "test:sdk/python/tests/test_client.py::TestLateConversions::test_a_purchase_301_seconds_after_the_assignment_reaches_the_experiment",
-    "test:sdk/python/tests/test_client.py::TestLateConversions::test_clear_cache_keeps_the_attributed_keys",
-    "test:sdk/python/tests/test_client.py::TestLateConversions::test_a_key_answered_more_than_24_hours_ago_is_dropped_and_the_event_goes_with_no_key",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_each_returns_the_default_and_reports",
+    "test:sdk/python/tests/test_client.py::TestFlagEvaluationValue::test_an_experimentation_error_built_by_position_keeps_working",
 ]
 
 [[unit]]
-text = "Those keys are this client instance's only: an event tracked by another instance, in this process or another, reaches none of them."
-by = ["test:sdk/python/tests/test_client.py::TestLateConversions::test_another_client_instance_has_none_of_them"]
+text = "on_exposure is new: a function you give the client when you create it, which it calls once each time the server enrols a user in an experiment and the answer did not come from its cache."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_called_once_with_exactly_the_experiment_key_user_id_variant_id_and_variant_name",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_a_cached_answer_calls_nothing_however_often_the_answer_is_asked_for",
+]
 
 [[unit]]
-text = "With nothing to reach, a track() without a key is now sent once with no key and stored as history, and returns True on a 2xx; before this version it sent nothing and returned False."
+text = "It receives an Exposure, which controlvar exports."
+by = ["test:sdk/python/tests/test_exposure.py::TestTheClientAroundIt::test_exposure_is_a_frozen_dataclass_of_exactly_the_four_fields_exported_from_controlvar"]
+
+[[unit]]
+text = "See Exposure hook below."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "on_error is now also called in server mode: with the operation \"value\" when a typed getter returns your default, and with \"exposure\" when on_exposure raises."
 by = [
-    "test:sdk/python/tests/test_client.py::TestTrackFanOut::test_nothing_attributed_sends_the_event_once_to_track_with_no_key",
-    "test:backend/tests/integration/api/test_tracking_untagged_events.py::TestUntaggedTrack::test_an_event_with_no_key_is_stored_as_history",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_each_returns_the_default_and_reports",
+    "test:sdk/python/tests/test_exposure.py::TestAHookThatRaises::test_is_reported_to_on_error_once_with_exposure_and_an_experimentation_error_whose_code_is_hook_error",
+]
+
+[[unit]]
+text = "Code that treats an operation or a code it does not know as a mistake should handle them."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "track() takes an event_id, and track_batch() sends the event_id key of an event's dict."
+by = [
+    "test:sdk/python/tests/test_event_id.py::TestEventId::test_sends_event_id_on_a_track_with_an_explicit_key",
+    "test:sdk/python/tests/test_event_id.py::TestEventId::test_track_batch_passes_each_events_event_id_through_as_given",
+]
+
+[[unit]]
+text = "See Event ids below."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "track() returns False, and sends nothing, when event_value or properties holds NaN or an infinite number; see Tracking fan-out rule for the other methods."
+by = ["test:sdk/python/tests/test_client.py::TestNaNAndInfinityAreNotSent::test_track_returns_false_and_sends_nothing"]
+
+[[unit]]
+text = "Before this version the request was sent."
+by = ["test:sdk/python/tests/test_client.py::TestNaNAndInfinityAreNotSent::test_track_returns_false_and_sends_nothing"]
+
+[[unit]]
+text = "Local evaluation answers a string, number or json flag's value too."
+by = ["test:sdk/python/tests/test_local.py::test_the_typed_getters_answer_value_flags_from_the_ruleset_with_no_request"]
+
+[[unit]]
+text = "A flag entry with an evaluation this SDK does not know sends only that flag to the server, and the rest of the ruleset is still answered locally; before this version it refused the whole ruleset, and the client kept answering from its last one."
+by = [
+    "test:sdk/python/tests/test_local.py::test_an_entry_this_sdk_cannot_read_sends_that_flag_to_the_server_and_the_rest_stay_local",
+    "test:sdk/python/tests/test_evaluator.py::test_an_entry_this_sdk_cannot_read_defers_that_flag_and_the_document_still_loads",
+]
+
+[[unit]]
+text = "An entry with a value_type it does not know, or a value of the wrong type, also sends only that flag to the server."
+by = [
+    "test:sdk/python/tests/test_local.py::test_an_entry_this_sdk_cannot_read_sends_that_flag_to_the_server_and_the_rest_stay_local",
+    "test:sdk/python/tests/test_evaluator.py::test_an_entry_this_sdk_cannot_read_defers_that_flag_and_the_document_still_loads",
+]
+
+[[unit]]
+text = "Once local evaluation stops answering a flag (max_stale_seconds passed, the ruleset discarded, close()), a call for a user it answered locally goes to the server; before this version that user kept the local answer from the cache for up to cache_ttl_seconds."
+by = [
+    "test:sdk/python/tests/test_local.py::test_a_refusal_that_discards_the_ruleset_sends_a_pair_answered_locally_to_the_server",
+    "test:sdk/python/tests/test_local.py::test_past_max_stale_seconds_a_pair_answered_locally_goes_to_the_server",
+    "test:sdk/python/tests/test_local.py::test_after_close_a_pair_answered_locally_goes_to_the_server",
+]
+
+[[unit]]
+text = "With a finite cache_ttl_seconds above 24 hours, a track() without a key still reaches an experiment or flag whose answer is still cached; before this version it reached only those answered in the last 24 hours."
+by = ["test:sdk/python/tests/test_client.py::TestLateConversions::test_a_cached_answer_older_than_24_hours_still_tags_a_keyless_track_1423"]
+
+[[unit]]
+text = "The message of a request that fails on the network, and the warning the client logs for it, name the URL without its query string, which carries the user id and the user's attributes; before this version they named the full URL."
+by = [
+    "test:sdk/python/tests/test_transport.py::test_a_network_failure_names_the_url_without_its_query",
+    "test:sdk/python/tests/test_client.py::TestRequestErrorsNameThePathWithoutItsQuery::test_the_warning_logged_for_a_failed_evaluation_and_what_on_error_receives",
 ]
 
 [[unit]]
@@ -143,10 +221,6 @@ by = [
     "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r1_a_purchase_sent_again_with_its_event_id_is_stored_and_counted_once",
     "test:backend/tests/integration/api/test_tracking_duplicate_events.py::test_r6_one_event_id_fanned_out_to_three_experiments_and_a_flag",
 ]
-
-[[unit]]
-text = "Use the option from the next published version, not from the version on PyPI now."
-by = ["exempt:instruction"]
 
 [[unit]]
 text = "It needs a Controlvar server that includes the event_id change (#1640, in the first platform release after it merged): an older server ignores the field."
@@ -223,10 +297,11 @@ text = "get_variant(experiment_key, user_id, user_attributes=None) | str variant
 by = ["test:sdk/python/tests/test_client.py::TestGetVariant::test_returns_default_on_404"]
 
 [[unit]]
-text = "get_feature_flag(flag_key, user_id, user_attributes=None) | FlagEvaluation(key, enabled, config, reason) | raises ExperimentationError (status == 404 when the flag key is unknown; a flag that is not ACTIVE returns enabled=False, reason=\"inactive\")"
+text = "get_feature_flag(flag_key, user_id, user_attributes=None) | FlagEvaluation(key, enabled, config, reason, source, value, value_type) | raises ExperimentationError (status == 404 when the flag key is unknown; a flag that is not ACTIVE returns enabled=False, reason=\"inactive\")"
 by = [
     "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_maps_response",
     "test:sdk/python/tests/test_client.py::TestGetFeatureFlag::test_404_raises_and_is_not_cached",
+    "test:sdk/python/tests/test_client.py::TestFlagEvaluationValue::test_value_and_value_type_come_after_every_older_field",
     "test:backend/tests/integration/api/test_feature_flag_kill_switch.py::TestKillSwitch::test_disabled_flag_evaluates_off_for_sdk_clients",
     "test:backend/tests/integration/api/test_feature_flag_evaluate_context.py::TestGetEvaluateWithContext::test_unknown_key_returns_404",
 ]
@@ -234,6 +309,32 @@ by = [
 [[unit]]
 text = "is_feature_enabled(flag_key, user_id, user_attributes=None) | bool | returns False"
 by = ["test:sdk/python/tests/test_client.py::TestIsFeatureEnabled::test_false_on_404"]
+
+[[unit]]
+text = "get_string_value(flag_key, user_id, user_attributes=None, , default) | str, the string a string flag serves this user | returns default; never raises; logs a warning and calls on_error(error, \"value\")"
+by = [
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_returns_the_value_the_flag_serves",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_each_returns_the_default_and_reports",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_logs_a_warning_as_is_feature_enabled_does",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_default_is_keyword_only_so_a_swapped_call_is_a_type_error",
+]
+
+[[unit]]
+text = "get_number_value(flag_key, user_id, user_attributes=None, , default) | int or float as saved (never a bool), the number a number flag serves this user | returns default; never raises; logs a warning and calls on_error(error, \"value\")"
+by = [
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_returns_the_value_the_flag_serves",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_an_integral_float_is_a_number_and_stays_a_float",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_never_coerces_a_string_10_is_not_a_number_and_10_is_not_a_string",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_each_returns_the_default_and_reports",
+]
+
+[[unit]]
+text = "get_json_value(flag_key, user_id, user_attributes=None, , default) | a new copy of the dict or list a json flag serves this user | returns default; never raises; logs a warning and calls on_error(error, \"value\")"
+by = [
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_returns_the_value_the_flag_serves",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_get_json_value_returns_a_new_copy_on_every_call",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_each_returns_the_default_and_reports",
+]
 
 [[unit]]
 text = "get_all_flags(user_id, user_attributes=None) | dict[str, bool] (not cached) | raises ExperimentationError"
@@ -293,11 +394,20 @@ by = [
 ]
 
 [[unit]]
-text = "ExperimentationError carries .status (HTTP status, None for network errors/timeouts) and .body (raw response text)."
+text = "ExperimentationError carries .status (HTTP status, None for network errors/timeouts), .body (raw response text) and .code: \"TYPE_MISMATCH\" or \"INVALID_RESPONSE\" on an error a typed getter makes itself, and \"HOOK_ERROR\" on the error on_error receives with \"exposure\"."
 by = [
     "test:sdk/python/tests/test_client.py::TestGetAssignment::test_404_raises_with_status_and_body",
     "test:sdk/python/tests/test_client.py::TestGetAssignment::test_transport_failure_raises_experimentation_error",
     "test:sdk/python/tests/test_client.py::TestGetAssignment::test_failure_is_never_cached",
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_each_returns_the_default_and_reports",
+    "test:sdk/python/tests/test_exposure.py::TestAHookThatRaises::test_is_reported_to_on_error_once_with_exposure_and_an_experimentation_error_whose_code_is_hook_error",
+]
+
+[[unit]]
+text = "Other errors carry no code in this version; .status describes them."
+by = [
+    "test:sdk/python/tests/test_client.py::TestTypedValues::test_each_returns_the_default_and_reports",
+    "test:sdk/python/tests/test_client.py::TestFlagEvaluationValue::test_an_experimentation_error_built_by_position_keeps_working",
 ]
 
 [[unit]]
@@ -440,7 +550,7 @@ text = "event_type defaults to event_name; properties is sent as metadata; times
 by = ["test:sdk/python/tests/test_client.py::TestTrackWithKey::test_naive_datetime_is_utc_and_strings_pass_through"]
 
 [[unit]]
-text = "From the next published version, track returns False, and sends nothing, when event_value or properties holds NaN or an infinite number."
+text = "track returns False, and sends nothing, when event_value or properties holds NaN or an infinite number."
 by = [
     "test:sdk/python/tests/test_client.py::TestNaNAndInfinityAreNotSent::test_track_returns_false_and_sends_nothing",
 ]
@@ -452,6 +562,72 @@ by = [
     "test:sdk/python/tests/test_client.py::TestNaNAndInfinityAreNotSent::test_get_assignment_raises_with_no_status_and_sends_nothing",
     "test:sdk/python/tests/test_client.py::TestNaNAndInfinityAreNotSent::test_a_cached_assignment_is_returned_before_the_attributes_are_encoded",
 ]
+
+[[unit]]
+text = "Exposure hook"
+by = ["exempt:label"]
+
+[[unit]]
+text = "on_exposure is a function you give the client when you create it."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_called_once_with_exactly_the_experiment_key_user_id_variant_id_and_variant_name",
+    "test:sdk/python/tests/test_exposure.py::TestTheClientAroundIt::test_on_exposure_none_sets_no_hook_and_the_assignment_works_as_before",
+]
+
+[[unit]]
+text = "The client calls it once each time the server enrols the user in an experiment and the answer did not come from the client's cache: the moment the server records the exposure."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_called_once_with_exactly_the_experiment_key_user_id_variant_id_and_variant_name",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_a_cached_answer_calls_nothing_however_often_the_answer_is_asked_for",
+    "test:backend/tests/integration/services/test_assignment_service_coverage.py::TestAssignUser::test_track_exposure_called_on_existing_assignment",
+]
+
+[[unit]]
+text = "Use it to send the exposure to your analytics tool or warehouse."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "The example needs an ACTIVE experiment with the key checkout_flow; put your own key in its place."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It prints exposure checkout_flow <variant> user-123 once, or nothing for a user the experiment did not enrol."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_called_once_with_exactly_the_experiment_key_user_id_variant_id_and_variant_name",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_not_called_for_assigned_false_and_the_control_answer_comes_back_unchanged",
+]
+
+[[unit]]
+text = "It receives an Exposure: experiment_key, user_id, variant_id (None when the server sends none) and variant_name."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_called_once_with_exactly_the_experiment_key_user_id_variant_id_and_variant_name",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_passes_variant_id_none_when_the_server_sends_no_variant_id",
+]
+
+[[unit]]
+text = "It is not called for a cached answer, a user the experiment did not enrol or an experiment that is not running (assigned False), a call that fails, or a feature flag."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_a_cached_answer_calls_nothing_however_often_the_answer_is_asked_for",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_not_called_for_assigned_false_and_the_control_answer_comes_back_unchanged",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_a_failed_call_calls_nothing",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_flags_never_call_it_in_server_mode",
+]
+
+[[unit]]
+text = "It runs in the thread that called get_assignment or get_variant, before that call returns, so keep it quick."
+by = ["test:sdk/python/tests/test_exposure.py::TestTheClientAroundIt::test_runs_in_the_calling_thread_before_get_assignment_returns"]
+
+[[unit]]
+text = "If it raises, the answer is unchanged, and the error is logged at ERROR and passed to on_error with the operation \"exposure\" and code \"HOOK_ERROR\"."
+by = [
+    "test:sdk/python/tests/test_exposure.py::TestAHookThatRaises::test_changes_nothing_get_variant_returns_the_variant_and_get_assignment_returns",
+    "test:sdk/python/tests/test_exposure.py::TestAHookThatRaises::test_is_logged_at_error_with_its_traceback_on_the_controlvar_client_logger",
+    "test:sdk/python/tests/test_exposure.py::TestAHookThatRaises::test_is_reported_to_on_error_once_with_exposure_and_an_experimentation_error_whose_code_is_hook_error",
+]
+
+[[unit]]
+text = "Full details: Exposure hook."
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Backend endpoints used"
@@ -466,9 +642,10 @@ text = "SDK call | Method and path | Body / query | Response used"
 by = ["exempt:label"]
 
 [[unit]]
-text = "get_assignment, get_variant | POST /api/v1/tracking/assign | {experiment_key, user_id, context?} | {experiment_key, user_id, variant_id, variant_name, is_control, configuration}; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with assigned: false"
+text = "get_assignment, get_variant | POST /api/v1/tracking/assign | {experiment_key, user_id, context?} | {experiment_key, user_id, variant_id, variant_name, is_control, configuration, assigned, reason}; 404 when no experiment has the key, or for a draft with no control variant; an experiment that is not ACTIVE answers its control variant with assigned: false"
 by = [
     "test:sdk/python/tests/test_client.py::TestGetAssignment::test_sends_post_with_context",
+    "test:sdk/python/tests/test_client.py::TestGetAssignment::test_carries_assigned_true_and_reason",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
     "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_unknown_key_returns_404",
     "test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_a_draft_with_no_control_variant_returns_404",

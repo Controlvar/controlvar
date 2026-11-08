@@ -26,6 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.sdk_scope import may_use_server_key
 from backend.app.core.api_key_scopes import (
     SDK_RULESET_SCOPE,
@@ -54,7 +55,7 @@ from backend.app.services.audit_service import (
     audit_snapshot,
 )
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 SDK_RULESET_CREATE_FORBIDDEN = (
     "Only users who can change feature flags can create an API key with the "

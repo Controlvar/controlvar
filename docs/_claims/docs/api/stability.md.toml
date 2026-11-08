@@ -994,6 +994,27 @@ by = [
 ]
 
 [[unit]]
+text = "POST /api/v1/experiments/{experiment_id}/clone (full profile) | #1781 | A clone of a split URL experiment carries the source's split_url_config, where it carried null and its start answered 400. Its start makes the usual split URL checks, so it cannot start while an active split URL experiment has the same control URL. Other experiments clone as before. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_clone_split_url_experiment.py::test_a_clone_of_a_split_url_draft_carries_its_config_and_starts",
+    "test:backend/tests/integration/api/test_clone_split_url_experiment.py::test_while_the_clone_is_active_the_source_does_not_start",
+    "test:backend/tests/unit/services/test_clone_keeps_analysis_settings.py::test_a_clone_carries_the_split_url_config_as_its_own_copy",
+    "test:backend/tests/integration/api/test_clone_keeps_analysis_settings.py::test_a_clone_through_the_api_keeps_every_analysis_setting",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/experiments/{experiment_id}/metadata | #961 | A body holding NUL (U+0000) or an unpaired surrogate anywhere, in a key or a value, nested or not, answers 422 at [\"body\"] with the msg Value error, metadata must not contain NUL or unpaired surrogate characters; nothing is stored and no audit entry is made. It used to answer 500, because the database cannot store such text. The message does not repeat the value sent. Authentication still answers 401 first, and the 422 now comes before the 403 and 404 the operation answers for a role without UPDATE and for an unknown experiment. Every other body answers as before. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_experiment_metadata_text_refused.py::test_metadata_holding_unstorable_text_answers_422_and_nothing_is_written",
+    "test:backend/tests/integration/api/test_experiment_metadata_text_refused.py::test_storable_metadata_is_merged_as_before",
+    "test:backend/tests/integration/api/test_experiment_metadata_text_refused.py::test_the_422_comes_before_the_403_for_a_role_without_update",
+    "test:backend/tests/integration/api/test_experiment_metadata_text_refused.py::test_the_422_comes_before_the_404_for_an_unknown_experiment",
+    "test:backend/tests/integration/api/test_experiment_metadata_text_refused.py::test_authentication_still_answers_401_first",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
 text = "GET /api/v1/ai/sample-size, POST /api/v1/utils/utils/sample-size | #958 | GET /api/v1/ai/sample-size answers 422 with fixed text, checked in this order: a baseline_rate, confidence or power that is NaN or outside 0 to 1 gets <param> must be a number from 0 to 1, with the parameter's name; an mde of 0 gets This baseline raised by this effect changes too little to estimate a sample size. Raise the baseline rate or the effect.; a treatment rate (baseline_rate + mde) above 1 gets This baseline raised by this effect reaches 100% or more. Lower the baseline rate or the effect.; and a treatment rate below 0, or a size or a day count that is not a finite number above 0, gets These values are too large or too small to calculate with. Use values nearer those of a real experiment. Most of these answered 500; these answered 200 with a size that is not one, and now answer 422: a treatment rate outside 0 to 1 (sizes such as -10, 7 and 0), a baseline_rate or confidence outside 0 to 1, and inputs whose size came to 0. POST /api/v1/utils/utils/sample-size answers 422 with the same out-of-range text, where it answered 500, when the users per variant per day come to 0, the day count is not finite, or daily_traffic or variant_count is too large for a floating-point number. Every other input answers as before, a baseline_rate of 0 or 1, a confidence of 0 and a treatment rate of exactly 0 or 1 included. The message does not repeat the value sent. The OpenAPI document does not change."
 by = [
     "test:backend/tests/unit/api/test_sample_size_inputs_answer_422.py::test_the_ai_sample_size_refuses_with_fixed_text",

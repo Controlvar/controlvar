@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Response, status
 from sqlalchemy.orm import Session
 
 from backend.app.api.deps import get_current_active_user, get_current_user, get_db
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.security import oauth2_scheme
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.user import User
@@ -54,13 +55,13 @@ from modules.backend.app.services.workspace_service import (
     workspace_service,
 )
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 #: The invite preview: a recipient who may not have an account yet looks the
 #: invitation up by its token before accepting.  Sign-in is optional (it only
 #: decides whether the invited address is shown in full), so the registration
 #: mounts it behind nothing.
-public_router = APIRouter()
+public_router = APIRouter(route_class=OffLoopRoute)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Internal helpers

@@ -166,6 +166,33 @@ def test_a_clone_gets_a_generated_key_of_its_own():
     assert clone.key.startswith("copy-of-checkout-button-")
 
 
+@pytest.mark.regression
+def test_a_clone_carries_the_split_url_config_as_its_own_copy():
+    """A clone of a split URL experiment had no split_url_config, so its start
+    answered 400 (#1781). It carries the source's, deep-copied: changing the
+    clone's leaves the source's alone."""
+    config = {
+        "variants": [
+            {"name": "Control", "url": "https://h.example/a", "traffic_allocation": 50},
+            {
+                "name": "Treatment",
+                "url": "https://h.example/b",
+                "traffic_allocation": 50,
+            },
+        ],
+        "cookie_ttl_days": 30,
+    }
+    source = _source(split_url_config=config)
+    source.experiment_type = ExperimentType.SPLIT_URL
+    clone = _clone(source)
+
+    assert clone.split_url_config == config
+    assert clone.split_url_config is not source.split_url_config
+    assert clone.split_url_config["variants"] is not config["variants"]
+    clone.split_url_config["variants"][0]["url"] = "https://h.example/changed"
+    assert source.split_url_config["variants"][0]["url"] == "https://h.example/a"
+
+
 # Copied by ``clone_experiment`` outside ``CLONED_ANALYSIS_FIELDS``.
 COPIED_ELSEWHERE = {
     "name",  # as "Copy of <name>"
@@ -173,6 +200,7 @@ COPIED_ELSEWHERE = {
     "hypothesis",
     "experiment_type",
     "targeting_rules",  # rules_for_clone (#533)
+    "split_url_config",  # deep-copied, so a split URL clone can start (#1781)
     "tags",
 }
 
@@ -191,7 +219,6 @@ NOT_COPIED = {
     "experiment_metadata": "notes on the source's results",
     "metrics": "legacy list; the metric definitions are cloned as rows",
     "mutual_exclusion_group_id": "group membership is chosen per experiment",
-    "split_url_config": "split-URL setup; not part of #255",
     "workspace_id": "set by the workspaces module, not by core create",
 }
 

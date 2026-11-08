@@ -237,11 +237,11 @@ reason = "the page's pip install, run as written in a fresh virtual environment,
 
 [pages."sdk/java.md"]
 class = "reference"
-reason = "not walked: the page says the package is not yet on Maven Central; the SDK live contract (tests/sdk-contract/live/run_live_contract.py) runs the SDK against a live API in the PR QA Gate"
+reason = "not walked: no docs journey installs the package from Maven Central yet; the SDK live contract (tests/sdk-contract/live/run_live_contract.py) runs the SDK against a live API in the PR QA Gate"
 
 [pages."sdk/react.md"]
 class = "reference"
-reason = "not walked: the page says the package is not yet on npm; the SDK live contract (tests/sdk-contract/live/run_live_contract.py) runs the SDK against a live API in the PR QA Gate"
+reason = "not walked: no docs journey installs the package from npm yet; the SDK live contract (tests/sdk-contract/live/run_live_contract.py) runs the SDK against a live API in the PR QA Gate"
 
 [pages."sdk/go.md"]
 class = "journey"
@@ -270,7 +270,7 @@ reason = "its key, manifest and AI endpoint steps run on a stack in Doc Examples
 
 [pages."sdk/openfeature.md"]
 class = "reference"
-reason = "not walked: the page says the provider is not yet on npm; the SDK live contract (tests/sdk-contract/live/run_live_contract.py) runs the provider against a live API in the PR QA Gate"
+reason = "not walked: no docs journey installs the providers from npm or PyPI yet; the SDK live contract (tests/sdk-contract/live/run_live_contract.py) runs both providers against a live API in the PR QA Gate"
 
 [pages."sdk/edge.md"]
 class = "reference"
@@ -286,7 +286,7 @@ reason = "not walked: the page says the package is not yet on Packagist; the SDK
 
 [pages."sdk/dotnet.md"]
 class = "reference"
-reason = "not walked: the page says the package is not yet on NuGet; the SDK live contract (tests/sdk-contract/live/run_live_contract.py) runs the SDK against a live API in the PR QA Gate"
+reason = "not walked: no docs journey installs the package from NuGet yet; the SDK live contract (tests/sdk-contract/live/run_live_contract.py) runs the SDK against a live API in the PR QA Gate"
 
 [pages."sdk/elixir.md"]
 class = "reference"
@@ -299,6 +299,10 @@ reason = "the SDK contract and each SDK's status; no steps to follow"
 [pages."sdk/local-evaluation.md"]
 class = "exec"
 reason = "its blocks run on a stack in Doc Examples"
+
+[pages."sdk/exposure-hook.md"]
+class = "reference"
+reason = "not walked: each example needs the reader's own account with that analytics tool; the hook it describes is held by each SDK's unit tests and the SDK live contract"
 
 [pages."api/auth.md"]
 class = "exec"
@@ -701,7 +705,7 @@ note = "sign-in per role and a password change, a first API key used for an assi
 # above says what each field means.
 # ---------------------------------------------------------------------------
 [meta]
-walked = 156
+walked = 157
 
 # The front door, and the policy beside it.
 
@@ -810,27 +814,27 @@ reason = "the Go module's README; not walked: the sdk-go journey walks docs/sdk/
 [documents."sdk/openfeature-python/README.md"]
 scope = "in"
 class = "reference"
-reason = "not walked: the provider is not on PyPI yet (docs/sdk/openfeature.md says so; the README is the one PyPI will show, so it names no status)"
+reason = "not walked: no docs journey installs the provider from PyPI yet (the README is the one PyPI shows, so it names no status)"
 
 [documents."sdk/java/README.md"]
 scope = "in"
 class = "reference"
-reason = "not walked: the README says the package is not on Maven Central yet; #1107 tests its flows"
+reason = "not walked: no docs journey installs the package from Maven Central yet; #1107 tests its flows"
 
 [documents."sdk/react/README.md"]
 scope = "in"
 class = "reference"
-reason = "not walked: the package is not on npm yet (docs/sdk/react.md says so; the README is the one npm will show, so it names no status); #1107 tests its flows"
+reason = "not walked: no docs journey installs the package from npm yet (the README is the one npm shows, so it names no status); #1107 tests its flows"
 
 [documents."sdk/react-native/README.md"]
 scope = "in"
 class = "device"
-reason = "needs a React Native toolchain and a device; the package is not on npm yet (docs/sdk/react-native.md says so; the README is the one npm will show, so it names no status)"
+reason = "needs a React Native toolchain and a device (the README is the one npm shows, so it names no status)"
 
 [documents."sdk/openfeature/README.md"]
 scope = "in"
 class = "reference"
-reason = "not walked: the provider is not on npm yet (docs/sdk/openfeature.md says so; the README is the one npm will show, so it names no status); #1107 tests its flows"
+reason = "not walked: no docs journey installs the provider from npm yet (the README is the one npm shows, so it names no status); #1107 tests its flows"
 
 [documents."sdk/edge/README.md"]
 scope = "in"
@@ -855,7 +859,7 @@ reason = "not walked: the README says the package is not on Packagist yet; #1107
 [documents."sdk/dotnet/README.md"]
 scope = "in"
 class = "reference"
-reason = "not walked: the package is not on NuGet yet (docs/sdk/dotnet.md says so; the README is the one NuGet will show, so it names no status); #1107 tests its flows"
+reason = "not walked: no docs journey installs the package from NuGet yet (the README is the one NuGet shows, so it names no status); #1107 tests its flows"
 
 [documents."sdk/elixir/README.md"]
 scope = "in"

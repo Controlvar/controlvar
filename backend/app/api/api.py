@@ -7,6 +7,7 @@ and applying appropriate prefixes and tags.
 
 from fastapi import APIRouter
 
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.v1.endpoints import (
     admin,
     ai_design,
@@ -177,7 +178,7 @@ def build_v1_router() -> APIRouter:
     load had already reported success.
     """
     load_modules()
-    router = APIRouter()
+    router = APIRouter(route_class=OffLoopRoute)
     register_core_routers(router)
     mount_module_routers(router)
     return router
@@ -187,7 +188,7 @@ def build_v1_router() -> APIRouter:
 api_router_v1 = build_v1_router()
 
 # Main API router that includes versioned routers
-api_router = APIRouter()
+api_router = APIRouter(route_class=OffLoopRoute)
 api_router.include_router(api_router_v1)
 
 # Documentation configuration

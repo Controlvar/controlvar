@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.bandit_scheduler import BanditScheduler
 from backend.app.core.permissions import Action, ResourceType, check_permission
 from backend.app.core.stats_engine import ENGINE_VERSION
@@ -41,7 +42,7 @@ from backend.app.services.audit_service import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 #: The 403 of ``POST /bandit/{experiment_id}/update`` (#891): it names the
 #: permission, then the built-in roles that have it, so it stays true when a
