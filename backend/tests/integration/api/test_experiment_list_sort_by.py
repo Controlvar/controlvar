@@ -202,6 +202,18 @@ def test_786_a_name_that_is_no_column_answers_422(client, viewer_user, sent):
     assert "(any case)" not in resp.text
 
 
+#: Columns that are not sort keys (#448): the beta ``balance_within``, and
+#: ``balance_seed``, which is never answered, so never an order either.
+NOT_SORT_KEYS = ("balance_within", "balance_seed")
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("sent", NOT_SORT_KEYS)
+def test_448_the_balance_columns_are_not_sort_keys(client, viewer_user, sent):
+    resp = _list(client, viewer_user, {"sort_by": sent})
+    _assert_refused(resp, sent)
+
+
 @pytest.mark.regression
 def test_786_the_refusal_never_repeats_the_value_sent(client, viewer_user):
     sentinel = "zz786sentinel"

@@ -49,13 +49,14 @@ KEY_GENERATION_ATTEMPTS = 3
 NAME_MAX = Experiment.__table__.c.name.type.length
 
 #: The names ``sort_by`` accepts: every column of the experiments table, in
-#: exact case, the JSON ones included (#786). Any other name is refused before
-#: it reaches ``getattr``: an attribute that is no column (``metadata``,
-#: ``to_dict``, a relationship) used to answer 500, and a name that is no
-#: attribute (``foo``, ``Name``) was ignored. Written out rather than read from
-#: the table, so a new column is sortable only once someone adds it here;
-#: backend/tests/unit/services/test_experiment_sort_by_columns.py holds this
-#: list to ``Experiment.__table__.columns``.
+#: exact case, the JSON ones included (#786), except #448's two: the beta
+#: ``balance_within`` and ``balance_seed``, which is never answered. Any other
+#: name is refused before it reaches ``getattr``: an attribute that is no
+#: column (``metadata``, ``to_dict``, a relationship) used to answer 500, and a
+#: name that is no attribute (``foo``, ``Name``) was ignored. Written out rather
+#: than read from the table, so a new column is sortable only once someone adds
+#: it here; backend/tests/unit/services/test_experiment_sort_by_columns.py
+#: holds this list and the columns left out to ``Experiment.__table__.columns``.
 SORT_BY_COLUMNS = (
     "id",
     "created_at",
