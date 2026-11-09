@@ -4,7 +4,7 @@ Pydantic schemas for authentication.
 This module defines the request and response schemas for authentication operations.
 """
 
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -175,3 +175,62 @@ class UserInfoResponse(BaseModel):
 
     username: str
     attributes: Dict[str, Any]
+
+
+# ---------------------------------------------------------------------------
+# Dashboard sign-in configuration and the Cognito Hosted UI (#708)
+# ---------------------------------------------------------------------------
+
+
+class AuthConfigResponse(BaseModel):
+    """``GET /api/v1/auth/config``: how the dashboard signs in.
+
+    ``{"provider": "local"}`` under the local provider. Under Cognito, either
+    the Hosted UI's ``hosted_ui_domain``, the app ``client_id`` and the
+    ``scopes`` to ask for, or ``configured: false`` with the names of the
+    unset settings in ``missing``. A field that does not apply is absent.
+    """
+
+    provider: Literal["local", "cognito"]
+    configured: Optional[Literal[False]] = Field(
+        default=None,
+        description="Present, and false, when Cognito sign-in is not set up",
+    )
+    missing: Optional[List[str]] = Field(
+        default=None,
+        description="The names of the unset settings, when configured is false",
+    )
+    hosted_ui_domain: Optional[str] = Field(
+        default=None,
+        description="The Cognito Hosted UI's domain name, without a scheme",
+    )
+    client_id: Optional[str] = Field(
+        default=None, description="The Cognito app client the dashboard signs in to"
+    )
+    scopes: Optional[List[str]] = Field(
+        default=None, description="The OAuth scopes to ask the Hosted UI for"
+    )
+
+
+class CognitoCodeExchangeRequest(BaseModel):
+    """``POST /api/v1/auth/cognito/exchange``: what the Hosted UI's callback
+    received, and the PKCE verifier the dashboard kept.
+
+    Nothing else is read from the request: the domain asked and the app client
+    named come from the configuration.
+    """
+
+    code: str = Field(..., min_length=1, max_length=2048)
+    # RFC 7636 section 4.1: 43 to 128 unreserved characters.
+    code_verifier: str = Field(
+        ..., min_length=43, max_length=128, pattern=r"^[A-Za-z0-9._~-]+$"
+    )
+    redirect_uri: str = Field(..., min_length=1, max_length=2048)
+
+
+class CognitoCodeExchangeResponse(BaseModel):
+    """The access token Cognito issued, and its lifetime. Nothing else: the id
+    token and the refresh token are not returned."""
+
+    access_token: str
+    expires_in: int = Field(..., description="Seconds until the token expires")

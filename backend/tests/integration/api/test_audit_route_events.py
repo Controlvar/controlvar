@@ -15,9 +15,11 @@ in a session of the test's own:
 * a superuser's change to a user's role, superuser flag or active status is
   written together with its entry or not at all; user changes record the
   superuser flag;
-* a Cognito sign-in through ``POST /auth/token`` (against a moto user pool,
-  never AWS) writes ``user_login`` with the provider ``cognito`` when the
-  identity has an account, and nothing when it has none or is refused.
+* a Cognito sign-in through ``POST /auth/token`` or the Hosted UI's code
+  exchange, ``POST /auth/cognito/exchange`` (against a moto user pool and a
+  fake token endpoint, never AWS), writes ``user_login`` with the provider
+  ``cognito`` when the identity has an account, and nothing when it has none
+  or is refused.
 """
 
 from __future__ import annotations
@@ -1292,6 +1294,86 @@ def test_cognito_token_for_another_pool_writes_nothing(
     response = _cognito_sign_in(client, user.username)
     assert response.status_code == 200, response.text
     assert w.rows() == []
+
+
+@pytest.fixture
+def hosted_ui_sign_in(cognito_pool, monkeypatch):
+    """The Hosted UI's code exchange against the fake token endpoint (#708).
+
+    Yields ``sign_in(username)``: the user signs in on the Hosted UI (here,
+    moto's USER_PASSWORD_AUTH for the configured app client), and the
+    dashboard sends the code Cognito gave it to ``POST /auth/cognito/exchange``.
+    """
+    from backend.app.services import cognito_hosted_ui
+    from backend.tests.integration.cognito_hosted_ui_fake import (
+        FakeIssuer,
+        new_verifier,
+    )
+
+    redirect = "https://dashboard.example.com/auth/callback"
+    monkeypatch.setattr(
+        settings, "COGNITO_DOMAIN", "ae221.auth.us-east-1.amazoncognito.com"
+    )
+    with FakeIssuer() as issuer:
+        monkeypatch.setattr(cognito_hosted_ui, "transport", issuer.transport())
+        idp = boto3.client("cognito-idp", region_name="us-east-1")
+        app_client = os.environ["COGNITO_CLIENT_ID"]
+
+        def sign_in(client, username):
+            tokens = idp.initiate_auth(
+                ClientId=app_client,
+                AuthFlow="USER_PASSWORD_AUTH",
+                AuthParameters={"USERNAME": username, "PASSWORD": PASSWORD},
+            )["AuthenticationResult"]
+            verifier = new_verifier()
+            code = issuer.issue_code(
+                tokens, verifier=verifier, client_id=app_client, redirect_uri=redirect
+            )
+            response = client.post(
+                f"{V1}/auth/cognito/exchange",
+                json={
+                    "code": code,
+                    "code_verifier": verifier,
+                    "redirect_uri": redirect,
+                },
+            )
+            return response, tokens
+
+        yield sign_in
+
+
+def test_hosted_ui_sign_in_with_an_account_is_recorded(
+    client, fresh, db_session, cognito_pool, hosted_ui_sign_in
+):
+    user = _cognito_account(db_session, cognito_pool)
+    w = Written(fresh)
+    response, tokens = hosted_ui_sign_in(client, user.username)
+    assert response.status_code == 200, response.text
+    row = _one(w, "user_login", "user", user.id, user)
+    assert row.entity_name == user.username
+    assert _values(row) == (None, {"provider": "cognito"})
+    assert row.reason is None
+    for column in (row.old_value, row.new_value, row.reason, row.entity_name):
+        for key in ("AccessToken", "IdToken", "RefreshToken"):
+            assert tokens[key] not in (column or "")
+
+
+def test_hosted_ui_sign_in_without_an_account_writes_nothing(
+    client, fresh, db_session, cognito_pool, hosted_ui_sign_in
+):
+    """The first request made with the token creates the account (and writes
+    ``user_create``); the exchange itself creates nothing and records none."""
+    username = f"{P}_unlinked_{uuid.uuid4().hex[:8]}"
+    cognito_pool(username, f"{username}@example.com")
+    w = Written(fresh)
+    response, _ = hosted_ui_sign_in(client, username)
+    assert response.status_code == 200, response.text
+    assert w.rows() == []
+    session = fresh()
+    try:
+        assert session.query(User).filter(User.username == username).count() == 0
+    finally:
+        session.close()
 
 
 def test_cognito_sign_in_succeeds_when_the_entry_cannot_be_written(

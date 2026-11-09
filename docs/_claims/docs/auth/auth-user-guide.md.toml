@@ -20,7 +20,7 @@ text = "The password-reset and token-refresh endpoints (POST /api/v1/auth/forgot
 by = [
     "test:backend/tests/unit/api/test_cognito_only_routes.py::test_local_provider_answers_fixed_404",
     "test:backend/tests/unit/api/test_cognito_only_routes.py::test_cognito_provider_reaches_the_service",
-    "test:backend/tests/unit/api/test_cognito_only_routes.py::test_exactly_the_five_routes_carry_the_gate",
+    "test:backend/tests/unit/api/test_cognito_only_routes.py::test_exactly_the_six_routes_carry_the_gate",
 ]
 
 [[unit]]

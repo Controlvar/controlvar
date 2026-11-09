@@ -129,6 +129,18 @@
         "summary": "Get audit logs for a specific user"
       }
     },
+    "/api/v1/auth/cognito/exchange": {
+      "post": {
+        "operationId": "exchange_cognito_code_api_v1_auth_cognito_exchange_post",
+        "summary": "Exchange Cognito Code"
+      }
+    },
+    "/api/v1/auth/config": {
+      "get": {
+        "operationId": "get_auth_config_api_v1_auth_config_get",
+        "summary": "Get Auth Config"
+      }
+    },
     "/api/v1/auth/confirm": {
       "post": {
         "operationId": "confirm_signup_api_v1_auth_confirm_post",
