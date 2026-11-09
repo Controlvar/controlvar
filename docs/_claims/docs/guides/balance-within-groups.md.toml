@@ -264,3 +264,160 @@ by = ["test:backend/tests/integration/database/test_balance_within_migration.py:
 [[unit]]
 text = "Limitations lists what balancing does not do."
 by = ["exempt:navigation"]
+
+[[unit]]
+text = "The results by group count both kinds in users_outside_blocks."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_a_fallback_row_that_kept_its_group_is_outside_the_blocks",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_rows_with_no_stored_group_count_under_unknown_and_outside_the_blocks",
+]
+
+[[unit]]
+text = "Results by group"
+by = ["exempt:label"]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id}/balanced-groups (beta) gives the experiment's results by the group each user was balanced in, the group stored when they were assigned."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_rows_are_the_stored_groups_and_add_up_to_every_user",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_the_balanced_groups_route_is_beta_and_carries_no_place_in_a_group",
+]
+
+[[unit]]
+text = "The experiment's own results and their decision do not change."
+by = [
+    "test:backend/tests/unit/services/test_sufficient_stats_fingerprint.py",
+    "test:backend/tests/unit/services/test_results_correction_pins.py",
+    "test:backend/tests/unit/services/test_binomial_metric_result_characterisation.py",
+]
+
+[[unit]]
+text = "groups has one row per group, built as a breakdown's rows are: the groups with the most users, then other and unknown, each with a p-value and the Bonferroni threshold over the rows returned."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_rows_are_the_stored_groups_and_add_up_to_every_user",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_for_users_assigned_with_a_listed_value_the_rows_are_the_breakdowns",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_each_rows_threshold_counts_every_row_returned",
+    "test:backend/tests/unit/services/test_balanced_groups_rows_one_source.py",
+]
+
+[[unit]]
+text = "Per variant, the rows add up to every user assigned."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_rows_are_the_stored_groups_and_add_up_to_every_user",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_rows_with_no_stored_group_count_under_unknown_and_outside_the_blocks",
+]
+
+[[unit]]
+text = "overall gives one estimate per treatment of the primary metric: each group's difference from the control, weighted by the group's share of all the users."
+by = [
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_the_hand_worked_example_gives_its_constants",
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_three_variants_equal_one_regression_over_all_of_them",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_overall_estimate_is_corrected_across_the_treatments",
+]
+
+[[unit]]
+text = "Its interval is at the experiment's confidence level, and the treatments are corrected together with the experiment's correction method."
+by = [
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_the_interval_and_p_value_are_the_normal_ones_at_the_level",
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_three_variants_are_corrected_together_with_the_experiments_method",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_overall_estimate_is_corrected_across_the_treatments",
+]
+
+[[unit]]
+text = "No CUPED adjustment is applied to it."
+by = ["test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_the_hand_worked_example_equals_the_regression"]
+
+[[unit]]
+text = "overall is null, with reason, for a primary metric that is not a conversion (mean_metric), for an experiment with sequential testing (sequential_testing), and when no group has 2 users in every variant (too_few_users)."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_a_mean_primary_metric_has_no_estimate",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_sequential_testing_has_no_estimate",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_too_few_users_has_no_estimate",
+]
+
+[[unit]]
+text = "A group with fewer than 2 users in a variant is counted with the largest group that has 2 in every variant, and listed in merged_groups."
+by = [
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_a_group_with_one_user_in_a_variant_is_merged_into_the_largest",
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_a_large_group_with_one_user_in_a_variant_is_merged_too",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_a_small_group_is_merged_into_the_largest",
+]
+
+[[unit]]
+text = "users_outside_blocks is the number of users split without balancing."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_a_fallback_row_that_kept_its_group_is_outside_the_blocks",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_rows_with_no_stored_group_count_under_unknown_and_outside_the_blocks",
+]
+
+[[unit]]
+text = "unknown_share is the share in unknown of the users whose group was stored."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_rows_with_no_stored_group_count_under_unknown_and_outside_the_blocks",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_rows_are_the_stored_groups_and_add_up_to_every_user",
+]
+
+[[unit]]
+text = "An experiment that does not balance within groups answers 409."
+by = ["test:backend/tests/integration/api/test_balanced_groups_results.py::test_an_experiment_that_balances_nothing_answers_409"]
+
+[[unit]]
+text = "How they differ from ?breakdown="
+by = ["exempt:label"]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id}?breakdown=tier puts each user in the value of their first event that carries tier (Where the segments come from)."
+by = ["test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_an_exposure_value_wins_over_an_earlier_keyed_event_order"]
+
+[[unit]]
+text = "For users assigned through POST /api/v1/tracking/assign with a listed value, the two agree."
+by = ["test:backend/tests/integration/api/test_balanced_groups_results.py::test_for_users_assigned_with_a_listed_value_the_rows_are_the_breakdowns"]
+
+[[unit]]
+text = "Otherwise they can differ:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Users assigned from a list have no exposure, so the breakdown counts them under unknown until they send an event with tier; here they are in their group."
+by = ["test:backend/tests/integration/api/test_balanced_groups_results.py::test_users_assigned_from_a_list_are_in_their_group_here_and_unknown_there"]
+
+[[unit]]
+text = "A user assigned without tier who later sends an event with it is in that value in the breakdown, and in unknown here."
+by = ["test:backend/tests/integration/api/test_balanced_groups_results.py::test_a_later_keyed_event_moves_the_breakdown_and_not_the_group"]
+
+[[unit]]
+text = "A value that is not listed, a decimal number such as 3.0, a list or an object, or text of 101 to 255 characters is other here, and the value itself in the breakdown."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_a_value_of_101_to_255_characters_is_other_here_and_itself_there",
+    "test:backend/tests/unit/services/test_balanced_allocation.py::test_the_label_table",
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_values_are_the_exact_text_of_a_top_level_key",
+]
+
+[[unit]]
+text = "With more than 20 distinct values the breakdown can count a listed value under other; here every listed group has its own row."
+by = [
+    "test:backend/tests/unit/services/test_balanced_groups_fit_the_breakdown.py::test_every_named_group_fits_in_the_breakdowns_listed_rows",
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_values_beyond_the_listed_ones_fold_into_other_cap",
+]
+
+[[unit]]
+text = "A user an older server version assigned has no stored group, so they are in unknown here."
+by = ["test:backend/tests/integration/api/test_balanced_groups_results.py::test_rows_with_no_stored_group_count_under_unknown_and_outside_the_blocks"]
+
+[[unit]]
+text = "Method"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The overall estimate is the stratified difference in conversion rates (Cochran, Sampling Techniques, chapter 5): the sum over the groups of each group's share of the users times its treatment rate minus its control rate, with the variance summed the same way from each group's two rates and the group's share squared."
+by = [
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_the_hand_worked_example_gives_its_constants",
+    "test:backend/tests/unit/stats_validation/test_balanced_groups_estimate_rates.py",
+]
+
+[[unit]]
+text = "It equals the treatment's coefficient, and its HC2 standard error, in one regression over every variant with the group indicators centred and interacted with each treatment."
+by = [
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_two_variants_equal_the_regression",
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_three_variants_equal_one_regression_over_all_of_them",
+]

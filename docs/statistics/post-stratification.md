@@ -7,6 +7,10 @@
     input -- one metric value and the stratum attributes per assigned user --
     from an experiment's recorded assignments and events.
 
+An experiment that balances its split within groups has a size-weighted estimate over its groups:
+`GET /api/v1/results/{experiment_id}/balanced-groups` (beta), described in
+[Balance the split within groups](../guides/balance-within-groups.md#results-by-group).
+
 ## REST API Reference
 
 ### POST `/api/v1/results/{experiment_id}/post-stratification`
