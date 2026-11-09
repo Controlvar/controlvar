@@ -19,8 +19,11 @@ import type { LaunchOptions } from "@playwright/test";
  * then passes: Chromium uses the later argument, so storage partitioning is
  * on, and every other disabled feature comes from the stale list.
  * tests/e2e/fixtures/launch.fixture.ts fails on that command line anyway,
- * because the default argument still names both: a bump that changes the
- * list fails V112 until DEFAULT is updated (measured with 1.63's list).
+ * because it requires exactly one `--disable-features=` argument, the one in
+ * `args`. So a bump that changes the list fails V112 until DEFAULT is
+ * updated, whether or not the new list names either feature (measured with
+ * 1.63's list, and with a default list where both are replaced by another
+ * name).
  *
  * Only the `launch` project (playwright.config.ts) uses this today; the other
  * projects keep Playwright's default launch.
