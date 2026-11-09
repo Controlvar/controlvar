@@ -21574,7 +21574,7 @@
     },
     "/api/v1/bandit/{experiment_id}": {
       "get": {
-        "description": "Return the current bandit allocation weights for a MAB experiment.\n\nRequires any authenticated user (VIEWER+).\nReturns equal weights if no bandit state has been computed yet.",
+        "description": "Return the current bandit allocation weights for a MAB experiment.\n\nRequires permission to view the experiment, as GET /api/v1/experiments/{id}\ndoes; every role has it.\nReturns equal weights if no bandit state has been computed yet.",
         "operationId": "get_bandit_status_api_v1_bandit__experiment_id__get",
         "parameters": [
           {
@@ -24781,7 +24781,7 @@
     },
     "/api/v1/export/experiments": {
       "get": {
-        "description": "Download all (or filtered) experiments as a CSV or JSON file. Requires authentication. Available to all roles.",
+        "description": "Download all (or filtered) experiments as a CSV or JSON file. Requires the experiment LIST permission.",
         "operationId": "export_experiments_api_v1_export_experiments_get",
         "parameters": [
           {
@@ -24884,7 +24884,7 @@
     },
     "/api/v1/export/feature-flags": {
       "get": {
-        "description": "Download feature flag usage data as a CSV or JSON file. Requires authentication.",
+        "description": "Download feature flag usage data as a CSV or JSON file. Requires the feature-flag LIST permission.",
         "operationId": "export_feature_flags_api_v1_export_feature_flags_get",
         "parameters": [
           {
@@ -25119,7 +25119,7 @@
     },
     "/api/v1/export/variants": {
       "get": {
-        "description": "Download per-variant results for all (or filtered) experiments. Each variant's numbers are its primary-metric result, as GET /api/v1/results/{experiment_id} reports it. Requires authentication.",
+        "description": "Download per-variant results for all (or filtered) experiments. Each variant's numbers are its primary-metric result, as GET /api/v1/results/{experiment_id} reports it. Requires the experiment LIST permission.",
         "operationId": "export_variants_api_v1_export_variants_get",
         "parameters": [
           {

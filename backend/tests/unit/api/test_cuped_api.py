@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 
 from backend.app.api.v1.endpoints.results import ExperimentNotFound
 from backend.app.main import app
-from backend.app.models.user import User
+from backend.app.models.user import User, UserRole
 from backend.app.schemas.variance_reduction import (
     CupedMetricResult,
     CupedResultsResponse,
@@ -43,7 +43,7 @@ def mock_user():
     user.id = uuid.UUID(TEST_USER_ID)
     user.is_active = True
     user.is_superuser = False
-    user.role = "DEVELOPER"
+    user.role = UserRole.DEVELOPER
     return user
 
 

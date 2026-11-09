@@ -145,7 +145,7 @@ against the treatment created first, so an experiment with three or more variant
 only that one, and the same one on every call. It takes
 one optional query parameter, `alpha`: the significance level for this request, above 0
 and at most 0.2, which overrides the stored `sequential_testing_config.alpha` (default
-`0.05`); a value outside the range answers `422`. Any logged-in user can read it. It answers `404` with
+`0.05`); a value outside the range answers `422`. Anyone who may view the experiment can read it. It answers `404` with
 `"Sequential testing is not enabled for this experiment"` when it is off, and
 `"Experiment not found"` when there is no such experiment.
 

@@ -189,6 +189,11 @@ CLASS_B: Dict[Tuple[str, str], str] = {
         'Interaction analysis needs the ANALYST, DEVELOPER or ADMIN role."',
     ): "interaction analysis stays with the built-in role",
     (
+        "backend/app/api/v1/endpoints/interactions.py",
+        "Raise 403 unless the user is a superuser or holds one of the ANALYST, "
+        "DEVELOPER and ADMIN roles.",
+    ): "interaction analysis stays with the built-in role",
+    (
         "backend/app/api/v1/endpoints/scheduler_health.py",
         "Accessible by ADMIN and DEVELOPER roles.",
     ): "the scheduler health routes check no permission; outside #891",

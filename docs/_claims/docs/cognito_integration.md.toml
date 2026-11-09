@@ -251,6 +251,13 @@ text = "the user has no email address in the pool;"
 by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_identity_with_no_email_is_refused"]
 
 [[unit]]
+text = "the user's email address is not verified (email_verified is not true);"
+by = [
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_a_first_sign_in_needs_a_verified_email",
+    "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_a_cognito_user_gets_an_account_once_their_email_is_verified",
+]
+
+[[unit]]
 text = "another account already has the user's email address, in any letter case."
 by = [
     "test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_identity_whose_email_another_account_holds_is_refused",
@@ -571,6 +578,10 @@ by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_
 [[unit]]
 text = "no_email | the user has no email address in the pool"
 by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_an_identity_with_no_email_is_refused"]
+
+[[unit]]
+text = "email_unverified | the user's email address is not verified"
+by = ["test:backend/tests/integration/api/test_cognito_sign_in_linking.py::test_a_first_sign_in_needs_a_verified_email"]
 
 [[unit]]
 text = "email_taken | another account has the user's email address, in any letter case"

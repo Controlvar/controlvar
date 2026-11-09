@@ -85,7 +85,7 @@ that add up to 100; they decide the split until the bandit's first weight update
 ### GET /api/v1/bandit/{experiment_id}
 
 Returns the current bandit state: the algorithm, and each variant's weight, pulls,
-successes and conversion rate. Any logged-in user can read it. This also saves each
+successes and conversion rate. Anyone who may view the experiment can read it. This also saves each
 variant's id, for the weight override further down:
 
 ```{.bash exec}

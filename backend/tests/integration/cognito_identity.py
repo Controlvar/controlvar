@@ -17,16 +17,23 @@ def identity(
     sub: Optional[str],
     email: Optional[str] = None,
     groups: Optional[List[str]] = None,
+    *,
+    email_verified: Optional[str] = "true",
     **extra_attributes: str,
 ) -> Dict[str, Any]:
     """What ``CognitoAuthService.get_user_with_groups`` returns for a user.
 
     ``sub`` and ``email`` are left out of ``attributes`` when ``None``, as
-    Cognito leaves out an attribute the user does not have.
+    Cognito leaves out an attribute the user does not have. A user with an
+    email also has ``email_verified``, ``"true"`` unless given (the user
+    "Adding a user" in ``docs/cognito_integration.md`` creates); ``None``
+    leaves it out.
     """
     attributes: Dict[str, str] = dict(extra_attributes)
     if sub is not None:
         attributes["sub"] = sub
     if email is not None:
         attributes["email"] = email
+        if email_verified is not None:
+            attributes["email_verified"] = email_verified
     return {"username": username, "attributes": attributes, "groups": groups or []}

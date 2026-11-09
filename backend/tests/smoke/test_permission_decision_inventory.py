@@ -118,6 +118,19 @@ DECIDER_CALLS = {
         "check_permission",
         "ResourceType.REPORT, Action.UPDATE",
     ),
+    # The list-page rule of the list-shaped exports.
+    (
+        "api/deps.py",
+        "require_experiment_list",
+        "check_permission",
+        "ResourceType.EXPERIMENT, Action.LIST",
+    ),
+    (
+        "api/deps.py",
+        "require_feature_flag_list",
+        "check_permission",
+        "ResourceType.FEATURE_FLAG, Action.LIST",
+    ),
     # The server-key rule (option B) and batch assignment's own check.
     (
         "api/sdk_scope.py",

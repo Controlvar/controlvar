@@ -460,6 +460,117 @@ def test_an_identity_with_no_email_is_refused(signin, caplog, email):
 
 
 # --------------------------------------------------------------------------
+# Case 5: a first sign-in needs a verified email address
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "email_verified", ["false", None, "", "1"], ids=["false", "absent", "empty", "one"]
+)
+def test_a_first_sign_in_needs_a_verified_email(signin, caplog, email_verified):
+    sfx = _suffix()
+    count = signin.rows.count()
+    signin.use(
+        identity(
+            f"unverified_{sfx}",
+            str(uuid.uuid4()),
+            f"unverified.{sfx}@example.com",
+            ["Developers"],
+            email_verified=email_verified,
+        )
+    )
+
+    response = _sign_in(signin, caplog)
+
+    _assert_refused(signin, response, caplog, "email_unverified", {}, count)
+
+
+def test_an_unverified_email_is_refused_before_the_address_is_looked_up(signin, caplog):
+    """The cases are evaluated in order: with an address another account
+    holds, an unverified email is still refused as ``email_unverified``, and
+    the record names no row."""
+    sfx = _suffix()
+    held = f"held.{sfx}@example.com"
+    holder = _add_user(
+        signin.db,
+        username=f"holder_{sfx}",
+        email=held,
+        hashed_password=HASHED_PASSWORD,
+        role=UserRole.DEVELOPER,
+    )
+    before = {holder.id: signin.rows.snapshot(holder.id)}
+    count = signin.rows.count()
+    signin.use(identity(f"cog_{sfx}", str(uuid.uuid4()), held, email_verified="false"))
+
+    response = _sign_in(signin, caplog)
+
+    _assert_refused(signin, response, caplog, "email_unverified", before, count)
+    (record,) = [r for r in caplog.records if r.name == SIGN_IN_LOGGER]
+    assert record.row_id is None
+
+
+@pytest.mark.parametrize("email_verified", ["true", "True"], ids=["true", "True"])
+def test_a_first_sign_in_with_a_verified_email_gets_an_account(
+    signin, caplog, email_verified
+):
+    """The control for the test above: the same identity, verified."""
+    sfx = _suffix()
+    sub = str(uuid.uuid4())
+    count = signin.rows.count()
+    signin.use(
+        identity(
+            f"verified_{sfx}",
+            sub,
+            f"verified.{sfx}@example.com",
+            ["Developers"],
+            email_verified=email_verified,
+        )
+    )
+
+    response = _sign_in(signin, caplog)
+
+    assert response.status_code == 200, response.text
+    assert _reasons(caplog) == []
+    assert signin.rows.count() == count + 1
+    row_id = signin.rows.id_with_external_id(f"cognito:{sub}")
+    assert str(row_id) == response.json()["id"]
+
+
+@pytest.mark.parametrize("email_verified", ["false", None], ids=["false", "absent"])
+def test_a_linked_account_signs_in_whatever_email_verified_says(
+    signin, caplog, email_verified
+):
+    """The requirement is for a first sign-in only: an account already linked
+    to the Cognito user is used as before."""
+    sfx = _suffix()
+    sub = str(uuid.uuid4())
+    linked = _add_user(
+        signin.db,
+        username=f"kept_{sfx}",
+        email=f"kept.{sfx}@example.com",
+        external_id=f"cognito:{sub}",
+        role=UserRole.DEVELOPER,
+    )
+    count = signin.rows.count()
+    signin.use(
+        identity(
+            linked.username,
+            sub,
+            linked.email,
+            ["Developers"],
+            email_verified=email_verified,
+        )
+    )
+
+    response = _sign_in(signin, caplog)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["id"] == str(linked.id)
+    assert _reasons(caplog) == []
+    assert signin.rows.count() == count
+
+
+# --------------------------------------------------------------------------
 # Case 6: the address belongs to another account (row 12)
 # --------------------------------------------------------------------------
 
@@ -926,12 +1037,17 @@ def pool(db_session, test_db, monkeypatch) -> Iterator[Pool]:
         _restore_overrides(saved)
 
 
-def _pool_user(p: Pool, groups=()) -> str:
+def _pool_user(p: Pool, groups=(), verified: bool = True) -> str:
+    """A Cognito user with an email address, verified unless ``verified`` is
+    false (then the user has no ``email_verified`` attribute)."""
     username = f"ops{_suffix()}"
+    attributes = [{"Name": "email", "Value": f"{username}@example.com"}]
+    if verified:
+        attributes.append({"Name": "email_verified", "Value": "true"})
     p.idp.admin_create_user(
         UserPoolId=p.pool_id,
         Username=username,
-        UserAttributes=[{"Name": "email", "Value": f"{username}@example.com"}],
+        UserAttributes=attributes,
         TemporaryPassword="Tmp-pass1!",
         MessageAction="SUPPRESS",
     )
@@ -979,6 +1095,34 @@ def test_a_pool_user_in_the_admin_group_gets_an_administrator_account(
     again = _pool_sign_in(pool, username)
     assert again.json()["id"] == response.json()["id"]
     assert _role(pool, again) == ("ADMIN", True)
+
+
+def test_a_cognito_user_gets_an_account_once_their_email_is_verified(pool, caplog):
+    """Through the real service: no account while the user's email is not
+    verified, then one at the first sign-in after it is."""
+    username = _pool_user(pool, verified=False)
+    record = pool.idp.admin_get_user(UserPoolId=pool.pool_id, Username=username)
+    sub = next(a["Value"] for a in record["UserAttributes"] if a["Name"] == "sub")
+    count = pool.rows.count()
+
+    with caplog.at_level(logging.WARNING, logger=SIGN_IN_LOGGER):
+        refused = _pool_sign_in(pool, username)
+
+    _assert_generic_401(refused)
+    assert _reasons(caplog) == ["email_unverified"]
+    assert pool.rows.count() == count
+    assert pool.rows.id_with_external_id(f"cognito:{sub}") is None
+
+    pool.idp.admin_update_user_attributes(
+        UserPoolId=pool.pool_id,
+        Username=username,
+        UserAttributes=[{"Name": "email_verified", "Value": "true"}],
+    )
+    response = _pool_sign_in(pool, username)
+
+    assert response.status_code == 200, response.text
+    assert pool.rows.count() == count + 1
+    assert str(pool.rows.id_with_external_id(f"cognito:{sub}")) == response.json()["id"]
 
 
 def test_a_linked_administrator_still_in_the_admin_group_stays_an_administrator(

@@ -65,7 +65,10 @@ def _create_user(idp, pool_id: str, username: str, email: str, groups=()) -> Non
     idp.admin_create_user(
         UserPoolId=pool_id,
         Username=username,
-        UserAttributes=[{"Name": "email", "Value": email}],
+        UserAttributes=[
+            {"Name": "email", "Value": email},
+            {"Name": "email_verified", "Value": "true"},
+        ],
         TemporaryPassword="Tmp-pass1!",
         MessageAction="SUPPRESS",
     )

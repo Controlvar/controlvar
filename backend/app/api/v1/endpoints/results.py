@@ -14,7 +14,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
-from backend.app.api.deps import get_current_active_user, get_current_superuser, get_db
+from backend.app.api.deps import (
+    get_current_active_user,
+    get_current_superuser,
+    get_db,
+    require_experiment_read,
+)
 from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.analysis_status import analysis_notice, analysis_status
 from backend.app.core.logger import unexpected_failure
@@ -72,7 +77,10 @@ from backend.app.services.sufficient_stats_analysis import (
 
 logger = logging.getLogger(__name__)
 
+# Every route here reads an experiment's data, so each admits a caller by the
+# rule of GET /api/v1/experiments/{id}, before the handler runs.
 router = APIRouter(route_class=OffLoopRoute)
+router.dependencies.append(Depends(require_experiment_read))
 
 
 # ---------------------------------------------------------------------------
