@@ -473,12 +473,13 @@ expects = 0
 path = "docs/self-hosting/kubernetes.md"
 reason = "run on a kind cluster by the chart-kind workflow (scripts/chart_kind.sh), which extracts its marked blocks"
 
-# Read on GitHub, beside compose.yml: its blocks start the production stack,
-# which the compose-production workflow boots with generate-env.sh and
-# docker compose up --wait.
+# Read on GitHub, beside compose.yml: its blocks start, back up and upgrade
+# the production stack. The compose-production workflow's compose-upgrade job
+# extracts and runs them (scripts/guide_blocks.py --marker compose-upgrade),
+# so they carry that job's markers, not tags.
 [[exempt]]
 path = "deploy/compose/README.md"
-reason = "starts the production stack on a Docker host: the compose-production workflow runs generate-env.sh and docker compose up --wait on this directory's files"
+reason = "starts and upgrades the production stack on a Docker host: compose-production boots this directory's files, and its compose-upgrade job (scripts/compose_upgrade.sh) runs the marked blocks"
 
 [pending]
 "backend/lambda/README.md" = { comments = 0, unlabelled = 1, syntax = 0 }

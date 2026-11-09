@@ -30,6 +30,7 @@ from urllib.parse import urlparse
 import pytest
 import yaml
 
+from backend.tests.unit.infrastructure import _workflow_graph as wg
 from backend.tests.unit.infrastructure._compose_feature_keys import FEATURE_KEYS
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -508,11 +509,55 @@ class TestGenerator:
 
 
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "compose-production.yml"
+UPGRADE_SCRIPT = REPO_ROOT / "scripts" / "compose_upgrade.sh"
+
+#: The compose-upgrade job's steps that run its script unconditionally, in
+#: order: one phase of scripts/compose_upgrade.sh each (the image builds sit
+#: between `previous` and `images`).
+UPGRADE_PHASES = (
+    "previous",
+    "images",
+    "blocks",
+    "install",
+    "prepare",
+    "retag",
+    "upgrade",
+    "restart",
+    "rollback",
+)
+
+#: What run_block may pass a block: the variables the page tells the reader to
+#: set (Upgrade's table, and Run it's ENV_FILE), and nothing of the job's.
+BLOCK_VARIABLES = {"RELEASE", "PUBLIC_BASE_URL", "ENV_FILE"}
+
+#: A call of the script's run_block: the block's name, then VAR=VALUE words.
+RUN_BLOCK_CALL = re.compile(
+    r"\brun_block ([a-z][a-z0-9-]*)((?: [A-Za-z_][A-Za-z0-9_]*=\S+)*)"
+)
+
+#: A call of the script's dc (its own `docker compose`), as a command or in $(...).
+DC_CALL = re.compile(r"(?<![\w$-])dc\s")
+
+
+def _function(script: str, name: str) -> str:
+    """The body of shell function *name* in *script*, `name() {` to `}`."""
+    found = re.search(rf"^{name}\(\) \{{\n(.*?)^\}}$", script, re.M | re.S)
+    assert found, f"compose_upgrade.sh has no {name} function"
+    return found.group(1)
+
+
+def _code(script: str) -> str:
+    """*script* without its comment lines, which may name what it never runs."""
+    return "\n".join(
+        line for line in script.splitlines() if not line.lstrip().startswith("#")
+    )
 
 
 @pytest.mark.skipif(not WORKFLOW.is_file(), reason="this tree has no .github/workflows")
 class TestWorkflow:
-    """The job that boots the file: it must not build, pull or skip its checks."""
+    """The jobs that boot the file and rehearse its upgrade: they must not
+    build where they should pull or pull where they should build, log in to a
+    registry, run a block the page does not hold, or skip a check."""
 
     @pytest.fixture(scope="class")
     def runs(self) -> str:
@@ -555,6 +600,268 @@ class TestWorkflow:
             'TOPOLOGY="${TOPOLOGY:-alb}"'
             in (REPO_ROOT / "tests" / "alb" / "rehearse.sh").read_text()
         )
+
+    # -- compose-upgrade (#1807): the README's own blocks, from N-1's images --
+
+    @pytest.fixture(scope="class")
+    def jobs(self) -> Dict[str, Any]:
+        return wg.load(WORKFLOW)["jobs"]
+
+    @pytest.fixture(scope="class")
+    def upgrade_job(self, jobs) -> Dict[str, Any]:
+        assert "compose-upgrade" in jobs, (
+            "compose-production.yml has no compose-upgrade job"
+        )
+        return jobs["compose-upgrade"]
+
+    @pytest.fixture(scope="class")
+    def script(self) -> str:
+        assert UPGRADE_SCRIPT.is_file(), "scripts/compose_upgrade.sh does not exist"
+        return UPGRADE_SCRIPT.read_text(encoding="utf-8")
+
+    def test_no_job_or_step_may_fail_and_carry_on(self, jobs):
+        """SPEC, refused: `continue-on-error` anywhere in the workflow."""
+        for name, job in jobs.items():
+            assert "continue-on-error" not in job, name
+            for step in job.get("steps", []):
+                assert "continue-on-error" not in step, f"{name}: {step.get('name')}"
+
+    def test_nothing_logs_in_to_a_registry(self, script):
+        """SPEC, refused: every pull is anonymous, as a fork's must be; and the
+        header no longer says nothing pulls."""
+        text = WORKFLOW.read_text(encoding="utf-8")
+        for refused in ("docker login", "login-action", "packages:"):
+            assert refused not in text, f"{refused!r} in compose-production.yml"
+            assert refused not in script, f"{refused!r} in compose_upgrade.sh"
+        assert "nothing here pulls from ghcr.io" not in text
+
+    def test_the_upgrade_job_is_named_bounded_and_skips_only_a_push(self, upgrade_job):
+        """Not on a push: on the release commit, compose.yml names core-N
+        before release.yml has published it, so the page's pull would fail."""
+        assert upgrade_job["name"] == "Compose Upgrade"
+        assert upgrade_job["if"] == "github.event_name != 'push'"
+        assert upgrade_job["timeout-minutes"] == 40
+        assert upgrade_job["runs-on"] == "ubuntu-latest"
+        assert "strategy" not in upgrade_job, "one profile, no matrix"
+        assert "concurrency" not in upgrade_job, "the workflow's group only"
+
+    def test_the_upgrade_job_runs_on_pull_requests_nightly_and_by_hand(self):
+        on = wg.triggers(wg.load(WORKFLOW))
+        assert on["schedule"] == [{"cron": "30 4 * * *"}]
+        assert set(on["workflow_dispatch"]["inputs"]) == {"previous_version"}
+        assert on["workflow_dispatch"]["inputs"]["previous_version"]["default"] == ""
+        paths = on["pull_request"]["paths"]
+        for path in (
+            "deploy/compose/README.md",
+            "scripts/compose_upgrade.sh",
+            "scripts/guide_blocks.py",
+        ):
+            assert path in paths, path
+
+    def test_the_upgrade_job_runs_its_phases_in_order(self, upgrade_job):
+        steps = upgrade_job["steps"]
+        assert steps[0]["uses"] == "actions/checkout@v7"
+        assert steps[0]["with"] == {"fetch-depth": 0}, (
+            "N-1 is a tag, and the self-hoster's clone is made from this one"
+        )
+        phase = re.compile(r"bash scripts/compose_upgrade\.sh ([a-z-]+)")
+        ran, conditional = [], {}
+        for step in steps:
+            found = phase.fullmatch(str(step.get("run", "")).strip())
+            if not found:
+                continue
+            if "if" in step:
+                conditional[found.group(1)] = step["if"]
+            else:
+                ran.append(found.group(1))
+        assert ran == list(UPGRADE_PHASES)
+        assert conditional == {"diagnose": "failure()", "teardown": "always()"}
+
+    def test_the_upgrade_job_builds_what_the_other_job_builds(self, jobs, upgrade_job):
+        """The same two core builds, cache and build arguments, under local
+        names: the stack must pull N-1's images, so nothing may be tagged with
+        the published names before the install."""
+
+        def builds(job):
+            return [
+                step["with"]
+                for step in job["steps"]
+                if str(step.get("uses", "")).startswith("docker/build-push-action@")
+            ]
+
+        mine, theirs = builds(upgrade_job), builds(jobs["compose-production"])
+        assert [b["tags"] for b in mine] == [
+            "compose-upgrade-api:core",
+            "compose-upgrade-web:core",
+        ]
+        assert [{**b, "tags": None} for b in mine] == [
+            {**b, "tags": None} for b in theirs
+        ]
+
+    def test_the_script_names_the_page_the_builds_and_the_project(
+        self, script, compose
+    ):
+        def value(name):
+            found = re.search(rf"^{name}=(\S+)$", script, re.M)
+            assert found, f"compose_upgrade.sh sets no {name}"
+            return found.group(1)
+
+        assert REPO_ROOT / value("GUIDE") == README
+        assert value("MARKER") == "compose-upgrade"
+        assert value("PROJECT") == compose["name"]
+        assert value("PROFILE") == "core"
+        assert value("BUILD_API") == "compose-upgrade-api:core"
+        assert value("BUILD_WEB") == "compose-upgrade-web:core"
+
+    def test_the_upgrade_job_runs_every_block_of_the_page(self, script):
+        """Every bash block of the README is marked, in the script's list, and
+        run by name: an unrun block is a command on the page nothing tests."""
+        text = README.read_text(encoding="utf-8")
+        listed = re.search(r"^GUIDE_BLOCKS=(\S+)$", script, re.M)
+        assert listed, "compose_upgrade.sh sets no GUIDE_BLOCKS"
+        blocks = listed.group(1).split(",")
+        markers = re.findall(
+            r"^<!-- compose-upgrade: ([a-z][a-z0-9-]*) -->$", text, re.M
+        )
+        assert markers == blocks
+        assert len(re.findall(r"^```bash$", text, re.M)) == len(blocks)
+        called = {m.group(1) for m in RUN_BLOCK_CALL.finditer(_code(script))}
+        assert called == set(blocks)
+
+    def test_every_block_runs_under_env_i_with_only_the_declared_variables(
+        self, script
+    ):
+        """C6, SPEC, refused: a block run outside run_block, or a run_block
+        that does not start `env -i`. The block sees HOME, PATH and the
+        variables the page declares, never the job's environment."""
+        body = _function(script, "run_block")
+        runs = [line for line in body.splitlines() if '"$BLOCKS/$name.sh"' in line]
+        runs = [line for line in runs if "bash" in line]
+        assert len(runs) == 1, runs
+        command = runs[0].split("&&", 1)[-1].strip()
+        assert command.startswith(
+            'env -i HOME="$READER_HOME" PATH="$PATH" "$@" bash -euo pipefail '
+        ), f"run_block does not run the block under env -i: {runs[0]!r}"
+        outside = _code(script.replace(body, ""))
+        assert "bash -euo pipefail" not in outside, "a block run outside run_block"
+        assert '"$BLOCKS/' not in outside.replace('--out "$BLOCKS"', ""), (
+            "a block read outside run_block"
+        )
+
+        declared = re.search(r"^DECLARED='([^']*)'$", script, re.M)
+        assert declared, "compose_upgrade.sh declares no DECLARED variables"
+        assert set(declared.group(1).split()) == BLOCK_VARIABLES
+        assert UPGRADE_VARIABLES <= BLOCK_VARIABLES
+        for call in RUN_BLOCK_CALL.finditer(_code(script)):
+            passed = set(re.findall(r" ([A-Za-z_][A-Za-z0-9_]*)=", call.group(2)))
+            assert passed <= BLOCK_VARIABLES, call.group(0)
+
+    def test_each_block_is_given_the_variables_it_reads(self, script):
+        """Every call of a block passes each variable the block expands: under
+        `bash -u` a block without one stops at its first line, and under
+        `env -i` nothing else can supply it."""
+        bodies = dict(
+            re.findall(
+                r"^<!-- compose-upgrade: ([a-z][a-z0-9-]*) -->\n```bash\n(.*?)^```$",
+                README.read_text(encoding="utf-8"),
+                re.M | re.S,
+            )
+        )
+        calls = list(RUN_BLOCK_CALL.finditer(_code(script)))
+        assert calls, "compose_upgrade.sh runs no block"
+        for call in calls:
+            passed = set(re.findall(r" ([A-Za-z_][A-Za-z0-9_]*)=", call.group(2)))
+            reads = _expanded_variables(bodies[call.group(1)])
+            assert reads <= passed, (
+                f"{call.group(0)!r} does not pass {sorted(reads - passed)}, "
+                "which the block reads"
+            )
+
+    def test_the_upgrade_starts_from_a_clone_at_the_previous_release(self, script):
+        """C5(a): the ref get-files checks out is made after the clone, so only
+        the page's `git fetch --tags` can bring it."""
+        install = _function(script, "do_install")
+        clone = install.index(
+            'git clone --quiet --branch "v$prev" "$REPO_ROOT" "$SELFHOST"'
+        )
+        tag = install.index('git -C "$REPO_ROOT" tag -f "$CHANGE_TAG" HEAD')
+        named = install.index("run_block install-named ")
+        plain = install.index("run_block install ")
+        assert clone < tag < named < plain
+        assert "--pull never" not in script
+
+    def test_it_rolls_back_in_place_before_it_restores(self, script):
+        """PR 1's step 7: roll back in place first (steps 3 and 5 with the old
+        tag); restore the backup only after that, into a stack with no volumes."""
+        rollback = _function(script, "do_rollback")
+        order = [
+            rollback.index(text)
+            for text in (
+                'run_block get-files RELEASE="v$prev"',
+                "run_block pull",
+                "run_block upgrade",
+                "dc down -v --remove-orphans",
+                "run_block restore",
+            )
+        ]
+        assert order == sorted(order)
+        assert _code(script).count("down -v") == 2, (
+            "the rollback's and the teardown's only"
+        )
+
+    def test_a_check_settings_refusal_is_reported_without_compose(self, script):
+        """Compose loads the whole compose.yml for every subcommand, `ps`
+        included, so after check-settings refuses the file a `dc` call fails
+        before the refusal is reported. The refusal branch, and the
+        api_image_id it calls, find the api container by the labels Compose
+        put on it; the refusal is reported whether or not its image is read;
+        diagnose finds the containers the same way, and teardown falls back to
+        the labels when `down` fails."""
+        branch = re.search(
+            r"^    if ! run_block check-settings; then\n(.*?)^    fi$",
+            _function(script, "do_prepare"),
+            re.M | re.S,
+        )
+        assert branch, "do_prepare has no `if ! run_block check-settings` branch"
+        refusal = _code(branch.group(1))
+        lookup = _code(_function(script, "api_image_id"))
+        for name, body in (
+            ("the check-settings refusal branch", refusal),
+            ("api_image_id", lookup),
+            ("do_diagnose", _code(_function(script, "do_diagnose"))),
+        ):
+            calls = [line.strip() for line in body.splitlines() if DC_CALL.search(line)]
+            assert not calls, f"{name} calls dc, which loads the refused file: {calls}"
+        project = '"label=com.docker.compose.project=$PROJECT"'
+        assert project in lookup
+        assert "--filter label=com.docker.compose.service=api" in lookup
+        assert "if still=$(api_image_id); then" in refusal, (
+            "the refusal is reported only when the api's image can be read"
+        )
+        last = refusal.strip().splitlines()[-1].strip()
+        assert last.startswith("fail \"the page's check-settings block refused "), last
+        teardown = _code(_function(script, "do_teardown"))
+        assert "if dc down -v --remove-orphans; then" in teardown
+        assert teardown.count('--filter "$label"') == 4
+
+    def test_restart_is_waited_for_by_the_bootstrap_line(self, script):
+        """C5(b): `restart` returns before the entrypoint runs again; the job
+        waits, bounded, for one more bootstrap line before it reads the log."""
+        restart = _function(script, "do_restart")
+        assert "dc restart api" in restart
+        assert "RESTART_WAIT=300" in script
+        assert restart.index("dc restart api") < restart.index("wait_for_bootstrap")
+
+    def test_the_upgrade_job_is_one_step_of_the_core_profile_on_linux(
+        self, script, upgrade_job
+    ):
+        """What the README says CI does not rehearse: the full profile and a
+        jump over more than one release."""
+        assert re.search(r"^PROFILE=core$", script, re.M)
+        assert upgrade_job["runs-on"] == "ubuntu-latest"
+        for step in upgrade_job["steps"]:
+            target = (step.get("with") or {}).get("target")
+            assert target in (None, "core"), step.get("name")
 
 
 def _backup_section() -> str:

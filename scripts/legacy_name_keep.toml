@@ -46,6 +46,12 @@ count = 2
 reason = "K1: the compose project name sets the volume names; a new name starts an empty database"
 
 [[keep]]
+path = "scripts/compose_upgrade.sh"
+literal = "experimently-selfhost"
+count = 1
+reason = "K1: the compose project name sets the volume names; a new name starts an empty database"
+
+[[keep]]
 path = "docs/_claims/docs/self-hosting/upgrading-to-controlvar.md.toml"
 literal = "experimently-selfhost"
 count = 1
@@ -858,7 +864,7 @@ reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
 [[keep]]
 path = ".github/workflows/compose-production.yml"
 literal = "EXPERIMENTLY_PROFILE"
-count = 1
+count = 2
 reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
 
 [[keep]]
