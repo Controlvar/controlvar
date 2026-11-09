@@ -7,24 +7,27 @@ import { API_URL, TOKEN_STORAGE_KEY } from "./env";
  * Journey: a dialog keeps focus inside and gives it back (#369).
  *
  * The shared Dialog, in a real browser, on /admin/users (the edit-user
- * dialog): focus moves into it, Tab and Shift+Tab stay inside it, the page
- * behind it (`#__next`) is inert while Next's route announcer, a child of
- * body, is not, axe finds nothing serious in it, and on close focus is back
- * on the row's Edit button. jsdom implements no `inert` and moves no focus on
- * Tab, so this is the only place either is shown.
+ * dialog) and /admin/api-keys (the create-key dialog): focus moves into it,
+ * Tab and Shift+Tab stay inside it, the page behind it (`#__next`) is inert
+ * while Next's route announcer, a child of body, is not, axe finds nothing
+ * serious in it, and on close focus is back on the button that opened it.
+ * jsdom implements no `inert` and moves no focus on Tab, so this is the only
+ * place either is shown.
  *
- * "Saved changes to <name>." is written in the page's live region after the
- * dialog has taken `inert` off `#__next`: a MutationObserver installed in the
- * page records every live-region text change with whether an ancestor was
- * inert at that moment (the `inert` attribute changes are replayed in order
- * with the text changes), and none may be.
+ * "Saved changes to <name>." and "Key created" are written in the page's live
+ * region after the dialog has taken `inert` off `#__next`: a MutationObserver
+ * installed in the page records every live-region text change with whether an
+ * ancestor was inert at that moment (the `inert` attribute changes are
+ * replayed in order with the text changes), and none may be. The new API key
+ * is in none of those changes, and in no live region when the journey ends.
  *
  * The axe import is static, so a missing @axe-core/playwright fails this file
  * instead of skipping it.
  *
- * The journey creates its own VIEWER through the API, edits only that user,
- * and deletes it in a `finally`: the seeded accounts other journeys sign in
- * with are never changed.
+ * The edit-user journey creates its own VIEWER through the API, edits only
+ * that user, and deletes it in a `finally`: the seeded accounts other
+ * journeys sign in with are never changed. The create-key journey deletes
+ * the key it creates the same way.
  */
 
 /** An explicit live region, or a role that is one (as in src/tests/helpers/watchLiveRegions.ts). */
@@ -111,6 +114,56 @@ async function openFrom(page: Page, editButton: Locator): Promise<Locator> {
   return dialog;
 }
 
+/** Open the create-key dialog from its button, by keyboard, so the button is focused first. */
+async function openCreateKeyFrom(page: Page, createButton: Locator): Promise<Locator> {
+  await createButton.focus();
+  await expect(createButton).toBeFocused();
+  await page.keyboard.press("Enter");
+  const dialog = page.getByRole("dialog", { name: "Create API Key" });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+/** What the page shows a screen reader about itself while a dialog is open. */
+async function expectPageBehindIsInert(page: Page, behindTestId: string): Promise<void> {
+  expect(await appRootIsInert(page), "#__next is inert while the dialog is open").toBe(true);
+  expect(
+    await page.evaluate(() => document.getElementById("__next")?.contains(document.querySelector('[role="dialog"]'))),
+    "the dialog is not inside #__next",
+  ).toBe(false);
+  expect(
+    await page.evaluate(() => {
+      const announcer = document.querySelector("next-route-announcer");
+      return announcer
+        ? { childOfBody: announcer.parentElement === document.body, inert: announcer.closest("[inert]") !== null }
+        : null;
+    }),
+    "Next's route announcer is a child of body and not inert",
+  ).toEqual({ childOfBody: true, inert: false });
+  expect(
+    await page.evaluate((testId) => {
+      const behind = document.querySelector<HTMLElement>(`[data-testid="${testId}"]`);
+      behind?.focus();
+      return behind !== null && document.activeElement === behind;
+    }, behindTestId),
+    "a control behind the dialog cannot take focus",
+  ).toBe(false);
+  expect(await page.evaluate(() => getComputedStyle(document.body).overflow), "the page does not scroll").toBe(
+    "hidden",
+  );
+}
+
+async function expectTabStaysInside(page: Page): Promise<void> {
+  for (let i = 1; i <= 8; i += 1) {
+    await page.keyboard.press("Tab");
+    expect(await focusIsInsideDialog(page), `Tab ${i} stays in the dialog`).toBe(true);
+  }
+  for (let i = 1; i <= 8; i += 1) {
+    await page.keyboard.press("Shift+Tab");
+    expect(await focusIsInsideDialog(page), `Shift+Tab ${i} stays in the dialog`).toBe(true);
+  }
+}
+
 test.describe("Journey: a dialog keeps focus inside and gives it back", () => {
   test("the edit-user dialog: focus in, Tab trapped, page inert, focus back, announced after close", async ({
     adminPage: page,
@@ -146,42 +199,11 @@ test.describe("Journey: a dialog keeps focus inside and gives it back", () => {
       // --- Open: focus moves in, the page behind is inert, the announcer is not.
       const dialog = await openFrom(page, editButton);
       await expect(page.getByTestId("edit-role-select")).toBeFocused();
-      expect(await appRootIsInert(page), "#__next is inert while the dialog is open").toBe(true);
-      expect(
-        await page.evaluate(() => document.getElementById("__next")?.contains(document.querySelector('[role="dialog"]'))),
-        "the dialog is not inside #__next",
-      ).toBe(false);
-      expect(
-        await page.evaluate(() => {
-          const announcer = document.querySelector("next-route-announcer");
-          return announcer
-            ? { childOfBody: announcer.parentElement === document.body, inert: announcer.closest("[inert]") !== null }
-            : null;
-        }),
-        "Next's route announcer is a child of body and not inert",
-      ).toEqual({ childOfBody: true, inert: false });
-      expect(
-        await page.evaluate(() => {
-          const behind = document.querySelector<HTMLElement>('[data-testid="invite-user-button"]');
-          behind?.focus();
-          return behind !== null && document.activeElement === behind;
-        }),
-        "a control behind the dialog cannot take focus",
-      ).toBe(false);
-      expect(await page.evaluate(() => getComputedStyle(document.body).overflow), "the page does not scroll").toBe(
-        "hidden",
-      );
+      await expectPageBehindIsInert(page, "invite-user-button");
       await expectNoSeriousViolationsIn(page, '[role="dialog"]', "the edit-user dialog");
 
       // --- Tab and Shift+Tab: never out of the dialog.
-      for (let i = 1; i <= 8; i += 1) {
-        await page.keyboard.press("Tab");
-        expect(await focusIsInsideDialog(page), `Tab ${i} stays in the dialog`).toBe(true);
-      }
-      for (let i = 1; i <= 8; i += 1) {
-        await page.keyboard.press("Shift+Tab");
-        expect(await focusIsInsideDialog(page), `Shift+Tab ${i} stays in the dialog`).toBe(true);
-      }
+      await expectTabStaysInside(page);
 
       // --- Save: the dialog closes, focus is back on the row, the save is
       // announced, and never while the page was inert.
@@ -230,6 +252,89 @@ test.describe("Journey: a dialog keeps focus inside and gives it back", () => {
         // Soft, so a failed delete is reported without replacing the error that
         // is already propagating from the try block.
         expect.soft(removed.status(), "the journey's user is deleted").toBe(204);
+      }
+    }
+  });
+
+  test("the create-key dialog: focus in, Tab trapped, page inert, focus back, announced after close, the key in no live region", async ({
+    adminPage: page,
+  }) => {
+    const keyName = `e2e-dialog-key-${Date.now()}`;
+    let headers: Record<string, string> = {};
+    let keyId: string | null = null;
+    try {
+      await page.goto("/admin/api-keys");
+      await expect(page.getByTestId("api-key-table")).toBeVisible({ timeout: 15_000 });
+      const token = await page.evaluate((key) => window.localStorage.getItem(key), TOKEN_STORAGE_KEY);
+      expect(token, "the admin session has a token").toBeTruthy();
+      headers = { Authorization: `Bearer ${token}` };
+      const createButton = page.getByTestId("create-api-key-button");
+      await watchLiveRegions(page);
+
+      // --- Open: focus is on Name, the page behind is inert, the announcer is not.
+      await openCreateKeyFrom(page, createButton);
+      await expect(page.getByTestId("api-key-name-input")).toBeFocused();
+      await expectPageBehindIsInert(page, "create-api-key-button");
+      await expectNoSeriousViolationsIn(page, '[role="dialog"]', "the create-key dialog");
+
+      // --- Tab and Shift+Tab: never out of the dialog.
+      await expectTabStaysInside(page);
+
+      // --- Escape: closes it, and focus is back on the button.
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(createButton).toBeFocused();
+      expect(await appRootIsInert(page)).toBe(false);
+      expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).not.toBe("hidden");
+
+      // --- Create: the dialog closes, the key is in the banner, focus is back on
+      // the button, and "Key created" is announced, never while the page was inert.
+      const dialog = await openCreateKeyFrom(page, createButton);
+      await dialog.getByTestId("api-key-name-input").fill(keyName);
+      const created = page.waitForResponse(
+        (r) => r.request().method() === "POST" && new URL(r.url()).pathname === "/api/v1/api-keys",
+      );
+      await dialog.getByTestId("create-api-key-submit").click();
+      const response = await created;
+      // The body carries the key, so it is not the message.
+      expect(response.status(), "the key is created").toBe(201);
+      keyId = ((await response.json()) as { id: string }).id;
+
+      await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+      await expect(page.getByTestId("new-key-banner")).toBeVisible({ timeout: 15_000 });
+      const key = (await page.getByTestId("new-key-value").innerText()).trim();
+      expect(key.length, "the banner shows the whole key").toBeGreaterThan(8);
+      await expect(page.getByTestId("new-key-live-region")).toHaveText("Key created", { timeout: 15_000 });
+      await expect(createButton).toBeFocused({ timeout: 15_000 });
+      expect(await appRootIsInert(page), "#__next is not inert after close").toBe(false);
+
+      // The key, first: in no live-region change, and in no live region now.
+      // Counted, so a failure does not print it.
+      const changes = await liveRegionChanges(page);
+      expect(
+        changes.filter((c) => c.text.includes(key)).length,
+        "no live-region change carried the key",
+      ).toBe(0);
+      expect(
+        await page.evaluate(
+          ({ selector, secret }) =>
+            Array.from(document.querySelectorAll(selector)).filter((el) => (el.textContent ?? "").includes(secret))
+              .length,
+          { selector: LIVE_REGION, secret: key },
+        ),
+        "no live region holds the key",
+      ).toBe(0);
+      expect(
+        changes.some((c) => c.text.includes("Key created")),
+        `the observer saw the announcement: ${JSON.stringify(changes.map((c) => c.underInert))}`,
+      ).toBe(true);
+      expect(changes.filter((c) => c.underInert), "no live region changed under an inert ancestor").toEqual([]);
+    } finally {
+      if (keyId) {
+        const removed = await page.request.delete(`${API_URL}/api/v1/api-keys/${keyId}`, { headers });
+        // Soft, so a failed delete is reported without replacing the error that
+        // is already propagating from the try block.
+        expect.soft(removed.status(), "the journey's key is deleted").toBe(204);
       }
     }
   });

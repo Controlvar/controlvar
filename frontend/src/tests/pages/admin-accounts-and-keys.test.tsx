@@ -10,7 +10,11 @@
  *  - an ADMIN or DEVELOPER who is not a superuser is turned away from both.
  */
 import React from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+// The API key and invite dialogs make `#__next` inert and portal beside it, so
+// the pages are mounted the way Next mounts them (#369).
+import { APP_ROOT_ID, renderInAppRoot as render } from '@/tests/helpers/renderInAppRoot';
+import { watchLiveRegions } from '@/tests/helpers/watchLiveRegions';
 import UsersPage from '@/pages/admin/users';
 import ApiKeysPage from '@/pages/admin/api-keys';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
@@ -148,7 +152,10 @@ describe('the API keys dialog on /admin/api-keys', () => {
     await createKeyThroughDialog();
     // The key is on screen, and the region says only that one was created.
     expect(screen.getByTestId('new-key-value')).toHaveTextContent(PLAIN_KEY);
-    expect(region()).toHaveTextContent('Key created');
+    // Changed for #369 (was an immediate check): "Key created" is written one
+    // commit after the dialog closes, once the page behind it is no longer
+    // inert, so the check waits for it.
+    await waitFor(() => expect(region()).toHaveTextContent('Key created'));
     noKey();
 
     fireEvent.click(screen.getByTestId('copy-new-key'));
@@ -195,6 +202,31 @@ describe('the API keys dialog on /admin/api-keys', () => {
     fireEvent.keyDown(document.activeElement as Element, { key: 'Escape' });
     expect(screen.queryByTestId('create-api-key-modal')).not.toBeInTheDocument();
     expect(opener).toHaveFocus();
+  });
+
+  it('"Key created" is announced after the page behind the dialog stops being inert, never the key (#369)', async () => {
+    renderPage(ApiKeysPage);
+    const opener = await screen.findByTestId('create-api-key-button');
+    opener.focus();
+    fireEvent.click(opener);
+    await screen.findByRole('dialog', { name: 'Create API Key' });
+    expect(document.getElementById(APP_ROOT_ID)).toHaveAttribute('inert');
+
+    const watch = watchLiveRegions();
+    fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'flag-guide' } });
+    fireEvent.click(screen.getByTestId('create-api-key-submit'));
+    await screen.findByTestId('new-key-banner');
+    await waitFor(() => expect(screen.getByTestId('new-key-live-region')).toHaveTextContent('Key created'));
+    watch.stop();
+
+    expect(document.getElementById(APP_ROOT_ID)).not.toHaveAttribute('inert');
+    expect(screen.queryByTestId('create-api-key-modal')).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+    expect(watch.changes).toContainEqual({ text: 'Key created', underInert: false });
+    expect(watch.changes.filter((c) => c.underInert)).toEqual([]);
+    for (const change of watch.changes) {
+      expect(change.text).not.toContain(PLAIN_KEY.slice(0, 8));
+    }
   });
 });
 

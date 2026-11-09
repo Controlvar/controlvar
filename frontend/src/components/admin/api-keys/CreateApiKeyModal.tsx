@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Dialog } from '@/components/ui/Dialog';
 import { apiFetch, UserMe } from '@/services/api';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import {
@@ -58,12 +59,16 @@ export function canCreateRulesetKey(user: UserMe | null | undefined, effective?:
   return ROLES_THAT_CHANGE_FLAGS.includes(user.role) || holds(effective, 'feature_flag', 'update');
 }
 
-const FOCUSABLE =
-  'a[href], button:not([disabled]), select:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
 export const RULESET_SCOPE_ROLE_REASON =
   'Only users who can change feature flags can create a key with this scope; the ADMIN and DEVELOPER roles and superusers can.';
 
+/**
+ * The Create API Key dialog, on the shared Dialog (#369): focus opens on Name,
+ * Tab stays inside, the page behind is inert, and on close focus goes back to
+ * the button that opened it. Escape closes it at any time, a create in flight
+ * included (it is never `busy`): the create still finishes and the page gets
+ * the key, the dialog does not.
+ */
 export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyModalProps) {
   const auth = useOptionalAuth();
   const { effective, loading } = useEffectivePermissions();
@@ -77,24 +82,9 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
   const [error, setError] = useState<string | null>(null);
   const [createdKey, setCreatedKey] = useState<CreatedApiKey | null>(null);
   const [copied, setCopied] = useState(false);
-  const dialogRef = useRef<HTMLDivElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const doneRef = useRef<HTMLButtonElement>(null);
-  const openerRef = useRef<HTMLElement | null>(null);
   const sessionRef = useRef(0);
-
-  // Move focus into the dialog when it opens, and give it back to whatever
-  // opened it when it closes (or unmounts).
-  useEffect(() => {
-    if (!isOpen) return;
-    openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    nameRef.current?.focus();
-    return () => {
-      const opener = openerRef.current;
-      openerRef.current = null;
-      if (opener && opener.isConnected) opener.focus();
-    };
-  }, [isOpen]);
 
   // Whenever the dialog is closed (by this component or by its parent, which
   // closes it as soon as a key is created) drop everything it held, so the
@@ -117,8 +107,6 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
   useEffect(() => {
     if (createdKey) doneRef.current?.focus();
   }, [createdKey]);
-
-  if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -170,28 +158,6 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
     }
   };
 
-  // Escape closes; Tab and Shift+Tab stay inside the dialog.
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'Escape') {
-      e.stopPropagation();
-      handleClose();
-      return;
-    }
-    if (e.key !== 'Tab' || !dialogRef.current) return;
-    const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE));
-    if (focusable.length === 0) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    const active = document.activeElement;
-    if (e.shiftKey && (active === first || !dialogRef.current.contains(active))) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && (active === last || !dialogRef.current.contains(active))) {
-      e.preventDefault();
-      first.focus();
-    }
-  };
-
   const maskedKeyDisplay = createdKey
     ? `${plaintextKey(createdKey).slice(0, 8)}...`
     : null;
@@ -199,23 +165,19 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
   // Never the key itself: this text is announced by a screen reader.
   const announcement = createdKey ? (copied ? 'Key copied' : 'Key created') : '';
 
+  // Never `busy`: Escape closes it during a create too (see the docstring).
   return (
-    <div
-      data-testid="create-api-key-modal"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="create-api-key-title"
-      onKeyDown={handleKeyDown}
-      ref={dialogRef}
+    <Dialog
+      open={isOpen}
+      onClose={handleClose}
+      title={createdKey ? 'API Key Created' : 'Create API Key'}
+      initialFocusRef={nameRef}
+      testId="create-api-key-modal"
     >
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
+      <div className="mt-3">
         <div role="status" aria-live="polite" data-testid="api-key-live-region" className="sr-only">
           {announcement}
         </div>
-        <h2 id="create-api-key-title" className="text-lg font-semibold text-slate-900 mb-4">
-          {createdKey ? 'API Key Created' : 'Create API Key'}
-        </h2>
 
         {/* Key revealed state */}
         {createdKey ? (
@@ -351,6 +313,7 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
             {/* Error */}
             {error && (
               <div
+                role="alert"
                 data-testid="modal-error"
                 className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md p-3"
               >
@@ -380,6 +343,6 @@ export function CreateApiKeyModal({ isOpen, onClose, onSuccess }: CreateApiKeyMo
           </form>
         )}
       </div>
-    </div>
+    </Dialog>
   );
 }
