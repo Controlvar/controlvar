@@ -40,8 +40,8 @@
 # sends the requests that answered 500 on GET /api/v1/rollout-schedules/
 # (#1001) and POST /api/v1/metrics/aggregate (#956), so their superuser
 # entries were removed because the run stopped sending those requests, not
-# because the bugs were fixed: both still answer 500 to the requests sent
-# before, and both issues stay open.
+# because the bugs were fixed: both answered 500 to the requests sent
+# before. POST /api/v1/metrics/aggregate's is now fixed by #956 (below).
 #
 # The superuser entry of POST /api/v1/rbac/users/{user_id}/grant (#1002) was
 # removed by #891: the grant validation refuses the seed's bodies with 422
@@ -52,7 +52,8 @@
 # GET /api/v1/metrics/errors (#956) is fixed, as GET /api/v1/metrics/summary
 # was (#1572): a start_date or end_date with a UTC offset of 16 hours or more
 # answers 422, so both its entries (superuser and viewer) were removed. The
-# other routes that took such a date are fixed the same way: GET
+# other routes that took such a date as a query parameter are fixed the same
+# way (a date in a request body still answers 500: #1826): GET
 # /api/v1/audit-logs/export, GET /api/v1/compliance/export and GET
 # /api/v1/hipaa/report answer 422, and their entries were removed.
 # #958 and #959 are fixed, so their entries were removed from both passes:
