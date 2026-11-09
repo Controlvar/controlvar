@@ -445,6 +445,31 @@ class TestMCPManifestEndpoint:
         )
         assert listed == expected
 
+    @pytest.mark.regression
+    def test_the_stale_filter_reads_as_the_flag_list_describes_it(self, client_no_auth):
+        """The MCP tool's ``stale`` (#1808) is the list route's: a boolean, in
+        the route's words, which the served OpenAPI document carries."""
+        from backend.app.api.v1.endpoints.feature_flags import (
+            FLAG_STALE_FILTER_DESCRIPTION,
+        )
+
+        served = json.loads(
+            (REPO_ROOT / "sdk" / "mcp" / "tools.json").read_text(encoding="utf-8")
+        )["tools"]
+        (tool,) = [t for t in served if t["name"] == "list_feature_flags"]
+        assert tool["inputSchema"]["properties"]["stale"] == {
+            "type": "boolean",
+            "description": FLAG_STALE_FILTER_DESCRIPTION,
+        }
+        paths = client_no_auth.get("/api/v1/openapi.json").json()["paths"]
+        (param,) = [
+            p
+            for p in paths["/api/v1/feature-flags/"]["get"]["parameters"]
+            if p["name"] == "stale"
+        ]
+        assert param["description"] == FLAG_STALE_FILTER_DESCRIPTION
+        assert param["required"] is False
+
     def test_mcp_manifest_tools_have_name_and_description(self, client_no_auth):
         """Each MCP tool has a 'name' and 'description' field."""
         response = client_no_auth.get("/api/v1/mcp/manifest")

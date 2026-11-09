@@ -545,10 +545,12 @@ by = [
 ]
 
 [[unit]]
-text = "The fields a response carries but no request writes (id, owner_id, created_at, updated_at and status) are accepted and ignored, so a GET body can be sent back unchanged unless its targeting_rules are ones PUT now refuses (422); omitting the field still works (see Add targeting rules)."
+text = "The fields a response carries but no request writes (id, owner_id, created_at, updated_at and status, and a list item's stale and stale_reasons) are accepted and ignored, so a GET body can be sent back unchanged unless its targeting_rules are ones PUT now refuses (422); omitting the field still works (see Add targeting rules)."
 by = [
     "test:backend/tests/integration/api/test_flag_contract.py::test_read_only_fields_in_a_put_are_ignored",
     "test:backend/tests/integration/api/test_flag_contract.py::test_every_response_can_be_put_back_unchanged",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_a_list_item_sent_back_is_accepted_and_its_stale_fields_ignored",
+    "test:backend/tests/unit/schemas/test_feature_flag_schemas.py::TestReadOnlySet::test_a_list_item_validates_as_both_request_models",
 ]
 
 [[unit]]
@@ -1033,6 +1035,10 @@ by = [
     "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::reads Archived in the list, with no switch in its row and a link saying how to unarchive it",
     "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::the list filters archived flags, asking the API for status ARCHIVED",
 ]
+
+[[unit]]
+text = "Stale Flags lists the flags that look ready to archive."
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "Create an API key"

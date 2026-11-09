@@ -99,6 +99,7 @@ nav:
   - Gradual Rollouts: feature-flags/rollouts.md
   - Safety Monitoring: feature-flags/safety.md
   - Turning a Flag Off: feature-flags/kill-switch.md
+  - Stale Flags: feature-flags/stale-flags.md
 - A/B Testing & Experiments:
   - Running Experiments: guides/user-guide.md
   - How Events Count: guides/how-events-count.md

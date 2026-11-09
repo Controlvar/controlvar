@@ -8,6 +8,7 @@ manage feature flags for gradual rollouts and A/B testing.
 
 import json
 import logging
+from datetime import datetime
 from typing import Annotated, Any, Dict, Optional
 from uuid import UUID
 
@@ -31,6 +32,7 @@ from backend.app.api.enum_filters import enum_filter
 from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.api.read_scope import get_current_reader
 from backend.app.api.segment_rules import refuse_unusable_segments
+from backend.app.core.config import settings
 from backend.app.core.context_limits import (
     CONTEXT_TOO_DEEP,
     check_context,
@@ -60,6 +62,7 @@ from backend.app.schemas.audit_log import ToggleRequest, ToggleResponse
 from backend.app.schemas.feature_flag import (
     STATUS_READ_ONLY,
     FeatureFlagCreate,
+    FeatureFlagListItem,
     FeatureFlagListResponse,
     FeatureFlagRead,
     FeatureFlagUpdate,
@@ -79,6 +82,7 @@ from backend.app.services.feature_flag_service import (
     FlagVerb,
     transition,
 )
+from backend.app.services.stale_flags import stale_clock, stale_reasons
 
 # Setup logger
 logger = logging.getLogger(__name__)
@@ -92,6 +96,12 @@ FLAG_STATUS_SPELLINGS = ("active", "inactive", "archived")
 FLAG_STATUS_FILTER_DESCRIPTION = (
     "Only flags with this status: `active`, `inactive` or `archived`, in any "
     "case. Any other value answers 422; an empty value means no filter."
+)
+
+#: The list's ``stale`` filter (#1808).
+FLAG_STALE_FILTER_DESCRIPTION = (
+    "true returns only stale flags, false the rest; omit for all. Archived "
+    "flags are never stale."
 )
 
 
@@ -272,6 +282,9 @@ async def list_feature_flags(
         None, alias="status", description=FLAG_STATUS_FILTER_DESCRIPTION
     ),
     search: Optional[str] = None,
+    stale: Optional[bool] = Query(None, description=FLAG_STALE_FILTER_DESCRIPTION),
+    # The time the flags are classified at (#1808); tests override it.
+    now: datetime = Depends(stale_clock),
     # A sign-in, or an API key with the mcp:read scope (read_scope.py).
     current_user=Depends(get_current_reader),
 ) -> FeatureFlagListResponse:
@@ -281,6 +294,11 @@ async def list_feature_flags(
     - **limit**: Maximum number of feature flags to return
     - **status**: Filter by status (`active`, `inactive`, `archived`; any case)
     - **search**: Filter by name or key
+    - **stale**: `true` for only the stale flags, `false` for the rest
+
+    Each item says whether the flag looks ready to remove (`stale`) and why
+    (`stale_reasons`); `stale_days` and `evaluations_seen` say what that was
+    decided with. Listing changes no flag.
     """
     # Check if user has permission to list feature flags
     if not check_permission(current_user, ResourceType.FEATURE_FLAG, Action.LIST):
@@ -307,20 +325,33 @@ async def list_feature_flags(
     # All four roles carry Action.LIST on feature flags, a deployment is single
     # tenant (founder, 2026-09-21), and tenant isolation belongs to the
     # workspaces module rather than to row ownership. See #83.
-    feature_flags_data = crud_feature_flag.get_multi(
-        db, skip=skip, limit=limit, status=status_member, search=search
-    )
-    total = crud_feature_flag.count(db, status=status_member, search=search)
+    days = settings.STALE_FLAG_DAYS
+    if stale is None:
+        # The page as before; only its flags are classified.
+        flags = crud_feature_flag.get_multi(
+            db, skip=skip, limit=limit, status=status_member, search=search
+        )
+        total = crud_feature_flag.count(db, status=status_member, search=search)
+        reasons, evaluations_seen = stale_reasons(db, flags, now=now, days=days)
+    else:
+        # Every matching flag is classified, so the filter comes before the
+        # page: `total` counts the filtered flags, in the list's order.
+        matching = crud_feature_flag.get_multi(
+            db, skip=0, limit=None, status=status_member, search=search
+        )
+        reasons, evaluations_seen = stale_reasons(db, matching, now=now, days=days)
+        kept = [flag for flag in matching if bool(reasons[flag.id]) is stale]
+        total = len(kept)
+        flags = kept[skip : skip + limit]
 
-    # Create response with pagination
-    response = FeatureFlagListResponse(
-        items=[FeatureFlagRead.model_validate(flag) for flag in feature_flags_data],
+    return FeatureFlagListResponse(
+        items=[FeatureFlagListItem.of(flag, reasons[flag.id]) for flag in flags],
         total=total,
         skip=skip,
         limit=limit,
+        stale_days=days,
+        evaluations_seen=evaluations_seen,
     )
-
-    return response
 
 
 @router.post(
