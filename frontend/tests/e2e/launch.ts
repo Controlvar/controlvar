@@ -14,8 +14,13 @@ import type { LaunchOptions } from "@playwright/test";
  *
  * `ignoreDefaultArgs` removes an argument only when it is exactly equal to
  * the string given, so DEFAULT must be playwright-core's value byte for byte.
- * A wrong string matches nothing: the default argument stays, the one in
- * `args` is added beside it, and both features are still off.
+ * A wrong string matches nothing: the default argument stays and the one in
+ * `args` follows it. Measured on Chromium Headless Shell 156, the canary pair
+ * then passes: Chromium uses the later argument, so storage partitioning is
+ * on, and every other disabled feature comes from the stale list.
+ * tests/e2e/fixtures/launch.fixture.ts fails on that command line anyway,
+ * because the default argument still names both: a bump that changes the
+ * list fails V112 until DEFAULT is updated (measured with 1.63's list).
  *
  * Only the `launch` project (playwright.config.ts) uses this today; the other
  * projects keep Playwright's default launch.

@@ -143,6 +143,9 @@ export default defineConfig({
     },
     {
       // #1545, V112: the browser users run, through tests/e2e/launch.ts.
+      // Its specs import `test` from tests/e2e/fixtures/launch.fixture.ts,
+      // which fails every test here when the running browser's command line
+      // disables either feature.
       name: "launch",
       testMatch: /\.launch\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"], launchOptions },
