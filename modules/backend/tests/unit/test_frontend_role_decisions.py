@@ -363,6 +363,14 @@ SITES: Dict[Key, Tuple[int, str, str]] = {
         f"an owner's role is shown, not offered for change: {_WORKSPACE}",
     ),
     # --- decides nothing ----------------------------------------------------
+    ("frontend/src/contexts/AuthContext.tsx", "role: me.role ?? 'VIEWER',"): (
+        1,
+        NOTHING,
+        "cognitoUser (#708) copies GET /users/me's role into the signed-in user, as "
+        "/auth/me's answer is used under the local provider; a missing role becomes "
+        "VIEWER, which is what /auth/me answers for the same account "
+        "(UserMe._role_to_name); each decision on user.role is classified where it is read",
+    ),
     (
         _APP_SHELL,
         "className={`inline-flex shrink-0 items-center px-2 py-0.5 rounded-full text-[11px] "
@@ -465,8 +473,8 @@ SITES: Dict[Key, Tuple[int, str, str]] = {
 }
 
 #: Reads per class, and in all: a classification that loses or gains one fails.
-EXPECTED_READS = {CONVERTED: 7, BASE: 15, NOTHING: 29}
-EXPECTED_TOTAL = 51
+EXPECTED_READS = {CONVERTED: 7, BASE: 15, NOTHING: 30}
+EXPECTED_TOTAL = 52
 
 
 # ---------------------------------------------------------------------------

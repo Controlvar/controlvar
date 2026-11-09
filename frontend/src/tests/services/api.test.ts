@@ -35,7 +35,8 @@ import { SCHEDULE_ERROR_COPY, scheduleErrorCopy } from '@/components/experiments
 import { rolloutErrorCopy } from '@/components/feature-flags/RolloutScheduleManager';
 import { resultsErrorMessage } from '@/components/results/ResultsDashboard/ResultsDashboard';
 import { sessionErrorMessage } from '@/contexts/AuthContext';
-import { loginErrorMessage } from '@/pages/login';
+import { loginErrorMessage, signInNoticeMessage } from '@/pages/login';
+import { signInFailureNotice } from '@/services/hostedUi';
 import { classifyPasswordError, passwordOutcomeSentence } from '@/services/password';
 import { groupErrorCopy } from '@/utils/exclusionGroups';
 import { holdoutErrorCopy, loadErrorCopy, resultsErrorCopy } from '@/utils/holdouts';
@@ -769,6 +770,8 @@ describe("the caller's own signal (#1040 D4)", () => {
 
 /** Every place a dashboard service overrides the deadline: `file` -> the values, in order. */
 const EXPECTED_OVERRIDES: Record<string, string[]> = {
+  // GET /api/v1/auth/config, which /login and the session check wait for (#708).
+  'services/authConfig.ts': ['AUTH_CONFIG_TIMEOUT_MS'],
   'services/results.ts': Array(5).fill('LONG_REQUEST_TIMEOUT_MS'),
   ...(fs.existsSync(MODULES_SRC_ROOT)
     ? {
@@ -905,6 +908,8 @@ const STATUS_ZERO_SITES: Record<string, { count: number; kind: string }> = {
   'components/results/ResultsDashboard/ResultsDashboard.tsx': { count: 1, kind: 'passes-message' },
   'contexts/AuthContext.tsx': { count: 1, kind: 'read' },
   'pages/login.tsx': { count: 1, kind: 'sign-in' },
+  // signInFailureNotice: the Cognito Hosted UI callback's exchange (#708).
+  'services/hostedUi.ts': { count: 1, kind: 'sign-in' },
   // classifyPasswordError's `case 0:`.
   'services/password.ts': { count: 1, kind: 'write' },
   'utils/exclusionGroups.ts': { count: 1, kind: 'write' },
@@ -1090,6 +1095,10 @@ describe('each status-0 place says what a time-out means (#1040 D7)', () => {
     'pages/login.tsx': (write) => {
       expect(loginErrorMessage(write)).toBe(SIGN_IN_TEXT);
       expect(loginErrorMessage(unreachable())).toBe(unreachableMessage());
+    },
+    'services/hostedUi.ts': (write) => {
+      expect(signInNoticeMessage(signInFailureNotice(write, '/'))).toBe(SIGN_IN_TEXT);
+      expect(signInNoticeMessage(signInFailureNotice(unreachable(), '/'))).toBe(unreachableMessage());
     },
     'services/password.ts': (write) => {
       expect(classifyPasswordError(write)).toEqual({ outcome: 'timed-out', message: WRITE_TEXT });
