@@ -85,6 +85,27 @@
       }
     },
     {
+      "slug": "10-serve-a-value",
+      "title": "Serve a value with a feature flag",
+      "description": "Create a flag that serves a string instead of on or off: its type, an on value and an off value, and a rule for pro plan users. Switch it on, then see the Go SDK lines that read the value.",
+      "duration_seconds": 73,
+      "mp4": {
+        "name": "10-serve-a-value-5afc444bad1e.mp4",
+        "bytes": 2849992,
+        "sha256": "5afc444bad1e3622cbf8d9b3cb1356c79865e090956d8e43976226693915e0c3"
+      },
+      "vtt": {
+        "name": "10-serve-a-value-5afc444bad1e.vtt",
+        "bytes": 1228,
+        "sha256": "3012832c739305d58543dd2194d933fb6c277f83918b481b782c1e7626f11243"
+      },
+      "poster": {
+        "name": "10-serve-a-value-5afc444bad1e-poster-d44a1994c7cd.jpg",
+        "bytes": 57938,
+        "sha256": "d44a1994c7cd031c4b17de03ac776ed4bed6b41cac12439dc8a51e3618aee705"
+      }
+    },
+    {
       "slug": "05-plan-and-team",
       "title": "Plan a test, bring your team",
       "description": "Work out a test's sample size in the power calculator, which needs no account, then sign in and invite teammates, each with a role.",
