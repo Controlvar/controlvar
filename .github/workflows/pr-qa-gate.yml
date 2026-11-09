@@ -661,6 +661,7 @@ jobs:
           modules/backend/tests/unit/services/test_sso_docs_messages.py
           backend/tests/unit/showcase/test_showcase_quoted_docs.py
           backend/tests/unit/ground_truth/test_contract_citations.py
+          backend/tests/unit/showcase/test_site_walkthroughs.py
 
       # On a docs-only change this is where the docs tests run, Unit Tests
       # being skipped, so a docs test that skipped would read as a pass on
