@@ -54,6 +54,10 @@ import numpy as np
 #: and counts their conversions there, lists the 20 values with the most users
 #: and counts the rest under ``other``, and tests each segment's treatment
 #: against the control with Fisher's exact test instead of a pooled z-test.
+#: 1.10.0 (#448): ``GET /results/{id}/balanced-groups`` returns, for an
+#: experiment that balances its split within groups, one size-weighted
+#: estimate per treatment over the groups
+#: (``backend/app/services/balanced_groups_estimate.py``).
 #:
 #: The rule: an engine-changing PR bumps ``ENGINE_VERSION`` to the next minor
 #: and appends it to ``RELEASED_ENGINE_VERSIONS`` ("frozen on main", in
@@ -65,7 +69,7 @@ import numpy as np
 #: path stamping ``engine_version`` returns, caches or persists: results and
 #: its snapshots, Bayesian, CUPED, sequential, and the bandit's state, history
 #: and status.  A revert of an engine-changing PR bumps again.
-ENGINE_VERSION: str = "1.9.0"
+ENGINE_VERSION: str = "1.10.0"
 
 #: Mask that keeps the derived seed inside the signed 64-bit range.
 _SEED_MASK = (1 << 63) - 1

@@ -146,6 +146,7 @@ routes = [
   "/api/v1/rbac/users/{user_id}/grant/{resource}",
   "/api/v1/rbac/users/{user_id}/permissions",
   "/api/v1/results/{experiment_id}",
+  "/api/v1/results/{experiment_id}/balanced-groups",
   "/api/v1/results/{experiment_id}/bayesian",
   "/api/v1/results/{experiment_id}/cuped",
   "/api/v1/results/{experiment_id}/daily",

@@ -422,3 +422,53 @@ def test_the_snapshot_carries_balance_within_and_never_its_key(
         assert "balance_seed" not in text, f"balance_seed found in {name}"
     assign = stable_snapshot["paths"]["/api/v1/tracking/assign"]["post"]
     assert BALANCED_ASSIGN_SENTENCE in " ".join(assign["description"].split())
+
+
+BALANCED_GROUPS_PATH = "/api/v1/results/{experiment_id}/balanced-groups"
+
+
+def _referenced_schemas(document: Dict[str, Any], node: Any, seen=None) -> Dict:
+    """Every component schema ``node`` references, transitively, by name."""
+    seen = {} if seen is None else seen
+    if isinstance(node, dict):
+        ref = node.get("$ref")
+        if isinstance(ref, str) and ref.startswith("#/components/schemas/"):
+            name = ref.rsplit("/", 1)[-1]
+            if name not in seen:
+                seen[name] = document["components"]["schemas"][name]
+                _referenced_schemas(document, seen[name], seen)
+        for value in node.values():
+            _referenced_schemas(document, value, seen)
+    elif isinstance(node, list):
+        for value in node:
+            _referenced_schemas(document, value, seen)
+    return seen
+
+
+def test_the_balanced_groups_route_is_beta_and_carries_no_place_in_a_group(
+    stable_snapshot, full_snapshot, core_document
+):
+    """#448: the balanced-groups route is in both snapshots, marked beta, as
+    the live core document serves it (a beta route's change only warns in the
+    comparison above, so this compares it exactly); and no document names a
+    user's place in their group (``balance_seq``) or a group's counter
+    (``next_seq``)."""
+    live = core_document["paths"][BALANCED_GROUPS_PATH]["get"]
+    for name, document in (
+        ("openapi-v1.stable.json", stable_snapshot),
+        ("openapi-v1.full.json", full_snapshot),
+    ):
+        operation = document["paths"][BALANCED_GROUPS_PATH]["get"]
+        assert operation.get("x-stability") == "beta", name
+        assert operation == live, f"{name}: the balanced-groups route differs"
+        assert _referenced_schemas(document, operation) == _referenced_schemas(
+            core_document, live
+        ), f"{name}: the balanced-groups schemas differ"
+    for name, document in (
+        ("openapi-v1.stable.json", stable_snapshot),
+        ("openapi-v1.full.json", full_snapshot),
+        ("the live core document", core_document),
+    ):
+        text = json.dumps(document)
+        for word in ("balance_seed", "balance_seq", "next_seq"):
+            assert word not in text, f"{word} found in {name}"

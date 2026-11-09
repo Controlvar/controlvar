@@ -977,6 +977,12 @@
         "summary": "Get Experiment Results"
       }
     },
+    "/api/v1/results/{experiment_id}/balanced-groups": {
+      "get": {
+        "operationId": "get_balanced_groups_api_v1_results__experiment_id__balanced_groups_get",
+        "summary": "Beta: results by the group each user was balanced in"
+      }
+    },
     "/api/v1/results/{experiment_id}/bayesian": {
       "get": {
         "operationId": "get_bayesian_results_api_v1_results__experiment_id__bayesian_get",
