@@ -33,6 +33,68 @@ and the conventions, with the reasons for them, are in
 - CI, the pre-commit hook and the virtual environment install the same ruff
   version.
 
+## Dialogs
+
+- A modal dialog in the dashboard is `Dialog`, from
+  `frontend/src/components/ui/Dialog.tsx`. Do not build an overlay by hand:
+  `frontend/src/tests/a11y/dialog-sweep.test.ts` refuses `aria-modal`, a
+  `<dialog>` element, and `fixed` with `inset-0` in one class string anywhere
+  else.
+- While a `Dialog` is open, Tab and Shift+Tab stay inside it, the page behind
+  it is `inert`, and the page does not scroll. Escape calls `onClose`, unless
+  `dismissible={false}` or `busy` is set.
+- Content inside a `Dialog` never receives Escape: the dialog takes the key in
+  the capture phase on `document` and stops it there, even when it refuses to
+  close, so a tooltip or combobox inside a dialog cannot use Escape.
+- Focus opens on `initialFocusRef`, else on the first element marked
+  `data-autofocus`, else on the first control. Give a confirmation that
+  deletes something its Cancel button as `initialFocusRef`.
+- On close, focus goes to `returnFocus` if you pass one, else back to the
+  element that opened the dialog.
+- Set a live region's text as the dialog closes with the third value of
+  `useDeferredAnnouncement`: it writes the text after the page behind the
+  dialog is no longer inert.
+- In a Jest test, render with `renderInAppRoot` from
+  `frontend/src/tests/helpers/renderInAppRoot.tsx`. Under Jest, a `Dialog`
+  rendered without it throws.
+
+```tsx
+import { useRef, useState } from 'react';
+import { Dialog, useDeferredAnnouncement } from '@/components/ui/Dialog';
+
+export function RenameFlag({ rename }: { rename: (name: string) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [status, , announceAfterClose] = useDeferredAnnouncement();
+  const nameField = useRef<HTMLInputElement>(null);
+
+  const save = async () => {
+    await rename(name);
+    setOpen(false);
+    announceAfterClose(`Renamed to ${name}.`);
+  };
+
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}>
+        Rename
+      </button>
+      <p role="status">{status}</p>
+      <Dialog open={open} onClose={() => setOpen(false)} title="Rename flag" initialFocusRef={nameField}>
+        <label htmlFor="flag-name">Name</label>
+        <input id="flag-name" ref={nameField} value={name} onChange={(e) => setName(e.target.value)} />
+        <button type="button" onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+        <button type="button" onClick={save}>
+          Save
+        </button>
+      </Dialog>
+    </>
+  );
+}
+```
+
 ## Pull requests
 
 - Write the title as a conventional commit, `type(optional scope): description`,

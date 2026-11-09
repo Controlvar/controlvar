@@ -68,6 +68,76 @@ text = "CI, the pre-commit hook and the virtual environment install the same ruf
 by = ["test:backend/tests/unit/infrastructure/test_ruff_version_agrees.py::test_all_three_declaration_sites_name_one_version"]
 
 [[unit]]
+text = "Dialogs"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A modal dialog in the dashboard is Dialog, from frontend/src/components/ui/Dialog.tsx."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Do not build an overlay by hand: frontend/src/tests/a11y/dialog-sweep.test.ts refuses aria-modal, a <dialog> element, and fixed with inset-0 in one class string anywhere else."
+by = [
+    "test:frontend/src/tests/a11y/dialog-sweep.test.ts::builds no overlay by hand outside Dialog.tsx and RAW_DIALOGS, and every count matches",
+    "test:frontend/src/tests/a11y/dialog-sweep.test.ts::refuses %s",
+    "test:frontend/src/tests/a11y/dialog-sweep.test.ts::refuses fixed and inset-0 in one class string: %s",
+]
+
+[[unit]]
+text = "While a Dialog is open, Tab and Shift+Tab stay inside it, the page behind it is inert, and the page does not scroll."
+by = [
+    "test:frontend/src/tests/components/Dialog.test.tsx::Tab and Shift+Tab wrap among the controls and never reach the page behind",
+    "test:frontend/src/tests/components/Dialog.test.tsx::#__next carries the inert attribute while open and none after close",
+    "test:frontend/src/tests/components/Dialog.test.tsx::sets overflow hidden on body while open, and restores what was there on close",
+]
+
+[[unit]]
+text = "Escape calls onClose, unless dismissible={false} or busy is set."
+by = [
+    "test:frontend/src/tests/components/Dialog.test.tsx::calls onClose exactly once, from document and from inside the dialog",
+    "test:frontend/src/tests/components/Dialog.test.tsx::is ignored while busy and works again once busy clears",
+    "test:frontend/src/tests/components/Dialog.test.tsx::is ignored when dismissible={false}",
+]
+
+[[unit]]
+text = "Content inside a Dialog never receives Escape: the dialog takes the key in the capture phase on document and stops it there, even when it refuses to close, so a tooltip or combobox inside a dialog cannot use Escape."
+by = [
+    "test:frontend/src/tests/components/Dialog.test.tsx::never reaches a page key handler, from an input inside the dialog: %s",
+]
+
+[[unit]]
+text = "Focus opens on initialFocusRef, else on the first element marked data-autofocus, else on the first control."
+by = [
+    "test:frontend/src/tests/components/Dialog.test.tsx::initialFocusRef wins over the first control: a destructive confirm opens on Cancel",
+    "test:frontend/src/tests/components/Dialog.test.tsx::then the first [data-autofocus] element",
+    "test:frontend/src/tests/components/Dialog.test.tsx::goes to the first control by default",
+]
+
+[[unit]]
+text = "Give a confirmation that deletes something its Cancel button as initialFocusRef."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "On close, focus goes to returnFocus if you pass one, else back to the element that opened the dialog."
+by = [
+    "test:frontend/src/tests/components/Dialog.test.tsx::an explicit returnFocus ref wins over the opener",
+    "test:frontend/src/tests/components/Dialog.test.tsx::to the opener after Escape, and after the dialog’s own close control",
+    "test:frontend/src/tests/components/Dialog.test.tsx::an explicit returnFocus target that has left the page falls through to the opener",
+]
+
+[[unit]]
+text = "Set a live region's text as the dialog closes with the third value of useDeferredAnnouncement: it writes the text after the page behind the dialog is no longer inert."
+by = ["test:frontend/src/tests/components/Dialog.test.tsx::useDeferredAnnouncement writes the live region after #__next is no longer inert"]
+
+[[unit]]
+text = "In a Jest test, render with renderInAppRoot from frontend/src/tests/helpers/renderInAppRoot.tsx."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Under Jest, a Dialog rendered without it throws."
+by = ["test:frontend/src/tests/components/Dialog.test.tsx::throws under Jest, naming the helper, and leaves nothing behind"]
+
+[[unit]]
 text = "Pull requests"
 by = ["exempt:label"]
 
