@@ -71,7 +71,16 @@ the API documentation names its parameters.
 Some list endpoints support filtering, and one supports sorting:
 
 - Filtering: Use query parameters (e.g., `status_filter=active`)
-- Sorting: `GET /api/v1/experiments/` takes `sort_by` and `sort_order` (e.g., `sort_by=created_at&sort_order=desc`)
+- Sorting: `GET /api/v1/experiments/` takes `sort_by` and `sort_order` (e.g., `sort_by=created_at&sort_order=desc`).
+  `sort_by` is a column of the experiment, in exact case: `id`, `created_at`, `updated_at`,
+  `name`, `key`, `description`, `hypothesis`, `status`, `experiment_type`, `owner_id`,
+  `start_date`, `end_date`, `resume_at`, `targeting_rules`, `metrics`, `tags`,
+  `experiment_metadata`, `optimization_type`, `sequential_testing_enabled`,
+  `sequential_testing_method`, `sequential_testing_config`, `variance_reduction_config`,
+  `correction_method`, `confidence_level`, `mutual_exclusion_group_id`, `bayesian_enabled`,
+  `bayesian_config`, `bayesian_decision`, `split_url_config` or `workspace_id`. An empty
+  `sort_by` applies no sort; any other value answers 422 at `["query", "sort_by"]` with a
+  message that lists the columns.
 
 ## Common Workflows
 

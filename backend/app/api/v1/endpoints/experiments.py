@@ -24,6 +24,7 @@ from fastapi import (
     status,
 )
 from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -90,6 +91,7 @@ from backend.app.services.audit_service import (
 )
 from backend.app.services.experiment_service import (
     END_DATE_PASSED,
+    SORT_BY_COLUMNS,
     AnalysisConfigError,
     EndDatePassedError,
     ExperimentService,
@@ -103,6 +105,15 @@ from backend.app.services.power_calculator_service import (
     sample_size_two_proportions,
 )
 from backend.app.services.segment_breakdown import NUL_IN_DIMENSION
+
+#: ``sort_by`` on the list (#786): the columns, in exact case. The message is
+#: the 422's for any other non-empty value; it never repeats the value sent.
+SORT_BY_MESSAGE = "sort_by must be one of: " + ", ".join(SORT_BY_COLUMNS)
+SORT_BY_DESCRIPTION = (
+    "Column to sort by, in exact case: "
+    + ", ".join(SORT_BY_COLUMNS)
+    + ". An empty value applies no sort; any other value answers 422."
+)
 
 #: The states in which ``PUT /experiments/{id}`` accepts ``targeting_rules``
 #: (#523). PAUSED only when targeting is the one field sent; see the route.
@@ -443,10 +454,7 @@ async def list_experiments(
     search: Optional[str] = Query(
         None, description="Search term to filter experiment names and descriptions"
     ),
-    sort_by: Optional[str] = Query(
-        "created_at",
-        description="Field to sort by (created_at, updated_at, name, status)",
-    ),
+    sort_by: Optional[str] = Query("created_at", description=SORT_BY_DESCRIPTION),
     sort_order: Optional[str] = Query("desc", description="Sort order (asc, desc)"),
 ) -> ExperimentListResponse:
     """
@@ -479,6 +487,14 @@ async def list_experiments(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to list experiments",
+        )
+
+    # After the permission check, so a caller who may not list learns nothing
+    # about the columns; before the `try`, whose `except Exception` would turn
+    # this 422 into a 500 (#786).
+    if sort_by and sort_by not in SORT_BY_COLUMNS:
+        raise RequestValidationError(
+            [{"type": "enum", "loc": ("query", "sort_by"), "msg": SORT_BY_MESSAGE}]
         )
 
     try:

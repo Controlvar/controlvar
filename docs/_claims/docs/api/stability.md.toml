@@ -695,6 +695,29 @@ by = [
 ]
 
 [[unit]]
+text = "GET /api/v1/experiments/ | #786 | sort_by accepts a column of the experiment, in exact case: id, created_at, updated_at, name, key, description, hypothesis, status, experiment_type, owner_id, start_date, end_date, resume_at, targeting_rules, metrics, tags, experiment_metadata, optimization_type, sequential_testing_enabled, sequential_testing_method, sequential_testing_config, variance_reduction_config, correction_method, confidence_level, mutual_exclusion_group_id, bayesian_enabled, bayesian_config, bayesian_decision, split_url_config and workspace_id. Any other non-empty value answers 422 at [\"query\", \"sort_by\"] with \"type\": \"enum\" and a msg that lists those columns and does not repeat the value sent. Something of the model that is not a column, such as metadata, to_dict or a relationship (variants, owner), used to answer 500. Every column sorts as before in both directions, the JSON ones (tags, metrics and the rest) included, and an empty sort_by still applies no sort. The parameter is still a string: the OpenAPI document changes only in its description, which lists the columns."
+by = [
+    "test:backend/tests/unit/services/test_experiment_sort_by_columns.py::test_the_written_list_is_exactly_the_experiment_tables_columns",
+    "test:backend/tests/unit/services/test_experiment_sort_by_columns.py::test_786_sort_by_accepts_exactly_the_tables_columns",
+    "test:backend/tests/unit/services/test_experiment_sort_by_columns.py::test_786_the_refusal_names_every_column_in_exact_case",
+    "test:backend/tests/unit/services/test_experiment_sort_by_columns.py::test_786_the_parameter_stays_a_string_whose_description_lists_the_columns",
+    "test:backend/tests/integration/api/test_experiment_list_sort_by.py::test_786_sort_by_metadata_answers_422_not_500",
+    "test:backend/tests/integration/api/test_experiment_list_sort_by.py::test_786_a_name_that_is_no_column_answers_422",
+    "test:backend/tests/integration/api/test_experiment_list_sort_by.py::test_786_the_refusal_never_repeats_the_value_sent",
+    "test:backend/tests/integration/api/test_experiment_list_sort_by.py::test_every_column_sorts_both_ways",
+    "test:backend/tests/integration/api/test_experiment_list_sort_by.py::test_an_empty_sort_by_is_still_no_sort",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "GET /api/v1/experiments/ | #786 | A narrowing: a sort_by that names nothing of the model, such as foo, Name or Created_At, answered 200 and sorted nothing, and now answers 422 as in the row above. The case must match: Name is not name. No value that sorted before stops sorting."
+by = [
+    "test:backend/tests/integration/api/test_experiment_list_sort_by.py::test_786_a_name_that_is_no_column_answers_422",
+    "test:backend/tests/integration/api/test_experiment_list_sort_by.py::test_every_column_sorts_both_ways",
+    "test:backend/tests/integration/api/test_experiment_list_sort_by.py::test_the_dashboards_sorts_answer_byte_for_byte_as_on_main",
+]
+
+[[unit]]
 text = "POST /api/v1/rbac/roles, PUT /api/v1/rbac/roles/{role_name}, POST /api/v1/rbac/users/{user_id}/grant (full profile) | #891 | A custom role or a direct grant can hold only experiment and feature_flag with create, read, update, delete and list, and audit_log with read. A request that sends any other resource or action answers 422 with \"type\": \"not_grantable\", at [\"body\", \"permissions\"] on the two role operations (on PUT only when permissions is sent) and at [\"body\"] on the grant, and nothing is written; every resource and action used to be accepted. Roles and grants stored before the change read back unchanged, a PUT that sends only description still answers 200, and DELETE /api/v1/rbac/users/{user_id}/grant/{resource} still deletes a grant of any resource. The OpenAPI document does not change. See RBAC."
 by = [
     "test:modules/backend/tests/unit/schemas/test_rbac_schemas.py::test_exactly_the_eleven_pairs_are_accepted",
