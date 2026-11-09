@@ -7,7 +7,9 @@ import React from 'react';
 import axe from 'axe-core';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ModulesProvider } from '@/contexts/ModulesContext';
+import userEvent from '@testing-library/user-event';
 import { ApiError, apiFetch } from '@/services/api';
+import { APP_ROOT_ID, renderInAppRoot } from '@/tests/helpers/renderInAppRoot';
 import { routedApi, Route } from '@/tests/pages/helpers/apiMock';
 import WarehouseAnalysisSection from '@modules/components/warehouse/runs/WarehouseAnalysisSection';
 import RunResults from '@modules/components/warehouse/runs/RunResults';
@@ -60,8 +62,10 @@ const calls = (method: string, path: string) =>
     ([p, o]) => p.split('?')[0] === path && (o?.method ?? 'GET').toUpperCase() === method,
   );
 
+// View SQL is the shared Dialog (#369): it portals beside `#__next` and makes
+// it inert, so the section is mounted the way Next mounts a page.
 function renderSection(modules: string[] = ['warehouse']) {
-  return render(
+  return renderInAppRoot(
     <ModulesProvider initial={{ profile: 'full', modules, version: 'test' }}>
       <WarehouseAnalysisSection experiment={EXPERIMENT} />
     </ModulesProvider>,
@@ -828,5 +832,51 @@ describe('the direction each metric was analysed in (#1386)', () => {
       'Checkout errors (proportion, lower is better, primary)',
     );
     expect(screen.getByRole('checkbox', { name: /Signed up/ })).toHaveAccessibleName('Signed up (proportion)');
+  });
+});
+
+describe('View SQL on the shared Dialog (#369)', () => {
+  const appRoot = () => document.getElementById(APP_ROOT_ID) as HTMLElement;
+
+  async function openedFromButton() {
+    const user = userEvent.setup();
+    install([{ path: RUNS_PATH, handler: () => ({ runs: [run()] }) }]);
+    renderSection();
+    const trigger = await screen.findByTestId('warehouse-view-sql');
+    await user.click(trigger);
+    return { user, trigger };
+  }
+
+  it('the page behind it is inert while it is open, and not after Close', async () => {
+    const { user } = await openedFromButton();
+    const dialog = screen.getByRole('dialog', { name: 'SQL this analysis ran' });
+    expect(appRoot()).toHaveAttribute('inert');
+    expect(appRoot().contains(dialog)).toBe(false);
+    await user.click(screen.getByTestId('warehouse-sql-close'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(appRoot()).not.toHaveAttribute('inert');
+  });
+
+  it('Escape dispatched on document closes it once and focus returns to View SQL', async () => {
+    const { trigger } = await openedFromButton();
+    expect(screen.getByTestId('warehouse-sql-close')).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('focus returns to View SQL after the Close button too', async () => {
+    const { user, trigger } = await openedFromButton();
+    await user.click(screen.getByTestId('warehouse-sql-close'));
+    expect(trigger).toHaveFocus();
+  });
+
+  it('the dialog has no axe violations, and the rule that names it ran on it', async () => {
+    await openedFromButton();
+    const dialog = screen.getByRole('dialog');
+    expect(document.body).toContainElement(dialog);
+    const result = await axe.run(dialog, { rules: { 'color-contrast': { enabled: false } } });
+    expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`)).toStrictEqual([]);
+    expect(result.passes.map((p) => p.id)).toContain('aria-dialog-name');
   });
 });
