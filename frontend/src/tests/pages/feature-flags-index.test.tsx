@@ -1,8 +1,8 @@
 import React from 'react';
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import FeatureFlagsPage from '@/pages/feature-flags/index';
-import { apiFetch } from '@/services/api';
-import { FeatureFlag } from '@/services/featureFlags';
+import { apiFetch, buildQuery } from '@/services/api';
+import { FeatureFlagListItem as FeatureFlag } from '@/services/featureFlags';
 import { FLAG_ROLE_NOTE } from '@/utils/experimentPermissions';
 import { apiError, makeRouter, routedApi } from './helpers/apiMock';
 
@@ -393,6 +393,147 @@ describe('FeatureFlagsPage', () => {
     ]);
     // No value is shown in the list.
     expect(table).not.toHaveTextContent('Complete purchase');
+  });
+});
+
+describe('stale flags (#1808)', () => {
+  // N comes from the response: 45 here, so a hard-coded 30 cannot pass.
+  const stalePage = (items: FeatureFlag[], extra: Record<string, unknown> = {}) => ({
+    ...list(items),
+    stale_days: 45,
+    evaluations_seen: true,
+    ...extra,
+  });
+  const serve = (handler: (query: Record<string, unknown>) => unknown) =>
+    mockedApiFetch.mockImplementation(
+      routedApi([
+        { path: '/api/v1/feature-flags', handler: (_p, options) => handler(options.query ?? {}) },
+      ]) as unknown as typeof apiFetch,
+    );
+  const lastQuery = () =>
+    (mockedApiFetch.mock.calls[mockedApiFetch.mock.calls.length - 1][1]?.query ?? {}) as Record<
+      string,
+      unknown
+    >;
+
+  it('U1: marks a stale flag and gives each reason as its own line, with N from the response', async () => {
+    serve(() =>
+      stalePage([
+        flag({
+          id: 'old',
+          key: 'old_flag',
+          stale: true,
+          stale_reasons: ['not_evaluated', 'on_for_everyone'],
+        }),
+        flag({ id: 'off', key: 'off_flag', stale: true, stale_reasons: ['off_for_everyone'] }),
+        flag({ id: 'fresh', key: 'fresh_flag', stale: false, stale_reasons: [] }),
+      ]),
+    );
+    render(<FeatureFlagsPage />);
+    const rows = within(await screen.findByTestId('flags-table')).getAllByTestId('flag-row');
+
+    expect(within(rows[0]).getByTestId('flag-stale-pill')).toHaveTextContent(/^Stale$/);
+    const lines = within(within(rows[0]).getByTestId('flag-stale-reasons'))
+      .getAllByRole('listitem')
+      .map((li) => li.textContent);
+    expect(lines).toEqual([
+      'Not evaluated in 45 days',
+      'On for everyone, unchanged for 45 days',
+    ]);
+    expect(
+      within(within(rows[1]).getByTestId('flag-stale-reasons'))
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual(['Off for everyone, unchanged for 45 days']);
+    expect(within(rows[2]).queryByTestId('flag-stale-pill')).toBeNull();
+    expect(within(rows[2]).queryByTestId('flag-stale-reasons')).toBeNull();
+    expect(screen.getByTestId('flags-table').textContent).not.toMatch(/unused|Review/i);
+  });
+
+  it('U2: sends stale=true only while "Stale" is pressed and no stale at all on "Any"', async () => {
+    serve(() => stalePage([flag({})]));
+    render(<FeatureFlagsPage />);
+    await screen.findByTestId('flags-table');
+    // The URL the service builds, not the argument object: no `stale=` at all.
+    expect(buildQuery(lastQuery() as never)).not.toContain('stale');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stale' }));
+    await waitFor(() => expect(buildQuery(lastQuery() as never)).toBe('?stale=true'));
+    await screen.findByTestId('flags-table');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Any' }));
+    await waitFor(() => expect(buildQuery(lastQuery() as never)).not.toContain('stale'));
+    expect(lastQuery().stale).toBeUndefined();
+    await screen.findByTestId('flags-table');
+  });
+
+  it('U3: an empty Stale view says "No stale flags right now."', async () => {
+    serve((query) => (query.stale === true ? stalePage([]) : stalePage([flag({})])));
+    render(<FeatureFlagsPage />);
+    await screen.findByTestId('flags-table');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stale' }));
+    const empty = await screen.findByTestId('flags-empty');
+    expect(empty).toHaveTextContent('No stale flags right now.');
+    expect(empty).not.toHaveTextContent('No flags match this filter');
+  });
+
+  it('U4: a flag the server says is not stale has no marker, whatever its tags', async () => {
+    serve(() =>
+      stalePage([
+        flag({ id: 'perm', key: 'perm_flag', tags: ['permanent'], stale: false, stale_reasons: [] }),
+        flag({ id: 'untagged', key: 'untagged_flag', tags: ['permanent'], stale: true, stale_reasons: ['not_evaluated'] }),
+        // A server without the field (older release) shows no marker either.
+        flag({ id: 'plain', key: 'plain_flag' }),
+      ]),
+    );
+    render(<FeatureFlagsPage />);
+    const rows = within(await screen.findByTestId('flags-table')).getAllByTestId('flag-row');
+    expect(within(rows[0]).queryByTestId('flag-stale-pill')).toBeNull();
+    expect(within(rows[1]).getByTestId('flag-stale-pill')).toBeInTheDocument();
+    expect(within(rows[2]).queryByTestId('flag-stale-pill')).toBeNull();
+  });
+
+  it('U5: tells the user, in a status region, when no evaluation was recorded; says nothing otherwise', async () => {
+    serve(() => stalePage([flag({})], { evaluations_seen: false }));
+    const first = render(<FeatureFlagsPage />);
+    await screen.findByTestId('flags-table');
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'No flag evaluations have been recorded in the last 45 days, so no flag is marked “Not evaluated”.',
+    );
+    first.unmount();
+
+    serve(() => stalePage([flag({})], { evaluations_seen: true }));
+    render(<FeatureFlagsPage />);
+    await screen.findByTestId('flags-table');
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('U6: labels both filter groups, sets aria-pressed, and shows reasons as row text not a title', async () => {
+    serve(() =>
+      stalePage([flag({ stale: true, stale_reasons: ['not_evaluated'] })]),
+    );
+    render(<FeatureFlagsPage />);
+    const table = await screen.findByTestId('flags-table');
+
+    const statusGroup = screen.getByRole('group', { name: 'Status filter' });
+    expect(within(statusGroup).getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
+    const staleGroup = screen.getByRole('group', { name: 'Stale filter' });
+    expect(within(staleGroup).getAllByRole('button').map((b) => b.textContent)).toEqual(['Any', 'Stale']);
+    expect(within(staleGroup).getByRole('button', { name: 'Any' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(staleGroup).getByRole('button', { name: 'Stale' })).toHaveAttribute('aria-pressed', 'false');
+
+    // The reason is text in the row; nothing in the row relies on a title.
+    expect(within(table).getByText('Not evaluated in 45 days')).toBeVisible();
+    expect(table.querySelectorAll('[title]')).toHaveLength(0);
+
+    expect(screen.queryByTestId('flag-stale-hint')).toBeNull();
+    fireEvent.click(within(staleGroup).getByRole('button', { name: 'Stale' }));
+    await screen.findByTestId('flags-table');
+    expect(within(staleGroup).getByRole('button', { name: 'Stale' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('flag-stale-hint')).toHaveTextContent(
+      'Stale is a suggestion: nothing is changed or archived for you. A flag tagged permanent is never stale; tags are set through the API.',
+    );
   });
 });
 
