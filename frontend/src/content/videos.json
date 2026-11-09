@@ -64,6 +64,27 @@
       }
     },
     {
+      "slug": "04-streampulse-rollout",
+      "title": "Roll out to devices, roll back by itself",
+      "description": "A device rule, a kill switch, then the safety monitor rolls a staged rollout back by itself after simulated crashes. The demo uses the web SDK; iOS, Android and Flutter send only the user id to flags.",
+      "duration_seconds": 83,
+      "mp4": {
+        "name": "04-streampulse-rollout-c4e1a9f03e2a.mp4",
+        "bytes": 3521898,
+        "sha256": "c4e1a9f03e2af3c0971d32757aa734e91618ad4de0f701d19cfc6b28571e2d50"
+      },
+      "vtt": {
+        "name": "04-streampulse-rollout-c4e1a9f03e2a.vtt",
+        "bytes": 1304,
+        "sha256": "4f747411860c063129c1dacafb9ba713a1c5ec2051d306be59b9537b21419c1a"
+      },
+      "poster": {
+        "name": "04-streampulse-rollout-c4e1a9f03e2a-poster-603d5b026a17.jpg",
+        "bytes": 61550,
+        "sha256": "603d5b026a178fe026a1c934bee38f68314cd03f41dff290aca13f1fc0f660e8"
+      }
+    },
+    {
       "slug": "05-plan-and-team",
       "title": "Plan a test, bring your team",
       "description": "Work out a test's sample size in the power calculator, which needs no account, then sign in and invite teammates, each with a role.",
