@@ -831,6 +831,11 @@ names:
 - restore the backup taken before that upgrade, and run the older image
   against the restored database.
 
+On Docker Compose, the Compose README's
+[Upgrade](https://github.com/Controlvar/controlvar/blob/main/deploy/compose/README.md#upgrade)
+procedure takes that backup before it upgrades, and its last step restores it
+only when the older image refuses the database.
+
 A third way, when the newer release's migrations can be undone: with the newer
 release still running, downgrade to the heads of the older release, then start
 the older image. Those are its core head and, on a full install, its modules

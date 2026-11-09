@@ -149,6 +149,8 @@ NO_WORDS = {
         "get_feature_flag_access",
         "get_report_access",
         "get_experiment_read_access",
+        "require_experiment_list",
+        "require_feature_flag_list",
     )
 } | {
     (E + "api_keys.py", "_may_act_on_others_keys"),

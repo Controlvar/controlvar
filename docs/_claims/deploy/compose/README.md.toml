@@ -351,7 +351,7 @@ by = [
 ]
 
 [[unit]]
-text = "An older image refuses to start on a database a newer release migrated (see Database migrations), so restore first and upgrade afterwards, the usual way."
+text = "An older image refuses to start on a database a newer release migrated (see Database migrations), so restore first, then upgrade as Upgrade shows."
 by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated"]
 
 [[unit]]
@@ -393,6 +393,222 @@ by = [
     "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_project_in_the_prose_is_the_composes",
     "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_volumes_take_their_names_from_the_project",
 ]
+
+[[unit]]
+text = "Upgrade"
+by = ["exempt:label"]
+
+[[unit]]
+text = "These steps move a running stack to a newer release and keep its database."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::test_compose_upgrade_keeps_the_postgres_volume",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_no_block_deletes_a_volume_or_runs_the_generator",
+]
+
+[[unit]]
+text = "Run them from this directory of the clone you installed from."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Every docker compose command names the project, experimently-selfhost, and none of them runs docker compose down -v or generate-env.sh, or deletes a volume."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_every_compose_command_names_the_stacks_project",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_no_block_deletes_a_volume_or_runs_the_generator",
+]
+
+[[unit]]
+text = "They read two shell variables, which you set first in the shell you run them in:"
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_the_blocks_read_only_the_variables_the_section_declares"]
+
+[[unit]]
+text = "Variable | Meaning"
+by = ["exempt:label"]
+
+[[unit]]
+text = "RELEASE | the tag of the release you upgrade to, such as v0.44.0"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "PUBLIC_BASE_URL | the PUBLIC_BASE_URL in your .env, such as https://controlvar.example.com"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "1. Read the release notes"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Read the release notes of every release after yours, up to RELEASE, for a setting the new release requires."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "2. Back up"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Take a backup as Back up shows, then check that the dump reads back whole:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "pg_restore reads the whole dump and writes it nowhere, and fails on a dump that is cut short."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Do not go on until it succeeds."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "3. Get the files"
+by = ["exempt:label"]
+
+[[unit]]
+text = "First note the release you run now, which a rollback in step 7 goes back to: the version that step 6's curl prints, with a v in front, such as v0.43.2."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_the_release_to_roll_back_to_is_noted_before_the_files_change"]
+
+[[unit]]
+text = "Then get the new release's files:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "This checks out the repository at the release, compose.yml included."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "Your .env is not in git, so it stays as it was."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_the_env_file_is_not_in_git"]
+
+[[unit]]
+text = "Git says the checkout is a detached HEAD, which is what checking out a tag gives."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "If compose.yml was edited by hand, git refuses the checkout and changes nothing."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version"]
+
+[[unit]]
+text = "An install made by copying the files rather than cloning the repository takes compose.yml and .env.example from deploy/compose/ at the release's tag instead."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "4. Check the settings"
+by = ["exempt:label"]
+
+[[unit]]
+text = "It prints nothing when .env has every setting the release's compose.yml requires, and otherwise names a missing one: add it to .env and run the command again."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestApiEnvironment::test_a_required_setting_has_no_default"]
+
+[[unit]]
+text = "It starts and stops nothing, so the old release keeps serving meanwhile."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "5. Upgrade"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Pull the release's images:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "PostgreSQL and Redis are pulled as well: compose.yml names postgres:16-alpine and redis:7-alpine, which follow the newest 16 and 7 images."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version"]
+
+[[unit]]
+text = "Then start the release:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The API migrates the database when it starts, before it serves, and --wait-timeout 600 is the ten minutes its health check allows for that."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestBackupAndRestore::test_the_api_creates_the_schema_when_it_starts",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_the_wait_is_as_long_as_the_api_health_check",
+]
+
+[[unit]]
+text = "If up fails while docker compose -p experimently-selfhost logs api still shows the migration running, restart nothing: wait until step 6's ps shows the API healthy, as Database migrations says of a long migration, then run the up command again."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "It leaves the API as it is and starts the dashboard, which waits for a healthy API."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_after_a_slow_migration_a_second_up_starts_the_dashboard"]
+
+[[unit]]
+text = "6. Verify"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Check that each of the four services is listed and healthy, and that the API's version is RELEASE without its v."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_the_verify_step_counts_every_service"]
+
+[[unit]]
+text = "Then sign in at PUBLIC_BASE_URL and open an experiment you made before the upgrade."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The upgrade is done when all three hold."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "7. Roll back"
+by = ["exempt:label"]
+
+[[unit]]
+text = "When step 5 or step 6 fails, go back to the release you noted in step 3."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Roll back in place first, and restore the backup only if the old release refuses the database."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Before you roll back, read the API's log, which tells you whether to expect that refusal:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "The API logs running database bootstrap each time it starts."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_the_log_check_reads_the_line_every_start_writes"]
+
+[[unit]]
+text = "Alembic logs a Running upgrade line as it starts each migration."
+by = ["exempt:third-party"]
+
+[[unit]]
+text = "No Running upgrade line: the new release migrated nothing, and the old release starts on the database as before."
+by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts"]
+
+[[unit]]
+text = "A Running upgrade line: expect the old release to refuse the database."
+by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated"]
+
+[[unit]]
+text = "It does not when the migration failed: a migration that fails is undone with every other migration of that start."
+by = ["mechanism:email-lower-one-transaction"]
+
+[[unit]]
+text = "No running database bootstrap line: the command read no log of this stack."
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_the_log_check_reads_the_line_every_start_writes"]
+
+[[unit]]
+text = "Check the directory and the project name before you go on."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Then, whatever the log showed, roll back in place: run the commands of steps 3 and 5 again with RELEASE set to the release you noted."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "If docker compose -p experimently-selfhost logs api then shows this database was migrated by a newer Controlvar release, the old release refuses the database and has changed nothing in it."
+by = [
+    "test:backend/tests/integration/database/test_newer_database_rollback.py::test_an_older_release_refuses_a_database_a_newer_release_migrated",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestUpgrade::test_the_rollback_restores_only_on_the_refusal_bootstrap_prints",
+]
+
+[[unit]]
+text = "Restore the backup into a fresh stack of the old release, as Restore shows, or take another way back from An Older Image Against a Newer Database."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A restore loses anything written since the backup."
+by = ["exempt:advice"]
 
 [[unit]]
 text = "What CI runs"

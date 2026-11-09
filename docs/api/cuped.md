@@ -164,8 +164,9 @@ takes no query parameters: the method comes from the experiment, the interval us
 experiment's stored `confidence_level`, and `corrected_p_value` applies its stored
 `correction_method` across the metric's treatments
 ([How results are judged](endpoints.md#how-results-are-judged)). Like the main results, the
-view is fixed-horizon: do not stop an experiment the first time it looks significant. Any
-logged-in user can read it; an experiment that doesn't exist answers `404`.
+view is fixed-horizon: do not stop an experiment the first time it looks significant. A
+user who may view the experiment can read it; without that permission it answers `403`, and
+an experiment that doesn't exist answers `404`.
 
 ```{.bash exec}
 curl -s localhost:8000/api/v1/results/$EXP_ID/cuped \
@@ -291,7 +292,7 @@ Three things can surprise:
 
 ## Permissions
 
-Any logged-in user can read the results. Changing an experiment's
+Anyone who may view the experiment can read the results. Changing an experiment's
 `variance_reduction_config` is a change to the experiment, decided by permission and by the
 experiment's state, not by who created it. Set it when you create the experiment, or with
 `PUT /api/v1/experiments/{id}` while the experiment is a draft. ADMIN and DEVELOPER may

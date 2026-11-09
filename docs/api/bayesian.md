@@ -33,8 +33,8 @@ same numbers.
 
 ### GET /api/v1/results/{experiment_id}/bayesian
 
-Returns the Bayesian block on its own, always freshly computed. Any logged-in user can
-read it. An experiment that hasn't turned Bayesian analysis on answers `200` with
+Returns the Bayesian block on its own, always freshly computed. Anyone who may view the
+experiment can read it. An experiment that hasn't turned Bayesian analysis on answers `200` with
 `"is_enabled": false`; an experiment that doesn't exist answers `404`.
 
 Run the commands on this page in one terminal, in order, against the stack from the

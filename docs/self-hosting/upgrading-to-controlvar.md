@@ -13,11 +13,11 @@ identity for each version.
 
 ## Docker Compose
 
-Replace `deploy/compose/compose.yml` with the file of the new release, then run
-`docker compose pull` and `docker compose up -d`. The file keeps the project name
-`experimently-selfhost` and the database user `experimently` on purpose: the
-volumes are named after the project, so your database is the one you had. Do not
-change either value.
+Follow the Compose README's
+[Upgrade](https://github.com/Controlvar/controlvar/blob/main/deploy/compose/README.md#upgrade)
+procedure. `compose.yml` keeps the project name `experimently-selfhost` and the
+database user `experimently` on purpose: the volumes are named after the
+project, so your database is the one you had. Do not change either value.
 
 ## Helm
 
