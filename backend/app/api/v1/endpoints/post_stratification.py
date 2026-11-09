@@ -16,7 +16,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import get_current_active_user, get_db
+from backend.app.api.deps import (
+    get_current_active_user,
+    get_db,
+    require_experiment_read,
+)
 from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.logger import unexpected_failure
 from backend.app.models.experiment import Experiment
@@ -29,7 +33,10 @@ from backend.app.schemas.post_stratification import (
 )
 from backend.app.services.fdr_correction_service import BenjaminiHochbergService
 
+# Mounted under /results beside results.router: the same rule, before the
+# experiment is looked up or the request body is validated.
 router = APIRouter(route_class=OffLoopRoute)
+router.dependencies.append(Depends(require_experiment_read))
 logger = logging.getLogger(__name__)
 
 POST_STRAT_UNAVAILABLE_DETAIL = (

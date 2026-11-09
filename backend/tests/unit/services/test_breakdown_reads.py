@@ -88,7 +88,7 @@ def test_the_examples_experiment_counts_checkout_completed():
 
 
 @pytest.mark.parametrize("role", list(UserRole), ids=lambda r: r.name)
-def test_any_signed_in_user_reads_both_breakdowns(as_role, role):
+def test_every_shipped_role_reads_both_breakdowns(as_role, role):
     experiment = _experiment()
     db = MagicMock()
     db.query.return_value.filter.return_value.first.return_value = experiment

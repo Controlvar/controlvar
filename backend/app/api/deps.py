@@ -425,6 +425,64 @@ def get_experiment_read_access(
     return experiment
 
 
+async def require_experiment_read(
+    current_user: User = Depends(get_current_active_user),
+) -> User:
+    """
+    Admit a caller who may read experiments, by the rule of
+    ``GET /api/v1/experiments/{id}``: a superuser, or a role, custom role or
+    grant holding READ on experiments.
+
+    A route dependency, so it runs before the handler: before the experiment
+    is looked up, the request body is validated or a cached answer is read.
+    ``get_experiment_read_access`` never reads its experiment argument, so
+    None is passed.
+
+    Raises:
+        HTTPException 403: If the caller does not hold READ on experiments
+    """
+    get_experiment_read_access(None, current_user)
+    return current_user
+
+
+async def require_experiment_list(
+    current_user: User = Depends(get_current_active_user),
+) -> User:
+    """
+    Admit a caller who may list experiments, as ``GET /api/v1/experiments/``
+    does: a superuser, or a role, custom role or grant holding LIST on
+    experiments.
+
+    Raises:
+        HTTPException 403: If the caller does not hold LIST on experiments
+    """
+    if not check_permission(current_user, ResourceType.EXPERIMENT, Action.LIST):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=get_permission_error_message(ResourceType.EXPERIMENT, Action.LIST),
+        )
+    return current_user
+
+
+async def require_feature_flag_list(
+    current_user: User = Depends(get_current_active_user),
+) -> User:
+    """
+    Admit a caller who may list feature flags, as ``GET /api/v1/feature-flags/``
+    does: a superuser, or a role, custom role or grant holding LIST on feature
+    flags.
+
+    Raises:
+        HTTPException 403: If the caller does not hold LIST on feature flags
+    """
+    if not check_permission(current_user, ResourceType.FEATURE_FLAG, Action.LIST):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=get_permission_error_message(ResourceType.FEATURE_FLAG, Action.LIST),
+        )
+    return current_user
+
+
 def get_experiment_change_access(
     experiment: Union[Experiment, Dict[str, Any]],
     current_user: User,

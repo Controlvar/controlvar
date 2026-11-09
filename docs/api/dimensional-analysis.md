@@ -145,7 +145,7 @@ It prints `8`.
 
 The experiment's results, with a `breakdown` field that splits the primary metric by one
 dimension, with the Bonferroni-corrected significance test above. Without `breakdown`, the
-field is `null`. Any logged-in user can read it.
+field is `null`. A user who may view the experiment can read it.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -275,4 +275,4 @@ conversions of `blue_button` and `green_button`.
 
 ## Permissions
 
-Any logged-in user can read both breakdowns, whatever the role.
+Reading either breakdown takes permission to view the experiment, as on the experiment page; every role has it.

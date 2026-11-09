@@ -290,8 +290,11 @@ text = "It takes one optional query parameter, alpha: the significance level for
 by = ["docex:docs/api/sequential-testing.md#\"method\": \"msprt\""]
 
 [[unit]]
-text = "Any logged-in user can read it."
-by = ["test:backend/tests/integration/api/test_sequential_results_routes.py::test_any_signed_in_user_reads_the_sequential_analysis"]
+text = "Anyone who may view the experiment can read it."
+by = [
+    "test:backend/tests/integration/api/test_sequential_results_routes.py::test_every_shipped_role_reads_the_sequential_analysis",
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_no_base_role_is_refused_on_results_routes",
+]
 
 [[unit]]
 text = "It answers 404 with \"Sequential testing is not enabled for this experiment\" when it is off, and \"Experiment not found\" when there is no such experiment."

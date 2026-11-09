@@ -130,8 +130,12 @@ text = "Returns the current bandit state: the algorithm, and each variant's weig
 by = ["docex:docs/api/multi-armed-bandit.md#\"algorithm\": \"thompson_sampling\""]
 
 [[unit]]
-text = "Any logged-in user can read it."
-by = ["test:backend/tests/unit/api/test_bandit_endpoints.py::TestBanditStatusForTheDashboard::test_every_role_reads_the_weights"]
+text = "Anyone who may view the experiment can read it."
+by = [
+    "test:backend/tests/unit/api/test_bandit_endpoints.py::TestBanditStatusForTheDashboard::test_every_role_reads_the_weights",
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_every_shipped_role_keeps_its_answer_on_each_route",
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_no_base_role_is_refused_on_the_route_level_reads",
+]
 
 [[unit]]
 text = "This also saves each variant's id, for the weight override further down:"

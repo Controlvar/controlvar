@@ -125,7 +125,7 @@ def _traffic(
         (UserRole.ADMIN, True),
     ],
 )
-def test_any_signed_in_user_reads_the_sequential_analysis(
+def test_every_shipped_role_reads_the_sequential_analysis(
     client, db_session, role, superuser
 ):
     _, experiment = _running(client, db_session)
