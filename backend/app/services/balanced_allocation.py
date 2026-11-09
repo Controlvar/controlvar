@@ -24,7 +24,7 @@ import logging
 import threading
 from typing import Any, Dict, Optional, Tuple
 
-from sqlalchemy import text
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
@@ -122,9 +122,15 @@ def take_seq(
         )
         try:
             with db.begin_nested():
+                # set_config(..., true) is SET LOCAL, with the value bound
+                # rather than written into the statement.
                 db.execute(
-                    text(
-                        f"SET LOCAL statement_timeout = {int(BALANCE_STEP_TIMEOUT_MS)}"
+                    select(
+                        func.set_config(
+                            "statement_timeout",
+                            str(int(BALANCE_STEP_TIMEOUT_MS)),
+                            True,
+                        )
                     )
                 )
                 seq = db.execute(upsert).scalar_one()
