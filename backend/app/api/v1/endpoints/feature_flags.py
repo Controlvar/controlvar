@@ -104,6 +104,43 @@ FLAG_STALE_FILTER_DESCRIPTION = (
     "flags are never stale."
 )
 
+#: The largest ``skip`` or ``limit`` the list takes: PostgreSQL's OFFSET and
+#: LIMIT are a bigint.
+LIST_PAGING_MAX = 2**63 - 1
+
+
+def _refuse_paging_out_of_range(**values: int) -> None:
+    """The 422 for a list ``skip`` or ``limit`` below 0 or above a bigint.
+
+    PostgreSQL refuses either as an OFFSET or LIMIT, so it answered 500; with
+    ``stale`` sent the page is cut in Python, where a negative ``skip`` counted
+    from the end. Checked here, not declared on the parameters, so the list's
+    OpenAPI document (a stable operation) does not change; the error is the
+    one a declared ``ge`` or ``le`` gives, at ``["query", <param>]``.
+    """
+    errors = []
+    for param, value in values.items():
+        if value < 0:
+            errors.append(
+                {
+                    "type": "greater_than_equal",
+                    "loc": ("query", param),
+                    "msg": "Input should be greater than or equal to 0",
+                    "ctx": {"ge": 0},
+                }
+            )
+        elif value > LIST_PAGING_MAX:
+            errors.append(
+                {
+                    "type": "less_than_equal",
+                    "loc": ("query", param),
+                    "msg": f"Input should be less than or equal to {LIST_PAGING_MAX}",
+                    "ctx": {"le": LIST_PAGING_MAX},
+                }
+            )
+    if errors:
+        raise RequestValidationError(errors)
+
 
 def _flag_key_taken_detail(key: str) -> str:
     return f"Feature flag with key '{key}' already exists"
@@ -312,6 +349,7 @@ async def list_feature_flags(
     status_member = enum_filter(
         status_filter, FeatureFlagStatus, "status", FLAG_STATUS_SPELLINGS
     )
+    _refuse_paging_out_of_range(skip=skip, limit=limit)
 
     # Everyone the LIST check above admitted sees the whole platform.
     #
