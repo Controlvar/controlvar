@@ -22,7 +22,8 @@ import { launchOptions } from "./tests/e2e/launch";
  *     #1545): Desktop Chrome with tests/e2e/launch.ts's override, which keeps
  *     third-party storage partitioning and paint holding on (Playwright's
  *     default launch turns both off). The other projects keep the default
- *     launch.
+ *     launch. Frontend Tests runs it right after the `site` step, over the
+ *     same export; no other workflow step does.
  *   - `extended` — everything else under tests/e2e (accessibility and the
  *     older specs); nightly territory, not a PR gate, but a failure there
  *     fails the night.
