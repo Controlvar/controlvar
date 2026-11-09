@@ -59,10 +59,11 @@ def _require_summary_scope(scope: ExportScope) -> None:
     summary="Export experiments to CSV or JSON",
     description=(
         "Download all (or filtered) experiments as a CSV or JSON file. "
-        "Requires authentication. Available to all roles."
+        "Requires the experiment LIST permission."
     ),
     tags=["Export"],
     responses=_CSV_OR_JSON,
+    dependencies=[Depends(deps.require_experiment_list)],
 )
 def export_experiments(
     format: ExportFormat = Query(
@@ -120,10 +121,11 @@ def export_experiments(
         "Download per-variant results for all (or filtered) experiments. "
         "Each variant's numbers are its primary-metric result, as "
         "GET /api/v1/results/{experiment_id} reports it. "
-        "Requires authentication."
+        "Requires the experiment LIST permission."
     ),
     tags=["Export"],
     responses=_CSV_OR_JSON,
+    dependencies=[Depends(deps.require_experiment_list)],
 )
 def export_variants(
     format: ExportFormat = Query(
@@ -179,10 +181,11 @@ def export_variants(
     summary="Export feature flag data to CSV or JSON",
     description=(
         "Download feature flag usage data as a CSV or JSON file. "
-        "Requires authentication."
+        "Requires the feature-flag LIST permission."
     ),
     tags=["Export"],
     responses=_CSV_OR_JSON,
+    dependencies=[Depends(deps.require_feature_flag_list)],
 )
 def export_feature_flags(
     format: ExportFormat = Query(
@@ -239,6 +242,10 @@ def export_feature_flags(
         "activity. Optionally filtered by a date range."
     ),
     tags=["Reports"],
+    dependencies=[
+        Depends(deps.require_experiment_list),
+        Depends(deps.require_feature_flag_list),
+    ],
 )
 def get_overview_report(
     start_date: Annotated[
@@ -286,6 +293,7 @@ def get_overview_report(
         **_CSV_OR_JSON,
         404: {"description": "No experiment has this id."},
     },
+    dependencies=[Depends(deps.require_experiment_read)],
 )
 def get_experiment_report(
     experiment_id: UUID,

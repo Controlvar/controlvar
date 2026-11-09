@@ -261,8 +261,11 @@ text = "Without breakdown, the field is null."
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Any logged-in user can read it."
-by = ["test:backend/tests/unit/services/test_breakdown_reads.py::test_any_signed_in_user_reads_both_breakdowns"]
+text = "A user who may view the experiment can read it."
+by = [
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_every_shipped_role_keeps_its_answer_on_each_route",
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_no_base_role_is_refused_on_results_routes",
+]
 
 [[unit]]
 text = "Parameter | Type | Required | Description"
@@ -424,5 +427,8 @@ text = "Permissions"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Any logged-in user can read both breakdowns, whatever the role."
-by = ["test:backend/tests/unit/services/test_breakdown_reads.py::test_any_signed_in_user_reads_both_breakdowns"]
+text = "Reading either breakdown takes permission to view the experiment, as on the experiment page; every role has it."
+by = [
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_every_shipped_role_keeps_its_answer_on_each_route",
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_no_base_role_is_refused_on_results_routes",
+]

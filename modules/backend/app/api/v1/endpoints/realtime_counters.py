@@ -11,7 +11,8 @@ Endpoints:
     POST /api/v1/counters/bulk                      — atomic bulk increment
     POST /api/v1/counters/{experiment_id}/reset     — reset (ADMIN only)
 
-Reading a counter needs nothing beyond a session; *writing* one needs UPDATE
+Reading a counter needs permission to view the experiment, as
+``GET /api/v1/experiments/{id}`` does; *writing* one needs UPDATE
 on experiments (ADMIN, DEVELOPER, a superuser, or anyone whose custom role or
 direct grant gives it), because these counters are
 the first source ``BanditScheduler`` consults for a bandit experiment's arm
@@ -154,6 +155,7 @@ def _require_body_matches_path(*, path_experiment_id: str, body_experiment_id: s
         200: {"description": "Experiment counters returned"},
         404: {"description": "No counter data found for this experiment"},
     },
+    dependencies=[Depends(deps.require_experiment_read)],
 )
 def get_experiment_counters(
     experiment_id: str,

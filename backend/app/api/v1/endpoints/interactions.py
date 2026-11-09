@@ -52,15 +52,21 @@ EXPERIMENT_NOT_FOUND = "{} does not match an experiment."
 # ---------------------------------------------------------------------------
 
 
-def _require_developer(current_user: User) -> None:
-    """Raise 403 when the user is VIEWER (read-only role).
+#: The roles that may use interaction analysis; superusers may too.
+INTERACTION_ROLES = (UserRole.ANALYST, UserRole.DEVELOPER, UserRole.ADMIN)
 
-    DEVELOPER, ANALYST, and ADMIN may access interaction analysis endpoints.
+
+def _require_developer(current_user: User) -> None:
+    """Raise 403 unless the user is a superuser or holds one of the
+    ANALYST, DEVELOPER and ADMIN roles.
+
+    The roles are named, so any other role, and an account with no base
+    role, is refused.
     """
     role = getattr(current_user, "role", None)
     if current_user.is_superuser:
         return
-    if role in (UserRole.VIEWER,):
+    if role not in INTERACTION_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Interaction analysis needs the ANALYST, DEVELOPER or ADMIN role.",

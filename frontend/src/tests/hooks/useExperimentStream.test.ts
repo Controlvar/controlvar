@@ -159,6 +159,34 @@ describe('useExperimentStream', () => {
     }
   });
 
+  it('stops retrying and reports the refusal on close code 4403', async () => {
+    jest.useFakeTimers();
+    try {
+      const { result } = renderHook(() =>
+        useExperimentStream('exp-1', { reconnectDelayMs: 10, maxReconnectAttempts: 5 }),
+      );
+      await act(async () => {
+        jest.advanceTimersByTime(0);
+      });
+      expect(result.current.status).toBe('connected');
+
+      // The backend accepts, then closes 4403: the caller may not view the
+      // experiment, and a new socket with the same token would get the same.
+      await act(async () => {
+        wsInstances[0].onclose?.({ code: 4403 });
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+      });
+      expect(wsInstances).toHaveLength(1); // no retry
+      expect(result.current.status).toBe('unauthorized');
+      expect(result.current.error).toMatch(/code 4403/);
+      expect(result.current.error).not.toMatch(/sign in again/i);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('still reconnects after an ordinary close', async () => {
     jest.useFakeTimers();
     try {

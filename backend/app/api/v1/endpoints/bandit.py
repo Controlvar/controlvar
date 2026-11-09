@@ -176,7 +176,11 @@ def _build_status_response(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/{experiment_id}", response_model=BanditStatusResponse)
+@router.get(
+    "/{experiment_id}",
+    response_model=BanditStatusResponse,
+    dependencies=[Depends(deps.require_experiment_read)],
+)
 def get_bandit_status(
     experiment_id: UUID,
     db: Session = Depends(deps.get_db),
@@ -185,7 +189,8 @@ def get_bandit_status(
     """
     Return the current bandit allocation weights for a MAB experiment.
 
-    Requires any authenticated user (VIEWER+).
+    Requires permission to view the experiment, as GET /api/v1/experiments/{id}
+    does; every role has it.
     Returns equal weights if no bandit state has been computed yet.
     """
     experiment = _get_mab_experiment(experiment_id, db)

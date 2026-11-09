@@ -151,6 +151,10 @@ before the socket is registered; a missing or invalid token is answered with an
 accepted-then-closed socket, close code **4401**, so browser clients can tell
 "unauthorized" from a network failure and must not reconnect with the same token.
 
+A caller who may not view the experiment is answered the same way, with close code
+**4403**. Reconnecting cannot help, so the dashboard stops retrying and reports that the
+server refused the stream (code 4403).
+
 Ways to present the token, in order of preference:
 
 1. **Subprotocol** (what the dashboard uses):
