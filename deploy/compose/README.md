@@ -176,7 +176,7 @@ release, because the database records the revision it was migrated to, and
 the same profile. An older image refuses to start on a database a newer release
 migrated (see
 [Database migrations](https://docs.controlvar.com/self-hosting/migrations/)),
-so restore first and upgrade afterwards, the usual way.
+so restore first, then upgrade as [Upgrade](#upgrade) shows.
 
 On the new host, put that release's `compose.yml` and the saved `.env` in one
 directory, and do not run `generate-env.sh`. Do not run the commands below in
@@ -201,6 +201,140 @@ To restore on the host that runs the stack, stop it with
 `docker compose -p experimently-selfhost stop`, which keeps its volumes, and
 restore under another project name: the same commands with a different `-p`
 start with empty volumes.
+
+## Upgrade
+
+These steps move a running stack to a newer release and keep its database.
+Run them from this directory of the clone you installed from. Every
+`docker compose` command names the project, `experimently-selfhost`, and none
+of them runs `docker compose down -v` or `generate-env.sh`, or deletes a
+volume.
+
+They read two shell variables, which you set first in the shell you run them
+in:
+
+| Variable | Meaning |
+|---|---|
+| `RELEASE` | the tag of the release you upgrade to, such as `v0.44.0` |
+| `PUBLIC_BASE_URL` | the `PUBLIC_BASE_URL` in your `.env`, such as `https://controlvar.example.com` |
+
+### 1. Read the release notes
+
+Read the [release notes](https://github.com/Controlvar/controlvar/releases) of
+every release after yours, up to `RELEASE`, for a setting the new release
+requires.
+
+### 2. Back up
+
+Take a backup as [Back up](#back-up) shows, then check that the dump reads
+back whole:
+
+```bash
+docker compose -p experimently-selfhost exec -T postgres \
+  pg_restore -f /dev/null < ~/controlvar-backups/controlvar.dump
+```
+
+`pg_restore` reads the whole dump and writes it nowhere, and fails on a dump
+that is cut short. Do not go on until it succeeds.
+
+### 3. Get the files
+
+First note the release you run now, which a rollback in step 7 goes back to:
+the `version` that step 6's `curl` prints, with a `v` in front, such as
+`v0.43.2`. Then get the new release's files:
+
+```bash
+git fetch --tags
+git checkout "$RELEASE"
+```
+
+This checks out the repository at the release, `compose.yml` included. Your
+`.env` is not in git, so it stays as it was. Git says the checkout is a
+detached HEAD, which is what checking out a tag gives. If `compose.yml` was
+edited by hand, git refuses the checkout and changes nothing. An install made
+by copying the files rather than cloning the repository takes `compose.yml`
+and `.env.example` from `deploy/compose/` at the release's tag instead.
+
+### 4. Check the settings
+
+```bash
+docker compose -p experimently-selfhost config --quiet
+```
+
+It prints nothing when `.env` has every setting the release's `compose.yml`
+requires, and otherwise names a missing one: add it to `.env` and run the
+command again. It starts and stops nothing, so the old release keeps serving
+meanwhile.
+
+### 5. Upgrade
+
+Pull the release's images:
+
+```bash
+docker compose -p experimently-selfhost pull
+```
+
+PostgreSQL and Redis are pulled as well: `compose.yml` names
+`postgres:16-alpine` and `redis:7-alpine`, which follow the newest 16 and 7
+images. Then start the release:
+
+```bash
+docker compose -p experimently-selfhost up -d --wait --wait-timeout 600
+```
+
+The API migrates the database when it starts, before it serves, and
+`--wait-timeout 600` is the ten minutes its health check allows for that. If
+`up` fails while `docker compose -p experimently-selfhost logs api` still
+shows the migration running, restart nothing: wait until step 6's `ps` shows
+the API `healthy`, as
+[Database migrations](https://docs.controlvar.com/self-hosting/migrations/)
+says of a long migration, then run the `up` command again. It leaves the API
+as it is and starts the dashboard, which waits for a healthy API.
+
+### 6. Verify
+
+```bash
+docker compose -p experimently-selfhost ps
+curl -fsS "$PUBLIC_BASE_URL/api/v1/modules"
+```
+
+Check that each of the four services is listed and `healthy`, and that the
+API's `version` is `RELEASE` without its `v`. Then sign in at
+`PUBLIC_BASE_URL` and open an experiment you made before the upgrade. The
+upgrade is done when all three hold.
+
+### 7. Roll back
+
+When step 5 or step 6 fails, go back to the release you noted in step 3. Roll
+back in place first, and restore the backup only if the old release refuses
+the database. Before you roll back, read the API's log, which tells you
+whether to expect that refusal:
+
+```bash
+docker compose -p experimently-selfhost logs api 2>&1 \
+  | grep -e 'running database bootstrap' -e 'Running upgrade'
+```
+
+The API logs `running database bootstrap` each time it starts. Alembic logs a
+`Running upgrade` line as it starts each migration.
+
+- No `Running upgrade` line: the new release migrated nothing, and the old
+  release starts on the database as before.
+- A `Running upgrade` line: expect the old release to refuse the database.
+  It does not when the migration failed: a migration that fails is undone
+  with every other migration of that start.
+- No `running database bootstrap` line: the command read no log of this
+  stack. Check the directory and the project name before you go on.
+
+Then, whatever the log showed, roll back in place: run the commands of steps
+[3](#3-get-the-files) and [5](#5-upgrade) again with `RELEASE` set to the
+release you noted. If `docker compose -p experimently-selfhost logs api` then
+shows `this database was migrated by a newer Controlvar release`, the old
+release refuses the database and has changed nothing in it. Restore the backup
+into a fresh stack of the old release, as [Restore](#restore) shows, or take
+another way back from
+[An Older Image Against a Newer Database](https://docs.controlvar.com/self-hosting/migrations/#an-older-image-against-a-newer-database).
+A restore loses anything written since the backup.
 
 ## What CI runs
 

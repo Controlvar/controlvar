@@ -14,6 +14,7 @@ The version on the image lines is pinned by ``scripts/check_version_sources.py``
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import os
 import re
@@ -21,6 +22,7 @@ import shutil
 import stat
 import subprocess
 import sys
+from itertools import zip_longest
 from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import urlparse
@@ -704,3 +706,325 @@ class TestBackupAndRestore:
             (one,) = [x for x in first.splitlines() if x.startswith(f"{name}=")]
             (two,) = [x for x in second.splitlines() if x.startswith(f"{name}=")]
             assert one != two, name
+
+
+#: The README's upgrade procedure (#1807): each block exactly as the page gives
+#: it, in page order. A self-hoster runs these on the stack that holds their
+#: data, so a changed word in one is a reviewed change to what they run.
+UPGRADE_BLOCKS = (
+    (
+        "check-backup",
+        "docker compose -p experimently-selfhost exec -T postgres \\\n"
+        "  pg_restore -f /dev/null < ~/controlvar-backups/controlvar.dump\n",
+    ),
+    ("get-files", 'git fetch --tags\ngit checkout "$RELEASE"\n'),
+    ("check-settings", "docker compose -p experimently-selfhost config --quiet\n"),
+    ("pull", "docker compose -p experimently-selfhost pull\n"),
+    (
+        "upgrade",
+        "docker compose -p experimently-selfhost up -d --wait --wait-timeout 600\n",
+    ),
+    (
+        "verify",
+        "docker compose -p experimently-selfhost ps\n"
+        'curl -fsS "$PUBLIC_BASE_URL/api/v1/modules"\n',
+    ),
+    (
+        "check-migrations",
+        "docker compose -p experimently-selfhost logs api 2>&1 \\\n"
+        "  | grep -e 'running database bootstrap' -e 'Running upgrade'\n",
+    ),
+)
+
+#: The shell variables the section's table asks the reader to set, and the only
+#: ones its blocks may read.
+UPGRADE_VARIABLES = {"RELEASE", "PUBLIC_BASE_URL"}
+
+#: What deletes a volume (TestBackupAndRestore's list), and the generator, which
+#: an upgrade never runs: the install keeps the .env it has.
+UPGRADE_FORBIDDEN = (
+    r"\bdown\b",
+    r"(^|\s)-v\b",
+    r"--volumes",
+    r"\bvolume\s+(rm|prune)\b",
+    r"\bprune\b",
+    r"\brm\b",
+    r"\bkill\b",
+    r"generate-env",
+)
+
+
+def _upgrade_section() -> str:
+    """The README's "Upgrade" section, up to the next `## `."""
+    text = README.read_text(encoding="utf-8")
+    assert "\n## Upgrade\n" in text, "the README has no `## Upgrade` section"
+    start = text.index("\n## Upgrade\n")
+    end = text.index("\n## ", start + 1)
+    return text[start:end]
+
+
+def _upgrade_step(number: int) -> str:
+    """Step *number* of the Upgrade section, from its `### ` heading to the next."""
+    section = _upgrade_section()
+    found = re.search(rf"^### {number}\. .*?(?=^### |\Z)", section, re.M | re.S)
+    assert found, f"the Upgrade section has no step {number}"
+    return found.group(0)
+
+
+def _prose(text: str) -> str:
+    """*text* with its fences removed and its lines joined by single spaces."""
+    unfenced = re.sub(r"^```.*?^```$", "", text, flags=re.M | re.S)
+    return " ".join(unfenced.split())
+
+
+def _refusal_bootstrap_prints() -> str:
+    """The literal text of the refusal an older image gives a database a newer
+    release migrated: the last `return` of `unresolvable_revisions_message`,
+    read from bootstrap.py's syntax tree, each `{...}` field as `{}`."""
+    source = (REPO_ROOT / "backend" / "app" / "db" / "bootstrap.py").read_text(
+        encoding="utf-8"
+    )
+    (function,) = [
+        node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "unresolvable_revisions_message"
+    ]
+    message = function.body[-1]
+    assert isinstance(message, ast.Return), ast.dump(message)
+    assert isinstance(message.value, ast.JoinedStr), ast.dump(message.value)
+    return "".join(
+        part.value if isinstance(part, ast.Constant) else "{}"
+        for part in message.value.values
+    )
+
+
+def _upgrade_fences() -> list:
+    """Every fence in the section, as (info string, body): all of them, so a
+    block in another language, or with a tag, is seen rather than skipped."""
+    fences, info, body = [], None, []
+    for line in _upgrade_section().splitlines():
+        opens = line.lstrip().startswith(("```", "~~~"))
+        if info is None:
+            if opens:
+                info, body = line.lstrip()[3:].strip(), []
+        elif opens:
+            fences.append((info, "".join(f"{text}\n" for text in body)))
+            info = None
+        else:
+            body.append(line)
+    assert info is None, "an unclosed fence in the Upgrade section"
+    return fences
+
+
+def _declared_variables() -> list:
+    """The first cell of each row of the section's `| Variable | Meaning |` table."""
+    lines = _upgrade_section().splitlines()
+    assert "| Variable | Meaning |" in lines, "the section has no variables table"
+    start = lines.index("| Variable | Meaning |")
+    assert lines[start + 1] == "|---|---|", lines[start + 1]
+    rows = []
+    for line in lines[start + 2 :]:
+        if not line.startswith("|"):
+            break
+        rows.append(line.split("|")[1].strip().strip("`"))
+    return rows
+
+
+def _expanded_variables(block: str) -> set:
+    """The names a block expands, `$NAME` or `${NAME}`, outside single quotes."""
+    unquoted = re.sub(r"'[^']*'", "", block)
+    return set(re.findall(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)", unquoted))
+
+
+class TestUpgrade:
+    """The README's upgrade procedure (#1807), read as text, with no Docker.
+
+    A self-hoster runs its blocks in order on the stack that holds their data:
+    check the backup, get the release's files, check the settings, pull,
+    start, verify, and roll back in place, restoring the backup only when the
+    old release refuses the database. So each block's
+    text is pinned, and the properties that fail silently are held by name:
+    every compose command names the stack's project, none deletes a volume or
+    runs the generator, the wait is as long as the API's health check allows,
+    and the blocks read only the variables the section tells the reader to set.
+    """
+
+    def _blocks(self) -> list:
+        return [body for _, body in _upgrade_fences()]
+
+    def _commands(self) -> list:
+        """Every command line of the blocks, continuation lines joined."""
+        return [
+            line.strip()
+            for block in self._blocks()
+            for line in block.replace("\\\n", " ").splitlines()
+            if line.strip()
+        ]
+
+    def test_the_blocks_are_the_procedure_in_order(self):
+        blocks = self._blocks()
+        names = [name for name, _ in UPGRADE_BLOCKS]
+        assert len(blocks) == len(UPGRADE_BLOCKS), (
+            f"{len(blocks)} blocks in Upgrade, expected {len(names)}: {names}"
+        )
+        for (name, expected), block in zip(UPGRADE_BLOCKS, blocks):
+            for want, got in zip_longest(expected.splitlines(), block.splitlines()):
+                assert got == want, f"{name}: {got!r}, expected {want!r}"
+
+    def test_the_backup_is_linked_not_copied(self):
+        assert "[Back up](#back-up)" in _upgrade_section()
+        for block in self._blocks():
+            assert "pg_dump" not in block, (
+                f"a second copy of the backup command in Upgrade: {block!r}; "
+                "link to Back up instead"
+            )
+
+    def test_every_compose_command_names_the_stacks_project(self, compose):
+        commands = [c for c in self._commands() if "docker compose" in c]
+        assert len(commands) == 6, commands
+        for command in commands:
+            for found in re.finditer(r"docker compose(?: -p (\S+))?", command):
+                assert found.group(1) == compose["name"], command
+
+    def test_no_block_deletes_a_volume_or_runs_the_generator(self):
+        """The block bodies only: the prose may name what they never run."""
+        for block in self._blocks():
+            for pattern in UPGRADE_FORBIDDEN:
+                assert not re.search(pattern, block, re.M), f"{pattern} in {block!r}"
+
+    def test_the_wait_is_as_long_as_the_api_health_check(self, services):
+        """`--wait-timeout` is about the time the API's health check gives a
+        start, a migration included, before it reports the container
+        unhealthy: the start period, then that many failed checks."""
+        check = services["api"]["healthcheck"]
+
+        def seconds(value) -> int:
+            assert re.fullmatch(r"\d+s", str(value)), value
+            return int(str(value)[:-1])
+
+        window = seconds(check["start_period"]) + check["retries"] * seconds(
+            check["interval"]
+        )
+        (upgrade,) = [block for block in self._blocks() if " up -d" in block]
+        found = re.search(r" up -d --wait --wait-timeout (\d+)$", upgrade, re.M)
+        assert found, f"the upgrade block has no --wait-timeout: {upgrade!r}"
+        assert int(found.group(1)) == window, (
+            f"--wait-timeout {found.group(1)}, but the api health check gives "
+            f"{check['start_period']} + {check['retries']} x {check['interval']} "
+            f"= {window} s"
+        )
+
+    def test_the_blocks_read_only_the_variables_the_section_declares(self):
+        declared = set(_declared_variables())
+        for name in sorted(UPGRADE_VARIABLES - declared):
+            pytest.fail(f"the variables table does not declare {name}")
+        for name in sorted(declared - UPGRADE_VARIABLES):
+            pytest.fail(f"the variables table declares {name}, which is not pinned")
+        read = set()
+        for block in self._blocks():
+            for name in sorted(_expanded_variables(block) - declared):
+                pytest.fail(
+                    f"the block starting {block.splitlines()[0]!r} reads ${name}, "
+                    "which the section does not tell the reader to set"
+                )
+            read |= _expanded_variables(block)
+        assert read == declared, f"declared, read by no block: {declared - read}"
+
+    def test_no_block_carries_a_comment_or_a_tag(self):
+        for info, body in _upgrade_fences():
+            assert info == "bash", f"a fence opened as {info!r}: plain bash only"
+            for line in body.splitlines():
+                assert not re.search(r"(^|\s)#", line), f"a comment: {line!r}"
+
+    def test_the_log_check_reads_the_line_every_start_writes(self, services):
+        """The API runs the bootstrap on every start, and the entrypoint logs
+        `running database bootstrap` to stderr first: the block reads both
+        streams and finds each start by that line."""
+        entrypoint = (REPO_ROOT / "backend" / "docker-entrypoint.sh").read_text(
+            encoding="utf-8"
+        )
+        assert "log() { printf '[entrypoint] %s\\n' \"$*\" >&2; }" in entrypoint
+        assert (
+            'if [ "$RUN_MIGRATIONS" = "true" ]; then\n'
+            '    log "running database bootstrap (' in entrypoint
+        )
+        assert services["api"]["environment"]["RUN_MIGRATIONS"] == "true"
+        (logs,) = [block for block in self._blocks() if " logs api " in block]
+        assert " logs api 2>&1 " in logs, logs
+        assert "-e 'running database bootstrap'" in logs, logs
+
+    def test_the_rollback_restores_only_on_the_refusal_bootstrap_prints(self):
+        """Step 7 rolls back in place whatever the log showed, and restores
+        only when the old release then refuses the database, by the sentence
+        bootstrap.py prints. A `Running upgrade` line does not decide it: a
+        migration that fails is undone, and the old release starts as before,
+        so a restore there would lose what was written since the backup."""
+        refusal = "this database was migrated by a newer Controlvar release"
+        assert refusal in _refusal_bootstrap_prints()
+        rollback = _prose(_upgrade_step(7))
+        named = f"shows `{refusal}`"
+        assert named in rollback, f"step 7 does not name the refusal {refusal!r}"
+        in_place = "whatever the log showed, roll back in place"
+        assert in_place in rollback, rollback
+        restore = "[Restore](#restore)"
+        assert rollback.count(restore) == 1, f"step 7 links Restore twice: {rollback}"
+        order = [rollback.index(text) for text in (in_place, named, restore)]
+        assert order == sorted(order), (
+            "step 7 must roll back in place, then name the refusal, then restore"
+        )
+
+    def test_after_a_slow_migration_a_second_up_starts_the_dashboard(self, services):
+        """The dashboard waits for a healthy API, so an `up` that gives up
+        while the migration still runs never starts it, and nothing starts it
+        later: step 5 says to run `up` again once the API is healthy."""
+        assert services["web"]["depends_on"]["api"]["condition"] == "service_healthy"
+        upgrade = _prose(_upgrade_step(5))
+        assert "then run the `up` command again" in upgrade, upgrade
+        assert "starts the dashboard" in upgrade, upgrade
+
+    def test_the_verify_step_counts_every_service(self, services):
+        """`ps` lists only the containers that run, so a dashboard that never
+        started is missing rather than unhealthy: step 6 says how many to look
+        for, and each service has a health check, so each can show `healthy`."""
+        words = ("no", "one", "two", "three", "four", "five", "six")
+        assert len(services) < len(words), sorted(services)
+        verify = _prose(_upgrade_step(6))
+        counted = f"each of the {words[len(services)]} services is listed and `healthy`"
+        assert counted in verify, f"step 6 does not say {counted!r}: {verify}"
+        for name, service in services.items():
+            assert "healthcheck" in service, f"{name} has no health check"
+
+    def test_the_release_to_roll_back_to_is_noted_before_the_files_change(self):
+        """After the checkout, the clone names the new release, and an install
+        cloned from main may never have been on a tag: step 3 has the reader
+        note the running release before its block, and step 7 goes back to it."""
+        get_files = _upgrade_step(3)
+        assert "```bash" in get_files, get_files
+        before = _prose(get_files[: get_files.index("```bash")])
+        assert "note the release you run now" in before, before
+        assert "the `version` that step 6's `curl` prints, with a `v`" in before, before
+        rollback = _prose(_upgrade_step(7))
+        assert "go back to the release you noted in step 3" in rollback, rollback
+        assert "`RELEASE` set to the release you noted" in rollback, rollback
+
+    def test_the_env_file_is_not_in_git(self):
+        """So checking out a release leaves the install's .env as it was."""
+        ignored = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+        assert ".env" in ignored
+        unignored = [line for line in ignored if line.startswith("!")]
+        assert not [line for line in unignored if line.endswith(".env")], unignored
+
+    def test_every_link_within_the_page_names_a_heading(self):
+        """GitHub's anchors: the heading in lower case, punctuation dropped,
+        spaces as hyphens. A step renamed would leave its links pointing at
+        nothing; the site does not build this page, so mkdocs never sees them."""
+        text = README.read_text(encoding="utf-8")
+        anchors = {
+            re.sub(r"[^\w\- ]", "", heading.strip().lower()).replace(" ", "-")
+            for heading in re.findall(r"^#{1,6} (.+)$", text, re.M)
+        }
+        links = re.findall(r"\]\(#([^)]+)\)", text)
+        assert links, "the README links to none of its headings"
+        for link in links:
+            assert link in anchors, f"#{link} names no heading of the README"
