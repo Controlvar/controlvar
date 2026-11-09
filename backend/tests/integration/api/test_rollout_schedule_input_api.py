@@ -567,27 +567,54 @@ def refuse_max_percentage():
         event.remove(RolloutSchedule, "before_insert", force)
 
 
+@pytest.fixture
+def refuse_null_name():
+    """Make the database refuse the next write of the given schedule ids with a
+    NOT NULL violation (a real one from psycopg2), as ``refuse_max_percentage``
+    does for its CHECK. A null name no longer passes the request model (#1537),
+    so it is forced inside the database."""
+    ids: set = set()
+
+    def force(mapper, connection, target):
+        if target.id in ids:
+            target.name = None
+
+    event.listen(RolloutSchedule, "before_update", force)
+    try:
+        yield ids
+    finally:
+        event.remove(RolloutSchedule, "before_update", force)
+
+
 @pytest.mark.parametrize(
     "violation", ["not-null", "check_max_percentage", "name-in-the-message"]
 )
 def test_another_constraint_on_update_keeps_todays_500_and_log_line(
-    client, developer, new_flag, fresh, routes_log, refuse_max_percentage, violation
+    client,
+    developer,
+    new_flag,
+    fresh,
+    routes_log,
+    refuse_max_percentage,
+    refuse_null_name,
+    violation,
 ):
     created = create(client, developer, new_flag(), [stage(1, 10)], start_date=START)
     before = _row(fresh, created["id"])
     if violation == "not-null":
-        body = {"name": None}
+        refuse_null_name.add(uuid.UUID(created["id"]))
         cause = "NotNullViolation"
-    elif violation == "name-in-the-message":
-        # The date constraint's name appears in the error text (the failing row
-        # holds it) but a NOT NULL is what was violated: only the constraint
-        # that was violated may be mapped, never a match on the message.
-        body = {"name": None, "description": "check_rollout_schedule_dates"}
-        cause = "NotNullViolation"
+        # A NOT NULL names no constraint, and the date constraint's name is in
+        # the error text (the failing row holds it): only the constraint that
+        # was violated may be mapped, never a match on the message.
+        body = {"name": "renamed", "description": "check_rollout_schedule_dates"}
     else:
         refuse_max_percentage.add(uuid.UUID(created["id"]))
-        body = {"name": "renamed"}
         cause = "check_max_percentage"
+        if violation == "name-in-the-message":
+            body = {"name": "renamed", "description": "check_rollout_schedule_dates"}
+        else:
+            body = {"name": "renamed"}
     response = _put(client, developer, created["id"], body)
     assert (response.status_code, response.text) == (500, UPDATE_FAILED)
     messages = [record.getMessage() for record in routes_log]
