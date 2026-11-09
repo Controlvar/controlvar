@@ -27,6 +27,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.datetime_bounds import refuse_unstorable_offset
 from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.logger import unexpected_failure
 from backend.app.core.permissions import can_read_all_audit_logs
@@ -129,12 +130,16 @@ def resolve_audit_log_filters(
     role or direct grant gives ``audit_log (read)``, see other users' entries
     too. Anyone else sees only their own: ``user_id`` is replaced by their own
     id, whatever was asked. An unknown ``entity_type`` or ``action_type``, or a
-    ``to_date`` that is not after ``from_date``, answers 400.
+    ``to_date`` that is not after ``from_date``, answers 400. A date with a UTC
+    offset the database cannot store (16 hours or more) answers 422.
     """
     # Other users' entries need can_read_all_audit_logs; anyone else reads
     # their own.
     if not can_read_all_audit_logs(current_user):
         user_id = current_user.id
+
+    refuse_unstorable_offset("from_date", from_date)
+    refuse_unstorable_offset("to_date", to_date)
 
     entity_type_enum = None
     if entity_type:
@@ -517,6 +522,9 @@ async def get_user_activity(
             detail="Not enough permissions to view this user's activity",
         )
 
+    refuse_unstorable_offset("from_date", from_date)
+    refuse_unstorable_offset("to_date", to_date)
+
     # Validate date range
     if from_date and to_date and to_date <= from_date:
         raise HTTPException(
@@ -574,6 +582,9 @@ async def get_audit_stats(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to view audit statistics",
         )
+
+    refuse_unstorable_offset("from_date", from_date)
+    refuse_unstorable_offset("to_date", to_date)
 
     # Validate date range
     if from_date and to_date and to_date <= from_date:
