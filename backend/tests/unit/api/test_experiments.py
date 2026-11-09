@@ -306,6 +306,9 @@ async def test_list_experiments(
         cache_control=mock_cache_control,
         skip=0,
         limit=100,
+        # A direct call gets each Query() default object, not its value;
+        # FastAPI resolves sort_by to "created_at" in a real request.
+        sort_by="created_at",
     )
 
     # Verify service was called correctly
