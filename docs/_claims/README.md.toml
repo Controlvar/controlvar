@@ -744,3 +744,7 @@ by = ["exempt:label"]
 [[unit]]
 text = "CONTRIBUTING.md covers the development setup, the test suites and the core/modules boundary."
 by = ["exempt:navigation"]
+
+[[unit]]
+text = "ROADMAP.md says what is planned Now, Next and Later, and how to influence it."
+by = ["exempt:navigation"]

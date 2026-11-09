@@ -257,3 +257,5 @@ public issues. Contributions are accepted under the DCO — see [CONTRIBUTING.md
 
 [CONTRIBUTING.md](CONTRIBUTING.md) covers the development setup, the test suites and the
 core/modules boundary.
+
+[ROADMAP.md](ROADMAP.md) says what is planned Now, Next and Later, and how to influence it.

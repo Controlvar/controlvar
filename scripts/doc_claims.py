@@ -627,6 +627,7 @@ EXEMPT_CATEGORIES: Tuple[str, ...] = (
 #: Where a policy statement (what the project does, not what the product does)
 #: may stand as exempt:policy, and nowhere else.
 POLICY_DOCUMENTS: Tuple[str, ...] = (
+    "ROADMAP.md",
     "SECURITY.md",
     "docs/api/stability.md",
     "docs/security/incident-response.md",

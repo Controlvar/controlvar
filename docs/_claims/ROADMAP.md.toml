@@ -1,0 +1,319 @@
+# What verifies each unit of ROADMAP.md (#1142).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+# The roadmap is what the project plans to do, not what the product does, so
+# its plans are exempt:policy (ROADMAP.md is one of POLICY_DOCUMENTS); the two
+# sentences about what Controlvar does today name the tests that hold them.
+document = "ROADMAP.md"
+
+[[unit]]
+text = "Roadmap"
+by = ["exempt:label"]
+
+[[unit]]
+text = "This file is for anyone deciding whether to use Controlvar or to contribute to it."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "It says where the project is heading, in three horizons: Now, Next and Later."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "There are no dates."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Each theme has a goal and links the public issues that carry its work; an item with no issue yet has no link."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "It is a plan, not a promise, and the order can change; what people running Controlvar report weighs most."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "We aim to review it monthly, and each update comes with a short note on what changed and why."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "An item is removed when it is done or stops earning its place, and the note says why."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Now"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Goal: what the first users hit gets fixed, and the cheapest gaps close."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "An item in Now can move to Next if something more urgent comes up."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "What you report comes first."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "A bug reported by someone running Controlvar comes before everything else on this page."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "A balanced split within each segment, so test and control match within every group (#448)."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Analysis settings fixed once an experiment starts, so it is read the way it was planned (#848)."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "A segment preview from real user attributes (#830), and one accessible dialog across the dashboard (#369)."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Dashboard sign-in when Controlvar uses Amazon Cognito (#708)."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "A tested upgrade for Docker Compose installs: a written procedure, rehearsed in CI from the previous release's published images (#1807)."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Stale-flag detection: find the flags nobody has changed or evaluated lately (#1808)."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Warehouse analysis on Redshift, then Databricks (#826, #1605)."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "SDKs that do the same things: every SDK reads a flag's value, not only on or off (#1810), and sends user attributes on flag evaluation (#438, #1720)."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "An SDK that installs from a clone today is published to its registry when someone asks for it, with event ids (#1543) and the exposure hook."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Two-factor sign-in for local accounts (#1812)."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "A visual page editor: change a live page's text and layout to make a variant, with no code (#1545)."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "It is built in steps, carries on into Next, and reaches users once it is complete."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Next"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Goal: a team can move its flags and experiments here and run them the way it already does, with the guardrails it expects."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Flag delivery."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Flag checks are answered next to your apps, quickly, and keep working when the Controlvar server is down."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "A relay that runs beside your apps, holds the rules, answers flag checks for every SDK and streams changes."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Browsers and phones never receive the rules."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Multi-way flags: a weighted split among three or more values, and a different value per rule."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Release workflow."
+by = ["exempt:label"]
+
+[[unit]]
+text = "A flag change is made in one environment, approved, then promoted, in one install."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Environments (development, staging, production) in one install, and approvals for flag changes in each."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Flag prerequisites: a flag that is on only when another flag is."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Statistics."
+by = ["exempt:label"]
+
+[[unit]]
+text = "Every analysis reads a revenue, count or duration metric by its values."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "A shared metric library: define a metric once, use it in experiments and rollouts."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Every view of a mean metric reads its values: Bayesian, sequential, sample size, daily, Live and breakdowns; then CUPED and outlier control (winsorization) for means, and ratio metrics."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Also in Next:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Dashboard screens for what only the API does today (#442)."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Guardrail thresholds that act: alert, then stop or roll back on a business metric, in experiments and in rollouts."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "SAML sign-in, and Microsoft Entra ID over OIDC (#123)."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Identity aliasing: a visitor who signs in keeps one assignment (#449)."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Data retention by age, and erasing one person's data."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Moving in and out: import flags from other flag tools, and export and import between Controlvar instances."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Rollback on an outside alert: an alert from your monitoring stops the matching rollouts."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Later"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Goal: depth for larger teams, and for teams whose data lives in a warehouse."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Events from Segment or RudderStack counted as conversions."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "API keys that belong to a service, not a person (#657), and a Terraform provider."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "One owner tier: the admin role and superuser access tied together (#758); and SCIM provisioning."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Warehouse analysis on Athena (#908) and ClickHouse, and intervals and the impact for mean metrics in a warehouse analysis."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Workspaces that keep teams' experiments and flags apart, not only group people."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Holdout results for mean metrics (#835)."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Quantile and funnel metrics, and metrics defined from dbt models."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Local evaluation in more server SDKs, including segments and the advanced operators."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Changes through the MCP server, under the same role checks, with a person approving risky ones (#1607)."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "More integrations, such as Slack and PagerDuty, when people ask for them."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "The one-command AWS installer out of beta (#1299)."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Scheduled flag changes beyond rollout schedules."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "What we won't do"
+by = ["exempt:label"]
+
+[[unit]]
+text = "No paid or proprietary feature tier."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Controlvar is an open-source project."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Shipped code stays open source: the core, the optional modules and the dashboard under Apache-2.0, the client SDKs under MIT."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_tree_is_apache_and_the_sdks_are_mit"]
+
+[[unit]]
+text = "Everything on this page lands in that code, approvals, SAML and SCIM included."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "No product analytics or session replay."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "Controlvar sends exposures to the tools that do this, and its warehouse analysis (beta) reads your own tables."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::is called once, with exactly the experiment key, user id, variant id and variant name, for an assigned: true answer",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_called_once_with_exactly_the_experiment_key_user_id_variant_id_and_variant_name",
+    "test:modules/backend/tests/unit/warehouse/test_connectors.py::test_enabled_connectors_exact",
+]
+
+[[unit]]
+text = "Not planned unless users ask: interleaving, switchbacks, contextual bandits, an AI-assisted visual editor, post-stratification, retention metrics, and effects by segment beyond breakdowns."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "No dates on this page."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "A date we cannot keep is worse than none."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "How to influence it"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Open an issue that describes the problem you are trying to solve, before the solution."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Add a 👍 to the issues that matter to you."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "Reactions inform priority; they are not a queue."
+by = ["exempt:policy"]
+
+[[unit]]
+text = "To contribute code or documentation, see CONTRIBUTING.md."
+by = ["exempt:navigation"]
