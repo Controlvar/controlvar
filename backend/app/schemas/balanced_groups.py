@@ -119,15 +119,17 @@ class BalancedGroupsResponse(BaseModel):
         description=(
             "Why overall is null: mean_metric (the primary metric is not a "
             "conversion), sequential_testing (the experiment uses sequential "
-            "testing) or too_few_users (no group has 2 users in every "
-            "variant). Null when overall is given."
+            "testing) or too_few_users (no treatment has users, or no group "
+            "has 2 users in every variant that has users). Null when overall "
+            "is given."
         ),
     )
     merged_groups: List[MergedGroup] = Field(
         default_factory=list,
         description=(
-            "Groups with fewer than 2 users in a variant, each counted in "
-            "overall with the largest group that has 2 in every variant."
+            "Groups with fewer than 2 users in a variant that has users, each "
+            "counted in overall with the largest group that has 2 in every "
+            "variant that has users."
         ),
     )
     users_outside_blocks: int = Field(
@@ -135,9 +137,9 @@ class BalancedGroupsResponse(BaseModel):
         ge=0,
         description=(
             "Users split without balancing: assigned by the hash because the "
-            "server was busy balancing others of their group, or by an older "
-            "server version (whose rows stored no group and are counted under "
-            "unknown)."
+            "server was busy balancing other users at that moment, or by an "
+            "older server version (whose rows stored no group and are counted "
+            "under unknown)."
         ),
     )
     unknown_share: Optional[float] = Field(

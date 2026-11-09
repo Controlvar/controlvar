@@ -53,9 +53,9 @@ def users_outside_blocks(db: Session, experiment_id: Any) -> int:
     How many of the experiment's users were split without balancing.
 
     The assignments with no place in their group (``balance_seq`` NULL):
-    users assigned by the hash because the server was busy balancing others
-    of their group, and users an older server version assigned, whose row
-    stored no group either.
+    users assigned by the hash because the server was busy balancing other
+    users at that moment, and users an older server version assigned, whose
+    row stored no group either.
     """
     return int(
         db.query(func.count(Assignment.id))

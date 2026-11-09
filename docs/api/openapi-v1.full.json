@@ -1704,7 +1704,7 @@
             "description": "One row per group: the breakdown's rows, with each user in the group stored when they were assigned. Exploratory, as every breakdown is: each row's significance uses adjusted_alpha, the Bonferroni threshold over the rows returned."
           },
           "merged_groups": {
-            "description": "Groups with fewer than 2 users in a variant, each counted in overall with the largest group that has 2 in every variant.",
+            "description": "Groups with fewer than 2 users in a variant that has users, each counted in overall with the largest group that has 2 in every variant that has users.",
             "items": {
               "$ref": "#/components/schemas/MergedGroup"
             },
@@ -1740,7 +1740,7 @@
                 "type": "null"
               }
             ],
-            "description": "Why overall is null: mean_metric (the primary metric is not a conversion), sequential_testing (the experiment uses sequential testing) or too_few_users (no group has 2 users in every variant). Null when overall is given.",
+            "description": "Why overall is null: mean_metric (the primary metric is not a conversion), sequential_testing (the experiment uses sequential testing) or too_few_users (no treatment has users, or no group has 2 users in every variant that has users). Null when overall is given.",
             "title": "Reason"
           },
           "unknown_share": {
@@ -1758,7 +1758,7 @@
             "title": "Unknown Share"
           },
           "users_outside_blocks": {
-            "description": "Users split without balancing: assigned by the hash because the server was busy balancing others of their group, or by an older server version (whose rows stored no group and are counted under unknown).",
+            "description": "Users split without balancing: assigned by the hash because the server was busy balancing other users at that moment, or by an older server version (whose rows stored no group and are counted under unknown).",
             "minimum": 0,
             "title": "Users Outside Blocks",
             "type": "integer"
@@ -31801,7 +31801,7 @@
     },
     "/api/v1/results/{experiment_id}/balanced-groups": {
       "get": {
-        "description": "The results of an experiment that balances its split within groups (#448).\n\n``groups`` has one row per group, each user in the group stored when they\nwere assigned: the rows of a breakdown (the 20 groups with the most\nusers, then ``other`` and ``unknown``), with each row's p-value and its\nBonferroni threshold. Per variant the rows add up to every user\nassigned. ``overall`` gives, for the primary metric, one estimate per\ntreatment over every group: each group's difference from the control\nweighted by the group's share of the users, at the experiment's\n``confidence_level``, corrected across the treatments with its\n``correction_method``. It is null, with ``reason``, for a primary metric\nthat is not a conversion, for an experiment with sequential testing, and\nwhen no group has 2 users in every variant. The experiment's results and\ntheir decision do not change.\n\nAn experiment that does not balance within groups answers 409. The\nanswer is computed on each request: it is not cached and no snapshot is\nrecorded.",
+        "description": "The results of an experiment that balances its split within groups (#448).\n\n``groups`` has one row per group, each user in the group stored when they\nwere assigned: the rows of a breakdown (the 20 groups with the most\nusers, then ``other`` and ``unknown``), with each row's p-value and its\nBonferroni threshold. Per variant the rows add up to every user\nassigned. ``overall`` gives, for the primary metric, one estimate per\ntreatment over every group: each group's difference from the control\nweighted by the group's share of the users, at the experiment's\n``confidence_level``, corrected across the treatments with its\n``correction_method``. It is null, with ``reason``, for a primary metric\nthat is not a conversion, for an experiment with sequential testing, and\nwhen no treatment has users or no group has 2 users in every variant that\nhas users. The experiment's results and their decision do not change.\n\nAn experiment that does not balance within groups answers 409. The\nanswer is computed on each request: it is not cached and no snapshot is\nrecorded.",
         "operationId": "get_balanced_groups_api_v1_results__experiment_id__balanced_groups_get",
         "parameters": [
           {

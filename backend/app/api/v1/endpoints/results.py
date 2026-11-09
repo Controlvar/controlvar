@@ -1849,8 +1849,8 @@ def get_balanced_groups(
     ``confidence_level``, corrected across the treatments with its
     ``correction_method``. It is null, with ``reason``, for a primary metric
     that is not a conversion, for an experiment with sequential testing, and
-    when no group has 2 users in every variant. The experiment's results and
-    their decision do not change.
+    when no treatment has users or no group has 2 users in every variant that
+    has users. The experiment's results and their decision do not change.
 
     An experiment that does not balance within groups answers 409. The
     answer is computed on each request: it is not cached and no snapshot is

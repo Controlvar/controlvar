@@ -359,6 +359,27 @@ def test_no_users_gives_too_few_users():
     assert _overall(no_control)["reason"] == bge.REASON_TOO_FEW_USERS
 
 
+@pytest.mark.parametrize("arms", [TWO_ARMS, THREE_ARMS], ids=["2-arms", "3-arms"])
+def test_only_the_control_having_users_gives_too_few_users(arms):
+    """The first users of a block can all be the control's: a 20/80 split
+    (control 80) puts 4 of each 5 places in the control. With no treatment
+    user there is nothing to compare, whatever the control's counts."""
+    groups = [
+        GroupCounts("gold", {CONTROL.variant_id: (3, 1)}),
+        GroupCounts("silver", {CONTROL.variant_id: (2, 0)}),
+    ]
+    result = _overall(groups, arms)
+    entries = [
+        (e["variant_name"].lower(), e["absolute_difference"])
+        for e in result["overall"] or []
+    ]
+    assert result == {
+        "overall": None,
+        "reason": bge.REASON_TOO_FEW_USERS,
+        "merged_groups": [],
+    }, f"reason={result['reason']} overall={entries}"
+
+
 def test_a_variant_with_no_users_has_an_empty_estimate_and_merges_nothing():
     """A variant with a 0% share gets no users: it compares with nothing, so it
     takes no part in the small-group rule and the others are estimated."""

@@ -116,9 +116,9 @@ results and their decision do not change.
   correction method. No CUPED adjustment is applied to it.
 - `overall` is `null`, with `reason`, for a primary metric that is not a conversion
   (`mean_metric`), for an experiment with sequential testing (`sequential_testing`), and when no
-  group has 2 users in every variant (`too_few_users`).
-- A group with fewer than 2 users in a variant is counted with the largest group that has 2 in
-  every variant, and listed in `merged_groups`.
+  treatment has users or no group has 2 users in every variant that has users (`too_few_users`).
+- A group with fewer than 2 users in a variant that has users is counted with the largest group
+  that has 2 in every variant that has users, and listed in `merged_groups`.
 - `users_outside_blocks` is the number of users split without balancing. `unknown_share` is the
   share in `unknown` of the users whose group was stored.
 - An experiment that does not balance within groups answers `409`.

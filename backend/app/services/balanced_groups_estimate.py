@@ -30,12 +30,13 @@ It is not the treatment coefficient of ``y ~ t * C(group)``, which is the
 first group's effect alone.
 
 Small groups: a group with fewer than ``MIN_USERS_PER_ARM`` users in a
-variant is counted with the largest group that has at least that many in
-every variant (``merge_small_groups``), and none having that many is
-``REASON_TOO_FEW_USERS``. A variant with no users at all compares with
-nothing, so it is left out of that rule and its estimate is empty. Merging is
-approximately unbiased, not exactly, and is valid because every group has the
-same target split.
+variant that has users is counted with the largest group that has at least
+that many in every variant that has users (``merge_small_groups``), and none
+having that many is ``REASON_TOO_FEW_USERS``. A treatment with no users at all
+compares with nothing, so it is left out of that rule and its estimate is
+empty; when no treatment has users, or the control has none, the answer is
+``REASON_TOO_FEW_USERS``. Merging is approximately unbiased, not exactly, and
+is valid because every group has the same target split.
 
 A standard error of 0 (every group's rate is 0 or 1 in both variants) gives
 no p-value and no interval, never a p-value of 0.0. The treatments' p-values
@@ -67,7 +68,8 @@ MIN_USERS_PER_ARM = 2
 REASON_MEAN_METRIC = "mean_metric"
 #: No estimate: the experiment uses sequential testing.
 REASON_SEQUENTIAL_TESTING = "sequential_testing"
-#: No estimate: no group has ``MIN_USERS_PER_ARM`` users in every variant.
+#: No estimate: no treatment has users, or no group has ``MIN_USERS_PER_ARM``
+#: users in every variant that has users.
 REASON_TOO_FEW_USERS = "too_few_users"
 
 #: A variant's users and converting users in one group.
@@ -249,6 +251,9 @@ def balanced_overall(
     compared = [control.variant_id] + [
         t.variant_id for t in treatments if users_of[t.variant_id] > 0
     ]
+    if len(compared) == 1:
+        # No treatment has users: there is nothing to compare.
+        return {"overall": None, "reason": REASON_TOO_FEW_USERS, "merged_groups": []}
     kept, merged = merge_small_groups(groups, compared)
     if kept is None:
         return {"overall": None, "reason": REASON_TOO_FEW_USERS, "merged_groups": []}

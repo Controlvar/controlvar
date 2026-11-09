@@ -328,18 +328,21 @@ text = "No CUPED adjustment is applied to it."
 by = ["test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_the_hand_worked_example_equals_the_regression"]
 
 [[unit]]
-text = "overall is null, with reason, for a primary metric that is not a conversion (mean_metric), for an experiment with sequential testing (sequential_testing), and when no group has 2 users in every variant (too_few_users)."
+text = "overall is null, with reason, for a primary metric that is not a conversion (mean_metric), for an experiment with sequential testing (sequential_testing), and when no treatment has users or no group has 2 users in every variant that has users (too_few_users)."
 by = [
     "test:backend/tests/integration/api/test_balanced_groups_results.py::test_a_mean_primary_metric_has_no_estimate",
     "test:backend/tests/integration/api/test_balanced_groups_results.py::test_sequential_testing_has_no_estimate",
     "test:backend/tests/integration/api/test_balanced_groups_results.py::test_too_few_users_has_no_estimate",
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_only_the_control_having_users_gives_too_few_users",
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_no_group_with_two_users_in_every_variant_gives_too_few_users",
 ]
 
 [[unit]]
-text = "A group with fewer than 2 users in a variant is counted with the largest group that has 2 in every variant, and listed in merged_groups."
+text = "A group with fewer than 2 users in a variant that has users is counted with the largest group that has 2 in every variant that has users, and listed in merged_groups."
 by = [
     "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_a_group_with_one_user_in_a_variant_is_merged_into_the_largest",
     "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_a_large_group_with_one_user_in_a_variant_is_merged_too",
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_a_variant_with_no_users_has_an_empty_estimate_and_merges_nothing",
     "test:backend/tests/integration/api/test_balanced_groups_results.py::test_a_small_group_is_merged_into_the_largest",
 ]
 
