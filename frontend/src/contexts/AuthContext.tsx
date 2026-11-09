@@ -3,6 +3,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -68,6 +69,9 @@ export interface AuthContextValue {
   /**
    * Re-fetch `/auth/me` (e.g. after a profile change). Resolves `null`, and
    * changes nothing, when a sign-in, sign-out or newer check came first.
+   * The same function for the provider's whole life, so a caller may keep
+   * the one from its first render. Before the sign-in configuration is known
+   * it resolves `null` at once; the check then runs when it is.
    */
   refresh: () => Promise<UserMe | null>;
   /** True when the current user has one of the given roles. */
@@ -233,6 +237,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [applyAnonymous, cognito, config, configLoading]);
 
+  // `refresh` is one function for the provider's whole life, and runs the
+  // check as it stands when it is called. loadMe is a new function once the
+  // configuration is known, and a page that keeps the `refresh` of its first
+  // render (/sso/complete does) would otherwise hold the one from before,
+  // which does nothing: the SSO sign-in then landed signed out (#708).
+  const latestLoadMe = useRef(loadMe);
+  useLayoutEffect(() => {
+    latestLoadMe.current = loadMe;
+  }, [loadMe]);
+  const refresh = useCallback((): Promise<UserMe | null> => latestLoadMe.current(), []);
+
   useEffect(() => {
     mounted.current = true;
     // loadMe does nothing until the configuration is known, and is a new
@@ -332,11 +347,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       logout,
       afterLogoutPath,
-      refresh: loadMe,
+      refresh,
       hasRole,
       sessionError,
     }),
-    [user, status, login, logout, afterLogoutPath, loadMe, hasRole, sessionError],
+    [user, status, login, logout, afterLogoutPath, refresh, hasRole, sessionError],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
