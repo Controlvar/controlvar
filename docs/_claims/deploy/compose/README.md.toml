@@ -198,6 +198,26 @@ text = "POSTGRES_SERVER | an external PostgreSQL instead of the bundled one; the
 by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_api_does_not_wait_on_the_bundled_database"]
 
 [[unit]]
+text = "AUTH_PROVIDER | how people sign in: local (the default), with accounts kept by the API, or cognito, with an Amazon Cognito user pool"
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestSignIn::test_local_unless_env_says_otherwise",
+    "test:backend/tests/unit/core/test_documented_defaults.py::test_sign_in_is_local_by_default",
+]
+
+[[unit]]
+text = "COGNITO_USER_POOL_ID, COGNITO_CLIENT_ID, COGNITO_DOMAIN | with AUTH_PROVIDER=cognito: the user pool, its app client, and its Hosted UI's domain name, <prefix>.auth.<region>.amazoncognito.com; empty by default"
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestSignIn::test_each_cognito_setting_is_passed_empty_by_default",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestSignIn::test_exactly_these_cognito_settings_and_no_aws_credentials",
+    "test:backend/tests/unit/core/test_cognito_hosted_ui_settings.py::test_a_domain_name_is_accepted",
+    "workflow:compose-production.yml",
+]
+
+[[unit]]
+text = "AWS_REGION | the user pool's region: us-east-1 by default"
+by = ["test:backend/tests/unit/infrastructure/test_production_compose.py::TestSignIn::test_the_region_defaults_to_the_apis_own"]
+
+[[unit]]
 text = "WAREHOUSE_CREDENTIALS_KEYS | turns on warehouse analysis in the full profile: Fernet keys, comma-separated, newest first, that encrypt the warehouse credentials the API stores; while it is empty, storing or using a credential answers 503 credentials_unavailable"
 by = [
     "test:backend/tests/unit/infrastructure/test_production_compose.py::TestFeatureKeys::test_the_api_is_passed_the_key_empty_by_default",

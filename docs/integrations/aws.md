@@ -280,6 +280,7 @@ answers 404.
 | `SECRET_KEY` | Yes | Application secret key (min 32 chars) |
 | `COGNITO_USER_POOL_ID` | Only for Cognito sign-in | AWS Cognito User Pool ID |
 | `COGNITO_CLIENT_ID` | Only for Cognito sign-in | Cognito app client ID |
+| `COGNITO_DOMAIN` | Only for sign-in through the Cognito Hosted UI | The Hosted UI's domain name, `<prefix>.auth.<region>.amazoncognito.com`, no scheme. A value that is not a domain name stops the API from starting |
 | `AWS_REGION` | Yes | Primary AWS region, read by Cognito and the other settings that name it. The Glue and DynamoDB counter clients do not read it |
 | `AWS_DEFAULT_REGION` | Full profile: yes, for the ETL routes | The region the Glue client (see [Glue](#glue-the-etl-routes)) and the DynamoDB counter client (see [DynamoDB](#dynamodb)) use. The CDK sets it to the stack's region. Outside the CDK set it yourself (Helm: `api.extraEnv`); without it the job and crawler routes answer 500 |
 | `GLUE_ETL_JOB_NAME`, `GLUE_METRICS_JOB_NAME`, `GLUE_CRAWLER_NAME`, `GLUE_DATABASE` | Full profile, for the ETL routes | The Glue job, crawler and database names the ETL routes accept. The CDK sets them to the glue-etl stack's `-<env>` names |

@@ -54,7 +54,14 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_FORMAT: json
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
-      AUTH_PROVIDER: local
+      # Sign-in: local (the default), or cognito with the user pool, its app
+      # client and its Hosted UI domain below, each empty unless .env sets it.
+      AUTH_PROVIDER: ${AUTH_PROVIDER:-local}
+      COGNITO_USER_POOL_ID: ${COGNITO_USER_POOL_ID:-}
+      COGNITO_CLIENT_ID: ${COGNITO_CLIENT_ID:-}
+      COGNITO_DOMAIN: ${COGNITO_DOMAIN:-}
+      # The user pool's region; the API uses us-east-1 when it is not set.
+      AWS_REGION: ${AWS_REGION:-us-east-1}
       DEV_AUTH_BYPASS: "false"
       PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:?required: the URL people open, e.g. https://controlvar.example.com}"
       SECRET_KEY: "${SECRET_KEY:?required: generate with openssl rand -hex 32}"
