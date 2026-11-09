@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
-from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.off_loop_route import OffLoopRoute, release_request_sessions
 from backend.app.api.sdk_scope import require_batch_assign_key
 from backend.app.core.balanced_blocks import balance_setting
 from backend.app.core.context_limits import check_context
@@ -399,10 +399,15 @@ async def assign_user_to_experiment(
         if balance_setting(experiment) is not None:
             # A balanced experiment's new user takes a place from their
             # group's counter row, which another request can be holding
-            # (#448): that wait, and everything after it, runs in the thread
-            # pool, never on the event loop. The request's session is used by
-            # one thread at a time. Every other experiment is assigned here,
-            # as before.
+            # (#448), so the assignment runs in a worker thread, off the event
+            # loop. The request's sessions are released first: their
+            # transaction ends and the connection goes back to the pool while
+            # the request waits for a worker, and the session, whose objects
+            # stay attached, reads again inside it (one thread at a time).
+            # test_route_worker_steps.py and the balanced row of
+            # test_api_key_routes_under_overload.py pin both. Every other
+            # experiment is assigned here, as before.
+            release_request_sessions()
             return await run_in_threadpool(assign_and_answer)
         return assign_and_answer()
     except ValidationError as e:
