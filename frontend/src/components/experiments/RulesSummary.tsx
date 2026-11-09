@@ -27,18 +27,20 @@ interface RulesSummaryProps {
  * stored rules with this, and the new-experiment Review shows the rules it is
  * about to send, so the two read the same.
  *
- * A stored segment condition shows the segment's name once the list has
- * loaded: the id while it loads, and the id (no banner) when the list cannot
- * be read, as for a role without segment access. An id the list does not
+ * A segment condition, stored or in the new-experiment Review, shows the
+ * segment's name once the list has loaded: the id while it loads, and the id
+ * (no banner) when the list cannot be read, as for a role without segment access. An id the list does not
  * contain is shown with "(segment not found)".
  */
 export function RulesSummary({ value, draft = false }: RulesSummaryProps) {
   const groups = (value.groups as Record<string, unknown>[]) ?? [];
-  const usesSegment =
-    !draft &&
-    groups.some((group) =>
-      ((group.conditions as Record<string, unknown>[]) ?? []).some((condition) => isSegmentOperator(condition.operator)),
-    );
+  // In the Review a segment condition with no value yet is not looked up.
+  const hasSegmentId = (condition: Record<string, unknown>): boolean =>
+    isSegmentOperator(condition.operator) &&
+    (!draft || (typeof condition.value === 'string' && condition.value !== ''));
+  const usesSegment = groups.some((group) =>
+    ((group.conditions as Record<string, unknown>[]) ?? []).some(hasSegmentId),
+  );
   const segmentList = useSegmentList(usesSegment);
   const segmentName = (id: string): string => {
     if (segmentList.state !== 'ready') return id;
@@ -46,7 +48,7 @@ export function RulesSummary({ value, draft = false }: RulesSummaryProps) {
     return found ? found.name : `${id} ${SEGMENT_NOT_FOUND}`;
   };
   const describe = (condition: Record<string, unknown>): string =>
-    draft ? describeDraftCondition(condition) : describeCondition(condition, segmentName);
+    draft ? describeDraftCondition(condition, segmentName) : describeCondition(condition, segmentName);
   const conditionList = (group: Record<string, unknown>) => {
     const conditions = (group.conditions as Record<string, unknown>[]) ?? [];
     return (

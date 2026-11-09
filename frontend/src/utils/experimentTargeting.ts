@@ -157,14 +157,22 @@ export const VALUE_NOT_SET = '(value not set)';
  * an operator that takes one), so the creation that follows says what to fix.
  * Rules already stored are described as stored, by `describeCondition`.
  */
-export function describeDraftCondition(condition: Record<string, unknown>): string {
+export function describeDraftCondition(
+  condition: Record<string, unknown>,
+  segmentName?: (segmentId: string) => string,
+): string {
   const attribute = String(condition.attribute ?? '');
   const value = condition.value;
-  return describeCondition({
-    ...condition,
-    attribute: attribute.trim() === '' ? ATTRIBUTE_NOT_SET : attribute,
-    value: value === null || value === undefined || value === '' ? VALUE_NOT_SET : value,
-  });
+  const blank = value === null || value === undefined || value === '';
+  return describeCondition(
+    {
+      ...condition,
+      attribute: attribute.trim() === '' ? ATTRIBUTE_NOT_SET : attribute,
+      value: blank ? VALUE_NOT_SET : value,
+    },
+    // A value not set is not a segment id to look up.
+    blank ? undefined : segmentName,
+  );
 }
 
 /** "all" for AND (or absent), "any" for OR: how a list of things combines, in words. */
