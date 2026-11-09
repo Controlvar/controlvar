@@ -227,7 +227,11 @@ def test_the_cognito_path_with_a_role_sync_request(client, db_session, monkeypat
         sub = f"sub-{uuid.uuid4().hex[:10]}"
         return {
             "username": f"{TAG}cog_{name}_{sub}",
-            "attributes": {"sub": sub, "email": f"{name}-{sub}@rev.test"},
+            "attributes": {
+                "sub": sub,
+                "email": f"{name}-{sub}@rev.test",
+                "email_verified": "true",
+            },
             "groups": groups,
         }
 

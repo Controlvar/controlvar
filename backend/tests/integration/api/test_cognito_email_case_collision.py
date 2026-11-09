@@ -69,7 +69,11 @@ def test_a_case_variant_on_first_cognito_sign_in_is_refused_with_401(
         "get_user_with_groups",
         lambda token: {
             "username": newcomer,
-            "attributes": {"sub": str(uuid.uuid4()), "email": existing.email.lower()},
+            "attributes": {
+                "sub": str(uuid.uuid4()),
+                "email": existing.email.lower(),
+                "email_verified": "true",
+            },
             "groups": ["Admins"],
         },
     )
