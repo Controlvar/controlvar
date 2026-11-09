@@ -88,7 +88,7 @@ MESSAGES: Mapping[WarehouseErrorCode, str] = {
     _C.UNREACHABLE: "The warehouse could not be reached.",
     _C.UNRECOGNISED_WAREHOUSE_ERROR: (
         "{warehouse} returned an error we don't recognise (code {vendor_code}). "
-        "See Troubleshooting."
+        "See Troubleshooting in the warehouse analysis docs."
     ),
     _C.INTERNAL: "Something went wrong on our side while talking to the warehouse.",
 }

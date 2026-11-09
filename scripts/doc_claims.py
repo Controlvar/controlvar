@@ -949,6 +949,33 @@ MECHANISMS: Dict[str, Mechanism] = {
             ),
         ),
     ),
+    # The Troubleshooting table: one row per error code, each with the status a
+    # route answers with (#1809). The wording of a row's two last cells is read
+    # in review; the test holds the code set and the status.
+    "warehouse-troubleshooting": Mechanism(
+        "modules/backend/tests/unit/test_warehouse_docs_availability.py"
+        "::test_the_troubleshooting_table_has_one_row_per_error_code_with_its_status",
+        holds=(
+            (
+                "docs/api/warehouse-analytics.md",
+                r"^(?:Code \| Status \| What it means \| What to check"
+                r"|[a-z0-9_]{3,40} \| [0-9]{3} \| [^|]{1,700} \| [^|]{1,700})$",
+            ),
+        )
+        + _whole(
+            "docs/api/warehouse-analytics.md",
+            "The codes below are the whole set.",
+            "A failed call answers with one as code, and a failed run reports one as its error_code.",
+            'A metric that could not be computed can carry fewer_than_2_units, no_units or join_key_mismatch as its "Not computed" reason while the run itself succeeds.',
+            "Status is the HTTP status of a route that answers with the code directly.",
+        ),
+    ),
+    # The heading the unrecognised-error text points at.
+    "warehouse-troubleshooting-pointer": Mechanism(
+        "modules/backend/tests/unit/test_warehouse_docs_availability.py"
+        "::test_the_unrecognised_error_text_names_a_section_the_page_has",
+        holds=_whole("docs/api/warehouse-analytics.md", "Troubleshooting"),
+    ),
     # The Doc Examples guide's "When the check fails" sample is what the check
     # prints; the sentence above the sample says what that output is.
     "doc-examples-failure-sample": Mechanism(
