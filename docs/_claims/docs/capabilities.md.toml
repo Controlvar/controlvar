@@ -1,0 +1,427 @@
+# What verifies each unit of docs/capabilities.md.
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/capabilities.md"
+
+[[unit]]
+text = "What Controlvar does today"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The main capabilities of Controlvar, one line each, grouped by area; each line links the page that explains it."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "(beta) marks a capability its own page calls beta; each route's level is in API stability."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "(full profile) marks a capability of the optional modules (Modules & Profiles)."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Experiments and statistics"
+by = ["exempt:label"]
+
+[[unit]]
+text = "A/B and multivariate experiments: the server assigns each user a variant, and the same user always gets the same one."
+by = ["test:backend/tests/integration/api/test_tracking_api.py::TestAssign::test_assigns_user_to_a_variant_and_is_sticky"]
+
+[[unit]]
+text = "Frequentist results: judged at the experiment's confidence level, with Benjamini-Hochberg (the default) or Bonferroni correction across its variants."
+by = [
+    "test:backend/tests/integration/api/test_experiment_correction_settings_api.py::test_a_new_experiment_stores_benjamini_hochberg_at_095",
+    "test:backend/tests/unit/services/test_binomial_metric_result_characterisation.py::test_binomial_metric_result_characterisation",
+]
+
+[[unit]]
+text = "Sequential testing (beta): mSPRT with always-valid confidence intervals, so you can read results at any time."
+by = [
+    "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_aa_false_rejections_under_peeking",
+    "test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_cs_anytime_coverage",
+    "test:backend/tests/unit/core/test_analysis_status.py::test_demoted_routes_are_beta_in_the_openapi_document",
+]
+
+[[unit]]
+text = "Bayesian analysis: each variant's chance to be best, the expected loss of choosing it, and a stopping recommendation."
+by = [
+    "test:backend/tests/unit/api/test_bayesian_results_api.py::TestBayesianResultsField::test_bayesian_results_present_when_bayesian_enabled",
+    "test:backend/tests/unit/stats_validation/test_bayesian_stop_winner.py::test_power_at_one_quarter_relative_lift",
+    "test:backend/tests/unit/services/test_bayesian_service.py::test_expected_loss_decreases_with_more_data",
+]
+
+[[unit]]
+text = "CUPED (beta): narrower intervals from each user's pre-experiment history, through the API."
+by = [
+    "test:backend/tests/unit/services/test_cuped_metric_result.py::test_s1_planted_correlation_removes_60_to_68_percent",
+    "test:backend/tests/unit/core/test_analysis_status.py::test_demoted_routes_are_beta_in_the_openapi_document",
+]
+
+[[unit]]
+text = "Sample size planning: the Power Calculator and guided setup before an experiment, and the results page's Sample Size tab during it."
+by = [
+    "test:backend/tests/integration/api/test_results_sample_size_api.py::test_the_tab_and_the_guided_setup_agree",
+    "test:frontend/src/tests/pages/power-calculator-names.test.tsx",
+]
+
+[[unit]]
+text = "Multi-armed bandits: new users go more often to the variants that perform better."
+by = [
+    "test:backend/tests/unit/services/test_bandit_scheduler.py::TestBanditSchedulerIntegration::test_thompson_weights_shift_toward_better_variant",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestBanditAssignment::test_new_users_follow_bandit_weights",
+]
+
+[[unit]]
+text = "Mutual exclusion groups and a global holdout: a user joins at most one experiment of a group, and the holdout keeps a share of new users out of every experiment (its results are beta)."
+by = [
+    "test:backend/tests/integration/services/test_mutual_exclusion_sticky.py::TestGroupRules::test_m9_with_both_live_from_the_start_each_user_is_in_exactly_one",
+    "test:backend/tests/unit/services/test_assignment_service_eligibility.py::TestHoldout::test_user_in_holdout_is_not_assigned",
+    "test:backend/tests/unit/core/test_analysis_status.py::test_demoted_routes_are_beta_in_the_openapi_document",
+]
+
+[[unit]]
+text = "Breakdowns: results by a user attribute such as device or country, flagged when the effect differs between segments."
+by = [
+    "test:backend/tests/unit/api/test_dimensional_analysis_api.py::TestBreakdownQueryParam::test_breakdown_response_contains_segments",
+    "test:backend/tests/unit/api/test_dimensional_analysis_api.py::TestBreakdownQueryParam::test_hte_detected_sets_flag_and_warning",
+    "test:backend/tests/unit/services/test_dimensional_analysis_service.py::TestDetectHTE::test_hte_detected_when_effects_differ_strongly",
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_a_user_with_events_in_two_segments_is_in_one",
+]
+
+[[unit]]
+text = "Interaction detection: a scan for running experiments that share users, and a test of one pair of them (beta)."
+by = [
+    "docex:docs/api/interaction-detection.md#\"total_active_experiments\": 4",
+    "test:backend/tests/integration/api/test_analysis_beta_labels.py",
+    "test:backend/tests/unit/core/test_analysis_status.py::test_demoted_routes_are_beta_in_the_openapi_document",
+]
+
+[[unit]]
+text = "Live results: a WebSocket that sends an experiment's results every 30 seconds by default."
+by = ["test:backend/tests/integration/api/test_websocket_results.py::TestPeriodicSnapshots::test_the_interval_is_30_seconds_by_default"]
+
+[[unit]]
+text = "Scheduling: start and end dates that the scheduler acts on, and a scheduled resume after a pause."
+by = [
+    "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestUpdateExperimentSchedule::test_admin_can_schedule_draft_experiment",
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p2_scheduled_resume_is_recorded_and_fires",
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p8_one_tick_starts_and_ends_only_what_is_due",
+]
+
+[[unit]]
+text = "Split URL experiments (full profile, beta): each variant is its own page, and your server or edge sends each visitor to theirs."
+by = [
+    "test:modules/backend/tests/integration/split_url/test_split_url_assign_e2e.py::test_a_split_url_experiment_splits_its_visitors",
+    "test:backend/tests/unit/api/test_capabilities_beta_operations.py::test_a_module_operation_the_page_calls_beta_is_beta",
+]
+
+[[unit]]
+text = "Warehouse analysis (full profile, beta): an experiment's analysis run on tables in your own Snowflake or BigQuery warehouse."
+by = [
+    "test:modules/backend/tests/unit/warehouse/test_connectors.py::test_enabled_connectors_exact",
+    "test:modules/backend/tests/integration/warehouse/test_runs_api.py",
+    "test:modules/backend/tests/smoke/test_warehouse_routes_contract.py::test_every_warehouse_route_is_beta",
+]
+
+[[unit]]
+text = "LLM experiments: users split between model variants, with an optional LLM judge that scores the answers."
+by = [
+    "test:backend/tests/integration/api/test_llm_experiments_api.py::TestJudgeEndpoint::test_judge_endpoint_returns_list",
+    "test:backend/tests/unit/services/test_llm_experiment_service.py::TestVariantAssignment::test_same_user_always_same_variant",
+    "test:backend/tests/unit/services/test_llm_analytics.py::TestRunLLMAsJudge::test_judge_scores_evaluations",
+]
+
+[[unit]]
+text = "Feature flags and rollouts"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Feature flags: on or off for each user, or serving a string, number or JSON value instead."
+by = [
+    "test:backend/tests/integration/api/test_flag_values_api.py::test_a_value_flag_is_created_and_its_values_changed",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_a_boolean_flag_serves_false_when_off_and_a_value_flag_its_off_value",
+]
+
+[[unit]]
+text = "Rollout percentage: a flag is on for a share of users, and a targeting rule can give the users it matches their own share."
+by = ["test:backend/tests/integration/services/test_feature_flag_targeting_rules.py::TestDashboardRules::test_matched_rule_uses_rule_percentage_unmatched_uses_global"]
+
+[[unit]]
+text = "Rollout schedules: a flag's percentage raised in stages, each started at its date or by hand."
+by = [
+    "test:backend/tests/unit/core/test_rollout_stage_order.py::test_a_time_based_stage_starts_once_the_stage_before_it_is_complete",
+    "test:backend/tests/integration/api/test_rollout_schedules_api.py::TestRolloutStages::test_advance_manual_stage_on_active_schedule",
+]
+
+[[unit]]
+text = "Safety monitoring: each active flag's error rate and latency checked against your thresholds, and an automatic rollback on a breach when you turn that on."
+by = [
+    "test:backend/tests/integration/api/test_safety_defaults_and_manual_rollback.py::test_a_flag_with_its_own_configuration_is_checked_against_its_own_thresholds_only",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_rollback_uses_config_rollback_percentage",
+    "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_no_rollback_when_automatic_rollbacks_disabled",
+]
+
+[[unit]]
+text = "Turning a flag off: the server answers off from the next evaluation, and each SDK once its cached answer expires."
+by = [
+    "test:backend/tests/integration/api/test_feature_flag_kill_switch.py::TestKillSwitch::test_disabled_flag_evaluates_off_for_sdk_clients",
+    "test:backend/tests/unit/sdk/test_kill_switch_numbers.py::test_every_sdk_but_the_edge_sdk_keeps_an_answer_five_minutes_and_the_edge_sdk_one",
+]
+
+[[unit]]
+text = "Stale flags: the flag list marks a flag that looks ready to remove, and says why; listing changes no flag."
+by = [
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v14_stale_true_false_and_omitted_are_exact_sets",
+    "test:backend/tests/integration/api/test_stale_flags_api.py::test_v19_listing_changes_no_flag_and_records_nothing",
+]
+
+[[unit]]
+text = "Slack alerts: a message when the safety monitor rolls a flag back, a rollout stage advances, or the scheduler starts, resumes or completes an experiment."
+by = [
+    "test:backend/tests/unit/schedulers/test_scheduler_notifications.py::TestSafetySchedulerNotifications::test_safety_rollback_calls_notify_safety_rollback",
+    "test:backend/tests/unit/schedulers/test_scheduler_notifications.py::TestRolloutSchedulerNotifications::test_rollout_advance_calls_notify_rollout_advanced",
+    "test:backend/tests/unit/services/test_notification_delivery_rules.py::test_scheduled_changes_go_to_slack_and_no_route_sends_a_notification",
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p8_one_tick_starts_and_ends_only_what_is_due",
+    "test:backend/tests/integration/services/test_scheduler_pause_semantics.py::test_p2_scheduled_resume_is_recorded_and_fires",
+]
+
+[[unit]]
+text = "Targeting and segments"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Targeting rules: more than 20 operators, including semantic versions, geo-distance and time windows, answered the same way for flags and experiments."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_rules_engine_has_more_than_20_operators",
+    "test:backend/tests/unit/core/test_rules_engine_advanced.py::TestAdvancedOperators::test_semantic_version_operator",
+    "test:backend/tests/unit/services/test_experiment_flag_targeting_parity.py::test_both_evaluators_answer_each_operator_alike",
+]
+
+[[unit]]
+text = "Experiment eligibility: a new user whom the global holdout, an exclusion group or the experiment's targeting keeps out gets the control variant, and nothing is recorded for them."
+by = [
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_holdout_users_get_control_and_are_not_recorded",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_mutual_exclusion_assigns_each_user_to_exactly_one_experiment",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignEligibility::test_dashboard_shaped_targeting_rules_gate_new_users",
+]
+
+[[unit]]
+text = "Segments: a named group of users, by rules or by an uploaded list of user ids, that a flag or an experiment can target (adding and removing ids is beta)."
+by = [
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_kind_defaults_to_rules",
+    "test:backend/tests/integration/api/test_segment_members_api.py::test_kind_an_id_list_is_created_without_rules",
+    "test:backend/tests/integration/api/test_segment_targeting_api.py::test_rules_naming_an_active_segment_are_accepted",
+    "test:backend/tests/unit/api/test_capabilities_beta_operations.py::test_a_core_operation_the_page_calls_beta_is_beta",
+]
+
+[[unit]]
+text = "SDKs and the MCP server"
+by = ["exempt:label"]
+
+[[unit]]
+text = "16 SDKs for experiment assignment, flag evaluation and event tracking; 13 of them run against a live API in CI."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_thirteen_of_the_sixteen_sdks_run_the_live_contract"]
+
+[[unit]]
+text = "Released SDKs: the JavaScript, React, React Native, Python, Java and .NET SDKs and the OpenFeature providers are on npm, PyPI, Maven Central or NuGet, and the Go SDK installs by module path."
+by = [
+    "mechanism:registry-availability",
+    "journey:sdk-go#quick-start-user-on",
+]
+
+[[unit]]
+text = "Local evaluation (beta): the JavaScript and Python SDKs answer flags in a server process from a downloaded ruleset, with no request per evaluation."
+by = [
+    "test:sdk/js/__tests__/local.test.ts::after ready, evaluations make no request and follow the attributes passed",
+    "test:sdk/python/tests/test_local.py",
+    "test:backend/tests/unit/api/test_capabilities_beta_operations.py::test_a_core_operation_the_page_calls_beta_is_beta",
+]
+
+[[unit]]
+text = "Exposure hook: the JavaScript, Python, Go, React, React Native, Java and .NET SDKs call your function when a user is enrolled, so you can send the exposure to your analytics tool."
+by = [
+    "test:sdk/js/__tests__/exposure.test.ts::is called once, with exactly the experiment key, user id, variant id and variant name, for an assigned: true answer",
+    "test:sdk/python/tests/test_exposure.py::TestWhenItIsCalled::test_is_called_once_with_exactly_the_experiment_key_user_id_variant_id_and_variant_name",
+    "test:sdk/go/exposure_test.go::TestOnExposure_CalledOnceWithTheFourValues",
+    "test:sdk/react/src/__tests__/exposure.test.tsx::is called once for an assigned: true answer, with exactly the four values",
+    "test:sdk/react-native/__tests__/exposure.test.tsx::is called once, with exactly the experiment key, user id, variant id and variant name, for an assigned: true answer",
+    "test:sdk/java/core/src/test/java/com/controlvar/sdk/ExposureListenerTest.java::calledOnceWithTheFourValues",
+    "test:sdk/dotnet/tests/Controlvar.Tests/ExposureTests.cs::IsCalledOnceForAnAssignedTrueAnswerWithTheFourValues",
+]
+
+[[unit]]
+text = "The MCP server: an AI assistant starts it on your computer to read your flags, experiments and results with your API key; it changes no flag or experiment."
+by = [
+    "test:sdk/mcp/__tests__/surface.test.ts::the six tools and their annotations, whatever tools.json says",
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_sdk_mcp_is_the_mcp_server_and_not_an_sdk",
+]
+
+[[unit]]
+text = "The dashboard"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Guided setup: an A/B or multivariate experiment in five steps, with an optional sample-size estimate."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-guided.test.tsx::offers exactly the types the single-page form offers",
+    "journey:experiment-wizard#new-experiment",
+]
+
+[[unit]]
+text = "The results page: each variant's users, the planned sample reached, the leading variant and the sample ratio check."
+by = [
+    "journey:experiment-results#results-page",
+    "journey:experiment-results#ratio-results-page",
+]
+
+[[unit]]
+text = "Experiment pages: start, pause, resume and complete an experiment, clone it, and edit, schedule or delete a draft."
+by = [
+    "test:frontend/src/tests/pages/experiment-detail-manage.test.tsx::POSTs /clone with no body and goes to the NEW experiment",
+    "test:frontend/src/tests/pages/experiment-detail-manage.test.tsx::asks in the page, then DELETEs with the experiment key and goes to the list",
+    "test:frontend/src/tests/pages/experiment-detail-schedule.test.tsx",
+    "test:frontend/src/tests/pages/experiment-detail.test.tsx",
+]
+
+[[unit]]
+text = "Administration: users and their roles, API keys, and the audit log, which downloads as CSV or JSON (the download is beta)."
+by = [
+    "test:frontend/src/tests/pages/admin-accounts-and-keys.test.tsx::a superuser creates an account under Admin → Users",
+    "test:frontend/src/tests/pages/admin-accounts-and-keys.test.tsx::a superuser creates an API key under Admin → API Keys",
+    "test:frontend/src/tests/admin/AuditLogAccess.test.tsx",
+    "test:backend/tests/integration/api/test_audit_export.py::test_each_filter_returns_exactly_its_rows_newest_first",
+    "test:backend/tests/unit/api/test_capabilities_beta_operations.py::test_a_core_operation_the_page_calls_beta_is_beta",
+]
+
+[[unit]]
+text = "What has a screen and what is API only, capability by capability."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Self-hosting and deployment"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Docker Compose: one host, on the published images; it builds nothing."
+by = [
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_images_are_the_published_ones_at_this_version",
+    "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_nothing_is_built",
+]
+
+[[unit]]
+text = "Kubernetes: a Helm chart, which CI installs on a kind cluster."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_chart_is_installed_on_a_kind_cluster"]
+
+[[unit]]
+text = "AWS CDK: stacks that provision the API, the dashboard and their data stores in your AWS account."
+by = [
+    "test:infrastructure/tests/test_app_profiles.py::TestTheAppActuallySynthesises::test_synth_completes",
+    "test:infrastructure/tests/test_dashboard_service.py::test_the_app_has_exactly_two_ecs_services",
+]
+
+[[unit]]
+text = "AWS installer (beta): one command that runs the CDK steps for you, for the core profile in us-west-2."
+by = [
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_clean_run_installs",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_help_says_beta_and_lists_only_the_options",
+    "test:backend/tests/installer_sweeps/test_install_checks.py::test_every_message_ends_a_run_by_the_rules",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_the_full_profile_stops_before_the_deploy",
+    "test:backend/tests/installer_sweeps/test_install_run.py::test_every_regional_call_is_in_us_west_2",
+]
+
+[[unit]]
+text = "Signed releases: each image is signed with cosign and carries an SBOM, and you can verify both."
+by = [
+    "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_each_image_is_signed_and_carries_its_sbom_as_an_attestation",
+    "docex:docs/self-hosting/releases.md#https://github.com/getexperimently/experimently/.github/workflows/release.yml@refs/",
+]
+
+[[unit]]
+text = "Two profiles: core, and full with the optional modules; GET /api/v1/modules says which one is running."
+by = [
+    "test:backend/tests/unit/api/test_modules_endpoint.py::TestModulesEndpointShape::test_profile_matches_the_loader",
+    "test:backend/tests/smoke/test_core_boundary.py::test_register_core_routers_mounts_no_module_route",
+]
+
+[[unit]]
+text = "Monitoring: Prometheus metrics at /metrics, structured logs and health probes."
+by = [
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestMetricsEndpoint::test_exposition_content_type",
+    "test:backend/tests/unit/core/test_health_endpoints.py::TestLiveness::test_live_is_200_and_does_not_touch_dependencies",
+    "test:backend/tests/unit/core/test_logger.py::test_configure_logging_json_mode",
+]
+
+[[unit]]
+text = "Security, roles and audit"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Four built-in roles: Admin, Developer, Analyst, Viewer."
+by = [
+    "test:backend/tests/unit/api/test_documented_limits.py::test_there_are_four_built_in_roles",
+    "test:backend/tests/unit/core/test_permissions.py::TestHasPermission::test_admin_has_permission",
+]
+
+[[unit]]
+text = "Custom roles and grants (full profile): roles beyond the four, and permissions granted to one user, optionally until a date."
+by = [
+    "test:modules/backend/tests/unit/services/test_rbac_service.py::TestCreateCustomRole::test_creates_role_with_name",
+    "test:modules/backend/tests/integration/rbac/test_rbac_provider.py::test_a_grant_yields_its_pairs_only_when_activated_active_and_unexpired",
+    "test:modules/backend/tests/integration/rbac/test_rbac_provider.py::test_an_assignment_yields_its_roles_pairs_only_when_activated",
+]
+
+[[unit]]
+text = "Audit log: the changes people make through the API to flags, experiments, rollout schedules and API keys, and no API edits or deletes an entry."
+by = [
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_create",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_experiment_create_update_delete",
+]
+
+[[unit]]
+text = "Signed audit events and compliance reports (full profile): HMAC-signed events, SOC 2 and ISO 27001 reports, and an audit export."
+by = [
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestComplianceReports::test_soc2_report_returns_200",
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestComplianceReports::test_iso27001_report_returns_200",
+    "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestAuditExport::test_admin_can_export_csv",
+    "test:modules/backend/tests/unit/api/test_compliance_signing.py::TestAuditEventSignature::test_audit_event_has_hmac_signature",
+    "test:modules/backend/tests/unit/services/test_compliance_report_service.py::TestGenerateSoc2Report::test_report_breaks_down_by_action",
+    "test:modules/backend/tests/unit/services/test_compliance_report_service.py::TestGenerateSoc2Report::test_iso27001_report_covers_730_days_by_default",
+    "docex:docs/api/compliance.md#\"standard\": \"soc2\"",
+]
+
+[[unit]]
+text = "API keys: shown once and stored hashed, with scopes for local evaluation and the MCP server."
+by = [
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestCreate::test_create_returns_plaintext_once",
+    "test:backend/tests/integration/api/test_api_keys_api.py::TestList::test_lists_only_own_keys_without_secret",
+    "test:backend/tests/smoke/test_sdk_scoped_routes.py",
+    "test:backend/tests/smoke/test_mcp_read_routes.py::test_the_mcp_read_routes_are_exactly_these",
+]
+
+[[unit]]
+text = "Single sign-on (full profile): OIDC providers, with an account created at a user's first sign-in and roles mapped from the provider's groups."
+by = [
+    "journey:sso-sign-in#account-created",
+    "journey:sso-sign-in#role-from-groups",
+    "test:modules/backend/tests/unit/services/test_sso_settings_checks_and_messages.py::test_role_mapping_keys_match_exactly_and_default_to_empty",
+]
+
+[[unit]]
+text = "HIPAA module (full profile): PHI encryption, a PHI access log and BAA records."
+by = [
+    "test:modules/backend/tests/integration/api/test_hipaa_api.py::TestEncryptDecrypt::test_encrypt_decrypt_round_trip",
+    "test:modules/backend/tests/unit/services/test_hipaa_service.py::TestLogPhiAccess::test_retention_years_set_to_6",
+    "test:modules/backend/tests/unit/services/test_hipaa_service.py::TestCreateBaa::test_creates_baa_and_commits",
+]
+
+[[unit]]
+text = "Workspaces (full profile): users grouped into teams; a workspace role does not decide access to experiments and flags."
+by = [
+    "test:modules/backend/tests/unit/services/test_workspace_service.py::TestCreateWorkspace::test_create_workspace_owner_added_as_member",
+    "test:backend/tests/unit/api/test_documented_limits.py::test_the_permission_check_reads_grants_only_through_the_capability",
+]
+
+[[unit]]
+text = "What Controlvar does not do is in Limitations, and what is planned, Now, Next and Later, is in the roadmap."
+by = ["exempt:navigation"]

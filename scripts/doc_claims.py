@@ -827,6 +827,14 @@ MECHANISMS: Dict[str, Mechanism] = {
                 "docs/sdk-guide.md",
                 r"^The Java SDK and its Spring Boot starter are on Maven Central:$",
             ),
+            (
+                "docs/capabilities.md",
+                r"^Released SDKs: ",
+            ),
+            (
+                "README.md",
+                r"^The @controlvar/mcp-server package is on npm\.$",
+            ),
         ),
     ),
     # The one sentence per SDK page about the live contract job.
