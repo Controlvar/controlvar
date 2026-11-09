@@ -6,11 +6,12 @@ of ``POST /api/v1/api-keys``; only its SHA-256 hash is stored.
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Annotated, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
 
+from backend.app.api.datetime_bounds import storable_offset
 from backend.app.core.api_key_scopes import normalise_scope_list, parse_scopes
 
 # Length of the visible prefix (``eptk_`` + first 4 hex chars) shown in lists.
@@ -25,7 +26,8 @@ class APIKeyCreate(BaseModel):
     scopes: Optional[List[str]] = Field(
         None, description="Optional list of scope names (stored comma-separated)"
     )
-    expires_at: Optional[datetime] = None
+    # An offset the database cannot store answered 500 (#956): 422 instead.
+    expires_at: Annotated[Optional[datetime], AfterValidator(storable_offset)] = None
 
     @field_validator("name", mode="before")
     @classmethod
