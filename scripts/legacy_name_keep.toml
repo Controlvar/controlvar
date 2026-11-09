@@ -1354,13 +1354,31 @@ count = 1
 reason = "K14: marker already on restored AWS resources"
 
 [[keep]]
-path = "infrastructure/cdk/stacks/fargate_service_stack.py"
+path = "infrastructure/cdk/stacks/names.py"
+literal = "Experimently/<env>"
+count = 1
+reason = "K15: the CloudWatch namespace; a new one orphans metric history"
+
+[[keep]]
+path = "infrastructure/cdk/stacks/names.py"
 literal = "Experimently/{env"
 count = 1
 reason = "K15: the CloudWatch namespace; a new one orphans metric history"
 
 [[keep]]
 path = "infrastructure/tests/test_standing_alarms.py"
+literal = "Experimently/{env"
+count = 3
+reason = "K15: the CloudWatch namespace; a new one orphans metric history"
+
+[[keep]]
+path = "infrastructure/tests/test_dashboards.py"
+literal = "Experimently/<env>"
+count = 2
+reason = "K15: the CloudWatch namespace; a new one orphans metric history"
+
+[[keep]]
+path = "infrastructure/tests/test_dashboards.py"
 literal = "Experimently/{env"
 count = 1
 reason = "K15: the CloudWatch namespace; a new one orphans metric history"
