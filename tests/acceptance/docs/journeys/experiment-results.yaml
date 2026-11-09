@@ -44,12 +44,13 @@
 #   for the 5% default (#1257).
 #
 # Then the two further analyses the guide names ("Bayesian Analysis",
-# "Sequential Testing"), turned on through the API on two of the running
-# experiments, as docs/api/sequential-testing.md and docs/api/bayesian.md turn
-# them on (the demo administrator is a superuser, so a running experiment's
-# settings may change), and read from their own routes, which are not cached.
-# Each number is held to an oracle written from those pages and textbook
-# formulas, not from the API's code (oracles.py):
+# "Sequential Testing"), turned on through the API for two of the experiments
+# while each is still a draft: a PUT after the step that finds or makes the
+# draft and before the step that starts the experiment, so before its traffic
+# (docs/api/sequential-testing.md and docs/api/bayesian.md set them when they
+# create their own experiment). They are read after the traffic, from their own
+# routes, which are not cached. Each number is held to an oracle written from
+# those pages and textbook formulas, not from the API's code (oracles.py):
 #
 # * Sequential (mSPRT), on the A/B experiment at the documented defaults
 #   (tau_squared 0.001, alpha 0.05): lambda 4.6007 under the boundary of 20, so
@@ -143,8 +144,9 @@
 # sample variance, n - 1) over its size; the p-value is a two-sided z-test's
 # and the interval goes with it.
 #
-# * New users: CUPED turned on, by PUT as api/cuped.md does, for the A/B
-#   experiment, whose users sent nothing before their assignment. theta,
+# * New users: CUPED set by a PUT on the A/B experiment while it is a draft,
+#   before its start, with api/cuped.md's setting (the method cuped and a
+#   7-day lookback). Its users sent nothing before their assignment. theta,
 #   the coverage and the variance reduction are 0 exactly, and every adjusted
 #   number is the unadjusted one: the effect 0.06, its standard error 0.023715
 #   (p 0.0114, the interval 0.0135 to 0.1065).
@@ -170,8 +172,9 @@
 #
 # The results are cached for up to five minutes, so each experiment's
 # population is complete before its results are first read, on the page or
-# through the API; nothing reads them earlier, so no cached answer can be
-# stale and the journey needs no invalidation.
+# through the API, and every analysis is set before its experiment starts;
+# nothing reads the results earlier and nothing changes a setting later, so no
+# cached answer can be stale and the journey needs no invalidation.
 #
 # Not recorded whole (video): the journey makes an API key
 # (model.reveals_credential). The launch walkthrough R5 (recordings.toml)
@@ -408,6 +411,79 @@ steps:
           - text: Draft
           - button "Start"
     fail: Create Experiment does not create a draft and land on its page
+  - id: find-experiment
+    doc: reading-results
+    do:
+      api:
+        method: GET
+        path: /api/v1/experiments/?search=journey%20results
+        as: admin
+    expect:
+      status: 200
+      json:
+        total: 1
+        items.0.key: docs_journey_results
+        items.0.status: draft
+    save:
+      experiment-id:
+        path: items.0.id
+    fail: the experiment just created is not the one draft the API finds by its name
+  - id: sequential-on
+    doc: sequential-testing-stop-experiments-early
+    do:
+      api:
+        method: PUT
+        path: /api/v1/experiments/{{experiment-id}}
+        as: admin
+        body:
+          sequential_testing_enabled: true
+    expect:
+      status: 200
+      json:
+        status: draft
+        sequential_testing_enabled: true
+    fail: sequential testing cannot be turned on for the A/B experiment while it is a draft
+  - id: bayesian-on
+    doc: bayesian-analysis
+    do:
+      api:
+        method: PUT
+        path: /api/v1/experiments/{{experiment-id}}
+        as: admin
+        body:
+          bayesian_enabled: true
+          bayesian_config:
+            prior_family: beta
+            alpha: 100.0
+            beta: 900.0
+            loss_threshold: 0.001
+            credible_level: 0.95
+    expect:
+      status: 200
+      json:
+        status: draft
+        bayesian_enabled: true
+        bayesian_config.alpha: 100.0
+        bayesian_config.beta: 900.0
+    fail: Bayesian analysis cannot be turned on with a prior of its own for the A/B experiment while it is a draft
+  - id: cuped-new-users-on
+    doc: cuped-reach-significance-faster
+    do:
+      api:
+        method: PUT
+        path: /api/v1/experiments/{{experiment-id}}
+        as: admin
+        body:
+          variance_reduction_config:
+            method: cuped
+            covariate_lookback_days: 7
+    expect:
+      status: 200
+      json:
+        status: draft
+        variance_reduction_config.method: cuped
+        variance_reduction_config.covariate_lookback_days: 7
+    fail: CUPED cannot be turned on for the A/B experiment while it is a draft
   - id: start
     doc: creating-an-experiment
     do:
@@ -421,23 +497,6 @@ steps:
           - text: Active
           - link "View results"
     fail: Start does not make the experiment active
-  - id: find-experiment
-    doc: reading-results
-    do:
-      api:
-        method: GET
-        path: /api/v1/experiments/?search=journey%20results
-        as: admin
-    expect:
-      status: 200
-      json:
-        total: 1
-        items.0.key: docs_journey_results
-        items.0.status: active
-    save:
-      experiment-id:
-        path: items.0.id
-    fail: the experiment just created is not the one active experiment the API finds by its name
   - id: api-key
     doc: creating-an-experiment
     do:
@@ -707,6 +766,50 @@ steps:
       floor-experiment-id:
         path: id
     fail: a third 50/50 experiment cannot be created as a draft
+  - id: floor-sequential-on
+    doc: sequential-testing-stop-experiments-early
+    do:
+      api:
+        method: PUT
+        path: /api/v1/experiments/{{floor-experiment-id}}
+        as: admin
+        body:
+          sequential_testing_enabled: true
+          sequential_testing_config:
+            method: msprt
+            alpha: 0.05
+            tau_squared: 0.01
+    expect:
+      status: 200
+      json:
+        status: draft
+        sequential_testing_enabled: true
+        sequential_testing_config.alpha: 0.05
+        sequential_testing_config.tau_squared: 0.01
+    fail: sequential testing cannot be turned on with its own tau-squared for the minimum-sample experiment while it is a draft
+  - id: floor-bayesian-on
+    doc: bayesian-analysis
+    do:
+      api:
+        method: PUT
+        path: /api/v1/experiments/{{floor-experiment-id}}
+        as: admin
+        body:
+          bayesian_enabled: true
+          bayesian_config:
+            prior_family: beta
+            alpha: 20.0
+            beta: 180.0
+            loss_threshold: 0.001
+            credible_level: 0.95
+    expect:
+      status: 200
+      json:
+        status: draft
+        bayesian_enabled: true
+        bayesian_config.alpha: 20.0
+        bayesian_config.beta: 180.0
+    fail: Bayesian analysis cannot be turned on with a prior of its own for the minimum-sample experiment while it is a draft
   - id: floor-start
     doc: experiment-summary-card
     do:
@@ -797,20 +900,6 @@ steps:
                   - row /Control\(control\) 60 10\.00%/
                   - row /Treatment 60 40\.00% \+300\.0%/
     fail: the results page reads "Planned sample Reached" before the planned sample is met, or recommends shipping a variant before every variant has 100 users
-  - id: sequential-on
-    doc: sequential-testing-stop-experiments-early
-    do:
-      api:
-        method: PUT
-        path: /api/v1/experiments/{{experiment-id}}
-        as: admin
-        body:
-          sequential_testing_enabled: true
-    expect:
-      status: 200
-      json:
-        sequential_testing_enabled: true
-    fail: an administrator cannot turn sequential testing on for the running experiment
   - id: sequential-results
     doc: sequential-testing-stop-experiments-early
     do:
@@ -847,26 +936,6 @@ steps:
             args: {control_users: 400, control_converted: 40, treatment_users: 400, treatment_converted: 64, tau_squared: 0.001, alpha: 0.05, bound: upper}
           rel: 1.0e-9
     fail: the mSPRT's lambda, always-valid p-value or confidence sequence is not the formula's for the users sent, at the default tau-squared and alpha, or it stops
-  - id: floor-sequential-on
-    doc: sequential-testing-stop-experiments-early
-    do:
-      api:
-        method: PUT
-        path: /api/v1/experiments/{{floor-experiment-id}}
-        as: admin
-        body:
-          sequential_testing_enabled: true
-          sequential_testing_config:
-            method: msprt
-            alpha: 0.05
-            tau_squared: 0.01
-    expect:
-      status: 200
-      json:
-        sequential_testing_enabled: true
-        sequential_testing_config.alpha: 0.05
-        sequential_testing_config.tau_squared: 0.01
-    fail: an administrator cannot turn sequential testing on with its own tau-squared for the running experiment
   - id: floor-sequential
     doc: sequential-testing-stop-experiments-early
     do:
@@ -934,28 +1003,6 @@ steps:
             args: {control_users: 60, control_converted: 6, treatment_users: 60, treatment_converted: 24, tau_squared: 0.01, alpha: 0.001, bound: upper}
           rel: 1.0e-9
     fail: the request's alpha does not move the boundary to 1/alpha and widen the confidence sequence to the formula's, or the mSPRT still stops
-  - id: floor-bayesian-on
-    doc: bayesian-analysis
-    do:
-      api:
-        method: PUT
-        path: /api/v1/experiments/{{floor-experiment-id}}
-        as: admin
-        body:
-          bayesian_enabled: true
-          bayesian_config:
-            prior_family: beta
-            alpha: 20.0
-            beta: 180.0
-            loss_threshold: 0.001
-            credible_level: 0.95
-    expect:
-      status: 200
-      json:
-        bayesian_enabled: true
-        bayesian_config.alpha: 20.0
-        bayesian_config.beta: 180.0
-    fail: an administrator cannot turn Bayesian analysis on with a prior of its own for the running experiment
   - id: floor-bayesian
     doc: bayesian-analysis
     do:
@@ -982,28 +1029,6 @@ steps:
             args: {control_users: 60, control_converted: 6, treatment_users: 60, treatment_converted: 24, prior_alpha: 20.0, prior_beta: 180.0, variant: treatment}
           rel: 0.002
     fail: a posterior is not the experiment's prior updated with the users sent, the treatment's probability to be best is not the two posteriors', or a clear winner is not declared
-  - id: bayesian-on
-    doc: bayesian-analysis
-    do:
-      api:
-        method: PUT
-        path: /api/v1/experiments/{{experiment-id}}
-        as: admin
-        body:
-          bayesian_enabled: true
-          bayesian_config:
-            prior_family: beta
-            alpha: 100.0
-            beta: 900.0
-            loss_threshold: 0.001
-            credible_level: 0.95
-    expect:
-      status: 200
-      json:
-        bayesian_enabled: true
-        bayesian_config.alpha: 100.0
-        bayesian_config.beta: 900.0
-    fail: an administrator cannot turn Bayesian analysis on with a prior of its own for the running A/B experiment
   - id: bayesian-results
     doc: bayesian-analysis
     do:
@@ -1314,23 +1339,6 @@ steps:
             args: {control_users: 256, control_converted: 64, treatment_users: 256, treatment_converted: 112, base: -40, step: 40, modulo: 6, confidence_level: 0.95, bound: upper}
           rel: 1.0e-9
     fail: with every value doubled, the buyers change, the means and the difference are not doubled, or Welch's p-value moves
-  - id: cuped-new-users-on
-    doc: cuped-reach-significance-faster
-    do:
-      api:
-        method: PUT
-        path: /api/v1/experiments/{{experiment-id}}
-        as: admin
-        body:
-          variance_reduction_config:
-            method: cuped
-            covariate_lookback_days: 7
-    expect:
-      status: 200
-      json:
-        variance_reduction_config.method: cuped
-        variance_reduction_config.covariate_lookback_days: 7
-    fail: an administrator cannot turn CUPED on for the running A/B experiment
   - id: cuped-new-users
     doc: cuped-reach-significance-faster
     do:

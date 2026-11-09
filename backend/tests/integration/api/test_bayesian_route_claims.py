@@ -10,10 +10,12 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import Dict, Tuple
 
 import pytest
 
+from backend.app.models.experiment import Experiment
 from backend.app.models.user import UserRole
 from backend.tests.integration.api.route_helpers import (
     api_client,
@@ -157,24 +159,37 @@ def test_any_other_prior_family_is_refused(client, db_session, family):
 def test_turning_it_on_changes_neither_the_frequentist_results_nor_the_recommendation(
     client, db_session
 ):
+    """Bayesian analysis is turned on while the experiment is a draft, before it
+    starts. The answer with it off is the same users read again after the two
+    columns are cleared in the database: like for like needs one population, and
+    a second experiment would hash the same users into other arms. Both reads
+    pass ``use_cache=false``, so neither is a cached copy of the other."""
     owner = make_user(db_session, UserRole.ADMIN, superuser=True, tag="second")
     experiment = create_experiment(client, owner)
-    start(client, experiment, owner)
-    key = api_key(client, owner)
-    counts = _traffic(client, key, experiment, "bayes-second", users=30)
-    url = f"/api/v1/results/{experiment['id']}"
-
-    off = client.get(url, params={"use_cache": "false"}, headers=auth(owner))
-    assert off.status_code == 200, off.text
-    assert off.json()["bayesian_results"] is None
     turned_on = client.put(
         f"/api/v1/experiments/{experiment['id']}",
         json={"bayesian_enabled": True},
         headers=auth(owner),
     )
     assert turned_on.status_code == 200, turned_on.text
+    assert turned_on.json()["status"] == "draft"
+    assert turned_on.json()["bayesian_enabled"] is True
+    start(client, experiment, owner)
+    key = api_key(client, owner)
+    counts = _traffic(client, key, experiment, "bayes-second", users=30)
+    url = f"/api/v1/results/{experiment['id']}"
+
     on = client.get(url, params={"use_cache": "false"}, headers=auth(owner))
     assert on.status_code == 200, on.text
+    assert on.json()["bayesian_results"] is not None
+
+    row = db_session.get(Experiment, uuid.UUID(experiment["id"]))
+    row.bayesian_enabled = False
+    row.bayesian_config = None
+    db_session.commit()
+    off = client.get(url, params={"use_cache": "false"}, headers=auth(owner))
+    assert off.status_code == 200, off.text
+    assert off.json()["bayesian_results"] is None
 
     for field in ("metrics", "summary", "sample_size_adequate", "srm"):
         assert on.json()[field] == off.json()[field], field

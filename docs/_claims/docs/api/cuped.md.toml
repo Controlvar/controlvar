@@ -218,7 +218,11 @@ by = ["exempt:baseline"]
 
 [[unit]]
 text = "The method is part of the experiment, in its variance_reduction_config, set when you create it (POST /api/v1/experiments/) or change it (PUT /api/v1/experiments/{id}):"
-by = ["docex:docs/api/cuped.md#200"]
+by = [
+    "docex:docs/api/cuped.md#\"covariate_lookback_days\": 7",
+    "journey:experiment-results#cuped-experiment",
+    "journey:experiment-results#cuped-new-users-on",
+]
 
 [[unit]]
 text = "Field | Type | Default | Description"
@@ -286,12 +290,30 @@ text = "To limit a whale's effect today, cap or filter the value before you send
 by = ["exempt:advice"]
 
 [[unit]]
-text = "This sets the demo experiment's method to cuped with a 7-day lookback:"
-by = ["exempt:baseline"]
+text = "The demo data creates checkout_button_color with the method cuped and a 7-day lookback."
+by = [
+    "test:backend/tests/unit/scripts/test_seed_demo_history.py::test_checkout_button_color_is_created_with_cuped_and_a_7_day_lookback",
+    "docex:docs/api/cuped.md#\"covariate_lookback_days\": 7",
+]
 
 [[unit]]
-text = "It prints 200."
-by = ["exempt:baseline"]
+text = "This reads the setting the experiment stores:"
+by = ["docex:docs/api/cuped.md#\"covariate_lookback_days\": 7"]
+
+[[unit]]
+text = "It prints \"method\": \"cuped\" and \"covariate_lookback_days\": 7, with the other two fields at their defaults."
+by = [
+    "docex:docs/api/cuped.md#\"covariate_lookback_days\": 7",
+    "test:backend/tests/unit/scripts/test_seed_demo_history.py::test_checkout_button_color_is_created_with_cuped_and_a_7_day_lookback",
+]
+
+[[unit]]
+text = "A stack whose demo data an earlier release seeded may print null: start it once with SEED_FORCE=true, which runs the demo seed again and sets a missing setting, or seed a fresh database."
+by = [
+    "test:backend/tests/unit/scripts/test_seed_demo_history.py::test_a_stack_seeded_before_gets_the_setting_only_where_it_is_null",
+    "test:backend/tests/unit/scripts/test_seed_demo_history.py::test_every_run_of_the_seed_backfills_after_the_experiments",
+    "test:backend/tests/unit/scripts/test_entrypoint_seed_force_and_workers.py::test_a_recorded_seed_is_skipped_and_seed_force_applies_it_again",
+]
 
 [[unit]]
 text = "API Reference"
@@ -547,16 +569,16 @@ by = [
 ]
 
 [[unit]]
-text = "ADMIN and DEVELOPER may change experiments, and in the full profile so may anyone whose custom role or direct grant gives experiment (update); for anyone else the PUT above answers 403 with \"You don't have permission to update experiments\"."
+text = "Set it when you create the experiment, or with PUT /api/v1/experiments/{id} while the experiment is a draft."
+by = [
+    "journey:experiment-results#cuped-experiment",
+    "journey:experiment-results#cuped-new-users-on",
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller",
+]
+
+[[unit]]
+text = "ADMIN and DEVELOPER may change experiments, and in the full profile so may anyone whose custom role or direct grant gives experiment (update); for anyone else that PUT answers 403 with \"You don't have permission to update experiments\"."
 by = [
     "test:backend/tests/integration/api/test_experiment_access_by_role.py",
     "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
 ]
-
-[[unit]]
-text = "Only a superuser may change an experiment that is no longer a draft, and the demo experiment is running: for anyone else who may change experiments, such as a DEVELOPER or an ADMIN who is not a superuser, the PUT above answers 400 with \"Cannot update experiments in active status\"."
-by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py"]
-
-[[unit]]
-text = "The demo's admin@demo.com is a superuser, which is why it gets 200."
-by = ["docex:docs/api/cuped.md#200"]

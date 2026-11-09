@@ -16,6 +16,8 @@ whether those checks can fail is pure, and is tested here, in the unit job:
   everyone), and then every adjusted number is the unadjusted one; the
   interval leaves out 0 exactly when the p-value is under ``1 -
   confidence_level``; and each oracle refuses what no comparison can be;
+* CUPED is set while each experiment is a draft, before the step that starts
+  it and so before its traffic;
 * each read's oracles are given the counts its traffic step sends, history
   included, and the history is inside the experiment's lookback;
 * each read's tolerances hold the formula's answer and refuse the answer each
@@ -539,11 +541,41 @@ def test_the_journey_reads_new_users_and_returning_users():
     assert _index("cuped-new-users") < _index("cuped-returning-users")
 
 
+def _starts(step: Dict[str, Any], experiment: str) -> bool:
+    """Whether *step* starts *experiment*: through the API, or with the Start
+    button on the page guided setup lands on."""
+    call = step["do"].get("api") or {}
+    path = f"/api/v1/experiments/{{{{{experiment}}}}}/start"
+    if call.get("method") == "POST" and call.get("path") == path:
+        return True
+    click = step["do"].get("click") or {}
+    return click.get("role") == "button" and click.get("name") == "Start"
+
+
+def _draft_window(experiment: str) -> Tuple[int, int]:
+    """(the step that saves *experiment*'s id while it is a draft, the step that
+    starts it)."""
+    steps = _steps()
+    (saved,) = [i for i, s in enumerate(steps) if experiment in (s.get("save") or {})]
+    expected = steps[saved]["expect"].get("json") or {}
+    status = expected.get("status", expected.get("items.0.status"))
+    assert status == "draft", (steps[saved]["id"], status)
+    starts = [i for i, s in enumerate(steps) if i > saved and _starts(s, experiment)]
+    assert starts, f"nothing starts {experiment} after {steps[saved]['id']}"
+    return saved, starts[0]
+
+
 @pytest.mark.parametrize("read_id", READS)
 def test_each_read_comes_after_its_traffic_and_after_cuped_is_on(read_id):
+    """CUPED is set while the experiment is a draft, and read after its traffic.
+
+    The new users' (A/B) experiment gets it from a ``PUT`` after the step that
+    saves the draft's id; the returning users' is made with it. Either way it
+    comes before the step that starts the experiment, so before its traffic,
+    and the step expects the experiment it answers with to be a draft.
+    """
     setup = _read_setup(read_id)
     assert setup["read"]["do"]["api"]["path"].endswith("/cuped")
-    assert setup["traffic"][0] < setup["at"]
     assert setup["configs"], "nothing turns CUPED on"
     at, config, step = setup["configs"][-1]
     assert config["method"] == "cuped"
@@ -552,12 +584,13 @@ def test_each_read_comes_after_its_traffic_and_after_cuped_is_on(read_id):
     lookback = config["covariate_lookback_days"]
     assert expected["variance_reduction_config.covariate_lookback_days"] == lookback
     assert setup["read"]["expect"]["json"]["covariate_lookback_days"] == lookback
-    # The new users' experiment is turned on after its traffic (as the page
-    # does); the returning users' is made with CUPED, before its traffic.
-    if read_id == "cuped-new-users":
-        assert setup["traffic"][0] < at
+    saved, started = _draft_window(setup["experiment"])
+    assert expected["status"] == "draft", step["id"]
+    if step["do"]["api"]["method"] == "PUT":
+        assert saved < at < started, (step["id"], saved, started)
     else:
-        assert at < setup["traffic"][0]
+        assert saved == at < started, (step["id"], saved, started)
+    assert started < setup["traffic"][0] < setup["at"]
 
 
 def test_the_history_is_inside_the_lookback_and_sent_with_the_metrics_event():

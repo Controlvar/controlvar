@@ -1,9 +1,10 @@
 """The sequential (mSPRT) and Bayesian oracles, and the results journey's steps that use them.
 
-The results journey (``experiment-results.yaml``) ends by turning the
-sequential and the Bayesian analysis on for two of its running experiments and
-holding the API's numbers to oracles (``docs_runner/oracles.py``). What decides
-whether those checks can fail is pure, and is tested here, in the unit job:
+The results journey (``experiment-results.yaml``) turns the sequential and the
+Bayesian analysis on for two of its experiments while each is still a draft,
+before it starts and before its traffic, and ends by holding the API's numbers
+to oracles (``docs_runner/oracles.py``). What decides whether those checks can
+fail is pure, and is tested here, in the unit job:
 
 * each oracle is the formula its page states. ``msprt_confidence_sequence``
   gives every number ``api/sequential-testing.md`` prints; ``msprt_lambda_ratio``
@@ -12,6 +13,9 @@ whether those checks can fail is pure, and is tested here, in the unit job:
   promises; and ``bayes_prob_best`` agrees with Evan Miller's closed form and
   with a second integral;
 * each oracle refuses what no experiment or setting can be;
+* each analysis is set by a ``PUT`` on its experiment's draft: after the step
+  that saves the draft's id, before the step that starts it and before its
+  traffic, and the ``PUT`` expects ``status: draft``;
 * each step's oracle is given the counts its experiment's traffic sends and
   the settings its PUT stores (or the page's defaults), the literals beside it
   follow from the oracles, and its tolerance holds the right answer while
@@ -538,8 +542,42 @@ def _sequential_settings(setup: Dict[str, Any]) -> Tuple[float, float]:
     return tau_squared, alpha
 
 
+def _starts(step: Dict[str, Any], experiment: str) -> bool:
+    """Whether *step* starts *experiment*: through the API, or with the Start
+    button on the page guided setup lands on."""
+    call = step["do"].get("api") or {}
+    path = f"/api/v1/experiments/{{{{{experiment}}}}}/start"
+    if call.get("method") == "POST" and call.get("path") == path:
+        return True
+    click = step["do"].get("click") or {}
+    return click.get("role") == "button" and click.get("name") == "Start"
+
+
+def _draft_window(steps: List[Dict[str, Any]], experiment: str) -> Tuple[int, int]:
+    """(the step that saves *experiment*'s id while it is a draft, the step that
+    starts it).
+
+    The A/B experiment is made in guided setup and its id is found through the
+    API before it is started; the minimum-sample one is made through the API.
+    Either way the step that saves the id must see the draft.
+    """
+    (saved,) = [i for i, s in enumerate(steps) if experiment in (s.get("save") or {})]
+    expected = steps[saved]["expect"].get("json") or {}
+    status = expected.get("status", expected.get("items.0.status"))
+    assert status == "draft", (steps[saved]["id"], status)
+    starts = [i for i, s in enumerate(steps) if i > saved and _starts(s, experiment)]
+    assert starts, f"nothing starts {experiment} after {steps[saved]['id']}"
+    return saved, starts[0]
+
+
 @pytest.mark.parametrize("read_id", SEQUENTIAL_READS + BAYESIAN_READS)
 def test_each_analysis_is_read_after_its_traffic_and_after_it_is_turned_on(read_id):
+    """Each analysis is set on its experiment's draft and read after the traffic.
+
+    The ``PUT`` that turns it on comes after the step that saves the draft's id
+    and before the step that starts the experiment, so before its traffic too,
+    and it expects the experiment it answers with to be a draft.
+    """
     steps = _steps()
     setup = _read_setup(steps, read_id)
     assert len(setup["traffic"]) == 1, "one population per experiment"
@@ -550,10 +588,15 @@ def test_each_analysis_is_read_after_its_traffic_and_after_it_is_turned_on(read_
     )
     route = "/bayesian" if read_id in BAYESIAN_READS else "/sequential"
     assert setup["read"]["do"]["api"]["path"].split("?")[0].endswith(route)
+    saved, started = _draft_window(steps, setup["experiment"])
     turned_on = [i for i, s in setup["puts"] if s["do"]["api"]["body"].get(field)]
-    assert turned_on and setup["traffic"][0][0] < turned_on[0] < setup["at"]
+    assert turned_on, f"nothing turns {field} on for {setup['experiment']}"
+    for at in turned_on:
+        assert saved < at < started, (steps[at]["id"], saved, started)
+    assert started < setup["traffic"][0][0] < setup["at"]
     for _, put in setup["puts"]:
-        assert put["expect"]["status"] == 200
+        assert put["expect"]["status"] == 200, put["id"]
+        assert put["expect"]["json"]["status"] == "draft", put["id"]
 
 
 @pytest.mark.parametrize("read_id", SEQUENTIAL_READS + BAYESIAN_READS)
