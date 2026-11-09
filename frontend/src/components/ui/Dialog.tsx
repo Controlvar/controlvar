@@ -48,7 +48,12 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 
-export type DialogSize = 'sm' | 'md' | 'lg';
+/**
+ * The panel's width: `sm` 24rem, `md` 28rem, `md-wide` 32rem, `lg` 42rem, `xl`
+ * 56rem. A closed set, not a className escape hatch, so every dialog is one of
+ * five widths.
+ */
+export type DialogSize = 'sm' | 'md' | 'md-wide' | 'lg' | 'xl';
 
 export interface DialogProps {
   open: boolean;
@@ -58,6 +63,13 @@ export interface DialogProps {
   title: string;
   /** Shown under the title and read as the dialog's description. */
   description?: ReactNode;
+  /** Shown directly under the title and not read as the description (who the dialog is about). */
+  subtitle?: ReactNode;
+  /**
+   * A control at the right of the title row, before the body (a close button):
+   * the dialog draws no close control of its own.
+   */
+  headerAction?: ReactNode;
   children?: ReactNode;
   /** `false`: Escape does nothing; the content's own controls are the only way out. */
   dismissible?: boolean;
@@ -78,7 +90,9 @@ export const APP_ROOT_ID = '__next';
 const SIZES: Record<DialogSize, string> = {
   sm: 'max-w-sm',
   md: 'max-w-md',
+  'md-wide': 'max-w-lg',
   lg: 'max-w-2xl',
+  xl: 'max-w-4xl',
 };
 
 // ---------------------------------------------------------------------------
@@ -220,7 +234,7 @@ const subscribeNothing = () => () => undefined;
 // ---------------------------------------------------------------------------
 
 export function Dialog(props: DialogProps) {
-  const { open, title, description, children, size = 'md', testId } = props;
+  const { open, title, description, subtitle, headerAction, children, size = 'md', testId } = props;
   const titleId = useId();
   const descriptionId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -307,6 +321,24 @@ export function Dialog(props: DialogProps) {
 
   if (!open || !canPortal) return null;
 
+  const titleElement = (
+    <h2 id={titleId} className="mb-1 text-lg font-semibold text-slate-900">
+      {title}
+    </h2>
+  );
+  const heading =
+    subtitle != null || headerAction != null ? (
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          {titleElement}
+          {subtitle != null && <div className="text-sm text-slate-500">{subtitle}</div>}
+        </div>
+        {headerAction}
+      </div>
+    ) : (
+      titleElement
+    );
+
   return createPortal(
     <div
       ref={rootRef}
@@ -323,9 +355,7 @@ export function Dialog(props: DialogProps) {
         data-testid={testId}
         className={`w-full ${SIZES[size]} max-h-full overflow-y-auto rounded-lg bg-white p-6 shadow-xl focus:outline-none`}
       >
-        <h2 id={titleId} className="mb-1 text-lg font-semibold text-slate-900">
-          {title}
-        </h2>
+        {heading}
         {description != null && (
           <div id={descriptionId} className="mb-4 text-sm text-slate-600">
             {description}

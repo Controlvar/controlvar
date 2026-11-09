@@ -1276,6 +1276,91 @@
         "title": "AuditStatsResponse",
         "type": "object"
       },
+      "AuthConfigResponse": {
+        "description": "``GET /api/v1/auth/config``: how the dashboard signs in.\n\n``{\"provider\": \"local\"}`` under the local provider. Under Cognito, either\nthe Hosted UI's ``hosted_ui_domain``, the app ``client_id`` and the\n``scopes`` to ask for, or ``configured: false`` with the names of the\nunset settings in ``missing``. A field that does not apply is absent.",
+        "properties": {
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The Cognito app client the dashboard signs in to",
+            "title": "Client Id"
+          },
+          "configured": {
+            "anyOf": [
+              {
+                "const": false,
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Present, and false, when Cognito sign-in is not set up",
+            "title": "Configured"
+          },
+          "hosted_ui_domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The Cognito Hosted UI's domain name, without a scheme",
+            "title": "Hosted Ui Domain"
+          },
+          "missing": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The names of the unset settings, when configured is false",
+            "title": "Missing"
+          },
+          "provider": {
+            "enum": [
+              "local",
+              "cognito"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "scopes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The OAuth scopes to ask the Hosted UI for",
+            "title": "Scopes"
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "title": "AuthConfigResponse",
+        "type": "object"
+      },
       "BAAConfigCreate": {
         "description": "Schema for creating a Business Associate Agreement configuration.",
         "properties": {
@@ -2735,6 +2820,57 @@
           "timestamp"
         ],
         "title": "ClientErrorResponse",
+        "type": "object"
+      },
+      "CognitoCodeExchangeRequest": {
+        "description": "``POST /api/v1/auth/cognito/exchange``: what the Hosted UI's callback\nreceived, and the PKCE verifier the dashboard kept.\n\nNothing else is read from the request: the domain asked and the app client\nnamed come from the configuration.",
+        "properties": {
+          "code": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "code_verifier": {
+            "maxLength": 128,
+            "minLength": 43,
+            "pattern": "^[A-Za-z0-9._~-]+$",
+            "title": "Code Verifier",
+            "type": "string"
+          },
+          "redirect_uri": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Redirect Uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "code_verifier",
+          "redirect_uri"
+        ],
+        "title": "CognitoCodeExchangeRequest",
+        "type": "object"
+      },
+      "CognitoCodeExchangeResponse": {
+        "description": "The access token Cognito issued, and its lifetime. Nothing else: the id\ntoken and the refresh token are not returned.",
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "expires_in": {
+            "description": "Seconds until the token expires",
+            "title": "Expires In",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "access_token",
+          "expires_in"
+        ],
+        "title": "CognitoCodeExchangeResponse",
         "type": "object"
       },
       "ComplianceAuditEventListResponse": {
@@ -20899,6 +21035,87 @@
         ]
       }
     },
+    "/api/v1/auth/cognito/exchange": {
+      "post": {
+        "description": "Exchange the code the Cognito Hosted UI sent to the dashboard for an\naccess token (``AUTH_PROVIDER=cognito`` only; 404 otherwise).\n\nThe body is what the dashboard's callback received and kept: the\n``code``, the PKCE ``code_verifier`` and the ``redirect_uri`` the sign-in\nstarted with. The API asks the token endpoint of ``COGNITO_DOMAIN`` for\nthe app client ``COGNITO_CLIENT_ID``; neither is read from the request.\nThe answer is the access token and its lifetime in seconds, which the\ndashboard then sends as a bearer token like any other; the id and refresh\ntokens are not returned.\n\nRefused: a code, verifier or redirect URI Cognito does not accept (an\nexpired or reused code, say) answers 400; Cognito unreachable or\nanswering with no access token, 502; no answer within\n``COGNITO_TOKEN_TIMEOUT_SECONDS``, 504; the Hosted UI settings unset, 503.\nEach with a fixed sentence: nothing Cognito says is repeated. Limited to\n10 requests a minute per client address. A sign-in by a user who already\nhas an account writes ``user_login`` with the provider ``cognito``.",
+        "operationId": "exchange_cognito_code_api_v1_auth_cognito_exchange_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CognitoCodeExchangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CognitoCodeExchangeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Cognito did not accept the sign-in code. Start the sign-in again."
+          },
+          "404": {
+            "description": "AUTH_PROVIDER is not 'cognito'"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "502": {
+            "description": "Cognito did not complete the sign-in. Try again."
+          },
+          "503": {
+            "description": "Sign-in through the Cognito Hosted UI is not set up on this server: COGNITO_DOMAIN, COGNITO_CLIENT_ID and COGNITO_USER_POOL_ID must all be set."
+          },
+          "504": {
+            "description": "Cognito did not answer in time. Try again."
+          }
+        },
+        "summary": "Exchange Cognito Code",
+        "tags": [
+          "Authentication"
+        ],
+        "x-stability": "beta"
+      }
+    },
+    "/api/v1/auth/config": {
+      "get": {
+        "description": "How the dashboard signs in. Needs no credentials.\n\n* ``AUTH_PROVIDER=local``, or the development sign-in bypass:\n  ``{\"provider\": \"local\"}``.\n* ``AUTH_PROVIDER=cognito`` with ``COGNITO_DOMAIN``, ``COGNITO_CLIENT_ID``\n  and ``COGNITO_USER_POOL_ID`` set: ``{\"provider\": \"cognito\",\n  \"hosted_ui_domain\", \"client_id\", \"scopes\"}``, what the dashboard needs\n  to send the browser to the Hosted UI. The callback is not served: it is\n  the dashboard's own origin followed by ``/auth/callback``, which must be\n  an allowed callback URL of the app client.\n* ``AUTH_PROVIDER=cognito`` with any of the three unset:\n  ``{\"provider\": \"cognito\", \"configured\": false, \"missing\": [...]}``,\n  naming the unset settings.\n\nEvery value comes from the configuration, none from the request.",
+        "operationId": "get_auth_config_api_v1_auth_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Auth Config",
+        "tags": [
+          "Authentication"
+        ],
+        "x-stability": "beta"
+      }
+    },
     "/api/v1/auth/confirm": {
       "post": {
         "description": "Confirm a self sign-up with the verification code Cognito sent.\n\nAnswers 404 unless ``AUTH_PROVIDER=cognito`` and\n``COGNITO_SELF_SIGNUP_ENABLED=true``.",
@@ -21036,13 +21253,21 @@
     },
     "/api/v1/auth/logout": {
       "post": {
-        "description": "Sign out.\n\nLocal tokens are stateless, so this endpoint exists for the client's\nbenefit (it discards the token); nothing is revoked server-side.",
+        "description": "Sign out.\n\n* ``AUTH_PROVIDER=local`` (or the development sign-in bypass): local\n  tokens are stateless, so this endpoint exists for the client's benefit\n  (it discards the token); nothing is revoked server-side, and no token is\n  needed.\n* ``AUTH_PROVIDER=cognito``: the bearer token is checked as every\n  request's is (401 without one, or with one Cognito does not accept),\n  then Cognito is asked to sign the user out everywhere (GlobalSignOut):\n  this token, the user's other access tokens and their refresh tokens stop\n  working, so the user's other sessions end too. If Cognito fails, the\n  answer is still 204 and the failure is logged.",
         "operationId": "logout_local_api_v1_auth_logout_post",
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "AUTH_PROVIDER=cognito: no bearer token, or one Cognito does not accept"
           }
         },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
         "summary": "Logout Local",
         "tags": [
           "Authentication"

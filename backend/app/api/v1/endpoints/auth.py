@@ -8,23 +8,32 @@ Two providers share this router (selected by ``settings.AUTH_PROVIDER``):
   ``POST /login``, ``GET /me``, ``POST /logout`` and the OAuth2 form
   ``POST /token`` (``username`` = e-mail) so Swagger's *Authorize* works.
 * ``cognito`` — AWS Cognito.  The legacy endpoints (signup, confirm, token,
-  forgot/reset password, refresh, me) forward to the user pool; ``/login`` and
-  ``/logout`` answer 404 because Cognito has its own flows.
+  forgot/reset password, refresh, me) forward to the user pool; ``/login``
+  answers 404 because Cognito has its own flows.  The dashboard signs in
+  through the Cognito Hosted UI: ``POST /cognito/exchange`` turns the code
+  the Hosted UI sends back into an access token, and ``POST /logout`` signs
+  the user out of Cognito (GlobalSignOut).
 
-Five endpoints exist only for Cognito: ``POST /signup``, ``/confirm``,
-``/forgot-password``, ``/reset-password`` and ``/refresh``.  Under any other
-provider they answer 404 with ``COGNITO_ONLY_DETAIL`` before the request body
-is validated and before any Cognito client is created.
+``GET /config`` (no credentials, either provider) tells the dashboard which
+of the two it is and, under Cognito, where the Hosted UI is.
+
+Six endpoints exist only for Cognito: ``POST /signup``, ``/confirm``,
+``/forgot-password``, ``/reset-password``, ``/refresh`` and
+``/cognito/exchange``.  Under any other provider they answer 404 with
+``COGNITO_ONLY_DETAIL`` before the request body is validated and before any
+Cognito client is created.
 
 Under ``cognito``, ``/signup`` and ``/confirm`` (self sign-up) also need
 ``COGNITO_SELF_SIGNUP_ENABLED=true``; without it they answer 404 with
 ``SELF_SIGNUP_DISABLED_DETAIL``, at the same point and with no Cognito call,
-and an administrator creates users in the user pool.  The other three are
+and an administrator creates users in the user pool.  The other four are
 unaffected by that setting.
 """
 
-from typing import Any, Optional, Union
+import logging
+from typing import Any, List, Optional, Union
 
+from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -36,6 +45,9 @@ from backend.app.core.security import create_local_access_token, oauth2_scheme
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.user import User
 from backend.app.schemas.auth import (
+    AuthConfigResponse,
+    CognitoCodeExchangeRequest,
+    CognitoCodeExchangeResponse,
     ConfirmForgotPasswordRequest,
     ConfirmForgotPasswordResponse,
     ConfirmSignUpRequest,
@@ -51,11 +63,15 @@ from backend.app.schemas.auth import (
     UserInfoResponse,
     UserMe,
 )
+from backend.app.services import cognito_hosted_ui
 from backend.app.services.audit_service import AuditService
 from backend.app.services.auth_service import (
     CognitoAuthService,
     CognitoTokenRefused,
+    configured_pool_and_client,
     log_token_refused,
+    sign_in_logger,
+    unset_hosted_ui_settings,
 )
 from backend.app.services.cognito_accounts import cognito_external_id
 from backend.app.services.local_auth_service import (
@@ -63,6 +79,8 @@ from backend.app.services.local_auth_service import (
     InvalidCredentialsError,
     local_auth_service,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(route_class=OffLoopRoute)
 
@@ -78,6 +96,20 @@ SELF_SIGNUP_DISABLED_DETAIL = (
     "Endpoint not available: self sign-up is turned off "
     "(COGNITO_SELF_SIGNUP_ENABLED is not true). "
     "An administrator creates users in the Cognito user pool."
+)
+
+CREDENTIALS_REFUSED_DETAIL = "Could not validate credentials"
+
+# The code exchange's answers. Fixed sentences: nothing Cognito says is
+# repeated, and the dashboard shows its own copy for each status.
+CODE_EXCHANGE_REFUSED_DETAIL = (
+    "Cognito did not accept the sign-in code. Start the sign-in again."
+)
+CODE_EXCHANGE_FAILED_DETAIL = "Cognito did not complete the sign-in. Try again."
+CODE_EXCHANGE_TIMEOUT_DETAIL = "Cognito did not answer in time. Try again."
+HOSTED_UI_NOT_SET_UP_DETAIL = (
+    "Sign-in through the Cognito Hosted UI is not set up on this server: "
+    "COGNITO_DOMAIN, COGNITO_CLIENT_ID and COGNITO_USER_POOL_ID must all be set."
 )
 
 
@@ -246,6 +278,68 @@ def _record_cognito_login(
     )
 
 
+def _credentials_refused(detail: str = CREDENTIALS_REFUSED_DETAIL) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=detail,
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+def _hosted_ui_missing() -> List[str]:
+    """The names of the unset settings sign-in through the Hosted UI needs."""
+    return unset_hosted_ui_settings(settings.COGNITO_DOMAIN)
+
+
+def _log_code_exchange_failed(failure: cognito_hosted_ui.CodeExchangeFailed) -> None:
+    """Record why a code exchange failed: the reason and, for a refusal,
+    Cognito's OAuth error code. Nothing else Cognito said is logged."""
+    sign_in_logger.warning(
+        "Cognito code exchange failed (%s, %s)",
+        failure.reason,
+        failure.cognito_error,
+        extra={"reason": failure.reason, "cognito_error": failure.cognito_error},
+    )
+
+
+def _log_sign_out_failed(exc: Exception) -> None:
+    """Record a GlobalSignOut that failed: the exception's type and, from
+    Cognito, its error code. Never the message or the token."""
+    code = None
+    if isinstance(exc, ClientError):
+        code = exc.response.get("Error", {}).get("Code")
+    logger.error(
+        "Cognito GlobalSignOut failed on /auth/logout (%s, %s); the user's "
+        "tokens were not revoked",
+        type(exc).__name__,
+        code,
+    )
+
+
+def _sign_out_of_cognito(token: Optional[str]) -> None:
+    """Check the bearer as every request's is, then GlobalSignOut with it.
+
+    The check is GetUser and the issuer and app-client comparison, as
+    ``deps.get_current_user`` makes them (no account is looked up or made):
+    401 without a token or with one refused. GlobalSignOut is best effort: a
+    failure is logged and the caller still answers 204.
+    """
+    if not token:
+        raise _credentials_refused("Not authenticated")
+    auth_service = CognitoAuthService()
+    try:
+        auth_service.get_user(access_token=token)
+    except CognitoTokenRefused as refusal:
+        log_token_refused(refusal, "/auth/logout")
+        raise _credentials_refused()
+    except ValueError:
+        raise _credentials_refused()
+    try:
+        auth_service.global_sign_out(access_token=token)
+    except Exception as exc:
+        _log_sign_out_failed(exc)
+
+
 # ---------------------------------------------------------------------------
 # Local provider endpoints
 # ---------------------------------------------------------------------------
@@ -275,15 +369,38 @@ def login_local(body: LoginRequest, db: Session = Depends(deps.get_db)) -> Any:
     return _issue_local_login(db, body.email, body.password)
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-def logout_local() -> Response:
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        401: {
+            "description": (
+                "AUTH_PROVIDER=cognito: no bearer token, or one Cognito does not accept"
+            )
+        }
+    },
+)
+# The function keeps its name so the operation keeps its operationId.
+def logout_local(token: Optional[str] = Depends(oauth2_scheme)) -> Response:
     """
     Sign out.
 
-    Local tokens are stateless, so this endpoint exists for the client's
-    benefit (it discards the token); nothing is revoked server-side.
+    * ``AUTH_PROVIDER=local`` (or the development sign-in bypass): local
+      tokens are stateless, so this endpoint exists for the client's benefit
+      (it discards the token); nothing is revoked server-side, and no token is
+      needed.
+    * ``AUTH_PROVIDER=cognito``: the bearer token is checked as every
+      request's is (401 without one, or with one Cognito does not accept),
+      then Cognito is asked to sign the user out everywhere (GlobalSignOut):
+      this token, the user's other access tokens and their refresh tokens stop
+      working, so the user's other sessions end too. If Cognito fails, the
+      answer is still 204 and the failure is logged.
     """
-    _require_local_provider()
+    if _is_local_provider() or deps.dev_auth_bypass_active():
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    if settings.AUTH_PROVIDER != "cognito":
+        _require_local_provider()
+    _sign_out_of_cognito(token)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -504,3 +621,119 @@ def get_user_info(
             detail=str(e),
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+# ---------------------------------------------------------------------------
+# Dashboard sign-in: the configuration, and the Cognito Hosted UI (#708)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/config",
+    response_model=AuthConfigResponse,
+    response_model_exclude_none=True,
+    openapi_extra={"x-stability": "beta"},
+)
+def get_auth_config() -> Any:
+    """
+    How the dashboard signs in. Needs no credentials.
+
+    * ``AUTH_PROVIDER=local``, or the development sign-in bypass:
+      ``{"provider": "local"}``.
+    * ``AUTH_PROVIDER=cognito`` with ``COGNITO_DOMAIN``, ``COGNITO_CLIENT_ID``
+      and ``COGNITO_USER_POOL_ID`` set: ``{"provider": "cognito",
+      "hosted_ui_domain", "client_id", "scopes"}``, what the dashboard needs
+      to send the browser to the Hosted UI. The callback is not served: it is
+      the dashboard's own origin followed by ``/auth/callback``, which must be
+      an allowed callback URL of the app client.
+    * ``AUTH_PROVIDER=cognito`` with any of the three unset:
+      ``{"provider": "cognito", "configured": false, "missing": [...]}``,
+      naming the unset settings.
+
+    Every value comes from the configuration, none from the request.
+    """
+    if settings.AUTH_PROVIDER != "cognito" or deps.dev_auth_bypass_active():
+        return AuthConfigResponse(provider="local")
+    missing = _hosted_ui_missing()
+    if missing:
+        return AuthConfigResponse(provider="cognito", configured=False, missing=missing)
+    _, client_id = configured_pool_and_client()
+    return AuthConfigResponse(
+        provider="cognito",
+        hosted_ui_domain=settings.COGNITO_DOMAIN,
+        client_id=client_id,
+        scopes=list(cognito_hosted_ui.HOSTED_UI_SCOPES),
+    )
+
+
+@router.post(
+    "/cognito/exchange",
+    response_model=CognitoCodeExchangeResponse,
+    dependencies=[Depends(_require_cognito_provider)],
+    openapi_extra={"x-stability": "beta"},
+    responses={
+        400: {"description": CODE_EXCHANGE_REFUSED_DETAIL},
+        404: {"description": "AUTH_PROVIDER is not 'cognito'"},
+        502: {"description": CODE_EXCHANGE_FAILED_DETAIL},
+        503: {"description": HOSTED_UI_NOT_SET_UP_DETAIL},
+        504: {"description": CODE_EXCHANGE_TIMEOUT_DETAIL},
+    },
+)
+def exchange_cognito_code(
+    body: CognitoCodeExchangeRequest, db: Session = Depends(deps.get_db)
+) -> Any:
+    """
+    Exchange the code the Cognito Hosted UI sent to the dashboard for an
+    access token (``AUTH_PROVIDER=cognito`` only; 404 otherwise).
+
+    The body is what the dashboard's callback received and kept: the
+    ``code``, the PKCE ``code_verifier`` and the ``redirect_uri`` the sign-in
+    started with. The API asks the token endpoint of ``COGNITO_DOMAIN`` for
+    the app client ``COGNITO_CLIENT_ID``; neither is read from the request.
+    The answer is the access token and its lifetime in seconds, which the
+    dashboard then sends as a bearer token like any other; the id and refresh
+    tokens are not returned.
+
+    Refused: a code, verifier or redirect URI Cognito does not accept (an
+    expired or reused code, say) answers 400; Cognito unreachable or
+    answering with no access token, 502; no answer within
+    ``COGNITO_TOKEN_TIMEOUT_SECONDS``, 504; the Hosted UI settings unset, 503.
+    Each with a fixed sentence: nothing Cognito says is repeated. Limited to
+    10 requests a minute per client address. A sign-in by a user who already
+    has an account writes ``user_login`` with the provider ``cognito``.
+    """
+    if _hosted_ui_missing():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=HOSTED_UI_NOT_SET_UP_DETAIL,
+        )
+    auth_service = CognitoAuthService()
+    try:
+        tokens = cognito_hosted_ui.exchange_code(
+            domain=settings.COGNITO_DOMAIN,
+            client_id=auth_service.client_id,
+            code=body.code,
+            code_verifier=body.code_verifier,
+            redirect_uri=body.redirect_uri,
+            timeout=settings.COGNITO_TOKEN_TIMEOUT_SECONDS,
+        )
+    except cognito_hosted_ui.CodeExchangeRefused as failure:
+        _log_code_exchange_failed(failure)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=CODE_EXCHANGE_REFUSED_DETAIL,
+        )
+    except cognito_hosted_ui.CodeExchangeTimedOut as failure:
+        _log_code_exchange_failed(failure)
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail=CODE_EXCHANGE_TIMEOUT_DETAIL,
+        )
+    except cognito_hosted_ui.CodeExchangeUnanswered as failure:
+        _log_code_exchange_failed(failure)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=CODE_EXCHANGE_FAILED_DETAIL,
+        )
+    _record_cognito_login(db, auth_service, tokens["access_token"])
+    return CognitoCodeExchangeResponse(**tokens)

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Dialog } from '@/components/ui/Dialog';
 import { RbacService, UserPermissionsResponse } from '@modules/rbac';
 import { USER_ROLE_LABELS, UserRole } from '@/types/admin';
 
@@ -75,23 +76,6 @@ export function EffectivePermissionsModal({
     }
   }, [isOpen, userId]);
 
-  // Escape closes the dialog, as the Close buttons do.
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [isOpen, onClose]);
-
-  // Focus moves into the dialog when it opens.
-  useEffect(() => {
-    if (isOpen) closeRef.current?.focus();
-  }, [isOpen]);
-
-  if (!isOpen) return null;
-
   const permissions = answer?.permissions ?? {};
   const rows = Object.entries(permissions).filter(
     ([resource, actions]) => resource !== 'audit_log' && actions.length > 0,
@@ -99,45 +83,35 @@ export function EffectivePermissionsModal({
   const customRoles = answer?.custom_roles ?? [];
 
   return (
-    <div
-      data-testid="effective-permissions-modal"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="permissions-modal-title"
-      aria-describedby="permissions-access-note"
-    >
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 id="permissions-modal-title" className="text-lg font-semibold text-slate-900">
-              Effective permissions
-            </h2>
-            {userEmail && (
-              <p className="text-sm text-slate-500 mt-0.5">{userEmail}</p>
-            )}
-          </div>
-          <button
-            type="button"
-            data-testid="permissions-close-button"
-            ref={closeRef}
-            onClick={onClose}
-            className="text-slate-600 hover:text-slate-900"
-            aria-label="Close"
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <p
-          id="permissions-access-note"
-          data-testid="permissions-access-note"
-          className="text-sm text-slate-700"
-        >
+    <Dialog
+      open={isOpen}
+      onClose={onClose}
+      title="Effective permissions"
+      subtitle={userEmail ? <p className="text-sm text-slate-500 mt-0.5">{userEmail}</p> : undefined}
+      description={
+        <p data-testid="permissions-access-note" className="text-sm text-slate-700">
           {PERMISSIONS_NOTE}
         </p>
+      }
+      headerAction={
+        <button
+          type="button"
+          data-testid="permissions-close-button"
+          ref={closeRef}
+          onClick={onClose}
+          className="text-slate-600 hover:text-slate-900"
+          aria-label="Close"
+        >
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      }
+      initialFocusRef={closeRef}
+      size="md-wide"
+      testId="effective-permissions-modal"
+    >
+      <div>
 
         {/* Loading */}
         {loading && (
@@ -187,6 +161,6 @@ export function EffectivePermissionsModal({
           </button>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }

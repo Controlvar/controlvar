@@ -40,6 +40,10 @@ def test_the_sso_routes_take_ten_and_thirty_a_minute():
     assert RATE_LIMIT_CONFIG["/api/v1/auth/sso/login"] == (30, MINUTE)
 
 
+def test_the_cognito_code_exchange_takes_ten_a_minute():
+    assert RATE_LIMIT_CONFIG["/api/v1/auth/cognito/exchange"] == (10, MINUTE)
+
+
 def test_the_audit_log_export_takes_ten_a_minute_on_its_own_count():
     assert RATE_LIMIT_CONFIG["/api/v1/audit-logs/export"] == (10, MINUTE)
 
@@ -58,6 +62,7 @@ def test_these_are_all_the_routes_with_a_limit_of_their_own():
         "/api/v1/users/me/password",
         "/api/v1/auth/sso/exchange",
         "/api/v1/auth/sso/login",
+        "/api/v1/auth/cognito/exchange",
         "/api/v1/tracking/assign/batch",
         "/api/v1/audit-logs/export",
         "/api/v1/ai/design",

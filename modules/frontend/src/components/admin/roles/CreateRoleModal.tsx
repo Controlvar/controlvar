@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Dialog } from '@/components/ui/Dialog';
 import { CustomRole } from '@/types/admin';
 import { RbacService } from '@modules/rbac';
 import { PermissionCheckboxGrid } from './PermissionCheckboxGrid';
@@ -54,10 +55,6 @@ export function CreateRoleModal({
     setError(null);
   }, [role, isOpen]);
 
-  if (!isOpen) {
-    return null;
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
@@ -82,53 +79,33 @@ export function CreateRoleModal({
     }
   };
 
+  // Escape closes it; a click on the backdrop does not (the shared Dialog has no
+  // backdrop close, so a stray click cannot throw away a half-made role).
   return (
-    <div
-      data-testid="create-role-modal"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="role-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center"
+    <Dialog
+      open={isOpen}
+      onClose={onClose}
+      title={isEditMode ? 'Edit Role' : 'Create Role'}
+      headerAction={
+        <button
+          data-testid="modal-close-x-button"
+          type="button"
+          aria-label="Close"
+          onClick={onClose}
+          className="text-slate-600 hover:text-slate-900 transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      }
+      size="lg"
+      testId="create-role-modal"
     >
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black bg-opacity-40"
-        onClick={onClose}
-      />
-
-      {/* Modal panel */}
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 flex flex-col max-h-[90vh]">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between flex-shrink-0">
-          <h2 id="role-modal-title" className="text-lg font-semibold text-slate-900">
-            {isEditMode ? 'Edit Role' : 'Create Role'}
-          </h2>
-          <button
-            data-testid="modal-close-x-button"
-            type="button"
-            aria-label="Close"
-            onClick={onClose}
-            className="text-slate-600 hover:text-slate-900 transition-colors"
-          >
-                        <svg
-              className="w-5 h-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        </div>
-
+      <div>
         {/* Body */}
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
-          <div className="px-6 py-4 space-y-4 overflow-y-auto flex-1">
+        <form onSubmit={handleSubmit} className="flex flex-col">
+          <div className="space-y-4">
             {error && (
               <div
                 role="alert"
@@ -155,6 +132,7 @@ export function CreateRoleModal({
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. data-scientist"
                 disabled={isEditMode}
+                data-autofocus={isEditMode ? undefined : ''}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-500"
               />
             </div>
@@ -170,6 +148,7 @@ export function CreateRoleModal({
               <textarea
                 id="role-description"
                 data-testid="role-description-input"
+                data-autofocus={isEditMode ? '' : undefined}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Describe what this role is for..."
@@ -201,7 +180,7 @@ export function CreateRoleModal({
           </div>
 
           {/* Footer */}
-          <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-3 flex-shrink-0">
+          <div className="mt-4 pt-4 border-t border-slate-200 flex justify-end gap-3">
             <button
               data-testid="modal-cancel-button"
               type="button"
@@ -227,6 +206,6 @@ export function CreateRoleModal({
           </div>
         </form>
       </div>
-    </div>
+    </Dialog>
   );
 }

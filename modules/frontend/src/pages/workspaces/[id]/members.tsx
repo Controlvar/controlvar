@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { withModule } from '@/components/ModuleNotice';
 import { MODULES } from '@/services/modules';
 import { PageTitle } from '@/components/PageTitle';
+import { Dialog } from '@/components/ui/Dialog';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import {
@@ -56,15 +57,6 @@ function InviteModal({ workspaceId, onClose }: InviteModalProps) {
   const [copyState, setCopyState] = useState<CopyState>('idle');
   const linkRef = useRef<HTMLInputElement>(null);
 
-  // Esc closes the dialog, as the × and Close buttons do.
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
-
   // The link is what the admin came for: focus and select it once it exists.
   useEffect(() => {
     if (created && linkRef.current) {
@@ -104,28 +96,25 @@ function InviteModal({ workspaceId, onClose }: InviteModalProps) {
 
   const done = created !== null;
 
+  // Escape closes it (as the × and Close buttons do), from anywhere on the page;
+  // the shared Dialog owns the key, focus and the page behind it.
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="invite-member-title"
-        className="bg-white rounded-xl shadow-xl w-full max-w-md p-6"
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 id="invite-member-title" className="text-lg font-semibold text-slate-900">
-            Invite Member
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-slate-500 hover:text-slate-700 text-xl leading-none"
-            aria-label="Close"
-          >
-            &times;
-          </button>
-        </div>
-
+    <Dialog
+      open
+      onClose={onClose}
+      title="Invite Member"
+      headerAction={
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-slate-500 hover:text-slate-700 text-xl leading-none"
+          aria-label="Close"
+        >
+          &times;
+        </button>
+      }
+    >
+      <div>
         {created && (
           <div className="mb-4 space-y-3">
             <p
@@ -185,7 +174,7 @@ function InviteModal({ workspaceId, onClose }: InviteModalProps) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              autoFocus
+              data-autofocus=""
               disabled={done}
               aria-describedby="invite-email-help"
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50"
@@ -238,7 +227,7 @@ function InviteModal({ workspaceId, onClose }: InviteModalProps) {
           </div>
         </form>
       </div>
-    </div>
+    </Dialog>
   );
 }
 
@@ -250,31 +239,42 @@ interface RemoveConfirmProps {
 }
 
 function RemoveConfirmDialog({ member, onConfirm, onCancel, removing }: RemoveConfirmProps) {
+  // A destructive confirm: it starts on Cancel, and Escape is Cancel (it never
+  // calls onConfirm).
+  const cancelRef = useRef<HTMLButtonElement>(null);
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
-        <h2 className="text-lg font-semibold text-slate-900 mb-2">Remove Member</h2>
-        <p className="text-sm text-slate-600 mb-5">
+    <Dialog
+      open
+      onClose={onCancel}
+      title="Remove Member"
+      description={
+        <p className="text-sm text-slate-600 mb-1">
           Are you sure you want to remove{' '}
           <span className="font-medium">{member.username}</span> from this workspace?
         </p>
-        <div className="flex justify-end gap-3">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={removing}
-            className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
-          >
-            {removing ? 'Removing...' : 'Remove'}
-          </button>
-        </div>
+      }
+      initialFocusRef={cancelRef}
+      size="sm"
+    >
+      <div className="mt-4 flex justify-end gap-3">
+        <button
+          ref={cancelRef}
+          type="button"
+          onClick={onCancel}
+          className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={removing}
+          className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
+        >
+          {removing ? 'Removing...' : 'Remove'}
+        </button>
       </div>
-    </div>
+    </Dialog>
   );
 }
 
