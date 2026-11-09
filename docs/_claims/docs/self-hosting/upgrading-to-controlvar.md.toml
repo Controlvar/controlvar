@@ -46,11 +46,11 @@ text = "Docker Compose"
 by = ["exempt:label"]
 
 [[unit]]
-text = "Replace deploy/compose/compose.yml with the file of the new release, then run docker compose pull and docker compose up -d."
-by = ["exempt:instruction"]
+text = "Follow the Compose README's Upgrade procedure."
+by = ["exempt:navigation"]
 
 [[unit]]
-text = "The file keeps the project name experimently-selfhost and the database user experimently on purpose: the volumes are named after the project, so your database is the one you had."
+text = "compose.yml keeps the project name experimently-selfhost and the database user experimently on purpose: the volumes are named after the project, so your database is the one you had."
 by = [
     "test:backend/tests/unit/infrastructure/test_production_compose.py::test_compose_upgrade_keeps_the_postgres_volume",
     "test:backend/tests/unit/infrastructure/test_production_compose.py::TestShape::test_the_project_name_is_not_the_development_stacks",

@@ -451,6 +451,10 @@ class Settings(BaseSettings):
     # but the bandit scheduler records every tick, so the tables still grow
     # without a purge. 0 disables the purge.
     ANALYSIS_HISTORY_RETENTION_DAYS: int = 90
+    # The days a flag must go unevaluated, or unchanged while it serves one
+    # answer to everyone, before the flag list marks it stale (#1808). One
+    # value for the installation, read when the process starts.
+    STALE_FLAG_DAYS: int = Field(default=30, ge=1, le=3650)
 
     METRICS_ENABLED: bool = True
     METRICS_TOKEN: Optional[str] = (

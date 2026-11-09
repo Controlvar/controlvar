@@ -42,6 +42,7 @@ from backend.app.models.feature_flag import (
 )
 from backend.app.models.metrics.metric import AggregatedMetric, ErrorLog, RawMetric
 from backend.app.schemas.feature_flag import (
+    LIST_ITEM_FIELDS,
     READ_ONLY_FIELDS,
     FeatureFlagCreate,
     FeatureFlagRead,
@@ -304,7 +305,9 @@ class FeatureFlagService:
         )
         _check_sent_status(flag_data, status)
 
-        flag_dict = flag_data.model_dump(exclude=READ_ONLY_FIELDS | {"is_active"})
+        flag_dict = flag_data.model_dump(
+            exclude=READ_ONLY_FIELDS | LIST_ITEM_FIELDS | {"is_active"}
+        )
         flag_dict["on_value"], flag_dict["off_value"] = stored_values(
             flag_dict["value_type"], flag_dict["on_value"], flag_dict["off_value"]
         )
@@ -358,7 +361,9 @@ class FeatureFlagService:
         _check_sent_status(flag_data, stored)
         _check_sent_values(flag_data, flag)
 
-        update_data = flag_data.model_dump(exclude_unset=True, exclude=READ_ONLY_FIELDS)
+        update_data = flag_data.model_dump(
+            exclude_unset=True, exclude=READ_ONLY_FIELDS | LIST_ITEM_FIELDS
+        )
         update_data.pop("value_type", None)
         if flag_value_type(flag) == BOOLEAN:
             for field in VALUE_FIELDS:

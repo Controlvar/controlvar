@@ -1,18 +1,30 @@
 name: Compose Production
 
-# Boots deploy/compose/compose.yml -- the file a self-hoster downloads -- the
-# way they do: published image names, a generated .env, ENVIRONMENT=production,
-# no build. Then checks it through the dashboard's published port with the Host
-# check on (tests/alb/rehearse.sh, TOPOLOGY=compose).
+# Two jobs on deploy/compose/compose.yml, the file a self-hoster downloads.
 #
-# On a pull request the images are THIS change's core builds, retagged to the
+# compose-production boots it the way they do: published image names, a
+# generated .env, ENVIRONMENT=production, no build. Then it checks it through
+# the dashboard's published port with the Host check on (tests/alb/rehearse.sh,
+# TOPOLOGY=compose). Its images are THIS change's core builds, retagged to the
 # published names the compose file resolves to. That proves the file's shape
-# and the images' behaviour under it, not the published bytes: nothing here
-# pulls from ghcr.io (`--pull never`), by design, since the published images
+# and the images' behaviour under it, not the published bytes: this job pulls
+# neither app image (`--pull never`), by design, since the published images
 # are the previous release's and this job tests this change's.
 #
+# compose-upgrade (#1807) runs the README's own blocks, extracted from the
+# page (scripts/compose_upgrade.sh): it installs the previous release from a
+# clone at its tag, which pulls that release's published images from GHCR
+# anonymously (no registry login, as a fork's run must), then upgrades to this
+# change's builds, rolls back in place and restores the backup. Not on a push:
+# on the release commit, compose.yml names images release.yml has not
+# published yet. The phases, and what each asserts, are in the script.
+#
 # Not a required check (yet): it is path-filtered, and a required check that
-# does not report blocks a pull request for ever.
+# does not report blocks a pull request for ever. A red run anywhere but a pull
+# request (a push to main, the nightly, a dispatch) opens an issue labelled
+# `compose-production-failure`, or comments on the open one: `failure-issue`
+# below, a copy of Doc Examples' job of that name
+# (test_compose_failure_issue.py holds the two identical).
 
 on:
   pull_request:
@@ -27,6 +39,9 @@ on:
       - tests/alb/rehearse.sh
       - tests/web/access_log.sh
       - scripts/check_compose_config.py
+      # What runs the README's blocks (compose-upgrade), and what extracts them.
+      - scripts/compose_upgrade.sh
+      - scripts/guide_blocks.py
       - VERSION
       - .github/workflows/compose-production.yml
   push:
@@ -43,7 +58,16 @@ on:
       - scripts/check_compose_config.py
       - VERSION
       - .github/workflows/compose-production.yml
+  # 04:30 UTC: after chart-kind (03:30) and CodeQL (04:00), before the fuzz
+  # run (05:23).
+  schedule:
+    - cron: '30 4 * * *'
   workflow_dispatch:
+    inputs:
+      previous_version:
+        description: 'N-1 for compose-upgrade, as X.Y.Z (default: the newest release at or below VERSION)'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -251,3 +275,135 @@ jobs:
       - name: Tear down
         if: always()
         run: docker compose -f "$PROD_COMPOSE" down -v --remove-orphans
+
+  compose-upgrade:
+    name: Compose Upgrade
+    # Not on a push: on the release commit, compose.yml names core-N before
+    # release.yml has published it, so the page's pull would fail.
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      # Full history: N-1 is a tag, and the self-hoster's clone is made from
+      # this checkout.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Resolved before anything is built, so that an N-1 that cannot be
+      # resolved fails in seconds: the newest release at or below VERSION
+      # whose images read anonymously, or the release before it while the
+      # newest one's are still publishing. A dispatch may name it, with no
+      # fallback.
+      - name: Resolve the previous release (N-1)
+        env:
+          PREVIOUS_VERSION: ${{ inputs.previous_version }}
+        run: bash scripts/compose_upgrade.sh previous
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # The UTC date, passed to the image builds below as OS_PACKAGES_REFRESHED
+      # (see the compose-production job).
+      - name: OS package refresh date
+        id: os-packages
+        run: printf 'date=%s\n' "$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      # The compose-production job's builds, under local names only: the
+      # install must pull N-1's images, so nothing carries a published name
+      # until the retag step below.
+      - name: Build API image (core)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: backend/Dockerfile
+          target: core
+          build-args: |
+            OS_PACKAGES_REFRESHED=${{ steps.os-packages.outputs.date }}
+          load: true
+          tags: compose-upgrade-api:core
+          cache-from: type=gha,scope=api
+
+      - name: Build dashboard image (core)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: frontend/Dockerfile
+          build-args: |
+            EXPERIMENTLY_PROFILE=core
+            OS_PACKAGES_REFRESHED=${{ steps.os-packages.outputs.date }}
+          load: true
+          tags: compose-upgrade-web:core
+          cache-from: type=gha,scope=web
+
+      - name: Record this change's image IDs
+        run: bash scripts/compose_upgrade.sh images
+
+      - name: The README's blocks (deploy/compose/README.md)
+        run: bash scripts/compose_upgrade.sh blocks
+
+      - name: Install the previous release as the README does
+        run: bash scripts/compose_upgrade.sh install
+
+      - name: Back up, get this change's files, check the settings, pull
+        run: bash scripts/compose_upgrade.sh prepare
+
+      # The one step that is not a README block: this change's builds, by ID,
+      # under the names the new compose.yml resolves.
+      - name: Retag this change's builds to the published names
+        run: bash scripts/compose_upgrade.sh retag
+
+      - name: Upgrade, verify, check the migrations
+        run: bash scripts/compose_upgrade.sh upgrade
+
+      - name: Restart the API
+        run: bash scripts/compose_upgrade.sh restart
+
+      - name: Roll back in place, then restore the backup
+        run: bash scripts/compose_upgrade.sh rollback
+
+      - name: Container logs (on failure)
+        if: failure()
+        run: bash scripts/compose_upgrade.sh diagnose
+
+      - name: Tear down
+        if: always()
+        run: bash scripts/compose_upgrade.sh teardown
+
+  failure-issue:
+    name: File an issue on failure
+    runs-on: ubuntu-latest
+    needs: [compose-production, compose-upgrade]
+    # Doc Examples' condition, unchanged: a job that reaches timeout-minutes
+    # concludes `cancelled`, not `failure`, so a cancelled job is red here
+    # too. compose-upgrade is skipped on a push, which neither condition
+    # counts. `!cancelled()` still leaves out a run that was itself
+    # cancelled; off a pull request the group above is the run's own id, so
+    # that means a person cancelled it.
+    if: ${{ github.event_name != 'pull_request' && !cancelled() && (failure() || contains(needs.*.result, 'cancelled')) }}
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          TITLE="Compose Production is red"
+          BODY="Compose Production failed on $(date -u '+%Y-%m-%d') (${GITHUB_EVENT_NAME}, commit ${GITHUB_SHA})."$'\n\n'"Run: ${RUN_URL}"
+
+          # `|| true`: the label does not exist yet on the first red run.
+          EXISTING=$(gh issue list --repo "$REPO" --state open --label compose-production-failure \
+            --json number --jq '.[0].number // empty' 2>/dev/null || true)
+
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$REPO" --body "$BODY"
+          else
+            gh label create compose-production-failure --repo "$REPO" --color B60205 \
+              --description "Compose Production failed" 2>/dev/null || true
+            gh issue create --repo "$REPO" --title "$TITLE" \
+              --label compose-production-failure --body "$BODY"
+          fi

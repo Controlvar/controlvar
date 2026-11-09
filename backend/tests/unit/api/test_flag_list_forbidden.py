@@ -84,7 +84,22 @@ def test_the_status_query_still_reaches_the_filter(signed_in):
         )
 
     assert resp.status_code == 200, resp.text
-    assert resp.json() == {"items": [], "total": 0, "skip": 0, "limit": 100}
+    body = resp.json()
+    # The stale fields (#1808) are decided by the database, a mock here.
+    assert set(body) == {
+        "items",
+        "total",
+        "skip",
+        "limit",
+        "stale_days",
+        "evaluations_seen",
+    }
+    assert {k: body[k] for k in ("items", "total", "skip", "limit")} == {
+        "items": [],
+        "total": 0,
+        "skip": 0,
+        "limit": 100,
+    }
     # The text reaches the filter as the enum member (#955), never as text.
     assert get_multi.call_args.kwargs["status"] is FeatureFlagStatus.INACTIVE
     assert get_multi.call_args.kwargs["search"] == "chk"

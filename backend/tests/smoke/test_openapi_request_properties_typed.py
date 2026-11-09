@@ -27,7 +27,7 @@ from typing import Any, Dict, Iterator, List, Set, Tuple
 import pytest
 from jsonschema import Draft202012Validator
 
-from backend.app.schemas.feature_flag import READ_ONLY_FIELDS
+from backend.app.schemas.feature_flag import LIST_ITEM_FIELDS, READ_ONLY_FIELDS
 from backend.tests.smoke.test_openapi_snapshot import HTTP_METHODS, _refs, dump_document
 
 pytestmark = pytest.mark.smoke
@@ -122,7 +122,9 @@ def untyped_request_properties(
 def test_no_request_body_property_is_untyped(document):
     found, read_only = untyped_request_properties(document)
     assert found == [], f"untyped request-body properties: {found}"
-    assert read_only == READ_ONLY_FIELDS
+    # The flag list item adds ``stale`` and ``stale_reasons`` (#1808); a request
+    # body may carry them back, marked readOnly, like the read-only fields.
+    assert read_only == READ_ONLY_FIELDS | LIST_ITEM_FIELDS
 
 
 @pytest.mark.regression

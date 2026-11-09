@@ -5375,6 +5375,16 @@
             "title": "Rollout Percentage",
             "type": "integer"
           },
+          "stale": {
+            "description": "Read-only; ignored.",
+            "readOnly": true,
+            "title": "Stale"
+          },
+          "stale_reasons": {
+            "description": "Read-only; ignored.",
+            "readOnly": true,
+            "title": "Stale Reasons"
+          },
           "status": {
             "description": "Read-only. Accepted when it equals the flag's status, in any case (on create: the status is_active gives it); any other value answers 422. Turn a flag on or off with is_active.",
             "readOnly": true,
@@ -5429,9 +5439,163 @@
         "title": "FeatureFlagCreate",
         "type": "object"
       },
+      "FeatureFlagListItem": {
+        "description": "A flag in the list: the flag, and whether it looks ready to remove (#1808).",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "default_value": {
+            "description": "Deprecated: always false. Read `off_value`.",
+            "title": "Default Value",
+            "type": "boolean"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "description": "True exactly when status is \"active\".",
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "off_value": {
+            "description": "What everyone else gets, and what everyone gets while the flag is off. Required for a string, number or json flag, and of that type; a boolean flag's is `false`.",
+            "title": "Off Value"
+          },
+          "on_value": {
+            "description": "What a user the flag is on for gets: a user who matches a targeting rule and falls inside its percentage, or matches no rule and falls inside `rollout_percentage`. Required for a string, number or json flag, and of that type; a boolean flag's is `true`.",
+            "title": "On Value"
+          },
+          "owner_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The user who created the flag; null once that user is gone.",
+            "title": "Owner Id"
+          },
+          "rollout_percentage": {
+            "title": "Rollout Percentage",
+            "type": "integer"
+          },
+          "stale": {
+            "description": "True when the flag looks ready to remove. Advice only: nothing is archived or changed automatically. The definition is beta: its conditions and threshold may change; the fields will not.",
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "stale_reasons": {
+            "description": "Why: not_evaluated, on_for_everyone, off_for_everyone; more than one can apply.",
+            "items": {
+              "enum": [
+                "not_evaluated",
+                "on_for_everyone",
+                "off_for_everyone"
+              ],
+              "type": "string"
+            },
+            "title": "Stale Reasons",
+            "type": "array"
+          },
+          "status": {
+            "description": "The flag's status, lower-cased.",
+            "enum": [
+              "active",
+              "inactive",
+              "archived"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          },
+          "targeting_rules": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The flag's targeting rules, as stored.",
+            "title": "Targeting Rules"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "value_type": {
+            "description": "What the flag serves: `boolean` (the default; `true` to users the flag is on for, `false` to everyone else), `string`, `number`, or `json` (an object or an array). Set when the flag is created; an update may send it back unchanged, and any other value answers 422.",
+            "title": "Value Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "name",
+          "description",
+          "status",
+          "is_active",
+          "rollout_percentage",
+          "targeting_rules",
+          "default_value",
+          "value_type",
+          "on_value",
+          "off_value",
+          "tags",
+          "owner_id",
+          "created_at",
+          "updated_at",
+          "stale",
+          "stale_reasons"
+        ],
+        "title": "FeatureFlagListItem",
+        "type": "object"
+      },
       "FeatureFlagListResponse": {
         "description": "Paginated response model for feature flags.",
         "example": {
+          "evaluations_seen": true,
           "items": [
             {
               "created_at": "2023-01-01T00:00:00Z",
@@ -5445,6 +5609,11 @@
               "on_value": true,
               "owner_id": "5f0c8a52-1d7e-4c3b-9a6f-2b8e4d1c7a90",
               "rollout_percentage": 0,
+              "stale": true,
+              "stale_reasons": [
+                "not_evaluated",
+                "off_for_everyone"
+              ],
               "status": "inactive",
               "updated_at": "2023-01-01T00:00:00Z",
               "value_type": "boolean"
@@ -5452,12 +5621,18 @@
           ],
           "limit": 100,
           "skip": 0,
+          "stale_days": 30,
           "total": 1
         },
         "properties": {
+          "evaluations_seen": {
+            "description": "False when the installation recorded no flag evaluation in the last stale_days days; not_evaluated is then not reported.",
+            "title": "Evaluations Seen",
+            "type": "boolean"
+          },
           "items": {
             "items": {
-              "$ref": "#/components/schemas/FeatureFlagRead"
+              "$ref": "#/components/schemas/FeatureFlagListItem"
             },
             "title": "Items",
             "type": "array"
@@ -5470,6 +5645,11 @@
             "title": "Skip",
             "type": "integer"
           },
+          "stale_days": {
+            "description": "N, the days a flag must go without an evaluation, or unchanged while it serves one answer to everyone, to be stale. STALE_FLAG_DAYS sets it.",
+            "title": "Stale Days",
+            "type": "integer"
+          },
           "total": {
             "title": "Total",
             "type": "integer"
@@ -5479,7 +5659,9 @@
           "items",
           "total",
           "skip",
-          "limit"
+          "limit",
+          "stale_days",
+          "evaluations_seen"
         ],
         "title": "FeatureFlagListResponse",
         "type": "object"
@@ -5795,6 +5977,16 @@
             "minimum": 0,
             "title": "Rollout Percentage",
             "type": "integer"
+          },
+          "stale": {
+            "description": "Read-only; ignored.",
+            "readOnly": true,
+            "title": "Stale"
+          },
+          "stale_reasons": {
+            "description": "Read-only; ignored.",
+            "readOnly": true,
+            "title": "Stale Reasons"
           },
           "status": {
             "description": "Read-only. Accepted when it equals the flag's status, in any case (on create: the status is_active gives it); any other value answers 422. Turn a flag on or off with is_active.",
@@ -17155,7 +17347,7 @@
             }
           },
           {
-            "description": "Field to sort by (created_at, updated_at, name, status)",
+            "description": "Column to sort by, in exact case: id, created_at, updated_at, name, key, description, hypothesis, status, experiment_type, owner_id, start_date, end_date, resume_at, targeting_rules, metrics, tags, experiment_metadata, optimization_type, sequential_testing_enabled, sequential_testing_method, sequential_testing_config, variance_reduction_config, correction_method, confidence_level, mutual_exclusion_group_id, bayesian_enabled, bayesian_config, bayesian_decision, split_url_config, workspace_id. An empty value applies no sort; any other value answers 422.",
             "in": "query",
             "name": "sort_by",
             "required": false,
@@ -17169,7 +17361,7 @@
                 }
               ],
               "default": "created_at",
-              "description": "Field to sort by (created_at, updated_at, name, status)",
+              "description": "Column to sort by, in exact case: id, created_at, updated_at, name, key, description, hypothesis, status, experiment_type, owner_id, start_date, end_date, resume_at, targeting_rules, metrics, tags, experiment_metadata, optimization_type, sequential_testing_enabled, sequential_testing_method, sequential_testing_config, variance_reduction_config, correction_method, confidence_level, mutual_exclusion_group_id, bayesian_enabled, bayesian_config, bayesian_decision, split_url_config, workspace_id. An empty value applies no sort; any other value answers 422.",
               "title": "Sort By"
             }
           },
@@ -19642,7 +19834,7 @@
     },
     "/api/v1/feature-flags/": {
       "get": {
-        "description": "Retrieve feature flags.\n- **skip**: Number of feature flags to skip in pagination\n- **limit**: Maximum number of feature flags to return\n- **status**: Filter by status (`active`, `inactive`, `archived`; any case)\n- **search**: Filter by name or key",
+        "description": "Retrieve feature flags.\n- **skip**: Number of feature flags to skip in pagination\n- **limit**: Maximum number of feature flags to return\n- **status**: Filter by status (`active`, `inactive`, `archived`; any case)\n- **search**: Filter by name or key\n- **stale**: `true` for only the stale flags, `false` for the rest\n\nEach item says whether the flag looks ready to remove (`stale`) and why\n(`stale_reasons`); `stale_days` and `evaluations_seen` say what that was\ndecided with. Listing changes no flag.",
         "operationId": "list_feature_flags_api_v1_feature_flags__get",
         "parameters": [
           {
@@ -19697,6 +19889,24 @@
                 }
               ],
               "title": "Search"
+            }
+          },
+          {
+            "description": "true returns only stale flags, false the rest; omit for all. Archived flags are never stale.",
+            "in": "query",
+            "name": "stale",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "true returns only stale flags, false the rest; omit for all. Archived flags are never stale.",
+              "title": "Stale"
             }
           }
         ],

@@ -62,6 +62,8 @@ READ_KEYS = {
     "created_at",
     "updated_at",
 }
+#: What a list item has besides (#1808).
+LIST_ITEM_KEYS = {"stale", "stale_reasons"}
 
 RULES = {
     "logical_operator": "OR",
@@ -241,7 +243,10 @@ def test_every_response_can_be_put_back_unchanged(
         admin_user.id if owned else None,
     )
     for name, body in surfaces:
-        assert set(body) == READ_KEYS, (name, set(body) ^ READ_KEYS)
+        # A list item also says whether the flag is stale (#1808); a request
+        # accepts those two fields and ignores them, like the read-only ones.
+        keys = READ_KEYS | LIST_ITEM_KEYS if name == "list_item" else READ_KEYS
+        assert set(body) == keys, (name, set(body) ^ keys)
         assert body["owner_id"] == (str(admin_user.id) if owned else None), name
         before = _snapshot(_row(db_session, flag.id))
 

@@ -14,6 +14,7 @@ The version on the image lines is pinned by ``scripts/check_version_sources.py``
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import os
 import re
@@ -21,6 +22,7 @@ import shutil
 import stat
 import subprocess
 import sys
+from itertools import zip_longest
 from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import urlparse
@@ -28,6 +30,7 @@ from urllib.parse import urlparse
 import pytest
 import yaml
 
+from backend.tests.unit.infrastructure import _workflow_graph as wg
 from backend.tests.unit.infrastructure._compose_feature_keys import FEATURE_KEYS
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -506,11 +509,55 @@ class TestGenerator:
 
 
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "compose-production.yml"
+UPGRADE_SCRIPT = REPO_ROOT / "scripts" / "compose_upgrade.sh"
+
+#: The compose-upgrade job's steps that run its script unconditionally, in
+#: order: one phase of scripts/compose_upgrade.sh each (the image builds sit
+#: between `previous` and `images`).
+UPGRADE_PHASES = (
+    "previous",
+    "images",
+    "blocks",
+    "install",
+    "prepare",
+    "retag",
+    "upgrade",
+    "restart",
+    "rollback",
+)
+
+#: What run_block may pass a block: the variables the page tells the reader to
+#: set (Upgrade's table, and Run it's ENV_FILE), and nothing of the job's.
+BLOCK_VARIABLES = {"RELEASE", "PUBLIC_BASE_URL", "ENV_FILE"}
+
+#: A call of the script's run_block: the block's name, then VAR=VALUE words.
+RUN_BLOCK_CALL = re.compile(
+    r"\brun_block ([a-z][a-z0-9-]*)((?: [A-Za-z_][A-Za-z0-9_]*=\S+)*)"
+)
+
+#: A call of the script's dc (its own `docker compose`), as a command or in $(...).
+DC_CALL = re.compile(r"(?<![\w$-])dc\s")
+
+
+def _function(script: str, name: str) -> str:
+    """The body of shell function *name* in *script*, `name() {` to `}`."""
+    found = re.search(rf"^{name}\(\) \{{\n(.*?)^\}}$", script, re.M | re.S)
+    assert found, f"compose_upgrade.sh has no {name} function"
+    return found.group(1)
+
+
+def _code(script: str) -> str:
+    """*script* without its comment lines, which may name what it never runs."""
+    return "\n".join(
+        line for line in script.splitlines() if not line.lstrip().startswith("#")
+    )
 
 
 @pytest.mark.skipif(not WORKFLOW.is_file(), reason="this tree has no .github/workflows")
 class TestWorkflow:
-    """The job that boots the file: it must not build, pull or skip its checks."""
+    """The jobs that boot the file and rehearse its upgrade: they must not
+    build where they should pull or pull where they should build, log in to a
+    registry, run a block the page does not hold, or skip a check."""
 
     @pytest.fixture(scope="class")
     def runs(self) -> str:
@@ -553,6 +600,268 @@ class TestWorkflow:
             'TOPOLOGY="${TOPOLOGY:-alb}"'
             in (REPO_ROOT / "tests" / "alb" / "rehearse.sh").read_text()
         )
+
+    # -- compose-upgrade (#1807): the README's own blocks, from N-1's images --
+
+    @pytest.fixture(scope="class")
+    def jobs(self) -> Dict[str, Any]:
+        return wg.load(WORKFLOW)["jobs"]
+
+    @pytest.fixture(scope="class")
+    def upgrade_job(self, jobs) -> Dict[str, Any]:
+        assert "compose-upgrade" in jobs, (
+            "compose-production.yml has no compose-upgrade job"
+        )
+        return jobs["compose-upgrade"]
+
+    @pytest.fixture(scope="class")
+    def script(self) -> str:
+        assert UPGRADE_SCRIPT.is_file(), "scripts/compose_upgrade.sh does not exist"
+        return UPGRADE_SCRIPT.read_text(encoding="utf-8")
+
+    def test_no_job_or_step_may_fail_and_carry_on(self, jobs):
+        """SPEC, refused: `continue-on-error` anywhere in the workflow."""
+        for name, job in jobs.items():
+            assert "continue-on-error" not in job, name
+            for step in job.get("steps", []):
+                assert "continue-on-error" not in step, f"{name}: {step.get('name')}"
+
+    def test_nothing_logs_in_to_a_registry(self, script):
+        """SPEC, refused: every pull is anonymous, as a fork's must be; and the
+        header no longer says nothing pulls."""
+        text = WORKFLOW.read_text(encoding="utf-8")
+        for refused in ("docker login", "login-action", "packages:"):
+            assert refused not in text, f"{refused!r} in compose-production.yml"
+            assert refused not in script, f"{refused!r} in compose_upgrade.sh"
+        assert "nothing here pulls from ghcr.io" not in text
+
+    def test_the_upgrade_job_is_named_bounded_and_skips_only_a_push(self, upgrade_job):
+        """Not on a push: on the release commit, compose.yml names core-N
+        before release.yml has published it, so the page's pull would fail."""
+        assert upgrade_job["name"] == "Compose Upgrade"
+        assert upgrade_job["if"] == "github.event_name != 'push'"
+        assert upgrade_job["timeout-minutes"] == 40
+        assert upgrade_job["runs-on"] == "ubuntu-latest"
+        assert "strategy" not in upgrade_job, "one profile, no matrix"
+        assert "concurrency" not in upgrade_job, "the workflow's group only"
+
+    def test_the_upgrade_job_runs_on_pull_requests_nightly_and_by_hand(self):
+        on = wg.triggers(wg.load(WORKFLOW))
+        assert on["schedule"] == [{"cron": "30 4 * * *"}]
+        assert set(on["workflow_dispatch"]["inputs"]) == {"previous_version"}
+        assert on["workflow_dispatch"]["inputs"]["previous_version"]["default"] == ""
+        paths = on["pull_request"]["paths"]
+        for path in (
+            "deploy/compose/README.md",
+            "scripts/compose_upgrade.sh",
+            "scripts/guide_blocks.py",
+        ):
+            assert path in paths, path
+
+    def test_the_upgrade_job_runs_its_phases_in_order(self, upgrade_job):
+        steps = upgrade_job["steps"]
+        assert steps[0]["uses"] == "actions/checkout@v7"
+        assert steps[0]["with"] == {"fetch-depth": 0}, (
+            "N-1 is a tag, and the self-hoster's clone is made from this one"
+        )
+        phase = re.compile(r"bash scripts/compose_upgrade\.sh ([a-z-]+)")
+        ran, conditional = [], {}
+        for step in steps:
+            found = phase.fullmatch(str(step.get("run", "")).strip())
+            if not found:
+                continue
+            if "if" in step:
+                conditional[found.group(1)] = step["if"]
+            else:
+                ran.append(found.group(1))
+        assert ran == list(UPGRADE_PHASES)
+        assert conditional == {"diagnose": "failure()", "teardown": "always()"}
+
+    def test_the_upgrade_job_builds_what_the_other_job_builds(self, jobs, upgrade_job):
+        """The same two core builds, cache and build arguments, under local
+        names: the stack must pull N-1's images, so nothing may be tagged with
+        the published names before the install."""
+
+        def builds(job):
+            return [
+                step["with"]
+                for step in job["steps"]
+                if str(step.get("uses", "")).startswith("docker/build-push-action@")
+            ]
+
+        mine, theirs = builds(upgrade_job), builds(jobs["compose-production"])
+        assert [b["tags"] for b in mine] == [
+            "compose-upgrade-api:core",
+            "compose-upgrade-web:core",
+        ]
+        assert [{**b, "tags": None} for b in mine] == [
+            {**b, "tags": None} for b in theirs
+        ]
+
+    def test_the_script_names_the_page_the_builds_and_the_project(
+        self, script, compose
+    ):
+        def value(name):
+            found = re.search(rf"^{name}=(\S+)$", script, re.M)
+            assert found, f"compose_upgrade.sh sets no {name}"
+            return found.group(1)
+
+        assert REPO_ROOT / value("GUIDE") == README
+        assert value("MARKER") == "compose-upgrade"
+        assert value("PROJECT") == compose["name"]
+        assert value("PROFILE") == "core"
+        assert value("BUILD_API") == "compose-upgrade-api:core"
+        assert value("BUILD_WEB") == "compose-upgrade-web:core"
+
+    def test_the_upgrade_job_runs_every_block_of_the_page(self, script):
+        """Every bash block of the README is marked, in the script's list, and
+        run by name: an unrun block is a command on the page nothing tests."""
+        text = README.read_text(encoding="utf-8")
+        listed = re.search(r"^GUIDE_BLOCKS=(\S+)$", script, re.M)
+        assert listed, "compose_upgrade.sh sets no GUIDE_BLOCKS"
+        blocks = listed.group(1).split(",")
+        markers = re.findall(
+            r"^<!-- compose-upgrade: ([a-z][a-z0-9-]*) -->$", text, re.M
+        )
+        assert markers == blocks
+        assert len(re.findall(r"^```bash$", text, re.M)) == len(blocks)
+        called = {m.group(1) for m in RUN_BLOCK_CALL.finditer(_code(script))}
+        assert called == set(blocks)
+
+    def test_every_block_runs_under_env_i_with_only_the_declared_variables(
+        self, script
+    ):
+        """C6, SPEC, refused: a block run outside run_block, or a run_block
+        that does not start `env -i`. The block sees HOME, PATH and the
+        variables the page declares, never the job's environment."""
+        body = _function(script, "run_block")
+        runs = [line for line in body.splitlines() if '"$BLOCKS/$name.sh"' in line]
+        runs = [line for line in runs if "bash" in line]
+        assert len(runs) == 1, runs
+        command = runs[0].split("&&", 1)[-1].strip()
+        assert command.startswith(
+            'env -i HOME="$READER_HOME" PATH="$PATH" "$@" bash -euo pipefail '
+        ), f"run_block does not run the block under env -i: {runs[0]!r}"
+        outside = _code(script.replace(body, ""))
+        assert "bash -euo pipefail" not in outside, "a block run outside run_block"
+        assert '"$BLOCKS/' not in outside.replace('--out "$BLOCKS"', ""), (
+            "a block read outside run_block"
+        )
+
+        declared = re.search(r"^DECLARED='([^']*)'$", script, re.M)
+        assert declared, "compose_upgrade.sh declares no DECLARED variables"
+        assert set(declared.group(1).split()) == BLOCK_VARIABLES
+        assert UPGRADE_VARIABLES <= BLOCK_VARIABLES
+        for call in RUN_BLOCK_CALL.finditer(_code(script)):
+            passed = set(re.findall(r" ([A-Za-z_][A-Za-z0-9_]*)=", call.group(2)))
+            assert passed <= BLOCK_VARIABLES, call.group(0)
+
+    def test_each_block_is_given_the_variables_it_reads(self, script):
+        """Every call of a block passes each variable the block expands: under
+        `bash -u` a block without one stops at its first line, and under
+        `env -i` nothing else can supply it."""
+        bodies = dict(
+            re.findall(
+                r"^<!-- compose-upgrade: ([a-z][a-z0-9-]*) -->\n```bash\n(.*?)^```$",
+                README.read_text(encoding="utf-8"),
+                re.M | re.S,
+            )
+        )
+        calls = list(RUN_BLOCK_CALL.finditer(_code(script)))
+        assert calls, "compose_upgrade.sh runs no block"
+        for call in calls:
+            passed = set(re.findall(r" ([A-Za-z_][A-Za-z0-9_]*)=", call.group(2)))
+            reads = _expanded_variables(bodies[call.group(1)])
+            assert reads <= passed, (
+                f"{call.group(0)!r} does not pass {sorted(reads - passed)}, "
+                "which the block reads"
+            )
+
+    def test_the_upgrade_starts_from_a_clone_at_the_previous_release(self, script):
+        """C5(a): the ref get-files checks out is made after the clone, so only
+        the page's `git fetch --tags` can bring it."""
+        install = _function(script, "do_install")
+        clone = install.index(
+            'git clone --quiet --branch "v$prev" "$REPO_ROOT" "$SELFHOST"'
+        )
+        tag = install.index('git -C "$REPO_ROOT" tag -f "$CHANGE_TAG" HEAD')
+        named = install.index("run_block install-named ")
+        plain = install.index("run_block install ")
+        assert clone < tag < named < plain
+        assert "--pull never" not in script
+
+    def test_it_rolls_back_in_place_before_it_restores(self, script):
+        """PR 1's step 7: roll back in place first (steps 3 and 5 with the old
+        tag); restore the backup only after that, into a stack with no volumes."""
+        rollback = _function(script, "do_rollback")
+        order = [
+            rollback.index(text)
+            for text in (
+                'run_block get-files RELEASE="v$prev"',
+                "run_block pull",
+                "run_block upgrade",
+                "dc down -v --remove-orphans",
+                "run_block restore",
+            )
+        ]
+        assert order == sorted(order)
+        assert _code(script).count("down -v") == 2, (
+            "the rollback's and the teardown's only"
+        )
+
+    def test_a_check_settings_refusal_is_reported_without_compose(self, script):
+        """Compose loads the whole compose.yml for every subcommand, `ps`
+        included, so after check-settings refuses the file a `dc` call fails
+        before the refusal is reported. The refusal branch, and the
+        api_image_id it calls, find the api container by the labels Compose
+        put on it; the refusal is reported whether or not its image is read;
+        diagnose finds the containers the same way, and teardown falls back to
+        the labels when `down` fails."""
+        branch = re.search(
+            r"^    if ! run_block check-settings; then\n(.*?)^    fi$",
+            _function(script, "do_prepare"),
+            re.M | re.S,
+        )
+        assert branch, "do_prepare has no `if ! run_block check-settings` branch"
+        refusal = _code(branch.group(1))
+        lookup = _code(_function(script, "api_image_id"))
+        for name, body in (
+            ("the check-settings refusal branch", refusal),
+            ("api_image_id", lookup),
+            ("do_diagnose", _code(_function(script, "do_diagnose"))),
+        ):
+            calls = [line.strip() for line in body.splitlines() if DC_CALL.search(line)]
+            assert not calls, f"{name} calls dc, which loads the refused file: {calls}"
+        project = '"label=com.docker.compose.project=$PROJECT"'
+        assert project in lookup
+        assert "--filter label=com.docker.compose.service=api" in lookup
+        assert "if still=$(api_image_id); then" in refusal, (
+            "the refusal is reported only when the api's image can be read"
+        )
+        last = refusal.strip().splitlines()[-1].strip()
+        assert last.startswith("fail \"the page's check-settings block refused "), last
+        teardown = _code(_function(script, "do_teardown"))
+        assert "if dc down -v --remove-orphans; then" in teardown
+        assert teardown.count('--filter "$label"') == 4
+
+    def test_restart_is_waited_for_by_the_bootstrap_line(self, script):
+        """C5(b): `restart` returns before the entrypoint runs again; the job
+        waits, bounded, for one more bootstrap line before it reads the log."""
+        restart = _function(script, "do_restart")
+        assert "dc restart api" in restart
+        assert "RESTART_WAIT=300" in script
+        assert restart.index("dc restart api") < restart.index("wait_for_bootstrap")
+
+    def test_the_upgrade_job_is_one_step_of_the_core_profile_on_linux(
+        self, script, upgrade_job
+    ):
+        """What the README says CI does not rehearse: the full profile and a
+        jump over more than one release."""
+        assert re.search(r"^PROFILE=core$", script, re.M)
+        assert upgrade_job["runs-on"] == "ubuntu-latest"
+        for step in upgrade_job["steps"]:
+            target = (step.get("with") or {}).get("target")
+            assert target in (None, "core"), step.get("name")
 
 
 def _backup_section() -> str:
@@ -704,3 +1013,325 @@ class TestBackupAndRestore:
             (one,) = [x for x in first.splitlines() if x.startswith(f"{name}=")]
             (two,) = [x for x in second.splitlines() if x.startswith(f"{name}=")]
             assert one != two, name
+
+
+#: The README's upgrade procedure (#1807): each block exactly as the page gives
+#: it, in page order. A self-hoster runs these on the stack that holds their
+#: data, so a changed word in one is a reviewed change to what they run.
+UPGRADE_BLOCKS = (
+    (
+        "check-backup",
+        "docker compose -p experimently-selfhost exec -T postgres \\\n"
+        "  pg_restore -f /dev/null < ~/controlvar-backups/controlvar.dump\n",
+    ),
+    ("get-files", 'git fetch --tags\ngit checkout "$RELEASE"\n'),
+    ("check-settings", "docker compose -p experimently-selfhost config --quiet\n"),
+    ("pull", "docker compose -p experimently-selfhost pull\n"),
+    (
+        "upgrade",
+        "docker compose -p experimently-selfhost up -d --wait --wait-timeout 600\n",
+    ),
+    (
+        "verify",
+        "docker compose -p experimently-selfhost ps\n"
+        'curl -fsS "$PUBLIC_BASE_URL/api/v1/modules"\n',
+    ),
+    (
+        "check-migrations",
+        "docker compose -p experimently-selfhost logs api 2>&1 \\\n"
+        "  | grep -e 'running database bootstrap' -e 'Running upgrade'\n",
+    ),
+)
+
+#: The shell variables the section's table asks the reader to set, and the only
+#: ones its blocks may read.
+UPGRADE_VARIABLES = {"RELEASE", "PUBLIC_BASE_URL"}
+
+#: What deletes a volume (TestBackupAndRestore's list), and the generator, which
+#: an upgrade never runs: the install keeps the .env it has.
+UPGRADE_FORBIDDEN = (
+    r"\bdown\b",
+    r"(^|\s)-v\b",
+    r"--volumes",
+    r"\bvolume\s+(rm|prune)\b",
+    r"\bprune\b",
+    r"\brm\b",
+    r"\bkill\b",
+    r"generate-env",
+)
+
+
+def _upgrade_section() -> str:
+    """The README's "Upgrade" section, up to the next `## `."""
+    text = README.read_text(encoding="utf-8")
+    assert "\n## Upgrade\n" in text, "the README has no `## Upgrade` section"
+    start = text.index("\n## Upgrade\n")
+    end = text.index("\n## ", start + 1)
+    return text[start:end]
+
+
+def _upgrade_step(number: int) -> str:
+    """Step *number* of the Upgrade section, from its `### ` heading to the next."""
+    section = _upgrade_section()
+    found = re.search(rf"^### {number}\. .*?(?=^### |\Z)", section, re.M | re.S)
+    assert found, f"the Upgrade section has no step {number}"
+    return found.group(0)
+
+
+def _prose(text: str) -> str:
+    """*text* with its fences removed and its lines joined by single spaces."""
+    unfenced = re.sub(r"^```.*?^```$", "", text, flags=re.M | re.S)
+    return " ".join(unfenced.split())
+
+
+def _refusal_bootstrap_prints() -> str:
+    """The literal text of the refusal an older image gives a database a newer
+    release migrated: the last `return` of `unresolvable_revisions_message`,
+    read from bootstrap.py's syntax tree, each `{...}` field as `{}`."""
+    source = (REPO_ROOT / "backend" / "app" / "db" / "bootstrap.py").read_text(
+        encoding="utf-8"
+    )
+    (function,) = [
+        node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "unresolvable_revisions_message"
+    ]
+    message = function.body[-1]
+    assert isinstance(message, ast.Return), ast.dump(message)
+    assert isinstance(message.value, ast.JoinedStr), ast.dump(message.value)
+    return "".join(
+        part.value if isinstance(part, ast.Constant) else "{}"
+        for part in message.value.values
+    )
+
+
+def _upgrade_fences() -> list:
+    """Every fence in the section, as (info string, body): all of them, so a
+    block in another language, or with a tag, is seen rather than skipped."""
+    fences, info, body = [], None, []
+    for line in _upgrade_section().splitlines():
+        opens = line.lstrip().startswith(("```", "~~~"))
+        if info is None:
+            if opens:
+                info, body = line.lstrip()[3:].strip(), []
+        elif opens:
+            fences.append((info, "".join(f"{text}\n" for text in body)))
+            info = None
+        else:
+            body.append(line)
+    assert info is None, "an unclosed fence in the Upgrade section"
+    return fences
+
+
+def _declared_variables() -> list:
+    """The first cell of each row of the section's `| Variable | Meaning |` table."""
+    lines = _upgrade_section().splitlines()
+    assert "| Variable | Meaning |" in lines, "the section has no variables table"
+    start = lines.index("| Variable | Meaning |")
+    assert lines[start + 1] == "|---|---|", lines[start + 1]
+    rows = []
+    for line in lines[start + 2 :]:
+        if not line.startswith("|"):
+            break
+        rows.append(line.split("|")[1].strip().strip("`"))
+    return rows
+
+
+def _expanded_variables(block: str) -> set:
+    """The names a block expands, `$NAME` or `${NAME}`, outside single quotes."""
+    unquoted = re.sub(r"'[^']*'", "", block)
+    return set(re.findall(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)", unquoted))
+
+
+class TestUpgrade:
+    """The README's upgrade procedure (#1807), read as text, with no Docker.
+
+    A self-hoster runs its blocks in order on the stack that holds their data:
+    check the backup, get the release's files, check the settings, pull,
+    start, verify, and roll back in place, restoring the backup only when the
+    old release refuses the database. So each block's
+    text is pinned, and the properties that fail silently are held by name:
+    every compose command names the stack's project, none deletes a volume or
+    runs the generator, the wait is as long as the API's health check allows,
+    and the blocks read only the variables the section tells the reader to set.
+    """
+
+    def _blocks(self) -> list:
+        return [body for _, body in _upgrade_fences()]
+
+    def _commands(self) -> list:
+        """Every command line of the blocks, continuation lines joined."""
+        return [
+            line.strip()
+            for block in self._blocks()
+            for line in block.replace("\\\n", " ").splitlines()
+            if line.strip()
+        ]
+
+    def test_the_blocks_are_the_procedure_in_order(self):
+        blocks = self._blocks()
+        names = [name for name, _ in UPGRADE_BLOCKS]
+        assert len(blocks) == len(UPGRADE_BLOCKS), (
+            f"{len(blocks)} blocks in Upgrade, expected {len(names)}: {names}"
+        )
+        for (name, expected), block in zip(UPGRADE_BLOCKS, blocks):
+            for want, got in zip_longest(expected.splitlines(), block.splitlines()):
+                assert got == want, f"{name}: {got!r}, expected {want!r}"
+
+    def test_the_backup_is_linked_not_copied(self):
+        assert "[Back up](#back-up)" in _upgrade_section()
+        for block in self._blocks():
+            assert "pg_dump" not in block, (
+                f"a second copy of the backup command in Upgrade: {block!r}; "
+                "link to Back up instead"
+            )
+
+    def test_every_compose_command_names_the_stacks_project(self, compose):
+        commands = [c for c in self._commands() if "docker compose" in c]
+        assert len(commands) == 6, commands
+        for command in commands:
+            for found in re.finditer(r"docker compose(?: -p (\S+))?", command):
+                assert found.group(1) == compose["name"], command
+
+    def test_no_block_deletes_a_volume_or_runs_the_generator(self):
+        """The block bodies only: the prose may name what they never run."""
+        for block in self._blocks():
+            for pattern in UPGRADE_FORBIDDEN:
+                assert not re.search(pattern, block, re.M), f"{pattern} in {block!r}"
+
+    def test_the_wait_is_as_long_as_the_api_health_check(self, services):
+        """`--wait-timeout` is about the time the API's health check gives a
+        start, a migration included, before it reports the container
+        unhealthy: the start period, then that many failed checks."""
+        check = services["api"]["healthcheck"]
+
+        def seconds(value) -> int:
+            assert re.fullmatch(r"\d+s", str(value)), value
+            return int(str(value)[:-1])
+
+        window = seconds(check["start_period"]) + check["retries"] * seconds(
+            check["interval"]
+        )
+        (upgrade,) = [block for block in self._blocks() if " up -d" in block]
+        found = re.search(r" up -d --wait --wait-timeout (\d+)$", upgrade, re.M)
+        assert found, f"the upgrade block has no --wait-timeout: {upgrade!r}"
+        assert int(found.group(1)) == window, (
+            f"--wait-timeout {found.group(1)}, but the api health check gives "
+            f"{check['start_period']} + {check['retries']} x {check['interval']} "
+            f"= {window} s"
+        )
+
+    def test_the_blocks_read_only_the_variables_the_section_declares(self):
+        declared = set(_declared_variables())
+        for name in sorted(UPGRADE_VARIABLES - declared):
+            pytest.fail(f"the variables table does not declare {name}")
+        for name in sorted(declared - UPGRADE_VARIABLES):
+            pytest.fail(f"the variables table declares {name}, which is not pinned")
+        read = set()
+        for block in self._blocks():
+            for name in sorted(_expanded_variables(block) - declared):
+                pytest.fail(
+                    f"the block starting {block.splitlines()[0]!r} reads ${name}, "
+                    "which the section does not tell the reader to set"
+                )
+            read |= _expanded_variables(block)
+        assert read == declared, f"declared, read by no block: {declared - read}"
+
+    def test_no_block_carries_a_comment_or_a_tag(self):
+        for info, body in _upgrade_fences():
+            assert info == "bash", f"a fence opened as {info!r}: plain bash only"
+            for line in body.splitlines():
+                assert not re.search(r"(^|\s)#", line), f"a comment: {line!r}"
+
+    def test_the_log_check_reads_the_line_every_start_writes(self, services):
+        """The API runs the bootstrap on every start, and the entrypoint logs
+        `running database bootstrap` to stderr first: the block reads both
+        streams and finds each start by that line."""
+        entrypoint = (REPO_ROOT / "backend" / "docker-entrypoint.sh").read_text(
+            encoding="utf-8"
+        )
+        assert "log() { printf '[entrypoint] %s\\n' \"$*\" >&2; }" in entrypoint
+        assert (
+            'if [ "$RUN_MIGRATIONS" = "true" ]; then\n'
+            '    log "running database bootstrap (' in entrypoint
+        )
+        assert services["api"]["environment"]["RUN_MIGRATIONS"] == "true"
+        (logs,) = [block for block in self._blocks() if " logs api " in block]
+        assert " logs api 2>&1 " in logs, logs
+        assert "-e 'running database bootstrap'" in logs, logs
+
+    def test_the_rollback_restores_only_on_the_refusal_bootstrap_prints(self):
+        """Step 7 rolls back in place whatever the log showed, and restores
+        only when the old release then refuses the database, by the sentence
+        bootstrap.py prints. A `Running upgrade` line does not decide it: a
+        migration that fails is undone, and the old release starts as before,
+        so a restore there would lose what was written since the backup."""
+        refusal = "this database was migrated by a newer Controlvar release"
+        assert refusal in _refusal_bootstrap_prints()
+        rollback = _prose(_upgrade_step(7))
+        named = f"shows `{refusal}`"
+        assert named in rollback, f"step 7 does not name the refusal {refusal!r}"
+        in_place = "whatever the log showed, roll back in place"
+        assert in_place in rollback, rollback
+        restore = "[Restore](#restore)"
+        assert rollback.count(restore) == 1, f"step 7 links Restore twice: {rollback}"
+        order = [rollback.index(text) for text in (in_place, named, restore)]
+        assert order == sorted(order), (
+            "step 7 must roll back in place, then name the refusal, then restore"
+        )
+
+    def test_after_a_slow_migration_a_second_up_starts_the_dashboard(self, services):
+        """The dashboard waits for a healthy API, so an `up` that gives up
+        while the migration still runs never starts it, and nothing starts it
+        later: step 5 says to run `up` again once the API is healthy."""
+        assert services["web"]["depends_on"]["api"]["condition"] == "service_healthy"
+        upgrade = _prose(_upgrade_step(5))
+        assert "then run the `up` command again" in upgrade, upgrade
+        assert "starts the dashboard" in upgrade, upgrade
+
+    def test_the_verify_step_counts_every_service(self, services):
+        """`ps` lists only the containers that run, so a dashboard that never
+        started is missing rather than unhealthy: step 6 says how many to look
+        for, and each service has a health check, so each can show `healthy`."""
+        words = ("no", "one", "two", "three", "four", "five", "six")
+        assert len(services) < len(words), sorted(services)
+        verify = _prose(_upgrade_step(6))
+        counted = f"each of the {words[len(services)]} services is listed and `healthy`"
+        assert counted in verify, f"step 6 does not say {counted!r}: {verify}"
+        for name, service in services.items():
+            assert "healthcheck" in service, f"{name} has no health check"
+
+    def test_the_release_to_roll_back_to_is_noted_before_the_files_change(self):
+        """After the checkout, the clone names the new release, and an install
+        cloned from main may never have been on a tag: step 3 has the reader
+        note the running release before its block, and step 7 goes back to it."""
+        get_files = _upgrade_step(3)
+        assert "```bash" in get_files, get_files
+        before = _prose(get_files[: get_files.index("```bash")])
+        assert "note the release you run now" in before, before
+        assert "the `version` that step 6's `curl` prints, with a `v`" in before, before
+        rollback = _prose(_upgrade_step(7))
+        assert "go back to the release you noted in step 3" in rollback, rollback
+        assert "`RELEASE` set to the release you noted" in rollback, rollback
+
+    def test_the_env_file_is_not_in_git(self):
+        """So checking out a release leaves the install's .env as it was."""
+        ignored = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+        assert ".env" in ignored
+        unignored = [line for line in ignored if line.startswith("!")]
+        assert not [line for line in unignored if line.endswith(".env")], unignored
+
+    def test_every_link_within_the_page_names_a_heading(self):
+        """GitHub's anchors: the heading in lower case, punctuation dropped,
+        spaces as hyphens. A step renamed would leave its links pointing at
+        nothing; the site does not build this page, so mkdocs never sees them."""
+        text = README.read_text(encoding="utf-8")
+        anchors = {
+            re.sub(r"[^\w\- ]", "", heading.strip().lower()).replace(" ", "-")
+            for heading in re.findall(r"^#{1,6} (.+)$", text, re.M)
+        }
+        links = re.findall(r"\]\(#([^)]+)\)", text)
+        assert links, "the README links to none of its headings"
+        for link in links:
+            assert link in anchors, f"#{link} names no heading of the README"

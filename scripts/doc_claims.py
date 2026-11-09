@@ -1916,6 +1916,10 @@ MECHANISMS: Dict[str, Mechanism] = {
             "docs/self-hosting/migrations.md",
             "Each file represents one atomic schema change, identified by a unique revision ID.",
             "Run the upgrade, which locks the table, checks for groups and builds the index in one transaction.",
+        )
+        + _whole(
+            "deploy/compose/README.md",
+            "It does not when the migration failed: a migration that fails is undone with every other migration of that start.",
         ),
     ),
     # The upgrade locks users and waits at most its lock timeout.

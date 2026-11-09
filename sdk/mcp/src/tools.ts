@@ -113,14 +113,18 @@ function pick(item: unknown, fields: readonly string[]): Json {
   return out;
 }
 
-/** `{total, skip, limit, items}` from a list answer, each item cut to `fields`. */
-function page(answer: unknown, fields: readonly string[]): Json {
+/**
+ * `{total, skip, limit, items}` from a list answer, each item cut to `fields`,
+ * plus the answer's own `extra` keys when it has them.
+ */
+function page(answer: unknown, fields: readonly string[], extra: readonly string[] = []): Json {
   const source = (answer && typeof answer === "object" ? answer : {}) as Json;
   const items = Array.isArray(source.items) ? source.items : [];
   return {
     total: source.total,
     skip: source.skip,
     limit: source.limit,
+    ...pick(source, extra),
     items: items.map((item) => pick(item, fields)),
   };
 }
@@ -133,7 +137,11 @@ const FLAG_LIST_FIELDS = [
   "value_type",
   "tags",
   "updated_at",
+  "stale",
+  "stale_reasons",
 ] as const;
+/** What the flag list says about the stale markers as a whole (#1808). */
+const FLAG_LIST_EXTRA = ["stale_days", "evaluations_seen"] as const;
 const EXPERIMENT_LIST_FIELDS = [
   "id",
   "key",
@@ -156,12 +164,19 @@ export function registerTools(server: McpServer, api: Api): void {
       title: "List feature flags",
       description:
         "Lists the feature flags on the Controlvar instance. Each item has its `key`, `name`, " +
-        "`status` (ACTIVE, INACTIVE or ARCHIVED), `value_type`, `rollout_percentage`, `tags` and " +
-        "`updated_at`. `search` matches part of a flag's name or key; `status` keeps one status. " +
-        "Returns at most `limit` flags (default 50, at most 100) and `total`, the number that match. " +
-        "When `total` is larger, call again with `skip`. The list is ordered by creation time, " +
-        "oldest first, so paging with `skip` reads each flag once unless flags are created or " +
-        "deleted meanwhile; to read one flag by its key, use get_feature_flag.",
+        "`status` (ACTIVE, INACTIVE or ARCHIVED), `value_type`, `rollout_percentage`, `tags`, " +
+        "`updated_at`, `stale` and `stale_reasons`, and the answer has `stale_days` and " +
+        "`evaluations_seen`. `stale` is true when the flag looks ready to remove, and " +
+        "`stale_reasons` says why (not_evaluated, on_for_everyone, off_for_everyone); this is " +
+        "advice only, and nothing is archived or changed. `stale_days` is the number of days " +
+        "those reasons look back, and `evaluations_seen` is false when the instance recorded no " +
+        "flag evaluation in that time, so not_evaluated is not reported. `search` matches part " +
+        "of a flag's name or key; `status` keeps one status; `stale` keeps the stale flags (true) " +
+        "or the others (false). Returns at most `limit` flags (default 50, at most 100) and " +
+        "`total`, the number that match. When `total` is larger, call again with `skip`. The list " +
+        "is ordered by creation time, oldest first, so paging with `skip` reads each flag once " +
+        "unless flags are created or deleted meanwhile; to read one flag by its key, use " +
+        "get_feature_flag.",
       inputSchema: {
         search: z
           .string()
@@ -171,12 +186,18 @@ export function registerTools(server: McpServer, api: Api): void {
           .optional()
           .describe("Part of a flag's name or key, 1 to 100 characters."),
         status: z.enum(["ACTIVE", "INACTIVE", "ARCHIVED"]).optional().describe("Only flags with this status."),
+        stale: z
+          .boolean()
+          .optional()
+          .describe(
+            "true returns only stale flags, false the rest; omit for all. Archived flags are never stale.",
+          ),
         limit,
         skip,
       },
       annotations: READ_ONLY,
     },
-    async ({ search, status, limit, skip }) =>
+    async ({ search, status, stale, limit, skip }) =>
       answer(async () =>
         page(
           await api.request({
@@ -185,9 +206,10 @@ export function registerTools(server: McpServer, api: Api): void {
             method: "GET",
             template: "/api/v1/feature-flags/",
             path: "/api/v1/feature-flags/",
-            query: { skip, limit, status, search },
+            query: { skip, limit, status, search, stale },
           }),
           FLAG_LIST_FIELDS,
+          FLAG_LIST_EXTRA,
         ),
       ),
   );

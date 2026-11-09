@@ -1370,6 +1370,10 @@ text = "restore the backup taken before that upgrade, and run the older image ag
 by = ["exempt:baseline"]
 
 [[unit]]
+text = "On Docker Compose, the Compose README's Upgrade procedure takes that backup before it upgrades, and its last step restores it only when the older image refuses the database."
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "A third way, when the newer release's migrations can be undone: with the newer release still running, downgrade to the heads of the older release, then start the older image."
 by = ["test:backend/tests/integration/database/test_newer_database_rollback.py::test_after_the_newer_release_downgrades_the_database_the_older_one_starts"]
 

@@ -140,7 +140,17 @@ PAGE = 100
 BULK_FLAGS = PAGE + 1
 #: The fields each list item carries (S4).
 FLAG_LIST_FIELDS = frozenset(
-    ["key", "name", "status", "rollout_percentage", "value_type", "tags", "updated_at"]
+    [
+        "key",
+        "name",
+        "status",
+        "rollout_percentage",
+        "value_type",
+        "tags",
+        "updated_at",
+        "stale",
+        "stale_reasons",
+    ]
 )
 EXPERIMENT_LIST_FIELDS = frozenset(
     [

@@ -300,12 +300,19 @@ async def test_list_experiments(
     # process, which broke every later test that built a list response.
     # The endpoint validates the service's dicts into real response models,
     # so we can assert on the actual result.
+    # Every query parameter as FastAPI passes it for a request that sends none:
+    # called directly, a parameter left out is its `Query(...)` object, which
+    # the route now checks as a sort_by (#786).
     response = await experiments.list_experiments(
         db=mock_db,
         current_user=mock_user,
         cache_control=mock_cache_control,
+        status_filter=None,
         skip=0,
         limit=100,
+        search=None,
+        sort_by="created_at",
+        sort_order="desc",
     )
 
     # Verify service was called correctly
