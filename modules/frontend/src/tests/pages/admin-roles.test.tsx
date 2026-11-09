@@ -5,7 +5,9 @@
  * takes one away; roles are assigned and grants made through the RBAC API.
  */
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
+// The role dialog makes `#__next` inert and portals beside it (#369).
+import { renderInAppRoot as render } from '@/tests/helpers/renderInAppRoot';
 import { RoleManagementPage } from '@modules/pages/admin/roles';
 import { RbacService } from '@modules/rbac';
 import { makeRole } from '../admin/rbacFixtures';

@@ -5,10 +5,11 @@
  * label, help and errors are tied with aria-describedby, status is text (never
  * colour alone), and code blocks are focusable, labelled scroll regions.
  */
-import React, { ReactNode, useCallback, useEffect, useId, useRef, useState } from 'react';
+import React, { ReactNode, useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { Connection, CredentialsStatus } from '@modules/services/warehouse';
 import { warehouseName } from '@modules/services/warehouse';
+import { Dialog } from '@/components/ui/Dialog';
 import { MODULES } from '@/services/modules';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
@@ -261,9 +262,12 @@ export function CopyBlock({ label, text, testId }: { label: string; text: string
 
 // -- dialog ---------------------------------------------------------------------
 
-const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
-
-/** A modal confirm: traps focus, closes on Escape, returns focus to its trigger. */
+/**
+ * A modal confirm for a delete, on the shared Dialog: it opens on Cancel, and
+ * Escape is Cancel and never confirms. The body is the dialog's description.
+ * Closing is not refused while `busy`: Cancel stays enabled then, so Escape
+ * does too.
+ */
 export function ConfirmDialog({
   title,
   children,
@@ -281,69 +285,29 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const titleId = useId();
-  const bodyId = useId();
-  useEffect(() => {
-    const trigger = document.activeElement as HTMLElement | null;
-    const first = ref.current?.querySelector<HTMLElement>(FOCUSABLE);
-    first?.focus();
-    return () => trigger?.focus?.();
-  }, []);
-  const onKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onCancel();
-        return;
-      }
-      if (e.key !== 'Tab' || !ref.current) return;
-      const items = Array.from(ref.current.querySelectorAll<HTMLElement>(FOCUSABLE));
-      if (items.length === 0) return;
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    },
-    [onCancel],
-  );
+  const cancelRef = useRef<HTMLButtonElement>(null);
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div
-        ref={ref}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={bodyId}
-        onKeyDown={onKeyDown}
-        className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
-      >
-        <h2 id={titleId} className="text-lg font-semibold text-slate-900">
-          {title}
-        </h2>
-        <div id={bodyId} className="mt-2 space-y-2 text-sm text-slate-700">
-          {children}
+    <Dialog
+      open
+      onClose={onCancel}
+      title={title}
+      description={<div className="space-y-2 text-slate-700">{children}</div>}
+      initialFocusRef={cancelRef}
+    >
+      {error && (
+        <div className="mb-4">
+          <ActionError message={error} />
         </div>
-        {error && (
-          <div className="mt-3">
-            <ActionError message={error} />
-          </div>
-        )}
-        <div className="mt-5 flex justify-end gap-3">
-          <button type="button" onClick={onCancel} className={BUTTON_SECONDARY}>
-            Cancel
-          </button>
-          <button type="button" onClick={onConfirm} disabled={busy} className={BUTTON_DANGER}>
-            {busy ? 'Working…' : confirmLabel}
-          </button>
-        </div>
+      )}
+      <div className="mt-1 flex justify-end gap-3">
+        <button ref={cancelRef} type="button" onClick={onCancel} className={BUTTON_SECONDARY}>
+          Cancel
+        </button>
+        <button type="button" onClick={onConfirm} disabled={busy} className={BUTTON_DANGER}>
+          {busy ? 'Working…' : confirmLabel}
+        </button>
       </div>
-    </div>
+    </Dialog>
   );
 }
 

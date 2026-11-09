@@ -3,7 +3,12 @@
  * only ADMIN edits, tests, regenerates a key or deletes.
  */
 import React from 'react';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import axe from 'axe-core';
+// The delete confirm makes `#__next` inert and portals beside it, so every
+// render is mounted the way Next mounts the page (#369).
+import { APP_ROOT_ID, renderInAppRoot as render } from '@/tests/helpers/renderInAppRoot';
 import { ModulesProvider } from '@/contexts/ModulesContext';
 import type { UserMe } from '@/services/api';
 import ConnectionPage from '@modules/pages/warehouse/connections/[id]';
@@ -253,6 +258,79 @@ describe('delete', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
     fireEvent.click(screen.getByRole('button', { name: 'Delete connection' }));
     expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent('requires the ADMIN role');
+  });
+});
+
+describe('the delete confirm on the shared Dialog (#369)', () => {
+  const appRoot = () => document.getElementById(APP_ROOT_ID) as HTMLElement;
+  const BODY =
+    'The connection and its stored credentials are deleted, and so are the sources that use it. Past analyses keep their results.';
+
+  async function openConfirm() {
+    renderPage();
+    const trigger = await screen.findByRole('button', { name: 'Delete' });
+    trigger.focus();
+    fireEvent.click(trigger);
+    // By role alone, so that a lost name fails the test that checks it (and
+    // the axe scan), not every test that opens the dialog.
+    const dialog = screen.getByRole('dialog');
+    return { trigger, dialog };
+  }
+
+  it('is a modal dialog described exactly by its body, outside the page, which is inert while it is open', async () => {
+    const { dialog } = await openConfirm();
+    expect(dialog).toBe(screen.getByRole('dialog', { name: 'Delete “Prod analytics”?' }));
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(dialog).toHaveAccessibleDescription(BODY);
+    expect(appRoot()).toHaveAttribute('inert');
+    expect(appRoot().contains(dialog)).toBe(false);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(appRoot()).not.toHaveAttribute('inert');
+  });
+
+  it('Escape dispatched on document is Cancel: it closes without deleting and focus returns to Delete', async () => {
+    const { trigger, dialog } = await openConfirm();
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    expect(svc.deleteConnection).not.toHaveBeenCalled();
+  });
+
+  it('Tab from outside the dialog goes into it', async () => {
+    const user = userEvent.setup();
+    const { dialog } = await openConfirm();
+    (document.activeElement as HTMLElement).blur();
+    expect(document.activeElement).toBe(document.body);
+    await user.tab();
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+  });
+
+  it('while the delete is in flight, Escape still closes it, as Cancel does, and does not delete again', async () => {
+    svc.deleteConnection.mockReturnValue(new Promise<void>(() => undefined));
+    const { dialog } = await openConfirm();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete connection' }));
+    expect(within(dialog).getByRole('button', { name: 'Working…' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeEnabled();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(svc.deleteConnection).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([false, true])('the dialog has no axe violations (refused: %s), and the rule that names it ran on it', async (refused) => {
+    if (refused) {
+      svc.deleteConnection.mockRejectedValue(apiError(403, 'role_required', 'Deleting a warehouse connection requires the ADMIN role; you are DEVELOPER.'));
+    }
+    const { dialog } = await openConfirm();
+    if (refused) {
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Delete connection' }));
+      await within(dialog).findByRole('alert');
+    }
+    expect(document.body).toContainElement(dialog);
+    const result = await axe.run(dialog, { rules: { 'color-contrast': { enabled: false } } });
+    expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`)).toStrictEqual([]);
+    expect(result.passes.map((p) => p.id)).toContain('aria-dialog-name');
   });
 });
 

@@ -108,11 +108,12 @@ POSTGRES_PASSWORD=<random>
 Other useful knobs: `POSTGRES_HOST_PORT`, `REDIS_HOST_PORT`, `API_HOST_PORT`,
 `FRONTEND_HOST_PORT` when a port is taken; `SEED`; `LOG_FORMAT=json`; `METRICS_TOKEN` to
 require a token on `/metrics`; `WEB_CONCURRENCY` for more uvicorn workers. `AUTH_PROVIDER=cognito`
-switches authentication to Amazon Cognito; add `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`
-and the AWS credentials to the `api` service's environment yourself, the compose file
-does not pass them through. The dashboard does not yet sign in with Cognito. Sign in through
-the API with `POST /api/v1/auth/token`. SSO sign-in needs `AUTH_PROVIDER=local`. See
-[Signing in under Cognito](../cognito_integration.md#signing-in-under-cognito).
+switches authentication to Amazon Cognito; the compose file passes `COGNITO_USER_POOL_ID`,
+`COGNITO_CLIENT_ID` and `COGNITO_DOMAIN` from `.env` to the `api` service, empty by default,
+and `AWS_REGION`, `us-west-2` by default. Add the AWS credentials to the `api` service's
+environment yourself: the compose file does not pass them through. The dashboard does not
+yet sign in with Cognito. Sign in through the API with `POST /api/v1/auth/token`. SSO
+sign-in needs `AUTH_PROVIDER=local`. See [Signing in under Cognito](../cognito_integration.md#signing-in-under-cognito).
 
 The compose file passes `WAREHOUSE_CREDENTIALS_KEYS`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`
 and `GEMINI_API_KEY` to the `api` service, empty by default: set them in `.env` to turn on

@@ -24,11 +24,13 @@ import logging
 import os
 import re
 import secrets
+import socket
 import subprocess
 import sys
 import textwrap
 from datetime import datetime
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -165,7 +167,7 @@ def test_production_logs_at_info_so_debug_lines_are_not_written(started):
 # ---------------------------------------------------------------------------
 
 
-_HTTP_CLIENT_LOGGERS = ("httpx", "httpcore")
+_HTTP_CLIENT_LOGGERS = ("httpx", "httpcore", "botocore", "boto3", "s3transfer")
 
 
 class _Rendered:
@@ -520,3 +522,126 @@ def test_the_api_started_at_info_does_not_log_the_hosts_it_calls(tmp_path):
     assert "kept line" in rendered, rendered
     assert "snowflakecomputing" not in rendered, rendered
     assert "HTTP Request" not in rendered, rendered
+
+
+# ---------------------------------------------------------------------------
+# The AWS SDK's loggers
+# ---------------------------------------------------------------------------
+
+#: botocore, boto3 and s3transfer join httpx and httpcore in
+#: HTTP_CLIENT_LOGGERS, so a DEBUG root no longer turns on the AWS SDK's
+#: request tracing.
+_AWS_SDK_LOGGERS = ("botocore", "boto3", "s3transfer")
+
+#: Planted at DEBUG on a child of each of the three loggers; in the log only if it got out.
+_SDK_PROBE_LINE = "aws-sdk-probe-line-7f3e"
+
+
+class _Recorder(logging.Handler):
+    """Every record that reaches the root logger's handlers, at any level."""
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.NOTSET)
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+def _closed_local_port() -> int:
+    """A port on 127.0.0.1, from 55700 up, that refuses a connection now."""
+    for port in range(55700, 55800):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.settimeout(0.5)
+            if probe.connect_ex(("127.0.0.1", port)) != 0:
+                return port
+    pytest.fail("no closed port on 127.0.0.1 from 55700 to 55799")
+
+
+def _aws_sdk_run_at_debug(home: Path) -> tuple[list[logging.LogRecord], str]:
+    """Logging configured at DEBUG as the API configures it, then a DEBUG line
+    planted on a child of each AWS SDK logger and one real client call to a closed
+    port on 127.0.0.1.
+
+    The client comes from a new session, so it reads the dummy AWS settings
+    the no-real-AWS guard (``backend/tests/no_real_aws.py``) puts in the
+    environment; ``HOME`` is an empty directory and ``AWS_PROFILE`` is unset.
+    The connection is refused, so nothing leaves the host.  Returns the records
+    from the AWS SDK's loggers that reached a handler, and what was written.
+    """
+    import boto3
+    from botocore.config import Config
+    from botocore.exceptions import EndpointConnectionError
+
+    recorder = _Recorder()
+    with mock.patch.dict(os.environ, {"HOME": str(home)}):
+        os.environ.pop("AWS_PROFILE", None)
+        with _configured(log_level="DEBUG") as out:
+            logging.root.addHandler(recorder)
+            logging.getLogger("probe.kept").debug("kept debug line")
+            for child in (
+                "botocore.endpoint",
+                "boto3.resources.action",
+                "s3transfer.tasks",
+            ):
+                logging.getLogger(child).debug(_SDK_PROBE_LINE)
+            client = boto3.session.Session().client(
+                "sts",
+                region_name="us-east-1",
+                endpoint_url=f"http://127.0.0.1:{_closed_local_port()}",
+                config=Config(
+                    retries={"total_max_attempts": 1, "mode": "standard"},
+                    connect_timeout=1,
+                    read_timeout=1,
+                ),
+            )
+            with pytest.raises(EndpointConnectionError):
+                client.get_caller_identity()
+    written = out.buffer.getvalue()
+    assert "kept debug line" in written, "the root is not at DEBUG"
+    records = [
+        record
+        for record in recorder.records
+        if record.name.split(".")[0] in _AWS_SDK_LOGGERS
+    ]
+    return records, written
+
+
+@pytest.mark.regression
+def test_a_debug_root_no_longer_turns_on_the_aws_sdks_request_tracing(tmp_path):
+    """botocore, boto3 and s3transfer join httpx and httpcore in
+    HTTP_CLIENT_LOGGERS, so a DEBUG root no longer turns on the AWS SDK's
+    request tracing: neither the planted line nor any line below WARNING from
+    the client call reaches a handler."""
+    records, written = _aws_sdk_run_at_debug(tmp_path)
+    below_warning = [
+        (record.name, record.levelname)
+        for record in records
+        if record.levelno < logging.WARNING
+    ]
+    assert below_warning == [], below_warning
+    assert _SDK_PROBE_LINE not in written
+
+
+def test_off_the_list_the_aws_sdks_request_tracing_follows_a_debug_root(tmp_path):
+    """The control for the test above: with botocore, boto3 and s3transfer
+    taken off HTTP_CLIENT_LOGGERS, the same steps put the planted line and the
+    client call's own DEBUG lines on the handler.  Passes before the fix too;
+    it shows those steps would catch the tracing if it were on."""
+    from backend.app.core import logger as logger_module
+
+    with mock.patch.object(logger_module, "HTTP_CLIENT_LOGGERS", ("httpx", "httpcore")):
+        records, written = _aws_sdk_run_at_debug(tmp_path)
+    assert _SDK_PROBE_LINE in written
+    planted_on = {
+        record.name.split(".")[0]
+        for record in records
+        if record.getMessage() == _SDK_PROBE_LINE
+    }
+    assert planted_on == set(_AWS_SDK_LOGGERS)
+    from_the_call = [
+        record.name
+        for record in records
+        if record.levelno < logging.WARNING and record.getMessage() != _SDK_PROBE_LINE
+    ]
+    assert from_the_call, "the client call wrote no DEBUG line from the AWS SDK"

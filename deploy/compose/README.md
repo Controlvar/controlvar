@@ -81,6 +81,9 @@ Compose refuses to start while a required one is unset or empty, and names it.
 | `HTTP_BIND`, `HTTP_PORT` | where the dashboard listens: `127.0.0.1` and `8080` by default |
 | `FORWARDED_ALLOW_IPS` | a TLS proxy on another machine whose `X-Forwarded-For` the API should believe; empty for a proxy on this host that connects to `127.0.0.1` (see [Users' addresses](#users-addresses)) |
 | `POSTGRES_SERVER` | an external PostgreSQL instead of the bundled one; then start only `docker compose up -d api web` |
+| `AUTH_PROVIDER` | how people sign in: `local` (the default), with accounts kept by the API, or `cognito`, with an Amazon Cognito user pool |
+| `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`, `COGNITO_DOMAIN` | with `AUTH_PROVIDER=cognito`: the user pool, its app client, and its Hosted UI's domain name, `<prefix>.auth.<region>.amazoncognito.com`; empty by default |
+| `AWS_REGION` | the user pool's region: `us-east-1` by default |
 | `WAREHOUSE_CREDENTIALS_KEYS` | turns on warehouse analysis in the `full` profile: Fernet keys, comma-separated, newest first, that encrypt the warehouse credentials the API stores; while it is empty, storing or using a credential answers `503 credentials_unavailable` |
 | `ANTHROPIC_API_KEY` | turns on Anthropic variants in LLM experiments and also Claude calls in `POST /api/v1/ai/design` and `POST /api/v1/ai/interpret/{experiment_id}` (limited to 10 requests a minute); without it those two routes answer from built-in templates |
 | `OPENAI_API_KEY` | turns on OpenAI variants in LLM experiments |

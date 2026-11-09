@@ -270,8 +270,8 @@ class TestForwardedAllowIps:
         spec = importlib.util.spec_from_file_location("check_compose_config", script)
         check = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(check)
-        names = check.PASSED_SETTINGS
-        assert names == ("FORWARDED_ALLOW_IPS",)
+        assert check.PASSED_SETTINGS == ("FORWARDED_ALLOW_IPS",) + COGNITO_SETTINGS
+        names = ("FORWARDED_ALLOW_IPS",)
         assert check.feature_key_failures({"FORWARDED_ALLOW_IPS": ""}, {}, names) == []
         given = {"FORWARDED_ALLOW_IPS": "192.0.2.10"}
         assert check.feature_key_failures(dict(given), given, names) == []
@@ -281,6 +281,76 @@ class TestForwardedAllowIps:
         assert check.feature_key_failures({"FORWARDED_ALLOW_IPS": "x"}, {}, names) == [
             "FORWARDED_ALLOW_IPS on the api service is not empty, and .env does not set it"
         ]
+
+
+#: Passed to the api as ``${NAME:-}``: empty unless `.env` sets them (#708).
+COGNITO_SETTINGS = ("COGNITO_USER_POOL_ID", "COGNITO_CLIENT_ID", "COGNITO_DOMAIN")
+
+
+@pytest.mark.unit
+@pytest.mark.regression
+class TestSignIn:
+    """How people sign in reaches the api from `.env` (#708). The file set
+    ``AUTH_PROVIDER: local`` and passed no Cognito setting and no region, so a
+    Cognito deployment could not be configured through it at all."""
+
+    def test_local_unless_env_says_otherwise(self, services):
+        env = services["api"]["environment"]
+        assert env["AUTH_PROVIDER"] == "${AUTH_PROVIDER:-local}"
+
+    @pytest.mark.parametrize("name", COGNITO_SETTINGS)
+    def test_each_cognito_setting_is_passed_empty_by_default(self, services, name):
+        env = services["api"]["environment"]
+        assert env.get(name) == f"${{{name}:-}}", (
+            f"{name} must be ${{{name}:-}}, got {env.get(name)!r}"
+        )
+
+    def test_exactly_these_cognito_settings_and_no_aws_credentials(self, services):
+        env = services["api"]["environment"]
+        assert sorted(n for n in env if n.startswith("COGNITO_")) == sorted(
+            COGNITO_SETTINGS
+        )
+        credentials = {
+            "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY",
+            "AWS_SESSION_TOKEN",
+        }
+        assert not credentials & set(env), sorted(credentials & set(env))
+
+    def test_the_region_defaults_to_the_apis_own(self, services):
+        """us-east-1 is what the API's Cognito client uses with no AWS_REGION
+        (backend/app/services/auth_service.py), so unset is unchanged."""
+        from backend.app.core.config import Settings
+
+        env = services["api"]["environment"]
+        assert env["AWS_REGION"] == "${AWS_REGION:-us-east-1}"
+        assert Settings.model_fields["AWS_REGION"].default == "us-east-1"
+        auth = (
+            REPO_ROOT / "backend" / "app" / "services" / "auth_service.py"
+        ).read_text()
+        assert 'os.environ.get("AWS_REGION", "us-east-1")' in auth
+
+    def test_the_config_check_follows_the_cognito_settings_through_compose(self):
+        """scripts/check_compose_config.py, which the Compose Production job runs
+        through `docker compose config`, checks each of them arrives empty from
+        a `.env` without it and with its value from one that sets it."""
+        import importlib.util
+
+        script = REPO_ROOT / "scripts" / "check_compose_config.py"
+        spec = importlib.util.spec_from_file_location("check_compose_config", script)
+        check = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(check)
+        assert set(COGNITO_SETTINGS) <= set(check.PASSED_SETTINGS)
+        empty = dict.fromkeys(COGNITO_SETTINGS, "")
+        assert check.feature_key_failures(empty, {}, COGNITO_SETTINGS) == []
+        given = {"COGNITO_DOMAIN": "controlvar-test.auth.us-west-2.amazoncognito.com"}
+        assert (
+            check.feature_key_failures({**empty, **given}, given, COGNITO_SETTINGS)
+            == []
+        )
+        assert check.feature_key_failures(
+            {"COGNITO_CLIENT_ID": "", "COGNITO_DOMAIN": ""}, {}, COGNITO_SETTINGS
+        ) == ["COGNITO_USER_POOL_ID is not passed to the api service"]
 
 
 class TestText:

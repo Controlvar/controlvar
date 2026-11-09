@@ -83,6 +83,27 @@
 # viewer pass may not write flags (403), and its list does not change. Both
 # read from fuzz_check's evaluation of local runs at this seed on the pull
 # request's earlier head; its CI runs gave the same counts.
+#
+# Then #708 added POST /api/v1/auth/cognito/exchange, the Cognito Hosted UI's
+# code exchange. It exists only for the Cognito provider and the stack signs in
+# with the local one, so it answers 404 in the superuser and viewer passes (and
+# 429 once its 10 a minute are spent): those lists are 106 and 176 (the 105
+# and 175 above, plus this one each). It is not an SDK route, so the sdk pass does not select it. GET /api/v1/auth/config,
+# added beside it, answers 200 with no credentials, so it needs no entry.
+# Listed from that reasoning before the pull request's own fuzz run.
+#
+# Then #1842 (#1808) gave GET /api/v1/feature-flags/ the `stale` parameter
+# and the flag request schemas two read-only fields. That changed the requests
+# the seed generates, and with them the ids Schemathesis reuses from earlier
+# answers: the superuser pass now sends a PUT
+# /api/v1/rollout-schedules/{schedule_id} that names a stored schedule and
+# updates it (200), so it reaches it again, and its list is 105. The viewer
+# pass's GET /api/v1/feature-flags/{flag_id} now names no stored flag (the id
+# it reuses is a user's, 404), so it no longer reaches it, and its list is
+# 177. Read from fuzz_check's evaluation of local runs at this seed: the
+# superuser pass on main after #1842 and on the head of the pull request that
+# changed these entries, the viewer pass on that head (its flag-by-id
+# requests come before any request that head answers differently from main).
 
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
@@ -110,6 +131,11 @@ reason = "Cognito sign-up and recovery: the stack signs in with the local provid
 pass = "superuser"
 operation = "POST /api/v1/auth/refresh"
 reason = "Cognito sign-up and recovery: the stack signs in with the local provider, so it answers 404 (and 429 once the sign-in limit is spent)."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/auth/cognito/exchange"
+reason = "The Cognito Hosted UI's code exchange: the stack signs in with the local provider, so it answers 404 (and 429 once its limit is spent)."
 
 [[unreached]]
 pass = "superuser"
@@ -255,11 +281,6 @@ reason = "No request names a stored experiment with sequential testing enabled: 
 pass = "superuser"
 operation = "POST /api/v1/rollout-schedules/"
 reason = "The handler refuses the generated values (400); ids that name no stored row answer 404 and invalid requests answer 422."
-
-[[unreached]]
-pass = "superuser"
-operation = "PUT /api/v1/rollout-schedules/{schedule_id}"
-reason = "The ids sent name no stored schedule (404), and the other requests fail validation (422) or, once, body parsing (400)."
 
 [[unreached]]
 pass = "superuser"
@@ -640,6 +661,11 @@ reason = "Cognito sign-up and recovery: the stack signs in with the local provid
 
 [[unreached]]
 pass = "viewer"
+operation = "POST /api/v1/auth/cognito/exchange"
+reason = "The Cognito Hosted UI's code exchange: the stack signs in with the local provider, so it answers 404 (and 429 once its limit is spent)."
+
+[[unreached]]
+pass = "viewer"
 operation = "POST /api/v1/users/"
 reason = "The VIEWER role may not use it, so the role check answers 403; requests that fail validation first answer 422."
 
@@ -772,6 +798,11 @@ reason = "An SDK route: it takes an API key, and this pass sends a bearer token 
 pass = "viewer"
 operation = "POST /api/v1/feature-flags/"
 reason = "The VIEWER role may not use it, so the role check answers 403, and a few 400."
+
+[[unreached]]
+pass = "viewer"
+operation = "GET /api/v1/feature-flags/{flag_id}"
+reason = "The ids sent name no stored flag (404; the one reused from an earlier answer is a user's id), and the other requests fail validation (422)."
 
 [[unreached]]
 pass = "viewer"

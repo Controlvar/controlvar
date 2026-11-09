@@ -175,9 +175,11 @@ tracking against a live API in CI (the SDK Live Contract job of `pr-qa-gate.yml`
 Every other SDK installs from a clone of this repository. The [SDK guide](docs/sdk-guide.md) says
 how, and what CI runs for each one.
 
-[`sdk/mcp`](sdk/mcp/) holds the Controlvar MCP server, which is not an SDK; it is meant for an AI
-assistant such as Claude Code to start on your computer, to read your instance's feature flags,
-experiments and results with your API key.
+The Controlvar MCP server is not an SDK. An AI assistant such as Claude Code starts it on your
+computer to read your instance's feature flags, experiments and results with your API key, and it
+changes no flag or experiment. The `@controlvar/mcp-server` package is on npm.
+[The MCP Server and the AI Endpoints](docs/mcp-server.md) has the command that adds it to Claude
+Code, and the settings for Claude Desktop and Cursor. Its source is [`sdk/mcp`](sdk/mcp/).
 
 ---
 

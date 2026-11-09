@@ -4,7 +4,10 @@
  * request to a route the core backend does not serve.
  */
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
+// The dialog makes `#__next` inert and portals beside it, so the page is
+// mounted the way Next mounts it (#369).
+import { renderInAppRoot as render } from '@/tests/helpers/renderInAppRoot';
 import { UserManagementPage } from '@/pages/admin/users';
 import { ModulesProvider } from '@/contexts/ModulesContext';
 import { CORE_PROFILE, ModulesInfo } from '@/services/modules';

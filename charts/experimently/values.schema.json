@@ -3,7 +3,7 @@
   "title": "Controlvar chart values",
   "type": "object",
   "additionalProperties": false,
-  "required": ["publicBaseUrl", "profile", "image", "secrets", "api", "web", "ingress", "postgresql", "redis"],
+  "required": ["publicBaseUrl", "profile", "auth", "image", "secrets", "api", "web", "ingress", "postgresql", "redis"],
   "properties": {
     "publicBaseUrl": {
       "description": "Scheme and host, no path, no trailing slash, no wildcard.",
@@ -30,6 +30,34 @@
     "firstSuperuser": {
       "type": "string",
       "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+    },
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "cognito"],
+      "properties": {
+        "provider": {"type": "string", "enum": ["local", "cognito"]},
+        "cognito": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["userPoolId", "clientId", "domain"],
+          "properties": {
+            "userPoolId": {"type": "string"},
+            "clientId": {"type": "string"},
+            "domain": {
+              "description": "Empty, or the Hosted UI's domain name: lower-case letters, digits, dots and hyphens with at least one dot, no scheme, path or port. The API refuses to start with anything else.",
+              "type": "string",
+              "maxLength": 253,
+              "pattern": "^$|^[a-z0-9-]+(\\.[a-z0-9-]+)+$"
+            }
+          }
+        }
+      }
+    },
+    "awsRegion": {
+      "description": "Empty, or an AWS region such as us-west-2.",
+      "type": "string",
+      "pattern": "^$|^[a-z]{2}(-[a-z]+)+-[0-9]{1,2}$"
     },
     "image": {
       "type": "object",
@@ -170,6 +198,29 @@
             "pattern": "^https?://[^/:*\\s\\[\\]]*[A-Za-z][^/:*\\s\\[\\]]*$"
           }
         }
+      }
+    },
+    {
+      "description": "With auth.provider cognito the API needs the user pool, its app client and their region: without the pool or the client every sign-in is refused, and without the region the Cognito client calls us-east-1.",
+      "if": {
+        "properties": {"auth": {"properties": {"provider": {"const": "cognito"}}, "required": ["provider"]}},
+        "required": ["auth"]
+      },
+      "then": {
+        "properties": {
+          "auth": {
+            "properties": {
+              "cognito": {
+                "properties": {
+                  "userPoolId": {"minLength": 1},
+                  "clientId": {"minLength": 1}
+                }
+              }
+            }
+          },
+          "awsRegion": {"minLength": 1}
+        },
+        "required": ["awsRegion"]
       }
     },
     {

@@ -10,7 +10,7 @@
  *   - a native `<dialog` element;
  *   - `fixed` and `inset-0` in one class string, in either order.
  *
- * The overlays still to move onto Dialog are listed in RAW_DIALOGS with their
+ * An overlay not yet on Dialog is listed in RAW_DIALOGS (none is now) with its
  * exact number of banned lines and of `<Dialog` uses, so a new raw overlay in a
  * listed file fails as surely as one in a new file. A file that has moved over
  * leaves that list for MIGRATED, which pins its `<Dialog` uses; a listed file
@@ -43,26 +43,27 @@ export interface RawEntry {
 }
 
 /**
- * The overlays not yet on Dialog: 11 in 10 files. Each moves in a later change
- * of #369 and leaves this list when it does.
+ * The overlays not yet on Dialog: none. Every dashboard overlay has moved, so
+ * a raw overlay anywhere outside Dialog.tsx is a new one and fails. The list
+ * stays, empty, as the place a deliberate exception would have to be written
+ * down with its exact counts.
  */
-export const RAW_DIALOGS: Record<string, RawEntry> = {
-  'frontend/src/components/admin/api-keys/CreateApiKeyModal.tsx': { banned: 2, dialogUses: 0 },
-  'frontend/src/components/admin/users/InviteUserModal.tsx': { banned: 2, dialogUses: 0 },
-  'frontend/src/components/admin/users/EffectivePermissionsModal.tsx': { banned: 2, dialogUses: 0 },
-  'frontend/src/pages/admin/safety.tsx': { banned: 2, dialogUses: 0 },
-  'modules/frontend/src/components/admin/roles/CreateRoleModal.tsx': { banned: 2, dialogUses: 0 },
-  'modules/frontend/src/components/warehouse/common.tsx': { banned: 2, dialogUses: 0 },
-  'modules/frontend/src/components/warehouse/runs/ViewSqlDialog.tsx': { banned: 2, dialogUses: 0 },
-  'modules/frontend/src/pages/workspaces/index.tsx': { banned: 1, dialogUses: 0 },
-  'modules/frontend/src/pages/workspaces/[id]/index.tsx': { banned: 1, dialogUses: 0 },
-  // Two overlays: the invite form and the remove confirmation.
-  'modules/frontend/src/pages/workspaces/[id]/members.tsx': { banned: 3, dialogUses: 0 },
-};
+export const RAW_DIALOGS: Record<string, RawEntry> = {};
 
 /** Files that left RAW_DIALOGS, with their exact number of `<Dialog` uses. */
 export const MIGRATED: Record<string, number> = {
   'frontend/src/components/admin/users/EditUserModal.tsx': 1,
+  'frontend/src/components/admin/users/EffectivePermissionsModal.tsx': 1,
+  'frontend/src/pages/admin/safety.tsx': 1,
+  'modules/frontend/src/components/warehouse/runs/ViewSqlDialog.tsx': 1,
+  'modules/frontend/src/components/admin/roles/CreateRoleModal.tsx': 1,
+  'modules/frontend/src/components/warehouse/common.tsx': 1,
+  'modules/frontend/src/pages/workspaces/index.tsx': 1,
+  'modules/frontend/src/pages/workspaces/[id]/index.tsx': 1,
+  // Two dialogs: the invite form and the remove confirmation.
+  'modules/frontend/src/pages/workspaces/[id]/members.tsx': 2,
+  'frontend/src/components/admin/api-keys/CreateApiKeyModal.tsx': 1,
+  'frontend/src/components/admin/users/InviteUserModal.tsx': 1,
 };
 
 /** Fewer files than this means the roots are wrong, not that the tree is clean. */
@@ -466,7 +467,11 @@ describe('dialog sweep: with no modules/ (a core tree) and with a wrong modules 
           return sweep({ ...core, modulesRoot: path.join(core.repoRoot, 'modules', 'frontend', 'srcs') }, RULES)
             .problems;
         })();
-    const moduleEntries = Object.keys(RAW_DIALOGS).filter((rel) => rel.startsWith('modules/'));
+    // Both lists: no module overlay is left in RAW_DIALOGS, and an entry in
+    // MIGRATED that is not found fails the same way.
+    const moduleEntries = [...Object.keys(RAW_DIALOGS), ...Object.keys(MIGRATED)].filter((rel) =>
+      rel.startsWith('modules/'),
+    );
     expect(moduleEntries.length).toBeGreaterThan(0);
     for (const rel of moduleEntries) {
       expect(problems).toContain(

@@ -16,7 +16,19 @@ data:
   {{- with .Values.corsOrigins }}
   CORS_ORIGINS: {{ join "," . | quote }}
   {{- end }}
-  AUTH_PROVIDER: local
+  AUTH_PROVIDER: {{ .Values.auth.provider | quote }}
+  {{- with .Values.auth.cognito.userPoolId }}
+  COGNITO_USER_POOL_ID: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.auth.cognito.clientId }}
+  COGNITO_CLIENT_ID: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.auth.cognito.domain }}
+  COGNITO_DOMAIN: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.awsRegion }}
+  AWS_REGION: {{ . | quote }}
+  {{- end }}
   LOG_FORMAT: json
   WEB_CONCURRENCY: "1"
   FIRST_SUPERUSER: {{ required "firstSuperuser is required: the email of the first administrator" .Values.firstSuperuser | quote }}

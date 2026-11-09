@@ -3,20 +3,23 @@ import { AdminLayout } from '@/components/admin/AdminLayout';
 import { ApiKeyTable } from '@/components/admin/api-keys/ApiKeyTable';
 import { CreateApiKeyModal } from '@/components/admin/api-keys/CreateApiKeyModal';
 import { withAdminGuard } from '@/components/admin/withAdminGuard';
+import { useDeferredAnnouncement } from '@/components/ui/Dialog';
 
 export function ApiKeysPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [newKeyBanner, setNewKeyBanner] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   // What the live region says. Cleared (not switched back) when the "copied"
-  // state wears off, so nothing is announced a second time.
-  const [announcement, setAnnouncement] = useState('');
+  // state wears off, so nothing is announced a second time. "Key created" is
+  // written after the dialog has closed: written in the same commit, it would
+  // change while the page is still inert (#369).
+  const [announcement, setAnnouncement, announceAfterClose] = useDeferredAnnouncement();
   const [tableKey, setTableKey] = useState(0);
 
   const handleKeyCreated = (keyValue: string) => {
     setNewKeyBanner(keyValue);
-    setAnnouncement('Key created');
     setModalOpen(false);
+    announceAfterClose('Key created');
     // Ask the table to refetch
     setTableKey((prev) => prev + 1);
   };
