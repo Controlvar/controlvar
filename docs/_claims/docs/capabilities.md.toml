@@ -333,7 +333,7 @@ by = [
 text = "Signed releases: each image is signed with cosign and carries an SBOM, and you can verify both."
 by = [
     "test:backend/tests/unit/infrastructure/test_release_publishes.py::test_each_image_is_signed_and_carries_its_sbom_as_an_attestation",
-    "docex:docs/self-hosting/releases.md#https://github.com/getexperimently/experimently/.github/workflows/release.yml@refs/",
+    "docex:docs/self-hosting/releases.md#https://spdx.dev/Document",
 ]
 
 [[unit]]
