@@ -6,9 +6,11 @@ cycle. The counter step that gives each user their place is
 ``backend.app.services.balanced_allocation``.
 
 An experiment that declares ``balance_within`` names one top-level key of the
-assign ``context`` and the values to balance within. A new, eligible user is
-put in a *group* by :func:`group_of`, and takes the next place in that group's
-sequence of randomly permuted blocks:
+assign ``context`` and the values to balance within, or 1 to 10 saved
+segments. A new, eligible user is put in a *group* -- by :func:`group_of` for
+an attribute, by :func:`segment_group` (the first listed segment the user
+belongs to) for segments -- and takes the next place in that group's sequence
+of randomly permuted blocks:
 
 * a block holds every variant as often as its share allows: with shares that
   are all multiples of 5, ``B = 100 / gcd(shares)`` places, at most 20
@@ -28,7 +30,7 @@ import hashlib
 import hmac
 import logging
 import math
-from typing import Any, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Collection, List, Mapping, Optional, Sequence, Tuple
 
 from backend.app.core.log_once import OnceLog
 
@@ -96,14 +98,58 @@ def balance_setting(experiment: Any) -> Optional[Mapping[str, Any]]:
     return None
 
 
-def named_groups(setting: Optional[Mapping[str, Any]]) -> Tuple[str, ...]:
-    """The groups a setting names: its ``values``, or a closed key's set.
+def balances_within_segments(setting: Optional[Mapping[str, Any]]) -> bool:
+    """True when *setting* balances within saved segments (it has a
+    ``segments`` key), so a user's group is decided by membership."""
+    return isinstance(setting, Mapping) and "segments" in setting
 
-    ``other`` and ``unknown`` are never among them. A setting with no
-    attribute (or none at all) names nothing.
+
+def balance_segments(setting: Optional[Mapping[str, Any]]) -> Tuple[str, ...]:
+    """The segment ids a setting balances within, in the order listed.
+
+    Only text counts: an entry of a stored list that is not a string (a value
+    written past the API) is no segment. A setting without segments has none.
+    """
+    if not balances_within_segments(setting):
+        return ()
+    segments = setting.get("segments")
+    if not isinstance(segments, (list, tuple)):
+        return ()
+    return tuple(segment for segment in segments if isinstance(segment, str))
+
+
+def segment_group(
+    segment_ids: Sequence[str],
+    members: Collection[str],
+    undecided: Collection[str],
+) -> str:
+    """The group of a user of an experiment balanced within *segment_ids*.
+
+    The first listed segment the user belongs to (its id is the group), else
+    ``other``. Listed order decides: a segment whose membership cannot be
+    decided (*undecided*) before the first one the user belongs to makes the
+    group ``unknown``, since the user may belong to it; one listed after it
+    does not matter.
+    """
+    for segment_id in segment_ids:
+        if segment_id in undecided:
+            return UNKNOWN
+        if segment_id in members:
+            return segment_id
+    return OTHER
+
+
+def named_groups(setting: Optional[Mapping[str, Any]]) -> Tuple[str, ...]:
+    """The groups a setting names: its ``values``, a closed key's set, or its
+    segments' ids.
+
+    ``other`` and ``unknown`` are never among them. A setting with neither an
+    attribute nor segments (or none at all) names nothing.
     """
     if not isinstance(setting, Mapping):
         return ()
+    if balances_within_segments(setting):
+        return balance_segments(setting)
     attribute = setting.get("attribute")
     if not isinstance(attribute, str):
         return ()
@@ -133,6 +179,10 @@ def _storable(value: str) -> bool:
 
 def group_of(setting: Optional[Mapping[str, Any]], context: Any) -> str:
     """The group a user with *context* is balanced in. Total: never raises.
+
+    For an attribute setting. (A segment setting's group needs the user's
+    membership, which the database decides: :func:`segment_group`. Given one
+    here, every user is ``unknown``.)
 
     Read from the top-level key ``setting["attribute"]`` of *context* only (no
     aliasing: ``{"user": {"tier": ...}}`` and ``{"user.tier": ...}`` do not
