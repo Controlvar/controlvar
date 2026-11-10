@@ -969,10 +969,32 @@ by = [
 ]
 
 [[unit]]
-text = "In a deployed stack that line is the only signal that an entry is missing."
+text = "The AWS deployment counts those lines: experimentation-api-audit-write-failed-<env> goes into alarm on the first one in any 5 minutes and emails ALARM_EMAIL, once that address has confirmed its subscription."
+by = [
+    "test:infrastructure/tests/test_standing_alarms.py::test_one_failed_audit_write_raises_the_alarm",
+    "test:infrastructure/tests/test_standing_alarms.py::test_every_standing_alarm_emails_the_topic_but_the_per_colour_two",
+    "test:backend/tests/unit/services/test_audit_write_failed_line.py::test_a_failed_write_renders_the_line_the_filter_counts",
+]
+
+[[unit]]
+text = "It sends one email when it goes into alarm, not one per line, and each line also counts toward experimentation-api-error-logs-<env>."
+by = [
+    "test:infrastructure/tests/test_standing_alarms.py::test_one_failed_audit_write_raises_the_alarm",
+    "test:infrastructure/tests/test_standing_alarms.py::test_the_error_filter_is_on_the_api_tasks_log_group",
+]
+
+[[unit]]
+text = "To find which entries are missing, search the log group /ecs/experimentation-backend-<env> for Failed to create audit log: each line names the action and the entity of one missing entry."
 by = [
     "test:backend/tests/unit/services/test_audit_log_rules.py::test_a_failed_write_logs_one_error_line_and_counts_it",
-    "test:infrastructure/tests/test_api_task_and_data_resources.py::test_nothing_collects_the_apis_prometheus_metrics",
+    "test:infrastructure/tests/test_standing_alarms.py::test_the_error_filter_is_on_the_api_tasks_log_group",
+]
+
+[[unit]]
+text = "Nothing writes a missing entry later."
+by = [
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_a_refused_entry_for_one_experiment_of_three_keeps_every_transition",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_a_refused_entry_still_applies_the_role_change",
 ]
 
 [[unit]]

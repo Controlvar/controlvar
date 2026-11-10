@@ -600,9 +600,11 @@ unless you deploy with `-c bastion_ssh_cidr=<cidr>`.
 
 ### experimentation-monitoring-<env> {#experimentation-monitoring}
 
-- CloudWatch dashboards `experimentation-platform-<env>` and
-  `experimentation-application-metrics-<env>` (some of their widgets graph
-  metrics nothing publishes, #424)
+- CloudWatch dashboards `experimentation-platform-<env>`, which graphs the
+  Aurora writer and each Redis node, and
+  `experimentation-application-metrics-<env>`, which graphs the API service's
+  CPU and memory, its running tasks, its log lines at level `error` or
+  `critical`, and the audit-log entries it could not write.
 - CloudWatch alarms: `AuroraHighCPU-<env>` on the Aurora writer, and one
   `RedisHighCPU-00N-<env>` per Redis node. The Aurora alarm reads the cluster's
   identifier from the SSM parameter
@@ -613,9 +615,11 @@ unless you deploy with `-c bastion_ssh_cidr=<cidr>`.
   email subscriber: `ALARM_EMAIL` (none in `dev` or `demo` without it). The
   fargate stack's alarms publish to it too: the two API 5xx alarms, which roll
   a deployment back, `experimentation-api-no-healthy-task-<env>`, which fires
-  when no API task is healthy, and `experimentation-api-error-logs-<env>`,
+  when no API task is healthy, `experimentation-api-error-logs-<env>`,
   which fires on 10 or more lines in 5 minutes whose JSON `level` is `error`
-  or `critical`.
+  or `critical`, and `experimentation-api-audit-write-failed-<env>`, which
+  fires on one line in 5 minutes saying an audit-log entry could not be
+  written ([Audit logging](../api/audit-logging.md#when-an-entry-can-be-missing)).
   That is why `experimentation-fargate-<env>` depends on this stack.
 - With the `etl` module: a Kinesis widget and an iterator-age alarm on that
   module's event stream. A core deployment gets neither, rather than an alarm
