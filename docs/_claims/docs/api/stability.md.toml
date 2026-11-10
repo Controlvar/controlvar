@@ -163,6 +163,13 @@ by = [
 ]
 
 [[unit]]
+text = "GET /api/v1/results/{id}/balanced-groups is beta too (#448): it answers for an experiment that balances its split within groups, and its response may still change."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_the_balanced_groups_route_is_beta_and_carries_no_place_in_a_group",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_an_experiment_that_balances_nothing_answers_409",
+]
+
+[[unit]]
 text = "Changing a stable route"
 by = ["exempt:baseline"]
 
@@ -1177,4 +1184,16 @@ by = [
     "test:backend/tests/integration/api/test_balance_within_segments.py::test_a_segment_an_experiment_balances_within_cannot_be_archived",
     "test:backend/tests/integration/api/test_balance_within_segments.py::test_the_listing_names_an_experiment_that_balances_within_the_segment",
     "test:backend/tests/unit/services/test_balance_segments.py::test_the_in_use_message_names_what_holds_the_segment",
+]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results, GET /api/v1/results/{experiment_id}/bayesian, GET /api/v1/bandit/{experiment_id} | #448 (results) | Engine version 1.10.0, for the new beta GET /api/v1/results/{experiment_id}/balanced-groups; the numbers these operations return do not change. /results serves no answer cached before the upgrade. The OpenAPI document changes only in the engine_version defaults."
+by = [
+    "test:backend/tests/unit/services/test_engine_versions_frozen.py",
+    "test:backend/tests/unit/services/test_engine_fingerprint.py::test_engine_output_matches_the_fingerprint_for_this_version",
+    "test:backend/tests/unit/services/test_sufficient_stats_fingerprint.py",
+    "test:backend/tests/unit/services/test_results_correction_pins.py",
+    "test:backend/tests/integration/api/test_results_breakdown_variants.py::test_a_cached_answer_from_another_engine_version_is_not_served",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_the_balanced_groups_route_is_beta_and_carries_no_place_in_a_group",
 ]
