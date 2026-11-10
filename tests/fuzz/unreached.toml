@@ -131,6 +131,17 @@
 # evaluation of local runs of both passes at this seed on the pull request's
 # head merged with #1858; the superuser pass's CI run on that head alone gave
 # the same reach counts.
+#
+# Then #957 answered 422 for a body value of the wrong type on POST and PUT
+# /api/v1/holdout and POST and PUT /api/v1/mutual-exclusion-groups, where it
+# answered 500, and a 5xx reaches an operation. The viewer pass reached those
+# four only through that 500: the VIEWER role may not use them, and the role
+# check comes after the body is validated, so a viewer gets 422, 400 for a
+# body that does not parse, or 403, never a 2xx. So it no longer reaches them,
+# and its list is 181 (the 177 of #1842's paragraph above and these four). The
+# superuser pass still reaches all four, and its list does not change. Read
+# from fuzz_check's evaluation of local runs of both passes at this seed on the
+# pull request's head, on main after #1867 (#1001).
 
 # Then #1789 answered 400 to a grant whose body's user_id is not the path's, so
 # the superuser pass no longer reaches POST /api/v1/rbac/users/{user_id}/grant
@@ -1077,8 +1088,18 @@ reason = "The VIEWER role may not use it, so the role check answers 403; request
 
 [[unreached]]
 pass = "viewer"
+operation = "POST /api/v1/mutual-exclusion-groups"
+reason = "The VIEWER role may not use it, so the role check answers 403; requests that fail validation first answer 422."
+
+[[unreached]]
+pass = "viewer"
 operation = "GET /api/v1/mutual-exclusion-groups/{group_id}"
 reason = "The VIEWER role may not use it, so the role check answers 403; requests that fail validation first answer 422."
+
+[[unreached]]
+pass = "viewer"
+operation = "PUT /api/v1/mutual-exclusion-groups/{group_id}"
+reason = "The VIEWER role may not use it, so the role check answers 403; requests that fail validation first answer 422, and a body that does not parse 400."
 
 [[unreached]]
 pass = "viewer"
@@ -1102,8 +1123,18 @@ reason = "The VIEWER role may not use it, so the role check answers 403."
 
 [[unreached]]
 pass = "viewer"
+operation = "POST /api/v1/holdout"
+reason = "The VIEWER role may not use it, so the role check answers 403; requests that fail validation first answer 422."
+
+[[unreached]]
+pass = "viewer"
 operation = "GET /api/v1/holdout/all"
 reason = "The VIEWER role may not use it, so the role check answers 403; requests that fail validation first answer 422."
+
+[[unreached]]
+pass = "viewer"
+operation = "PUT /api/v1/holdout/{holdout_id}"
+reason = "The VIEWER role may not use it, so the role check answers 403; requests that fail validation first answer 422, and a body that does not parse 400."
 
 [[unreached]]
 pass = "viewer"
