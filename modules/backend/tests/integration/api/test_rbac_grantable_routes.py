@@ -12,6 +12,12 @@ On Postgres, through the real routes, with real local-token authentication:
 
 ``modules/backend/tests/unit/schemas/test_rbac_schemas.py`` holds the set
 itself, generated over all forty pairs.
+
+The grant's body names its user too (#1789). A body ``user_id`` that names
+another user than the path, or is not a UUID, answers 400 and writes neither a
+grant nor an audit entry; the same id in capitals or without its dashes is
+the same user. The admin check comes first (403), and the comparison before
+#1002's lookup of the path's user (404).
 """
 
 from __future__ import annotations
@@ -118,6 +124,32 @@ def _the_refusal(resp):
     assert resp.status_code == 422, f"expected 422, got {resp.status_code}: {resp.text}"
     (only,) = resp.json()["detail"]
     return only
+
+
+def _grant_entries(db_session, user_id) -> int:
+    """The PERMISSION_GRANT audit entries for a user (the entity is the user)."""
+    db_session.expire_all()
+    return (
+        db_session.query(AuditLog)
+        .filter(
+            AuditLog.entity_id == user_id, AuditLog.action_type == "permission_grant"
+        )
+        .count()
+    )
+
+
+def _mismatch(body, path) -> dict:
+    """The 400's whole body, written out: the body's value, then the path's."""
+    return {
+        "detail": f"user_id in the body ('{body}') does not match the one in "
+        f"the path ('{path}')"
+    }
+
+
+@pytest.fixture
+def other(db_session):
+    """A second user with an account, so a grant to them could be stored."""
+    return make_user(db_session, UserRole.VIEWER, tag=TAG)
 
 
 @pytest.mark.regression
@@ -257,3 +289,111 @@ def test_a_role_and_a_grant_stored_before_the_check_read_and_clean_up(
     assert gone.status_code == 200, gone.text
     assert gone.json() == {"status": "revoked", "count": 1}
     assert _grants(db_session, target.id) == []
+
+
+# ---------------------------------------------------------------------------
+# The body's user_id names the path's user (#1789)
+# ---------------------------------------------------------------------------
+
+
+def _grant(client, caller, path_id, body_user_id):
+    return client.post(
+        f"{V1}/rbac/users/{path_id}/grant",
+        json={"user_id": body_user_id, "resource": "experiment", "actions": ["read"]},
+        headers=auth(caller),
+    )
+
+
+@pytest.mark.regression
+def test_grant_body_user_id_differing_from_path_is_refused(
+    client, db_session, admin, target, other
+):
+    """Path A, body B: 400 naming B then A, and no grant or audit entry for
+    either. The grant used to be made for A, the body's B never read."""
+    resp = _grant(client, admin, target.id, str(other.id))
+    assert resp.status_code == 400, resp.text
+    assert resp.json() == _mismatch(other.id, target.id)
+    assert _grants(db_session, target.id) == []
+    assert _grants(db_session, other.id) == []
+    assert _grant_entries(db_session, target.id) == 0
+    assert _grant_entries(db_session, other.id) == 0
+
+    # Positive control: the same request naming A in the body is made for A,
+    # and the two queries above find its row and its one entry.
+    resp = _grant(client, admin, target.id, str(target.id))
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["user_id"] == str(target.id)
+    assert [g.resource for g in _grants(db_session, target.id)] == ["experiment"]
+    assert _grants(db_session, other.id) == []
+    assert _grant_entries(db_session, target.id) == 1
+    assert _grant_entries(db_session, other.id) == 0
+
+
+@pytest.mark.parametrize("written", ["capitals", "no dashes"])
+def test_grant_body_user_id_written_another_way_is_the_same_user(
+    client, db_session, admin, target, written
+):
+    """The ids are compared as UUIDs, not as text."""
+    body_user_id = {
+        "capitals": str(target.id).upper(),
+        "no dashes": target.id.hex,
+    }[written]
+    resp = _grant(client, admin, target.id, body_user_id)
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["user_id"] == str(target.id)
+    assert [g.resource for g in _grants(db_session, target.id)] == ["experiment"]
+
+
+@pytest.mark.regression
+def test_grant_body_user_id_that_is_not_a_uuid_is_refused(
+    client, db_session, admin, target
+):
+    """A value that is not a UUID names no user: the same 400, never a 500."""
+    resp = _grant(client, admin, target.id, "not-a-uuid")
+    assert resp.status_code == 400, resp.text
+    assert resp.json() == _mismatch("not-a-uuid", target.id)
+    assert _grants(db_session, target.id) == []
+    assert _grant_entries(db_session, target.id) == 0
+
+
+@pytest.mark.parametrize(
+    "role", [UserRole.DEVELOPER, UserRole.ANALYST, UserRole.VIEWER]
+)
+def test_a_caller_who_is_not_an_admin_gets_403_before_the_body_is_compared(
+    client, db_session, target, other, role
+):
+    """The admin check comes first, so a caller who may not grant learns
+    nothing about the body."""
+    caller = make_user(db_session, role, tag=TAG)
+    resp = _grant(client, caller, target.id, str(other.id))
+    assert resp.status_code == 403, resp.text
+    assert resp.json() == {"detail": "Admin role required"}
+    assert _grants(db_session, target.id) == []
+    assert _grants(db_session, other.id) == []
+
+
+@pytest.mark.regression
+def test_a_mismatch_whose_path_id_has_no_account_answers_400(
+    client, db_session, admin, target
+):
+    """The body is compared before the path's user is looked up (#1002), so a
+    body naming another user is refused whether or not the path's id has an
+    account."""
+    missing = uuid.uuid4()
+    resp = _grant(client, admin, missing, str(target.id))
+    assert resp.status_code == 400, resp.text
+    assert resp.json() == _mismatch(target.id, missing)
+    assert _grants(db_session, target.id) == []
+    assert _grant_entries(db_session, target.id) == 0
+
+
+def test_a_matching_grant_whose_id_has_no_account_still_answers_404(
+    client, db_session, admin
+):
+    """#1002's answer is unchanged for a body that matches."""
+    missing = uuid.uuid4()
+    resp = _grant(client, admin, missing, str(missing))
+    assert resp.status_code == 404, resp.text
+    assert resp.json() == {"detail": "User not found"}
+    assert _grants(db_session, missing) == []
+    assert _grant_entries(db_session, missing) == 0

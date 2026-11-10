@@ -132,6 +132,10 @@
 # head merged with #1858; the superuser pass's CI run on that head alone gave
 # the same reach counts.
 
+# Then #1789 answered 400 to a grant whose body's user_id is not the path's, so
+# the superuser pass no longer reaches POST /api/v1/rbac/users/{user_id}/grant
+# and its list is 108.
+
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
 [[unreached]]
@@ -478,6 +482,11 @@ reason = "Generated ids never name a stored row (404); the other requests fail v
 pass = "superuser"
 operation = "POST /api/v1/rbac/roles/revoke"
 reason = "Generated ids never name a stored row (404); the other requests fail validation (422)."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/rbac/users/{user_id}/grant"
+reason = "No generated body's user_id is the path's: those that pass validation answer 400 (#1789, a body naming another user than the path), and the other requests fail validation (422)."
 
 [[unreached]]
 pass = "superuser"

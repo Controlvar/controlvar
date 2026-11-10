@@ -1229,3 +1229,16 @@ by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
+
+[[unit]]
+text = "POST /api/v1/rbac/users/{user_id}/grant (full profile) | #1789 | A body whose user_id names a different user than the path used to be accepted, and the grant was made for the path's user; it now answers 400 user_id in the body ('<body>') does not match the one in the path ('<path>'); nothing is written and no audit entry is made. A user_id that is not a UUID is refused the same way; the path's id in capitals or without its dashes is the same user. The admin check still comes first, so a caller who is not an admin gets 403, and the 400 comes before the 404 for a path id that names no account. A body that matches is unchanged. The OpenAPI document changes only in this operation's description."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_grant_body_user_id_differing_from_path_is_refused",
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_grant_body_user_id_that_is_not_a_uuid_is_refused",
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_grant_body_user_id_written_another_way_is_the_same_user",
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_a_caller_who_is_not_an_admin_gets_403_before_the_body_is_compared",
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_a_mismatch_whose_path_id_has_no_account_answers_400",
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_a_matching_grant_whose_id_has_no_account_still_answers_404",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
