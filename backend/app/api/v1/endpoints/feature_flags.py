@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 from backend.app.api import deps
 from backend.app.api.enum_filters import enum_filter
 from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.query_params import MAX_OFFSET, describe_as_int64
 from backend.app.api.read_scope import get_current_reader
 from backend.app.api.segment_rules import refuse_unusable_segments
 from backend.app.core.config import settings
@@ -103,43 +104,6 @@ FLAG_STALE_FILTER_DESCRIPTION = (
     "true returns only stale flags, false the rest; omit for all. Archived "
     "flags are never stale."
 )
-
-#: The largest ``skip`` or ``limit`` the list takes: PostgreSQL's OFFSET and
-#: LIMIT are a bigint.
-LIST_PAGING_MAX = 2**63 - 1
-
-
-def _refuse_paging_out_of_range(**values: int) -> None:
-    """The 422 for a list ``skip`` or ``limit`` below 0 or above a bigint.
-
-    PostgreSQL refuses either as an OFFSET or LIMIT, so it answered 500; with
-    ``stale`` sent the page is cut in Python, where a negative ``skip`` counted
-    from the end. Checked here, not declared on the parameters, so the list's
-    OpenAPI document (a stable operation) does not change; the error is the
-    one a declared ``ge`` or ``le`` gives, at ``["query", <param>]``.
-    """
-    errors = []
-    for param, value in values.items():
-        if value < 0:
-            errors.append(
-                {
-                    "type": "greater_than_equal",
-                    "loc": ("query", param),
-                    "msg": "Input should be greater than or equal to 0",
-                    "ctx": {"ge": 0},
-                }
-            )
-        elif value > LIST_PAGING_MAX:
-            errors.append(
-                {
-                    "type": "less_than_equal",
-                    "loc": ("query", param),
-                    "msg": f"Input should be less than or equal to {LIST_PAGING_MAX}",
-                    "ctx": {"le": LIST_PAGING_MAX},
-                }
-            )
-    if errors:
-        raise RequestValidationError(errors)
 
 
 def _flag_key_taken_detail(key: str) -> str:
@@ -310,8 +274,9 @@ router = APIRouter(
 async def list_feature_flags(
     *,
     db: Session = Depends(deps.get_db),
-    skip: int = 0,
-    limit: int = 100,
+    # The database's own limit, and no smaller cap: limit=0 stays 200 (#1001).
+    skip: int = Query(0, ge=0, le=MAX_OFFSET, json_schema_extra=describe_as_int64),
+    limit: int = Query(100, ge=0, le=MAX_OFFSET, json_schema_extra=describe_as_int64),
     # `status` in the URL only: a Python parameter called `status` hid the
     # `fastapi.status` module in this body, so reaching the 403 below raised
     # AttributeError and answered 500.
@@ -349,7 +314,6 @@ async def list_feature_flags(
     status_member = enum_filter(
         status_filter, FeatureFlagStatus, "status", FLAG_STATUS_SPELLINGS
     )
-    _refuse_paging_out_of_range(skip=skip, limit=limit)
 
     # Everyone the LIST check above admitted sees the whole platform.
     #

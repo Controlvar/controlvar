@@ -29,6 +29,11 @@ from sqlalchemy.orm import Session
 from backend.app.api import deps
 from backend.app.api.datetime_bounds import refuse_unstorable_offset
 from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.query_params import (
+    MAX_PAGE,
+    check_page_offset,
+    describe_as_int64,
+)
 from backend.app.core.logger import unexpected_failure
 from backend.app.core.permissions import can_read_all_audit_logs
 from backend.app.models.audit_log import ActionType, AuditLog, EntityType
@@ -197,7 +202,13 @@ async def list_audit_logs(
     to_date: Optional[datetime] = Query(
         None, description="Filter logs until this date (ISO format)"
     ),
-    page: int = Query(1, ge=1, description="Page number (1-based)"),
+    page: int = Query(
+        1,
+        ge=1,
+        le=MAX_PAGE,
+        description="Page number (1-based)",
+        json_schema_extra=describe_as_int64,
+    ),
     limit: int = Query(50, ge=1, le=1000, description="Number of records per page"),
 ) -> AuditLogListResponse:
     """
@@ -227,6 +238,9 @@ async def list_audit_logs(
         from_date=from_date,
         to_date=to_date,
     )
+    # Before the `try`, whose `except Exception` would make the 422 a 500
+    # (#1001).
+    check_page_offset(page, limit, "limit")
 
     try:
         # Get audit logs

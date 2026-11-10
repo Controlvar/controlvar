@@ -15042,6 +15042,7 @@
             "required": false,
             "schema": {
               "default": 0,
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"
@@ -15941,6 +15942,7 @@
             "schema": {
               "default": 1,
               "description": "Page number (1-based)",
+              "format": "int64",
               "minimum": 1,
               "title": "Page",
               "type": "integer"
@@ -17425,6 +17427,7 @@
             "schema": {
               "default": 1,
               "description": "Page number (1-indexed)",
+              "format": "int64",
               "minimum": 1,
               "title": "Page",
               "type": "integer"
@@ -17722,6 +17725,7 @@
             "schema": {
               "default": 0,
               "description": "Number of records to skip for pagination",
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"
@@ -20256,6 +20260,8 @@
             "required": false,
             "schema": {
               "default": 0,
+              "format": "int64",
+              "minimum": 0,
               "title": "Skip",
               "type": "integer"
             }
@@ -20266,6 +20272,8 @@
             "required": false,
             "schema": {
               "default": 100,
+              "format": "int64",
+              "minimum": 0,
               "title": "Limit",
               "type": "integer"
             }
@@ -21668,6 +21676,7 @@
             "required": false,
             "schema": {
               "default": 0,
+              "format": "int64",
               "minimum": 0,
               "title": "Offset",
               "type": "integer"
@@ -22010,6 +22019,7 @@
             "required": false,
             "schema": {
               "default": 0,
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"
@@ -22372,6 +22382,7 @@
             "required": false,
             "schema": {
               "default": 1,
+              "format": "int64",
               "minimum": 1,
               "title": "Page",
               "type": "integer"
@@ -23332,6 +23343,7 @@
             "schema": {
               "default": 0,
               "description": "Number of records to skip",
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"
@@ -23477,6 +23489,7 @@
             "schema": {
               "default": 0,
               "description": "Number of records to skip",
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"
@@ -23685,6 +23698,7 @@
             "required": false,
             "schema": {
               "default": 0,
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"
@@ -24103,6 +24117,7 @@
             "required": false,
             "schema": {
               "default": 1,
+              "format": "int64",
               "minimum": 1,
               "title": "Page",
               "type": "integer"
@@ -25379,6 +25394,7 @@
             "schema": {
               "default": 0,
               "description": "Number of records to skip",
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"
@@ -26559,6 +26575,7 @@
             "schema": {
               "default": 0,
               "description": "Number of results to skip",
+              "format": "int64",
               "minimum": 0,
               "title": "Offset",
               "type": "integer"
@@ -27662,6 +27679,7 @@
             "required": false,
             "schema": {
               "default": 0,
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"
