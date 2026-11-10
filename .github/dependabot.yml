@@ -305,13 +305,14 @@ updates:
       # react-native is 0.x, and for a 0.x package the MINOR position is where
       # breaking changes go -- semver's own rule. Dependabot classifies
       # 0.73 -> 0.87 as minor, so it lands in patch-and-minor and looks
-      # routine; it is a three-year migration. #285 is what that produces:
+      # routine; it is a three-year migration. That is what such a bump
+      # produces:
       #
       #   npm error ERESOLVE ... While resolving: react-native@0.87.1
       #
       # because 0.87 peer-requires react ^19.2.3 while these SDKs pin React
       # 18. Six checks failed on one bump. It moves with the React 18 -> 19
-      # migration (#291/#49/#51), by hand, or not at all.
+      # migration (#82), by hand, or not at all.
       - dependency-name: "react-native"
         update-types: ["version-update:semver-minor"]
       # react is ANCHORED at 18.2.0, because react-native 0.73.11 peer-pins it
@@ -322,7 +323,7 @@ updates:
       #   npm error Could not resolve dependency:
       #   npm error peer react@"18.2.0" from react-native@0.73.11
       #
-      # react moves with react-native, which moves with #291.
+      # react moves with react-native, which moves with #82.
       #
       # react-test-renderer is the same anchor, and #303's list missed it
       # because it was built from the two packages that had already failed
