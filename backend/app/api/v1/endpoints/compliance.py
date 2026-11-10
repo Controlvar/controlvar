@@ -138,11 +138,12 @@ def list_audit_events(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Compliance audit logs require ADMIN or ANALYST role",
             )
-    # After the role check: a caller it refuses is answered 403 (#1001).
-    check_page_offset(page, limit, "limit")
 
     refuse_unstorable_offset("start_time", start_time)
     refuse_unstorable_offset("end_time", end_time)
+    # After the role check, so a caller it refuses is answered 403, and after
+    # the date refusals, which answer as before (#1001).
+    check_page_offset(page, limit, "limit")
 
     service = AuditLogService(db)
     result = service.get_events(

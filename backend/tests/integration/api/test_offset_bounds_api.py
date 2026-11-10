@@ -426,10 +426,13 @@ VOLATILE_HEADERS = {"x-request-id"}
 
 #: The time the list classifies the golden rows at (its ``stale`` fields,
 #: #1808). ``evaluations_seen`` counts any flag evaluation the installation
-#: recorded in the STALE_FLAG_DAYS before it, so at the wall clock the answer
-#: would depend on what other tests in the session wrote. No test writes one
-#: near this time: the rest are at today's dates, and the stale-flag API tests
-#: take theirs from the year 2400 on.
+#: recorded from STALE_FLAG_DAYS before it on, with no upper bound
+#: (``any_evaluation_since``), so at the wall clock the answer would depend on
+#: what other tests in the session wrote. At this time it counts none: other
+#: tests' evaluations are at today's dates, and the stale-flag API tests, which
+#: write theirs from the year 2400 on, delete their flags afterwards, and the
+#: evaluations with them (``raw_metrics`` cascades on the flag's delete). A
+#: test that left a later evaluation behind would change this answer.
 GOLDEN_NOW = datetime(2200, 1, 1, tzinfo=timezone.utc)
 
 

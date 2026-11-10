@@ -226,10 +226,11 @@ def list_audit_logs(
     **Access**: ADMIN only.
     """
     _require_admin(current_user)
-    # After the role check: a caller it refuses is answered 403 (#1001).
-    check_page_offset(page, page_size, "page_size")
     refuse_unstorable_offset("start_date", start_date)
     refuse_unstorable_offset("end_date", end_date)
+    # After the role check, so a caller it refuses is answered 403, and after
+    # the date refusals, which answer as before (#1001).
+    check_page_offset(page, page_size, "page_size")
     svc = HIPAAService()
     result = svc.get_phi_audit_logs(
         db=db,
