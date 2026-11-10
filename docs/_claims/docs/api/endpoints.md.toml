@@ -3740,3 +3740,31 @@ by = [
     "test:backend/tests/unit/infrastructure/test_proxy_headers_trust.py::TestUvicornItself::test_the_private_ranges_return_the_real_client",
     "test:backend/tests/unit/middleware/test_rate_limiter.py::TestGetClientIp::test_it_uses_the_resolved_client_and_not_the_header",
 ]
+
+[[unit]]
+text = "Balanced Groups (beta)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "See Balance the split within groups for full documentation."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Returns an experiment that balances its split within groups by the group each user was balanced in: one row per group, one estimate per treatment over the groups (overall, or null with a reason), merged_groups, users_outside_blocks, unknown_share and engine_version."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_rows_are_the_stored_groups_and_add_up_to_every_user",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_too_few_users_has_no_estimate",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_a_small_group_is_merged_into_the_largest",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_the_balanced_groups_route_is_beta_and_carries_no_place_in_a_group",
+]
+
+[[unit]]
+text = "It takes no query parameters and is computed on each request."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_route_reads_and_writes_no_cache",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_the_balanced_groups_route_is_beta_and_carries_no_place_in_a_group",
+]
+
+[[unit]]
+text = "An experiment that does not balance within groups answers 409."
+by = ["test:backend/tests/integration/api/test_balanced_groups_results.py::test_an_experiment_that_balances_nothing_answers_409"]

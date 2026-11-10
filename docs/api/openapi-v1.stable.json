@@ -1017,6 +1017,214 @@
         "title": "BalanceWithin",
         "type": "object"
       },
+      "BalancedGroupsEstimate": {
+        "description": "One treatment against the control, over every group.",
+        "properties": {
+          "absolute_difference": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The treatment's conversion rate minus the control's in each group, weighted by the group's share of the experiment's users (every variant's), as a proportion (0.02 is 2 percentage points). Null when the treatment has no users.",
+            "title": "Absolute Difference"
+          },
+          "absolute_difference_ci": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The normal interval of absolute_difference at the experiment's confidence_level. Null when standard_error is 0 or null.",
+            "title": "Absolute Difference Ci"
+          },
+          "adjusted_p_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "p_value corrected across the treatments with the experiment's correction_method; null with no correction.",
+            "title": "Adjusted P Value"
+          },
+          "is_significant": {
+            "description": "Whether adjusted_p_value (p_value with no correction) is below 1 - confidence_level. Not a verdict: the experiment's results carry its decision.",
+            "title": "Is Significant",
+            "type": "boolean"
+          },
+          "p_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Two-sided normal p-value of absolute_difference. Null when standard_error is 0 or null, never 0.0.",
+            "title": "P Value"
+          },
+          "relative_improvement_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "absolute_difference over the control's conversion rate weighted the same way, in percent. Null when that rate is 0.",
+            "title": "Relative Improvement Pct"
+          },
+          "standard_error": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The standard error of absolute_difference.",
+            "title": "Standard Error"
+          },
+          "variant_id": {
+            "description": "The treatment variant's id.",
+            "title": "Variant Id",
+            "type": "string"
+          },
+          "variant_name": {
+            "description": "The treatment variant's name.",
+            "title": "Variant Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "variant_id",
+          "variant_name",
+          "is_significant"
+        ],
+        "title": "BalancedGroupsEstimate",
+        "type": "object"
+      },
+      "BalancedGroupsResponse": {
+        "description": "The results of an experiment that balances its split within groups, by\nthe group each user was balanced in, and one estimate over the groups.",
+        "properties": {
+          "confidence_level": {
+            "description": "The experiment's confidence level, which the estimate uses.",
+            "title": "Confidence Level",
+            "type": "number"
+          },
+          "correction_method": {
+            "description": "The experiment's multiple-comparison correction.",
+            "title": "Correction Method",
+            "type": "string"
+          },
+          "engine_version": {
+            "default": "1.10.0",
+            "description": "Statistics engine version that produced these results.",
+            "title": "Engine Version",
+            "type": "string"
+          },
+          "experiment_id": {
+            "description": "The experiment's id.",
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "groups": {
+            "$ref": "#/components/schemas/DimensionalBreakdownResponse",
+            "description": "One row per group: the breakdown's rows, with each user in the group stored when they were assigned. Exploratory, as every breakdown is: each row's significance uses adjusted_alpha, the Bonferroni threshold over the rows returned."
+          },
+          "merged_groups": {
+            "description": "Groups with fewer than 2 users in a variant that has users, each counted in overall with the largest group that has 2 in every variant that has users.",
+            "items": {
+              "$ref": "#/components/schemas/MergedGroup"
+            },
+            "title": "Merged Groups",
+            "type": "array"
+          },
+          "overall": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/BalancedGroupsEstimate"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "One estimate per treatment of the primary metric, over every group; null with a reason. No CUPED adjustment is applied to it.",
+            "title": "Overall"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "mean_metric",
+                  "sequential_testing",
+                  "too_few_users"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why overall is null: mean_metric (the primary metric is not a conversion), sequential_testing (the experiment uses sequential testing) or too_few_users (no treatment has users, or no group has 2 users in every variant that has users). Null when overall is given.",
+            "title": "Reason"
+          },
+          "unknown_share": {
+            "anyOf": [
+              {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Of the users whose group was stored, the share in unknown (assigned without the attribute). Users whose row stored no group are not counted. Null when no user's group was stored.",
+            "title": "Unknown Share"
+          },
+          "users_outside_blocks": {
+            "description": "Users split without balancing: assigned by the hash because the server was busy balancing other users at that moment, or by an older server version (whose rows stored no group and are counted under unknown).",
+            "minimum": 0,
+            "title": "Users Outside Blocks",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "experiment_id",
+          "confidence_level",
+          "correction_method",
+          "groups",
+          "users_outside_blocks"
+        ],
+        "title": "BalancedGroupsResponse",
+        "type": "object"
+      },
       "BanditStatusResponse": {
         "description": "Full bandit status snapshot for an experiment.\n\nAttributes\n----------\nexperiment_id:\n    Identifier of the parent experiment.\nalgorithm:\n    Algorithm currently driving traffic allocation.\ncurrent_weights:\n    Per-variant allocation weights.\ntotal_pulls:\n    Total pulls across all variants.\nregret_reduction_pct:\n    Estimated regret reduction vs. uniform allocation (may be None early on).\nrecommendation:\n    Narrative recommendation: one of ``\"EXPLORING\"``, ``\"CONVERGING\"``,\n    or ``\"DEPLOYING_<VariantName>\"``.\nlast_updated:\n    ISO-8601 timestamp of the last weight update (None if never updated).\nseed:\n    Deterministic RNG seed used by the last Thompson-sampling tick\n    (``blake2b(experiment_id | tick day | n_samples)``); ``None`` for\n    deterministic algorithms or before the first tick.\nn_samples:\n    Monte Carlo draws per variant used by the last Thompson-sampling\n    tick; ``None`` for deterministic algorithms or before the first tick.\nengine_version:\n    Version of the statistics engine that computed the current weights.",
         "properties": {
@@ -1033,7 +1241,7 @@
             "type": "array"
           },
           "engine_version": {
-            "default": "1.9.0",
+            "default": "1.10.0",
             "description": "Statistics engine version that computed the current weights",
             "title": "Engine Version",
             "type": "string"
@@ -1419,7 +1627,7 @@
             ]
           },
           "engine_version": {
-            "default": "1.9.0",
+            "default": "1.10.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -2821,7 +3029,7 @@
             "title": "Covariate Lookback Days"
           },
           "engine_version": {
-            "default": "1.9.0",
+            "default": "1.10.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -8257,6 +8465,27 @@
           "boundary"
         ],
         "title": "MSPRTResultResponse",
+        "type": "object"
+      },
+      "MergedGroup": {
+        "description": "A group with too few users to estimate, counted with a larger one.",
+        "properties": {
+          "group": {
+            "description": "The group with too few users.",
+            "title": "Group",
+            "type": "string"
+          },
+          "into": {
+            "description": "The group it was counted with.",
+            "title": "Into",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group",
+          "into"
+        ],
+        "title": "MergedGroup",
         "type": "object"
       },
       "MetricBase": {
@@ -24376,6 +24605,59 @@
         "tags": [
           "Results"
         ]
+      }
+    },
+    "/api/v1/results/{experiment_id}/balanced-groups": {
+      "get": {
+        "description": "The results of an experiment that balances its split within groups (#448).\n\n``groups`` has one row per group, each user in the group stored when they\nwere assigned: the rows of a breakdown (the 20 groups with the most\nusers, then ``other`` and ``unknown``), with each row's p-value and its\nBonferroni threshold. Per variant the rows add up to every user\nassigned. ``overall`` gives, for the primary metric, one estimate per\ntreatment over every group: each group's difference from the control\nweighted by the group's share of the users, at the experiment's\n``confidence_level``, corrected across the treatments with its\n``correction_method``. It is null, with ``reason``, for a primary metric\nthat is not a conversion, for an experiment with sequential testing, and\nwhen no treatment has users or no group has 2 users in every variant that\nhas users. The experiment's results and their decision do not change.\n\nAn experiment that does not balance within groups answers 409. The\nanswer is computed on each request: it is not cached and no snapshot is\nrecorded.",
+        "operationId": "get_balanced_groups_api_v1_results__experiment_id__balanced_groups_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BalancedGroupsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "This experiment does not balance its split within groups, so it has no balanced groups. For its results by an attribute, add ?breakdown=<attribute> to its results."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Beta: results by the group each user was balanced in",
+        "tags": [
+          "Results"
+        ],
+        "x-stability": "beta"
       }
     },
     "/api/v1/results/{experiment_id}/bayesian": {
