@@ -7,7 +7,9 @@ once #1842 added the ``stale`` parameter, which changed the requests its seed
 generates for the list. Each is now a 422 at ``["query", <param>]``, the answer
 the other list routes give for a skip below 0, whether ``stale`` is sent or
 not (with ``stale`` the page is cut in Python, where a negative skip counted
-from the end). The OpenAPI document does not change.
+from the end). #1858 checked the bounds in the route, leaving the OpenAPI
+document as it was; #1001 then declared them on the parameters, which gives
+the same 422 body.
 """
 
 from __future__ import annotations
