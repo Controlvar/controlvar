@@ -188,6 +188,9 @@ Code, and the settings for Claude Desktop and Cursor. Its source is [`sdk/mcp`](
 - [Documentation home](docs/README.md)
 - [Architecture overview](docs/getting-started/architecture.md)
 - [Targeting rules](docs/feature-flags/create.md): operators, attribute aliases and examples
+- [The Controlvar books](https://github.com/amarkanday/controlvar-books): engineering, programming and the craft of
+  shipping software, taught through this codebase, for newcomers to a language or framework, engineers who already
+  code, and contributors (CC BY 4.0)
 
 ---
 
