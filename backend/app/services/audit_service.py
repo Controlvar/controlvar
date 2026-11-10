@@ -114,7 +114,6 @@ AUDIT_NAME_ONLY_FIELDS: Dict[EntityType, Tuple[str, ...]] = {
         "description",
         "hypothesis",
         "targeting_rules",
-        "metrics",
         "variance_reduction_config",
         "sequential_testing_config",
         "bayesian_config",
@@ -124,6 +123,43 @@ AUDIT_NAME_ONLY_FIELDS: Dict[EntityType, Tuple[str, ...]] = {
     EntityType.HOLDOUT: ("description",),
     EntityType.MUTUAL_EXCLUSION_GROUP: ("description",),
     EntityType.SEGMENT: ("description", "rules"),
+}
+
+#: Child rows an update records by name only, like ``AUDIT_NAME_ONLY_FIELDS``:
+#: ``{name in changed_fields: (relationship, columns compared)}``. An
+#: experiment's variants and metrics are rows of their own (the JSONB
+#: ``experiments.metrics`` column is never written), and every design save
+#: deletes and re-creates them, so they are compared by these columns only,
+#: never by id or timestamp, and in no particular order (#1782).
+#: ``test_audit_values.py`` classifies every column of the two tables.
+AUDIT_NAME_ONLY_ROWS: Dict[EntityType, Dict[str, Tuple[str, Tuple[str, ...]]]] = {
+    EntityType.EXPERIMENT: {
+        "variants": (
+            "variants",
+            (
+                "name",
+                "description",
+                "is_control",
+                "traffic_allocation",
+                "configuration",
+            ),
+        ),
+        "metrics": (
+            "metric_definitions",
+            (
+                "name",
+                "description",
+                "event_name",
+                "metric_type",
+                "is_primary",
+                "aggregation_method",
+                "minimum_sample_size",
+                "expected_effect",
+                "event_value_path",
+                "lower_is_better",
+            ),
+        ),
+    },
 }
 
 #: Every ``action_type`` something in this profile writes. The inventories in
@@ -265,10 +301,25 @@ def _fingerprint(value: Any) -> str:
     return json.dumps(value, default=str, sort_keys=True)
 
 
+def _rows_fingerprint(rows: Any, columns: Tuple[str, ...]) -> str:
+    """Comparable text for child rows recorded by name only (never stored):
+    each row's listed columns as sorted JSON, the rows sorted, so a save that
+    re-creates the same rows in another order compares equal."""
+    if rows is None:
+        return _fingerprint(None)
+    return _fingerprint(
+        sorted(
+            _fingerprint({column: _plain(_read(row, column)) for column in columns})
+            for row in rows
+        )
+    )
+
+
 def audit_snapshot(entity_type: EntityType, source: Any) -> Dict[str, Any]:
     """The allow-listed fields of ``source`` (an ORM row or a dict), now.
 
-    Value fields are kept as values; name-only fields are kept as a
+    Value fields are kept as values; name-only fields and name-only rows
+    (``AUDIT_NAME_ONLY_ROWS``, read through the relationship) are kept as a
     fingerprint, so a later ``audit_changes`` can tell that they changed.
     Take it before the change, while the row still holds the old values.
     """
@@ -277,6 +328,10 @@ def audit_snapshot(entity_type: EntityType, source: Any) -> Dict[str, Any]:
     }
     for field in AUDIT_NAME_ONLY_FIELDS[entity_type]:
         snap["#" + field] = _fingerprint(_read(source, field))
+    for field, (relationship, columns) in AUDIT_NAME_ONLY_ROWS.get(
+        entity_type, {}
+    ).items():
+        snap["#" + field] = _rows_fingerprint(_read(source, relationship), columns)
     return snap
 
 
@@ -976,6 +1031,11 @@ def record_experiment_change(
     try:
         experiment_id = UUID(str(experiment_id))
         row = db.query(Experiment).filter(Experiment.id == experiment_id).first()
+        if row is not None:
+            # A session that does not expire on commit still holds the rows
+            # it loaded for ``before``; a design save has replaced them.
+            members = AUDIT_NAME_ONLY_ROWS[EntityType.EXPERIMENT].values()
+            db.expire(row, [relationship for relationship, _ in members])
         after = audit_snapshot(EntityType.EXPERIMENT, row) if row is not None else {}
         if before is None:
             old_value, new_value = None, audit_identity(after)

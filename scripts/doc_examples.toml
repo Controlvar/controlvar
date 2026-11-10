@@ -101,6 +101,7 @@ universe = [
     "docs/getting-started/quick-start.md",
     "docs/getting-started/vscode-settings.md",
     "docs/guides/assign-customer-list.md",
+    "docs/guides/balance-within-groups.md",
     "docs/guides/dashboard-and-api.md",
     "docs/guides/experiment-wizard.md",
     "docs/guides/guided-examples.md",
@@ -535,7 +536,7 @@ reason = "starts and upgrades the production stack on a Docker host: compose-pro
 path = "docs/guides/assign-customer-list.md"
 environment = "stack"
 exec = 9
-skip = 0
+skip = 1
 expects = 11
 
 [[document]]
@@ -608,7 +609,7 @@ expects = 33
 path = "docs/self-hosting/migrations.md"
 environment = "stack"
 exec = 7
-skip = 12
+skip = 13
 expects = 6
 
 # The beta AWS installer's page. One block runs: the installer's --help, which

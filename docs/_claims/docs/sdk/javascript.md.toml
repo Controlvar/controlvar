@@ -1381,3 +1381,10 @@ by = ["exempt:instruction"]
 [[unit]]
 text = "If you installed @getexperimently/js-sdk, the name this package had before the project was renamed, uninstall it and install @controlvar/js-sdk."
 by = ["exempt:instruction"]
+
+[[unit]]
+text = "An experiment that balances its split within groups reads its attribute from the top level of attributes only: { tier: 'gold' }, not { user: { tier: 'gold' } }."
+by = [
+    "test:sdk/js/__tests__/client.test.ts::sends {experiment_key, user_id, context: attributes} as the JSON body",
+    "test:backend/tests/unit/services/test_balanced_allocation.py::test_the_label_table",
+]

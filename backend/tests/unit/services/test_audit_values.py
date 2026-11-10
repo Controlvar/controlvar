@@ -3,7 +3,9 @@
 ``AUDIT_VALUE_FIELDS`` (recorded as values) and ``AUDIT_NAME_ONLY_FIELDS``
 (recorded by name when they change) name columns of the entity's model. A
 field the model does not have at this base cannot be listed, and no list may
-name a secret.
+name a secret. ``AUDIT_NAME_ONLY_ROWS`` (an experiment's variants and metrics,
+recorded by name when they change) reads relationships of the model, and every
+column of the tables it reads is compared or listed here with a reason.
 """
 
 from __future__ import annotations
@@ -17,7 +19,13 @@ import pytest
 
 from backend.app.models.api_key import APIKey
 from backend.app.models.audit_log import EntityType
-from backend.app.models.experiment import Experiment, ExperimentStatus
+from backend.app.models.experiment import (
+    Experiment,
+    ExperimentStatus,
+    Metric,
+    MetricType,
+    Variant,
+)
 from backend.app.models.feature_flag import FeatureFlag
 from backend.app.models.global_holdout import GlobalHoldout
 from backend.app.models.mutual_exclusion_group import MutualExclusionGroup
@@ -25,6 +33,7 @@ from backend.app.models.segment import Segment
 from backend.app.models.user import User, UserRole
 from backend.app.services.audit_service import (
     AUDIT_NAME_ONLY_FIELDS,
+    AUDIT_NAME_ONLY_ROWS,
     AUDIT_REASON_MAX,
     AUDIT_VALUE_FIELDS,
     AUDIT_VALUE_MAX,
@@ -123,6 +132,102 @@ def test_every_feature_flag_column_is_classified():
         f"{sorted(columns - value - name_only - unaudited)}; "
         f"listed but not columns: {sorted((value | name_only | unaudited) - columns)}"
     )
+
+
+#: The variant and metric columns a design save's entry does not compare, each
+#: with its reason (#1782). Every column of the two tables is compared by a
+#: member of ``AUDIT_NAME_ONLY_ROWS`` or listed here, so a new column cannot be
+#: left unclassified.
+ROW_COLUMNS_NOT_COMPARED = {
+    "id": "every save deletes and re-creates the rows: a new id is no change",
+    "created_at": "every save re-creates the rows: a new time is no change",
+    "updated_at": "every save re-creates the rows: a new time is no change",
+    "experiment_id": "the entry's entity_id",
+}
+
+
+def test_name_only_rows_read_relationships_of_the_entity():
+    related = set()
+    for entity, members in AUDIT_NAME_ONLY_ROWS.items():
+        relationships = MODELS[entity].__mapper__.relationships
+        fields = AUDIT_VALUE_FIELDS[entity] + AUDIT_NAME_ONLY_FIELDS[entity]
+        for name, (relationship, columns) in members.items():
+            assert relationship in relationships, (name, relationship)
+            assert name not in fields, (
+                f"{name} is also a field: one would hide the other"
+            )
+            assert len(set(columns)) == len(columns), name
+            related.add(relationships[relationship].mapper.class_)
+    assert related == {Variant, Metric}
+
+
+@pytest.mark.parametrize("model", [Variant, Metric], ids=lambda m: m.__tablename__)
+def test_every_variant_and_metric_column_is_classified(model):
+    relationships = Experiment.__mapper__.relationships
+    compared = {
+        column
+        for relationship, columns in AUDIT_NAME_ONLY_ROWS[
+            EntityType.EXPERIMENT
+        ].values()
+        if relationships[relationship].mapper.class_ is model
+        for column in columns
+    }
+    columns = {c.name for c in model.__table__.columns}
+    unaudited = set(ROW_COLUMNS_NOT_COMPARED)
+    assert not (compared & unaudited)
+    assert columns == compared | unaudited, (
+        f"unclassified {model.__tablename__} columns: "
+        f"{sorted(columns - compared - unaudited)}; "
+        f"listed but not columns: {sorted((compared | unaudited) - columns)}"
+    )
+
+
+def _variant(name, share, **extra):
+    """A variant row as a save re-creates it: a new id and a new time."""
+    return SimpleNamespace(
+        id=uuid4(),
+        created_at=datetime.now(timezone.utc),
+        experiment_id=None,
+        name=name,
+        description=None,
+        is_control=name == "A",
+        traffic_allocation=share,
+        configuration=extra.get("configuration"),
+    )
+
+
+def test_variants_and_metrics_are_compared_by_their_columns_not_ids_or_order():
+    metric = SimpleNamespace(
+        id=uuid4(),
+        name="Conversion",
+        description="s3cr3t metric",
+        event_name="purchase",
+        metric_type=MetricType.CONVERSION,
+        is_primary=True,
+        aggregation_method="average",
+        minimum_sample_size=100,
+        expected_effect=None,
+        event_value_path=None,
+        lower_is_better=False,
+    )
+    row = SimpleNamespace(
+        name="exp",
+        variants=[_variant("A", 50), _variant("B", 50)],
+        metric_definitions=[metric],
+    )
+    before = audit_snapshot(EntityType.EXPERIMENT, row)
+
+    row.variants = [_variant("B", 50), _variant("A", 50)]
+    row.metric_definitions = [SimpleNamespace(**{**vars(metric), "id": uuid4()})]
+    assert audit_changes(before, audit_snapshot(EntityType.EXPERIMENT, row)) == (
+        None,
+        None,
+    )
+
+    row.variants = [_variant("A", 50), _variant("B", 50, configuration={"c": 1})]
+    old, new = audit_changes(before, audit_snapshot(EntityType.EXPERIMENT, row))
+    assert (old, new) == (None, {"changed_fields": ["variants"]})
+    assert "s3cr3t" not in json.dumps([old, new])
 
 
 @pytest.mark.regression

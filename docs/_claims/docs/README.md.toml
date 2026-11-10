@@ -47,6 +47,10 @@ text = "Roadmap | What is planned Now, Next and Later, and how to influence it"
 by = ["exempt:navigation"]
 
 [[unit]]
+text = "The Controlvar books | Engineering, programming and the craft of shipping software, taught through this codebase, for newcomers to a language or framework, engineers who already code, and contributors (CC BY 4.0)"
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "Getting Started"
 by = ["exempt:label"]
 

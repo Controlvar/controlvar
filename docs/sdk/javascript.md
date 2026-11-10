@@ -149,6 +149,10 @@ answers `app.version`).
 Attributes are assumed **stable per user**: evaluations and assignments are cached by user + key
 only, so call `clearCache()` after changing a user's attributes.
 
+An experiment that [balances its split within groups](../guides/balance-within-groups.md) reads
+its attribute from the top level of `attributes` only: `{ tier: 'gold' }`, not
+`{ user: { tier: 'gold' } }`.
+
 `getAssignment` and `evaluateFlag` reject with `ExperimentationError` (`code: 'INVALID_RESPONSE'`,
 `user.userId is required`) when `userId` is missing or empty; `getVariant` / `isFeatureEnabled`
 turn that into their safe default.

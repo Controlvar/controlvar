@@ -201,7 +201,9 @@ The full rule is in the
 
 A segment that a flag or an experiment still uses cannot be archived or made inactive: it
 answers `409` and lists them. A flag counts until it is archived, and an experiment until it is
-completed or archived, because until then its rules can still be evaluated.
+completed or archived, because until then its rules can still be evaluated. An experiment that
+balances its split within the segment uses it the same way
+([Balance within saved segments](balance-within-groups.md#balance-within-saved-segments)).
 
 ```{.bash exec}
 curl -s -X DELETE localhost:8000/api/v1/segments/$SEGMENT \
