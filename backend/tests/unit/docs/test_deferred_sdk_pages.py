@@ -194,14 +194,20 @@ def licence_of(sdk: str) -> str:
     return licence
 
 
+def pyproject_licence(text: str) -> list:
+    """`project.license` as the SPDX string (PEP 639) or the old table's `text`."""
+    licence = tomllib.loads(text)["project"].get("license")
+    if isinstance(licence, str):
+        return [licence]
+    return [(licence or {}).get("text")]
+
+
 def manifest_licences(sdk: str) -> Iterator[Tuple[str, str]]:
     """Each licence a manifest of the SDK declares, as (file, value)."""
     directory = SDK_DIR / sdk
     found = {
         "package.json": lambda t: [json.loads(t).get("license")],
-        "pyproject.toml": lambda t: [
-            (tomllib.loads(t)["project"].get("license") or {}).get("text")
-        ],
+        "pyproject.toml": pyproject_licence,
         "composer.json": lambda t: [json.loads(t).get("license")],
         "mix.exs": lambda t: re.findall(
             r"licenses:\s{0,40}\[\s{0,40}\"([^\"]{1,40})\"", t

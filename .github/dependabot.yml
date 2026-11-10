@@ -383,6 +383,18 @@ updates:
       # Majors are migrations, not bumps -- see the header.
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # setuptools (build-system.requires) and pytest (the dev extra) are
+      # FLOORS in these two manifests, and Dependabot raises a floor to the
+      # latest release, which then constrains every user who installs the
+      # package or builds it from the sdist. The floor is what the code needs,
+      # not what is newest; raise it by hand when the code starts to need a
+      # newer one (setuptools>=77 is the PEP 639 licence metadata, #358).
+      # An ignore rather than `versioning-strategy: increase-if-necessary`,
+      # which would also stop the runtime floors (openfeature-sdk, controlvar)
+      # from being kept current; these two names are the only ones that are
+      # tooling, not something the package imports.
+      - dependency-name: "setuptools"
+      - dependency-name: "pytest"
     labels: ["dependencies", "sdk"]
     groups:
       patch-and-minor:
