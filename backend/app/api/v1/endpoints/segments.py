@@ -31,6 +31,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import deps
 from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.query_params import MAX_OFFSET, describe_as_int64
 from backend.app.core.context_limits import check_context
 from backend.app.core.permissions import Action, ResourceType, check_permission
 from backend.app.core.segment_preview_limits import preview_ruleset_violations
@@ -114,7 +115,13 @@ def list_segments(
         None, alias="status", description="Filter by segment status"
     ),
     limit: int = Query(50, ge=1, le=200, description="Maximum results to return"),
-    offset: int = Query(0, ge=0, description="Number of results to skip"),
+    offset: int = Query(
+        0,
+        ge=0,
+        le=MAX_OFFSET,
+        description="Number of results to skip",
+        json_schema_extra=describe_as_int64,
+    ),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user),
 ) -> List[SegmentResponse]:

@@ -585,12 +585,47 @@ text = "The feature flags list is ordered by creation time, oldest first (ties b
 by = ["test:backend/tests/integration/api/test_flag_list_order.py::test_walking_the_pages_returns_every_flag_exactly_once_oldest_first"]
 
 [[unit]]
-text = "The default and the largest limit differ by route (the experiments list: 100, at most 500; the feature flags list: 100, with no maximum)."
-by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+text = "The default and the largest limit differ by route (the experiments list: 100, at most 500; the feature flags list: 100, at most 9223372036854775807)."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/unit/api/test_paging_params_declared.py::test_1001_the_flag_list_document_gains_only_the_bounds",
+]
 
 [[unit]]
-text = "The API's OpenAPI document, GET /api/v1/openapi.json, gives each route's default limit and, where it has one, its maximum"
-by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+text = "The API's OpenAPI document, GET /api/v1/openapi.json, gives each route's default limit and its maximum; a bound of 9223372036854775807 is given as \"format\": \"int64\""
+by = [
+    "test:backend/tests/unit/api/test_paging_params_declared.py::test_1001_the_served_document_gives_every_paging_param_its_bounds",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "skip (and offset, where a route takes it instead) is at most 9223372036854775807, the largest offset PostgreSQL takes; a larger one answers 422 and nothing is read"
+by = [
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_every_offset_route_takes_the_largest_offset_and_refuses_the_next",
+    "test:backend/tests/unit/api/test_paging_params_declared.py::test_1001_every_paging_param_has_a_minimum_and_a_maximum",
+]
+
+[[unit]]
+text = "page, where a route takes it, is from 1 to 9223372036854775808, and the page must start within the largest offset: (page - 1) times the route's limit (or its page_size) at most 9223372036854775807."
+by = [
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_every_page_route_takes_the_last_page_and_refuses_the_next",
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_every_page_route_refuses_a_page_that_starts_past_the_largest_offset",
+]
+
+[[unit]]
+text = "Otherwise the route answers 422 at [\"query\", \"page\"]"
+by = [
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_every_page_route_takes_the_last_page_and_refuses_the_next",
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_every_page_route_refuses_a_page_that_starts_past_the_largest_offset",
+]
+
+[[unit]]
+text = "A skip one past the largest:"
+by = ["docex:docs/api/endpoints.md#{\"loc\":[\"query\",\"skip\"],\"type\":\"less_than_equal\"}"]
+
+[[unit]]
+text = "A page that starts past it, though page and limit are each in range:"
+by = ["docex:docs/api/endpoints.md#(page - 1) * limit must be at most 9223372036854775807"]
 
 [[unit]]
 text = "Caching"
@@ -740,7 +775,7 @@ count = 6
 [[unit]]
 text = "skip: int (default: 0)"
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
-count = 4
+count = 3
 
 [[unit]]
 text = "limit: int (default: 100, max: 100)"
@@ -1399,8 +1434,20 @@ text = "status: string (optional): ACTIVE, INACTIVE or ARCHIVED, in upper case (
 by = ["test:backend/tests/integration/api/test_feature_flags_api.py::TestFeatureFlagsList::test_list_status_filter_uses_db_enum_casing"]
 
 [[unit]]
-text = "limit: int (default: 100; the route sets no maximum)"
-by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+text = "skip: int (default: 0; 0 to 9223372036854775807)"
+by = [
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_every_offset_route_takes_the_largest_offset_and_refuses_the_next",
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_the_flag_list_refuses_a_negative_skip_or_limit",
+    "test:backend/tests/unit/api/test_paging_params_declared.py::test_1001_the_flag_list_document_gains_only_the_bounds",
+]
+
+[[unit]]
+text = "limit: int (default: 100; 0 to 9223372036854775807, and 0 answers no items)"
+by = [
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_the_flag_list_still_takes_limit_0_and_the_largest_limit",
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_the_flag_list_refuses_a_negative_skip_or_limit",
+    "test:backend/tests/unit/api/test_paging_params_declared.py::test_1001_the_flag_list_document_gains_only_the_bounds",
+]
 
 [[unit]]
 text = "search: string (optional): matches part of the name or the key, in any case"

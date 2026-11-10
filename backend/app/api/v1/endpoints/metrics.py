@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from backend.app.api.datetime_bounds import storable_offset
 from backend.app.api.deps import get_current_user, get_db
 from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.query_params import MAX_OFFSET, describe_as_int64
 from backend.app.models.user import User
 from backend.app.schemas.metrics import (
     AggregatedMetricResponse,
@@ -141,7 +142,13 @@ def get_aggregated_metrics(
         Query(description="End date for metrics"),
         AfterValidator(storable_offset),
     ] = None,
-    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    skip: int = Query(
+        0,
+        ge=0,
+        le=MAX_OFFSET,
+        description="Number of records to skip",
+        json_schema_extra=describe_as_int64,
+    ),
     limit: int = Query(
         100, ge=1, le=1000, description="Maximum number of records to return"
     ),
@@ -193,7 +200,13 @@ def get_error_logs(
         AfterValidator(storable_offset),
     ] = None,
     error_type: Optional[str] = Query(None, description="Filter by error type"),
-    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    skip: int = Query(
+        0,
+        ge=0,
+        le=MAX_OFFSET,
+        description="Number of records to skip",
+        json_schema_extra=describe_as_int64,
+    ),
     limit: int = Query(
         100, ge=1, le=1000, description="Maximum number of records to return"
     ),

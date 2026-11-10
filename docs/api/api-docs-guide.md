@@ -64,7 +64,7 @@ with `limit` or `page_size`, and a few take no paging parameter. The route's ent
 the API documentation names its parameters.
 
 - `limit`: Maximum number of records to return (default: 100; the largest value allowed
-  differs by route, and some lists have none: the route's OpenAPI entry gives it)
+  differs by route, and the route's OpenAPI entry gives it)
 
 ## Filtering and Sorting
 

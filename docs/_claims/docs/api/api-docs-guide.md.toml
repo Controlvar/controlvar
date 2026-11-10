@@ -146,8 +146,11 @@ text = "The route's entry in the API documentation names its parameters."
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "limit: Maximum number of records to return (default: 100; the largest value allowed differs by route, and some lists have none: the route's OpenAPI entry gives it)"
-by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot"]
+text = "limit: Maximum number of records to return (default: 100; the largest value allowed differs by route, and the route's OpenAPI entry gives it)"
+by = [
+    "test:backend/tests/unit/api/test_paging_params_declared.py::test_1001_every_paging_param_has_a_minimum_and_a_maximum",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
 
 [[unit]]
 text = "Filtering and Sorting"

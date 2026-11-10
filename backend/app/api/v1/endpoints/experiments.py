@@ -31,6 +31,7 @@ from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps, experiment_cache
 from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.query_params import MAX_OFFSET, describe_as_int64
 from backend.app.api.read_scope import get_current_reader
 from backend.app.api.segment_rules import (
     refuse_clone_with_unusable_balance_segments,
@@ -533,7 +534,13 @@ async def list_experiments(
         None,
         description="Filter by experiment status (draft, active, paused, completed, archived)",
     ),
-    skip: int = Query(0, ge=0, description="Number of records to skip for pagination"),
+    skip: int = Query(
+        0,
+        ge=0,
+        le=MAX_OFFSET,
+        description="Number of records to skip for pagination",
+        json_schema_extra=describe_as_int64,
+    ),
     limit: int = Query(
         100, ge=1, le=500, description="Maximum number of records to return"
     ),

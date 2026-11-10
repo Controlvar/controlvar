@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import deps
 from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.query_params import MAX_OFFSET, describe_as_int64
 from backend.app.core.logging import get_logger
 from backend.app.core.permissions import Action, can_act_on_feature_flag
 from backend.app.models.audit_log import ActionType, EntityType
@@ -210,10 +211,19 @@ def get_rollout_schedules(
     feature_flag_id: Optional[UUID] = Query(
         None, description="Filter by feature flag ID"
     ),
-    status: Optional[RolloutScheduleStatus] = Query(
-        None, description="Filter by status"
+    # `status` in the URL only: a Python parameter called `status` hid the
+    # `fastapi.status` module in this body, so the `except` below raised
+    # AttributeError instead of its 500.
+    status_filter: Optional[RolloutScheduleStatus] = Query(
+        None, alias="status", description="Filter by status"
     ),
-    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    skip: int = Query(
+        0,
+        ge=0,
+        le=MAX_OFFSET,
+        description="Number of records to skip",
+        json_schema_extra=describe_as_int64,
+    ),
     limit: int = Query(
         100, ge=1, le=1000, description="Maximum number of records to return"
     ),
@@ -230,7 +240,7 @@ def get_rollout_schedules(
             db=db,
             feature_flag_id=feature_flag_id,
             owner_id=None,  # Don't filter by owner - allow viewing all schedules
-            status=status,
+            status=status_filter,
             skip=skip,
             limit=limit,
         )
