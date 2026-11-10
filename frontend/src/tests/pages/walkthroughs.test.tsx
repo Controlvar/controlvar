@@ -69,6 +69,7 @@ const PINNED = [
   '02-first-experiment',
   '03-flag-rollout',
   '04-streampulse-rollout',
+  '10-serve-a-value',
   '05-plan-and-team',
   '06-shoplab-ab-test',
   '08-warehouse-explainer',
