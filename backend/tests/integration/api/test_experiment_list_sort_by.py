@@ -18,7 +18,9 @@ never the value sent, checked after the LIST permission and before the route's
 column still sorts, in both directions, and an empty ``sort_by`` is still no
 sort. The four values the dashboard sends (``frontend/src/services/experiments.ts``)
 answer byte for byte what main answered: ``golden/experiment_list_sort_by.json``
-was captured on main from the rows ``_golden_rows`` writes.
+was captured on main from the rows ``_golden_rows`` writes. The one field added
+to the answer since, #448's ``balance_within`` (null for those rows), is
+inserted where the response schema puts it; every other byte is main's.
 
 Each test reads only its own rows, by a ``search`` term that only they carry,
 because the test database is shared by the session.
@@ -198,6 +200,18 @@ def test_786_a_name_that_is_no_column_answers_422(client, viewer_user, sent):
     resp = _list(client, viewer_user, {"sort_by": sent})
     _assert_refused(resp, sent)
     assert "(any case)" not in resp.text
+
+
+#: Columns that are not sort keys (#448): the beta ``balance_within``, and
+#: ``balance_seed``, which is never answered, so never an order either.
+NOT_SORT_KEYS = ("balance_within", "balance_seed")
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("sent", NOT_SORT_KEYS)
+def test_448_the_balance_columns_are_not_sort_keys(client, viewer_user, sent):
+    resp = _list(client, viewer_user, {"sort_by": sent})
+    _assert_refused(resp, sent)
 
 
 @pytest.mark.regression
@@ -399,6 +413,22 @@ def _golden_rows(db_session) -> None:
     db_session.commit()
 
 
+#: The one field added to every experiment of the answer since the golden file
+#: was captured: #448's ``balance_within``, null for these rows (they balance
+#: nothing), which ``ExperimentResponse`` declares right after
+#: ``split_url_config``. The golden file stays main's bytes.
+ADDED_AFTER = '"split_url_config":null,'
+ADDED_FIELD = '"balance_within":null,'
+
+
+def _main_answer_with_the_added_field(main_answer: str) -> str:
+    """Main's answer with :data:`ADDED_FIELD` inserted once per experiment,
+    where the response schema puts it; every other byte is main's."""
+    assert ADDED_FIELD not in main_answer
+    assert main_answer.count(ADDED_AFTER) == len(GOLDEN_ROWS)
+    return main_answer.replace(ADDED_AFTER, ADDED_AFTER + ADDED_FIELD)
+
+
 def _golden_requests() -> Dict[str, Dict[str, str]]:
     """Each request the golden file holds, by a readable name."""
     requests = {"default": {"search": GOLDEN_SEARCH}}
@@ -421,4 +451,4 @@ def test_the_dashboards_sorts_answer_byte_for_byte_as_on_main(
     assert sorted(golden) == sorted(_golden_requests())
     resp = _list(client, viewer_user, _golden_requests()[name])
     assert resp.status_code == 200, f"{name}: expected 200, got {resp.status_code}"
-    assert resp.text == golden[name]
+    assert resp.text == _main_answer_with_the_added_field(golden[name])

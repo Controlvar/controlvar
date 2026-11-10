@@ -350,6 +350,11 @@ A `multivariate` draft gets three variants (33/33/34), and a `feature_flag_rollo
 gets a held-back control with `{"enabled": false}` and a treatment with `{"enabled": true}`,
 at 50% each. Review the experiment and start it when you're ready.
 
+The wizard does not set `balance_within`. To
+[balance the split within groups](balance-within-groups.md), send it with
+`PUT /api/v1/experiments/$EXP_ID` before you start the experiment; a multivariate draft's
+33/33/34 split must first become one whose shares are multiples of 5, such as 40/30/30.
+
 ---
 
 ## Sample Size Guidance

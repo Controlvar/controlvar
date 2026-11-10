@@ -392,3 +392,33 @@ def test_the_snapshot_carries_the_stored_correction_settings(stable_snapshot):
         }
         for name in CORRECTION_SETTINGS:
             assert parameters[name]["schema"].get("default") is None, (path, name)
+
+
+#: #448: the sentence ``/tracking/assign``'s stable description gained.
+BALANCED_ASSIGN_SENTENCE = (
+    "For an experiment that balances within groups, a new user's variant also "
+    "depends on the users of their group assigned before them."
+)
+
+
+@pytest.mark.regression
+def test_the_snapshot_carries_balance_within_and_never_its_key(
+    stable_snapshot, full_snapshot, core_document
+):
+    """#448: ``balance_within`` is on the create, update and response schemas;
+    the experiment's block-order key, ``balance_seed``, is in neither snapshot
+    nor in the live core document, whose schemas are what the routes answer
+    with."""
+    schemas = stable_snapshot["components"]["schemas"]
+    for name in ("ExperimentCreate", "ExperimentUpdate", "ExperimentResponse"):
+        assert "balance_within" in schemas[name]["properties"], name
+    for name, document in (
+        ("openapi-v1.stable.json", stable_snapshot),
+        ("openapi-v1.full.json", full_snapshot),
+        ("the live core document", core_document),
+    ):
+        text = json.dumps(document)
+        assert "balance_within" in text, f"{name}: the positive control is missing"
+        assert "balance_seed" not in text, f"balance_seed found in {name}"
+    assign = stable_snapshot["paths"]["/api/v1/tracking/assign"]["post"]
+    assert BALANCED_ASSIGN_SENTENCE in " ".join(assign["description"].split())

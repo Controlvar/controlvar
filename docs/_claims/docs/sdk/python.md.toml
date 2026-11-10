@@ -1237,3 +1237,10 @@ by = ["exempt:instruction"]
 [[unit]]
 text = "If you installed experimently, the name this package had before the project was renamed, uninstall it and install controlvar."
 by = ["exempt:instruction"]
+
+[[unit]]
+text = "An experiment that balances its split within groups reads its attribute from the top level of user_attributes only: {\"tier\": \"gold\"}, not {\"user\": {\"tier\": \"gold\"}}."
+by = [
+    "test:sdk/python/tests/test_client.py::TestGetAssignment::test_sends_post_with_context",
+    "test:backend/tests/unit/services/test_balanced_allocation.py::test_the_label_table",
+]

@@ -169,6 +169,11 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
             "A conversion counts for a variant only when it is tracked with the same visitor id"
         ),
     ),
+    "Give each group of users the same split as the whole experiment, set through the API (beta)": (
+        lede("Balance the split within groups (beta)"),
+        lede("gives each group of users the same split as the whole experiment"),
+        says("PUT /api/v1/experiments/{id}"),
+    ),
     "Keep users out of conflicting experiments, and a share of new users out of every experiment": (
         lede("prevent users from being enrolled in multiple conflicting experiments"),
         lede(

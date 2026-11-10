@@ -1,17 +1,19 @@
-"""``sort_by`` on ``GET /api/v1/experiments/`` is the 30 table columns (#786).
+"""``sort_by`` on ``GET /api/v1/experiments/`` is 30 table columns (#786).
 
 The list passed ``sort_by`` to ``hasattr(Experiment, ...)`` and ``getattr``, so
 any attribute of the class was a sort key: ``metadata`` (SQLAlchemy's
 ``MetaData``), ``registry``, ``to_dict``, a dunder or a relationship answered
 500, and a name that is no attribute (``foo``, ``Name``) answered 200 and was
-ignored. The allow-list is now exactly the columns of the experiments table, in
-exact case, the JSON columns included.
+ignored. The allow-list is now the columns of the experiments table, in exact
+case, the JSON columns included, except the two #448 added, which are not sort
+keys (``NOT_SORT_KEYS``).
 
 These tests need no database. They pin the list three ways, so none of them can
 move alone:
 
-- ``EXPECTED`` below, written out, equals ``Experiment.__table__.columns`` at
-  run time: a column added, dropped or renamed fails here, with the names;
+- ``EXPECTED`` below, written out, with ``NOT_SORT_KEYS``, equals
+  ``Experiment.__table__.columns`` at run time: a column added, dropped or
+  renamed fails here, with the names, until it is listed in one of the two;
 - the service's ``SORT_BY_COLUMNS`` equals ``EXPECTED``, in order;
 - the route's 422 message and the served OpenAPI description name exactly those
   columns, and the parameter is still a plain string (no ``enum``).
@@ -28,8 +30,8 @@ from backend.app.models.experiment import Experiment
 
 pytestmark = pytest.mark.unit
 
-#: The 30 columns, written out (PLAN v1.2 D3): the 27 of models/experiment.py
-#: and the 3 of models/base.py's BaseModel.
+#: The 30 sort keys, written out (PLAN v1.2 D3): the 27 columns
+#: models/experiment.py had before #448 and the 3 of models/base.py's BaseModel.
 EXPECTED = (
     "id",
     "created_at",
@@ -75,6 +77,16 @@ EXPECTED_JSONB = {
     "split_url_config",
 }
 
+#: The columns that are not sort keys, and why: each answers 422 like any
+#: other name that is not in ``EXPECTED``.
+NOT_SORT_KEYS = {
+    # Beta (#448): not part of the stable sort_by list while it is beta.
+    "balance_within": "beta",
+    # The block-order key: server-side only, never answered, so never an
+    # order of experiments either.
+    "balance_seed": "server-side only",
+}
+
 #: The 422's message, written out from the list above.
 EXPECTED_MESSAGE = "sort_by must be one of: " + ", ".join(EXPECTED)
 
@@ -82,13 +94,15 @@ EXPECTED_MESSAGE = "sort_by must be one of: " + ", ".join(EXPECTED)
 def test_the_written_list_is_exactly_the_experiment_tables_columns():
     columns = list(Experiment.__table__.columns.keys())
     assert len(EXPECTED) == len(set(EXPECTED)) == 30
-    assert set(columns) == set(EXPECTED), (
-        f"not listed: {sorted(set(columns) - set(EXPECTED))}; "
-        f"not a column: {sorted(set(EXPECTED) - set(columns))}"
+    assert not set(EXPECTED) & set(NOT_SORT_KEYS)
+    listed = set(EXPECTED) | set(NOT_SORT_KEYS)
+    assert set(columns) == listed, (
+        f"not listed: {sorted(set(columns) - listed)}; "
+        f"not a column: {sorted(listed - set(columns))}"
     )
-    assert len(columns) == 30
+    assert len(columns) == 32
     jsonb = {c.key for c in Experiment.__table__.columns if isinstance(c.type, JSONB)}
-    assert jsonb == EXPECTED_JSONB
+    assert jsonb == EXPECTED_JSONB | {"balance_within"}
 
 
 @pytest.mark.regression

@@ -221,6 +221,10 @@ reason = "its API steps run on a stack in Doc Examples"
 class = "exec"
 reason = "its API steps run on a stack in Doc Examples"
 
+[pages."guides/balance-within-groups.md"]
+class = "reference"
+reason = "what balancing within groups does and what it refuses; its examples are request bodies, not steps, and each rule is held by the tests its claims registry names"
+
 [pages."websocket-streaming.md"]
 class = "exec"
 reason = "its blocks run on a stack in Doc Examples; the skipped one runs the test suite in a checkout"
@@ -713,7 +717,7 @@ note = "sign-in per role and a password change, a first API key used for an assi
 # above says what each field means.
 # ---------------------------------------------------------------------------
 [meta]
-walked = 160
+walked = 161
 
 # The front door, the policy beside it, and the plan.
 
@@ -1005,7 +1009,7 @@ reason = "the script's usage header, which points at deploy/compose/README.md; t
 scope = "in"
 class = "reference"
 extractor = "docs-hub-desc"
-literals = 80
+literals = 81
 reason = "the in-app docs hub's section and card descriptions; each is registered (docs/_claims) and held to the page it links to (test_docs_hub_claims.py); jest renders the page and refuses retired wording (docs-index.test.tsx)"
 
 [documents."frontend/src/components/experiments/FirstRunChecklist.tsx"]

@@ -63,6 +63,8 @@ def _settings() -> dict:
         # #580: neither is the default (benjamini_hochberg, 0.95).
         "correction_method": "none",
         "confidence_level": 0.90,
+        # #448 (the API refuses it beside a bandit; this test only copies).
+        "balance_within": {"attribute": "tier", "values": ["gold", "silver"]},
     }
 
 
@@ -220,6 +222,7 @@ NOT_COPIED = {
     "metrics": "legacy list; the metric definitions are cloned as rows",
     "mutual_exclusion_group_id": "group membership is chosen per experiment",
     "workspace_id": "set by the workspaces module, not by core create",
+    "balance_seed": "the clone's own, made when it is inserted (#448)",
 }
 
 
@@ -236,6 +239,21 @@ def test_every_experiment_column_is_classified_for_clone():
     assert classified - columns == set(), "these are not Experiment columns"
     overlap = set(CLONED_ANALYSIS_FIELDS) & (COPIED_ELSEWHERE | set(NOT_COPIED))
     assert overlap == set()
+
+
+@pytest.mark.regression
+def test_a_balanced_clone_keeps_the_setting_and_not_the_block_order_key():
+    """#448: ``balance_within`` is copied; ``balance_seed`` is classified NOT
+    COPIED and the clone is built without it, so the insert makes its own."""
+    source = _source(balance_within={"attribute": "tier", "values": ["gold"]})
+    source.balance_seed = "a" * 64
+    clone = _clone(source)
+
+    assert "balance_seed" in NOT_COPIED
+    assert "balance_seed" not in CLONED_ANALYSIS_FIELDS
+    assert clone.balance_within == {"attribute": "tier", "values": ["gold"]}
+    assert clone.balance_within is not source.balance_within
+    assert clone.balance_seed is None, "the clone was built with the source's key"
 
 
 def test_every_analysis_column_is_copied():

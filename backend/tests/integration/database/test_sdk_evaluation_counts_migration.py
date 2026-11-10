@@ -37,20 +37,27 @@ pytestmark = [pytest.mark.integration]
 REVISION = "8fd44fb483a2"
 PREVIOUS_CORE_HEAD = "b8c9d0e1f2a3"
 #: The core head of this tree: ``upgrade heads`` runs on past this revision to
-#: ``7b6b4b4fe246`` (when each rollout stage started), through
+#: ``c448_balance_within`` (balance the split within groups), through
 #: ``271f03a31742``, ``d12cbd384bbe``, ``a89544fb1075``, ``1ab99332f0ba``,
 #: ``806901fb7735`` (the experiments' correction settings), ``d29a479daafe``
 #: (holdout population), ``37dcb2969766`` (segment kind and members),
 #: ``4c2c09a2b3e8`` (rollback records keep without a safety configuration),
-#: ``607c51a59bf5`` (feature flags' value type and two values) and
-#: ``85dd4796bb8b`` (the event_id keys); a database built by ``create_all``
-#: already carries what they build, so they add nothing here.
-CORE_HEAD = "7b6b4b4fe246"
+#: ``607c51a59bf5`` (feature flags' value type and two values),
+#: ``85dd4796bb8b`` (the event_id keys) and ``7b6b4b4fe246`` (when each
+#: rollout stage started); a database built by ``create_all`` already carries
+#: what they build, so they add nothing here.
+CORE_HEAD = "c448_balance_within"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``d29a479daafe``
 #: (#445) drops ``holdout_population``; ``37dcb2969766`` (#440) drops
-#: ``segment_members``; ``85dd4796bb8b`` (#1543) drops ``event_dedup_keys``.
-LATER_DOWNGRADE_TABLES = {"holdout_population", "segment_members", "event_dedup_keys"}
+#: ``segment_members``; ``85dd4796bb8b`` (#1543) drops ``event_dedup_keys``;
+#: ``c448_balance_within`` (#448) drops ``balance_group_counters``.
+LATER_DOWNGRADE_TABLES = {
+    "holdout_population",
+    "segment_members",
+    "event_dedup_keys",
+    "balance_group_counters",
+}
 #: The modules revision the previous full release (0.10.0) recorded, and the
 #: branch's head in this tree.  This tree also carries
 #: ``modules_0002_warehouse_analysis`` (#312),

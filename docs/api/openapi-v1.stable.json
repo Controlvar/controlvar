@@ -956,6 +956,65 @@
         "title": "AuthConfigResponse",
         "type": "object"
       },
+      "BalanceWithin": {
+        "additionalProperties": false,
+        "description": "Balance the split within each group of users (beta).",
+        "example": {
+          "attribute": "tier",
+          "values": [
+            "high_value",
+            "churn_risk"
+          ]
+        },
+        "properties": {
+          "attribute": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The top-level key of the assign `context` whose value puts a user in a group: letters, digits, `_` and `-`, at most 100 characters, no dot, not `user_id` or `segment`.",
+            "title": "Attribute"
+          },
+          "segments": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Not available yet: a request that sends it is refused with 422.",
+            "title": "Segments"
+          },
+          "values": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 100,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The values to balance within, 1 to 20 strings of 1 to 100 characters, matched exactly. Users with any other value are balanced together as `other`, users without the key as `unknown`, so neither name can be listed. Left out only for a closed key (`web_device`, `web_visitor`, `web_browser`), whose set is the list.",
+            "title": "Values"
+          }
+        },
+        "title": "BalanceWithin",
+        "type": "object"
+      },
       "BanditStatusResponse": {
         "description": "Full bandit status snapshot for an experiment.\n\nAttributes\n----------\nexperiment_id:\n    Identifier of the parent experiment.\nalgorithm:\n    Algorithm currently driving traffic allocation.\ncurrent_weights:\n    Per-variant allocation weights.\ntotal_pulls:\n    Total pulls across all variants.\nregret_reduction_pct:\n    Estimated regret reduction vs. uniform allocation (may be None early on).\nrecommendation:\n    Narrative recommendation: one of ``\"EXPLORING\"``, ``\"CONVERGING\"``,\n    or ``\"DEPLOYING_<VariantName>\"``.\nlast_updated:\n    ISO-8601 timestamp of the last weight update (None if never updated).\nseed:\n    Deterministic RNG seed used by the last Thompson-sampling tick\n    (``blake2b(experiment_id | tick day | n_samples)``); ``None`` for\n    deterministic algorithms or before the first tick.\nn_samples:\n    Monte Carlo draws per variant used by the last Thompson-sampling\n    tick; ``None`` for deterministic algorithms or before the first tick.\nengine_version:\n    Version of the statistics engine that computed the current weights.",
         "properties": {
@@ -3869,6 +3928,17 @@
           ]
         },
         "properties": {
+          "balance_within": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BalanceWithin"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Beta. Balance the split within groups of users as they are assigned: `{\"attribute\": \"tier\", \"values\": [\"gold\", \"silver\"]}` puts each new user in the group of their `context.tier` (a top-level key, matched exactly; any other value is `other`, no value is `unknown`), and each group gets the experiment's split among its own users. Every share must be a multiple of 5; a bandit or a split URL experiment cannot balance. Null balances nothing."
+          },
           "bayesian_config": {
             "anyOf": [
               {
@@ -4120,6 +4190,19 @@
       "ExperimentDetailResponse": {
         "description": "The answer of ``GET /api/v1/experiments/{experiment_id}`` (#921).\n\n``ExperimentResponse`` plus the owner's display name. Only that read\ncarries it: the list and every other experiment route answer with\n``ExperimentResponse``.",
         "properties": {
+          "balance_within": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Beta. What the experiment balances its split within: `{\"attribute\": ..., \"values\": [...]}`, or null when it balances nothing.",
+            "title": "Balance Within"
+          },
           "bayesian_config": {
             "anyOf": [
               {
@@ -4465,6 +4548,19 @@
       "ExperimentResponse": {
         "description": "Model for experiment response data.",
         "properties": {
+          "balance_within": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Beta. What the experiment balances its split within: `{\"attribute\": ..., \"values\": [...]}`, or null when it balances nothing.",
+            "title": "Balance Within"
+          },
           "bayesian_config": {
             "anyOf": [
               {
@@ -4996,6 +5092,17 @@
           ]
         },
         "properties": {
+          "balance_within": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BalanceWithin"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Beta. Balance the split within groups of users as they are assigned: `{\"attribute\": \"tier\", \"values\": [\"gold\", \"silver\"]}` puts each new user in the group of their `context.tier` (a top-level key, matched exactly; any other value is `other`, no value is `unknown`), and each group gets the experiment's split among its own users. Every share must be a multiple of 5; a bandit or a split URL experiment cannot balance. Null balances nothing. Changeable only while the experiment is a draft."
+          },
           "bayesian_config": {
             "anyOf": [
               {
@@ -26715,7 +26822,7 @@
     },
     "/api/v1/tracking/assign": {
       "post": {
-        "description": "Assign a user to an experiment variant.\n\nThis endpoint assigns a user to a variant of the specified experiment.\nIt handles consistent assignment for returning users.\n\nThe assignment is deterministic based on:\n- User ID\n- Experiment ID\n- Targeting rules\n- Traffic allocation percentages\n\nThis means that the same user will always get the same variant assignment\nfor a specific experiment, including across experiments in the same mutual\nexclusion group: a user enrolled in one experiment of a group is not\nenrolled in another, even as experiments in the group are activated,\npaused or resumed.\n\nNew users are first checked for eligibility: the global holdout, the\nexperiment's mutual exclusion group and its targeting rules (evaluated\nagainst ``context``; top-level keys also answer ``user.<key>`` /\n``device.<key>`` / ``app.<key>``).  Ineligible users receive HTTP 200 with\nthe control variant, ``assigned: false`` and ``reason`` set to\n``holdout`` | ``mutual_exclusion`` | ``targeting``; nothing is recorded\nfor them.  Existing assignments are always returned as-is.\n\nAn experiment that is not ACTIVE (a draft, or paused, completed or\narchived) answers every user, enrolled or not, with HTTP 200, its control\nvariant, ``assigned: false`` and ``reason`` set to its status: ``draft``\n| ``paused`` | ``completed`` | ``archived``.  Nothing is recorded, and\nusers who were assigned keep their assignment, so a resumed experiment\ngives them their variant again.  A draft with no control variant answers\n404.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.\n\nReturns:\n    VariantAssignmentResponse: The variant assignment with configuration\n    details plus ``assigned`` / ``reason``\n\nRaises:\n    HTTPException 401: If the API key is invalid\n    HTTPException 404: If no experiment has the key, or a draft has no\n        control variant\n    HTTPException 500: If there's an error during assignment",
+        "description": "Assign a user to an experiment variant.\n\nThis endpoint assigns a user to a variant of the specified experiment.\nIt handles consistent assignment for returning users.\n\nThe assignment is deterministic based on:\n- User ID\n- Experiment ID\n- Targeting rules\n- Traffic allocation percentages\n\nFor an experiment that balances within groups, a new user's variant also\ndepends on the users of their group assigned before them.\n\nThis means that the same user will always get the same variant assignment\nfor a specific experiment, including across experiments in the same mutual\nexclusion group: a user enrolled in one experiment of a group is not\nenrolled in another, even as experiments in the group are activated,\npaused or resumed.\n\nNew users are first checked for eligibility: the global holdout, the\nexperiment's mutual exclusion group and its targeting rules (evaluated\nagainst ``context``; top-level keys also answer ``user.<key>`` /\n``device.<key>`` / ``app.<key>``).  Ineligible users receive HTTP 200 with\nthe control variant, ``assigned: false`` and ``reason`` set to\n``holdout`` | ``mutual_exclusion`` | ``targeting``; nothing is recorded\nfor them.  Existing assignments are always returned as-is.\n\nAn experiment that is not ACTIVE (a draft, or paused, completed or\narchived) answers every user, enrolled or not, with HTTP 200, its control\nvariant, ``assigned: false`` and ``reason`` set to its status: ``draft``\n| ``paused`` | ``completed`` | ``archived``.  Nothing is recorded, and\nusers who were assigned keep their assignment, so a resumed experiment\ngives them their variant again.  A draft with no control variant answers\n404.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.\n\nReturns:\n    VariantAssignmentResponse: The variant assignment with configuration\n    details plus ``assigned`` / ``reason``\n\nRaises:\n    HTTPException 401: If the API key is invalid\n    HTTPException 404: If no experiment has the key, or a draft has no\n        control variant\n    HTTPException 500: If there's an error during assignment",
         "operationId": "assign_user_to_experiment_api_v1_tracking_assign_post",
         "requestBody": {
           "content": {
@@ -26763,7 +26870,7 @@
     },
     "/api/v1/tracking/assign/batch": {
       "post": {
-        "description": "Assign up to 1,000 users to an ACTIVE experiment in one request.\n\nEach user gets what ``POST /api/v1/tracking/assign`` would give them, with\nthe bandit weights read at the start of the request: the same eligibility\nchecks for a new user (global holdout, mutual exclusion group, targeting\nrules against that user's ``context``) and the same sticky answer for a\nuser already assigned. Users are processed in request order and each new\nassignment is committed on its own, as N single calls would be.\n\nOnly assignments are recorded, never a view event: the user's first\n``POST /api/v1/tracking/assign`` records that they saw the experiment.\n\n**Authentication**: an API key with the ``sdk:ruleset`` scope, whose owner\ncan change feature flags and experiments: ADMIN, DEVELOPER, a superuser, or\nin the full profile anyone whose custom roles or direct grants give\n``feature_flag (update)`` and ``experiment (update)``. A key whose owner can\nchange feature flags but not experiments is refused with 403 before anyone\nis assigned.\n\nA plain ``def``: FastAPI runs it in the thread pool, so a batch does not\nhold the event loop while it works through its users.",
+        "description": "Assign up to 1,000 users to an ACTIVE experiment in one request.\n\nEach user gets what ``POST /api/v1/tracking/assign`` would give them, with\nthe bandit weights read at the start of the request: the same eligibility\nchecks for a new user (global holdout, mutual exclusion group, targeting\nrules against that user's ``context``) and the same sticky answer for a\nuser already assigned. Users are processed in request order and each new\nassignment is committed on its own, as N single calls would be. For an\nexperiment that balances within groups, the same list sent in another\norder can split differently; each user keeps the variant they got.\n\nOnly assignments are recorded, never a view event: the user's first\n``POST /api/v1/tracking/assign`` records that they saw the experiment.\n\n**Authentication**: an API key with the ``sdk:ruleset`` scope, whose owner\ncan change feature flags and experiments: ADMIN, DEVELOPER, a superuser, or\nin the full profile anyone whose custom roles or direct grants give\n``feature_flag (update)`` and ``experiment (update)``. A key whose owner can\nchange feature flags but not experiments is refused with 403 before anyone\nis assigned.\n\nA plain ``def``: FastAPI runs it in the thread pool, so a batch does not\nhold the event loop while it works through its users.",
         "operationId": "assign_users_to_experiment_batch_api_v1_tracking_assign_batch_post",
         "requestBody": {
           "content": {
