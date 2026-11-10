@@ -24,7 +24,7 @@ from unittest.mock import patch
 import boto3
 import pytest
 from fastapi.testclient import TestClient
-from moto import mock_cognitoidp
+from moto import mock_aws
 
 # Set env vars BEFORE importing app (moto requires this order).
 # CognitoAuthService reads COGNITO_* from os.environ on every instantiation.
@@ -53,7 +53,7 @@ def _cognito_provider(monkeypatch):
 @pytest.fixture(scope="module")
 def cognito_mock():
     """Start moto Cognito mock for the entire module."""
-    with mock_cognitoidp():
+    with mock_aws():
         yield
 
 
