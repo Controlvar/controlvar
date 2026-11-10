@@ -12,7 +12,7 @@
   made here while the experiment is a draft, shows there only once the cache is
   cleared, while ``/sequential`` is not cached;
 * once the experiment is running, the ``PUT`` that changes those settings
-  answers 400 for everyone but a superuser.
+  answers 400 for everyone, a superuser included (#848).
 """
 
 from __future__ import annotations
@@ -41,6 +41,7 @@ from backend.tests.integration.api.route_helpers import (
 pytestmark = [pytest.mark.integration, pytest.mark.regression]
 
 ACTIVE_UPDATE = "Cannot update experiments in active status"
+SETTING_FIXED = "Cannot update {} for experiments in active status"
 
 
 @pytest.fixture(autouse=True)
@@ -306,9 +307,10 @@ def _boundary(resp) -> float:
     return block["msprt_result"]["boundary"]
 
 
-def test_once_running_only_a_superuser_changes_the_sequential_settings(
-    client, db_session
-):
+def test_once_running_nobody_changes_the_sequential_settings(client, db_session):
+    """A developer and a plain ADMIN meet the refusal of every change outside
+    draft; the superuser who owns the experiment gets the field's own 400
+    (#848), and the analysis still reads the settings it started with."""
     owner, experiment = _running(client, db_session)
     developer = make_user(db_session, UserRole.DEVELOPER, tag="seqdev")
     admin = make_user(db_session, UserRole.ADMIN, tag="seqadmin")
@@ -319,22 +321,18 @@ def test_once_running_only_a_superuser_changes_the_sequential_settings(
         {"sequential_testing_config": {"tau_squared": 0.01}},
         {"sequential_testing_enabled": False},
     ):
+        (field,) = change
         for user in (developer, admin):
             refused = client.put(exp_url, json=change, headers=auth(user))
             assert refused.status_code == 400, refused.text
             assert refused.json()["detail"] == ACTIVE_UPDATE
+        refused = client.put(exp_url, json=change, headers=auth(owner))
+        assert refused.status_code == 400, refused.text
+        assert refused.json()["detail"] == SETTING_FIXED.format(field)
     assert _boundary(client.get(seq_url, headers=auth(owner))) == 20.0
     stored = client.get(exp_url, headers=auth(owner)).json()
     assert stored["sequential_testing_enabled"] is True
     assert stored["sequential_testing_config"].get("alpha", 0.05) == 0.05
-
-    accepted = client.put(
-        exp_url,
-        json={"sequential_testing_config": {"alpha": 0.1}},
-        headers=auth(owner),
-    )
-    assert accepted.status_code == 200, accepted.text
-    assert _boundary(client.get(seq_url, headers=auth(owner))) == pytest.approx(10.0)
 
 
 def _written(redis, experiment) -> list:

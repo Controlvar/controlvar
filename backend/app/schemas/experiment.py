@@ -739,6 +739,11 @@ NOT_NULL_UPDATE_FIELDS = (
 )
 
 
+#: Ends the description of each analysis setting an update may change only on
+#: a draft (#848), as #580's two say it.
+ANALYSIS_SETTING_DRAFT_ONLY = "Changeable only while the experiment is a draft."
+
+
 #: The one message for a ``schedule`` sent to ``PUT /experiments/{id}`` (#595).
 SCHEDULE_ON_UPDATE_REFUSED = (
     "schedule is not applied by this endpoint; use "
@@ -806,19 +811,26 @@ class ExperimentUpdate(BaseModel):
         json_schema_extra={"deprecated": True},
     )
 
-    # EP-021: Sequential testing
+    # EP-021: Sequential testing. #848: this and the analysis settings below
+    # are refused outside draft, like #580's two.
     sequential_testing_enabled: bool = Field(
-        default=None, description="Enable or disable sequential testing."
+        default=None,
+        description=(
+            "Enable or disable sequential testing. " + ANALYSIS_SETTING_DRAFT_ONLY
+        ),
     )
     sequential_testing_config: Optional[SequentialTestingConfigInput] = Field(
         default=None,
-        description="Sequential testing configuration.",
+        description="Sequential testing configuration. " + ANALYSIS_SETTING_DRAFT_ONLY,
     )
 
     # Issue #21: CUPED variance reduction
     variance_reduction_config: Optional[VarianceReductionConfig] = Field(
         default=None,
-        description="CUPED / Winsorization variance-reduction configuration.",
+        description=(
+            "CUPED / Winsorization variance-reduction configuration. "
+            + ANALYSIS_SETTING_DRAFT_ONLY
+        ),
     )
 
     # EP-035: Bayesian analysis (#216). bayesian_decision is not accepted:
@@ -827,12 +839,16 @@ class ExperimentUpdate(BaseModel):
         default=None,
         description=(
             "Turn Bayesian analysis on or off. Turning it on with no stored or "
-            "supplied bayesian_config stores the default BayesianConfig."
+            "supplied bayesian_config stores the default BayesianConfig. "
+            + ANALYSIS_SETTING_DRAFT_ONLY
         ),
     )
     bayesian_config: Optional[BayesianConfig] = Field(
         default=None,
-        description="Bayesian analysis configuration (priors, loss threshold, ROPE).",
+        description=(
+            "Bayesian analysis configuration (priors, loss threshold, ROPE). "
+            + ANALYSIS_SETTING_DRAFT_ONLY
+        ),
     )
 
     # Issue #22: MAB optimization type

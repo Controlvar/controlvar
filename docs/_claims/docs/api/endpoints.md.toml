@@ -2693,10 +2693,28 @@ text = "A refusal because of the experiment's state is a 400 whose detail names 
 by = ["test:backend/tests/integration/api/test_experiment_update_refusals.py::test_a_role_without_update_gets_403_before_any_state_check"]
 
 [[unit]]
-text = "Outside draft, only a superuser may change an experiment's other fields (Cannot update experiments in active status), and variants, metrics, start_date, end_date, correction_method, confidence_level and balance_within cannot be changed by anyone (Cannot update variants for experiments in active status)."
+text = "Outside draft, only a superuser may change an experiment's other fields (Cannot update experiments in active status), and variants, metrics, correction_method, confidence_level, balance_within, variance_reduction_config, sequential_testing_enabled, sequential_testing_config, bayesian_enabled and bayesian_config cannot be changed by anyone, even to the value already stored (Cannot update variants for experiments in active status); a request that includes several is refused naming the first of them in that order."
 by = [
     "test:backend/tests/integration/api/test_experiment_targeting_by_state.py::test_superuser_still_changes_other_fields_when_not_draft",
+    "test:backend/tests/integration/api/test_experiment_update_refusals.py::test_a_state_refusal_answers_400_with_its_detail",
+    "test:backend/tests/integration/api/test_experiment_correction_settings_api.py::test_a_superuser_cannot_change_the_settings_once_out_of_draft",
     "test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_is_locked_after_draft_for_every_role",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_superuser_cannot_change_an_analysis_setting_once_out_of_draft",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_sending_back_the_stored_value_is_refused_too",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_body_naming_every_fixed_field_is_refused_naming_each_in_the_routes_order",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_balance_within_with_an_analysis_setting_is_refused_naming_balance_within",
+    "test:backend/tests/unit/api/test_experiment_update_fields_classified.py::test_the_fixed_fields_are_exactly_the_routes_list",
+]
+
+[[unit]]
+text = "To change one of those for a running experiment, clone it (POST /api/v1/experiments/{experiment_id}/clone): the copy is a new experiment, a draft, and takes the change."
+by = ["test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_clone_of_a_running_experiment_takes_the_settings_as_a_draft"]
+
+[[unit]]
+text = "start_date and end_date are not fields of this request, so a body that names them changes neither."
+by = [
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_start_date_and_end_date_in_a_body_change_nothing",
+    "test:backend/tests/unit/api/test_experiment_update_fields_classified.py::test_the_routes_list_has_no_other_entry_that_is_not_a_field",
 ]
 
 [[unit]]

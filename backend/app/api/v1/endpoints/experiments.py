@@ -124,6 +124,34 @@ TARGETING_EDITABLE_STATUSES = frozenset(
     {ExperimentStatus.DRAFT, ExperimentStatus.PAUSED}
 )
 
+#: What ``PUT /experiments/{id}`` refuses to change once the experiment has left
+#: DRAFT, for every role, a superuser included: on presence, so the stored
+#: value or null sent back is refused too, with "Cannot update <field> for
+#: experiments in <status> status" naming the first match in this order. The
+#: variants and metrics, how the results are judged (#580), which users share
+#: a group's blocks (#448: decided before the first one is assigned), and how
+#: the results are analysed: CUPED, sequential testing and Bayesian analysis,
+#: each switch with its config (#848). ``balance_within`` precedes #848's five,
+#: so a request this check refused before #848 keeps the field its detail
+#: names. ``start_date`` and ``end_date`` are not fields of ``ExperimentUpdate``,
+#: so the schema drops them and they never match here; a body naming them
+#: changes nothing. Every request field is classified against this list by
+#: ``backend/tests/unit/api/test_experiment_update_fields_classified.py``.
+FIXED_AFTER_DRAFT = (
+    "variants",
+    "metrics",
+    "start_date",
+    "end_date",
+    "correction_method",
+    "confidence_level",
+    "balance_within",
+    "variance_reduction_config",
+    "sequential_testing_enabled",
+    "sequential_testing_config",
+    "bayesian_enabled",
+    "bayesian_config",
+)
+
 #: An experiment's status changes only through the lifecycle endpoints, which
 #: carry each transition's checks (#542). The refusal names them.
 STATUS_THROUGH_LIFECYCLE = (
@@ -910,6 +938,16 @@ async def update_experiment(
     - Basic properties: name, description, hypothesis
     - Variants: if experiment is in DRAFT status
     - Metrics: if experiment is in DRAFT status
+    - `balance_within`: if experiment is in DRAFT status, for every role
+      including superusers
+    - Analysis settings (`correction_method`, `confidence_level`,
+      `variance_reduction_config`, `sequential_testing_enabled`,
+      `sequential_testing_config`, `bayesian_enabled`, `bayesian_config`):
+      if experiment is in DRAFT status, for every role including superusers.
+      Outside DRAFT a request that includes one is refused, even when the
+      value equals the stored one or is null. To change one on a running
+      experiment, clone it (`POST /api/v1/experiments/{id}/clone`, a draft
+      copy) and set it on the copy.
     - Targeting (`targeting_rules`): while the experiment is DRAFT or PAUSED,
       for every role including superusers. On a PAUSED experiment it must be
       the only field in the request. On an ACTIVE, COMPLETED or ARCHIVED
@@ -939,7 +977,8 @@ async def update_experiment(
             (the detail names the state): any change to a non-DRAFT experiment
             by a non-superuser, other than targeting alone on a PAUSED one;
             targeting outside DRAFT or PAUSED; targeting with other fields on
-            a PAUSED experiment; variants or metrics outside DRAFT
+            a PAUSED experiment; variants, metrics, `balance_within` or an
+            analysis setting outside DRAFT
         HTTPException 404: If the experiment doesn't exist
         HTTPException 422: If `targeting_rules` is not a valid rule set,
             `status` differs from the experiment's current status, the
@@ -1041,24 +1080,13 @@ async def update_experiment(
         update_data = experiment_in.model_dump(exclude_unset=True)
         update_data.pop("status", None)
 
-        # For non-draft experiments, prevent updates to restricted fields.
-        # This runs after the superuser passes the guard above, so it binds
-        # every role: once an experiment leaves draft, nobody changes how its
-        # results are judged (#580). It works on presence, so re-sending the
-        # stored value is refused too.
+        # For non-draft experiments, refuse FIXED_AFTER_DRAFT. This runs after
+        # the superuser passes the guard above, so it binds every role: once
+        # an experiment leaves draft, nobody changes how its results are
+        # judged or analysed (#580, #848). It works on presence, so re-sending
+        # the stored value, or null, is refused too.
         if experiment.status != ExperimentStatus.DRAFT:
-            restricted_fields = [
-                "variants",
-                "metrics",
-                "start_date",
-                "end_date",
-                "correction_method",
-                "confidence_level",
-                # #448: which users share a group's blocks is decided before
-                # the first one is assigned.
-                "balance_within",
-            ]
-            for field in restricted_fields:
+            for field in FIXED_AFTER_DRAFT:
                 if field in update_data:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
