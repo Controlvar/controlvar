@@ -461,14 +461,26 @@ by = [
 ]
 
 [[unit]]
-text = "Descriptions, hypotheses, targeting rules, segment rules, variants and metrics are never stored."
-by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_free_text_never_reaches_an_entry"]
+text = "Descriptions, hypotheses, targeting rules, segment rules, variants, metrics and an experiment's analysis configurations (variance_reduction_config for CUPED, sequential_testing_config, bayesian_config) are never stored."
+by = [
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_free_text_never_reaches_an_entry",
+    "test:backend/tests/integration/api/test_audit_analysis_settings.py::test_a_draft_put_of_an_analysis_setting_is_named_in_its_entry",
+]
 
 [[unit]]
-text = "A change to a description, a hypothesis or a rule is named in new_value.changed_fields; a change to an experiment's variants or metrics is not yet named there (the entry records who saved and when; #1782 tracks naming them)."
+text = "A change to a description, a hypothesis, a rule or an analysis configuration is named in new_value.changed_fields; a change to an experiment's variants or metrics is not yet named there (the entry records who saved and when; #1782 tracks naming them)."
 by = [
     "test:backend/tests/integration/api/test_audit_route_events.py::test_experiment_create_update_delete",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_a_design_save_records_the_save_but_not_which_parts_changed",
+    "test:backend/tests/integration/api/test_audit_analysis_settings.py::test_a_draft_put_of_an_analysis_setting_is_named_in_its_entry",
+]
+
+[[unit]]
+text = "Whether sequential testing and Bayesian analysis are on (sequential_testing_enabled, bayesian_enabled) is stored as a value, in an experiment's create and delete entries too."
+by = [
+    "test:backend/tests/integration/api/test_audit_analysis_settings.py::test_a_draft_put_of_an_analysis_setting_is_named_in_its_entry",
+    "test:backend/tests/integration/api/test_audit_analysis_settings.py::test_a_create_and_a_delete_record_whether_the_analyses_are_on",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_experiment_create_update_delete",
 ]
 
 [[unit]]
@@ -885,10 +897,11 @@ text = "request bodies, IP addresses or user agents;"
 by = ["test:backend/tests/unit/models/test_audit_log_text_normalised.py"]
 
 [[unit]]
-text = "the contents of descriptions, hypotheses, targeting rules, segment rules, variants and metrics (descriptions, hypotheses and rules are named under changed_fields; an experiment's variants and metrics are not yet named, #1782);"
+text = "the contents of descriptions, hypotheses, targeting rules, segment rules, variants, metrics and an experiment's CUPED, sequential testing and Bayesian configurations (descriptions, hypotheses, rules and those configurations are named under changed_fields; an experiment's variants and metrics are not yet named, #1782);"
 by = [
     "test:backend/tests/integration/api/test_audit_route_events.py::test_free_text_never_reaches_an_entry",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_a_design_save_records_the_save_but_not_which_parts_changed",
+    "test:backend/tests/integration/api/test_audit_analysis_settings.py::test_a_draft_put_of_an_analysis_setting_is_named_in_its_entry",
 ]
 
 [[unit]]

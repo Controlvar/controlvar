@@ -898,6 +898,17 @@ plan is for `0.05` and `mde_source` is `default`. A secondary metric's
 `expected_effect` is not read. A clone keeps it. A `PUT` that sends `metrics`
 replaces them, so a metric resent without `expected_effect` no longer has one.
 
+### Balancing the split within groups (beta)
+
+`balance_within`, sent on create or on a draft's `PUT`, gives each group of
+users the experiment's split among themselves: with
+`{"attribute": "tier", "values": ["gold", "silver"]}`, each new user is
+balanced within the group of their `context.tier`. Every experiment response
+carries it, `null` when the experiment balances nothing, and a clone copies it.
+It answers 422 at `["body", "balance_within"]` for a bandit, a split URL
+experiment, or a split whose shares are not all multiples of 5. See
+[Balance the split within groups](../guides/balance-within-groups.md).
+
 ## Feature Flag Endpoints
 
 ### List Feature Flags
@@ -1004,6 +1015,9 @@ their public `key`, except `POST /api/v1/tracking/events`, which takes ids. They
   its status: `draft`, `paused`, `completed` or `archived`. Nothing is recorded. Users who were
   assigned keep their assignment, so when a paused experiment is started again each of them gets
   their variant back. A draft with no control variant answers 404.
+- **Balanced experiments**: for an experiment that balances within groups, a new user's variant also
+  depends on the users of their group assigned before them; the group is read from the top level of
+  `context` ([Balancing the split within groups](#balancing-the-split-within-groups-beta)).
 - **Headers**: X-API-Key: {api_key}
 - **Body**: `{"experiment_key": string, "user_id": string, "context": object?}`; `context` at most
   8,192 bytes and 10 levels deep ([Targeting Context Limits](#targeting-context-limits))
@@ -1658,10 +1672,11 @@ state; a 403 means the caller's role may not update experiments, and is
 decided before the state is looked at. Outside `draft`, only a superuser may
 change an experiment's other fields (`Cannot update experiments in active
 status`), and `variants`, `metrics`, `correction_method`, `confidence_level`,
-`variance_reduction_config`, `sequential_testing_enabled`,
+`balance_within`, `variance_reduction_config`, `sequential_testing_enabled`,
 `sequential_testing_config`, `bayesian_enabled` and `bayesian_config` cannot be
 changed by anyone, even to the value already stored (`Cannot update variants
-for experiments in active status`). To change one of those for a running
+for experiments in active status`); a request that includes several is refused
+naming the first of them in that order. To change one of those for a running
 experiment, clone it (`POST /api/v1/experiments/{experiment_id}/clone`): the
 copy is a new experiment, a draft, and takes the change. `start_date` and
 `end_date` are not fields of this request, so a body that names them changes

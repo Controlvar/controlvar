@@ -6,6 +6,7 @@ This module defines models for experiments, variants, and metrics.
 """
 
 import enum
+import secrets
 import threading
 from datetime import datetime, timedelta
 from typing import Optional
@@ -176,6 +177,16 @@ class Experiment(Base, BaseModel):
     #           "cookie_name": "split_url_exp_key"}
     split_url_config = Column(JSONB, nullable=True)
 
+    # #448: balance the split within groups as users arrive.
+    # ``{"attribute": "<key>", "values": [...]}`` (``values`` left out for a
+    # closed ``web_*`` key); null balances nothing. Locked after draft.
+    balance_within = Column(JSONB, nullable=True)
+    # The key of the block order (64 hex characters). Server-side only: made
+    # by the ``_make_balance_seed_*`` mapper listeners below when
+    # ``balance_within`` is first set, never in a response, an export or a
+    # clone.
+    balance_seed = Column(String(64), nullable=True)
+
     # EP-057: Multi-Tenant Workspace isolation (nullable for backwards-compatibility).
     # The seam: a bare indexed UUID, not a ForeignKey. `workspaces` is the
     # workspaces module's table, and a ForeignKey here is the only thing in
@@ -314,6 +325,35 @@ def _clear_resume_on_status_change(target, value, oldvalue, initiator):
     if value == oldvalue:
         return
     target.resume_at = None
+
+
+def new_balance_seed() -> str:
+    """A fresh block-order key for a balanced experiment: 32 random bytes as
+    64 hex characters (#448)."""
+    return secrets.token_hex(32)
+
+
+@event.listens_for(Experiment, "before_insert")
+def _make_balance_seed_on_insert(mapper, connection, target):
+    """Every new experiment that balances gets its own block-order key (#448).
+
+    The one place the key is made, for every writer that inserts an
+    experiment through the ORM -- create, clone, a seed script -- so a value
+    the writer carried (a body's, or the clone's source's) is never kept. An
+    experiment that balances nothing has none.
+    """
+    target.balance_seed = new_balance_seed() if target.balance_within else None
+
+
+@event.listens_for(Experiment, "before_update")
+def _make_balance_seed_on_update(mapper, connection, target):
+    """A draft that starts to balance gets its key in the same write (#448).
+
+    Kept from then on: a key already made is never replaced, so the users a
+    group has already placed keep their places.
+    """
+    if target.balance_within and not target.balance_seed:
+        target.balance_seed = new_balance_seed()
 
 
 class Variant(Base, BaseModel):

@@ -38,6 +38,7 @@ from backend.app.api.segment_rules import (
 )
 from backend.app.api.v1.endpoints import results as results_endpoints
 from backend.app.api.v1.endpoints.power_calculator import OUT_OF_RANGE_MESSAGE
+from backend.app.core.balanced_blocks import balance_problem, balance_setting
 from backend.app.core.logger import failure_detail, unexpected_failure
 from backend.app.core.logging import logger
 from backend.app.core.optional_modules import (
@@ -125,12 +126,15 @@ TARGETING_EDITABLE_STATUSES = frozenset(
 #: DRAFT, for every role, a superuser included: on presence, so the stored
 #: value or null sent back is refused too, with "Cannot update <field> for
 #: experiments in <status> status" naming the first match in this order. The
-#: variants and metrics, how the results are judged (#580), and how they are
-#: analysed: CUPED, sequential testing and Bayesian analysis, each switch with
-#: its config (#848). ``start_date`` and ``end_date`` are not fields of
-#: ``ExperimentUpdate``, so the schema drops them and they never match here; a
-#: body naming them changes nothing. Every request field is classified against
-#: this list by ``backend/tests/unit/api/test_experiment_update_fields_classified.py``.
+#: variants and metrics, how the results are judged (#580), which users share
+#: a group's blocks (#448: decided before the first one is assigned), and how
+#: the results are analysed: CUPED, sequential testing and Bayesian analysis,
+#: each switch with its config (#848). ``balance_within`` precedes #848's five,
+#: so a request this check refused before #848 keeps the field its detail
+#: names. ``start_date`` and ``end_date`` are not fields of ``ExperimentUpdate``,
+#: so the schema drops them and they never match here; a body naming them
+#: changes nothing. Every request field is classified against this list by
+#: ``backend/tests/unit/api/test_experiment_update_fields_classified.py``.
 FIXED_AFTER_DRAFT = (
     "variants",
     "metrics",
@@ -138,6 +142,7 @@ FIXED_AFTER_DRAFT = (
     "end_date",
     "correction_method",
     "confidence_level",
+    "balance_within",
     "variance_reduction_config",
     "sequential_testing_enabled",
     "sequential_testing_config",
@@ -408,6 +413,61 @@ def _refuse_split_url_update(
     raise HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         detail=[{"loc": loc, "msg": problem.message, "type": SPLIT_URL_CONFIG_ERROR}],
+    )
+
+
+#: The update fields a balanced experiment is judged on (#448).
+_BALANCE_FIELDS = frozenset(
+    {"balance_within", "variants", "optimization_type", "experiment_type"}
+)
+
+
+def _balance_refusal(experiment: Experiment) -> Optional[str]:
+    """Why a stored experiment cannot balance as it is, or None (#448)."""
+    return balance_problem(
+        balance_setting(experiment),
+        optimization_type=getattr(experiment, "optimization_type", None),
+        experiment_type=getattr(experiment, "experiment_type", None),
+        allocations=[v.traffic_allocation for v in experiment.variants or []],
+    )
+
+
+def _refuse_unbalanceable_update(
+    experiment: Experiment, experiment_in: ExperimentUpdate, fields_sent: set
+) -> None:
+    """Refuse an update whose result balances a bandit, a split URL experiment
+    or a split not in steps of 5 (#448), in either order: the setting sent to
+    a bandit, or a bandit, a split or a type sent to a balanced experiment.
+
+    The result is what the request sent, and what is stored for every field
+    it left out (a ``variants`` of null changes nothing). Only a request that
+    sends one of ``_BALANCE_FIELDS`` is judged. The 422 is at
+    ``balance_within``, whichever field changed.
+    """
+    if not fields_sent & _BALANCE_FIELDS:
+        return
+
+    def result(name: str) -> Any:
+        if name in fields_sent:
+            return getattr(experiment_in, name)
+        return getattr(experiment, name)
+
+    variants = experiment_in.variants if "variants" in fields_sent else None
+    if variants is None:
+        variants = experiment.variants or []
+    problem = balance_problem(
+        result("balance_within"),
+        optimization_type=result("optimization_type"),
+        experiment_type=result("experiment_type"),
+        allocations=[v.traffic_allocation for v in variants],
+    )
+    if problem is None:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=[
+            {"loc": ["body", "balance_within"], "msg": problem, "type": "value_error"}
+        ],
     )
 
 
@@ -874,6 +934,8 @@ async def update_experiment(
     - Basic properties: name, description, hypothesis
     - Variants: if experiment is in DRAFT status
     - Metrics: if experiment is in DRAFT status
+    - `balance_within`: if experiment is in DRAFT status, for every role
+      including superusers
     - Analysis settings (`correction_method`, `confidence_level`,
       `variance_reduction_config`, `sequential_testing_enabled`,
       `sequential_testing_config`, `bayesian_enabled`, `bayesian_config`):
@@ -911,8 +973,8 @@ async def update_experiment(
             (the detail names the state): any change to a non-DRAFT experiment
             by a non-superuser, other than targeting alone on a PAUSED one;
             targeting outside DRAFT or PAUSED; targeting with other fields on
-            a PAUSED experiment; variants, metrics or an analysis setting
-            outside DRAFT
+            a PAUSED experiment; variants, metrics, `balance_within` or an
+            analysis setting outside DRAFT
         HTTPException 404: If the experiment doesn't exist
         HTTPException 422: If `targeting_rules` is not a valid rule set,
             `status` differs from the experiment's current status, the
@@ -1030,6 +1092,10 @@ async def update_experiment(
         # A split URL experiment's URL variants match its variants (#393), on
         # the result of this update.
         _refuse_split_url_update(experiment, experiment_in, fields_sent)
+
+        # A balanced experiment is not a bandit, not a split URL experiment,
+        # and its shares are multiples of 5 (#448), on the result too.
+        _refuse_unbalanceable_update(experiment, experiment_in, fields_sent)
 
         # Capture pre-update snapshot for audit trail. The update below
         # rebinds targeting_rules (setattr) rather than changing the dict,
@@ -1406,6 +1472,14 @@ async def start_experiment(
         if split_url_refusal is not None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=split_url_refusal
+            )
+
+        # A balanced experiment the API would refuse to store as it is (#448):
+        # only a write that bypassed create and update makes one.
+        balance_refusal = _balance_refusal(experiment)
+        if balance_refusal is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=balance_refusal
             )
 
         before_audit = audit_snapshot(EntityType.EXPERIMENT, experiment)

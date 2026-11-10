@@ -77,6 +77,10 @@ text = "Keep users out of conflicting experiments, and a share of new users out 
 by = ["mechanism:docs-hub"]
 
 [[unit]]
+text = "Give each group of users the same split as the whole experiment, set through the API (beta)"
+by = ["mechanism:docs-hub"]
+
+[[unit]]
 text = "Live experiment results over WebSocket: a snapshot on connect, then a fresh one every 30 seconds (by default), whatever the client sends."
 by = ["mechanism:docs-hub"]
 

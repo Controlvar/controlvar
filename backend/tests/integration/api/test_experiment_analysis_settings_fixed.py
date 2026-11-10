@@ -26,6 +26,10 @@ database, with the columns read back with SQL:
   neither.
 * **C6** the way out: a clone of a running experiment is a draft, and each of
   the five can be set on it.
+* **C11** with #448's ``balance_within``, also fixed after draft: a
+  superuser's body naming it and one of the five gets one 400 naming
+  ``balance_within``, its answer before #848, whichever the body sends first;
+  a body naming every fixed field is refused naming each in the route's order.
 """
 
 from __future__ import annotations
@@ -431,3 +435,124 @@ def test_a_clone_of_a_running_experiment_takes_the_settings_as_a_draft(
         assert _holds(_raw(test_db, copy["id"])[field], CHANGES[field]), field
 
     assert _raw(test_db, source["id"]) == source_before
+
+
+# ---------------------------------------------------------------------------
+# C11: with #448's balance_within, which is fixed after draft too
+# ---------------------------------------------------------------------------
+TIER = {"attribute": "tier", "values": ["gold", "silver"]}
+
+
+def _balance_within(test_db, experiment_id: str) -> Any:
+    with test_db.connect() as conn:
+        return conn.execute(
+            text(f"SELECT balance_within FROM {SCHEMA}.experiments WHERE id = :id"),
+            {"id": experiment_id},
+        ).scalar_one()
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "setting_first", [True, False], ids=["setting-first", "balance-first"]
+)
+@pytest.mark.parametrize(
+    "status",
+    [ExperimentStatus.ACTIVE, ExperimentStatus.PAUSED],
+    ids=["active", "paused"],
+)
+@pytest.mark.parametrize("field", FIELDS)
+def test_balance_within_with_an_analysis_setting_is_refused_naming_balance_within(
+    client, superuser, test_db, field, status, setting_first
+):
+    """One 400, and it names ``balance_within``, in whichever order the body
+    sends the two: the route's list puts #448's field before #848's five, so
+    the answer is the one a superuser got for this body before #848."""
+    created = _experiment(client, superuser, test_db, status)
+    before = _raw(test_db, created["id"])
+    pairs = [(field, CHANGES[field]), ("balance_within", TIER)]
+    body = dict(pairs if setting_first else reversed(pairs))
+
+    response = _put(client, created["id"], body, superuser)
+
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == FIELD_REFUSED.format(
+        "balance_within", status.value
+    )
+    assert _raw(test_db, created["id"]) == before
+    assert _balance_within(test_db, created["id"]) is None
+
+
+def test_a_developer_sending_both_meets_the_refusal_of_every_change_outside_draft_first(
+    client, developer, test_db
+):
+    """The guard order, as for each field alone: the same before #848."""
+    created = _experiment(client, developer, test_db, ExperimentStatus.ACTIVE)
+
+    response = _put(
+        client,
+        created["id"],
+        {"bayesian_enabled": False, "balance_within": TIER},
+        developer,
+    )
+
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == NOT_DRAFT_REFUSED.format("active")
+    assert _balance_within(test_db, created["id"]) is None
+
+
+#: Every request field the route fixes after draft, in the order its 400 names
+#: them. Written out, not read from the route's list.
+NAMED_IN_ORDER = (
+    "variants",
+    "metrics",
+    "correction_method",
+    "confidence_level",
+    "balance_within",
+    "variance_reduction_config",
+    "sequential_testing_enabled",
+    "sequential_testing_config",
+    "bayesian_enabled",
+    "bayesian_config",
+)
+
+
+@pytest.mark.regression
+def test_a_body_naming_every_fixed_field_is_refused_naming_each_in_the_routes_order(
+    client, superuser, test_db
+):
+    """Send them all, drop the one the 400 names, send the rest again."""
+    created = _experiment(client, superuser, test_db, ExperimentStatus.ACTIVE)
+    before = _raw(test_db, created["id"])
+    body: Dict[str, Any] = {
+        "variants": [
+            {"name": "control", "is_control": True, "traffic_allocation": 50},
+            {"name": "treatment", "is_control": False, "traffic_allocation": 50},
+        ],
+        "metrics": [
+            {
+                "name": "Signup",
+                "event_name": "signup_c11",
+                "metric_type": "conversion",
+                "is_primary": True,
+            }
+        ],
+        "correction_method": "bonferroni",
+        "confidence_level": 0.9,
+        "balance_within": TIER,
+        **CHANGES,
+    }
+    assert set(body) == set(NAMED_IN_ORDER)
+
+    named = []
+    while body:
+        response = _put(client, created["id"], body, superuser)
+        assert response.status_code == 400, response.text
+        detail = response.json()["detail"]
+        matches = [f for f in body if detail == FIELD_REFUSED.format(f, "active")]
+        assert len(matches) == 1, (detail, sorted(body))
+        named.append(matches[0])
+        del body[matches[0]]
+
+    assert tuple(named) == NAMED_IN_ORDER
+    assert _raw(test_db, created["id"]) == before
+    assert _balance_within(test_db, created["id"]) is None

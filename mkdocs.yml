@@ -113,6 +113,7 @@ nav:
   - Split URL Testing: api/split-url.md
   - Mutual Exclusion Groups: api/mutual-exclusion-groups.md
   - Assign a Customer List (beta): guides/assign-customer-list.md
+  - Balance the Split Within Groups (beta): guides/balance-within-groups.md
   - Live Results Streaming: websocket-streaming.md
 - LLM / AI Model Evaluation:
   - Overview: llm-evaluation/overview.md

@@ -356,10 +356,11 @@ by = [
 ]
 
 [[unit]]
-text = "Each migration in between runs its downgrade on the way; from a release that carries 7b6b4b4fe246 (its own down_revision is 85dd4796bb8b), that includes 7b6b4b4fe246's, which drops rollout_stages.started_at (Step 2 says what each downgrade loses)."
+text = "Each migration in between runs its downgrade on the way; from a release that carries 7b6b4b4fe246 (its own down_revision is 85dd4796bb8b), that includes 7b6b4b4fe246's, which drops rollout_stages.started_at, and from a release that carries c448_balance_within (its own down_revision is 7b6b4b4fe246), c448_balance_within's, which drops every experiment's balance setting, every user's group and every counter (Step 2 says what each downgrade loses)."
 by = [
     "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_previous_release_starts_only_after_the_downgrade",
     "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_downgrade_drops_the_column_only_and_an_upgrade_sets_it_from_updated_at",
+    "test:backend/tests/integration/database/test_balance_within_migration.py::test_the_downgrade_drops_exactly_the_columns_and_the_table",
 ]
 
 [[unit]]
@@ -1340,18 +1341,37 @@ by = [
 ]
 
 [[unit]]
-text = "85dd4796bb8b to undo 7b6b4b4fe246."
+text = "7b6b4b4fe246 to undo c448_balance_within."
 by = ["test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch"]
 
 [[unit]]
-text = "That downgrade drops rollout_stages.started_at, the time each rollout stage started (nothing restores the exact values: an upgrade afterwards sets each stage in progress from its updated_at, which an edit may have moved, so a stage edited in the meantime restarts its clock from the edit), and it does not refuse, so it needs the Engineering Lead's approval at the moment it runs when any stage is IN_PROGRESS."
+text = "c448_balance_within adds the balance setting, each user's group and place in it, and the per-group counters."
+by = ["test:backend/tests/integration/database/test_balance_within_migration.py::test_a_database_at_the_previous_release_gains_the_columns_and_the_table"]
+
+[[unit]]
+text = "Its downgrade drops every experiment's balance setting, every user's group and every counter; they cannot be recovered."
+by = [
+    "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
+    "test:backend/tests/integration/database/test_balance_within_migration.py::test_the_downgrade_drops_exactly_the_columns_and_the_table",
+]
+
+[[unit]]
+text = "Run it only with a human go at that moment."
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "It does not refuse and removes no assignment."
+by = ["test:backend/tests/integration/database/test_balance_within_migration.py::test_the_downgrade_drops_exactly_the_columns_and_the_table"]
+
+[[unit]]
+text = "A downgrade to 85dd4796bb8b also undoes 7b6b4b4fe246, which drops rollout_stages.started_at, the time each rollout stage started (nothing restores the exact values: an upgrade afterwards sets each stage in progress from its updated_at, which an edit may have moved, so a stage edited in the meantime restarts its clock from the edit), and it does not refuse, so it needs the Engineering Lead's approval at the moment it runs when any stage is IN_PROGRESS."
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_rollout_stage_started_at_migration.py::test_the_downgrade_drops_the_column_only_and_an_upgrade_sets_it_from_updated_at",
 ]
 
 [[unit]]
-text = "A downgrade to 607c51a59bf5 also undoes 85dd4796bb8b, which drops the table event_dedup_keys, every stored event_id, and no event; until the API is rolled back, the release still serving answers 500 to an event that carries an event_id."
+text = "Going on, to 607c51a59bf5, also undoes 85dd4796bb8b, which drops the table event_dedup_keys, every stored event_id, and no event; until the API is rolled back, the release still serving answers 500 to an event that carries an event_id."
 by = [
     "test:backend/tests/unit/infrastructure/test_db_migrate_target_graph.py::test_each_named_downgrade_unapplies_its_listed_revisions_on_one_branch",
     "test:backend/tests/integration/database/test_event_dedup_keys_migration.py::test_m5_the_downgrade_removes_exactly_the_table_online",

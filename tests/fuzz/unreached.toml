@@ -105,6 +105,18 @@
 # changed these entries, the viewer pass on that head (its flag-by-id
 # requests come before any request that head answers differently from main).
 
+# Then #1853 (#448) gave the experiment create and update schemas
+# balance_within. That changed the requests the seed generates for
+# POST /api/v1/experiments/, and with them the experiments whose ids
+# Schemathesis reuses from earlier answers: the superuser pass no longer sends
+# the GET /api/v1/bandit/{experiment_id} that named a stored bandit experiment
+# (200). Every id it sends names a fixed-allocation experiment (404), although
+# the run makes bandit experiments, so it no longer reaches it, and its list
+# is 106. The viewer pass's list does not change. Read from fuzz_check's
+# evaluation of local runs of both passes at this seed on the pull request's
+# head merged with #1858; the superuser pass's CI run on that head alone gave
+# the same reach counts.
+
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
 [[unreached]]
@@ -336,6 +348,11 @@ reason = "The handler refuses the generated values (400); invalid requests answe
 pass = "superuser"
 operation = "GET /api/v1/holdout/{holdout_id}/results"
 reason = "Generated ids never name a stored row (404); the other requests fail validation (422)."
+
+[[unreached]]
+pass = "superuser"
+operation = "GET /api/v1/bandit/{experiment_id}"
+reason = "No request names a stored bandit experiment: every id sent names a fixed-allocation experiment (404), and the other requests fail validation (422)."
 
 [[unreached]]
 pass = "superuser"

@@ -77,6 +77,8 @@ AUDIT_VALUE_FIELDS: Dict[EntityType, Tuple[str, ...]] = {
         "end_date",
         "correction_method",
         "confidence_level",
+        "sequential_testing_enabled",
+        "bayesian_enabled",
     ),
     EntityType.USER: ("username", "role", "is_active", "is_superuser"),
     EntityType.API_KEY: ("name", "scopes", "expires_at", "user_id"),
@@ -96,7 +98,10 @@ AUDIT_VALUE_FIELDS: Dict[EntityType, Tuple[str, ...]] = {
 #: ``off_value`` are user-authored content of up to 8 KiB, like its rules: a
 #: value recorded beside them could push the whole entry over
 #: ``AUDIT_VALUE_MAX`` and lose the ``rollout_percentage`` change with it
-#: (Plan F ruling 3).
+#: (Plan F ruling 3). An experiment's three analysis configurations (CUPED,
+#: sequential testing, Bayesian) are JSON objects and are named the same way;
+#: the two switches that turn sequential and Bayesian analysis on are values
+#: (#848).
 AUDIT_NAME_ONLY_FIELDS: Dict[EntityType, Tuple[str, ...]] = {
     EntityType.FEATURE_FLAG: (
         "description",
@@ -105,7 +110,15 @@ AUDIT_NAME_ONLY_FIELDS: Dict[EntityType, Tuple[str, ...]] = {
         "on_value",
         "off_value",
     ),
-    EntityType.EXPERIMENT: ("description", "hypothesis", "targeting_rules", "metrics"),
+    EntityType.EXPERIMENT: (
+        "description",
+        "hypothesis",
+        "targeting_rules",
+        "metrics",
+        "variance_reduction_config",
+        "sequential_testing_config",
+        "bayesian_config",
+    ),
     EntityType.USER: ("email",),
     EntityType.API_KEY: (),
     EntityType.HOLDOUT: ("description",),

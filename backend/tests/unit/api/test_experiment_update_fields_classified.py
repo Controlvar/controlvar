@@ -33,6 +33,7 @@ FIXED = frozenset(
         "metrics",
         "correction_method",
         "confidence_level",
+        "balance_within",
         "variance_reduction_config",
         "sequential_testing_enabled",
         "sequential_testing_config",
@@ -77,7 +78,8 @@ NEVER_WRITTEN = {
 }
 
 #: The list's order decides which field the 400 names when a body sends
-#: several: #580's six, then #848's five.
+#: several: #580's six, then #448's balance_within, then #848's five, so a
+#: request refused before #848 keeps the field its detail names.
 ROUTE_ORDER = (
     "variants",
     "metrics",
@@ -85,6 +87,7 @@ ROUTE_ORDER = (
     "end_date",
     "correction_method",
     "confidence_level",
+    "balance_within",
     "variance_reduction_config",
     "sequential_testing_enabled",
     "sequential_testing_config",

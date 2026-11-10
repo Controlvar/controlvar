@@ -27,7 +27,7 @@ documented commands. SPEC #1543 v1.2's gates, each named where it is held:
 * M5: the downgrade, online and with an events writer open, removes exactly
   the table;
 * M6: ``alembic heads`` names the core head after this revision,
-  ``7b6b4b4fe246`` (#1528), and the modules head.
+  ``c448_balance_within`` (#448), and the modules head.
 
 M4 (this release reads rows stored without a key, as the previous release
 stored them) is in ``backend/tests/integration/api/test_tracking_duplicate_events.py``.
@@ -55,9 +55,13 @@ pytestmark = [pytest.mark.integration]
 #: This revision, and the core revision it extends.
 REVISION = "85dd4796bb8b"
 PREVIOUS_CORE_HEAD = "607c51a59bf5"
-#: The core head of this tree: ``7b6b4b4fe246`` (#1528), the revision after
-#: this one, whose downgrade drops ``rollout_stages.started_at`` and no table.
-CORE_HEAD = "7b6b4b4fe246"
+#: The core head of this tree: ``c448_balance_within`` (#448), after
+#: ``7b6b4b4fe246`` (#1528), the revision after this one, whose downgrade drops
+#: ``rollout_stages.started_at`` and no table.
+CORE_HEAD = "c448_balance_within"
+#: Tables a later core revision's downgrade drops: a downgrade from the head to
+#: this test's target unapplies those revisions too.
+LATER_DOWNGRADE_TABLES = {"balance_group_counters"}
 MODULES_HEAD = "modules_0004_rbac_activation"
 
 PREVIOUS_ROWS = {
@@ -449,7 +453,7 @@ def test_m5_the_downgrade_removes_exactly_the_table_online(
     _report(profile, "after downgrade", test_db, scratch_schema)
 
     assert _rows(test_db, scratch_schema) == PREVIOUS_ROWS[profile]
-    assert _tables(test_db, scratch_schema) == tables - {TABLE}
+    assert _tables(test_db, scratch_schema) == tables - {TABLE} - LATER_DOWNGRADE_TABLES
     assert _events(test_db, scratch_schema) == events
 
     # And upgrading again creates the table again, empty.
@@ -510,7 +514,8 @@ HEADS = {CORE: {CORE_HEAD}, FULL: {CORE_HEAD, MODULES_HEAD}}
 @pytest.mark.parametrize("profile", BOTH_PROFILES)
 def test_m6_alembic_heads_are_this_revision_and_the_modules_head(profile, tmp_path):
     """Still two heads in a full tree: this revision extended the core chain,
-    and ``7b6b4b4fe246`` (#1528), the core head now, extends it."""
+    and ``7b6b4b4fe246`` (#1528) and ``c448_balance_within`` (#448), the core
+    head now, extend it."""
     tree = tree_profiles.tree_for(profile, tmp_path)
     heads = tree_profiles.alembic(tree, "public", "heads")
     assert heads.returncode == 0, heads.stderr[-3000:]

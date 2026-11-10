@@ -122,6 +122,26 @@ active_experiments_gauge: Gauge = Gauge(
     "Number of currently active experiments",
 )
 
+# A new user of an experiment that balances its split within groups (#448)
+# who was assigned by hash instead of by their group's block
+# (backend.app.services.balanced_allocation). ``reason`` is one of
+# ``FALLBACK_REASONS``: ``timeout`` (the counter step ran past its statement
+# timeout), ``busy`` (this process already had its limit of counter steps in
+# progress) or ``no_seed`` (the experiment has no block-order key). No
+# experiment label: the experiment id goes to the WARNING, once.
+experiment_balance_fallback_total: Counter = Counter(
+    "experiment_balance_fallback_total",
+    "New users of a balanced experiment assigned by hash instead of by their "
+    "group's block, by reason",
+    ["reason"],
+)
+
+# Counter steps of balanced experiments in progress in this process now.
+experiment_balance_waits: Gauge = Gauge(
+    "experiment_balance_waits",
+    "Counter steps of balanced experiments in progress in this process",
+)
+
 # ---------------------------------------------------------------------------
 # Background scheduler metrics (set by backend.app.core.scheduler_tick)
 # ---------------------------------------------------------------------------

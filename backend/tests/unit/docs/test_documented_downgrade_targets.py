@@ -46,10 +46,14 @@ DB_MIGRATE = REPO_ROOT / ".github" / "workflows" / "db-migrate.yml"
 #: A revision id named as a downgrade target: ``downgrade <id>`` (a shell
 #: command), ``downgrade`` with target ``<id>`` (the workflow form), and
 #: ``e.g. <id>`` (the help text and the runbook's Target bullet). The
-#: quantifiers are bounded and the id shapes are the two this repository uses.
+#: quantifiers are bounded and the id shapes are the three this repository
+#: uses: twelve hex digits, ``modules_<four digits>_<name>``, and a short
+#: prefix, an underscore and a name (``ep057_workspaces``,
+#: ``c448_balance_within``).
 TARGET = re.compile(
     r"(?:\bdowngrade`?\s{1,4}(?:with\s{1,4}target\s{1,4})?|\be\.g\.\s{1,4})"
-    r"`?(?P<rev>[0-9a-f]{12}|modules_\d{4}_[a-z0-9_]{1,64})\b"
+    r"`?(?P<rev>[0-9a-f]{12}|modules_\d{4}_[a-z0-9_]{1,64}"
+    r"|[a-z][a-z0-9]{1,7}_[a-z0-9_]{1,40})\b"
 )
 _HEADING = re.compile(r"^#{1,6}\s")
 _FENCE = re.compile(r"^\s*```")
@@ -218,6 +222,58 @@ def test_a_revision_cited_for_another_reason_is_not_an_announcement():
     assert "dropdown" in page and _DROPPING in page
     found = [m for m in mentions(page=page) if m.source == "migrations.md"]
     assert _DROPPING in unannounced_crossings(found)[f"migrations.md: {_BELOW_IT}"]
+
+
+#: A core id that is not twelve hex digits; the chain has had them since
+#: ``ep034``, and its head is one.
+_NAMED = "ep057_workspaces"
+#: The column-dropping revisions ``downgrade ep057_workspaces`` unapplies
+#: today: ten on the core chain, and two on the modules branch, which a
+#: core-only tree does not have. A later revision adds to what it crosses.
+_ABOVE_NAMED = {
+    "c448_balance_within",
+    "7b6b4b4fe246",
+    "607c51a59bf5",
+    "37dcb2969766",
+    "d29a479daafe",
+    "806901fb7735",
+    "a89544fb1075",
+    "271f03a31742",
+    "e5f6a7b8c9d0",
+    "d4e5f6a7b8c9",
+    "modules_0004_rbac_activation",
+    "modules_0003_lower_is_better",
+}
+
+
+def test_a_named_core_id_below_column_drops_is_refused():
+    """``downgrade ep057_workspaces`` with nothing said about what it drops is
+    reported with every column-dropping revision it crosses."""
+    page = f"## Undo\n\n```bash\nalembic downgrade {_NAMED}\n```\n"
+    found = [m for m in mentions(page=page) if m.source == "migrations.md"]
+    assert [m.target for m in found] == [_NAMED]
+    script = _script()
+    known = {r.revision for r in script.walk_revisions()}
+    expected = {r for r in _ABOVE_NAMED if r in known}
+    assert len(expected) == (12 if "modules_0004_rbac_activation" in known else 10)
+    crossed = set(unannounced_crossings(found, script)[f"migrations.md: {_NAMED}"])
+    assert expected <= crossed, sorted(expected - crossed)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "```bash\nalembic downgrade c448_balance_within\n```",
+        "Run the workflow with `downgrade` with target `c448_balance_within`.",
+        "Target: the revision to go back to, e.g. `c448_balance_within`.",
+    ],
+    ids=["command", "workflow", "example"],
+)
+def test_the_core_head_id_is_read_as_a_target(text):
+    page = f"## Undo\n\n{text}\n"
+    found = [m for m in mentions(page=page) if m.source == "migrations.md"]
+    assert [m.target for m in found] == ["c448_balance_within"]
+    assert "c448_balance_within" in {r.revision for r in _script().walk_revisions()}
 
 
 @pytest.mark.parametrize(

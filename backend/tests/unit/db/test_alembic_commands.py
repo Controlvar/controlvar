@@ -27,8 +27,8 @@ ALEMBIC_INI = REPO_ROOT / "backend" / "app" / "db" / "alembic.ini"
 CORE_VERSIONS = REPO_ROOT / "backend" / "app" / "db" / "migrations" / "versions"
 ENV_PY = REPO_ROOT / "backend" / "app" / "db" / "migrations" / "env.py"
 
-#: The core chain's head (#1528).
-CORE_HEAD = "7b6b4b4fe246"
+#: The core chain's head (#448).
+CORE_HEAD = "c448_balance_within"
 #: The modules branch's head (#891).
 MODULES_HEAD = "modules_0004_rbac_activation"
 #: The revision 1ab99332f0ba's re-run recipe downgrades to, and what lies past it.
@@ -188,6 +188,9 @@ def test_past_1ab99332f0ba_its_rerun_downgrade_also_undoes_the_later_revisions()
     assert "7b6b4b4fe246" in from_head
     # And the event_id keys' (#1543), which drops the table event_dedup_keys.
     assert "85dd4796bb8b" in from_head
+    # And the balance setting's (#448), which drops balance_group_counters and
+    # four columns.
+    assert "c448_balance_within" in from_head
 
 
 def _bootstrap_url(env: dict[str, str]) -> str:

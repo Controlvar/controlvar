@@ -46,15 +46,21 @@ PREVIOUS_CORE_HEAD = "1ab99332f0ba"
 #: The core head of this tree, which ``upgrade heads`` runs on to past this
 #: revision, through ``d29a479daafe`` (#445), ``37dcb2969766`` (#440),
 #: ``4c2c09a2b3e8`` (#1206) and ``607c51a59bf5`` (#1497), whose downgrade drops
-#: three ``feature_flags`` columns and no table, and ``85dd4796bb8b`` (#1543):
+#: three ``feature_flags`` columns and no table, ``85dd4796bb8b`` (#1543) and
 #: ``7b6b4b4fe246`` (#1528), whose downgrade drops ``rollout_stages.started_at``
-#: and no table.
-CORE_HEAD = "7b6b4b4fe246"
+#: and no table: ``c448_balance_within`` (#448).
+CORE_HEAD = "c448_balance_within"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``d29a479daafe``
 #: (#445) drops ``holdout_population``; ``37dcb2969766`` (#440) drops
-#: ``segment_members``; ``85dd4796bb8b`` (#1543) drops ``event_dedup_keys``.
-LATER_DOWNGRADE_TABLES = {"holdout_population", "segment_members", "event_dedup_keys"}
+#: ``segment_members``; ``85dd4796bb8b`` (#1543) drops ``event_dedup_keys``;
+#: ``c448_balance_within`` (#448) drops ``balance_group_counters``.
+LATER_DOWNGRADE_TABLES = {
+    "holdout_population",
+    "segment_members",
+    "event_dedup_keys",
+    "balance_group_counters",
+}
 #: The modules branch's head in this tree, recorded on both sides of every
 #: step here: this file is about the core chain.
 MODULES_HEAD = "modules_0004_rbac_activation"

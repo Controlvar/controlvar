@@ -2693,13 +2693,16 @@ text = "A refusal because of the experiment's state is a 400 whose detail names 
 by = ["test:backend/tests/integration/api/test_experiment_update_refusals.py::test_a_role_without_update_gets_403_before_any_state_check"]
 
 [[unit]]
-text = "Outside draft, only a superuser may change an experiment's other fields (Cannot update experiments in active status), and variants, metrics, correction_method, confidence_level, variance_reduction_config, sequential_testing_enabled, sequential_testing_config, bayesian_enabled and bayesian_config cannot be changed by anyone, even to the value already stored (Cannot update variants for experiments in active status)."
+text = "Outside draft, only a superuser may change an experiment's other fields (Cannot update experiments in active status), and variants, metrics, correction_method, confidence_level, balance_within, variance_reduction_config, sequential_testing_enabled, sequential_testing_config, bayesian_enabled and bayesian_config cannot be changed by anyone, even to the value already stored (Cannot update variants for experiments in active status); a request that includes several is refused naming the first of them in that order."
 by = [
     "test:backend/tests/integration/api/test_experiment_targeting_by_state.py::test_superuser_still_changes_other_fields_when_not_draft",
     "test:backend/tests/integration/api/test_experiment_update_refusals.py::test_a_state_refusal_answers_400_with_its_detail",
     "test:backend/tests/integration/api/test_experiment_correction_settings_api.py::test_a_superuser_cannot_change_the_settings_once_out_of_draft",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_is_locked_after_draft_for_every_role",
     "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_superuser_cannot_change_an_analysis_setting_once_out_of_draft",
     "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_sending_back_the_stored_value_is_refused_too",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_body_naming_every_fixed_field_is_refused_naming_each_in_the_routes_order",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_balance_within_with_an_analysis_setting_is_refused_naming_balance_within",
     "test:backend/tests/unit/api/test_experiment_update_fields_classified.py::test_the_fixed_fields_are_exactly_the_routes_list",
 ]
 
@@ -2712,6 +2715,45 @@ text = "start_date and end_date are not fields of this request, so a body that n
 by = [
     "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_start_date_and_end_date_in_a_body_change_nothing",
     "test:backend/tests/unit/api/test_experiment_update_fields_classified.py::test_the_routes_list_has_no_other_entry_that_is_not_a_field",
+]
+
+[[unit]]
+text = "Balancing the split within groups (beta)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "balance_within, sent on create or on a draft's PUT, gives each group of users the experiment's split among themselves: with {\"attribute\": \"tier\", \"values\": [\"gold\", \"silver\"]}, each new user is balanced within the group of their context.tier."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_create_stores_and_echoes_the_setting",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_put_on_a_draft_sets_echoes_and_clears_it",
+    "test:backend/tests/integration/api/test_balanced_assignment.py::test_a_list_and_single_assigns_share_each_groups_places",
+]
+
+[[unit]]
+text = "Every experiment response carries it, null when the experiment balances nothing, and a clone copies it."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_put_on_a_draft_sets_echoes_and_clears_it",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_clone_balances_within_the_same_groups_and_starts_fresh",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_the_snapshot_carries_balance_within_and_never_its_key",
+]
+
+[[unit]]
+text = "It answers 422 at [\"body\", \"balance_within\"] for a bandit, a split URL experiment, or a split whose shares are not all multiples of 5."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_bandit_cannot_balance",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_split_url_experiment_cannot_balance_on_create",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_split_not_in_steps_of_5_is_refused",
+]
+
+[[unit]]
+text = "See Balance the split within groups."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Balanced experiments: for an experiment that balances within groups, a new user's variant also depends on the users of their group assigned before them; the group is read from the top level of context (Balancing the split within groups)."
+by = [
+    "test:backend/tests/integration/services/test_balance_across_processes.py::test_four_processes_keep_every_group_balanced",
+    "test:backend/tests/unit/services/test_balanced_allocation.py::test_the_label_table",
 ]
 
 [[unit]]
