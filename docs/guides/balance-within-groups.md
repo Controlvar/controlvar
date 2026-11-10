@@ -38,6 +38,27 @@ ignores the field and still answers `200`.
   be changed.
 - A clone balances within the same groups, and its groups start from their first place.
 
+## In the dashboard
+
+The **Variants** step of guided setup and the single-page form have **Balance the split within
+groups**, off until you turn it on. A draft's **Edit variants and metrics**, on the experiment page,
+has the same switch.
+
+- **Group users by** offers Platform, Country and User Tier, **Another attribute…** (type its
+  name) and **Saved segments…**.
+- For an attribute, **Values to keep apart (up to 20)** takes one chip per value. An attribute
+  named `web_device`, `web_visitor` or `web_browser` needs no values.
+- For saved segments, **Add a saved segment** adds one at the end of the list, and each can be
+  moved up or down: a user is balanced in the first segment in the list they belong to.
+- A split with a share that is not a multiple of 5, such as 34/33/33, shows the refusal under the
+  allocations as you type it. **Next** and **Create Experiment** wait until it is fixed.
+- When the API refuses the setting, its own sentence is shown at the control it is about, and focus
+  moves there.
+- A draft that is a bandit or a split URL experiment shows a sentence in place of the switch.
+- The experiment page's **Balance** row says what the split is balanced within, such as
+  `within Platform (ios, android, web)`, or `off`. Once the experiment has started the row is all
+  there is: the setting cannot be changed.
+
 ## Assign users
 
 Put the attribute at the top level of `context` in every assign request:
