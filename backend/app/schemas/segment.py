@@ -6,7 +6,7 @@ used in the P3-C: Audience Segmentation API.
 """
 
 from enum import Enum
-from typing import Annotated, Any, List, Optional
+from typing import Annotated, Any, List, Literal, Optional
 
 from pydantic import (
     BaseModel,
@@ -439,12 +439,73 @@ class SegmentExperimentResponse(BaseModel):
     )
 
 
-class AudiencePreviewResponse(BaseModel):
-    """Estimated audience size from preview evaluation."""
+#: Why a preview gives no percentage: no user seen with attributes, or fewer
+#: than the preview's floor.
+PreviewReason = Literal["no_exposures_with_context", "too_few_users"]
+#: What ended the preview's read: enough users, the row cap, or the window.
+PreviewEndedBy = Literal["sample_size", "cap", "window"]
 
-    estimated_percentage: float
-    sample_size: int
-    matched: int
+
+class AudiencePreviewResponse(BaseModel):
+    """How many of the users seen most recently the rules match.
+
+    The users are the most recent ones with an exposure (a /tracking/assign
+    call) in the last 30 days, each counted once, with the attributes sent as
+    context on their latest one. It is not a random sample: it leans toward
+    frequent users and the time of day.
+    """
+
+    estimated_percentage: Optional[float] = Field(
+        ...,
+        description=(
+            "matched / sample_size x 100, to 2 decimals. null when reason is set: "
+            "no user seen with attributes, or fewer than 30."
+        ),
+    )
+    sample_size: int = Field(
+        ...,
+        description=(
+            "Distinct users read whose latest exposure carried attributes; at "
+            "most the requested sample_size."
+        ),
+    )
+    matched: int = Field(..., description="Of those users, how many the rules match.")
+    source: Literal["exposure_metadata"] = Field(
+        ...,
+        description="Where the attributes come from: the exposures' stored context.",
+    )
+    window_days: int = Field(
+        ...,
+        description="The read goes back at most this many days (fixed at 30).",
+    )
+    sampled_since: Optional[str] = Field(
+        ...,
+        description=(
+            "The time of the oldest exposure read, UTC ISO-8601; null when none "
+            "was read."
+        ),
+    )
+    ended_by: PreviewEndedBy = Field(
+        ...,
+        description=(
+            "sample_size: enough users were found; cap: the row cap was reached "
+            "first; window: every exposure in the window was read."
+        ),
+    )
+    users_without_context: int = Field(
+        ...,
+        description=(
+            "Distinct users read whose latest exposure carried no attributes; "
+            "not counted in sample_size."
+        ),
+    )
+    reason: Optional[PreviewReason] = Field(
+        ...,
+        description=(
+            "Why estimated_percentage is null: no_exposures_with_context (no user "
+            "with attributes) or too_few_users (1 to 29). null otherwise."
+        ),
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -452,6 +513,12 @@ class AudiencePreviewResponse(BaseModel):
                 "estimated_percentage": 35.5,
                 "sample_size": 1000,
                 "matched": 355,
+                "source": "exposure_metadata",
+                "window_days": 30,
+                "sampled_since": "2026-11-06T09:12:45.120391+00:00",
+                "ended_by": "sample_size",
+                "users_without_context": 42,
+                "reason": None,
             }
         }
     )

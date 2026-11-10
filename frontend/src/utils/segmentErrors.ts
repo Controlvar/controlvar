@@ -63,6 +63,9 @@ const UNPROCESSABLE: Partial<Record<SegmentAction, string>> = {
     'These rules are over the preview limits (20 groups, 50 conditions, 10 regex conditions, 1,000 list values).',
 };
 
+/** A preview the server stopped at its time limit (503). */
+export const PREVIEW_TOO_SLOW = 'The estimate took too long. Try again later.';
+
 /** The copy for a failed request while doing `action`. */
 export function segmentErrorCopy(err: unknown, action: SegmentAction): string {
   if (!isApiError(err)) return 'Something went wrong in the dashboard. Reload the page and try again.';
@@ -76,6 +79,7 @@ export function segmentErrorCopy(err: unknown, action: SegmentAction): string {
   if (status === 409) return CONFLICT[action] ?? SERVER_FAILED;
   if (status === 422) return UNPROCESSABLE[action] ?? 'The request was not accepted.';
   if (status === 429) return 'Too many requests. Wait a minute and try again.';
+  if (status === 503 && action === 'preview') return PREVIEW_TOO_SLOW;
   const id = err.requestId ? ` Request ID: ${err.requestId}.` : '';
   return `${SERVER_FAILED}${id}`;
 }

@@ -3287,19 +3287,167 @@ text = "Bulk-evaluate checks its one user_context once, whatever the number of s
 by = ["test:backend/tests/integration/api/test_segment_context_limits.py::test_bulk_evaluate_checks_its_one_user_context_once"]
 
 [[unit]]
-text = "POST /api/v1/segments/{id}/preview evaluates the rules in its body against the stored contexts of up to sample_size assignments (10 to 10,000, default 1,000)."
-by = ["test:backend/tests/integration/api/test_segment_rules_validated.py::test_preview_counts_only_assignments_with_a_context"]
+text = "Estimating a segment's size."
+by = ["exempt:label"]
 
 [[unit]]
-text = "Only assignments that carry a context are counted, and sample_size in the answer is how many there were."
-by = ["test:backend/tests/integration/api/test_segment_rules_validated.py::test_preview_counts_only_assignments_with_a_context"]
-
-[[unit]]
-text = "Assignment does not store a context today, so the answer is usually {\"estimated_percentage\": 0.0, \"sample_size\": 0, \"matched\": 0}: there was nothing to estimate from, which is not the same as 0%."
+text = "POST /api/v1/segments/{id}/preview estimates how many users the rules in its body match, from the attributes users sent as context to POST /api/v1/tracking/assign."
 by = [
-    "test:backend/tests/unit/services/test_audience_service.py::TestPreviewAudienceSize::test_preview_returns_zero_of_zero_when_no_assignment_has_a_context",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_counts_users_who_were_assigned_through_the_tracking_api",
+    "docex:docs/api/endpoints.md#\"source\": \"exposure_metadata\"",
+]
+
+[[unit]]
+text = "Every assign call records an exposure that carries those attributes."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_each_user_is_counted_once_across_experiments_and_repeats",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_users_latest_attributes_are_the_ones_evaluated",
+]
+
+[[unit]]
+text = "The preview reads the exposures of the last 30 days, newest first, and takes each user's latest one."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_exposures_older_than_the_window_are_not_read",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_uses_newest_not_oldest_rows",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_users_latest_attributes_are_the_ones_evaluated",
+]
+
+[[unit]]
+text = "It evaluates the rules, as evaluate does, against up to sample_size users (10 to 10,000, default 1,000) whose latest exposure carries attributes."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_matched_equals_membership_of_each_user",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_the_read_is_capped_and_stops_at_sample_size",
     "test:backend/tests/integration/api/test_segment_rules_validated.py::test_preview_counts_only_assignments_with_a_context",
 ]
+
+[[unit]]
+text = "Nothing is copied or stored for it: it reads the exposures where they are, and they are kept as long as other events are."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_the_preview_runs_the_same_statements_for_10_and_1000_users"]
+
+[[unit]]
+text = "Any role that can read segments may preview; the answer is counts and a share, never a stored attribute value."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_every_role_may_preview",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_no_stored_attribute_is_echoed_or_logged",
+]
+
+[[unit]]
+text = "On a stack with traffic, the answer looks like this:"
+by = ["exempt:example"]
+
+[[unit]]
+text = "sample_size in the request is a maximum."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_the_read_is_capped_and_stops_at_sample_size"]
+
+[[unit]]
+text = "In the answer it is the number of users evaluated, and matched is how many of them the rules match."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_counts_users_who_were_assigned_through_the_tracking_api"]
+
+[[unit]]
+text = "estimated_percentage is matched divided by sample_size, as a percentage to two decimals."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_users_latest_attributes_are_the_ones_evaluated",
+    "test:backend/tests/unit/services/test_audience_service.py::TestPreviewAudienceSize::test_only_rows_with_a_context_object_count",
+]
+
+[[unit]]
+text = "ended_by says what ended the read: sample_size (enough users were found), cap (the read takes at most 5 exposures per user asked for, and never more than 50,000), or window (every exposure of the last 30 days was read)."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_sampled_since_is_the_oldest_row_read_and_ended_by_says_why",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_the_read_is_capped_and_stops_at_sample_size",
+]
+
+[[unit]]
+text = "sampled_since is the time of the oldest exposure read, and window_days is always 30."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_sampled_since_is_the_oldest_row_read_and_ended_by_says_why",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_exposures_older_than_the_window_are_not_read",
+]
+
+[[unit]]
+text = "users_without_context counts the users read whose latest exposure carried no attributes, because their SDK sent no context; they are not in sample_size."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_empty_sample_is_not_a_percentage",
+    "test:backend/tests/integration/api/test_segment_rules_validated.py::test_preview_counts_only_assignments_with_a_context",
+]
+
+[[unit]]
+text = "If most callers send none, it is the larger number."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "With no user with attributes, estimated_percentage is null and reason is no_exposures_with_context."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_empty_sample_is_not_a_percentage"]
+
+[[unit]]
+text = "With 1 to 29, it is null and reason is too_few_users; sample_size and matched are still given."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_fewer_than_30_users_give_no_percentage"]
+
+[[unit]]
+text = "This is a floor on the estimate's quality."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "It is not a random sample."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_uses_newest_not_oldest_rows"]
+
+[[unit]]
+text = "Unless ended_by is window, the users are the ones seen most recently, since sampled_since, which on a busy site can be minutes ago."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_sampled_since_is_the_oldest_row_read_and_ended_by_says_why"]
+
+[[unit]]
+text = "So the sample leans toward users who call assign often and toward the time of day."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Use it as a sanity check and an order of magnitude: rules that match none of 1,000 recent users usually name an attribute that is misspelt or not sent."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "It counts only users who reached /tracking/assign: a user assigned only through /tracking/assign/batch has no exposure, and a visitor whose SDK sends attributes only after sign-in is counted from then on."
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestParity::test_each_user_gets_what_a_single_call_gives",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_counts_users_who_were_assigned_through_the_tracking_api",
+]
+
+[[unit]]
+text = "It takes each user's latest attributes, not their first exposure's, so a user whose attributes changed is counted by the new ones."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_users_latest_attributes_are_the_ones_evaluated",
+    "test:backend/tests/unit/services/test_audience_service.py::TestPreviewAudienceSize::test_a_users_latest_attributes_win",
+]
+
+[[unit]]
+text = "An exposure dated more than 5 minutes after the server's clock is not read, nor one whose stored attributes are longer than 8,192 bytes as PostgreSQL prints them."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_future_dated_and_oversize_exposures_are_not_sampled"]
+
+[[unit]]
+text = "PostgreSQL prints a space after each colon and comma, which assign's own 8,192-byte limit does not count, so attributes that assign accepted close to that limit may not be read."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_future_dated_and_oversize_exposures_are_not_sampled",
+    "test:backend/tests/unit/core/test_context_limits.py::test_size_is_counted_in_utf8_bytes_of_compact_json",
+]
+
+[[unit]]
+text = "The read has 5 seconds in all."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_read_of_quick_fetches_that_passes_the_limit_in_all_answers_503",
+    "test:backend/tests/unit/services/test_audience_service.py::TestPreviewRead::test_postgresql_gives_each_fetch_what_is_left_of_one_budget",
+]
+
+[[unit]]
+text = "It fetches rows from the database in batches and gives each fetch only the time left, so PostgreSQL stops it at 5 seconds however many fetches it has made, and the preview then answers 503 with a fixed message."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_the_read_streams_from_a_server_side_cursor",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_read_of_quick_fetches_that_passes_the_limit_in_all_answers_503",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_read_past_the_statement_timeout_answers_503",
+    "test:backend/tests/unit/services/test_audience_service.py::TestPreviewRead::test_postgresql_gives_each_fetch_what_is_left_of_one_budget",
+    "test:backend/tests/unit/services/test_audience_service.py::TestPreviewRead::test_the_read_stops_when_its_time_is_up",
+]
+
+[[unit]]
+text = "A large events table with few exposures can take that long."
+by = ["exempt:theory"]
 
 [[unit]]
 text = "The preview also refuses, before any query, regex conditions times sample_size above 500 and conditions plus groups times sample_size above 50,000, at loc [\"query\", \"sample_size\"]."

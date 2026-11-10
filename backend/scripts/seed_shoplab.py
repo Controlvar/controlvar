@@ -866,13 +866,16 @@ def seed_history(
             user_id = f"{HISTORY_USER_PREFIX}_{_short(key)}_{i:05d}"
             variant = _pick_variant(rng, variants)
             exposure_at = now - timedelta(days=rng.uniform(0.05, HISTORY_DAYS))
+            # The attributes go on the exposure too, as /tracking/assign
+            # stores them there: the segment preview reads them (#830).
+            context = {"source": "seed_shoplab"}
             assignments.append(
                 Assignment(
                     experiment_id=exp.id,
                     variant_id=variant.id,
                     user_id=user_id,
                     created_at=exposure_at,
-                    context={"source": "seed_shoplab"},
+                    context=context,
                 )
             )
             events.append(
@@ -883,6 +886,7 @@ def seed_history(
                     experiment_id=exp.id,
                     variant_id=variant.id,
                     value=1.0,
+                    event_metadata=dict(context),
                     created_at=exposure_at.isoformat(),
                 )
             )

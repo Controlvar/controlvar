@@ -2088,14 +2088,72 @@ Evaluate and bulk-evaluate hold `user_context` to the
 Over either, they answer 422 with the same `detail` as the flag routes, and no segment is
 evaluated. Bulk-evaluate checks its one `user_context` once, whatever the number of segments.
 
-`POST /api/v1/segments/{id}/preview` evaluates the rules in its body against the stored
-contexts of up to `sample_size` assignments (10 to 10,000, default 1,000). Only assignments
-that carry a context are counted, and `sample_size` in the answer is how many there were.
-Assignment does not store a context today, so the answer is usually
-`{"estimated_percentage": 0.0, "sample_size": 0, "matched": 0}`: there was nothing to
-estimate from, which is not the same as 0%. The preview also refuses, before any query,
-`regex` conditions times `sample_size` above 500 and conditions plus groups times
-`sample_size` above 50,000, at `loc` `["query", "sample_size"]`.
+**Estimating a segment's size.** `POST /api/v1/segments/{id}/preview` estimates how many users the rules in its body match,
+from the attributes users sent as `context` to `POST /api/v1/tracking/assign`. Every assign
+call records an exposure that carries those attributes. The preview reads the exposures of
+the last 30 days, newest first, and takes each user's latest one. It evaluates the rules, as
+evaluate does, against up to `sample_size` users (10 to 10,000, default 1,000) whose latest
+exposure carries attributes. Nothing is copied or stored for it: it reads the exposures where
+they are, and they are kept as long as other events are. Any role that can read segments
+may preview; the answer is counts and a share, never a stored attribute value.
+
+```{.bash exec}
+SEGMENT=$(curl -s -X POST "http://localhost:8000/api/v1/segments" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "US users", "rules": {"groups": [{"conditions": [{"attribute": "country", "operator": "equals", "value": "US"}]}]}}' | jq -r .id)
+
+curl -s -X POST "http://localhost:8000/api/v1/segments/$SEGMENT/preview?sample_size=1000" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "US users", "rules": {"groups": [{"conditions": [{"attribute": "country", "operator": "equals", "value": "US"}]}]}}' | jq .
+```
+<!-- expect: "source": "exposure_metadata" -->
+
+On a stack with traffic, the answer looks like this:
+
+```json
+{"estimated_percentage": 34.0, "sample_size": 1000, "matched": 340,
+ "source": "exposure_metadata", "window_days": 30,
+ "sampled_since": "2026-11-06T09:12:45.120391+00:00", "ended_by": "sample_size",
+ "users_without_context": 42, "reason": null}
+```
+
+- `sample_size` in the request is a maximum. In the answer it is the number of users
+  evaluated, and `matched` is how many of them the rules match.
+- `estimated_percentage` is `matched` divided by `sample_size`, as a percentage to two
+  decimals.
+- `ended_by` says what ended the read: `sample_size` (enough users were found), `cap` (the
+  read takes at most 5 exposures per user asked for, and never more than 50,000), or
+  `window` (every exposure of the last 30 days was read). `sampled_since` is the time of the
+  oldest exposure read, and `window_days` is always 30.
+- `users_without_context` counts the users read whose latest exposure carried no
+  attributes, because their SDK sent no `context`; they are not in `sample_size`. If most
+  callers send none, it is the larger number.
+- With no user with attributes, `estimated_percentage` is `null` and `reason` is
+  `no_exposures_with_context`. With 1 to 29, it is `null` and `reason` is `too_few_users`;
+  `sample_size` and `matched` are still given. This is a floor on the estimate's quality.
+
+**It is not a random sample.** Unless `ended_by` is `window`, the users are the ones seen
+most recently, since `sampled_since`, which on a busy site can be minutes ago. So the sample
+leans toward users who call assign often and toward the time of day. Use it as a sanity
+check and an order of magnitude: rules that match none of 1,000 recent users usually name an
+attribute that is misspelt or not sent. It counts only users who reached
+`/tracking/assign`: a user assigned only through `/tracking/assign/batch` has no exposure,
+and a visitor whose SDK sends attributes only after sign-in is counted from then on. It takes
+each user's latest attributes, not their first exposure's, so a user whose attributes
+changed is counted by the new ones. An exposure dated more than 5 minutes after the server's
+clock is not read, nor one whose stored attributes are longer than 8,192 bytes as PostgreSQL
+prints them. PostgreSQL prints a space after each colon and comma, which assign's own
+8,192-byte limit does not count, so attributes that assign accepted close to that limit may
+not be read.
+
+The read has 5 seconds in all. It fetches rows from the database in batches and gives each
+fetch only the time left, so PostgreSQL stops it at 5 seconds however many fetches it has
+made, and the preview then answers 503 with a fixed message. A large events table with few
+exposures can take that long. The preview also refuses, before any query, `regex`
+conditions times `sample_size` above 500 and conditions plus groups times `sample_size`
+above 50,000, at `loc` `["query", "sample_size"]`.
 
 **A segment in use cannot be archived or made inactive.** Flags and experiments target a
 segment with `in_segment` / `not_in_segment` ([Targeting Rules](#targeting-rules)).

@@ -22,6 +22,7 @@ from backend.app.schemas.segment import (
     SegmentStatus,
     SegmentUpdate,
 )
+from backend.app.services import audience_service
 from backend.app.services.audience_service import (
     AudienceService,
     SegmentRulesNotValid,
@@ -527,60 +528,302 @@ class TestGetSegmentExperiments:
 # ---------------------------------------------------------------------------
 
 
-class TestPreviewAudienceSize:
-    @staticmethod
-    def _db(contexts):
-        db = MagicMock()
-        chain = db.query.return_value.filter.return_value.limit.return_value
-        chain.all.return_value = [(c,) for c in contexts]
-        return db
+def _exposure_rows(contexts, start=0):
+    """``(user_id, event_metadata, created_at)`` rows, newest first, one user each."""
+    return [
+        (
+            f"user-{start + i}",
+            context,
+            f"2026-11-06T12:{59 - (start + i) % 60:02d}:00+00:00",
+        )
+        for i, context in enumerate(contexts)
+    ]
 
+
+class _Rows(list):
+    """The rows the read serves, and the row cap of each read (``caps``)."""
+
+    def __init__(self):
+        super().__init__()
+        self.caps: list = []
+
+
+@pytest.fixture
+def exposures(monkeypatch):
+    """Serve the preview's read from a list; returns the list to fill.
+
+    The read is replaced, not the session, so these tests see only the
+    sampling and the counting. The statement itself is covered against
+    PostgreSQL in ``test_segment_preview_exposures.py``.
+    """
+    rows = _Rows()
+
+    def read(db, since, until, cap):
+        rows.caps.append(cap)
+        yield from list(rows)
+
+    monkeypatch.setattr(audience_service, "_read_recent_exposures", read)
+    return rows
+
+
+@pytest.fixture
+def no_floor(monkeypatch):
+    """A floor of 1 user, so a share of a handful is computed."""
+    monkeypatch.setattr(audience_service, "PREVIEW_MIN_USERS", 1)
+
+
+class TestPreviewAudienceSize:
     @pytest.mark.regression
-    def test_a_time_window_that_cannot_be_read_counts_nobody(self):
+    def test_a_time_window_that_cannot_be_read_counts_nobody(self, exposures):
         """A user is not counted, and the preview does not fail (#1145)."""
-        contexts = [{"country": "US", "now": "2026-01-05T12:00:00"}, {"country": "CA"}]
+        exposures[:] = _exposure_rows(
+            [{"country": "US", "now": "2026-01-05T12:00:00"}, {"country": "CA"}]
+        )
         result = AudienceService.preview_audience_size(
-            self._db(contexts), UNREADABLE_WINDOW_RULES, sample_size=10
+            MagicMock(), UNREADABLE_WINDOW_RULES, sample_size=10
         )
 
-        assert result.model_dump() == {
-            "estimated_percentage": 0.0,
-            "sample_size": 2,
-            "matched": 0,
-        }
+        assert (result.sample_size, result.matched) == (2, 0)
+        assert result.reason == "too_few_users"
 
-    def test_preview_returns_dict_with_required_keys(self):
-        """preview_audience_size returns AudiencePreviewResponse with required fields."""
+    def test_preview_returns_the_nine_fields(self, exposures):
+        """preview_audience_size returns an AudiencePreviewResponse, nine fields."""
         result = AudienceService.preview_audience_size(
-            self._db([]), US_RULES, sample_size=100
+            MagicMock(), US_RULES, sample_size=100
         )
 
         assert isinstance(result, AudiencePreviewResponse)
-        assert hasattr(result, "estimated_percentage")
-        assert hasattr(result, "sample_size")
-        assert hasattr(result, "matched")
+        assert set(result.model_dump()) == {
+            "estimated_percentage",
+            "sample_size",
+            "matched",
+            "source",
+            "window_days",
+            "sampled_since",
+            "ended_by",
+            "users_without_context",
+            "reason",
+        }
 
-    def test_preview_returns_zero_of_zero_when_no_assignment_has_a_context(self):
-        """No context to evaluate: 0.0 of a sample of 0, never a share of rows."""
+    @pytest.mark.regression
+    def test_no_exposure_with_a_context_is_not_a_percentage(self, exposures):
+        """On main an empty sample answered 0.0, read as "matches nobody"."""
         result = AudienceService.preview_audience_size(
-            self._db([]), US_RULES, sample_size=1000
+            MagicMock(), US_RULES, sample_size=1000
         )
 
         assert result.model_dump() == {
-            "estimated_percentage": 0.0,
+            "estimated_percentage": None,
             "sample_size": 0,
             "matched": 0,
+            "source": "exposure_metadata",
+            "window_days": 30,
+            "sampled_since": None,
+            "ended_by": "window",
+            "users_without_context": 0,
+            "reason": "no_exposures_with_context",
         }
 
-    def test_only_rows_with_a_context_object_count(self):
+    def test_only_rows_with_a_context_object_count(self, exposures, no_floor):
         contexts = [{"country": "US"}, {"user": {"country": "US"}}, {"country": "DE"}]
         contexts += [{}, None, [], "US"]
+        exposures[:] = _exposure_rows(contexts)
         result = AudienceService.preview_audience_size(
-            self._db(contexts), US_RULES, sample_size=500
+            MagicMock(), US_RULES, sample_size=500
         )
 
-        assert result.model_dump() == {
-            "estimated_percentage": 66.67,
-            "sample_size": 3,
-            "matched": 2,
+        assert result.estimated_percentage == 66.67
+        assert (result.sample_size, result.matched) == (3, 2)
+        assert result.users_without_context == 4
+        assert result.sampled_since == exposures[-1][2]
+
+    def test_a_users_latest_attributes_win(self, exposures, no_floor):
+        pro = _rules(_eq("plan", "pro"))
+        exposures[:] = [
+            ("mover", {"plan": "pro"}, "2026-11-06T12:00:02+00:00"),
+            ("other", {"plan": "basic"}, "2026-11-06T12:00:01+00:00"),
+            ("mover", {"plan": "free"}, "2026-11-06T12:00:00+00:00"),
+        ]
+        result = AudienceService.preview_audience_size(MagicMock(), pro, 10)
+
+        assert (result.matched, result.sample_size) == (1, 2)
+
+    def test_a_user_whose_latest_exposure_has_no_context_is_not_sampled(
+        self, exposures, no_floor
+    ):
+        exposures[:] = [
+            ("u", {}, "2026-11-06T12:00:01+00:00"),
+            ("u", {"country": "US"}, "2026-11-06T12:00:00+00:00"),
+        ]
+        result = AudienceService.preview_audience_size(MagicMock(), US_RULES, 10)
+
+        assert (result.sample_size, result.users_without_context) == (0, 1)
+
+    @pytest.mark.parametrize("users, percentage", [(29, None), (30, 100.0)])
+    def test_the_floor_is_30_users(self, exposures, users, percentage):
+        exposures[:] = _exposure_rows([{"country": "US"}] * users)
+        result = AudienceService.preview_audience_size(MagicMock(), US_RULES, 1000)
+
+        assert result.estimated_percentage == percentage
+        assert result.reason == (None if percentage else "too_few_users")
+        assert (result.matched, result.sample_size) == (users, users)
+
+    def test_ended_by_says_what_ended_the_read(self, exposures):
+        # 10 users asked for: the read takes at most 50 rows.
+        exposures[:] = _exposure_rows([{"country": "US"}] * 12)
+        target = AudienceService.preview_audience_size(MagicMock(), US_RULES, 10)
+        assert (target.ended_by, target.sample_size) == ("sample_size", 10)
+        assert target.sampled_since == exposures[9][2]
+        assert exposures.caps == [50]
+
+        exposures[:] = [("same", {"country": "US"}, f"t{i:02d}") for i in range(50)]
+        capped = AudienceService.preview_audience_size(MagicMock(), US_RULES, 10)
+        assert (capped.ended_by, capped.sample_size) == ("cap", 1)
+        assert capped.sampled_since == "t49"
+
+        exposures[:] = _exposure_rows([{"country": "US"}] * 5)
+        window = AudienceService.preview_audience_size(MagicMock(), US_RULES, 10)
+        assert (window.ended_by, window.sample_size) == ("window", 5)
+
+
+class _Clock:
+    """``time.monotonic`` for the read, moved only by the fake fetches."""
+
+    def __init__(self):
+        self.now = 1000.0
+
+    def monotonic(self) -> float:
+        return self.now
+
+
+def _no_context_rows(count: int, start: int = 0) -> list:
+    """Rows of distinct users without attributes: the read never stops early."""
+    return [(f"u{start + i}", None, f"t{start + i:03d}") for i in range(count)]
+
+
+class TestPreviewRead:
+    """The read's guards, without a database.
+
+    Each fake fetch serves the next batch and moves the clock on by
+    ``seconds_per_fetch``, so the budget each fetch is given is exact.
+    """
+
+    @pytest.fixture
+    def clock(self, monkeypatch) -> _Clock:
+        clock = _Clock()
+        monkeypatch.setattr(audience_service, "time", clock)
+        monkeypatch.setattr(audience_service, "PREVIEW_ROWS_PER_FETCH", 2)
+        return clock
+
+    @staticmethod
+    def _db(
+        dialect: str, clock: _Clock, batches, seconds_per_fetch: float
+    ) -> MagicMock:
+        db = MagicMock()
+        db.get_bind.return_value.dialect.name = dialect
+        pending = [list(batch) for batch in batches]
+
+        def fetchmany(size):
+            assert size == 2
+            clock.now += seconds_per_fetch
+            return pending.pop(0) if pending else []
+
+        db.execute.return_value.fetchmany.side_effect = fetchmany
+        return db
+
+    @staticmethod
+    def _executed(db) -> list:
+        return [str(c.args[0]) for c in db.execute.call_args_list]
+
+    @staticmethod
+    def _budgets(db) -> list:
+        """The ``statement_timeout`` set before each statement, in order."""
+        return [
+            c.args[1]["ms"]
+            for c in db.execute.call_args_list
+            if "set_config('statement_timeout', :ms, true)" in str(c.args[0])
+        ]
+
+    def test_postgresql_gives_each_fetch_what_is_left_of_one_budget(self, clock):
+        batches = [_no_context_rows(2), _no_context_rows(2, 2), _no_context_rows(1, 4)]
+        db = self._db("postgresql", clock, batches, seconds_per_fetch=1.0)
+        result = AudienceService.preview_audience_size(db, US_RULES, 10)
+
+        # The statement, then one budget per fetch: 5 s in all, not 5 s each.
+        assert self._budgets(db) == ["5000", "5000", "4000", "3000"]
+        executed = self._executed(db)
+        assert len(executed) == 5
+        assert "events.created_at DESC" in executed[1]
+        assert db.execute.call_args_list[1].kwargs == {
+            "execution_options": {"yield_per": 2}
         }
+        # The short third batch ended the read: no fourth fetch.
+        assert (result.users_without_context, result.ended_by) == (5, "window")
+
+    @pytest.mark.parametrize(
+        "seconds_per_fetch, budgets",
+        [
+            (2.0, ["5000", "5000", "3000", "1000"]),
+            # Under a millisecond left: the read stops; 0 would turn the limit off.
+            (4.9996, ["5000", "5000"]),
+        ],
+    )
+    def test_the_read_stops_when_its_time_is_up(
+        self, clock, seconds_per_fetch, budgets
+    ):
+        batches = [_no_context_rows(2, 2 * i) for i in range(10)]
+        db = self._db("postgresql", clock, batches, seconds_per_fetch)
+        with pytest.raises(audience_service.PreviewTimedOut):
+            AudienceService.preview_audience_size(db, US_RULES, 10)
+
+        assert self._budgets(db) == budgets
+        assert "0" not in self._budgets(db)
+
+    def test_another_database_skips_the_statement_timeout_but_keeps_the_deadline(
+        self, clock
+    ):
+        batches = [_no_context_rows(2), _no_context_rows(1, 2)]
+        db = self._db("sqlite", clock, batches, seconds_per_fetch=1.0)
+        result = AudienceService.preview_audience_size(db, US_RULES, 10)
+        executed = self._executed(db)
+        assert len(executed) == 1
+        assert "set_config" not in executed[0]
+        assert result.users_without_context == 3
+
+        db = self._db("sqlite", clock, batches, seconds_per_fetch=6.0)
+        with pytest.raises(audience_service.PreviewTimedOut):
+            AudienceService.preview_audience_size(db, US_RULES, 10)
+
+    def test_only_sqlstate_57014_is_a_timeout(self):
+        class DriverError(Exception):
+            def __init__(self, pgcode):
+                self.pgcode = pgcode
+
+        class Wrapped(Exception):
+            def __init__(self, orig):
+                self.orig = orig
+
+        assert audience_service._is_statement_timeout(DriverError("57014"))
+        assert audience_service._is_statement_timeout(Wrapped(DriverError("57014")))
+        assert not audience_service._is_statement_timeout(DriverError("22012"))
+        assert not audience_service._is_statement_timeout(Wrapped(ValueError()))
+
+    def test_a_timeout_raises_preview_timed_out_and_others_propagate(self, monkeypatch):
+        class Canceled(Exception):
+            pgcode = "57014"
+
+        class Other(Exception):
+            pgcode = "22012"
+
+        for error, expected in (
+            (Canceled, audience_service.PreviewTimedOut),
+            (Other, Other),
+        ):
+
+            def read(db, since, until, cap, error=error):
+                raise error()
+                yield  # pragma: no cover
+
+            monkeypatch.setattr(audience_service, "_read_recent_exposures", read)
+            with pytest.raises(expected):
+                AudienceService.preview_audience_size(MagicMock(), US_RULES, 10)

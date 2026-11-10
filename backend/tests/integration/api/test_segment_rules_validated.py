@@ -9,7 +9,7 @@ Through the routes, against a real database:
 * a row stored before the check (the legacy shape, or one of the four
   invalid dashboard-shaped rows) answers 409 "rules not valid" at evaluate,
   and bulk-evaluate reports it as ``false`` while still answering the others;
-* the preview counts only assignments that carry a context;
+* the preview counts only users whose latest exposure carries a context;
 * ``{segment_id}`` is a UUID: other text answers 422 on every route;
 * ``python -m backend.scripts.check_targeting_rules`` lists the segments
   whose rules are not valid, and writes nothing.
@@ -20,12 +20,15 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from sqlalchemy import text
 
 from backend.app.api.v1.endpoints.segments import SEGMENT_RULES_NOT_VALID
 from backend.app.models.segment import Segment
 from backend.app.models.segment import SegmentStatus as ModelSegmentStatus
 from backend.scripts import check_targeting_rules
+from backend.tests.integration.api.test_segment_preview_exposures import (
+    _active_experiment,
+    no_exposures,
+)
 from backend.tests.unit.core.test_segment_rule_validation import (
     LEGACY,
     MARKER,
@@ -267,32 +270,30 @@ def test_bulk_evaluate_text_that_is_not_a_uuid_is_false_and_breaks_nothing(
 
 
 # ---------------------------------------------------------------------------
-# The preview counts only assignments that carry a context
+# The preview counts only users whose exposure carries a context
 # ---------------------------------------------------------------------------
-
-
-def _contexts_in_table(db_session) -> int:
-    return db_session.execute(
-        text(
-            "SELECT count(*) FROM assignments WHERE context IS NOT NULL "
-            "AND jsonb_typeof(context) = 'object' AND context <> '{}'::jsonb"
-        )
-    ).scalar_one()
 
 
 @pytest.mark.regression
 def test_preview_counts_only_assignments_with_a_context(
-    admin_client, db_session, make_experiment, make_variant, make_assignment
+    admin_client, db_session, make_experiment, no_exposures
 ):
     """On main, rows without a context were counted as sampled non-matches
-    (``sample_size: 26, matched: 0``)."""
+    (``sample_size: 26, matched: 0``). The preview reads the exposures
+    /tracking/assign writes (#830): a user assigned with no context is counted
+    in ``users_without_context``, never in the sample."""
     attribute = f"zq_preview_{uuid.uuid4().hex[:8]}"
-    experiment = make_experiment(name=f"Preview {attribute}")
-    variant = make_variant(experiment)
-    for i in range(20):
-        make_assignment(experiment, variant, f"{attribute}-none-{i}")
+    experiment = _active_experiment(db_session, make_experiment)
     segment = _create(admin_client)
     rules = _rules(_cond(attribute, "equals", "yes"))
+
+    def assign(user_id, context=None):
+        body = {"experiment_key": experiment.key, "user_id": user_id}
+        if context is not None:
+            body["context"] = context
+        response = admin_client.post("/api/v1/tracking/assign", json=body)
+        assert response.status_code == 200, response.text
+        assert response.json()["assigned"] is True, response.text
 
     def preview():
         response = admin_client.post(
@@ -302,24 +303,21 @@ def test_preview_counts_only_assignments_with_a_context(
         assert response.status_code == 200, response.text
         return response.json()
 
-    before = _contexts_in_table(db_session)
-    assert preview() == {
-        "estimated_percentage": 0.0,
-        "sample_size": before,
-        "matched": 0,
-    }
+    for i in range(20):
+        assign(f"{attribute}-none-{i}")
+    body = preview()
+    assert (body["sample_size"], body["matched"]) == (0, 0)
+    assert body["users_without_context"] == 20
+    assert body["estimated_percentage"] is None
 
     for suffix, value in (("a", "yes"), ("b", "yes"), ("c", "no")):
-        make_assignment(
-            experiment, variant, f"{attribute}-ctx-{suffix}", context={attribute: value}
-        )
-    make_assignment(
-        experiment, variant, f"{attribute}-nested", context={"user": {attribute: "yes"}}
-    )
+        assign(f"{attribute}-ctx-{suffix}", {attribute: value})
+    assign(f"{attribute}-nested", {"user": {attribute: "yes"}})
     body = preview()
-    assert body["sample_size"] == before + 4
+    assert body["sample_size"] == 4
     assert body["matched"] == 3
-    assert body["estimated_percentage"] == round(3 / (before + 4) * 100, 2)
+    assert body["users_without_context"] == 20
+    assert body["reason"] == "too_few_users"
 
 
 # ---------------------------------------------------------------------------
