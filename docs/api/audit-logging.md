@@ -284,9 +284,7 @@ written. An update records only the fields that changed, as
 `new_value`, and a delete the old ones in `old_value`. Descriptions, hypotheses, targeting
 rules, segment rules, variants, metrics and an experiment's analysis configurations
 (`variance_reduction_config` for CUPED, `sequential_testing_config`, `bayesian_config`)
-are never stored. A change to a description, a hypothesis, a rule or an analysis configuration
-is named in `new_value.changed_fields`; a change to an experiment's variants or metrics is not yet
-named there (the entry records who saved and when; #1782 tracks naming them).
+are never stored. A change to any of them is named in `new_value.changed_fields`.
 Whether sequential testing and Bayesian analysis are on (`sequential_testing_enabled`,
 `bayesian_enabled`) is stored as a value, in an experiment's create and delete entries too.
 No entry holds a password, a token, any part of an API key, or a request body.
@@ -380,8 +378,7 @@ entry. No entry ever holds:
 - request bodies, IP addresses or user agents;
 - the contents of descriptions, hypotheses, targeting rules, segment rules, variants,
   metrics and an experiment's CUPED, sequential testing and Bayesian configurations
-  (descriptions, hypotheses, rules and those configurations are named under `changed_fields`;
-  an experiment's variants and metrics are not yet named, #1782);
+  (a change to one is named under `changed_fields`);
 - error text;
 - changes made directly in the database rather than through the platform.
 

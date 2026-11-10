@@ -46,16 +46,20 @@ from backend.app.core.metrics import audit_write_failures_total
 from backend.app.main import app
 from backend.app.middleware import rate_limiter
 from backend.app.models.api_key import APIKey
-from backend.app.models.audit_log import AuditLog
+from backend.app.models.audit_log import ActionType, AuditLog, EntityType
 from backend.app.models.bandit_state import BanditState
-from backend.app.models.experiment import Experiment, ExperimentStatus
+from backend.app.models.experiment import Experiment, ExperimentStatus, Variant
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.models.global_holdout import GlobalHoldout
 from backend.app.models.mutual_exclusion_group import MutualExclusionGroup
 from backend.app.models.rollout_schedule import RolloutSchedule
 from backend.app.models.segment import Segment
 from backend.app.models.user import User, UserRole
-from backend.app.services.audit_service import AuditService
+from backend.app.services.audit_service import (
+    AuditService,
+    audit_snapshot,
+    record_experiment_change,
+)
 from backend.app.services.cognito_accounts import cognito_external_id
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db]
@@ -637,36 +641,179 @@ def test_experiment_create_update_delete(client, fresh, developer):
     )
 
 
-def test_a_design_save_records_the_save_but_not_which_parts_changed(
-    client, fresh, developer
-):
-    """Today a design save names neither variants nor metrics in the entry.
-
-    A PUT of ``{variants, metrics}`` on a draft writes one ``experiment_update``
-    entry with the user and the time, but ``old_value`` and ``new_value`` are
-    both null, so ``changed_fields`` does not name the variants or the metrics.
-    The audit-logging page says so (#1782). This pins that fact; #1782 will
-    name them, and this test then changes with it.
-    """
-    exp = _create_experiment(client, developer)
-
-    w = Written(fresh)
+def _design():
+    """The dashboard's design save: every variant and every metric, re-sent."""
     payload = _experiment_payload()
-    payload["variants"][0]["name"] = "Control renamed"
-    payload["metrics"][0]["name"] = "Conversion Rate renamed"
+    return {"variants": payload["variants"], "metrics": payload["metrics"]}
+
+
+def _save_design(client, user, exp, design):
     response = client.put(
-        f"{V1}/experiments/{exp['id']}",
-        json={"variants": payload["variants"], "metrics": payload["metrics"]},
-        headers=_auth(developer),
+        f"{V1}/experiments/{exp['id']}", json=design, headers=_auth(user)
     )
     assert response.status_code == 200, response.text
+
+
+@pytest.mark.regression
+def test_a_design_save_names_the_variants_and_metrics_it_changed(
+    client, fresh, developer
+):
+    """A design save names the variants and the metrics it changed (#1782).
+
+    A PUT of ``{variants, metrics}`` on a draft writes one ``experiment_update``
+    entry whose ``new_value.changed_fields`` names both parts, sorted, and
+    holds nothing else: no variant or metric name or content is stored.
+    Before #1782 both values were null.
+    """
+    exp = _create_experiment(client, developer)
+    design = _design()
+    design["variants"][0]["name"] = "Control renamed"
+    design["metrics"][0]["name"] = "Conversion Rate renamed"
+
+    w = Written(fresh)
+    _save_design(client, developer, exp, design)
     row = _one(w, "experiment_update", "experiment", exp["id"], developer, v2_delta=1)
     assert row.timestamp is not None
-    old, new = _values(row)
-    named = set((old or {}).keys()) | set((new or {}).keys())
-    assert "variants" not in named and "metrics" not in named
-    assert "variants" not in (new or {}).get("changed_fields", [])
-    assert "metrics" not in (new or {}).get("changed_fields", [])
+    assert (_values(row), row.reason) == (
+        (None, {"changed_fields": ["metrics", "variants"]}),
+        None,
+    )
+
+
+# Each case changes a design save and returns the (old_value, new_value) its
+# entry must hold.
+
+
+def _split_only(exp, design):
+    design["variants"][0]["traffic_allocation"] = 10
+    design["variants"][1]["traffic_allocation"] = 90
+    return None, {"changed_fields": ["variants"]}
+
+
+def _configuration_only(exp, design):
+    design["variants"][1]["configuration"] = {"button_color": "green"}
+    return None, {"changed_fields": ["variants"]}
+
+
+def _metrics_only(exp, design):
+    design["metrics"][0]["event_name"] = "checkout"
+    return None, {"changed_fields": ["metrics"]}
+
+
+def _unchanged(exp, design):
+    return None, None
+
+
+def _experiment_renamed(exp, design):
+    design["name"] = f"{P} exp renamed"
+    design["variants"][1]["name"] = "Treatment renamed"
+    design["metrics"][0]["name"] = "Conversion Rate renamed"
+    return (
+        {"name": exp["name"]},
+        {"name": f"{P} exp renamed", "changed_fields": ["metrics", "variants"]},
+    )
+
+
+@pytest.mark.parametrize(
+    "change",
+    [_split_only, _configuration_only, _metrics_only, _unchanged, _experiment_renamed],
+    ids=lambda change: change.__name__.lstrip("_"),
+)
+def test_a_design_save_names_exactly_the_parts_it_changed(
+    client, fresh, developer, change
+):
+    """One entry per save, in D8's one format: only what changed is named.
+
+    Every save re-sends both lists, so every save re-creates the rows; a part
+    whose rows hold the same values is not named.
+    """
+    exp = _create_experiment(client, developer)
+    design = _design()
+    expected = change(exp, design)
+
+    w = Written(fresh)
+    _save_design(client, developer, exp, design)
+    row = _one(w, "experiment_update", "experiment", exp["id"], developer, v2_delta=1)
+    assert (_values(row), row.reason) == (expected, None)
+
+
+def test_an_entry_reads_the_rows_a_save_wrote_not_the_rows_the_session_held(
+    client, fresh, developer
+):
+    """``record_experiment_change`` reloads the variants and metrics.
+
+    A session that does not expire on commit keeps the rows it loaded for the
+    ``before`` snapshot in the experiment's collections after a save has
+    replaced them; the entry must compare the saved rows.
+    """
+    exp = _create_experiment(client, developer)
+    session = fresh()
+    try:
+        row = session.get(Experiment, uuid.UUID(exp["id"]))
+        before = audit_snapshot(EntityType.EXPERIMENT, row)
+        for variant in list(row.variants):
+            session.delete(variant)
+        session.flush()
+        for name, control, share in (("Control", True, 10), ("Treatment", False, 90)):
+            session.add(
+                Variant(
+                    experiment_id=row.id,
+                    name=name,
+                    is_control=control,
+                    traffic_allocation=share,
+                )
+            )
+        session.commit()
+
+        w = Written(fresh)
+        record_experiment_change(
+            session, developer, ActionType.EXPERIMENT_UPDATE, row.id, before
+        )
+    finally:
+        session.close()
+    entry = _one(w, "experiment_update", "experiment", exp["id"], developer)
+    assert _values(entry) == (None, {"changed_fields": ["variants"]})
+
+
+def test_a_pause_writes_the_entry_it_wrote_before_variants_were_named(
+    client, fresh, developer
+):
+    """The writers that pass ``before`` but change no variant or metric row
+    write the entries they wrote before #1782; here a route, and below a
+    differently shaped writer (the bandit weights override)."""
+    exp = _create_experiment(client, developer)
+    h = _auth(developer)
+    response = client.post(f"{V1}/experiments/{exp['id']}/start", headers=h)
+    assert response.status_code == 200, response.text
+
+    w = Written(fresh)
+    response = client.post(f"{V1}/experiments/{exp['id']}/pause", headers=h)
+    assert response.status_code == 200, response.text
+    row = _one(w, "experiment_pause", "experiment", exp["id"], developer)
+    assert (_values(row), row.reason) == (
+        ({"status": "active"}, {"status": "paused"}),
+        None,
+    )
+
+
+def test_bandit_weights_on_an_experiment_with_a_design_name_nothing(
+    client, fresh, db_session, admin
+):
+    exp = _create_experiment(client, admin)
+    stored = db_session.get(Experiment, uuid.UUID(exp["id"]))
+    stored.status = ExperimentStatus.ACTIVE
+    stored.optimization_type = "thompson_sampling"
+    db_session.commit()
+
+    w = Written(fresh)
+    response = client.put(
+        f"{V1}/bandit/{exp['id']}/weights",
+        json={"weights": {"Control": 0.5, "Treatment": 0.5}},
+        headers=_auth(admin),
+    )
+    assert response.status_code == 200, response.text
+    row = _one(w, "experiment_update", "experiment", exp["id"], admin)
+    assert (_values(row), row.reason) == ((None, None), "bandit weights")
 
 
 def test_experiment_lifecycle(client, fresh, developer):
@@ -1448,6 +1595,23 @@ def test_free_text_never_reaches_an_entry(client, fresh, db_session, developer):
     payload.update(description=canary, hypothesis=canary)
     exp = client.post(f"{V1}/experiments/", json=payload, headers=h)
     assert exp.status_code == 201, exp.text
+    # A design save with the canary in every free-text field of the variants
+    # and the metric: its entry may name the two parts, never hold their text.
+    design = _design()
+    for i, variant in enumerate(design["variants"]):
+        variant.update(
+            name=f"{canary}v{i}",
+            description=canary,
+            configuration={canary: canary},
+        )
+    design["metrics"][0].update(
+        name=canary,
+        description=canary,
+        event_name=canary,
+        event_value_path=canary,
+    )
+    saved = client.put(f"{V1}/experiments/{exp.json()['id']}", json=design, headers=h)
+    assert saved.status_code == 200, saved.text
     seg = client.post(
         f"{V1}/segments",
         json={
@@ -1459,7 +1623,7 @@ def test_free_text_never_reaches_an_entry(client, fresh, db_session, developer):
     )
     assert seg.status_code in (200, 201), seg.text
     rows = w.rows()
-    assert len(rows) == 4
+    assert len(rows) == 5
     for row in rows:
         for column in (
             row.entity_name,
