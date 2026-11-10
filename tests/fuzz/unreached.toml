@@ -104,6 +104,21 @@
 # superuser pass on main after #1842 and on the head of the pull request that
 # changed these entries, the viewer pass on that head (its flag-by-id
 # requests come before any request that head answers differently from main).
+#
+# Then #1001 bounded every skip, page and offset at the largest offset
+# PostgreSQL takes (int64 in the document), on the 16 list operations that
+# take one. That changed the requests the seed generates for them, and with
+# them the ids Schemathesis reuses from earlier answers: the superuser pass no
+# longer sends the POST /api/v1/experiments/{experiment_id}/complete that
+# named the experiment its coverage phase had started (200). Every id it sends
+# that passes validation names a draft experiment (400), although the run has
+# an active one, so it no longer reaches it, and its list is 107: the 106 of
+# #1853's paragraph below (#1853 merged first) and this one. On #1001's head
+# alone the pass also no longer reached GET /api/v1/bandit/{experiment_id},
+# which #1853 lists. The viewer pass's list does not change. Read from
+# fuzz_check's evaluation of local runs of both passes at this seed on the
+# pull request's head merged with main (3c13e68d); a local run of the
+# superuser pass on that head alone gave the counts of its CI run.
 
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
@@ -156,6 +171,11 @@ reason = "The handler refuses the generated values (400); ids that name no store
 pass = "superuser"
 operation = "POST /api/v1/experiments/{experiment_id}/pause"
 reason = "The handler refuses the generated values (400); invalid requests answer 422."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/experiments/{experiment_id}/complete"
+reason = "No request names an active or paused experiment: every id sent that passes validation names a draft (400), and the other requests fail validation (422)."
 
 [[unreached]]
 pass = "superuser"
