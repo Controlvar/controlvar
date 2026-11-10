@@ -450,7 +450,7 @@ describe('evaluateFlag', () => {
     expect(fetchMock()).toHaveBeenCalledTimes(2);
   });
 
-  test('404 (flag unknown / not active) → disabled, reported, and NOT cached', async () => {
+  test('404 (unknown flag key) → disabled, reported, and NOT cached', async () => {
     const onError = jest.fn();
     mockFetchAlways({ detail: 'Not found' }, 404);
     const client = makeClient({ onError });

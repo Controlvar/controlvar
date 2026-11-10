@@ -130,8 +130,9 @@ public class ExperimentationClient implements AutoCloseable {
      * @param user    the user to evaluate the flag for
      * @param flagKey the feature flag key (e.g., "new-checkout-flow")
      * @return the server's evaluation (key, enabled, config)
-     * @throws ExperimentationException on a non-2xx response (404 when the flag is not
-     *                                  ACTIVE or unknown, 401 for a bad key), a network error,
+     * @throws ExperimentationException on a non-2xx response (404 when the flag key is
+     *                                  unknown, 401 for a bad key; a flag that is not ACTIVE is a
+     *                                  200 answer with enabled false, not an error), a network error,
      *                                  a 2xx body that is not the expected JSON, or attributes
      *                                  that cannot be written as JSON (nothing is sent then)
      */
