@@ -42,12 +42,17 @@ export interface AttributedKeyList {
 export class AttributedKeys {
   /**
    * How long a key is used after its latest answer: 24 hours, or the cache lifetime when
-   * that is longer, so a cached answer never outlives the record that tags its events (#1423).
+   * that is longer, and for ever when cached answers never expire (`Infinity`, `NaN`), so a
+   * cached answer never outlives the record that tags its events (#1423, #1540).
    */
   private readonly horizonMs: number;
 
   constructor(cacheTtlMs: number = 0) {
-    this.horizonMs = Math.max(ATTRIBUTION_HORIZON_MS, Number.isFinite(cacheTtlMs) ? cacheTtlMs : 0);
+    // `UserKeyCache` expires an entry when `Date.now() > now + ttl`: never for `Infinity` and
+    // `NaN` (the comparison with NaN is false), at once for a negative value. The record never
+    // expires with the cache; for any other value it is 24 hours or the lifetime, whichever is longer.
+    const neverExpires = cacheTtlMs === Infinity || Number.isNaN(cacheTtlMs);
+    this.horizonMs = neverExpires ? Infinity : Math.max(ATTRIBUTION_HORIZON_MS, cacheTtlMs);
   }
 
   /** Map order is answer order: the first user is the one answered least recently. */
