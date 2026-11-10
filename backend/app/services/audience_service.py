@@ -22,13 +22,15 @@ context's ``user_id`` is one of them.
 
 import logging
 import time
-from typing import Any, Dict, List, Optional, Tuple, Union
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
 from uuid import UUID
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
+from backend.app.core.context_limits import MAX_CONTEXT_BYTES
 from backend.app.core.pattern_match import PatternUnevaluable, report_unevaluable
 from backend.app.core.rules_engine import TimeWindowUnreadable, evaluate_condition
 from backend.app.core.targeting_adapter import (
@@ -38,6 +40,7 @@ from backend.app.core.targeting_adapter import (
     match_targeting_rule,
     validate_segment_rules,
 )
+from backend.app.models.event import Event
 from backend.app.models.experiment import Experiment
 from backend.app.models.feature_flag import FeatureFlag
 from backend.app.models.segment import Segment, SegmentKind, SegmentMember
@@ -57,6 +60,7 @@ from backend.app.schemas.segment import (
 )
 from backend.app.schemas.storable_text import contains_unstorable_text
 from backend.app.schemas.targeting_rule import TargetingRules
+from backend.app.services.event_matching import EXPOSURE_EVENT_TYPES
 from backend.app.services.segment_membership import (
     balance_references,
     segment_in_use_detail,
@@ -68,6 +72,142 @@ logger = logging.getLogger(__name__)
 #: An id-list segment holds at most this many user ids (#440). Read at call
 #: time, so a test can lower it.
 MAX_SEGMENT_MEMBERS = 1_000_000
+
+# ---------------------------------------------------------------------------
+# The audience preview (#830): recent exposures and the attributes on them
+# ---------------------------------------------------------------------------
+
+#: The preview reads exposures from at most this many days back. Fixed, and
+#: returned as ``window_days``.
+PREVIEW_WINDOW_DAYS = 30
+#: An exposure dated more than this many seconds after the server's clock is
+#: not read: its time came from a client. Ordinary clock drift is far less.
+PREVIEW_FUTURE_SKEW_SECONDS = 300
+#: The preview reads at most this many rows ...
+PREVIEW_MAX_ROWS = 50_000
+#: ... and at most this many per user asked for (``preview_candidate_cap``).
+PREVIEW_ROWS_PER_USER = 5
+#: With fewer users with attributes than this, there is no percentage
+#: (``reason: too_few_users``). A floor on the estimate's quality only.
+PREVIEW_MIN_USERS = 30
+#: The preview's whole read, every fetch and the work between them, has this
+#: long; past it the read stops (``PreviewTimedOut``).
+PREVIEW_READ_TIMEOUT_MS = 5000
+#: Rows fetched from the server per round trip while the read streams.
+PREVIEW_ROWS_PER_FETCH = 1000
+#: SQLSTATE ``query_canceled``: what PostgreSQL raises at a statement timeout.
+STATEMENT_TIMEOUT_SQLSTATE = "57014"
+
+
+def preview_candidate_cap(sample_size: int) -> int:
+    """The most rows a preview of ``sample_size`` users reads."""
+    return min(PREVIEW_MAX_ROWS, PREVIEW_ROWS_PER_USER * sample_size)
+
+
+class PreviewTimedOut(Exception):
+    """The preview's read passed ``PREVIEW_READ_TIMEOUT_MS``.
+
+    Raised when PostgreSQL cancels a fetch at the time left (SQLSTATE 57014),
+    or when no time is left before the next fetch.
+    """
+
+
+def recent_exposures_statement(since: datetime, until: datetime, cap: int) -> sa.Select:
+    """The preview's one read: exposures in ``[since, until]``, newest first.
+
+    ``since`` and ``until`` are server times; ``Event.created_at`` binds them
+    as UTC ISO-8601 text, the column's format. A row whose stored metadata is
+    longer than ``MAX_CONTEXT_BYTES`` in PostgreSQL's text form is left in
+    the database, so no row the preview reads is larger. That form puts a
+    space after each ``:`` and ``,``, so a context ``/tracking/assign``
+    accepted close to its limit (measured compact) can be over it and is not
+    read. A row with no metadata is read and counted as a user without
+    attributes.
+    """
+    metadata_bytes = sa.func.coalesce(
+        sa.func.octet_length(sa.cast(Event.event_metadata, sa.Text)), 0
+    )
+    return (
+        sa.select(Event.user_id, Event.event_metadata, Event.created_at)
+        .where(Event.event_type.in_(EXPOSURE_EVENT_TYPES))
+        .where(Event.created_at >= since)
+        .where(Event.created_at <= until)
+        .where(metadata_bytes <= MAX_CONTEXT_BYTES)
+        .order_by(Event.created_at.desc())
+        .limit(cap)
+    )
+
+
+def _on_postgresql(db: Session) -> bool:
+    dialect = getattr(getattr(db.get_bind(), "dialect", None), "name", None)
+    return dialect == "postgresql"
+
+
+def _limit_next_statement(db: Session, deadline: float, on_postgresql: bool) -> None:
+    """Give the read's next statement the time left before ``deadline``.
+
+    ``deadline`` is on ``time.monotonic()``. A server-side cursor's every
+    FETCH is a statement of its own, and PostgreSQL starts
+    ``statement_timeout`` again on each, so it is set to the time left before
+    each one: PostgreSQL cancels whichever fetch is under way at the deadline
+    (SQLSTATE 57014). With less than a millisecond left the read stops here
+    instead, since a timeout of 0 would turn the limit off.
+
+    ``set_config('statement_timeout', ..., true)`` is ``SET LOCAL``: it lasts
+    until the transaction ends, which the request's session does when it
+    closes. Other databases (SQLite in tests) have no such setting; the
+    deadline is still checked before each fetch.
+    """
+    left_ms = int((deadline - time.monotonic()) * 1000)
+    if left_ms < 1:
+        raise PreviewTimedOut()
+    if on_postgresql:
+        db.execute(
+            sa.text("SELECT set_config('statement_timeout', :ms, true)"),
+            {"ms": str(left_ms)},
+        )
+
+
+def _read_recent_exposures(
+    db: Session, since: datetime, until: datetime, cap: int
+) -> Iterator[Tuple[str, Any, str]]:
+    """``(user_id, event_metadata, created_at)`` of recent exposures, streamed.
+
+    The statement runs on a server-side cursor (``yield_per``) and rows are
+    fetched ``PREVIEW_ROWS_PER_FETCH`` at a time, so a caller that stops
+    early never holds more; closing the generator closes the cursor. The
+    whole read has ``PREVIEW_READ_TIMEOUT_MS`` from here, and the time left
+    is given to each fetch (``_limit_next_statement``), so the caller's work
+    between fetches counts too.
+    """
+    deadline = time.monotonic() + PREVIEW_READ_TIMEOUT_MS / 1000.0
+    on_postgresql = _on_postgresql(db)
+    _limit_next_statement(db, deadline, on_postgresql)
+    result = db.execute(
+        recent_exposures_statement(since, until, cap),
+        execution_options={"yield_per": PREVIEW_ROWS_PER_FETCH},
+    )
+    try:
+        while True:
+            _limit_next_statement(db, deadline, on_postgresql)
+            # At most one fetch from the server per call: SQLAlchemy asks the
+            # driver only for the rows its buffer lacks.
+            batch = result.fetchmany(PREVIEW_ROWS_PER_FETCH)
+            for user_id, metadata, created_at in batch:
+                yield user_id, metadata, created_at
+            if len(batch) < PREVIEW_ROWS_PER_FETCH:
+                return
+    finally:
+        result.close()
+
+
+def _is_statement_timeout(exc: BaseException) -> bool:
+    """Whether ``exc`` (or the driver error it wraps) is SQLSTATE 57014."""
+    for error in (exc, getattr(exc, "orig", None)):
+        code = getattr(error, "pgcode", None) or getattr(error, "sqlstate", None)
+        if code == STATEMENT_TIMEOUT_SQLSTATE:
+            return True
+    return False
 
 
 class SegmentChangeRefused(Exception):
@@ -706,52 +846,95 @@ class AudienceService:
         sample_size: int = 1000,
     ) -> AudiencePreviewResponse:
         """
-        Estimate the share of users the given rules would match.
+        Estimate the share of the users seen most recently that ``rules`` match.
 
-        Samples at most ``sample_size`` assignments that carry a context and
-        evaluates the rules against each context, as membership does. Only
-        those rows count: ``sample_size`` in the answer is how many there
-        were, and with none the answer is ``0.0`` of ``0``, not a percentage
-        of rows that could not be evaluated.
+        Reads exposures (``/tracking/assign`` writes one on every call) newest
+        first, from the last ``PREVIEW_WINDOW_DAYS`` days, and keeps each
+        user's latest one. A user whose latest exposure carries attributes (a
+        non-empty object, stored from the call's ``context``) is evaluated
+        against the rules, as membership does; any other user is counted in
+        ``users_without_context`` only. The read stops at ``sample_size`` such
+        users, at ``preview_candidate_cap(sample_size)`` rows, or at the start
+        of the window, and ``ended_by`` says which. It is one statement,
+        streamed, with ``PREVIEW_READ_TIMEOUT_MS`` for the whole read; nothing
+        is written.
+
+        With fewer than ``PREVIEW_MIN_USERS`` users the answer has no
+        percentage (``reason`` says why), so a share of a handful of users is
+        never shown as an estimate.
 
         Args:
             db: SQLAlchemy session.
             rules: Rules that passed ``validate_segment_rules`` (the
                 ``SegmentCreate`` body).
-            sample_size: Maximum number of assignments to sample.
+            sample_size: At most this many users are evaluated.
 
-        Returns:
-            AudiencePreviewResponse with estimated_percentage, sample_size, and matched.
+        Raises:
+            PreviewTimedOut: the read passed ``PREVIEW_READ_TIMEOUT_MS`` in
+                all: PostgreSQL cancelled a fetch at the time left (SQLSTATE
+                57014), or none was left before the next fetch. Any other
+                database error propagates unchanged.
         """
-        from backend.app.models.assignment import Assignment
-
         engine_rules = validate_segment_rules(rules)
-        rows = (
-            db.query(Assignment.context)
-            .filter(Assignment.context.isnot(None))
-            .limit(sample_size)
-            .all()
-        )
+        cap = preview_candidate_cap(sample_size)
+        now = datetime.now(timezone.utc)
+        since = now - timedelta(days=PREVIEW_WINDOW_DAYS)
+        until = now + timedelta(seconds=PREVIEW_FUTURE_SKEW_SECONDS)
 
+        seen: Set[str] = set()
+        sample = 0
         matched = 0
-        actual_sample = 0
-        for (context,) in rows:
-            if not isinstance(context, dict) or not context:
-                continue
-            actual_sample += 1
-            try:
-                if _is_member(engine_rules, expand_context(context)):
-                    matched += 1
-            except (PatternUnevaluable, TimeWindowUnreadable):
-                # Not counted, like any user the rules do not match.
-                pass
+        without_context = 0
+        rows_read = 0
+        oldest: Optional[str] = None
+        ended_by = "window"
+        rows = _read_recent_exposures(db, since, until, cap)
+        try:
+            for user_id, metadata, created_at in rows:
+                rows_read += 1
+                oldest = created_at
+                if user_id in seen:
+                    # An older exposure of a user already counted: the latest wins.
+                    continue
+                seen.add(user_id)
+                if not isinstance(metadata, dict) or not metadata:
+                    without_context += 1
+                    continue
+                sample += 1
+                try:
+                    if _is_member(engine_rules, expand_context(metadata)):
+                        matched += 1
+                except (PatternUnevaluable, TimeWindowUnreadable):
+                    # Not counted, like any user the rules do not match.
+                    pass
+                if sample >= sample_size:
+                    ended_by = "sample_size"
+                    break
+            else:
+                if rows_read >= cap:
+                    ended_by = "cap"
+        except Exception as exc:
+            if _is_statement_timeout(exc):
+                raise PreviewTimedOut() from None
+            raise
+        finally:
+            rows.close()
 
-        estimated_percentage = (
-            (matched / actual_sample * 100.0) if actual_sample > 0 else 0.0
-        )
+        if sample == 0:
+            percentage, reason = None, "no_exposures_with_context"
+        elif sample < PREVIEW_MIN_USERS:
+            percentage, reason = None, "too_few_users"
+        else:
+            percentage, reason = round(matched / sample * 100.0, 2), None
 
         return AudiencePreviewResponse(
-            estimated_percentage=round(estimated_percentage, 2),
-            sample_size=actual_sample,
+            estimated_percentage=percentage,
+            sample_size=sample,
             matched=matched,
+            source="exposure_metadata",
+            window_days=PREVIEW_WINDOW_DAYS,
+            sampled_since=oldest,
+            ended_by=ended_by,
+            users_without_context=without_context,
+            reason=reason,
         )

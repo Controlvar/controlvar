@@ -38,10 +38,24 @@ export interface SegmentMembership {
   is_member: boolean;
 }
 
+/**
+ * A preview's answer: how many of the users seen most recently (their latest
+ * exposure, from `/tracking/assign`, in the last `window_days`) the rules match.
+ */
 export interface AudiencePreview {
-  estimated_percentage: number;
+  /** `matched / sample_size x 100`; null when `reason` is set. */
+  estimated_percentage: number | null;
+  /** Users evaluated: those whose latest exposure carried attributes. */
   sample_size: number;
   matched: number;
+  source: 'exposure_metadata';
+  window_days: number;
+  /** UTC ISO-8601 time of the oldest exposure read; null when none was read. */
+  sampled_since: string | null;
+  /** What ended the read: enough users, the row cap, or the window's start. */
+  ended_by: 'sample_size' | 'cap' | 'window';
+  users_without_context: number;
+  reason: 'no_exposures_with_context' | 'too_few_users' | null;
 }
 
 export interface MembersAdded {
@@ -126,7 +140,7 @@ export const SegmentsService = {
     });
   },
 
-  /** Estimate how many recently assigned users `rules` match. */
+  /** Estimate how many of the users seen most recently `rules` match. */
   preview(id: string, name: string, rules: Record<string, unknown>): Promise<AudiencePreview> {
     return apiFetch<AudiencePreview>(`/api/v1/segments/${encodeURIComponent(id)}/preview`, {
       method: 'POST',
