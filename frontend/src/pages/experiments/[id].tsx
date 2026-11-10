@@ -9,6 +9,8 @@ import { ApiKeyRouteHint } from '@/components/experiments/ApiKeyRouteHint';
 import WarehouseAnalysisSection from '@modules/components/warehouse/runs/WarehouseAnalysisSection';
 import { useAuth } from '@/contexts/AuthContext';
 import { EligibilityUser, useExperimentEligibility } from '@/hooks/useExperimentEligibility';
+import { useSegmentList } from '@/hooks/useSegmentList';
+import { balanceSummary } from '@/components/experiments/new/balanceWithin';
 import { isApiError } from '@/services/api';
 import { docsUrl } from '@/services/docs';
 import { ExperimentsService } from '@/services/experiments';
@@ -83,6 +85,24 @@ function formatDate(value: string | null | undefined): string {
 export function algorithmLabel(optimizationType: string | null | undefined): string | null {
   if (!optimizationType || optimizationType === 'fixed') return null;
   return OPTIMIZATION_TYPE_LABELS[optimizationType as OptimizationType] ?? optimizationType;
+}
+
+/**
+ * The header's "Balance" row: what the split is balanced within ("within
+ * Platform (ios, android, web)", or the segments by name) or "off". Read-only:
+ * a draft changes it in "Edit variants and metrics", and it is fixed once the
+ * experiment has started. Saved segments are loaded only when it lists some.
+ */
+function BalanceRow({ setting }: { setting: Experiment['balance_within'] }) {
+  const segmentList = useSegmentList(Boolean(setting?.segments?.length));
+  const names =
+    segmentList.state === 'ready' ? new Map(segmentList.segments.map((s) => [s.id, s.name] as const)) : null;
+  return (
+    <div className="flex items-center gap-1.5">
+      <dt className="text-slate-500">Balance</dt>
+      <dd data-testid="experiment-balance">{balanceSummary(setting ?? null, names)}</dd>
+    </div>
+  );
 }
 
 /** The header's term for an experiment's start or end date. */
@@ -492,6 +512,7 @@ export default function ExperimentDetailPage() {
                     <dd data-testid="experiment-algorithm">{algorithm}</dd>
                   </div>
                 )}
+                {experiment.balance_within !== undefined && <BalanceRow setting={experiment.balance_within} />}
                 <div className="flex items-center gap-1.5">
                   <dt className="text-slate-500">Owner</dt>
                   <dd data-testid="experiment-owner" title={experiment.owner_id ?? undefined}>

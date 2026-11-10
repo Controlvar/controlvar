@@ -139,6 +139,17 @@ It prints `8`.
 
 ---
 
+## Balanced groups
+
+An experiment that balances its split within groups also answers
+`GET /api/v1/results/{experiment_id}/balanced-groups` (beta). Its rows are built the same way,
+with each user in the group stored when they were assigned instead of their first value, and it
+adds one estimate over the groups.
+[Balance the split within groups](../guides/balance-within-groups.md#results-by-group) says what
+it returns and where the two differ.
+
+---
+
 ## API Reference
 
 ### GET /api/v1/results/{experiment_id}?breakdown={dimension}

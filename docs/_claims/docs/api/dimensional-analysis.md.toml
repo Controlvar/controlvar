@@ -432,3 +432,26 @@ by = [
     "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_every_shipped_role_keeps_its_answer_on_each_route",
     "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_no_base_role_is_refused_on_results_routes",
 ]
+
+[[unit]]
+text = "Balanced groups"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An experiment that balances its split within groups also answers GET /api/v1/results/{experiment_id}/balanced-groups (beta)."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_rows_are_the_stored_groups_and_add_up_to_every_user",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_the_balanced_groups_route_is_beta_and_carries_no_place_in_a_group",
+]
+
+[[unit]]
+text = "Its rows are built the same way, with each user in the group stored when they were assigned instead of their first value, and it adds one estimate over the groups."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_for_users_assigned_with_a_listed_value_the_rows_are_the_breakdowns",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_a_later_keyed_event_moves_the_breakdown_and_not_the_group",
+    "test:backend/tests/unit/services/test_balanced_groups_rows_one_source.py",
+]
+
+[[unit]]
+text = "Balance the split within groups says what it returns and where the two differ."
+by = ["exempt:navigation"]

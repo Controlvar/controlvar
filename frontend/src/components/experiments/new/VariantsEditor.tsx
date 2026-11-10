@@ -31,7 +31,16 @@ interface VariantsEditorProps {
    */
   invalid?: { index: number; field: 'name' | 'traffic_allocation' | 'is_control' } | null;
   invalidDescribedBy?: string;
+  /**
+   * The API's refusal of this split for a balanced experiment, shown under the
+   * allocations it is about. Every allocation field then carries
+   * `aria-invalid` and `aria-describedby` pointing at it.
+   */
+  splitProblem?: string | null;
 }
+
+/** The id of the line `splitProblem` is shown in. */
+export const SPLIT_PROBLEM_ID = 'balance-split-error';
 
 const hasText = (v: VariantFormData) => (v.configuration_text ?? '').trim() !== '';
 
@@ -42,8 +51,18 @@ export function VariantsEditor({
   revealProblems = 0,
   invalid = null,
   invalidDescribedBy,
+  splitProblem = null,
 }: VariantsEditorProps) {
   const allocationTotal = allocationTotalOf(variants);
+  // An allocation field is described by the split's refusal, and by a refusal shown elsewhere when it is the one marked.
+  const allocationMarks = (index: number) => {
+    const marked = marks(index, 'traffic_allocation');
+    if (!splitProblem) return marked;
+    const describedBy = [SPLIT_PROBLEM_ID, (marked as { 'aria-describedby'?: string })['aria-describedby']]
+      .filter(Boolean)
+      .join(' ');
+    return { 'aria-invalid': true as const, 'aria-describedby': describedBy };
+  };
   const problems = configurationProblems(variants);
   // A radio takes no aria-invalid; it is described by the refusal only.
   const marks = (index: number, field: 'name' | 'traffic_allocation' | 'is_control') =>
@@ -113,6 +132,12 @@ export function VariantsEditor({
         </button>
       </div>
 
+      {splitProblem && (
+        <p id={SPLIT_PROBLEM_ID} className="text-sm text-red-700" data-testid={SPLIT_PROBLEM_ID}>
+          {splitProblem}
+        </p>
+      )}
+
       <div className="space-y-3">
         {variants.map((variant, index) => (
           <div
@@ -142,7 +167,7 @@ export function VariantsEditor({
                     onChange={(value) =>
                       dispatch({ type: 'changeVariant', index, field: 'traffic_allocation', value })
                     }
-                    marks={marks(index, 'traffic_allocation')}
+                    marks={allocationMarks(index)}
                   />
                   <span className="text-xs text-slate-500">%</span>
                 </div>

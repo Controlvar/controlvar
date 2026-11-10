@@ -1854,6 +1854,22 @@ an experiment in `draft` answers `400`. The breakdown with a test per segment is
 
 ---
 
+### Balanced Groups (beta)
+
+See [Balance the split within groups](../guides/balance-within-groups.md#results-by-group) for
+full documentation.
+
+```text
+GET /api/v1/results/{experiment_id}/balanced-groups
+```
+Returns an experiment that balances its split within groups by the group each user was balanced
+in: one row per group, one estimate per treatment over the groups (`overall`, or `null` with a
+`reason`), `merged_groups`, `users_outside_blocks`, `unknown_share` and `engine_version`. It takes
+no query parameters and is computed on each request. An experiment that does not balance within
+groups answers **409**.
+
+---
+
 ### Multi-Armed Bandit
 
 See [Multi-Armed Bandit Guide](multi-armed-bandit.md) for full documentation.

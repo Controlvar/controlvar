@@ -7,6 +7,7 @@ import { AdvancedForm } from '@/components/experiments/new/AdvancedForm';
 import { Wizard, NEW_EXPERIMENT_PATH } from '@/components/experiments/new/Wizard';
 import { navigateHard, useLeaveGuard } from '@/components/experiments/new/leaveGuard';
 import {
+  balanceSplitProblem,
   buildCreatePayload,
   checkTargeting,
   configurationProblems,
@@ -60,6 +61,16 @@ export default function NewExperimentPage() {
     if (router.isReady) shownViewRef.current = true;
   }, [router.isReady]);
 
+  // A refusal of the balance setting answers what was sent: once the setting or
+  // the split changes it is stale, and goes. What the same answer said about
+  // other fields stays.
+  useEffect(() => {
+    setError((prev) => {
+      if (!prev || !prev.balance) return prev;
+      return prev.otherMessage ? { message: prev.otherMessage } : null;
+    });
+  }, [state.balance, state.variants]);
+
   const submit = async (view: CreateView) => {
     if (submittingRef.current) return;
     setError(null);
@@ -81,6 +92,13 @@ export default function NewExperimentPage() {
       return;
     }
 
+    // A split the API would refuse for a balanced experiment: said at the split, and nothing is sent.
+    const splitRefusal = balanceSplitProblem(state);
+    if (splitRefusal !== null) {
+      setError({ message: splitRefusal, balance: { message: splitRefusal, field: 'split' } });
+      return;
+    }
+
     submittingRef.current = true;
     setIsSubmitting(true);
     let createdId: string;
@@ -93,7 +111,12 @@ export default function NewExperimentPage() {
       const created = await ExperimentsService.create(payload, { redirectOn401: false });
       createdId = created.id;
     } catch (err) {
-      setError(describeCreateError(err, sentKey, view));
+      setError(
+        describeCreateError(err, sentKey, view, {
+          balance: state.balance,
+          allocations: state.variants.map((v) => Number(v.traffic_allocation) || 0),
+        }),
+      );
       submittingRef.current = false;
       setIsSubmitting(false);
       return;

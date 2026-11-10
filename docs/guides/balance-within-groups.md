@@ -38,6 +38,27 @@ ignores the field and still answers `200`.
   be changed.
 - A clone balances within the same groups, and its groups start from their first place.
 
+## In the dashboard
+
+The **Variants** step of guided setup and the single-page form have **Balance the split within
+groups**, off until you turn it on. A draft's **Edit variants and metrics**, on the experiment page,
+has the same switch.
+
+- **Group users by** offers Platform, Country and User Tier, **Another attribute…** (type its
+  name) and **Saved segments…**.
+- For an attribute, **Values to keep apart (up to 20)** takes one chip per value. An attribute
+  named `web_device`, `web_visitor` or `web_browser` needs no values.
+- For saved segments, **Add a saved segment** adds one at the end of the list, and each can be
+  moved up or down: a user is balanced in the first segment in the list they belong to.
+- A split with a share that is not a multiple of 5, such as 34/33/33, shows the refusal under the
+  allocations as you type it. **Next** and **Create Experiment** wait until it is fixed.
+- When the API refuses the setting, its own sentence is shown at the control it is about, and focus
+  moves there.
+- A draft that is a bandit or a split URL experiment shows a sentence in place of the switch.
+- The experiment page's **Balance** row says what the split is balanced within, such as
+  `within Platform (ios, android, web)`, or `off`. Once the experiment has started the row is all
+  there is: the setting cannot be changed.
+
 ## Assign users
 
 Put the attribute at the top level of `context` in every assign request:
@@ -98,4 +119,53 @@ experiment's ordinary hash instead. They keep their group, their chance of each
 variant is still its share, and they are counted in the `experiment_balance_fallback_total` metric
 by reason (`timeout` or `busy`). An older server version, during a rolling deploy or a rollback,
 assigns every new user by the hash and stores no group. [Limitations](../getting-started/limitations.md#experiments-and-results)
-lists what balancing does not do.
+lists what balancing does not do. The results by group count both kinds in
+`users_outside_blocks`.
+
+## Results by group
+
+`GET /api/v1/results/{experiment_id}/balanced-groups` (beta) gives the experiment's results by the
+group each user was balanced in, the group stored when they were assigned. The experiment's own
+results and their decision do not change.
+
+- `groups` has one row per group, built as a breakdown's rows are: the groups with the most users,
+  then `other` and `unknown`, each with a p-value and the Bonferroni threshold over the rows
+  returned. Per variant, the rows add up to every user assigned.
+- `overall` gives one estimate per treatment of the primary metric: each group's difference from
+  the control, weighted by the group's share of all the users. Its interval is at the
+  experiment's confidence level, and the treatments are corrected together with the experiment's
+  correction method. No CUPED adjustment is applied to it.
+- `overall` is `null`, with `reason`, for a primary metric that is not a conversion
+  (`mean_metric`), for an experiment with sequential testing (`sequential_testing`), and when no
+  treatment has users or no group has 2 users in every variant that has users (`too_few_users`).
+- A group with fewer than 2 users in a variant that has users is counted with the largest group
+  that has 2 in every variant that has users, and listed in `merged_groups`.
+- `users_outside_blocks` is the number of users split without balancing. `unknown_share` is the
+  share in `unknown` of the users whose group was stored.
+- An experiment that does not balance within groups answers `409`.
+
+### How they differ from `?breakdown=`
+
+`GET /api/v1/results/{experiment_id}?breakdown=tier` puts each user in the value of their first
+event that carries `tier` ([Where the segments come from](../api/dimensional-analysis.md#where-the-segments-come-from)).
+For users assigned through `POST /api/v1/tracking/assign` with a listed value, the two agree.
+Otherwise they can differ:
+
+- Users assigned from a list have no exposure, so the breakdown counts them under `unknown`
+  until they send an event with `tier`; here they are in their group.
+- A user assigned without `tier` who later sends an event with it is in that value in the
+  breakdown, and in `unknown` here.
+- A value that is not listed, a decimal number such as `3.0`, a list or an object, or text of
+  101 to 255 characters is `other` here, and the value itself in the breakdown.
+- With more than 20 distinct values the breakdown can count a listed value under `other`; here
+  every listed group has its own row.
+- A user an older server version assigned has no stored group, so they are in `unknown` here.
+
+### Method
+
+The overall estimate is the stratified difference in conversion rates (Cochran, *Sampling
+Techniques*, chapter 5): the sum over the groups of each group's share of the users times its
+treatment rate minus its control rate, with the variance summed the same way from each group's
+two rates and the group's share squared. It equals the treatment's coefficient, and its HC2
+standard error, in one regression over every variant with the group indicators centred and
+interacted with each treatment.

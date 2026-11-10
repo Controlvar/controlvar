@@ -39,11 +39,19 @@ by = [
 ]
 
 [[unit]]
-text = "3. Variants | The variants, their traffic split (it must add up to exactly 100%), which one is the control, and optional targeting rules"
+text = "3. Variants | The variants, their traffic split (it must add up to exactly 100%), which one is the control, whether to balance the split within groups, and optional targeting rules"
 by = [
     "journey:experiment-wizard#details-next",
     "journey:experiment-wizard#split-90",
     "journey:experiment-wizard#split-refused",
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::guided setup offers it on the Variants step, off, before the targeting rules",
+]
+
+[[unit]]
+text = "With Balance the split within groups on, the Review step's Variants row ends Balance: within what you chose, such as Platform (ios, android, web), or Balance: off."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::names the attribute and its values",
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::says off when it is off",
 ]
 
 [[unit]]
@@ -689,8 +697,9 @@ text = "The wizard does not set balance_within."
 by = ["test:backend/tests/unit/services/test_experiment_wizard_service.py"]
 
 [[unit]]
-text = "To balance the split within groups, send it with PUT /api/v1/experiments/$EXP_ID before you start the experiment; a multivariate draft's 33/33/34 split must first become one whose shares are multiples of 5, such as 40/30/30."
+text = "To balance the split within groups, turn on Balance the split within groups in the draft's Edit variants and metrics, or send it with PUT /api/v1/experiments/$EXP_ID, before you start the experiment; a multivariate draft's 33/33/34 split must first become one whose shares are multiples of 5, such as 40/30/30."
 by = [
+    "test:frontend/src/tests/pages/experiment-detail-balance.test.tsx::turning it on and saving sends the setting with the lists",
     "test:backend/tests/integration/api/test_balance_within_api.py::test_put_on_a_draft_sets_echoes_and_clears_it",
     "test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_sent_to_a_draft_split_not_in_steps_of_5_is_refused",
 ]

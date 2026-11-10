@@ -13,7 +13,7 @@ experiment in five steps:
 |------|--------------|
 | 1. Type | A/B Test or Multivariate |
 | 2. Details | Name, key, description, hypothesis, and the metrics (each with its own name), one of them primary |
-| 3. Variants | The variants, their traffic split (it must add up to exactly 100%), which one is the control, and optional targeting rules |
+| 3. Variants | The variants, their traffic split (it must add up to exactly 100%), which one is the control, whether to [balance the split within groups](balance-within-groups.md#in-the-dashboard), and optional targeting rules |
 | 4. Estimate | How results will be judged (the confidence level and the correction, saved with the experiment), then, optionally, the minimum detectable effect (saved with the experiment), how many users each variant needs and roughly how many days that takes |
 | 5. Review | Everything as it will be sent; **Create Experiment** creates it as a draft |
 
@@ -54,6 +54,8 @@ experiment in five steps:
   estimate says so under its number. With None it makes no correction, the same as the
   results, and the Power Calculator, which applies a Bonferroni correction, gives a higher
   number.
+- With **Balance the split within groups** on, the Review step's **Variants** row ends **Balance:
+  within** what you chose, such as `Platform (ios, android, web)`, or **Balance: off**.
 - Only users who may create experiments see the form: ADMIN and DEVELOPER users,
   superusers, and in the full profile anyone whose custom role or direct grant gives
   `experiment (create)`. Anyone else sees a note saying so instead.
@@ -352,8 +354,9 @@ gets a held-back control with `{"enabled": false}` and a treatment with `{"enabl
 at 50% each. Review the experiment and start it when you're ready.
 
 The wizard does not set `balance_within`. To
-[balance the split within groups](balance-within-groups.md), send it with
-`PUT /api/v1/experiments/$EXP_ID` before you start the experiment; a multivariate draft's
+[balance the split within groups](balance-within-groups.md#in-the-dashboard), turn on **Balance
+the split within groups** in the draft's **Edit variants and metrics**, or send it with
+`PUT /api/v1/experiments/$EXP_ID`, before you start the experiment; a multivariate draft's
 33/33/34 split must first become one whose shares are multiples of 5, such as 40/30/30.
 
 ---
