@@ -127,6 +127,17 @@ try {
     fail(`the rejecting hook was reported as ${JSON.stringify(hookErrors)}, expected ["exposure/HOOK_ERROR"]`);
   }
 
+  // 6. Flag values (#1810): a NEW client (so the fan-out above is untouched) reads the seed's
+  //    string, number and json flags, each on at 100%, with the typed getters. Each default is
+  //    no flag value, so a getter that falls back shows. The report is what they returned; the
+  //    runner requires the seed's on values.
+  const valued = new ExperimentationClient({ apiUrl, apiKey });
+  const values = {
+    string: await valued.getStringValue('sdk_contract_value_string', { userId }, 'smoke-default'),
+    number: await valued.getNumberValue('sdk_contract_value_number', { userId }, -1),
+    json: await valued.getJsonValue('sdk_contract_value_json', { userId }, ['smoke-default']),
+  };
+
   const [exposure] = exposures;
   process.stdout.write(
     JSON.stringify({
@@ -148,6 +159,7 @@ try {
             }
           : null,
       },
+      values,
     }) + '\n'
   );
 } catch (err) {

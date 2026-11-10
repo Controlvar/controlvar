@@ -67,14 +67,19 @@ EVENT_ID = {
     "id": "contract-1",
     "sends": 2,
 }
+#: What the smoke of an SDK in VALUE_SDKS adds (#1810): what its string,
+#: number and json getters returned for the seed's three value flags, each on
+#: at 100%, so each is its on value.
+VALUES = {"string": "on-copy", "number": 10, "json": {"color": "blue"}}
 PR_QA_GATE = REPO_ROOT / ".github" / "workflows" / "pr-qa-gate.yml"
 PLATFORM = REPO_ROOT / ".github" / "workflows" / "_platform.yml"
 
 
 def good(runner, sdk: str, experiment_key: str = "sdk_contract_ab") -> dict:
     """A passing report from *sdk*'s smoke: GOOD, with EXPOSURE only if the
-    runner lists *sdk* in EXPOSURE_SDKS and TARGETED only if it lists *sdk* in
-    ATTRIBUTE_SDKS (an unlisted SDK may report neither)."""
+    runner lists *sdk* in EXPOSURE_SDKS, TARGETED only if it lists *sdk* in
+    ATTRIBUTE_SDKS, EVENT_ID only if in EVENT_ID_SDKS and VALUES only if in
+    VALUE_SDKS (an unlisted SDK may report none of them)."""
     report = {"sdk": sdk, **GOOD}
     if sdk in runner.EXPOSURE_SDKS:
         hook = {**EXPOSURE["payload"], "experiment_key": experiment_key}
@@ -83,6 +88,8 @@ def good(runner, sdk: str, experiment_key: str = "sdk_contract_ab") -> dict:
         report["targeted"] = dict(TARGETED)
     if sdk in runner.EVENT_ID_SDKS:
         report["event_id"] = dict(EVENT_ID)
+    if sdk in runner.VALUE_SDKS:
+        report["values"] = json.loads(json.dumps(VALUES))
     return report
 
 
@@ -260,6 +267,7 @@ def test_each_wrong_exposure_report_gives_exactly_its_problem(
     monkeypatch.setattr(runner, "EXPOSURE_SDKS", frozenset({"js"}))
     monkeypatch.setattr(runner, "ATTRIBUTE_SDKS", frozenset())  # exposure alone here
     monkeypatch.setattr(runner, "EVENT_ID_SDKS", frozenset())  # exposure alone here
+    monkeypatch.setattr(runner, "VALUE_SDKS", frozenset())  # exposure alone here
     report = {"sdk": sdk, **GOOD}
     if exposure is not None:
         report["exposure"] = exposure
@@ -483,6 +491,123 @@ def test_every_attribute_sdk_runs_in_ci_where_a_skip_is_a_failure(
     assert (status, ran) == (1, [])
     out = " ".join(capsys.readouterr().out.split())
     assert "FAIL react-native missing toolchain: node, npx" in out
+
+
+def test_js_is_the_sdk_whose_smoke_reports_the_flag_values(runner):
+    """#1810: the SDKs whose smokes read the seed's three value flags with their
+    typed getters, and each passes with exactly VALUES."""
+    assert runner.VALUE_SDKS == frozenset({"js"})
+    for sdk in sorted(runner.VALUE_SDKS):
+        report = good(runner, sdk)
+        assert report["values"] == VALUES
+        assert runner.validate(sdk, report) == [], sdk
+
+
+def test_the_values_a_smoke_must_report_are_the_seeds_on_values(runner):
+    """The runner judges against the seed's own on values (each flag is on at
+    100% while the SDK rows run; the published rows, which turn them off, run
+    last)."""
+    from backend.scripts import seed_sdk_contract as seed
+
+    on_values = {kind: on for kind, (_, on, _) in seed.VALUE_FLAGS.items()}
+    assert runner.VALUE_EXPECTED == on_values == VALUES
+
+
+@pytest.mark.parametrize(
+    ("sdk", "values", "problems"),
+    [
+        pytest.param(
+            "js",
+            {**VALUES, "string": "off-copy"},
+            ["values.string='off-copy' (expected 'on-copy', the seed's on value)"],
+            id="off-value",
+        ),
+        pytest.param(
+            "js",
+            {**VALUES, "number": -1},
+            ["values.number=-1 (expected 10, the seed's on value)"],
+            id="the-default",
+        ),
+        pytest.param(
+            "js",
+            {**VALUES, "number": "10"},
+            ["values.number='10' (expected 10, the seed's on value)"],
+            id="number-as-text",
+        ),
+        pytest.param(
+            "js",
+            {**VALUES, "number": True},
+            ["values.number=True (expected 10, the seed's on value)"],
+            id="number-true",
+        ),
+        pytest.param(
+            "js",
+            {**VALUES, "json": ["fallback"]},
+            [
+                "values.json=['fallback'] (expected {'color': 'blue'}, "
+                "the seed's on value)"
+            ],
+            id="json-off-value",
+        ),
+        pytest.param(
+            "js",
+            {"string": "on-copy", "number": 10},
+            ["values.json=None (expected {'color': 'blue'}, the seed's on value)"],
+            id="json-missing",
+        ),
+        pytest.param("js", {**VALUES, "number": 10.0}, [], id="a-double-is-10"),
+        pytest.param(
+            "js", None, ["values missing (js is in VALUE_SDKS)"], id="missing"
+        ),
+        pytest.param(
+            "python",
+            VALUES,
+            ["values reported but python is not in VALUE_SDKS"],
+            id="unlisted",
+        ),
+    ],
+)
+def test_each_wrong_values_report_gives_exactly_its_problems(
+    runner, sdk, values, problems
+):
+    """The gate's own planted reports. ``off-value`` is what an SDK that reads
+    the off value for an on user reports; ``the-default`` one whose getter fell
+    back."""
+    report = good(runner, sdk)
+    report.pop("values", None)
+    if values is not None:
+        report["values"] = values
+    assert runner.validate(sdk, report) == problems
+
+
+def test_a_smoke_that_reports_the_off_value_fails_its_row(monkeypatch, runner, capsys):
+    """main() on js whose smoke reports the string flag's off value."""
+    wrong = {**good(runner, "js"), "values": {**VALUES, "string": "off-copy"}}
+    monkeypatch.setattr(
+        runner, "_run_command", lambda command, env, timeout: ("PASS", "0.1s", wrong)
+    )
+    monkeypatch.setattr(runner.shutil, "which", lambda tool: f"/usr/bin/{tool}")
+    monkeypatch.setattr(runner, "check_ruleset", lambda *args: ("PASS", "ok"))
+    monkeypatch.setattr(runner, "LOCAL_MANIFEST", {})
+    monkeypatch.setattr(runner, "PUBLISHED_LOCAL", {})
+    monkeypatch.setattr(sys, "argv", ["run_live_contract.py", "--sdk", "js"])
+    assert runner.main() == 1
+    out = " ".join(capsys.readouterr().out.split())
+    assert (
+        "FAIL js values.string='off-copy' (expected 'on-copy', the seed's on value)"
+        in out
+    )
+
+
+def test_every_value_sdk_runs_in_the_sdk_live_contract_job(runner):
+    """CI runs every SDK in VALUE_SDKS with --strict (the attribute test above
+    pins --strict), so a value SDK cannot pass as SKIP."""
+    import yaml
+
+    job = yaml.safe_load(PR_QA_GATE.read_text(encoding="utf-8"))["jobs"][
+        "sdk-live-contract"
+    ]
+    assert set(runner.VALUE_SDKS) <= set(job["with"]["sdks"].split())
 
 
 def test_the_seeds_targeted_flag_is_on_only_through_its_plan_rule(runner):

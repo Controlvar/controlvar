@@ -31,6 +31,17 @@ globalThis.fetch = async (url, init = {}) => {
   }
   if (path.startsWith('/api/v1/feature-flags/evaluate/')) {
     const key = decodeURIComponent(path.split('/').pop());
+    // The seed's value flags, on at 100% (#1810); FAKE_NO_VALUES answers as a server before flag values.
+    const values = {
+      sdk_contract_value_string: ['string', 'on-copy'],
+      sdk_contract_value_number: ['number', 10],
+      sdk_contract_value_json: ['json', { color: 'blue' }],
+    };
+    if (key in values) {
+      const [value_type, value] = values[key];
+      const served = process.env.FAKE_NO_VALUES ? {} : { value, value_type };
+      return reply({ key, enabled: true, ...served, config: null, reason: 'rollout' });
+    }
     // The seed's targeted flag: 0%, on only through its rule plan equals pro (#1520).
     if (key === (process.env.CONTRACT_TARGETED_FLAG_KEY || 'sdk_contract_targeted')) {
       const context = new URL(String(url)).searchParams.get('context');
@@ -122,7 +133,12 @@ test('it assigns twice, evaluates the flag, tracks with and without a key and se
     'POST /api/v1/tracking/assign',
     // The client whose hook rejects.
     'POST /api/v1/tracking/assign',
+    // #1810: the seed's three value flags, read with the typed getters on a new client.
+    'GET /api/v1/feature-flags/evaluate/sdk_contract_value_string',
+    'GET /api/v1/feature-flags/evaluate/sdk_contract_value_number',
+    'GET /api/v1/feature-flags/evaluate/sdk_contract_value_json',
   ]);
+  expect(seen.slice(12).map(r => new URL(r.url).searchParams.get('user_id'))).toEqual(['user-a', 'user-a', 'user-a']);
   expect(seen.slice(8, 10).map(r => r.url)).toEqual([
     'http://api.test/api/v1/feature-flags/evaluate/targeted_a?user_id=user-a&context=%7B%22plan%22%3A%22pro%22%7D',
     'http://api.test/api/v1/feature-flags/evaluate/targeted_a?user_id=user-a&context=%7B%22plan%22%3A%22free%22%7D',
@@ -159,8 +175,9 @@ test('it assigns twice, evaluates the flag, tracks with and without a key and se
       calls: 1,
       payload: { experiment_key: 'exp_a', variant_name: 'control', variant_id: 'v-1', user_id: 'user-a' },
     },
+    values: { string: 'on-copy', number: 10, json: { color: 'blue' } },
   });
-  expect(seen.slice(10).map(r => r.body)).toEqual([
+  expect(seen.slice(10, 12).map(r => r.body)).toEqual([
     { experiment_key: 'exp_a', user_id: 'user-a' },
     { experiment_key: 'exp_a', user_id: 'user-a' },
   ]);
@@ -174,6 +191,12 @@ test('without assigned in the answer no hook is called, and it fails on the reje
     'js contract smoke failed: the rejecting hook was reported as [], expected ["exposure/HOOK_ERROR"]\n'
   );
   expect(seen.filter(r => new URL(r.url).pathname === '/api/v1/tracking/assign')).toHaveLength(4);
+});
+
+test('it reports what the typed getters returned: the defaults when the server sends no value', () => {
+  const { run } = runSmoke({ CONTROLVAR_API_KEY: 'k', FAKE_NO_VALUES: '1' });
+  expect(run.status).toBe(0);
+  expect(JSON.parse(run.stdout.trim()).values).toEqual({ string: 'smoke-default', number: -1, json: ['smoke-default'] });
 });
 
 test('it stops without a key and sends nothing', () => {
