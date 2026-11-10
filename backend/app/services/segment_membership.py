@@ -13,9 +13,11 @@ server resolves here, never from the request's context:
   removing whatever the request sent under that name;
 * :func:`segment_reference_problem` is the write-time check: every segment a
   ruleset names must exist, be active, and (for a rules segment) have rules
-  that pass ``validate_segment_rules``;
+  that pass ``validate_segment_rules``; :func:`balance_segment_problem` is the
+  same check for the segments an experiment balances within (#448);
 * :func:`segment_references` lists the flags and experiments that would stop
-  evaluating if a segment were archived or deactivated.
+  evaluating if a segment were archived or deactivated: by their rules, or
+  (an experiment) by the segments it balances within.
 
 A segment whose membership cannot be decided -- unknown, not active, stored
 rules that are not valid, a pattern that cannot be evaluated, or a database
@@ -30,12 +32,13 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass
-from typing import Any, Collection, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import sqlalchemy as sa
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from backend.app.core.balanced_blocks import balance_segments, balances_within_segments
 from backend.app.core.pattern_match import PatternUnevaluable, report_unevaluable
 from backend.app.core.rules_engine import SEGMENT_MEMBERSHIP_KEY, TimeWindowUnreadable
 from backend.app.core.targeting_adapter import (
@@ -282,6 +285,46 @@ def segment_reference_problem(db: Session, raw_rules: Any) -> Optional[str]:
     return None
 
 
+#: Why a segment an experiment would balance within cannot be used (#448).
+SEGMENT_MISSING = "missing"  # it does not exist, or is archived
+SEGMENT_NOT_USABLE = "not_usable"  # it is inactive, or its rules are not valid
+
+
+def balance_segment_problem(
+    db: Session, segment_ids: Sequence[str]
+) -> Optional[Tuple[str, str]]:
+    """The first of *segment_ids* that cannot be balanced within, and why.
+
+    The same rule as :func:`segment_reference_problem`: the segment exists,
+    is active, and a rules segment's stored rules pass
+    ``validate_segment_rules``. One query. Returns ``(segment id,
+    SEGMENT_MISSING | SEGMENT_NOT_USABLE)``, or ``None`` when every segment
+    can be used. The ids have already passed the request schema (segment
+    ids, at most 10).
+    """
+    ids = [sid for sid in segment_ids if is_segment_id(sid)]
+    rows = (
+        db.query(Segment.id, Segment.kind, Segment.status, Segment.rules)
+        .filter(Segment.id.in_([uuid.UUID(sid) for sid in ids]))
+        .all()
+        if ids
+        else []
+    )
+    found = {str(row.id): row for row in rows}
+    for sid in segment_ids:
+        row = found.get(sid)
+        if row is None or row.status == SegmentStatus.ARCHIVED:
+            return sid, SEGMENT_MISSING
+        if row.status != SegmentStatus.ACTIVE:
+            return sid, SEGMENT_NOT_USABLE
+        if row.kind != SegmentKind.ID_LIST.value:
+            try:
+                validate_segment_rules(row.rules)
+            except TargetingRulesError:
+                return sid, SEGMENT_NOT_USABLE
+    return None
+
+
 # ---------------------------------------------------------------------------
 # What a segment is used by
 # ---------------------------------------------------------------------------
@@ -302,19 +345,51 @@ def _references(raw_rules: Any, segment_id: str) -> bool:
         return True
 
 
+def balance_references(raw_setting: Any, segment_id: str) -> bool:
+    """Whether a stored ``balance_within`` that mentions ``segment_id``
+    balances within it (#448).
+
+    An attribute setting does not, even when one of its values is the id. A
+    segment setting does when the id is listed. A value that cannot be read
+    (not an object, or segments that are not a list of text) counts: the
+    archive check fails closed.
+    """
+    if isinstance(raw_setting, Mapping) and not balances_within_segments(raw_setting):
+        return False
+    if isinstance(raw_setting, Mapping):
+        listed = raw_setting.get("segments")
+        if isinstance(listed, list) and all(isinstance(s, str) for s in listed):
+            return segment_id in {s.lower() for s in balance_segments(raw_setting)}
+    return True
+
+
+#: The keys :func:`segment_references` sets on an experiment that balances
+#: within the segment, and on one whose rules reference it;
+#: :func:`segment_in_use_detail` reads them to say what holds the segment and
+#: leaves them out of the answer.
+BALANCES_WITHIN = "balances_within"
+TARGETED_BY_RULES = "targeted_by_rules"
+_INTERNAL_KEYS = (BALANCES_WITHIN, TARGETED_BY_RULES)
+
+
 def segment_references(
     db: Session, segment_id: Any
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """The flags and experiments whose rules reference ``segment_id``.
+    """The flags and experiments that use ``segment_id``.
 
-    Flags that are not archived and experiments that are draft, active or
-    paused: the ones whose rules can still be evaluated. A text prefilter
-    finds candidate rows; each is confirmed by reading its rules, and a row
-    whose rules cannot be read counts. Query errors propagate.
+    Flags that are not archived, by their rules, and experiments that are
+    draft, active or paused, by their rules or by the segments they balance
+    within (#448): the ones that can still evaluate the segment. A text
+    prefilter finds candidate rows; each is confirmed by reading the column
+    that matched, and a row whose value cannot be read counts. Query errors
+    propagate.
 
     Returns:
         ``(feature_flags, experiments)``: ``[{id, key, name}]`` and
-        ``[{id, key, name, status}]``, each ordered by key.
+        ``[{id, key, name, status}]``, each ordered by key. An experiment also
+        carries ``balances_within: True`` when it balances within the segment
+        and ``targeted_by_rules: True`` when its rules reference it, for
+        :func:`segment_in_use_detail`'s message.
     """
     sid = str(segment_id).lower()
     pattern = f"%{sid}%"
@@ -332,6 +407,8 @@ def segment_references(
         .order_by(FeatureFlag.key)
         .all()
     )
+    in_rules = sa.cast(Experiment.targeting_rules, sa.Text).ilike(pattern)
+    in_balance = sa.cast(Experiment.balance_within, sa.Text).ilike(pattern)
     experiment_rows = (
         db.query(
             Experiment.id,
@@ -339,10 +416,13 @@ def segment_references(
             Experiment.name,
             Experiment.status,
             Experiment.targeting_rules,
+            Experiment.balance_within,
+            in_rules.label("in_rules"),
+            in_balance.label("in_balance"),
         )
         .filter(
             Experiment.status.in_(REFERENCING_EXPERIMENT_STATUSES),
-            sa.cast(Experiment.targeting_rules, sa.Text).ilike(pattern),
+            sa.or_(in_rules, in_balance),
         )
         .order_by(Experiment.key)
         .all()
@@ -352,23 +432,37 @@ def segment_references(
         for row in flag_rows
         if _references(row.targeting_rules, sid)
     ]
-    experiments = [
-        {
+    experiments = []
+    for row in experiment_rows:
+        by_rules = bool(row.in_rules) and _references(row.targeting_rules, sid)
+        by_balance = bool(row.in_balance) and balance_references(
+            row.balance_within, sid
+        )
+        if not (by_rules or by_balance):
+            continue
+        reference = {
             "id": str(row.id),
             "key": row.key,
             "name": row.name,
             "status": getattr(row.status, "value", row.status),
         }
-        for row in experiment_rows
-        if _references(row.targeting_rules, sid)
-    ]
+        if by_balance:
+            reference[BALANCES_WITHIN] = True
+        if by_rules:
+            reference[TARGETED_BY_RULES] = True
+        experiments.append(reference)
     return flags, experiments
 
 
 def segment_in_use_detail(
     flags: List[Dict[str, Any]], experiments: List[Dict[str, Any]]
 ) -> Dict[str, Any]:
-    """The 409 ``detail`` for archiving or deactivating a segment in use."""
+    """The 409 ``detail`` for archiving or deactivating a segment in use.
+
+    Each experiment is answered as ``{id, key, name, status}``. When one of
+    them balances within the segment (#448), the message says how such an
+    experiment lets it go.
+    """
     parts = []
     if flags:
         parts.append(f"{len(flags)} feature flag{'s' if len(flags) != 1 else ''}")
@@ -376,12 +470,24 @@ def segment_in_use_detail(
         parts.append(
             f"{len(experiments)} experiment{'s' if len(experiments) != 1 else ''}"
         )
+    balanced = any(e.get(BALANCES_WITHIN) for e in experiments)
+    targeted = bool(flags) or any(e.get(TARGETED_BY_RULES) for e in experiments)
+    message = f"This segment is used by {' and '.join(parts)}. "
+    balance_clause = (
+        "the segments a draft balances within first; a started experiment that "
+        "balances within it uses it until it is completed or archived."
+    )
+    if balanced and targeted:
+        message += f"Remove it from their targeting rules and from {balance_clause}"
+    elif balanced:
+        message += f"Remove it from {balance_clause}"
+    else:
+        message += "Remove it from their targeting rules first."
     return {
         "code": "segment_in_use",
-        "message": (
-            f"This segment is used by {' and '.join(parts)}. Remove it from their "
-            "targeting rules first."
-        ),
+        "message": message,
         "feature_flags": flags,
-        "experiments": experiments,
+        "experiments": [
+            {k: v for k, v in e.items() if k not in _INTERNAL_KEYS} for e in experiments
+        ],
     }

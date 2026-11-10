@@ -1532,6 +1532,8 @@
             "anyOf": [
               {
                 "items": {
+                  "maxLength": 36,
+                  "minLength": 1,
                   "type": "string"
                 },
                 "type": "array"
@@ -1540,7 +1542,7 @@
                 "type": "null"
               }
             ],
-            "description": "Not available yet: a request that sends it is refused with 422.",
+            "description": "Saved segments to balance within instead of an attribute: 1 to 10 segment ids, each listed once, each an active segment. A new user is balanced in the first listed segment they belong to, in `other` when they belong to none, and in `unknown` when their membership of a segment listed before it cannot be decided.",
             "title": "Segments"
           },
           "values": {
@@ -5676,7 +5678,7 @@
                 "type": "null"
               }
             ],
-            "description": "Beta. Balance the split within groups of users as they are assigned: `{\"attribute\": \"tier\", \"values\": [\"gold\", \"silver\"]}` puts each new user in the group of their `context.tier` (a top-level key, matched exactly; any other value is `other`, no value is `unknown`), and each group gets the experiment's split among its own users. Every share must be a multiple of 5; a bandit or a split URL experiment cannot balance. Null balances nothing."
+            "description": "Beta. Balance the split within groups of users as they are assigned: `{\"attribute\": \"tier\", \"values\": [\"gold\", \"silver\"]}` puts each new user in the group of their `context.tier` (a top-level key, matched exactly; any other value is `other`, no value is `unknown`), and each group gets the experiment's split among its own users. `{\"segments\": [\"<segment id>\", ...]}` (1 to 10 active saved segments) puts each new user in the group of the first listed segment they belong to, and in `other` when they belong to none. Every share must be a multiple of 5; a bandit or a split URL experiment cannot balance. Null balances nothing."
           },
           "bayesian_config": {
             "anyOf": [
@@ -5939,7 +5941,7 @@
                 "type": "null"
               }
             ],
-            "description": "Beta. What the experiment balances its split within: `{\"attribute\": ..., \"values\": [...]}`, or null when it balances nothing.",
+            "description": "Beta. What the experiment balances its split within: `{\"attribute\": ..., \"values\": [...]}`, `{\"segments\": [...]}`, or null when it balances nothing.",
             "title": "Balance Within"
           },
           "bayesian_config": {
@@ -6297,7 +6299,7 @@
                 "type": "null"
               }
             ],
-            "description": "Beta. What the experiment balances its split within: `{\"attribute\": ..., \"values\": [...]}`, or null when it balances nothing.",
+            "description": "Beta. What the experiment balances its split within: `{\"attribute\": ..., \"values\": [...]}`, `{\"segments\": [...]}`, or null when it balances nothing.",
             "title": "Balance Within"
           },
           "bayesian_config": {
@@ -6840,7 +6842,7 @@
                 "type": "null"
               }
             ],
-            "description": "Beta. Balance the split within groups of users as they are assigned: `{\"attribute\": \"tier\", \"values\": [\"gold\", \"silver\"]}` puts each new user in the group of their `context.tier` (a top-level key, matched exactly; any other value is `other`, no value is `unknown`), and each group gets the experiment's split among its own users. Every share must be a multiple of 5; a bandit or a split URL experiment cannot balance. Null balances nothing. Changeable only while the experiment is a draft."
+            "description": "Beta. Balance the split within groups of users as they are assigned: `{\"attribute\": \"tier\", \"values\": [\"gold\", \"silver\"]}` puts each new user in the group of their `context.tier` (a top-level key, matched exactly; any other value is `other`, no value is `unknown`), and each group gets the experiment's split among its own users. `{\"segments\": [\"<segment id>\", ...]}` (1 to 10 active saved segments) puts each new user in the group of the first listed segment they belong to, and in `other` when they belong to none. Every share must be a multiple of 5; a bandit or a split URL experiment cannot balance. Null balances nothing. Changeable only while the experiment is a draft."
           },
           "bayesian_config": {
             "anyOf": [
@@ -33532,7 +33534,7 @@
     },
     "/api/v1/segments/{segment_id}": {
       "delete": {
-        "description": "Soft-delete a segment by setting its status to ARCHIVED. Refused (409) while targeting rules use the segment. Requires permission to delete experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (delete).",
+        "description": "Soft-delete a segment by setting its status to ARCHIVED. Refused (409) while targeting rules use the segment or while a draft, active or paused experiment balances within it. Requires permission to delete experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (delete).",
         "operationId": "delete_segment_api_v1_segments__segment_id__delete",
         "parameters": [
           {
@@ -33551,7 +33553,7 @@
             "description": "Successful Response"
           },
           "409": {
-            "description": "The segment is used by the targeting rules of a flag that is not archived or an experiment that is draft, active or paused. `detail` is `{\"code\": \"segment_in_use\", \"message\", \"feature_flags\": [{id, key, name}], \"experiments\": [{id, key, name, status}]}`."
+            "description": "The segment is used by the targeting rules of a flag that is not archived or an experiment that is draft, active or paused, or a draft, active or paused experiment balances within it. `detail` is `{\"code\": \"segment_in_use\", \"message\", \"feature_flags\": [{id, key, name}], \"experiments\": [{id, key, name, status}]}`."
           },
           "422": {
             "content": {
@@ -33624,7 +33626,7 @@
         ]
       },
       "put": {
-        "description": "Update segment name, description, rules, or status. A segment's kind cannot be changed, and an id_list segment takes no rules (422). A status other than active is refused (409) while targeting rules use the segment. Requires permission to change experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (update).",
+        "description": "Update segment name, description, rules, or status. A segment's kind cannot be changed, and an id_list segment takes no rules (422). A status other than active is refused (409) while targeting rules use the segment or while a draft, active or paused experiment balances within it. Requires permission to change experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (update).",
         "operationId": "update_segment_api_v1_segments__segment_id__put",
         "parameters": [
           {
@@ -33660,7 +33662,7 @@
             "description": "Successful Response"
           },
           "409": {
-            "description": "The segment is used by the targeting rules of a flag that is not archived or an experiment that is draft, active or paused. `detail` is `{\"code\": \"segment_in_use\", \"message\", \"feature_flags\": [{id, key, name}], \"experiments\": [{id, key, name, status}]}`."
+            "description": "The segment is used by the targeting rules of a flag that is not archived or an experiment that is draft, active or paused, or a draft, active or paused experiment balances within it. `detail` is `{\"code\": \"segment_in_use\", \"message\", \"feature_flags\": [{id, key, name}], \"experiments\": [{id, key, name, status}]}`."
           },
           "422": {
             "content": {
@@ -33750,7 +33752,7 @@
     },
     "/api/v1/segments/{segment_id}/experiments": {
       "get": {
-        "description": "Return all experiments and feature flags whose targeting_rules reference this segment's UUID.",
+        "description": "Return all experiments and feature flags whose targeting_rules reference this segment's UUID, and the experiments that balance within it.",
         "operationId": "get_segment_experiments_api_v1_segments__segment_id__experiments_get",
         "parameters": [
           {

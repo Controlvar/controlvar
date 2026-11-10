@@ -25,5 +25,13 @@ export const SECURITY_URL = `${REPO_URL}/blob/main/SECURITY.md`;
 
 export const COMPOSE_GUIDE_URL = `${REPO_URL}/blob/main/deploy/compose/README.md`;
 
+/**
+ * The Controlvar books (#1859): their own repository, not this one's. The
+ * homepage's books section and the footer link it; mkdocs.yml's nav, the docs
+ * home page and README.md carry the same URL
+ * (`backend/tests/unit/docs/test_books_links.py`).
+ */
+export const BOOKS_URL = 'https://github.com/amarkanday/controlvar-books';
+
 /** The footer's credit. */
 export const BUILDER_URL = 'https://www.linkedin.com/in/ashish-markanday/';

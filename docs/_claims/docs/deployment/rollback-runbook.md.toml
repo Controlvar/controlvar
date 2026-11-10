@@ -384,8 +384,11 @@ text = "Turn them back on when the API is again on a release with segment target
 by = ["test:sdk/python/tests/test_local.py"]
 
 [[unit]]
-text = "GET /api/v1/segments/{segment_id}/experiments lists the flags and experiments whose rules mention a segment."
-by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+text = "GET /api/v1/segments/{segment_id}/experiments lists the flags and experiments whose rules mention a segment, and the experiments that balance within it."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_the_listing_names_an_experiment_that_balances_within_the_segment",
+]
 
 [[unit]]
 text = "Step 1: Find the Previous Task Definition ARN"

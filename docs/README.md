@@ -12,6 +12,7 @@ and the dashboard are Apache-2.0; the client SDKs are MIT.
 | [What Controlvar does](capabilities.md) | The main capabilities in one list, each linked to the page that explains it |
 | [Limitations](getting-started/limitations.md) | What Controlvar does not do, and what happens instead |
 | [Roadmap](https://github.com/Controlvar/controlvar/blob/main/ROADMAP.md) | What is planned Now, Next and Later, and how to influence it |
+| [The Controlvar books](https://github.com/amarkanday/controlvar-books) | Engineering, programming and the craft of shipping software, taught through this codebase, for newcomers to a language or framework, engineers who already code, and contributors (CC BY 4.0) |
 
 ---
 

@@ -265,7 +265,8 @@ def get_segment(
         "Update segment name, description, rules, or status. A segment's kind "
         "cannot be changed, and an id_list segment takes no rules (422). A "
         "status other than active is refused (409) while targeting rules use "
-        "the segment. Requires permission to change experiments: DEVELOPER or "
+        "the segment or while a draft, active or paused experiment balances "
+        "within it. Requires permission to change experiments: DEVELOPER or "
         "ADMIN, or in the full profile a custom role or direct grant giving "
         "experiment (update)."
     ),
@@ -273,7 +274,8 @@ def get_segment(
         409: {
             "description": (
                 "The segment is used by the targeting rules of a flag that is "
-                "not archived or an experiment that is draft, active or paused. "
+                "not archived or an experiment that is draft, active or paused, "
+                "or a draft, active or paused experiment balances within it. "
                 '`detail` is `{"code": "segment_in_use", "message", '
                 '"feature_flags": [{id, key, name}], "experiments": '
                 "[{id, key, name, status}]}`."
@@ -322,7 +324,8 @@ def update_segment(
     summary="Archive an audience segment",
     description=(
         "Soft-delete a segment by setting its status to ARCHIVED. Refused (409) "
-        "while targeting rules use the segment. Requires permission to delete "
+        "while targeting rules use the segment or while a draft, active or "
+        "paused experiment balances within it. Requires permission to delete "
         "experiments: DEVELOPER or ADMIN, or in the full profile a custom role or "
         "direct grant giving experiment (delete)."
     ),
@@ -330,7 +333,8 @@ def update_segment(
         409: {
             "description": (
                 "The segment is used by the targeting rules of a flag that is "
-                "not archived or an experiment that is draft, active or paused. "
+                "not archived or an experiment that is draft, active or paused, "
+                "or a draft, active or paused experiment balances within it. "
                 '`detail` is `{"code": "segment_in_use", "message", '
                 '"feature_flags": [{id, key, name}], "experiments": '
                 "[{id, key, name, status}]}`."
@@ -422,7 +426,7 @@ def evaluate_segment_membership(
     summary="List experiments using this segment",
     description=(
         "Return all experiments and feature flags whose targeting_rules reference "
-        "this segment's UUID."
+        "this segment's UUID, and the experiments that balance within it."
     ),
     tags=["Segments"],
 )

@@ -903,10 +903,16 @@ replaces them, so a metric resent without `expected_effect` no longer has one.
 `balance_within`, sent on create or on a draft's `PUT`, gives each group of
 users the experiment's split among themselves: with
 `{"attribute": "tier", "values": ["gold", "silver"]}`, each new user is
-balanced within the group of their `context.tier`. Every experiment response
+balanced within the group of their `context.tier`. With
+`{"segments": ["<segment id>", ...]}`, 1 to 10 saved segments, each new user is
+balanced within the first listed segment they belong to, or `other` when they
+belong to none. Every experiment response
 carries it, `null` when the experiment balances nothing, and a clone copies it.
 It answers 422 at `["body", "balance_within"]` for a bandit, a split URL
-experiment, or a split whose shares are not all multiples of 5. See
+experiment, or a split whose shares are not all multiples of 5, and at
+`["body", "balance_within", "segments"]` for a segment that does not exist, is
+archived or inactive, or whose rules are not valid; a clone answers 409 when a
+segment it would balance within cannot be used. See
 [Balance the split within groups](../guides/balance-within-groups.md).
 
 ## Feature Flag Endpoints
@@ -2000,7 +2006,7 @@ PUT    /api/v1/segments/{id}             — Update segment (DEVELOPER+; 409: in
 DELETE /api/v1/segments/{id}             — Archive segment: sets status archived (DEVELOPER+; 409: in use)
 POST   /api/v1/segments/{id}/evaluate    — Is this user context a member? (409: stored rules not valid)
 POST   /api/v1/segments/bulk-evaluate    — One user context against up to 50 segments
-GET    /api/v1/segments/{id}/experiments — Experiments and flags whose rules mention the segment's id
+GET    /api/v1/segments/{id}/experiments — Experiments and flags whose rules mention the segment's id, and experiments that balance within it
 POST   /api/v1/segments/{id}/preview     — Estimate the share of users the rules in the body match
 POST   /api/v1/segments/{id}/members        — Add user IDs to an id_list segment (beta; DEVELOPER+)
 POST   /api/v1/segments/{id}/members/remove — Remove user IDs from an id_list segment (beta; DEVELOPER+)
@@ -2058,7 +2064,9 @@ estimate from, which is not the same as 0%. The preview also refuses, before any
 segment with `in_segment` / `not_in_segment` ([Targeting Rules](#targeting-rules)).
 `DELETE /api/v1/segments/{id}`, and a `PUT` that sets `status` to `inactive` or `archived`,
 answer 409 and change nothing while a flag that is not archived (a disabled one included), or
-an experiment that is draft, active or paused, has a rule naming the segment:
+an experiment that is draft, active or paused, has a rule naming the segment, or while such an
+experiment balances within the segment
+([Balancing the split within groups](#balancing-the-split-within-groups-beta)):
 
 ```json
 {"detail": {"code": "segment_in_use",

@@ -15,8 +15,9 @@
  *        image that loads with the page are the pinned bytes of the hero and
  *        the posters, read from the registry and the manifest, within a fixed
  *        budget. No timings;
- *   links  the SDK chips are `SDK_GUIDES`, and `content/site-links.ts` holds
- *        no docs page.
+ *   links  the SDK chips are `SDK_GUIDES`, `content/site-links.ts` holds
+ *        no docs page, and the Controlvar books are linked from their
+ *        section and the footer (#1859).
  *
  * The flag is mocked, as in `index.site-mode.test.tsx`: SITE_MODE is read at
  * module load.
@@ -197,6 +198,26 @@ describe("the homepage's links", () => {
     const urls = Object.values(SITE_LINKS) as string[];
     expect(urls.length).toBeGreaterThanOrEqual(5);
     expect(urls.filter((u) => /\/(blob|tree)\/[^/]+\/docs(\/|$)|docs\.controlvar\.com/.test(u))).toEqual([]);
+  });
+
+  it.each<[string, boolean]>([
+    ['platform build', false],
+    ['marketing build', true],
+  ])('links the Controlvar books from their section and from the footer, and nowhere else (#1859, %s)', (_name, marketing) => {
+    mode.mockReturnValue(marketing);
+    expect(SITE_LINKS.BOOKS_URL).toBe('https://github.com/amarkanday/controlvar-books');
+    const links = Array.from(page().querySelectorAll('a')).filter((a) => a.getAttribute('href') === SITE_LINKS.BOOKS_URL);
+    expect(
+      links.map((a) => ({
+        in: a.closest('section')?.querySelector('h2')?.textContent ?? a.closest('nav')?.getAttribute('aria-label'),
+        text: a.textContent,
+      })),
+    ).toEqual([
+      { in: 'The Controlvar books', text: 'Read the Controlvar books on GitHub →' },
+      { in: 'Footer', text: 'The Controlvar books' },
+    ]);
+    expect(links[0]).toHaveAccessibleName('Read the Controlvar books on GitHub');
+    expect(links[1]).toHaveAccessibleName('The Controlvar books');
   });
 
   it("links the Compose card to mkdocs.yml's own entry for the stack's README, which exists", () => {

@@ -45,9 +45,12 @@ BALANCE_WITHIN_DESCRIPTION = (
     '`{"attribute": "tier", "values": ["gold", "silver"]}` puts each new '
     "user in the group of their `context.tier` (a top-level key, matched "
     "exactly; any other value is `other`, no value is `unknown`), and each "
-    "group gets the experiment's split among its own users. Every share must "
-    "be a multiple of 5; a bandit or a split URL experiment cannot balance. "
-    "Null balances nothing."
+    "group gets the experiment's split among its own users. "
+    '`{"segments": ["<segment id>", ...]}` (1 to 10 active saved segments) '
+    "puts each new user in the group of the first listed segment they belong "
+    "to, and in `other` when they belong to none. Every share must be a "
+    "multiple of 5; a bandit or a split URL experiment cannot balance. Null "
+    "balances nothing."
 )
 
 
@@ -1062,8 +1065,8 @@ class ExperimentResponse(BaseModel):
         None,
         description=(
             "Beta. What the experiment balances its split within: "
-            '`{"attribute": ..., "values": [...]}`, or null when it balances '
-            "nothing."
+            '`{"attribute": ..., "values": [...]}`, `{"segments": [...]}`, or '
+            "null when it balances nothing."
         ),
     )
 

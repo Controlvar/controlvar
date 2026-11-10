@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Iterable, Optional, Tuple
 
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -59,6 +59,7 @@ _permits = threading.BoundedSemaphore(MAX_BALANCED_WAITS)
 _waits_lock = threading.Lock()
 _waits = {"current": 0, "peak": 0}
 _fallback_notes = OnceLog()
+_undecided_notes = OnceLog()
 
 
 def _sqlstate(exc: BaseException) -> Optional[str]:
@@ -143,6 +144,20 @@ def take_seq(
     finally:
         _wait_ended()
         _permits.release()
+
+
+def note_undecided_segments(experiment_id: Any, segment_ids: Iterable[str]) -> None:
+    """Log once per process per experiment that a new user was balanced in
+    ``unknown`` because membership of a segment it balances within could not
+    be decided (the experiment and the segment ids only: never a user)."""
+    if _undecided_notes.first(str(experiment_id), "undecided segments"):
+        logger.warning(
+            "Experiment %s: membership of a segment it balances within could not "
+            "be decided (segments: %s), so a new user was balanced in unknown. "
+            "Logged once.",
+            experiment_id,
+            ", ".join(sorted(str(s) for s in segment_ids)),
+        )
 
 
 def note_fallback(experiment_id: Any, reason: str) -> None:

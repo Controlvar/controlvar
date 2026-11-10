@@ -53,6 +53,27 @@ at a time and users of an uploaded list are balanced together (see
 [Assign a customer list](assign-customer-list.md#balance-each-segment-of-the-list)). The same list
 sent in another order can split differently; each user keeps the variant they got.
 
+## Balance within saved segments
+
+Instead of an attribute, `balance_within` can list 1 to 10 [saved segments](segments.md) by their
+id:
+
+```json
+{"balance_within": {"segments": ["8d4c6f0e-3a1b-4c2d-9e8f-7a6b5c4d3e2f", "1f2e3d4c-5b6a-4978-8a9b-0c1d2e3f4a5b"]}}
+```
+
+- A new user is balanced in the group of the first listed segment they belong to, so for a user
+  in two of them the order of the list decides. A user in none of them is balanced in `other`.
+- Membership is decided as it is for targeting rules: an ID list by the assign request's
+  `user_id`, a rules segment by its `context`.
+- When the membership of a segment listed before the first one the user belongs to cannot be
+  decided, the user is balanced in `unknown`.
+- A user keeps their variant and their group if they leave the segment later.
+- Every segment must exist and be active, and a rules segment's rules must be valid.
+- A segment that a draft, active or paused experiment balances within cannot be archived or made
+  inactive: the request answers `409`, as for a segment that targeting rules use. A clone answers
+  `409` when a segment it would balance within cannot be used.
+
 ## What is refused
 
 The request answers `422` with the reason when:
@@ -64,7 +85,9 @@ The request answers `422` with the reason when:
 - a share of the split is not a multiple of 5, such as 34/33/33 (50/50, 20/80, 35/35/30 and 40/30/30
   are allowed);
 - the experiment is a bandit or a split URL experiment;
-- `segments` is sent: balancing within saved segments is not available yet.
+- both `attribute` and `segments` are sent, or neither is;
+- `segments` has more than 10 ids, lists one twice, or names a segment that does not exist, is
+  archived or inactive, or whose rules are not valid.
 
 Changing `balance_within` after the experiment has started answers `400`.
 
