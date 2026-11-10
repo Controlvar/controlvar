@@ -271,8 +271,12 @@ by = [
 ]
 
 [[unit]]
-text = "GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results | #922 | When the experiment has sequential testing on, sequential_testing carries the analysis GET /api/v1/results/{experiment_id}/sequential serves at the experiment's stored alpha (the primary metric, the control against the first treatment); it used to be null always. It stays null when sequential testing is off, and is null when the analysis could not be computed (the API logs a warning); the rest of the response is unaffected. It is cached with the results, so an answer cached before the upgrade keeps null until it expires (5 minutes for a running experiment, 24 hours otherwise) or POST /api/v1/results/{experiment_id}/invalidate-cache clears it. For the same reason a change to sequential_testing_enabled or sequential_testing_config, which is accepted on a running experiment, shows on these routes when the cached answer expires or is cleared, not immediately. The OpenAPI document does not change. See Sequential Testing."
-by = ["test:backend/tests/integration/api/test_results_embeds_sequential.py"]
+text = "GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results | #922 | When the experiment has sequential testing on, sequential_testing carries the analysis GET /api/v1/results/{experiment_id}/sequential serves at the experiment's stored alpha (the primary metric, the control against the first treatment); it used to be null always. It stays null when sequential testing is off, and is null when the analysis could not be computed (the API logs a warning); the rest of the response is unaffected. It is cached with the results, so an answer cached before the upgrade keeps null until it expires (5 minutes for a running experiment, 24 hours otherwise) or POST /api/v1/results/{experiment_id}/invalidate-cache clears it. For the same reason a change to sequential_testing_enabled or sequential_testing_config, which can be made only while the experiment is a draft (#848), shows on these routes when the cached answer expires or is cleared, not immediately. The OpenAPI document does not change. See Sequential Testing."
+by = [
+    "test:backend/tests/integration/api/test_results_embeds_sequential.py",
+    "test:backend/tests/integration/api/test_sequential_results_routes.py::test_a_settings_change_reaches_the_cached_results_only_once_cleared",
+    "test:backend/tests/integration/api/test_sequential_results_routes.py::test_once_running_nobody_changes_the_sequential_settings",
+]
 
 [[unit]]
 text = "GET /api/v1/results/{experiment_id}/sequential, GET /api/v1/results/{experiment_id}, GET /api/v1/experiments/{experiment_id}/results | #929 | The sequential analysis compares the control against the treatment created first (created_at, then id), on every call. It used to take the treatment the database returned first, which on an experiment with three or more variants could change between two calls with no change to the data, so the analysis could switch arms. Two-variant experiments are unchanged, and so are the numbers for a given pair of arms. The results routes' cache is not keyed on the arm, so an answer cached before the upgrade is served until it expires (5 minutes for a running experiment, 24 hours otherwise) or POST /api/v1/results/{experiment_id}/invalidate-cache clears it. The OpenAPI document does not change. See Sequential Testing."
@@ -1196,4 +1200,19 @@ by = [
     "test:backend/tests/integration/api/test_results_breakdown_variants.py::test_a_cached_answer_from_another_engine_version_is_not_served",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_the_balanced_groups_route_is_beta_and_carries_no_place_in_a_group",
+]
+
+[[unit]]
+text = "PUT /api/v1/experiments/{experiment_id} | #848 | Once an experiment has left draft (it is active, paused, completed or archived), a request that includes variance_reduction_config, sequential_testing_enabled, sequential_testing_config, bayesian_enabled or bayesian_config answers 400 and changes nothing, for every role, a superuser included; a superuser's detail is Cannot update <field> for experiments in <status> status (#580's), as correction_method and confidence_level already did (#580). The refusal is on presence: the stored value sent back is refused, and so is null for the four that accept it; sequential_testing_enabled: null still answers 422 at every status. Before, a superuser's request changing one of the five on such an experiment answered 200; anyone else already got Cannot update experiments in <status> status, and still does. A draft takes them as before. To use other settings for an experiment that has left draft, clone it with POST /api/v1/experiments/{experiment_id}/clone: the copy is a new experiment, a draft, and takes them. The OpenAPI document changes only in descriptions: of the five fields in ExperimentUpdate, and of the update operation. See Updating an experiment."
+by = [
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_superuser_cannot_change_an_analysis_setting_once_out_of_draft",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_sending_back_the_stored_value_is_refused_too",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_null_is_refused_outside_draft_for_the_four_that_accept_it",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_null_sequential_testing_enabled_is_422_at_every_status",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_developer_meets_the_refusal_of_every_change_outside_draft_first",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_draft_takes_each_analysis_setting",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_clone_of_a_running_experiment_takes_the_settings_as_a_draft",
+    "test:backend/tests/unit/api/test_experiment_update_fields_classified.py::test_the_fixed_fields_are_exactly_the_routes_list",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]

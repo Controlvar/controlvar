@@ -119,7 +119,9 @@ experiment.
 ## Choosing the method
 
 The method is part of the experiment, in its `variance_reduction_config`, set when you
-create it (`POST /api/v1/experiments/`) or change it (`PUT /api/v1/experiments/{id}`):
+create it (`POST /api/v1/experiments/`) or while it is a draft
+(`PUT /api/v1/experiments/{id}`); once it has left draft it cannot be changed (see
+[Permissions](#permissions)):
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -298,4 +300,11 @@ experiment's state, not by who created it. Set it when you create the experiment
 `PUT /api/v1/experiments/{id}` while the experiment is a draft. ADMIN and DEVELOPER may
 change experiments, and in the full profile so may anyone whose custom role or direct grant
 gives `experiment (update)`; for anyone else that `PUT` answers `403` with
-`"You don't have permission to update experiments"`.
+`"You don't have permission to update experiments"`. Once the experiment has left draft,
+nobody can change it, a superuser included, even to the value it already has: on an active
+experiment the `PUT` answers `400` with
+`"Cannot update variance_reduction_config for experiments in active status"` for a superuser
+and `"Cannot update experiments in active status"` for anyone else who may change
+experiments. To use another method,
+clone the experiment (`POST /api/v1/experiments/{id}/clone`): the copy is a new experiment,
+a draft, and takes it.

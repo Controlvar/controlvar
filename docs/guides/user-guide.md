@@ -140,7 +140,8 @@ cannot be changed after it starts:
 Below them, **Also analyse the primary metric with Bayesian statistics** is off by default. Turned
 on, the results also carry a Bayesian analysis of the primary metric (the probability that each
 variant is the best) with default priors; the frequentist results and the recommendation do not
-change. To set the priors, see [Bayesian analysis](../api/bayesian.md).
+change. Like the two settings above, it is saved with the experiment and cannot be changed
+after it starts. To set the priors, see [Bayesian analysis](../api/bayesian.md).
 
 The single-page form has the same settings in a collapsed **Analysis settings** section,
 whose title shows the current values.

@@ -1698,9 +1698,16 @@ A refusal because of the experiment's state is a 400 whose detail names the
 state; a 403 means the caller's role may not update experiments, and is
 decided before the state is looked at. Outside `draft`, only a superuser may
 change an experiment's other fields (`Cannot update experiments in active
-status`), and `variants`, `metrics`, `start_date`, `end_date`,
-`correction_method`, `confidence_level` and `balance_within` cannot be changed
-by anyone (`Cannot update variants for experiments in active status`).
+status`), and `variants`, `metrics`, `correction_method`, `confidence_level`,
+`balance_within`, `variance_reduction_config`, `sequential_testing_enabled`,
+`sequential_testing_config`, `bayesian_enabled` and `bayesian_config` cannot be
+changed by anyone, even to the value already stored (`Cannot update variants
+for experiments in active status`); a request that includes several is refused
+naming the first of them in that order. To change one of those for a running
+experiment, clone it (`POST /api/v1/experiments/{experiment_id}/clone`): the
+copy is a new experiment, a draft, and takes the change. `start_date` and
+`end_date` are not fields of this request, so a body that names them changes
+neither.
 
 `schedule` is not accepted by this endpoint. A request that contains it, with
 any value including `null` or `{}`, is refused with 422, nothing is changed,
