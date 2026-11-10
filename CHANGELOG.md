@@ -10,6 +10,74 @@ longer applies and release-please can generate this file directly. Until it
 does, entries below 0.2.2 are hand-written and the links in them are the
 reason why.
 
+## [0.45.0](https://github.com/Controlvar/controlvar/compare/v0.44.1...v0.45.0) (2026-11-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **experiments:** PUT /api/v1/experiments/{experiment_id} answers 400 and changes nothing to a request that includes variance_reduction_config, sequential_testing_enabled, sequential_testing_config, bayesian_enabled or bayesian_config once the experiment has left draft, for every role, a superuser included; a superuser's detail is "Cannot update <field> for experiments in <status> status" (#580's). A superuser's such request used to answer 200. Set them while the experiment is a draft, or clone the experiment and set them on the copy.
+* **api:** sort_by values that are not a column of Experiment (foo, Name, Created_At) answered 200 and were ignored; they now answer 422.
+
+### Features
+
+* **admin:** the API key and Invite User dialogs move onto the shared Dialog ([#1850](https://github.com/Controlvar/controlvar/issues/1850)) ([4a649b8](https://github.com/Controlvar/controlvar/commit/4a649b893f4bc1c172d10dd5ecc0d4c061309eec))
+* **auth:** server side of dashboard sign-in through the Cognito Hosted UI ([#1841](https://github.com/Controlvar/controlvar/issues/1841)) ([078e673](https://github.com/Controlvar/controlvar/commit/078e6737e3e49e61116bb5d37740dff596de339b))
+* **dashboard:** balance the split within groups on a draft ([#1873](https://github.com/Controlvar/controlvar/issues/1873)) ([f5f76a9](https://github.com/Controlvar/controlvar/commit/f5f76a95e47a87a1109da9682b6dafd785c9b38d))
+* **dashboard:** show stale flags and filter to them ([#1852](https://github.com/Controlvar/controlvar/issues/1852)) ([a28c5fe](https://github.com/Controlvar/controlvar/commit/a28c5fe0ee5b4e179ad6b05e80260bf1bb6b61de))
+* **dashboard:** sign in through the Cognito Hosted UI ([#708](https://github.com/Controlvar/controlvar/issues/708)) ([#1849](https://github.com/Controlvar/controlvar/issues/1849)) ([a7b1c9e](https://github.com/Controlvar/controlvar/commit/a7b1c9ee12245d833c0e8576376ad1a114a15e4c))
+* **experiments:** balance the split within a group as visitors arrive ([#448](https://github.com/Controlvar/controlvar/issues/448)) ([#1853](https://github.com/Controlvar/controlvar/issues/1853)) ([b519a7a](https://github.com/Controlvar/controlvar/commit/b519a7ae99bec4cd200bae300476f048d9b5a046))
+* **experiments:** balance within saved segments ([#448](https://github.com/Controlvar/controlvar/issues/448)) ([#1870](https://github.com/Controlvar/controlvar/issues/1870)) ([667c96a](https://github.com/Controlvar/controlvar/commit/667c96a668c48d006753939bf120ed418f387e6b))
+* **feature-flags:** mark stale flags in the flag list API and the MCP server ([#1842](https://github.com/Controlvar/controlvar/issues/1842)) ([bc43401](https://github.com/Controlvar/controlvar/commit/bc43401d1077dcb32738b6ce9144a96159f4a5a2))
+* **frontend:** one shared dialog that keeps focus inside and returns it ([#369](https://github.com/Controlvar/controlvar/issues/369)) ([#1845](https://github.com/Controlvar/controlvar/issues/1845)) ([afb9747](https://github.com/Controlvar/controlvar/commit/afb974791ec5a92b7f17eac6c62ba236c5503a83))
+* **frontend:** seven more overlays move onto the shared Dialog ([#1847](https://github.com/Controlvar/controlvar/issues/1847)) ([a452bdc](https://github.com/Controlvar/controlvar/commit/a452bdc5c94488b1f76b6e1b01a94b0fa0eb640a))
+* **frontend:** the safety rollback and warehouse delete confirms move onto the shared Dialog ([#1856](https://github.com/Controlvar/controlvar/issues/1856)) ([bf3268b](https://github.com/Controlvar/controlvar/commit/bf3268b1b41a007b4c1d58a538b7cef0b511d545))
+* **infra:** Cognito Hosted UI sign-in settings in the CDK, Helm and compose, off by default ([#1851](https://github.com/Controlvar/controlvar/issues/1851)) ([835127e](https://github.com/Controlvar/controlvar/commit/835127ef4545d6e727650586b65f4588e82f5133))
+* **results:** per-group and stratified results for a balanced experiment ([#448](https://github.com/Controlvar/controlvar/issues/448)) ([#1874](https://github.com/Controlvar/controlvar/issues/1874)) ([d5d9e61](https://github.com/Controlvar/controlvar/commit/d5d9e6197609aa1eb633dd9aa8dd9a4133b74bda))
+* **segments:** the preview estimates from recent exposure contexts ([#830](https://github.com/Controlvar/controlvar/issues/830)) ([#1879](https://github.com/Controlvar/controlvar/issues/1879)) ([fa2ffac](https://github.com/Controlvar/controlvar/commit/fa2ffacd5b8b63ccf964c3c0aa45abf2c6daf94d))
+
+
+### Bug Fixes
+
+* **api:** a date with a UTC offset beyond 15:59 answers 422 instead of 500 ([#1827](https://github.com/Controlvar/controlvar/issues/1827)) ([54c7a26](https://github.com/Controlvar/controlvar/commit/54c7a26d9ae04427b99544f341e358266d06cd6f))
+* **api:** a feature flag key ending in a newline is refused ([#1875](https://github.com/Controlvar/controlvar/issues/1875)) ([0956fc4](https://github.com/Controlvar/controlvar/commit/0956fc4cbb900dacc95b0e9153d815dad8b11669))
+* **api:** a request-body date with a UTC offset beyond 15:59 answers 422 instead of 500 ([#1846](https://github.com/Controlvar/controlvar/issues/1846)) ([43e1ddf](https://github.com/Controlvar/controlvar/commit/43e1ddf17b9bda2938f3bfd4d66e9e6674367879))
+* **api:** bound skip, page and offset at the database limit ([#1001](https://github.com/Controlvar/controlvar/issues/1001)) ([#1867](https://github.com/Controlvar/controlvar/issues/1867)) ([f8c9599](https://github.com/Controlvar/controlvar/commit/f8c9599f52579c9e4e4304e8738cd208234b479b))
+* **api:** refuse a wrong-typed body value with 422 ([#957](https://github.com/Controlvar/controlvar/issues/957)) ([#1884](https://github.com/Controlvar/controlvar/issues/1884)) ([e6693ea](https://github.com/Controlvar/controlvar/commit/e6693ea96c9caf225b643974be51011a536f54c2))
+* **api:** sort_by on the experiment list accepts exactly the table's columns ([#1840](https://github.com/Controlvar/controlvar/issues/1840)) ([b31a305](https://github.com/Controlvar/controlvar/commit/b31a30508ec6d44ddf632c1b22ddbaa86fd750d3))
+* **audit:** a design save names the variants and metrics it changed ([#1782](https://github.com/Controlvar/controlvar/issues/1782)) ([#1872](https://github.com/Controlvar/controlvar/issues/1872)) ([7172a3e](https://github.com/Controlvar/controlvar/commit/7172a3e8e5b37cfe72d1f316ebef2eaeaf5b58f5))
+* **audit:** an experiment's update entry names its CUPED, sequential and Bayesian settings ([#1866](https://github.com/Controlvar/controlvar/issues/1866)) ([7d39e6e](https://github.com/Controlvar/controlvar/commit/7d39e6e4935a24fb7fa94053ff250452b326639c))
+* **auth:** a first Cognito sign-in needs a verified email ([#1833](https://github.com/Controlvar/controlvar/issues/1833)) ([c34c1b5](https://github.com/Controlvar/controlvar/commit/c34c1b5c8b6969e3a003908db46108169986f6c2))
+* **dashboard:** the new-experiment Review names a segment instead of showing its id ([#1835](https://github.com/Controlvar/controlvar/issues/1835)) ([bf00a39](https://github.com/Controlvar/controlvar/commit/bf00a390af203f30202f68ada88bdc60cfd4baed))
+* **experiments:** analysis settings are fixed once an experiment leaves draft ([#1865](https://github.com/Controlvar/controlvar/issues/1865)) ([e816040](https://github.com/Controlvar/controlvar/commit/e8160404d11b2d3d98643a9dcde681392a826202))
+* **feature-flags:** the flag list answers 422 for a skip or limit it cannot page with ([#1858](https://github.com/Controlvar/controlvar/issues/1858)) ([ed9878e](https://github.com/Controlvar/controlvar/commit/ed9878e6446585394370d4e3a5b9fb26f9b0756f))
+* **js-sdk:** keep the key-less track() record for ever when cacheTtlMs never expires ([#1877](https://github.com/Controlvar/controlvar/issues/1877)) ([d23b774](https://github.com/Controlvar/controlvar/commit/d23b77488fa5b444dcfed89389aa50b58cb823d3))
+* **logging:** hold the AWS SDK's loggers at WARNING, as the HTTP client's are ([#1848](https://github.com/Controlvar/controlvar/issues/1848)) ([c586e43](https://github.com/Controlvar/controlvar/commit/c586e437571ae4adb034eb427c05650859da43f5))
+* **metrics:** the summary counts the window asked for when the database server's time zone is not UTC ([#1855](https://github.com/Controlvar/controlvar/issues/1855)) ([918d107](https://github.com/Controlvar/controlvar/commit/918d107f17698c614d5dc7599da66d1b7d4d2142))
+* **monitoring:** dashboards graph only published metrics, and one failed audit write raises an alarm ([#1861](https://github.com/Controlvar/controlvar/issues/1861)) ([0234201](https://github.com/Controlvar/controlvar/commit/023420174a3378f31c9faf30d2fa65db40421f26))
+* **rbac:** a grant whose body user_id differs from the path is refused ([#1789](https://github.com/Controlvar/controlvar/issues/1789)) ([#1882](https://github.com/Controlvar/controlvar/issues/1882)) ([37cbd4a](https://github.com/Controlvar/controlvar/commit/37cbd4ac3a1fca29964ccf94f3494dc0e4813489))
+* **results:** the results routes admit callers by the experiment page's rule ([#1839](https://github.com/Controlvar/controlvar/issues/1839)) ([03f5639](https://github.com/Controlvar/controlvar/commit/03f5639911b135787725cddc8dab3ef6c7688e88))
+* **rollout:** a null for a required schedule or stage field answers 422 instead of 500 ([#1829](https://github.com/Controlvar/controlvar/issues/1829)) ([6573204](https://github.com/Controlvar/controlvar/commit/65732046f36ef609b95f5667082b8c7ad6277aa1))
+* **scripts:** verify_release_gate.sh says Release Gate is still running instead of asking for a dispatch ([#1860](https://github.com/Controlvar/controlvar/issues/1860)) ([92fd01a](https://github.com/Controlvar/controlvar/commit/92fd01a384befd040f729973ff9b48db6945c95c))
+* **sdk:** SPDX licence metadata for the Python packages, and no Dependabot floor bumps ([#1883](https://github.com/Controlvar/controlvar/issues/1883)) ([8e479ee](https://github.com/Controlvar/controlvar/commit/8e479ee5e1f015739d5925b26821b70da58c98e0))
+* **sdk:** the React and Python SDKs keep the key-less track() record while their cache never expires ([#1880](https://github.com/Controlvar/controlvar/issues/1880)) ([c6791b4](https://github.com/Controlvar/controlvar/commit/c6791b44af1a80aab5d5f6eb73e5e6f7cf02bf5e))
+* **warehouse:** the unrecognised-error text points at a Troubleshooting section that exists ([#1809](https://github.com/Controlvar/controlvar/issues/1809)) ([#1838](https://github.com/Controlvar/controlvar/issues/1838)) ([15e03a0](https://github.com/Controlvar/controlvar/commit/15e03a0f9f7f9d4eb5ebe8a43672cdce6041688d))
+
+
+### Dependencies
+
+* **fuzz:** certifi 2026.10.x in the fuzz constraints ([#1869](https://github.com/Controlvar/controlvar/issues/1869)) ([d03d8c7](https://github.com/Controlvar/controlvar/commit/d03d8c7a332ff80bc57ed9abdd9ed0ddfc601790))
+* **tests:** move to moto 5, which drops python-jose ([#1862](https://github.com/Controlvar/controlvar/issues/1862)) ([1fbb1e2](https://github.com/Controlvar/controlvar/commit/1fbb1e250ef1c7b1ed402d83adf71d8f98a8c7ba))
+
+
+### Documentation
+
+* a page listing what Controlvar does today, linked from the docs home and the README ([#1854](https://github.com/Controlvar/controlvar/issues/1854)) ([7800b18](https://github.com/Controlvar/controlvar/commit/7800b185c039f6ebc9dea83dded58623a9f1886b))
+* **ci:** the react-native advisory and issue comments state what was measured ([#1881](https://github.com/Controlvar/controlvar/issues/1881)) ([272cf14](https://github.com/Controlvar/controlvar/commit/272cf1480a253b2e2d3462e02a005f877cc4320c))
+* **compose:** an upgrade procedure for the Compose install ([#1843](https://github.com/Controlvar/controlvar/issues/1843)) ([3b9a550](https://github.com/Controlvar/controlvar/commit/3b9a550abae06dc1488f10d87516c4c6ff772bd2))
+* **experiments:** the CUPED, sequential and results-journey examples set their analysis settings before start ([#1832](https://github.com/Controlvar/controlvar/issues/1832)) ([2d274b8](https://github.com/Controlvar/controlvar/commit/2d274b8605b1b4f4c2d493c72ac52b2cf78cd5bd))
+* publish the product roadmap ([#1830](https://github.com/Controlvar/controlvar/issues/1830)) ([25a8b8c](https://github.com/Controlvar/controlvar/commit/25a8b8c2161f416e35a5ebaa93398e2ba230877d))
+* **site:** link the Controlvar books from the site, the docs and the README ([#1864](https://github.com/Controlvar/controlvar/issues/1864)) ([3c13e68](https://github.com/Controlvar/controlvar/commit/3c13e68d81a04625cf4da6cb14faa2325270e0dd))
+
 ## [0.44.1](https://github.com/Controlvar/controlvar/compare/v0.44.0...v0.44.1) (2026-11-08)
 
 
