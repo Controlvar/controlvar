@@ -91,6 +91,19 @@
 # and 175 above, plus this one each). It is not an SDK route, so the sdk pass does not select it. GET /api/v1/auth/config,
 # added beside it, answers 200 with no credentials, so it needs no entry.
 # Listed from that reasoning before the pull request's own fuzz run.
+#
+# Then #1842 (#1808) gave GET /api/v1/feature-flags/ the `stale` parameter
+# and the flag request schemas two read-only fields. That changed the requests
+# the seed generates, and with them the ids Schemathesis reuses from earlier
+# answers: the superuser pass now sends a PUT
+# /api/v1/rollout-schedules/{schedule_id} that names a stored schedule and
+# updates it (200), so it reaches it again, and its list is 105. The viewer
+# pass's GET /api/v1/feature-flags/{flag_id} now names no stored flag (the id
+# it reuses is a user's, 404), so it no longer reaches it, and its list is
+# 177. Read from fuzz_check's evaluation of local runs at this seed: the
+# superuser pass on main after #1842 and on the head of the pull request that
+# changed these entries, the viewer pass on that head (its flag-by-id
+# requests come before any request that head answers differently from main).
 
 # Then #1853 (#448) gave the experiment create and update schemas
 # balance_within. That changed the requests the seed generates for
@@ -280,11 +293,6 @@ reason = "No request names a stored experiment with sequential testing enabled: 
 pass = "superuser"
 operation = "POST /api/v1/rollout-schedules/"
 reason = "The handler refuses the generated values (400); ids that name no stored row answer 404 and invalid requests answer 422."
-
-[[unreached]]
-pass = "superuser"
-operation = "PUT /api/v1/rollout-schedules/{schedule_id}"
-reason = "The ids sent name no stored schedule (404), and the other requests fail validation (422) or, once, body parsing (400)."
 
 [[unreached]]
 pass = "superuser"
@@ -807,6 +815,11 @@ reason = "An SDK route: it takes an API key, and this pass sends a bearer token 
 pass = "viewer"
 operation = "POST /api/v1/feature-flags/"
 reason = "The VIEWER role may not use it, so the role check answers 403, and a few 400."
+
+[[unreached]]
+pass = "viewer"
+operation = "GET /api/v1/feature-flags/{flag_id}"
+reason = "The ids sent name no stored flag (404; the one reused from an earlier answer is a user's id), and the other requests fail validation (422)."
 
 [[unreached]]
 pass = "viewer"

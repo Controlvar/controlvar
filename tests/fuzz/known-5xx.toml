@@ -53,9 +53,12 @@
 # was (#1572): a start_date or end_date with a UTC offset of 16 hours or more
 # answers 422, so both its entries (superuser and viewer) were removed. The
 # other routes that took such a date as a query parameter are fixed the same
-# way (a date in a request body still answers 500: #1826): GET
-# /api/v1/audit-logs/export, GET /api/v1/compliance/export and GET
-# /api/v1/hipaa/report answer 422, and their entries were removed.
+# way: GET /api/v1/audit-logs/export, GET /api/v1/compliance/export and GET
+# /api/v1/hipaa/report answer 422, and their entries were removed. A date in
+# a request body is fixed too (#1826): an API key's expires_at and a rollout
+# schedule's start_date and end_date answer 422 for an offset of 16 hours or
+# more. No entry cited it, so none was removed; the POST /api/v1/api-keys
+# entries below are #957 (a field of the wrong type), a different cause.
 # #958 and #959 are fixed, so their entries were removed from both passes:
 # the two sample-size routes answer 422 for the inputs they cannot calculate
 # with, and GET, PUT and DELETE /api/v1/users/{user_id} and

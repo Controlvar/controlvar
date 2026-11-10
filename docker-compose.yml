@@ -90,6 +90,12 @@ services:
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}       # 1 worker per container; scale containers instead
       # --- auth ---
       AUTH_PROVIDER: ${AUTH_PROVIDER:-local}       # local | cognito
+      # Under cognito: the user pool, its app client and its Hosted UI domain
+      # (<prefix>.auth.<region>.amazoncognito.com), empty unless .env sets
+      # them; the region is AWS_REGION below.
+      COGNITO_USER_POOL_ID: ${COGNITO_USER_POOL_ID:-}
+      COGNITO_CLIENT_ID: ${COGNITO_CLIENT_ID:-}
+      COGNITO_DOMAIN: ${COGNITO_DOMAIN:-}
       DEV_AUTH_BYPASS: ${DEV_AUTH_BYPASS:-false}   # never true outside development/test
       # Placeholder for local development only. Generate a real one with
       #   python -c 'import secrets; print(secrets.token_urlsafe(48))'

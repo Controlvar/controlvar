@@ -687,6 +687,14 @@ text = "COGNITO_CLIENT_ID | Only for Cognito sign-in | Cognito app client ID"
 by = ["test:backend/tests/unit/core/test_aws_settings_and_clients.py::test_redis_defaults_and_cognito_settings_only_for_cognito_sign_in"]
 
 [[unit]]
+text = "COGNITO_DOMAIN | Only for sign-in through the Cognito Hosted UI | The Hosted UI's domain name, <prefix>.auth.<region>.amazoncognito.com, no scheme. A value that is not a domain name stops the API from starting"
+by = [
+    "test:backend/tests/unit/api/test_auth_config_route.py::test_under_cognito_an_unset_setting_is_named_and_nothing_is_echoed",
+    "test:backend/tests/unit/core/test_cognito_hosted_ui_settings.py::test_a_domain_name_is_accepted",
+    "test:backend/tests/unit/core/test_cognito_hosted_ui_settings.py::test_anything_else_stops_the_settings_and_the_value_is_not_repeated",
+]
+
+[[unit]]
 text = "AWS_REGION | Yes | Primary AWS region, read by Cognito and the other settings that name it. The Glue and DynamoDB counter clients do not read it"
 by = [
     "test:backend/tests/unit/core/test_aws_settings_and_clients.py::test_redis_defaults_and_cognito_settings_only_for_cognito_sign_in",

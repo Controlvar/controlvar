@@ -57,9 +57,10 @@ openai==3.26.0
 faker==40.41.0
 factory-boy==3.3.3
 freezegun==1.5.5
-moto==4.2.14
-pyparsing==3.3.3       # required by moto's glue backend (mock_glue), not declared by moto 4.2
-python-jose[cryptography]==3.5.0  # required by moto's cognitoidp backend (mock_cognitoidp); app auth uses PyJWT
+moto==5.2.5            # without extras: the two pins below are what its `glue` and `cognitoidp` extras add
+pyparsing==3.3.3       # moto's Glue backend imports it
+joserfc==1.7.6         # moto's Cognito backend signs its tokens with it; the same pin as
+                       # modules/requirements.lock. The app's own auth uses PyJWT
 jsonschema==4.26.0
 locust==2.46.7   # 2.40+ requires pytest>=8.3. That held this pin while
                  # pytest sat at 7.4 (a grouped Dependabot update to

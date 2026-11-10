@@ -4,7 +4,10 @@
  */
 import React from 'react';
 import axe from 'axe-core';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+// The delete confirm makes `#__next` inert and portals beside it, so every
+// render is mounted the way Next mounts the page (#369).
+import { renderInAppRoot as render } from '@/tests/helpers/renderInAppRoot';
 import { ModulesProvider } from '@/contexts/ModulesContext';
 import type { UserMe } from '@/services/api';
 import NewSourcePage from '@modules/pages/warehouse/sources/new';
@@ -410,5 +413,19 @@ describe('source detail', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete source' }));
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/warehouse?tab=assignment'));
+  });
+
+  it('the delete confirm opens on Cancel; Escape dispatched on document closes it without deleting and focus returns to Delete (#369)', async () => {
+    renderWith(<SourcePage />);
+    const trigger = await screen.findByRole('button', { name: 'Delete' });
+    trigger.focus();
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole('dialog', { name: `Delete “${source().name}”?` });
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    expect(document.getElementById('__next')).toHaveAttribute('inert');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    expect(svc.deleteSource).not.toHaveBeenCalled();
   });
 });

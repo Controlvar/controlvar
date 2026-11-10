@@ -5,7 +5,7 @@ This module provides functionality for recording metrics during
 feature flag evaluation and querying aggregated metrics for analysis.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
@@ -35,6 +35,30 @@ logger = get_logger(__name__)
 #: ``end_date``. ``GET /api/v1/metrics/summary`` computes the same default
 #: itself, to refuse an ``end_date`` whose default start falls before year 1.
 SUMMARY_DEFAULT_PERIOD = timedelta(days=30)
+
+
+def _naive_utc(value: Optional[datetime]) -> Optional[datetime]:
+    """A bound for a naive-UTC column: an aware datetime as naive UTC.
+
+    ``raw_metrics.timestamp``, ``aggregated_metrics.period_start`` and
+    ``error_logs.timestamp`` are ``timestamp without time zone`` columns that
+    hold UTC. PostgreSQL compares an aware value with such a column after
+    converting it to the session's time zone, so on a server whose ``TimeZone``
+    is not UTC a window sent with ``Z`` or an offset moved by the server's
+    offset (#1795). A naive value already means UTC and is returned as it is.
+    """
+    if value is not None and value.tzinfo is not None:
+        try:
+            return value.astimezone(timezone.utc).replace(tzinfo=None)
+        except OverflowError:
+            # The instant is outside datetime's range, which the database
+            # compares without error. A positive offset can only have passed
+            # year 1 (clamp to the earliest), a negative one year 9999 (the
+            # latest): the bound then holds every row the true one would.
+            if value.utcoffset() > timedelta(0):
+                return datetime.min
+            return datetime.max
+    return value
 
 
 class MetricsService:
@@ -341,8 +365,8 @@ class MetricsService:
             Summary statistics
         """
         # Set default dates if not provided
-        end_date = end_date or datetime.utcnow()
-        start_date = start_date or (end_date - SUMMARY_DEFAULT_PERIOD)
+        end_date = _naive_utc(end_date) or datetime.utcnow()
+        start_date = _naive_utc(start_date) or (end_date - SUMMARY_DEFAULT_PERIOD)
 
         # Base query for aggregated metrics
         query = db.query(AggregatedMetric).filter(
@@ -461,10 +485,14 @@ class MetricsService:
             query = query.filter(AggregatedMetric.period == params.period)
 
         if params.start_date:
-            query = query.filter(AggregatedMetric.period_start >= params.start_date)
+            query = query.filter(
+                AggregatedMetric.period_start >= _naive_utc(params.start_date)
+            )
 
         if params.end_date:
-            query = query.filter(AggregatedMetric.period_start <= params.end_date)
+            query = query.filter(
+                AggregatedMetric.period_start <= _naive_utc(params.end_date)
+            )
 
         # Order by period start (descending) and metric type
         query = query.order_by(
@@ -506,10 +534,10 @@ class MetricsService:
             query = query.filter(ErrorLog.feature_flag_id == feature_flag_id)
 
         if start_date:
-            query = query.filter(ErrorLog.timestamp >= start_date)
+            query = query.filter(ErrorLog.timestamp >= _naive_utc(start_date))
 
         if end_date:
-            query = query.filter(ErrorLog.timestamp <= end_date)
+            query = query.filter(ErrorLog.timestamp <= _naive_utc(end_date))
 
         if error_type:
             query = query.filter(ErrorLog.error_type == error_type)

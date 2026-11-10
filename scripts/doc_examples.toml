@@ -65,6 +65,7 @@ universe = [
     "docs/auth/cognito-auth-testing.md",
     "docs/auth/flow.md",
     "docs/auth/sso.md",
+    "docs/capabilities.md",
     "docs/cognito_integration.md",
     "docs/deployment/README.md",
     "docs/deployment/deployment-guide.md",

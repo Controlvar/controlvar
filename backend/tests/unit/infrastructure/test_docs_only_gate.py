@@ -184,6 +184,11 @@ DOCS_TESTS = (
     # The event contract's rules quote docs/guides/how-events-count.md and the
     # pages beside it (#1544); reads the library as text, stdlib only.
     "backend/tests/unit/ground_truth/test_contract_citations.py",
+    # Video 4's description says what docs/getting-started/limitations.md says
+    # about native SDKs (D163), so a docs-only reword of that row must meet it.
+    # Reads the manifest, storyboards and transcripts as text; passes with
+    # backend/requirements.txt alone (checked).
+    "backend/tests/unit/showcase/test_site_walkthroughs.py",
 )
 
 #: Python tests that name docs/ but are deliberately NOT in DOCS_TESTS.

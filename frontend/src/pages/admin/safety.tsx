@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
+import { Dialog } from '@/components/ui/Dialog';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { SafetySettingsForm } from '@/components/admin/safety/SafetySettingsForm';
 import { SafetyStatusCard } from '@/components/admin/safety/SafetyStatusCard';
@@ -79,14 +80,9 @@ export function SafetyDashboard() {
   const [rolling, setRolling] = useState(false);
   /** The control that opened the dialog; focus goes back to it on close. */
   const rollbackTriggerRef = useRef<HTMLElement | null>(null);
-  const rollbackReasonRef = useRef<HTMLInputElement>(null);
+  /** The flag the dialog is about, for the fallback when that control has gone. */
+  const rollbackFlagIdRef = useRef<string | null>(null);
   const rollbackCancelRef = useRef<HTMLButtonElement>(null);
-  const rollbackModalOpen = rollbackModal !== null;
-
-  // Move focus into the dialog when it opens.
-  useEffect(() => {
-    if (rollbackModalOpen) rollbackReasonRef.current?.focus();
-  }, [rollbackModalOpen]);
 
   // On success the reason field and the confirm button go; keep focus in the dialog.
   useEffect(() => {
@@ -121,6 +117,7 @@ export function SafetyDashboard() {
     const active = document.activeElement;
     rollbackTriggerRef.current =
       active instanceof HTMLElement && active.closest('[data-flag-id]') ? active : null;
+    rollbackFlagIdRef.current = flagId;
     setRollbackModal({ flagId, flagName: flag.flag_name });
     setRollbackReason('');
     setRollbackSuccess(false);
@@ -162,33 +159,27 @@ export function SafetyDashboard() {
   const erroredKeys = failedChecks.filter((f) => !f.rateLimited).map((f) => f.key);
 
   const handleCloseModal = () => {
-    const flagId = rollbackModal?.flagId;
     setRollbackModal(null);
     setRollbackReason('');
     setRollbackSuccess(false);
     setRollbackError(null);
-    // Back to the button that opened the dialog. When it was not captured, or
-    // the card now shows "Off" in its place, use the card's Roll back button if
-    // it is still there, else the card itself.
-    const trigger = rollbackTriggerRef.current;
-    rollbackTriggerRef.current = null;
-    if (trigger && trigger.isConnected) {
-      trigger.focus();
-    } else if (flagId) {
-      const card = Array.from(document.querySelectorAll<HTMLElement>('[data-flag-id]')).find(
-        (el) => el.dataset.flagId === flagId,
-      );
-      const button = card?.querySelector<HTMLElement>('[data-testid="rollback-button"]');
-      (button ?? card)?.focus();
-    }
   };
 
-  const handleModalKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'Escape') {
-      e.stopPropagation();
-      handleCloseModal();
-    }
-  };
+  /**
+   * Where focus goes when the dialog closes: the button that opened it. When
+   * it was not captured (the Dialog's own opener is then <body>), or the card
+   * now shows "Off" in its place, the card's Roll back button if it is still
+   * there, else the card itself.
+   */
+  const rollbackReturnFocus = useCallback((): HTMLElement | null => {
+    const trigger = rollbackTriggerRef.current;
+    if (trigger?.isConnected) return trigger;
+    const flagId = rollbackFlagIdRef.current;
+    const card = Array.from(document.querySelectorAll<HTMLElement>('[data-flag-id]')).find(
+      (el) => el.dataset.flagId === flagId,
+    );
+    return card?.querySelector<HTMLElement>('[data-testid="rollback-button"]') ?? card ?? null;
+  }, []);
 
   return (
     <AdminLayout title="Safety" currentPath={router.pathname}>
@@ -286,37 +277,38 @@ export function SafetyDashboard() {
         </section>
       </div>
 
-      {/* Rollback Confirmation Modal */}
+      {/* Rollback confirmation: a destructive confirm, so it opens on Cancel and
+          Escape is Cancel. Closing is not refused while the request is in
+          flight: Cancel stays enabled then, so Escape does too. */}
       {rollbackModal && (
-        <div
-          data-testid="rollback-modal"
-          className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="rollback-modal-title"
-          onKeyDown={handleModalKeyDown}
+        <Dialog
+          open
+          onClose={handleCloseModal}
+          title="Confirm Rollback"
+          testId="rollback-modal"
+          initialFocusRef={rollbackCancelRef}
+          returnFocus={rollbackReturnFocus}
+          description={
+            <>
+              <p>
+                You are about to roll back flag{' '}
+                <span
+                  data-testid="rollback-modal-flag-name"
+                  className="font-mono font-semibold text-slate-800"
+                >
+                  {rollbackModal.flagName}
+                </span>
+                .
+              </p>
+              <p data-testid="rollback-modal-effect" className="mt-4">
+                The flag will be turned off for every user, including users matched by a targeting
+                rule. They get the flag&apos;s off value. Its rollout schedule is paused. To serve
+                it again, turn it on from the flag&apos;s page.
+              </p>
+            </>
+          }
         >
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 flex flex-col gap-4">
-            <h3 id="rollback-modal-title" className="text-base font-semibold text-slate-800">
-              Confirm Rollback
-            </h3>
-
-            <p className="text-sm text-slate-600">
-              You are about to roll back flag{' '}
-              <span
-                data-testid="rollback-modal-flag-name"
-                className="font-mono font-semibold text-slate-800"
-              >
-                {rollbackModal.flagName}
-              </span>
-              .
-            </p>
-            <p data-testid="rollback-modal-effect" className="text-sm text-slate-600">
-              The flag will be turned off for every user, including users matched by a targeting
-              rule. They get the flag&apos;s off value. Its rollout schedule is paused. To serve
-              it again, turn it on from the flag&apos;s page.
-            </p>
-
+          <div className="flex flex-col gap-4">
             {!rollbackSuccess && (
               <div className="flex flex-col gap-1">
                 <label
@@ -326,7 +318,6 @@ export function SafetyDashboard() {
                   Reason (optional)
                 </label>
                 <input
-                  ref={rollbackReasonRef}
                   id="rollback-reason"
                   data-testid="rollback-reason-input"
                   type="text"
@@ -340,6 +331,7 @@ export function SafetyDashboard() {
 
             {rollbackError && (
               <div
+                role="alert"
                 data-testid="rollback-error"
                 className="bg-red-50 border border-red-200 rounded p-3 text-red-700 text-sm"
               >
@@ -380,7 +372,7 @@ export function SafetyDashboard() {
               )}
             </div>
           </div>
-        </div>
+        </Dialog>
       )}
     </AdminLayout>
   );

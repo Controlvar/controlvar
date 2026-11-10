@@ -20,14 +20,21 @@ from stacks.dashboard_service import DashboardService
 from stacks.database_access import require_database
 from stacks.environments import api_app_env, data_removal_policy
 from stacks.names import (
+    API_ERROR_LOG_LINES_METRIC,
     API_LIVE_TARGET_GROUP_CONTEXT,
     API_LIVE_TARGET_GROUP_DEFAULT,
     API_TARGET_GROUP_COLOURS,
+    AUDIT_SERVICE_LOGGER,
+    AUDIT_WRITE_FAILED_SEARCH,
+    AUDIT_WRITE_FAILURES_METRIC,
     BACKEND_ECR_REPOSITORY,
     api_5xx_alarm_name,
+    api_audit_write_failed_alarm_name,
     api_error_logs_alarm_name,
     api_healthy_alarm_name,
+    api_log_metric_namespace,
     api_no_healthy_task_alarm_name,
+    api_service_name,
     codedeploy_application_name,
     counters_table_name,
     glue_names,
@@ -104,6 +111,11 @@ class FargateServiceStack(Stack):
     ``include_modules`` is the deployment's profile (``app.py`` passes
     ``ENABLE_MODULE_STACKS``). ``True`` adds the full profile's own secret,
     ``AUDIT_HMAC_KEY``; see the comment beside it.
+
+    ``cognito_hosted_ui`` is the auth stack's ``hosted_ui``: ``None`` (the
+    default) unless the app is synthesised with ``-c cognito_hosted_ui=true``
+    (#708). Given, the API container is told to sign users in with Cognito,
+    by reference to the auth stack's pool, client and Hosted UI domain.
     """
 
     def __init__(
@@ -126,6 +138,7 @@ class FargateServiceStack(Stack):
         redis_host: str = None,
         redis_port: str = None,
         alarm_topic=None,
+        cognito_hosted_ui=None,
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -435,6 +448,24 @@ class FargateServiceStack(Stack):
                 # and infrastructure/tests/test_api_task_forwarded_allow_ips.py
                 # holds it to the synthesised VPC.
                 "FORWARDED_ALLOW_IPS": "10.0.0.0/16",
+                # Dashboard sign-in through the Cognito Hosted UI (#708), only
+                # with `-c cognito_hosted_ui=true` (`cognito_hosted_ui` is the
+                # auth stack's `hosted_ui`, None otherwise). The ids are
+                # references to the auth stack, so this stack imports its
+                # exports; COGNITO_DOMAIN is the Hosted UI's domain name,
+                # `<prefix>.auth.<region>.amazoncognito.com`. AWS_REGION is the
+                # pool's: unset, the Cognito client would use us-east-1.
+                **(
+                    {
+                        "AUTH_PROVIDER": "cognito",
+                        "COGNITO_USER_POOL_ID": cognito_hosted_ui.user_pool_id,
+                        "COGNITO_CLIENT_ID": cognito_hosted_ui.client_id,
+                        "COGNITO_DOMAIN": cognito_hosted_ui.domain,
+                        "AWS_REGION": cognito_hosted_ui.region,
+                    }
+                    if cognito_hosted_ui is not None
+                    else {}
+                ),
             },
             secrets={
                 # Both halves from the secret Aurora generated its master
@@ -680,7 +711,7 @@ class FargateServiceStack(Stack):
         self.fargate_service = ecs.FargateService(
             self,
             "BackendService",
-            service_name=f"experimentation-backend-{env_name}",
+            service_name=api_service_name(env_name),
             cluster=ecs_cluster,
             task_definition=self.task_definition,
             # Per environment, from app.py (DECISIONS D13: staging runs 2).
@@ -977,8 +1008,8 @@ class FargateServiceStack(Stack):
                 logs.FilterPattern.string_value("$.level", "=", "error"),
                 logs.FilterPattern.string_value("$.level", "=", "critical"),
             ),
-            metric_name="ApiErrorLogLines",
-            metric_namespace=f"Experimently/{env_name}",
+            metric_name=API_ERROR_LOG_LINES_METRIC,
+            metric_namespace=api_log_metric_namespace(env_name),
             default_value=0,
         )
         error_logs_alarm = cloudwatch.Alarm(
@@ -998,6 +1029,59 @@ class FargateServiceStack(Stack):
             treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
         )
         error_logs_alarm.add_alarm_action(cloudwatch_actions.SnsAction(alarm_topic))
+
+        # --- one audit-log entry that could not be written (#834) ---
+        # A change whose audit-log entry fails is kept, and the API logs one
+        # error line saying so (AuditService._log_failure). Ten of those in
+        # five minutes were needed to reach the alarm above; this one fires
+        # on the first.
+        #
+        # The pattern matches the line's logger and level, not its text: a
+        # reworded message cannot silence it. Moving or renaming the module
+        # can, and so can a third error-level call in it, which would count
+        # as a lost entry. backend/tests/unit/services/
+        # test_audit_write_failed_line.py renders the real lines and checks
+        # their "logger" against AUDIT_SERVICE_LOGGER, and pins the module's
+        # error-level calls to exactly the two "Failed to create audit log"
+        # lines.
+        audit_write_failures = log_group.add_metric_filter(
+            "AuditWriteFailures",
+            filter_pattern=logs.FilterPattern.all(
+                logs.FilterPattern.string_value("$.logger", "=", AUDIT_SERVICE_LOGGER),
+                logs.FilterPattern.any(
+                    logs.FilterPattern.string_value("$.level", "=", "error"),
+                    logs.FilterPattern.string_value("$.level", "=", "critical"),
+                ),
+            ),
+            metric_name=AUDIT_WRITE_FAILURES_METRIC,
+            metric_namespace=api_log_metric_namespace(env_name),
+            metric_value="1",
+            default_value=0,
+        )
+        audit_write_failed_alarm = cloudwatch.Alarm(
+            self,
+            "AuditWriteFailedAlarm",
+            alarm_name=api_audit_write_failed_alarm_name(env_name),
+            alarm_description=(
+                "At least one audit-log entry could not be written in the last "
+                "5 minutes. The change each one records was kept; the audit "
+                "log has no entry for it. Search the log group "
+                f"/ecs/experimentation-backend-{env_name} for "
+                f'"{AUDIT_WRITE_FAILED_SEARCH}". See docs/api/audit-logging.md.'
+            ),
+            metric=audit_write_failures.metric(
+                statistic="Sum", period=Duration.minutes(5)
+            ),
+            threshold=1,
+            comparison_operator=(
+                cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD
+            ),
+            evaluation_periods=1,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        )
+        audit_write_failed_alarm.add_alarm_action(
+            cloudwatch_actions.SnsAction(alarm_topic)
+        )
 
         # --- CodeDeploy Application ---
         self.codedeploy_app = codedeploy.EcsApplication(

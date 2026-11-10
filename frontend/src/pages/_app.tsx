@@ -3,6 +3,7 @@ import type { AppProps } from "next/app";
 import Head from "next/head";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthConfigProvider } from "@/contexts/AuthConfigContext";
 import { NotificationProvider } from "@/contexts/NotificationContext";
 import { ModulesProvider } from "@/contexts/ModulesContext";
 import { EffectivePermissionsProvider } from "@/contexts/EffectivePermissionsContext";
@@ -34,14 +35,16 @@ export default function App({ Component, pageProps, router }: AppProps) {
         <title>Controlvar</title>
       </Head>
       <ModulesProvider>
-        <AuthProvider>
-          <EffectivePermissionsProvider navigationKey={navigationKey}>
-            <NotificationProvider>
-              {page}
-              <ToastContainer />
-            </NotificationProvider>
-          </EffectivePermissionsProvider>
-        </AuthProvider>
+        <AuthConfigProvider>
+          <AuthProvider>
+            <EffectivePermissionsProvider navigationKey={navigationKey}>
+              <NotificationProvider>
+                {page}
+                <ToastContainer />
+              </NotificationProvider>
+            </EffectivePermissionsProvider>
+          </AuthProvider>
+        </AuthConfigProvider>
       </ModulesProvider>
     </ErrorBoundary>
   );

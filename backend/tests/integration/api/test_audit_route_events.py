@@ -34,7 +34,7 @@ from unittest.mock import patch
 import boto3
 import pytest
 from fastapi.testclient import TestClient
-from moto import mock_cognitoidp
+from moto import mock_aws
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
@@ -1190,7 +1190,7 @@ def cognito_pool(monkeypatch):
     monkeypatch.setattr(settings, "AUTH_PROVIDER", "cognito")
     allow_all = {"return_value": (True, 999)}
     with (
-        mock_cognitoidp(),
+        mock_aws(),
         patch.object(rate_limiter.RedisRateLimiter, "is_allowed", **allow_all),
         patch.object(rate_limiter.SlidingWindowRateLimiter, "is_allowed", **allow_all),
     ):
