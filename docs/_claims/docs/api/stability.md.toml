@@ -1242,3 +1242,43 @@ by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
 ]
+
+[[unit]]
+text = "POST /api/v1/holdout, PUT /api/v1/holdout/{holdout_id}, POST /api/v1/mutual-exclusion-groups, PUT /api/v1/mutual-exclusion-groups/{group_id}, POST /api/v1/api-keys | #957 | A body value of the wrong type answers 422 at [\"body\", <field>] with pydantic's own type and msg, and nothing is written; it used to answer 500. That is holdout_percentage or traffic_allocation sent as an object or an array, or as null on a create (on an update null still means \"not changed\"), and scopes sent as false, true or a number (\"type\": \"list_type\"). scopes sent as an object is still read by its keys, as before: {} is no scopes. No message repeats the value sent. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_wrong_typed_body_values_api.py::test_957_create_holdout_refuses_a_wrong_typed_percentage",
+    "test:backend/tests/integration/api/test_wrong_typed_body_values_api.py::test_957_update_holdout_refuses_a_wrong_typed_percentage",
+    "test:backend/tests/integration/api/test_wrong_typed_body_values_api.py::test_a_null_percentage_on_update_still_changes_nothing",
+    "test:backend/tests/integration/api/test_wrong_typed_body_values_api.py::test_957_create_group_refuses_a_wrong_typed_allocation",
+    "test:backend/tests/integration/api/test_wrong_typed_body_values_api.py::test_957_update_group_refuses_a_wrong_typed_allocation",
+    "test:backend/tests/integration/api/test_wrong_typed_body_values_api.py::test_957_scopes_that_are_not_a_list_answer_422_and_store_no_key",
+    "test:backend/tests/integration/api/test_wrong_typed_body_values_api.py::test_scopes_that_can_be_iterated_are_stored_as_before",
+    "test:backend/tests/unit/schemas/test_request_model_before_validators.py::test_no_before_validator_raises_anything_but_a_validation_error",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "POST /api/v1/holdout, PUT /api/v1/holdout/{holdout_id}, POST /api/v1/mutual-exclusion-groups, PUT /api/v1/mutual-exclusion-groups/{group_id} | #957 | holdout_percentage and traffic_allocation are checked for their type before their range. A string holding a number is read as that number, as for any other number field: \"10\" for holdout_percentage and \"0.5\" for traffic_allocation are accepted (201 on a create, 200 on an update) where they answered 500, and a string holding a number out of range (\"50\" for holdout_percentage, \"2\" for traffic_allocation) or no number (\"abc\") answers 422 where it answered 500. A number out of range, a holdout_percentage outside 1 to 20 (false included, read as 0) or a traffic_allocation outside 0 to 1, still answers 422, but the item is pydantic's own: \"type\": \"greater_than_equal\" or \"less_than_equal\", a msg such as Input should be less than or equal to 20, and the bound in ctx; it was \"type\": \"value_error\" with Value error, holdout_percentage must be between 1 and 20 or Value error, traffic_allocation must be between 0.0 and 1.0. true is still read as 1, and false as 0 for traffic_allocation. The OpenAPI document does not change."
+by = [
+    "test:backend/tests/integration/api/test_wrong_typed_body_values_api.py::test_957_a_percentage_string_in_range_is_taken_as_its_number",
+    "test:backend/tests/integration/api/test_wrong_typed_body_values_api.py::test_957_an_allocation_string_in_range_is_taken_as_its_number",
+    "test:backend/tests/integration/api/test_wrong_typed_body_values_api.py::test_957_create_holdout_refuses_a_wrong_typed_percentage",
+    "test:backend/tests/integration/api/test_wrong_typed_body_values_api.py::test_957_create_group_refuses_a_wrong_typed_allocation",
+    "test:backend/tests/integration/api/test_wrong_typed_body_values_api.py::test_an_out_of_range_percentage_keeps_its_422_with_pydantics_text",
+    "test:backend/tests/integration/api/test_wrong_typed_body_values_api.py::test_an_out_of_range_allocation_keeps_its_422_with_pydantics_text",
+    "test:backend/tests/integration/api/test_wrong_typed_body_values_api.py::test_true_is_still_taken_as_1",
+    "test:backend/tests/integration/api/test_wrong_typed_body_values_api.py::test_a_boolean_allocation_is_still_taken_as_its_number",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
+text = "PUT /api/v1/rollout-schedules/{schedule_id}, PUT /api/v1/rollout-schedules/stages/{stage_id} | #1537 | null for a schedule's name, max_percentage or status, or for a stage's name, stage_order, target_percentage or trigger_type, answers 422 at that field with a msg that names it, and nothing is written; it used to answer 500. null is still accepted for a field it clears, such as a schedule's min_stage_duration (#1086) or description, and a field left out keeps its value. The OpenAPI document does not change: the seven fields are still listed as nullable. See Rollout schedules."
+by = [
+    "test:backend/tests/integration/api/test_rollout_update_null_required.py::test_a_schedule_update_with_null_for_a_required_field_is_422",
+    "test:backend/tests/integration/api/test_rollout_update_null_required.py::test_a_stage_update_with_null_for_a_required_field_is_422",
+    "test:backend/tests/integration/api/test_rollout_update_null_required.py::test_a_schedule_update_may_still_clear_an_optional_field",
+    "test:backend/tests/integration/api/test_rollout_schedule_input_api.py::test_put_null_still_clears_min_stage_duration",
+    "test:backend/tests/integration/api/test_rollout_update_null_required.py::test_a_schedule_update_that_leaves_the_fields_out_is_unchanged",
+    "test:backend/tests/integration/api/test_rollout_update_null_required.py::test_a_stage_update_that_leaves_the_fields_out_is_unchanged",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]

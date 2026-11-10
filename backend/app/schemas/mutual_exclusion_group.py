@@ -41,9 +41,12 @@ class MutualExclusionGroupCreate(BaseModel):
         description="Fraction of traffic eligible for experiments in this group (0.0-1.0).",
     )
 
-    @field_validator("traffic_allocation", mode="before")
+    @field_validator("traffic_allocation", mode="after")
     @classmethod
     def validate_traffic_allocation(cls, v: float) -> float:
+        """Runs after pydantic's type check and the field's ge/le, so a value
+        of the wrong type answers pydantic's own 422; as a ``before`` validator
+        it compared the raw value and raised ``TypeError``, a 500 (#957)."""
         if not (0.0 <= v <= 1.0):
             raise ValueError("traffic_allocation must be between 0.0 and 1.0")
         return v
@@ -74,9 +77,10 @@ class MutualExclusionGroupUpdate(BaseModel):
         description="Updated status.",
     )
 
-    @field_validator("traffic_allocation", mode="before")
+    @field_validator("traffic_allocation", mode="after")
     @classmethod
     def validate_traffic_allocation(cls, v: Optional[float]) -> Optional[float]:
+        """``after``, as on create (#957)."""
         if v is not None and not (0.0 <= v <= 1.0):
             raise ValueError("traffic_allocation must be between 0.0 and 1.0")
         return v

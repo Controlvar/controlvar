@@ -58,7 +58,7 @@
 # a request body is fixed too (#1826): an API key's expires_at and a rollout
 # schedule's start_date and end_date answer 422 for an offset of 16 hours or
 # more. No entry cited it, so none was removed; the POST /api/v1/api-keys
-# entries below are #957 (a field of the wrong type), a different cause.
+# entries were #957 (a field of the wrong type), a different cause.
 # #958 and #959 are fixed, so their entries were removed from both passes:
 # the two sample-size routes answer 422 for the inputs they cannot calculate
 # with, and GET, PUT and DELETE /api/v1/users/{user_id} and
@@ -68,43 +68,12 @@
 # page at most 2**63, and a page whose (page - 1) * size is past 2**63 - 1
 # answers 422, so the entries of GET /api/v1/users/ (superuser) and
 # GET /api/v1/audit-logs/ (viewer) were removed.
+# #957 is fixed: a body value of the wrong type on POST /api/v1/api-keys,
+# POST and PUT /api/v1/mutual-exclusion-groups and POST and PUT
+# /api/v1/holdout answers 422, so their ten entries (superuser and viewer)
+# were removed.
 
 # --- superuser: the seeded demo administrator's bearer token ----------------
-
-[[known]]
-pass = "superuser"
-operation = "POST /api/v1/api-keys"
-status = 500
-issue = 957
-reason = "A field of the wrong type reaches the handler before validation."
-
-[[known]]
-pass = "superuser"
-operation = "POST /api/v1/mutual-exclusion-groups"
-status = 500
-issue = 957
-reason = "A field of the wrong type reaches the handler before validation."
-
-[[known]]
-pass = "superuser"
-operation = "PUT /api/v1/mutual-exclusion-groups/{group_id}"
-status = 500
-issue = 957
-reason = "A field of the wrong type reaches the handler before validation."
-
-[[known]]
-pass = "superuser"
-operation = "POST /api/v1/holdout"
-status = 500
-issue = 957
-reason = "A field of the wrong type reaches the handler before validation."
-
-[[known]]
-pass = "superuser"
-operation = "PUT /api/v1/holdout/{holdout_id}"
-status = 500
-issue = 957
-reason = "A field of the wrong type reaches the handler before validation."
 
 [[known]]
 pass = "superuser"
@@ -163,41 +132,6 @@ cause = "config"
 reason = "Needs PHI_ENCRYPTION_KEY, which the fuzz stack leaves unset, and answers 503."
 
 # --- viewer: the seeded VIEWER's bearer token ------------------------------
-
-[[known]]
-pass = "viewer"
-operation = "POST /api/v1/api-keys"
-status = 500
-issue = 957
-reason = "A field of the wrong type reaches the handler before validation."
-
-[[known]]
-pass = "viewer"
-operation = "POST /api/v1/mutual-exclusion-groups"
-status = 500
-issue = 957
-reason = "A field of the wrong type reaches the handler before validation."
-
-[[known]]
-pass = "viewer"
-operation = "PUT /api/v1/mutual-exclusion-groups/{group_id}"
-status = 500
-issue = 957
-reason = "A field of the wrong type reaches the handler before validation."
-
-[[known]]
-pass = "viewer"
-operation = "POST /api/v1/holdout"
-status = 500
-issue = 957
-reason = "A field of the wrong type reaches the handler before validation."
-
-[[known]]
-pass = "viewer"
-operation = "PUT /api/v1/holdout/{holdout_id}"
-status = 500
-issue = 957
-reason = "A field of the wrong type reaches the handler before validation."
 
 [[known]]
 pass = "viewer"

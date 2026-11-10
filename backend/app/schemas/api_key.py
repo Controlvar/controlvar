@@ -41,6 +41,12 @@ class APIKeyCreate(BaseModel):
             return None
         if isinstance(v, str):
             return parse_scopes(v)
+        try:
+            iter(v)
+        except TypeError:
+            # false, true, a number: List[str] refuses it with 422
+            # (list_type). Iterating it here raised TypeError, a 500 (#957).
+            return v
         cleaned = normalise_scope_list(v)
         for scope in cleaned:
             if "," in scope:
