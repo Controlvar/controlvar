@@ -11,6 +11,7 @@ import { HowItWorks } from '@/components/homepage/HowItWorks';
 import { ProductRows } from '@/components/homepage/ProductRows';
 import { SdkChips } from '@/components/homepage/SdkChips';
 import { DeployCards } from '@/components/homepage/DeployCards';
+import { Books } from '@/components/homepage/Books';
 import { ClosingBand } from '@/components/homepage/ClosingBand';
 import { HomeFooter } from '@/components/homepage/HomeFooter';
 
@@ -85,6 +86,7 @@ export default function HomePage() {
           <SdkChips />
           {marketing && <Walkthroughs />}
           <DeployCards />
+          <Books />
           <ClosingBand />
         </main>
 

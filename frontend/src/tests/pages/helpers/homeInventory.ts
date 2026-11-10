@@ -50,6 +50,7 @@ export interface Row {
 const MAIN = 'main:frontend/src/pages/index.tsx';
 const UX = 'v1-ux-designer.md';
 const HEADER = 'SiteHeader.tsx, unchanged (#1458)';
+const BOOKS = "the Controlvar books' README (amarkanday/controlvar-books, #1859)";
 
 /** The JavaScript snippet's first line: the install command of main:index.tsx:124, as a comment (UX, How it works). */
 export const SNIPPET_COMMENT = '// npm install @controlvar/js-sdk';
@@ -221,6 +222,15 @@ export const TYPED: readonly Row[] = [
   },
   { tag: 'p', text: 'Deploy with CDK →', source: 'the approved mockup, Main.dc.html:275 (the UX names the page, not the words)' },
 
+  // The Controlvar books (#1859): the books' own README's words, and no count of books.
+  { tag: 'h2', text: 'The Controlvar books', source: `${BOOKS}: its title` },
+  {
+    tag: 'p',
+    text: 'Learn engineering, programming and the craft of shipping software through one real, open-source codebase: Controlvar itself. The books are for newcomers to a language or framework, engineers who already code, and contributors. They are licensed CC BY 4.0.',
+    source: `${BOOKS}: its subtitle, "Who these books are for" and "Licence"`,
+  },
+  { tag: 'p', text: 'Read the Controlvar books on GitHub →', source: '#1859: the link to the books repository' },
+
   // Closing band.
   { tag: 'h2', text: 'Open, and checkable', source: `${MAIN}:131` },
   {
@@ -238,6 +248,7 @@ export const TYPED: readonly Row[] = [
   { tag: 'p', text: 'Product', source: `${UX} Footer` },
   { tag: 'li', text: 'Quick start', source: `${UX} Footer` },
   { tag: 'li', text: 'Docs', source: `${MAIN}:192` },
+  { tag: 'li', text: 'The Controlvar books', source: '#1859: the footer link to the books repository' },
   { tag: 'li', text: 'Power calculator', source: `${UX} Footer` },
   { tag: 'li', text: 'Walkthroughs', source: `${UX} Footer`, build: 'marketing' },
   { tag: 'li', text: 'Sign in', source: `${MAIN}:228`, build: 'platform' },

@@ -4,7 +4,7 @@ import { Wordmark } from '@/components/Wordmark';
 import { LOGIN_PATH } from '@/services/api';
 import { docsUrl } from '@/services/docs';
 import { CONTACT_EMAIL, isMarketingSite } from '@/utils/site-mode';
-import { BUILDER_URL, RELEASES_URL, REPO_URL, SECURITY_URL } from '@/content/site-links';
+import { BOOKS_URL, BUILDER_URL, RELEASES_URL, REPO_URL, SECURITY_URL } from '@/content/site-links';
 import { FOCUS, WIDTH } from '@/components/homepage/styles';
 
 const LINK = `text-slate-700 hover:text-slate-900 ${FOCUS}`;
@@ -29,7 +29,8 @@ function Group({ id, label, children }: { id: string; label: string; children: R
  * Every same-site link is a path, never `https://controlvar.com/…`, so the
  * platform build's links stay on the self-hoster's own host. "Walkthroughs"
  * is the marketing build's only; the platform build has "Sign in" instead.
- * "Source" is the footer's only repository link (`index.site-mode.test.tsx`).
+ * "Source" is the footer's only link to this repository
+ * (`index.site-mode.test.tsx`); "The Controlvar books" links theirs (#1859).
  */
 export function HomeFooter() {
   const marketing = isMarketingSite();
@@ -53,6 +54,11 @@ export function HomeFooter() {
               <Link href="/docs" className={LINK}>
                 Docs
               </Link>
+            </li>
+            <li>
+              <a href={BOOKS_URL} className={LINK}>
+                The Controlvar books
+              </a>
             </li>
             <li>
               <Link href="/power-calculator" className={LINK}>
