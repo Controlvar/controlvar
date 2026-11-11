@@ -269,6 +269,29 @@ class _Query:
         return self.counts.get(("all",) + self.filters, [])
 
 
+def _with_variants(status):
+    return SimpleNamespace(
+        id=uuid.uuid4(),
+        status=status,
+        variants=[
+            SimpleNamespace(id=uuid.uuid4(), name="control"),
+            SimpleNamespace(id=uuid.uuid4(), name="treatment"),
+        ],
+    )
+
+
+def _summary(experiment, recommendation, winner=True):
+    winning_variant_id = str(experiment.variants[1].id) if winner else None
+    return {
+        "metrics": [],
+        "summary": {
+            "has_winner": winner,
+            "winning_variant_id": winning_variant_id,
+            "recommendation": recommendation,
+        },
+    }
+
+
 def test_the_overview_fields():
     active = str(FeatureFlag.status == FeatureFlagStatus.ACTIVE)
     completed_with_dates = (
@@ -281,25 +304,53 @@ def test_the_overview_fields():
         SimpleNamespace(start_date=start, end_date=start + timedelta(days=10)),
         SimpleNamespace(start_date=start, end_date=start + timedelta(days=21)),
     ]
+    shipped = _with_variants(ExperimentStatus.ACTIVE)
+    below_minimum_sample = _with_variants(ExperimentStatus.DRAFT)
+    sample_ratio_mismatch = _with_variants(ExperimentStatus.ARCHIVED)
+    paused = _with_variants(ExperimentStatus.PAUSED)
+    no_winner = _with_variants(ExperimentStatus.COMPLETED)
+    results = {
+        shipped.id: _summary(shipped, "SHIP_VARIANT"),
+        below_minimum_sample.id: _summary(below_minimum_sample, "CONTINUE_TESTING"),
+        sample_ratio_mismatch.id: _summary(sample_ratio_mismatch, "INCONCLUSIVE"),
+        paused.id: _summary(paused, "SHIP_VARIANT"),
+        no_winner.id: _summary(no_winner, "CONTINUE_TESTING", winner=False),
+    }
     tables = {
-        "Experiment": {(): 3, ("all",) + completed_with_dates: finished},
+        "Experiment": {
+            (): 5,
+            ("all",): [
+                shipped,
+                below_minimum_sample,
+                sample_ratio_mismatch,
+                paused,
+                no_winner,
+            ],
+            ("all",) + completed_with_dates: finished,
+        },
         "FeatureFlag": {(): 15, (active,): 8},
         "Assignment": {(): 125},
         "Event": {(): 340},
-        "Report": {(): 5},
     }
     db = MagicMock()
     db.query.side_effect = lambda model: _Query(tables[model.__name__])
 
-    report = ExportService(db).generate_platform_overview()
+    with patch("backend.app.services.export_service.AnalysisService") as analysis:
+        analysis.return_value.get_experiment_results.side_effect = (
+            lambda experiment_id, **_: results[experiment_id]
+        )
+        report = ExportService(db).generate_platform_overview()
 
     assert report.period_start is None and report.period_end is None
     assert report.total_feature_flags == 15
     assert report.active_feature_flags == 8
     assert report.total_assignments == 125
     assert report.total_events == 340
-    # Five stored reports, but none has a summary to count.
-    assert report.experiments_with_winners == 0
+    # Four of the five experiments' results name a winner, and each counts
+    # whatever its recommendation (CONTINUE_TESTING below the minimum sample,
+    # INCONCLUSIVE under a sample ratio mismatch) and whatever its status
+    # (draft, paused, archived).
+    assert report.experiments_with_winners == 4
     assert report.average_experiment_duration_days == 15.5
     assert datetime.fromisoformat(report.generated_at).utcoffset() == timedelta(0)
 

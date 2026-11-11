@@ -7,7 +7,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ExportFormat(str, Enum):
@@ -107,5 +107,10 @@ class PlatformOverviewReport(BaseModel):
     active_feature_flags: int
     total_assignments: int
     total_events: int
-    experiments_with_winners: int
+    experiments_with_winners: int = Field(
+        description=(
+            "Experiments created in the period whose current results name a "
+            "winner (the export's winner_variant rule). Recomputed on every call."
+        )
+    )
     average_experiment_duration_days: Optional[float]

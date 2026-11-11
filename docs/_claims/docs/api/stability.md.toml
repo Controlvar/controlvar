@@ -636,6 +636,14 @@ by = [
 ]
 
 [[unit]]
+text = "GET /api/v1/export/reports/overview | #244, #1907 | experiments_with_winners counts the experiments in the period whose current results name a winner, as the export's winner_variant column does, where it counted saved reports through a column they do not have, swallowed the error and answered 0 for every request. The overview now runs an analysis for each experiment in the period, so the call costs as much as GET /api/v1/export/experiments for the same period, and an analysis error other than results that cannot be computed fails the call with 500 instead of reporting 0. The OpenAPI document does not change. Clients that read the field see a real number instead of 0."
+by = [
+    "test:backend/tests/unit/services/test_export_overview_winners.py",
+    "test:backend/tests/integration/api/test_export_overview_winners.py::test_the_overview_counts_a_completed_experiment_with_a_winner",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+]
+
+[[unit]]
 text = "GET /api/v1/metrics/summary | #956 | A start_date or end_date whose UTC offset is 16 hours or more either way (such as +16:00 or -19:52) answers 422 at [\"query\", <field>] with the msg Value error, the UTC offset must be less than 16 hours; it used to answer 500, because the database cannot store such an offset. An end_date within the first 30 days of year 1 sent without a start_date, whose default start would fall before year 1, answers 422 at [\"query\", \"end_date\"] with the msg Value error, end_date is too early for the default 30-day period; send start_date as well; it used to answer 500. Neither message repeats the value sent. Every other request answers as before, offsets up to 15:59 either way included. The OpenAPI document does not change."
 by = [
     "test:backend/tests/integration/api/test_metrics_summary_dates.py::test_an_offset_of_16_hours_or_more_answers_422",
