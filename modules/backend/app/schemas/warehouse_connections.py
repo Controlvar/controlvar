@@ -23,6 +23,7 @@ lower limits and an outer upper bound.
 
 from __future__ import annotations
 
+import re
 from typing import Annotated, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StringConstraints
@@ -39,6 +40,9 @@ BIGQUERY_LOCATION_PATTERN = r"^[A-Za-z]+(-[a-z]+[0-9]*)*$"
 SERVICE_ACCOUNT_JSON_PATTERN = r"^[\t\n\r\x20-\x7e]+$"
 AWS_REGION_PATTERN = r"^[a-z]{2}(-[a-z]+)+-[0-9]{1,2}$"
 ROLE_ARN_PATTERN = r"^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]{1,512}$"
+#: ``ROLE_ARN_PATTERN`` compiled, for code that checks an ARN outside a request
+#: body (``aws.assume_role_session``).
+ROLE_ARN_RE = re.compile(ROLE_ARN_PATTERN)
 ATHENA_WORKGROUP_PATTERN = r"^[A-Za-z0-9._-]{1,128}$"
 ATHENA_DATABASE_PATTERN = r"^[a-z0-9_]{1,255}$"
 

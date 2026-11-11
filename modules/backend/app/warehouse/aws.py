@@ -42,7 +42,7 @@ from botocore.exceptions import (
     ReadTimeoutError,
 )
 
-from modules.backend.app.schemas.warehouse_connections import ROLE_ARN_PATTERN
+from modules.backend.app.schemas.warehouse_connections import ROLE_ARN_RE
 from modules.backend.app.warehouse.deadlines import (
     CONNECT_SECONDS,
     READ_SECONDS,
@@ -310,7 +310,6 @@ ROLE_SESSION_NAME = "controlvar-warehouse"
 #: The shortest session STS issues.
 ROLE_SESSION_SECONDS = 900
 
-_ROLE_ARN = re.compile(ROLE_ARN_PATTERN)
 _EXTERNAL_ID = re.compile(r"exp-[0-9a-f]{32}")
 
 
@@ -344,7 +343,7 @@ def assume_role_session(
     here logs them or keeps them.
     """
     _aws_warehouse(warehouse)
-    if not isinstance(role_arn, str) or not _ROLE_ARN.fullmatch(role_arn):
+    if not isinstance(role_arn, str) or not ROLE_ARN_RE.fullmatch(role_arn):
         raise WarehouseError(WarehouseErrorCode.INTERNAL, warehouse=warehouse)
     if not isinstance(external_id, str) or not _EXTERNAL_ID.fullmatch(external_id):
         raise WarehouseError(WarehouseErrorCode.INTERNAL, warehouse=warehouse)
