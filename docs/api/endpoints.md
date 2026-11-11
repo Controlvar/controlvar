@@ -434,9 +434,30 @@ three levels deep.
 - The feature flags list is ordered by creation time, oldest first (ties by `id`), so
   paging with `skip` reads each flag once unless flags are created or deleted meanwhile
 - The default and the largest `limit` differ by route (the experiments list: 100, at most
-  500; the feature flags list: 100, with no maximum). The API's OpenAPI document,
-  `GET /api/v1/openapi.json`, gives each route's default `limit` and, where it has one, its
-  maximum
+  500; the feature flags list: 100, at most 9223372036854775807). The API's OpenAPI
+  document, `GET /api/v1/openapi.json`, gives each route's default `limit` and its maximum;
+  a bound of 9223372036854775807 is given as `"format": "int64"`
+- `skip` (and `offset`, where a route takes it instead) is at most 9223372036854775807, the
+  largest offset PostgreSQL takes; a larger one answers 422 and nothing is read
+- `page`, where a route takes it, is from 1 to 9223372036854775808, and the page must start
+  within the largest offset: `(page - 1)` times the route's `limit` (or its `page_size`) at
+  most 9223372036854775807. Otherwise the route answers 422 at `["query", "page"]`
+
+A `skip` one past the largest:
+
+```{.bash exec}
+curl -s "http://localhost:8000/api/v1/feature-flags/?skip=9223372036854775808" \
+  -H "Authorization: Bearer $TOKEN" | jq -c '.detail[0] | {loc, type}'
+```
+<!-- expect: {"loc":["query","skip"],"type":"less_than_equal"} -->
+
+A page that starts past it, though `page` and `limit` are each in range:
+
+```{.bash exec}
+curl -s "http://localhost:8000/api/v1/audit-logs/?page=4611686018427387905&limit=2" \
+  -H "Authorization: Bearer $TOKEN" | jq -r '.detail[0].msg'
+```
+<!-- expect: (page - 1) * limit must be at most 9223372036854775807 -->
 
 ### Caching
 - `GET /api/v1/experiments/{experiment_id}` and its `daily-results` and `segmented-results` are cached for 3,600 seconds (an hour) when `CACHE_ENABLED` is on (it is off by default). A change to the experiment clears its cached detail; its cached daily and segmented results stay until they expire
@@ -611,6 +632,10 @@ three levels deep.
     "updated_at": "datetime"
   }
   ```
+- **Errors**: 400 "Invalid user ID format" when `{user_id}` is not a UUID (a
+  caller who is not a superuser gets 403 first). 403 "Not enough permissions"
+  when a caller who is not a superuser asks for another account. 404 "User not
+  found".
 
 ### Update User
 - **Endpoint**: `PUT /api/v1/users/{user_id}`
@@ -673,7 +698,9 @@ three levels deep.
   another account holds in any letter case. Changing only the letter case of
   the account's own address is accepted, and resending the stored address
   unchanged is never refused. 409 "Username already registered" when a
-  superuser sets a username another account has.
+  superuser sets a username another account has. 400 "Invalid user ID format"
+  when `{user_id}` is not a UUID, `me` included: `GET /api/v1/users/me`
+  returns your account and its `id`.
 
 ### Delete User
 - **Endpoint**: `DELETE /api/v1/users/{user_id}`
@@ -690,7 +717,9 @@ three levels deep.
 - **Response**: 204 No Content
 - **Errors**: 400 "Superusers cannot delete themselves" when a superuser
   deletes their own account. 403 "Not enough permissions" when anyone else
-  deletes another account. 404 "User not found".
+  deletes another account. 404 "User not found". 400 "Invalid user ID format"
+  when `{user_id}` is not a UUID, `me` included: `GET /api/v1/users/me`
+  returns your account and its `id`.
 
 ### Change Your Password
 - **Endpoint**: `POST /api/v1/users/me/password`
@@ -890,6 +919,23 @@ plan is for `0.05` and `mde_source` is `default`. A secondary metric's
 `expected_effect` is not read. A clone keeps it. A `PUT` that sends `metrics`
 replaces them, so a metric resent without `expected_effect` no longer has one.
 
+### Balancing the split within groups (beta)
+
+`balance_within`, sent on create or on a draft's `PUT`, gives each group of
+users the experiment's split among themselves: with
+`{"attribute": "tier", "values": ["gold", "silver"]}`, each new user is
+balanced within the group of their `context.tier`. With
+`{"segments": ["<segment id>", ...]}`, 1 to 10 saved segments, each new user is
+balanced within the first listed segment they belong to, or `other` when they
+belong to none. Every experiment response
+carries it, `null` when the experiment balances nothing, and a clone copies it.
+It answers 422 at `["body", "balance_within"]` for a bandit, a split URL
+experiment, or a split whose shares are not all multiples of 5, and at
+`["body", "balance_within", "segments"]` for a segment that does not exist, is
+archived or inactive, or whose rules are not valid; a clone answers 409 when a
+segment it would balance within cannot be used. See
+[Balance the split within groups](../guides/balance-within-groups.md).
+
 ## Feature Flag Endpoints
 
 ### List Feature Flags
@@ -900,8 +946,8 @@ replaces them, so a metric resent without `expected_effect` no longer has one.
 - **Query Parameters**:
   - status: string (optional): `ACTIVE`, `INACTIVE` or `ARCHIVED`, in upper case (each
     item's own `status` is lower case)
-  - skip: int (default: 0)
-  - limit: int (default: 100; the route sets no maximum)
+  - skip: int (default: 0; 0 to 9223372036854775807)
+  - limit: int (default: 100; 0 to 9223372036854775807, and `0` answers no items)
   - search: string (optional): matches part of the name or the key, in any case
 - **Response**: 200 OK. `total` counts every flag that matches `status` and `search`, not
   only the ones on this page.
@@ -950,6 +996,9 @@ replaces them, so a metric resent without `expected_effect` no longer has one.
   }
   ```
 
+A flag whose stored rules the server cannot read (only a direct database write leaves one) answers
+`false`, and the other flags are unaffected.
+
 ### Archived Flags
 An archived flag stays archived until it is unarchived:
 
@@ -996,6 +1045,9 @@ their public `key`, except `POST /api/v1/tracking/events`, which takes ids. They
   its status: `draft`, `paused`, `completed` or `archived`. Nothing is recorded. Users who were
   assigned keep their assignment, so when a paused experiment is started again each of them gets
   their variant back. A draft with no control variant answers 404.
+- **Balanced experiments**: for an experiment that balances within groups, a new user's variant also
+  depends on the users of their group assigned before them; the group is read from the top level of
+  `context` ([Balancing the split within groups](#balancing-the-split-within-groups-beta)).
 - **Headers**: X-API-Key: {api_key}
 - **Body**: `{"experiment_key": string, "user_id": string, "context": object?}`; `context` at most
   8,192 bytes and 10 levels deep ([Targeting Context Limits](#targeting-context-limits))
@@ -1649,9 +1701,16 @@ A refusal because of the experiment's state is a 400 whose detail names the
 state; a 403 means the caller's role may not update experiments, and is
 decided before the state is looked at. Outside `draft`, only a superuser may
 change an experiment's other fields (`Cannot update experiments in active
-status`), and `variants`, `metrics`, `start_date`, `end_date`,
-`correction_method` and `confidence_level` cannot be changed by anyone
-(`Cannot update variants for experiments in active status`).
+status`), and `variants`, `metrics`, `correction_method`, `confidence_level`,
+`balance_within`, `variance_reduction_config`, `sequential_testing_enabled`,
+`sequential_testing_config`, `bayesian_enabled` and `bayesian_config` cannot be
+changed by anyone, even to the value already stored (`Cannot update variants
+for experiments in active status`); a request that includes several is refused
+naming the first of them in that order. To change one of those for a running
+experiment, clone it (`POST /api/v1/experiments/{experiment_id}/clone`): the
+copy is a new experiment, a draft, and takes the change. `start_date` and
+`end_date` are not fields of this request, so a body that names them changes
+neither.
 
 `schedule` is not accepted by this endpoint. A request that contains it, with
 any value including `null` or `{}`, is refused with 422, nothing is changed,
@@ -1819,6 +1878,22 @@ an experiment in `draft` answers `400`. The breakdown with a test per segment is
 
 ---
 
+### Balanced Groups (beta)
+
+See [Balance the split within groups](../guides/balance-within-groups.md#results-by-group) for
+full documentation.
+
+```text
+GET /api/v1/results/{experiment_id}/balanced-groups
+```
+Returns an experiment that balances its split within groups by the group each user was balanced
+in: one row per group, one estimate per treatment over the groups (`overall`, or `null` with a
+`reason`), `merged_groups`, `users_outside_blocks`, `unknown_share` and `engine_version`. It takes
+no query parameters and is computed on each request. An experiment that does not balance within
+groups answers **409**.
+
+---
+
 ### Multi-Armed Bandit
 
 See [Multi-Armed Bandit Guide](multi-armed-bandit.md) for full documentation.
@@ -1971,7 +2046,7 @@ PUT    /api/v1/segments/{id}             — Update segment (DEVELOPER+; 409: in
 DELETE /api/v1/segments/{id}             — Archive segment: sets status archived (DEVELOPER+; 409: in use)
 POST   /api/v1/segments/{id}/evaluate    — Is this user context a member? (409: stored rules not valid)
 POST   /api/v1/segments/bulk-evaluate    — One user context against up to 50 segments
-GET    /api/v1/segments/{id}/experiments — Experiments and flags whose rules mention the segment's id
+GET    /api/v1/segments/{id}/experiments — Experiments and flags whose rules mention the segment's id, and experiments that balance within it
 POST   /api/v1/segments/{id}/preview     — Estimate the share of users the rules in the body match
 POST   /api/v1/segments/{id}/members        — Add user IDs to an id_list segment (beta; DEVELOPER+)
 POST   /api/v1/segments/{id}/members/remove — Remove user IDs from an id_list segment (beta; DEVELOPER+)
@@ -2016,20 +2091,80 @@ Evaluate and bulk-evaluate hold `user_context` to the
 Over either, they answer 422 with the same `detail` as the flag routes, and no segment is
 evaluated. Bulk-evaluate checks its one `user_context` once, whatever the number of segments.
 
-`POST /api/v1/segments/{id}/preview` evaluates the rules in its body against the stored
-contexts of up to `sample_size` assignments (10 to 10,000, default 1,000). Only assignments
-that carry a context are counted, and `sample_size` in the answer is how many there were.
-Assignment does not store a context today, so the answer is usually
-`{"estimated_percentage": 0.0, "sample_size": 0, "matched": 0}`: there was nothing to
-estimate from, which is not the same as 0%. The preview also refuses, before any query,
-`regex` conditions times `sample_size` above 500 and conditions plus groups times
-`sample_size` above 50,000, at `loc` `["query", "sample_size"]`.
+**Estimating a segment's size.** `POST /api/v1/segments/{id}/preview` estimates how many users the rules in its body match,
+from the attributes users sent as `context` to `POST /api/v1/tracking/assign`. Every assign
+call records an exposure that carries those attributes. The preview reads the exposures of
+the last 30 days, newest first, and takes each user's latest one. It evaluates the rules, as
+evaluate does, against up to `sample_size` users (10 to 10,000, default 1,000) whose latest
+exposure carries attributes. Nothing is copied or stored for it: it reads the exposures where
+they are, and they are kept as long as other events are. Any role that can read segments
+may preview; the answer is counts and a share, never a stored attribute value.
+
+```{.bash exec}
+SEGMENT=$(curl -s -X POST "http://localhost:8000/api/v1/segments" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "US users", "rules": {"groups": [{"conditions": [{"attribute": "country", "operator": "equals", "value": "US"}]}]}}' | jq -r .id)
+
+curl -s -X POST "http://localhost:8000/api/v1/segments/$SEGMENT/preview?sample_size=1000" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "US users", "rules": {"groups": [{"conditions": [{"attribute": "country", "operator": "equals", "value": "US"}]}]}}' | jq .
+```
+<!-- expect: "source": "exposure_metadata" -->
+
+On a stack with traffic, the answer looks like this:
+
+```json
+{"estimated_percentage": 34.0, "sample_size": 1000, "matched": 340,
+ "source": "exposure_metadata", "window_days": 30,
+ "sampled_since": "2026-11-06T09:12:45.120391+00:00", "ended_by": "sample_size",
+ "users_without_context": 42, "reason": null}
+```
+
+- `sample_size` in the request is a maximum. In the answer it is the number of users
+  evaluated, and `matched` is how many of them the rules match.
+- `estimated_percentage` is `matched` divided by `sample_size`, as a percentage to two
+  decimals.
+- `ended_by` says what ended the read: `sample_size` (enough users were found), `cap` (the
+  read takes at most 5 exposures per user asked for, and never more than 50,000), or
+  `window` (every exposure of the last 30 days was read). `sampled_since` is the time of the
+  oldest exposure read, and `window_days` is always 30.
+- `users_without_context` counts the users read whose latest exposure carried no
+  attributes, because their SDK sent no `context`; they are not in `sample_size`. If most
+  callers send none, it is the larger number.
+- With no user with attributes, `estimated_percentage` is `null` and `reason` is
+  `no_exposures_with_context`. With 1 to 29, it is `null` and `reason` is `too_few_users`;
+  `sample_size` and `matched` are still given. This is a floor on the estimate's quality.
+
+**It is not a random sample.** Unless `ended_by` is `window`, the users are the ones seen
+most recently, since `sampled_since`, which on a busy site can be minutes ago. So the sample
+leans toward users who call assign often and toward the time of day. Use it as a sanity
+check and an order of magnitude: rules that match none of 1,000 recent users usually name an
+attribute that is misspelt or not sent. It counts only users who reached
+`/tracking/assign`: a user assigned only through `/tracking/assign/batch` has no exposure,
+and a visitor whose SDK sends attributes only after sign-in is counted from then on. It takes
+each user's latest attributes, not their first exposure's, so a user whose attributes
+changed is counted by the new ones. An exposure dated more than 5 minutes after the server's
+clock is not read, nor one whose stored attributes are longer than 8,192 bytes as PostgreSQL
+prints them. PostgreSQL prints a space after each colon and comma, which assign's own
+8,192-byte limit does not count, so attributes that assign accepted close to that limit may
+not be read.
+
+The read has 5 seconds in all. It fetches rows from the database in batches and gives each
+fetch only the time left, so PostgreSQL stops it at 5 seconds however many fetches it has
+made, and the preview then answers 503 with a fixed message. A large events table with few
+exposures can take that long. The preview also refuses, before any query, `regex`
+conditions times `sample_size` above 500 and conditions plus groups times `sample_size`
+above 50,000, at `loc` `["query", "sample_size"]`.
 
 **A segment in use cannot be archived or made inactive.** Flags and experiments target a
 segment with `in_segment` / `not_in_segment` ([Targeting Rules](#targeting-rules)).
 `DELETE /api/v1/segments/{id}`, and a `PUT` that sets `status` to `inactive` or `archived`,
 answer 409 and change nothing while a flag that is not archived (a disabled one included), or
-an experiment that is draft, active or paused, has a rule naming the segment:
+an experiment that is draft, active or paused, has a rule naming the segment, or while such an
+experiment balances within the segment
+([Balancing the split within groups](#balancing-the-split-within-groups-beta)):
 
 ```json
 {"detail": {"code": "segment_in_use",

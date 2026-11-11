@@ -62,6 +62,10 @@ from backend.app.models.rollout_schedule import (
 )
 from backend.app.models.safety import FeatureFlagSafetyConfig, SafetySettings
 from backend.app.models.user import User, UserRole
+from backend.app.schemas.variance_reduction import (
+    VarianceReductionConfig,
+    VarianceReductionMethod,
+)
 from backend.app.services.audit_service import role_value
 from backend.scripts import seed_audit
 from backend.scripts.seed_audit import seeded_entry
@@ -119,6 +123,40 @@ def backfill_experiment_keys(db) -> int:
             row.key = key
             updated += 1
             print(f"    Backfilled key '{key}' on experiment '{name}' ({row.id}).")
+    if updated:
+        db.commit()
+    return updated
+
+
+def checkout_variance_reduction_config() -> dict:
+    """The CUPED setting ``checkout_button_color`` is seeded with (#848).
+
+    The method ``cuped`` with a 7-day lookback, the setting docs/api/cuped.md
+    reads, dumped as a ``POST`` stores it. A new dict on every call.
+    """
+    return VarianceReductionConfig(
+        method=VarianceReductionMethod.CUPED, covariate_lookback_days=7
+    ).model_dump(mode="json")
+
+
+def backfill_checkout_variance_reduction(db) -> int:
+    """Give a ``checkout_button_color`` seeded before #848 its CUPED setting.
+
+    The seed skips an experiment that already exists, so a demo stack seeded
+    before the experiment was created with CUPED keeps no setting, and
+    docs/api/cuped.md's read of it prints ``"method": "none"``. Running the
+    seed again (``SEED_FORCE=true``) reaches this. Only a missing (NULL)
+    setting is set: one that is already there, whatever it says, is left
+    alone. Returns the number of rows updated.
+    """
+    updated = 0
+    rows = db.query(Experiment).filter(Experiment.name == "Checkout Button Color")
+    for row in rows.all():
+        if row.variance_reduction_config is not None:
+            continue
+        row.variance_reduction_config = checkout_variance_reduction_config()
+        updated += 1
+        print(f"    Set CUPED with a 7-day lookback on '{row.name}' ({row.id}).")
     if updated:
         db.commit()
     return updated
@@ -427,7 +465,11 @@ def _checkout_history_event(history_rng, arm, user_id, assigned_at, converts):
 
 
 def seed_checkout_button_experiment(db, admin_user) -> Experiment:
-    """30K pre-seeded events, no clear winner yet. Status: ACTIVE."""
+    """30K pre-seeded events, no clear winner yet. Status: ACTIVE.
+
+    Created with CUPED on (``checkout_variance_reduction_config``), so that
+    docs/api/cuped.md reads the adjusted numbers from the history below.
+    """
     print("  Seeding experiment: Checkout Button Color...")
 
     exp_name = "Checkout Button Color"
@@ -448,6 +490,7 @@ def seed_checkout_button_experiment(db, admin_user) -> Experiment:
         end_date=days_ago(-30),  # 30 days in the future
         targeting_rules={},
         metrics={"primary_metric": "checkout_completed", "metric_type": "conversion"},
+        variance_reduction_config=checkout_variance_reduction_config(),
     )
     db.add(exp)
     db.flush()
@@ -1139,6 +1182,7 @@ def main():
         exp2 = seed_checkout_button_experiment(db, admin_user)
         exp3 = seed_recommendation_mab_experiment(db, admin_user)
         backfill_experiment_keys(db)
+        backfill_checkout_variance_reduction(db)
 
         print("\n[3/5] Feature Flags")
         flags = seed_feature_flags(db, admin_user)

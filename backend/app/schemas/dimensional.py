@@ -43,8 +43,9 @@ class SegmentVariantResult(BaseModel):
     p_value: Optional[float] = Field(
         None,
         description=(
-            "Two-tailed p-value from a two-proportion z-test vs. the control. "
-            "None for the control variant itself."
+            "Two-sided p-value of Fisher's exact test against the control, the "
+            "test the headline uses for a conversion rate. None for the control "
+            "variant itself."
         ),
     )
     is_significant: bool = Field(
@@ -125,5 +126,8 @@ class DimensionalBreakdownResponse(BaseModel):
     )
     segments: List[SegmentBreakdown] = Field(
         ...,
-        description="Per-segment breakdown results, one entry per observed dimension value.",
+        description=(
+            "Per-segment results: the 20 values with the most users, then "
+            "`other` and `unknown`, each listed only when it has users."
+        ),
     )

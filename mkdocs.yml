@@ -85,13 +85,16 @@ nav:
 - Home: README.md
 - Getting Started:
   - Quick Start: getting-started/quick-start.md
+  - What Controlvar Does: capabilities.md
   - Limitations: getting-started/limitations.md
+  - Roadmap: https://github.com/Controlvar/controlvar/blob/main/ROADMAP.md
   - Core Concepts: getting-started/concepts.md
   - Architecture Overview: getting-started/architecture.md
   - FAQ: getting-started/faq.md
   - Modules & Profiles: getting-started/modules.md
   - Local Development with Docker: getting-started/docker-guide.md
   - The Development Compose File: getting-started/docker-compose-file.md
+  - The Controlvar Books: https://github.com/amarkanday/controlvar-books
 - Feature Flags:
   - Creating Feature Flags: feature-flags/create.md
   - Targeting & Rules: Enhanced_Rules_Engine_Reference.md
@@ -99,6 +102,7 @@ nav:
   - Gradual Rollouts: feature-flags/rollouts.md
   - Safety Monitoring: feature-flags/safety.md
   - Turning a Flag Off: feature-flags/kill-switch.md
+  - Stale Flags: feature-flags/stale-flags.md
 - A/B Testing & Experiments:
   - Running Experiments: guides/user-guide.md
   - How Events Count: guides/how-events-count.md
@@ -110,6 +114,7 @@ nav:
   - Split URL Testing: api/split-url.md
   - Mutual Exclusion Groups: api/mutual-exclusion-groups.md
   - Assign a Customer List (beta): guides/assign-customer-list.md
+  - Balance the Split Within Groups (beta): guides/balance-within-groups.md
   - Live Results Streaming: websocket-streaming.md
 - LLM / AI Model Evaluation:
   - Overview: llm-evaluation/overview.md
@@ -133,6 +138,7 @@ nav:
   - Elixir SDK: sdk/elixir.md
   - SDK contract & status: sdk-guide.md
   - Local evaluation (server-side, beta): sdk/local-evaluation.md
+  - Exposures to analytics tools: sdk/exposure-hook.md
 - API Reference:
   - Authentication: api/auth.md
   - Experiments: api/endpoints.md

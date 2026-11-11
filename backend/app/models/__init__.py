@@ -24,6 +24,7 @@ from .analysis_snapshot import AnalysisKind, AnalysisSnapshot
 from .api_key import APIKey
 from .assignment import Assignment
 from .audit_log import ActionType, AuditLog, EntityType
+from .balance_group_counter import BalanceGroupCounter
 from .bandit_state import BanditState, BanditStateHistory
 from .base import Base, BaseModel, BaseModelMixin
 from .compliance_audit_event import AuditAction, AuditOutcome, ComplianceAuditEvent
@@ -98,6 +99,7 @@ CORE_MODEL_MODULES = (
     "api_key",
     "assignment",
     "audit_log",
+    "balance_group_counter",
     "bandit_state",
     "base",
     "compliance_audit_event",

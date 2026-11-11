@@ -38,6 +38,11 @@ import pytest
 
 from backend.app.core.stats_engine import ENGINE_VERSION
 from backend.app.services.analysis_service import AnalysisService
+from backend.app.services.balanced_groups_estimate import (
+    Arm,
+    GroupCounts,
+    balanced_overall,
+)
 from backend.app.services.bayesian_service import BayesianService
 from backend.app.services.cuped_service import CupedService
 from backend.app.services.dimensional_analysis_service import (
@@ -84,12 +89,19 @@ ENGINE_FINGERPRINTS: Dict[str, str] = {
     # 1.8.0 is #1496: the difference fields are added to the results' metric
     # results, which this fingerprint does not hash: 1.7.0's.
     "1.8.0": "003234aa770b7f48e4d42ee0e718895523371c24251dadb6e46dc8355b7e346c",
+    # 1.9.0 is #1776: each segment's p-value is Fisher's exact test against
+    # the control, which moves the breakdown's p-values below.
+    "1.9.0": "aaa346cd662b90fd6251edbbffad936d6d0237df68ef7ffd98bc0f9288fa57b5",
+    # 1.10.0 is #448: the dataset gains the balanced-groups estimate (the
+    # ``balanced_groups`` output below), which no earlier version returns.
+    "1.10.0": "11f01afb88c2d4f930234b60a8c4004a733743f4dbd9af81132c4349ffb52c23",
 }
 
 # Two ids where the control sorts AFTER the treatment, so an engine that
 # guesses the control from the smaller id produces a different fingerprint.
 _CONTROL = "ffffffff-0000-4000-8000-000000000002"
 _TREATMENT = "00000000-0000-4000-8000-000000000001"
+_SECOND_TREATMENT = "00000000-0000-4000-8000-000000000003"
 
 
 def _canonical(value: Any) -> Any:
@@ -230,6 +242,33 @@ def _engine_outputs() -> Dict[str, Any]:
     cy = 0.8 * cx + rng.normal(0.0, 1.0, 200)
     ty = 0.8 * tx + 0.3 + rng.normal(0.0, 1.0, 200)
     outputs["cuped"] = CupedService.compute_cuped_effect(cy, cx, ty, tx)
+
+    # The size-weighted estimate over balanced groups (/balanced-groups,
+    # 1.10.0): three variants, one group small enough to be merged.
+    arms = (
+        Arm(_CONTROL, "control", True),
+        Arm(_TREATMENT, "treatment", False),
+        Arm(_SECOND_TREATMENT, "treatment b", False),
+    )
+    groups = [
+        GroupCounts(
+            "ios",
+            {_CONTROL: (210, 21), _TREATMENT: (205, 31), _SECOND_TREATMENT: (208, 25)},
+        ),
+        GroupCounts(
+            "web",
+            {_CONTROL: (120, 30), _TREATMENT: (118, 33), _SECOND_TREATMENT: (121, 29)},
+        ),
+        GroupCounts(
+            "other", {_CONTROL: (1, 0), _TREATMENT: (2, 1), _SECOND_TREATMENT: (3, 1)}
+        ),
+    ]
+    outputs["balanced_groups"] = balanced_overall(
+        groups,
+        arms,
+        confidence_level=0.95,
+        correction_method="benjamini_hochberg",
+    )
 
     return outputs
 

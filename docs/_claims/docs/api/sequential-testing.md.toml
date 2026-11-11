@@ -159,7 +159,7 @@ by = [
 
 [[unit]]
 text = "spending_function and planned_looks are still accepted and stored."
-by = ["docex:docs/api/sequential-testing.md#200"]
+by = ["docex:docs/api/sequential-testing.md#\"planned_looks\": 5"]
 
 [[unit]]
 text = "The mSPRT above stays valid however often you read the results, so no planned-looks table is needed to use it."
@@ -170,8 +170,13 @@ text = "Turning it on"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Sequential testing is set on the experiment, when you create it (POST /api/v1/experiments/) or change it (PUT /api/v1/experiments/{id}):"
-by = ["docex:docs/api/sequential-testing.md#200"]
+text = "Sequential testing is set on the experiment, when you create it (POST /api/v1/experiments/) or while it is a draft (PUT /api/v1/experiments/{id}); once it has left draft neither field can be changed (see Permissions):"
+by = [
+    "docex:docs/api/sequential-testing.md#\"planned_looks\": 5",
+    "journey:experiment-results#floor-sequential-on",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_draft_takes_each_analysis_setting",
+    "test:backend/tests/integration/api/test_sequential_results_routes.py::test_once_running_nobody_changes_the_sequential_settings",
+]
 
 [[unit]]
 text = "Field | Type | Default | Description"
@@ -226,7 +231,7 @@ by = ["test:backend/tests/unit/api/test_sequential_decisions.py::test_the_stored
 
 [[unit]]
 text = "In the dashboard, tick Also test the primary metric sequentially (beta) when you create the experiment: it is on guided setup's Estimate step and in the single-page form's Analysis settings."
-by = ["test:frontend/src/tests/pages/experiment-new-sequential.test.tsx::is off by default, labelled, explains itself, and links to how it works"]
+by = ["test:frontend/src/tests/pages/experiment-new-sequential.test.tsx::%s: is off by default, labelled, explains itself, and links to how it works"]
 
 [[unit]]
 text = "The dashboard then sends sequential_testing_enabled: true and no sequential_testing_config."
@@ -252,16 +257,23 @@ text = "It prints \"ADMIN\"."
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "The examples use the demo data's checkout_button_color experiment, which is running and has data."
-by = ["docex:docs/api/sequential-testing.md#200"]
+text = "This creates an experiment of its own, on the checkout_completed event, with sequential testing on and five planned looks, saves its id in $EXP_ID and starts it:"
+by = [
+    "docex:docs/api/sequential-testing.md#\"status\": \"active\"",
+    "docex:docs/api/sequential-testing.md#\"planned_looks\": 5",
+]
 
 [[unit]]
-text = "This saves its id in $EXP_ID and turns sequential testing on with five planned looks."
-by = ["exempt:baseline"]
+text = "It prints \"status\": \"active\", \"sequential_testing_enabled\": true and \"planned_looks\": 5."
+by = [
+    "docex:docs/api/sequential-testing.md#\"status\": \"active\"",
+    "docex:docs/api/sequential-testing.md#\"sequential_testing_enabled\": true",
+    "docex:docs/api/sequential-testing.md#\"planned_looks\": 5",
+]
 
 [[unit]]
-text = "It prints 200."
-by = ["exempt:baseline"]
+text = "The experiment has no users yet, so the requests below read an analysis with nothing to weigh: lambda_ratio is 1 and the interval is [-1, 1]."
+by = ["test:backend/tests/unit/stats_validation/test_sequential_confidence_sequence.py::test_no_finite_interval_without_data"]
 
 [[unit]]
 text = "API Reference"
@@ -280,8 +292,11 @@ text = "It takes one optional query parameter, alpha: the significance level for
 by = ["docex:docs/api/sequential-testing.md#\"method\": \"msprt\""]
 
 [[unit]]
-text = "Any logged-in user can read it."
-by = ["test:backend/tests/integration/api/test_sequential_results_routes.py::test_any_signed_in_user_reads_the_sequential_analysis"]
+text = "Anyone who may view the experiment can read it."
+by = [
+    "test:backend/tests/integration/api/test_sequential_results_routes.py::test_every_shipped_role_reads_the_sequential_analysis",
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_no_base_role_is_refused_on_results_routes",
+]
 
 [[unit]]
 text = "It answers 404 with \"Sequential testing is not enabled for this experiment\" when it is off, and \"Experiment not found\" when there is no such experiment."
@@ -299,8 +314,8 @@ by = [
 ]
 
 [[unit]]
-text = "A full response, abridged:"
-by = ["exempt:baseline"]
+text = "With traffic, a full response looks like this, abridged; the numbers are illustrative:"
+by = ["exempt:example"]
 
 [[unit]]
 text = "analysis_status is \"beta\" while part of the analysis is not computed yet (here the alpha-spending table), and analysis_notice then says what; when the status is \"ga\" the notice is null."
@@ -476,10 +491,10 @@ by = [
 ]
 
 [[unit]]
-text = "A change to sequential_testing_enabled or sequential_testing_config, which only a superuser can make once the experiment is running (see Permissions), therefore shows here only when the cached answer expires or POST /api/v1/results/{experiment_id}/invalidate-cache clears it, not immediately; /sequential is not cached."
+text = "A change to sequential_testing_enabled or sequential_testing_config, which can be made only while the experiment is a draft (see Permissions), therefore shows here only when the cached answer expires or POST /api/v1/results/{experiment_id}/invalidate-cache clears it, not immediately; /sequential is not cached."
 by = [
     "test:backend/tests/integration/api/test_sequential_results_routes.py::test_a_settings_change_reaches_the_cached_results_only_once_cleared",
-    "test:backend/tests/integration/api/test_sequential_results_routes.py::test_once_running_only_a_superuser_changes_the_sequential_settings",
+    "test:backend/tests/integration/api/test_sequential_results_routes.py::test_once_running_nobody_changes_the_sequential_settings",
 ]
 
 [[unit]]
@@ -502,19 +517,32 @@ by = [
 ]
 
 [[unit]]
-text = "ADMIN and DEVELOPER may change experiments, and in the full profile so may anyone whose custom role or direct grant gives experiment (update); for anyone else the PUT above answers 403 with \"You don't have permission to update experiments\"."
+text = "Set them when you create the experiment, as above, or with PUT /api/v1/experiments/{id} while the experiment is a draft."
+by = [
+    "docex:docs/api/sequential-testing.md#\"planned_looks\": 5",
+    "journey:experiment-results#floor-sequential-on",
+    "test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller",
+]
+
+[[unit]]
+text = "ADMIN and DEVELOPER may change experiments, and in the full profile so may anyone whose custom role or direct grant gives experiment (update); for anyone else that PUT answers 403 with \"You don't have permission to update experiments\"."
 by = [
     "test:backend/tests/integration/api/test_experiment_access_by_role.py",
     "test:modules/backend/tests/integration/rbac/test_rbac_enforcement_routes.py::test_a_grant_admits_its_pair_and_only_its_pair",
 ]
 
 [[unit]]
-text = "Only a superuser may change an experiment that is no longer a draft, and the demo experiment is running: for anyone else who may change experiments, such as a DEVELOPER or an ADMIN who is not a superuser, the PUT above answers 400 with \"Cannot update experiments in active status\"."
-by = ["test:backend/tests/integration/api/test_experiment_access_by_role.py"]
+text = "Once the experiment has left draft, nobody can change them, a superuser included, even to the values they already have: on an active experiment the PUT answers 400 with \"Cannot update sequential_testing_enabled for experiments in active status\" (or sequential_testing_config) for a superuser and \"Cannot update experiments in active status\" for anyone else who may change experiments."
+by = [
+    "test:backend/tests/integration/api/test_sequential_results_routes.py::test_once_running_nobody_changes_the_sequential_settings",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_superuser_cannot_change_an_analysis_setting_once_out_of_draft",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_sending_back_the_stored_value_is_refused_too",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_developer_meets_the_refusal_of_every_change_outside_draft_first",
+]
 
 [[unit]]
-text = "The demo's admin@demo.com is a superuser, which is why it gets 200."
-by = ["docex:docs/api/sequential-testing.md#200"]
+text = "To use other settings, clone the experiment (POST /api/v1/experiments/{id}/clone): the copy is a new experiment, a draft, and takes them."
+by = ["test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_clone_of_a_running_experiment_takes_the_settings_as_a_draft"]
 
 [[unit]]
 text = "Common Mistakes"
@@ -539,16 +567,16 @@ by = [
 ]
 
 [[unit]]
-text = "Do not change the configuration mid-experiment."
+text = "Choose the configuration before the experiment starts."
 by = ["exempt:advice"]
 
 [[unit]]
-text = "Choose alpha and tau_squared before the experiment starts."
+text = "Choose alpha and tau_squared while it is a draft."
 by = ["exempt:advice"]
 
 [[unit]]
-text = "Once it is running, the PUT that would change sequential_testing_enabled or sequential_testing_config answers 400 with \"Cannot update experiments in active status\" for anyone who may change experiments but is not a superuser."
+text = "Once it is running, the PUT that would change sequential_testing_enabled or sequential_testing_config answers 400 for anyone who may change experiments, a superuser included, so the analysis keeps the settings it started with."
 by = [
-    "test:backend/tests/integration/api/test_sequential_results_routes.py::test_once_running_only_a_superuser_changes_the_sequential_settings",
+    "test:backend/tests/integration/api/test_sequential_results_routes.py::test_once_running_nobody_changes_the_sequential_settings",
     "test:backend/tests/integration/api/test_experiment_access_by_role.py::test_status_by_route_and_caller",
 ]

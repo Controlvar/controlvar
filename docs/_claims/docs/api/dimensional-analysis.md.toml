@@ -91,16 +91,92 @@ text = "Where the segments come from"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "A segment is a value of a key in the events' metadata."
-by = ["test:backend/tests/unit/services/test_dimensional_analysis_service.py::TestComputeSegmentResults::test_missing_dimension_values_grouped_as_unknown"]
+text = "Each user is counted once, in the segment of the value the user was first assigned with, or else the first value tracked for them, so for every variant the segments add up to the experiment's users and converting users."
+by = [
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_a_user_with_events_in_two_segments_is_in_one",
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_users_without_a_value_are_counted_under_unknown",
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_the_sdk_path_puts_each_converter_in_its_assignment_context_segment",
+]
 
 [[unit]]
-text = "Send the dimension with the events you track, as in \"metadata\": {\"device\": \"mobile\"}, and the breakdown groups the experiment's users by it."
-by = ["exempt:baseline"]
+text = "The value is a top-level key of the context sent with POST /api/v1/tracking/assign, which is stored with the user's assignment event, or of an event's metadata."
+by = [
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_the_sdk_path_puts_each_converter_in_its_assignment_context_segment",
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_values_are_the_exact_text_of_a_top_level_key",
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_a_user_value_is_the_first_received_keyed_event_order",
+]
 
 [[unit]]
-text = "A user whose events don't carry the key is counted under the segment unknown."
-by = ["exempt:baseline"]
+text = "Assignment events come first, then the user's other events in the order the server received them; an event's own timestamp does not move a user."
+by = [
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_a_user_value_is_the_first_received_keyed_event_order",
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_an_exposure_value_wins_over_an_earlier_keyed_event_order",
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_a_user_value_on_equal_keys_is_the_smaller_event_id_tie",
+]
+
+[[unit]]
+text = "So a user assigned with {\"device\": \"mobile\"} who checks out on desktop is counted once, under mobile, with that checkout."
+by = ["test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_a_user_with_events_in_two_segments_is_in_one"]
+
+[[unit]]
+text = "A user's conversions count in their segment whether or not the conversion events carry the key."
+by = [
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_a_conversion_without_the_key_counts_in_the_users_segment",
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_the_sdk_path_puts_each_converter_in_its_assignment_context_segment",
+]
+
+[[unit]]
+text = "Users with no value are counted under unknown: users whose events never carry the key, or carry it as null or \"\", and users with no events at all."
+by = [
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_users_without_a_value_are_counted_under_unknown",
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_a_user_whose_only_value_is_empty_is_counted_under_unknown",
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_values_are_the_exact_text_of_a_top_level_key",
+]
+
+[[unit]]
+text = "A value is compared as exact text, with no trimming or change of case: iOS and ios are two segments, true is the text true, and an object is its JSON text."
+by = ["test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_values_are_the_exact_text_of_a_top_level_key"]
+
+[[unit]]
+text = "A value unknown is counted under unknown."
+by = ["test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_literal_other_and_unknown_take_no_listed_slot_cap"]
+
+[[unit]]
+text = "POST /api/v1/tracking/assign/batch records no assignment event, so its context sets no segment; send the key on an event."
+by = ["test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_a_batch_assigned_user_is_placed_by_a_tracked_event_batch"]
+
+[[unit]]
+text = "A breakdown lists the 20 values with the most users and counts the rest under other."
+by = [
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_values_beyond_the_listed_ones_fold_into_other_cap",
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_the_listed_values_are_those_with_the_most_users_cap",
+]
+
+[[unit]]
+text = "A value longer than 255 characters is counted under other."
+by = ["test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_a_value_longer_than_255_characters_is_counted_under_other_long_values"]
+
+[[unit]]
+text = "To break results down by an attribute, send it in the user's attributes when you assign them: context on the API, user_attributes in the Python SDK and attributes in the JavaScript and React SDKs."
+by = [
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_the_sdk_path_puts_each_converter_in_its_assignment_context_segment",
+    "test:sdk/python/tests/test_client.py::TestGetAssignment::test_sends_post_with_context",
+    "test:sdk/js/__tests__/client.test.ts::sends {experiment_key, user_id, context: attributes} as the JSON body",
+    "test:sdk/react/src/__tests__/useExperiment.test.tsx::POSTs {experiment_key, user_id, context} to /api/v1/tracking/assign",
+]
+
+[[unit]]
+text = "The events you track then need no properties."
+by = ["test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_the_sdk_path_puts_each_converter_in_its_assignment_context_segment"]
+
+[[unit]]
+text = "The dashboard's Breakdowns tab offers platform, country and user_tier; any other key works through the API."
+by = [
+    "test:frontend/src/tests/components/ResultsDashboard.test.tsx::fetches breakdown and renders SegmentComparisonTable when a dimension is selected",
+    "test:frontend/src/tests/components/ResultsDashboard.test.tsx::calls getResults with breakdown param when a dimension is selected",
+    "test:frontend/src/tests/components/BreakdownSelector.test.tsx::calls onChange with the dimension string when a dimension is selected",
+    "docex:docs/api/dimensional-analysis.md#\"dimension\": \"device\"",
+]
 
 [[unit]]
 text = "Run the commands on this page in one terminal, in order, against the stack from the Quick Start."
@@ -123,8 +199,8 @@ text = "The examples use the demo data's checkout_button_color experiment, whose
 by = ["test:backend/tests/unit/services/test_breakdown_reads.py::test_the_examples_experiment_counts_checkout_completed"]
 
 [[unit]]
-text = "Its demo events carry no metadata, so this page tracks a few that do."
-by = ["exempt:baseline"]
+text = "Its demo users were assigned with no attributes, so this page assigns a few with a device."
+by = ["docex:docs/api/dimensional-analysis.md#\"unknown\""]
 
 [[unit]]
 text = "That takes an API key, which this saves in $KEY, with the experiment's id in $EXP_ID."
@@ -139,16 +215,23 @@ text = "It prints eptk_, the start of every API key."
 by = ["docex:docs/api/dimensional-analysis.md#eptk_"]
 
 [[unit]]
-text = "This assigns eight users to the experiment:"
-by = ["exempt:baseline"]
+text = "This assigns eight users to the experiment, the odd numbers with the device desktop and the even ones with mobile, sent in each user's context:"
+by = ["docex:docs/api/dimensional-analysis.md#8 true"]
 
 [[unit]]
 text = "It prints 8 true: all eight were enrolled."
 by = ["docex:docs/api/dimensional-analysis.md#8 true"]
 
 [[unit]]
-text = "Then each completes a checkout, the odd numbers on desktop and the even ones on mobile."
-by = ["exempt:baseline"]
+text = "Then each completes a checkout."
+by = ["docex:docs/api/dimensional-analysis.md#8"]
+
+[[unit]]
+text = "The events carry no metadata: each user's segment comes from their assignment."
+by = [
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_the_sdk_path_puts_each_converter_in_its_assignment_context_segment",
+    "docex:docs/api/dimensional-analysis.md#{\"users\":true,\"conversions\":true}",
+]
 
 [[unit]]
 text = "jq builds the batch of eight events:"
@@ -178,8 +261,11 @@ text = "Without breakdown, the field is null."
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Any logged-in user can read it."
-by = ["test:backend/tests/unit/services/test_breakdown_reads.py::test_any_signed_in_user_reads_both_breakdowns"]
+text = "A user who may view the experiment can read it."
+by = [
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_every_shipped_role_keeps_its_answer_on_each_route",
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_no_base_role_is_refused_on_results_routes",
+]
 
 [[unit]]
 text = "Parameter | Type | Required | Description"
@@ -197,10 +283,11 @@ text = "confidence_level | float | ❌ | 0.80–0.99, default 0.95"
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
-text = "It prints the dimension, \"is_exploratory\": true, the corrected threshold and the segments: desktop, mobile, and unknown for the users' assignment events, which carry no device."
+text = "It prints the dimension, \"is_exploratory\": true, the corrected threshold and the segments: desktop, mobile, and unknown: the demo's own users, assigned with no device."
 by = [
-    "test:backend/tests/unit/services/test_breakdown_reads.py::test_events_without_the_key_form_an_unknown_segment_under_a_bonferroni_threshold",
+    "docex:docs/api/dimensional-analysis.md#\"unknown\"",
     "docex:docs/api/dimensional-analysis.md#\"is_exploratory\": true",
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_users_without_a_value_are_counted_under_unknown",
 ]
 
 [[unit]]
@@ -208,8 +295,22 @@ text = "With three segments the threshold is 0.05 / 3, about 0.0167."
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "A variant's conversions in a segment are users, as in the rest of /results: the users assigned to it with at least one conversion event in that segment, each counted once."
-by = ["test:backend/tests/integration/api/test_results_breakdown_variants.py"]
+text = "For every variant the segments add up to the experiment's users and converting users:"
+by = [
+    "docex:docs/api/dimensional-analysis.md#{\"users\":true,\"conversions\":true}",
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_the_sdk_path_puts_each_converter_in_its_assignment_context_segment",
+]
+
+[[unit]]
+text = "It prints {\"users\":true,\"conversions\":true}."
+by = ["docex:docs/api/dimensional-analysis.md#{\"users\":true,\"conversions\":true}"]
+
+[[unit]]
+text = "A variant's conversions in a segment are users, as in the rest of /results: the segment's users assigned to it with a conversion event, wherever that event was, each counted once."
+by = [
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_a_conversion_without_the_key_counts_in_the_users_segment",
+    "test:backend/tests/integration/api/test_results_breakdown_variants.py",
+]
 
 [[unit]]
 text = "Every segment lists every variant of the experiment by name, with zero counts where the segment has none of its users, and is_control is the flag the experiment gives the variant."
@@ -228,8 +329,8 @@ text = "One segment in full:"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "The control's p_value is null; every other variant's is its test against the control in the same segment."
-by = ["test:backend/tests/unit/services/test_breakdown_reads.py::test_the_control_has_no_p_value_and_each_treatment_is_tested_against_it"]
+text = "The control's p_value is null; every other variant's is Fisher's exact test against the control in the same segment, the test the headline uses for a conversion rate."
+by = ["test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_each_segment_is_tested_with_fishers_exact_test"]
 
 [[unit]]
 text = "The breakdown also carries has_heterogeneous_effects and hte_warning."
@@ -244,12 +345,13 @@ by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_
 
 [[unit]]
 text = "Counts per segment, variant and metric, with no significance test."
-by = ["test:backend/tests/unit/services/test_breakdown_reads.py::test_segmented_results_are_counts_for_segments_that_carry_the_key"]
+by = ["test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_the_segmented_results_keep_their_keys"]
 
 [[unit]]
-text = "Only segments with the key are listed (no unknown), conversion_rate is a percentage, and an experiment in draft answers 400."
+text = "Its segments are the ones above, by the same rule, unknown included; conversion_rate is a percentage, and an experiment in draft answers 400."
 by = [
-    "test:backend/tests/unit/services/test_breakdown_reads.py::test_segmented_results_are_counts_for_segments_that_carry_the_key",
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_users_without_a_value_are_counted_under_unknown",
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_the_segmented_results_keep_their_keys",
     "test:backend/tests/unit/services/test_breakdown_reads.py::test_a_draft_experiment_has_no_segmented_results",
 ]
 
@@ -258,8 +360,11 @@ text = "metric_id narrows it to one metric:"
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
 
 [[unit]]
-text = "It prints the desktop and mobile segments, each with the users and conversions of blue_button and green_button."
-by = ["docex:docs/api/dimensional-analysis.md#\"segment_value\": \"desktop\""]
+text = "It prints the desktop, mobile and unknown segments, each with the users and conversions of blue_button and green_button."
+by = [
+    "docex:docs/api/dimensional-analysis.md#\"segment_value\": \"unknown\"",
+    "docex:docs/api/dimensional-analysis.md#\"segment_value\": \"desktop\"",
+]
 
 [[unit]]
 text = "Reading the Results"
@@ -322,5 +427,31 @@ text = "Permissions"
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Any logged-in user can read both breakdowns, whatever the role."
-by = ["test:backend/tests/unit/services/test_breakdown_reads.py::test_any_signed_in_user_reads_both_breakdowns"]
+text = "Reading either breakdown takes permission to view the experiment, as on the experiment page; every role has it."
+by = [
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_every_shipped_role_keeps_its_answer_on_each_route",
+    "test:backend/tests/integration/api/test_experiment_data_read_rule.py::test_no_base_role_is_refused_on_results_routes",
+]
+
+[[unit]]
+text = "Balanced groups"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An experiment that balances its split within groups also answers GET /api/v1/results/{experiment_id}/balanced-groups (beta)."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_rows_are_the_stored_groups_and_add_up_to_every_user",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_the_balanced_groups_route_is_beta_and_carries_no_place_in_a_group",
+]
+
+[[unit]]
+text = "Its rows are built the same way, with each user in the group stored when they were assigned instead of their first value, and it adds one estimate over the groups."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_for_users_assigned_with_a_listed_value_the_rows_are_the_breakdowns",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_a_later_keyed_event_moves_the_breakdown_and_not_the_group",
+    "test:backend/tests/unit/services/test_balanced_groups_rows_one_source.py",
+]
+
+[[unit]]
+text = "Balance the split within groups says what it returns and where the two differ."
+by = ["exempt:navigation"]

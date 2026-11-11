@@ -1,11 +1,13 @@
 """
-The five Cognito-only auth routes answer 404 unless ``AUTH_PROVIDER`` is
-``cognito`` (#387).
+The six Cognito-only auth routes answer 404 unless ``AUTH_PROVIDER`` is
+``cognito`` (#387, #708).
 
 ``POST /api/v1/auth/{signup,confirm,forgot-password,reset-password,refresh}``
+and the Hosted UI's code exchange, ``POST /api/v1/auth/cognito/exchange``,
 exist only for the Cognito provider.  Under any other provider each answers
 404 with one fixed message, whatever the body, and creates no Cognito client.
-Under ``cognito`` the request still reaches ``CognitoAuthService``.
+Under ``cognito`` the first five still reach ``CognitoAuthService``; the
+exchange's own tests are ``integration/api/test_cognito_hosted_ui_relay.py``.
 
 No database and no modules: the routes under test never open a session, and
 ``CognitoAuthService`` is replaced by a recording stub.  The AWS credential
@@ -53,6 +55,11 @@ VALID_BODIES: Dict[str, Dict[str, Any]] = {
         "new_password": "Abcdefg1x",
     },
     f"{PREFIX}/refresh": {"refresh_token": "a-refresh-token"},
+    f"{PREFIX}/cognito/exchange": {
+        "code": "a-code",
+        "code_verifier": "v" * 43,
+        "redirect_uri": "https://dashboard.example.com/auth/callback",
+    },
 }
 
 COGNITO_ONLY: Set[Tuple[str, str]] = {(path, "POST") for path in VALID_BODIES}
@@ -199,10 +206,11 @@ SELF_SIGNUP_OFF = (
 )
 
 
-@pytest.mark.parametrize("path", sorted(VALID_BODIES), ids=_route_name)
+@pytest.mark.parametrize("path", sorted(STUB_CALLS), ids=_route_name)
 def test_cognito_provider_reaches_the_service(path, client, recorders, monkeypatch):
     """Under ``cognito`` the request reaches the service (self sign-up with
-    the setting turned on)."""
+    the setting turned on). Not the code exchange, which asks the Hosted UI's
+    token endpoint and has its own tests."""
     monkeypatch.setattr(settings, "AUTH_PROVIDER", "cognito")
     if path in SELF_SIGNUP:
         monkeypatch.setattr(settings, "COGNITO_SELF_SIGNUP_ENABLED", True)
@@ -259,7 +267,7 @@ def _gate_calls(dependant) -> bool:
     )
 
 
-def test_exactly_the_five_routes_carry_the_gate():
+def test_exactly_the_six_routes_carry_the_gate():
     """Read from the mounted app: no route gains or loses the gate unnoticed."""
     routes = list(_mounted_routes())
     gated = {
@@ -267,5 +275,5 @@ def test_exactly_the_five_routes_carry_the_gate():
     }
 
     assert gated == COGNITO_ONLY
-    assert len(COGNITO_ONLY) == 5
+    assert len(COGNITO_ONLY) == 6
     assert COGNITO_ONLY <= {(path, method) for path, method, _ in routes}

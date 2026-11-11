@@ -17,7 +17,9 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute, release_request_sessions
 from backend.app.api.sdk_scope import require_batch_assign_key
+from backend.app.core.balanced_blocks import balance_setting
 from backend.app.core.context_limits import check_context
 from backend.app.core.logger import failure_detail, unexpected_failure
 from backend.app.core.metrics import (
@@ -51,7 +53,7 @@ from backend.app.services.bandit_routing import bandit_chooser
 from backend.app.services.event_service import EventService
 
 # Create router
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 logger = logging.getLogger(__name__)
 
@@ -282,6 +284,9 @@ async def assign_user_to_experiment(
     - Targeting rules
     - Traffic allocation percentages
 
+    For an experiment that balances within groups, a new user's variant also
+    depends on the users of their group assigned before them.
+
     This means that the same user will always get the same variant assignment
     for a specific experiment, including across experiments in the same mutual
     exclusion group: a user enrolled in one experiment of a group is not
@@ -344,7 +349,7 @@ async def assign_user_to_experiment(
         request.user_id
     )
 
-    try:
+    def assign_and_answer() -> VariantAssignmentResponse:
         # Attempt to assign the user
         assignment_data = assignment_service.assign_user(
             user_id=request.user_id,
@@ -389,6 +394,22 @@ async def assign_user_to_experiment(
             assigned=bool(assignment_data.get("assigned", True)),
             reason=str(assignment_data.get("reason") or "assigned"),
         )
+
+    try:
+        if balance_setting(experiment) is not None:
+            # A balanced experiment's new user takes a place from their
+            # group's counter row, which another request can be holding
+            # (#448), so the assignment runs in a worker thread, off the event
+            # loop. The request's sessions are released first: their
+            # transaction ends and the connection goes back to the pool while
+            # the request waits for a worker, and the session, whose objects
+            # stay attached, reads again inside it (one thread at a time).
+            # test_route_worker_steps.py and the balanced row of
+            # test_api_key_routes_under_overload.py pin both. Every other
+            # experiment is assigned here, as before.
+            release_request_sessions()
+            return await run_in_threadpool(assign_and_answer)
+        return assign_and_answer()
     except ValidationError as e:
         # A response that does not build is not the caller's mistake, and
         # pydantic's text repeats the values: answer as an unexpected failure.
@@ -459,7 +480,9 @@ async def assign_users_to_experiment_batch(
     checks for a new user (global holdout, mutual exclusion group, targeting
     rules against that user's ``context``) and the same sticky answer for a
     user already assigned. Users are processed in request order and each new
-    assignment is committed on its own, as N single calls would be.
+    assignment is committed on its own, as N single calls would be. For an
+    experiment that balances within groups, the same list sent in another
+    order can split differently; each user keeps the variant they got.
 
     Only assignments are recorded, never a view event: the user's first
     ``POST /api/v1/tracking/assign`` records that they saw the experiment.

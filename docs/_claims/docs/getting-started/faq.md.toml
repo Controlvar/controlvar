@@ -314,12 +314,21 @@ by = ["exempt:label"]
 text = "The JavaScript SDK is on npm (npm install @controlvar/js-sdk, 0.3.0, beta) and the Python SDK is on PyPI (pip install controlvar, 0.3.0, beta)."
 by = [
     "mechanism:sdk-doc-versions",
+    "mechanism:registry-availability",
     "journey:sdk-javascript#quick-start-user-on",
     "journey:sdk-python#quick-start-user-on",
 ]
 
 [[unit]]
-text = "The Go SDK installs by module path, and the other SDKs from a clone of this repository: each SDK's page (Go, Java, React) says how."
+text = "So are the React SDK (npm install @controlvar/react-sdk, 0.1.0, beta), the React Native SDK (npm install @controlvar/react-native-sdk, 0.1.0, beta) and the two OpenFeature providers (npm install @controlvar/openfeature-provider, 0.1.0, beta; pip install controlvar-openfeature, 0.1.0, beta)."
+by = ["mechanism:sdk-doc-versions", "mechanism:registry-availability"]
+
+[[unit]]
+text = "The Java SDK is on Maven Central and the .NET SDK on NuGet."
+by = ["mechanism:registry-availability"]
+
+[[unit]]
+text = "The Go SDK installs by module path, and the other SDKs from a clone of this repository: each SDK's page (Go, Ruby) says how."
 by = ["journey:sdk-go#quick-start-user-on"]
 
 [[unit]]
@@ -335,11 +344,27 @@ text = "Python | controlvar (PyPI)"
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
 
 [[unit]]
-text = "Java / JVM | com.controlvar:controlvar-sdk (Maven/Gradle)"
+text = "Java / JVM | com.controlvar:controlvar-sdk (Maven Central)"
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
 
 [[unit]]
 text = "React | @controlvar/react-sdk (npm)"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "React Native | @controlvar/react-native-sdk (npm)"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "OpenFeature (Node) | @controlvar/openfeature-provider (npm)"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "OpenFeature (Python) | controlvar-openfeature (PyPI)"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = ".NET | Controlvar.SDK (NuGet)"
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
 
 [[unit]]
@@ -620,12 +645,25 @@ by = [
 ]
 
 [[unit]]
-text = "Full audit log export (JSON or CSV) is available for SIEM ingestion at GET /api/v1/compliance/export."
+text = "The compliance trail exports as JSON or CSV at GET /api/v1/compliance/export (compliance module; a core deployment answers 501): flag and experiment creates, changes and deletes, without their old and new values."
 by = [
     "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestAuditExport::test_admin_can_export_csv",
     "test:modules/backend/tests/integration/api/test_compliance_reports_api.py::TestAuditExport::test_admin_can_export_json",
+    "test:backend/tests/unit/services/test_compliance_trail_writers.py::test_core_answers_the_report_and_export_501_after_the_role_check",
+    "test:modules/backend/tests/unit/services/test_compliance_export_contents.py::test_every_matching_event_oldest_first_with_eight_fields",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
+
+[[unit]]
+text = "Toggles, rollbacks, sign-ins and role changes are in the audit log, which exports at GET /api/v1/audit-logs/export (beta) in every profile."
+by = [
+    "test:backend/tests/integration/api/test_audit_export.py::test_each_filter_returns_exactly_its_rows_newest_first",
+    "test:backend/tests/smoke/test_audit_inventory.py::test_the_inventory_is_exact",
+]
+
+[[unit]]
+text = "For a SIEM, take both."
+by = ["exempt:advice"]
 
 [[unit]]
 text = "See Compliance Audit Trail API for full documentation."

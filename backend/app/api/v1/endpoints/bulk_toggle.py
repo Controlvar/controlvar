@@ -17,6 +17,8 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.query_params import MAX_OFFSET, describe_as_int64
 from backend.app.core.logger import failure_detail
 from backend.app.core.permissions import (
     Action,
@@ -50,7 +52,7 @@ _ACTIONS = {
     "archive": (FlagVerb.ARCHIVE, ActionType.FEATURE_FLAG_UPDATE),
 }
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 
 @router.post(
@@ -215,7 +217,7 @@ async def bulk_toggle_flags(
 def get_flag_history(
     flag_id: UUID,
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=MAX_OFFSET, json_schema_extra=describe_as_int64),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user),
 ):

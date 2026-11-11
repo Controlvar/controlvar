@@ -986,30 +986,105 @@
         "type": "object"
       },
       "AudiencePreviewResponse": {
-        "description": "Estimated audience size from preview evaluation.",
+        "description": "How many of the users seen most recently the rules match.\n\nThe users are the most recent ones with an exposure (a /tracking/assign\ncall) in the last 30 days, each counted once, with the attributes sent as\ncontext on their latest one. It is not a random sample: it leans toward\nfrequent users and the time of day.",
         "example": {
+          "ended_by": "sample_size",
           "estimated_percentage": 35.5,
           "matched": 355,
-          "sample_size": 1000
+          "sample_size": 1000,
+          "sampled_since": "2026-11-06T09:12:45.120391+00:00",
+          "source": "exposure_metadata",
+          "users_without_context": 42,
+          "window_days": 30
         },
         "properties": {
+          "ended_by": {
+            "description": "sample_size: enough users were found; cap: the row cap was reached first; window: every exposure in the window was read.",
+            "enum": [
+              "sample_size",
+              "cap",
+              "window"
+            ],
+            "title": "Ended By",
+            "type": "string"
+          },
           "estimated_percentage": {
-            "title": "Estimated Percentage",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "matched / sample_size x 100, to 2 decimals. null when reason is set: no user seen with attributes, or fewer than 30.",
+            "title": "Estimated Percentage"
           },
           "matched": {
+            "description": "Of those users, how many the rules match.",
             "title": "Matched",
             "type": "integer"
           },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "no_exposures_with_context",
+                  "too_few_users"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why estimated_percentage is null: no_exposures_with_context (no user with attributes) or too_few_users (1 to 29). null otherwise.",
+            "title": "Reason"
+          },
           "sample_size": {
+            "description": "Distinct users read whose latest exposure carried attributes; at most the requested sample_size.",
             "title": "Sample Size",
+            "type": "integer"
+          },
+          "sampled_since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The time of the oldest exposure read, UTC ISO-8601; null when none was read.",
+            "title": "Sampled Since"
+          },
+          "source": {
+            "const": "exposure_metadata",
+            "description": "Where the attributes come from: the exposures' stored context.",
+            "title": "Source",
+            "type": "string"
+          },
+          "users_without_context": {
+            "description": "Distinct users read whose latest exposure carried no attributes; not counted in sample_size.",
+            "title": "Users Without Context",
+            "type": "integer"
+          },
+          "window_days": {
+            "description": "The read goes back at most this many days (fixed at 30).",
+            "title": "Window Days",
             "type": "integer"
           }
         },
         "required": [
           "estimated_percentage",
           "sample_size",
-          "matched"
+          "matched",
+          "source",
+          "window_days",
+          "sampled_since",
+          "ended_by",
+          "users_without_context",
+          "reason"
         ],
         "title": "AudiencePreviewResponse",
         "type": "object"
@@ -1276,6 +1351,91 @@
         "title": "AuditStatsResponse",
         "type": "object"
       },
+      "AuthConfigResponse": {
+        "description": "``GET /api/v1/auth/config``: how the dashboard signs in.\n\n``{\"provider\": \"local\"}`` under the local provider. Under Cognito, either\nthe Hosted UI's ``hosted_ui_domain``, the app ``client_id`` and the\n``scopes`` to ask for, or ``configured: false`` with the names of the\nunset settings in ``missing``. A field that does not apply is absent.",
+        "properties": {
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The Cognito app client the dashboard signs in to",
+            "title": "Client Id"
+          },
+          "configured": {
+            "anyOf": [
+              {
+                "const": false,
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Present, and false, when Cognito sign-in is not set up",
+            "title": "Configured"
+          },
+          "hosted_ui_domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The Cognito Hosted UI's domain name, without a scheme",
+            "title": "Hosted Ui Domain"
+          },
+          "missing": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The names of the unset settings, when configured is false",
+            "title": "Missing"
+          },
+          "provider": {
+            "enum": [
+              "local",
+              "cognito"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "scopes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The OAuth scopes to ask the Hosted UI for",
+            "title": "Scopes"
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "title": "AuthConfigResponse",
+        "type": "object"
+      },
       "BAAConfigCreate": {
         "description": "Schema for creating a Business Associate Agreement configuration.",
         "properties": {
@@ -1420,6 +1580,275 @@
         "title": "BAAConfigResponse",
         "type": "object"
       },
+      "BalanceWithin": {
+        "additionalProperties": false,
+        "description": "Balance the split within each group of users (beta).",
+        "example": {
+          "attribute": "tier",
+          "values": [
+            "high_value",
+            "churn_risk"
+          ]
+        },
+        "properties": {
+          "attribute": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The top-level key of the assign `context` whose value puts a user in a group: letters, digits, `_` and `-`, at most 100 characters, no dot, not `user_id` or `segment`.",
+            "title": "Attribute"
+          },
+          "segments": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 36,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Saved segments to balance within instead of an attribute: 1 to 10 segment ids, each listed once, each an active segment. A new user is balanced in the first listed segment they belong to, in `other` when they belong to none, and in `unknown` when their membership of a segment listed before it cannot be decided.",
+            "title": "Segments"
+          },
+          "values": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 100,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The values to balance within, 1 to 20 strings of 1 to 100 characters, matched exactly. Users with any other value are balanced together as `other`, users without the key as `unknown`, so neither name can be listed. Left out only for a closed key (`web_device`, `web_visitor`, `web_browser`), whose set is the list.",
+            "title": "Values"
+          }
+        },
+        "title": "BalanceWithin",
+        "type": "object"
+      },
+      "BalancedGroupsEstimate": {
+        "description": "One treatment against the control, over every group.",
+        "properties": {
+          "absolute_difference": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The treatment's conversion rate minus the control's in each group, weighted by the group's share of the experiment's users (every variant's), as a proportion (0.02 is 2 percentage points). Null when the treatment has no users.",
+            "title": "Absolute Difference"
+          },
+          "absolute_difference_ci": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The normal interval of absolute_difference at the experiment's confidence_level. Null when standard_error is 0 or null.",
+            "title": "Absolute Difference Ci"
+          },
+          "adjusted_p_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "p_value corrected across the treatments with the experiment's correction_method; null with no correction.",
+            "title": "Adjusted P Value"
+          },
+          "is_significant": {
+            "description": "Whether adjusted_p_value (p_value with no correction) is below 1 - confidence_level. Not a verdict: the experiment's results carry its decision.",
+            "title": "Is Significant",
+            "type": "boolean"
+          },
+          "p_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Two-sided normal p-value of absolute_difference. Null when standard_error is 0 or null, never 0.0.",
+            "title": "P Value"
+          },
+          "relative_improvement_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "absolute_difference over the control's conversion rate weighted the same way, in percent. Null when that rate is 0.",
+            "title": "Relative Improvement Pct"
+          },
+          "standard_error": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The standard error of absolute_difference.",
+            "title": "Standard Error"
+          },
+          "variant_id": {
+            "description": "The treatment variant's id.",
+            "title": "Variant Id",
+            "type": "string"
+          },
+          "variant_name": {
+            "description": "The treatment variant's name.",
+            "title": "Variant Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "variant_id",
+          "variant_name",
+          "is_significant"
+        ],
+        "title": "BalancedGroupsEstimate",
+        "type": "object"
+      },
+      "BalancedGroupsResponse": {
+        "description": "The results of an experiment that balances its split within groups, by\nthe group each user was balanced in, and one estimate over the groups.",
+        "properties": {
+          "confidence_level": {
+            "description": "The experiment's confidence level, which the estimate uses.",
+            "title": "Confidence Level",
+            "type": "number"
+          },
+          "correction_method": {
+            "description": "The experiment's multiple-comparison correction.",
+            "title": "Correction Method",
+            "type": "string"
+          },
+          "engine_version": {
+            "default": "1.10.0",
+            "description": "Statistics engine version that produced these results.",
+            "title": "Engine Version",
+            "type": "string"
+          },
+          "experiment_id": {
+            "description": "The experiment's id.",
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "groups": {
+            "$ref": "#/components/schemas/DimensionalBreakdownResponse",
+            "description": "One row per group: the breakdown's rows, with each user in the group stored when they were assigned. Exploratory, as every breakdown is: each row's significance uses adjusted_alpha, the Bonferroni threshold over the rows returned."
+          },
+          "merged_groups": {
+            "description": "Groups with fewer than 2 users in a variant that has users, each counted in overall with the largest group that has 2 in every variant that has users.",
+            "items": {
+              "$ref": "#/components/schemas/MergedGroup"
+            },
+            "title": "Merged Groups",
+            "type": "array"
+          },
+          "overall": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/BalancedGroupsEstimate"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "One estimate per treatment of the primary metric, over every group; null with a reason. No CUPED adjustment is applied to it.",
+            "title": "Overall"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "mean_metric",
+                  "sequential_testing",
+                  "too_few_users"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why overall is null: mean_metric (the primary metric is not a conversion), sequential_testing (the experiment uses sequential testing) or too_few_users (no treatment has users, or no group has 2 users in every variant that has users). Null when overall is given.",
+            "title": "Reason"
+          },
+          "unknown_share": {
+            "anyOf": [
+              {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Of the users whose group was stored, the share in unknown (assigned without the attribute). Users whose row stored no group are not counted. Null when no user's group was stored.",
+            "title": "Unknown Share"
+          },
+          "users_outside_blocks": {
+            "description": "Users split without balancing: assigned by the hash because the server was busy balancing other users at that moment, or by an older server version (whose rows stored no group and are counted under unknown).",
+            "minimum": 0,
+            "title": "Users Outside Blocks",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "experiment_id",
+          "confidence_level",
+          "correction_method",
+          "groups",
+          "users_outside_blocks"
+        ],
+        "title": "BalancedGroupsResponse",
+        "type": "object"
+      },
       "BanditStatusResponse": {
         "description": "Full bandit status snapshot for an experiment.\n\nAttributes\n----------\nexperiment_id:\n    Identifier of the parent experiment.\nalgorithm:\n    Algorithm currently driving traffic allocation.\ncurrent_weights:\n    Per-variant allocation weights.\ntotal_pulls:\n    Total pulls across all variants.\nregret_reduction_pct:\n    Estimated regret reduction vs. uniform allocation (may be None early on).\nrecommendation:\n    Narrative recommendation: one of ``\"EXPLORING\"``, ``\"CONVERGING\"``,\n    or ``\"DEPLOYING_<VariantName>\"``.\nlast_updated:\n    ISO-8601 timestamp of the last weight update (None if never updated).\nseed:\n    Deterministic RNG seed used by the last Thompson-sampling tick\n    (``blake2b(experiment_id | tick day | n_samples)``); ``None`` for\n    deterministic algorithms or before the first tick.\nn_samples:\n    Monte Carlo draws per variant used by the last Thompson-sampling\n    tick; ``None`` for deterministic algorithms or before the first tick.\nengine_version:\n    Version of the statistics engine that computed the current weights.",
         "properties": {
@@ -1436,7 +1865,7 @@
             "type": "array"
           },
           "engine_version": {
-            "default": "1.8.0",
+            "default": "1.10.0",
             "description": "Statistics engine version that computed the current weights",
             "title": "Engine Version",
             "type": "string"
@@ -1822,7 +2251,7 @@
             ]
           },
           "engine_version": {
-            "default": "1.8.0",
+            "default": "1.10.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -2676,6 +3105,57 @@
           "timestamp"
         ],
         "title": "ClientErrorResponse",
+        "type": "object"
+      },
+      "CognitoCodeExchangeRequest": {
+        "description": "``POST /api/v1/auth/cognito/exchange``: what the Hosted UI's callback\nreceived, and the PKCE verifier the dashboard kept.\n\nNothing else is read from the request: the domain asked and the app client\nnamed come from the configuration.",
+        "properties": {
+          "code": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "code_verifier": {
+            "maxLength": 128,
+            "minLength": 43,
+            "pattern": "^[A-Za-z0-9._~-]+$",
+            "title": "Code Verifier",
+            "type": "string"
+          },
+          "redirect_uri": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Redirect Uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "code_verifier",
+          "redirect_uri"
+        ],
+        "title": "CognitoCodeExchangeRequest",
+        "type": "object"
+      },
+      "CognitoCodeExchangeResponse": {
+        "description": "The access token Cognito issued, and its lifetime. Nothing else: the id\ntoken and the refresh token are not returned.",
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "expires_in": {
+            "description": "Seconds until the token expires",
+            "title": "Expires In",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "access_token",
+          "expires_in"
+        ],
+        "title": "CognitoCodeExchangeResponse",
         "type": "object"
       },
       "ComplianceAuditEventListResponse": {
@@ -3929,7 +4409,7 @@
             "title": "Covariate Lookback Days"
           },
           "engine_version": {
-            "default": "1.8.0",
+            "default": "1.10.0",
             "description": "Statistics engine version that produced these results.",
             "title": "Engine Version",
             "type": "string"
@@ -4453,7 +4933,7 @@
             "type": "boolean"
           },
           "segments": {
-            "description": "Per-segment breakdown results, one entry per observed dimension value.",
+            "description": "Per-segment results: the 20 values with the most users, then `other` and `unknown`, each listed only when it has users.",
             "items": {
               "$ref": "#/components/schemas/SegmentBreakdown"
             },
@@ -5472,6 +5952,17 @@
           ]
         },
         "properties": {
+          "balance_within": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BalanceWithin"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Beta. Balance the split within groups of users as they are assigned: `{\"attribute\": \"tier\", \"values\": [\"gold\", \"silver\"]}` puts each new user in the group of their `context.tier` (a top-level key, matched exactly; any other value is `other`, no value is `unknown`), and each group gets the experiment's split among its own users. `{\"segments\": [\"<segment id>\", ...]}` (1 to 10 active saved segments) puts each new user in the group of the first listed segment they belong to, and in `other` when they belong to none. Every share must be a multiple of 5; a bandit or a split URL experiment cannot balance. Null balances nothing."
+          },
           "bayesian_config": {
             "anyOf": [
               {
@@ -5723,6 +6214,19 @@
       "ExperimentDetailResponse": {
         "description": "The answer of ``GET /api/v1/experiments/{experiment_id}`` (#921).\n\n``ExperimentResponse`` plus the owner's display name. Only that read\ncarries it: the list and every other experiment route answer with\n``ExperimentResponse``.",
         "properties": {
+          "balance_within": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Beta. What the experiment balances its split within: `{\"attribute\": ..., \"values\": [...]}`, `{\"segments\": [...]}`, or null when it balances nothing.",
+            "title": "Balance Within"
+          },
           "bayesian_config": {
             "anyOf": [
               {
@@ -6068,6 +6572,19 @@
       "ExperimentResponse": {
         "description": "Model for experiment response data.",
         "properties": {
+          "balance_within": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Beta. What the experiment balances its split within: `{\"attribute\": ..., \"values\": [...]}`, `{\"segments\": [...]}`, or null when it balances nothing.",
+            "title": "Balance Within"
+          },
           "bayesian_config": {
             "anyOf": [
               {
@@ -6599,6 +7116,17 @@
           ]
         },
         "properties": {
+          "balance_within": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BalanceWithin"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Beta. Balance the split within groups of users as they are assigned: `{\"attribute\": \"tier\", \"values\": [\"gold\", \"silver\"]}` puts each new user in the group of their `context.tier` (a top-level key, matched exactly; any other value is `other`, no value is `unknown`), and each group gets the experiment's split among its own users. `{\"segments\": [\"<segment id>\", ...]}` (1 to 10 active saved segments) puts each new user in the group of the first listed segment they belong to, and in `other` when they belong to none. Every share must be a multiple of 5; a bandit or a split URL experiment cannot balance. Null balances nothing. Changeable only while the experiment is a draft."
+          },
           "bayesian_config": {
             "anyOf": [
               {
@@ -6608,7 +7136,7 @@
                 "type": "null"
               }
             ],
-            "description": "Bayesian analysis configuration (priors, loss threshold, ROPE)."
+            "description": "Bayesian analysis configuration (priors, loss threshold, ROPE). Changeable only while the experiment is a draft."
           },
           "bayesian_enabled": {
             "anyOf": [
@@ -6619,7 +7147,7 @@
                 "type": "null"
               }
             ],
-            "description": "Turn Bayesian analysis on or off. Turning it on with no stored or supplied bayesian_config stores the default BayesianConfig.",
+            "description": "Turn Bayesian analysis on or off. Turning it on with no stored or supplied bayesian_config stores the default BayesianConfig. Changeable only while the experiment is a draft.",
             "title": "Bayesian Enabled"
           },
           "confidence_level": {
@@ -6711,10 +7239,10 @@
                 "type": "null"
               }
             ],
-            "description": "Sequential testing configuration."
+            "description": "Sequential testing configuration. Changeable only while the experiment is a draft."
           },
           "sequential_testing_enabled": {
-            "description": "Enable or disable sequential testing.",
+            "description": "Enable or disable sequential testing. Changeable only while the experiment is a draft.",
             "title": "Sequential Testing Enabled",
             "type": "boolean"
           },
@@ -6770,7 +7298,7 @@
                 "type": "null"
               }
             ],
-            "description": "CUPED / Winsorization variance-reduction configuration."
+            "description": "CUPED / Winsorization variance-reduction configuration. Changeable only while the experiment is a draft."
           },
           "variants": {
             "anyOf": [
@@ -6925,10 +7453,44 @@
             "type": "string"
           },
           "off_value": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "object"
+              },
+              {
+                "type": "array"
+              }
+            ],
             "description": "What everyone else gets, and what everyone gets while the flag is off. Required for a string, number or json flag, and of that type; a boolean flag's is `false`. At most 8192 bytes as compact JSON and 10 levels deep; every number in it finite and from -9007199254740991 to 9007199254740991; no NUL or unpaired surrogate character; the two values differ.",
             "title": "Off Value"
           },
           "on_value": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "object"
+              },
+              {
+                "type": "array"
+              }
+            ],
             "description": "What a user the flag is on for gets: a user who matches a targeting rule and falls inside its percentage, or matches no rule and falls inside `rollout_percentage`. Required for a string, number or json flag, and of that type; a boolean flag's is `true`. At most 8192 bytes as compact JSON and 10 levels deep; every number in it finite and from -9007199254740991 to 9007199254740991; no NUL or unpaired surrogate character; the two values differ.",
             "title": "On Value"
           },
@@ -6943,6 +7505,16 @@
             "minimum": 0,
             "title": "Rollout Percentage",
             "type": "integer"
+          },
+          "stale": {
+            "description": "Read-only; ignored.",
+            "readOnly": true,
+            "title": "Stale"
+          },
+          "stale_reasons": {
+            "description": "Read-only; ignored.",
+            "readOnly": true,
+            "title": "Stale Reasons"
           },
           "status": {
             "description": "Read-only. Accepted when it equals the flag's status, in any case (on create: the status is_active gives it); any other value answers 422. Turn a flag on or off with is_active.",
@@ -6998,9 +7570,163 @@
         "title": "FeatureFlagCreate",
         "type": "object"
       },
+      "FeatureFlagListItem": {
+        "description": "A flag in the list: the flag, and whether it looks ready to remove (#1808).",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "default_value": {
+            "description": "Deprecated: always false. Read `off_value`.",
+            "title": "Default Value",
+            "type": "boolean"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "description": "True exactly when status is \"active\".",
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "off_value": {
+            "description": "What everyone else gets, and what everyone gets while the flag is off. Required for a string, number or json flag, and of that type; a boolean flag's is `false`.",
+            "title": "Off Value"
+          },
+          "on_value": {
+            "description": "What a user the flag is on for gets: a user who matches a targeting rule and falls inside its percentage, or matches no rule and falls inside `rollout_percentage`. Required for a string, number or json flag, and of that type; a boolean flag's is `true`.",
+            "title": "On Value"
+          },
+          "owner_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The user who created the flag; null once that user is gone.",
+            "title": "Owner Id"
+          },
+          "rollout_percentage": {
+            "title": "Rollout Percentage",
+            "type": "integer"
+          },
+          "stale": {
+            "description": "True when the flag looks ready to remove. Advice only: nothing is archived or changed automatically. The definition is beta: its conditions and threshold may change; the fields will not.",
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "stale_reasons": {
+            "description": "Why: not_evaluated, on_for_everyone, off_for_everyone; more than one can apply.",
+            "items": {
+              "enum": [
+                "not_evaluated",
+                "on_for_everyone",
+                "off_for_everyone"
+              ],
+              "type": "string"
+            },
+            "title": "Stale Reasons",
+            "type": "array"
+          },
+          "status": {
+            "description": "The flag's status, lower-cased.",
+            "enum": [
+              "active",
+              "inactive",
+              "archived"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          },
+          "targeting_rules": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The flag's targeting rules, as stored.",
+            "title": "Targeting Rules"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "value_type": {
+            "description": "What the flag serves: `boolean` (the default; `true` to users the flag is on for, `false` to everyone else), `string`, `number`, or `json` (an object or an array). Set when the flag is created; an update may send it back unchanged, and any other value answers 422.",
+            "title": "Value Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "name",
+          "description",
+          "status",
+          "is_active",
+          "rollout_percentage",
+          "targeting_rules",
+          "default_value",
+          "value_type",
+          "on_value",
+          "off_value",
+          "tags",
+          "owner_id",
+          "created_at",
+          "updated_at",
+          "stale",
+          "stale_reasons"
+        ],
+        "title": "FeatureFlagListItem",
+        "type": "object"
+      },
       "FeatureFlagListResponse": {
         "description": "Paginated response model for feature flags.",
         "example": {
+          "evaluations_seen": true,
           "items": [
             {
               "created_at": "2023-01-01T00:00:00Z",
@@ -7014,6 +7740,11 @@
               "on_value": true,
               "owner_id": "5f0c8a52-1d7e-4c3b-9a6f-2b8e4d1c7a90",
               "rollout_percentage": 0,
+              "stale": true,
+              "stale_reasons": [
+                "not_evaluated",
+                "off_for_everyone"
+              ],
               "status": "inactive",
               "updated_at": "2023-01-01T00:00:00Z",
               "value_type": "boolean"
@@ -7021,12 +7752,18 @@
           ],
           "limit": 100,
           "skip": 0,
+          "stale_days": 30,
           "total": 1
         },
         "properties": {
+          "evaluations_seen": {
+            "description": "False when the installation recorded no flag evaluation in the last stale_days days; not_evaluated is then not reported.",
+            "title": "Evaluations Seen",
+            "type": "boolean"
+          },
           "items": {
             "items": {
-              "$ref": "#/components/schemas/FeatureFlagRead"
+              "$ref": "#/components/schemas/FeatureFlagListItem"
             },
             "title": "Items",
             "type": "array"
@@ -7039,6 +7776,11 @@
             "title": "Skip",
             "type": "integer"
           },
+          "stale_days": {
+            "description": "N, the days a flag must go without an evaluation, or unchanged while it serves one answer to everyone, to be stale. STALE_FLAG_DAYS sets it.",
+            "title": "Stale Days",
+            "type": "integer"
+          },
           "total": {
             "title": "Total",
             "type": "integer"
@@ -7048,7 +7790,9 @@
           "items",
           "total",
           "skip",
-          "limit"
+          "limit",
+          "stale_days",
+          "evaluations_seen"
         ],
         "title": "FeatureFlagListResponse",
         "type": "object"
@@ -7313,10 +8057,44 @@
             "type": "string"
           },
           "off_value": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "object"
+              },
+              {
+                "type": "array"
+              }
+            ],
             "description": "What everyone else gets, and what everyone gets while the flag is off. Required for a string, number or json flag, and of that type; a boolean flag's is `false`. At most 8192 bytes as compact JSON and 10 levels deep; every number in it finite and from -9007199254740991 to 9007199254740991; no NUL or unpaired surrogate character; the two values differ.",
             "title": "Off Value"
           },
           "on_value": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "object"
+              },
+              {
+                "type": "array"
+              }
+            ],
             "description": "What a user the flag is on for gets: a user who matches a targeting rule and falls inside its percentage, or matches no rule and falls inside `rollout_percentage`. Required for a string, number or json flag, and of that type; a boolean flag's is `true`. At most 8192 bytes as compact JSON and 10 levels deep; every number in it finite and from -9007199254740991 to 9007199254740991; no NUL or unpaired surrogate character; the two values differ.",
             "title": "On Value"
           },
@@ -7330,6 +8108,16 @@
             "minimum": 0,
             "title": "Rollout Percentage",
             "type": "integer"
+          },
+          "stale": {
+            "description": "Read-only; ignored.",
+            "readOnly": true,
+            "title": "Stale"
+          },
+          "stale_reasons": {
+            "description": "Read-only; ignored.",
+            "readOnly": true,
+            "title": "Stale Reasons"
           },
           "status": {
             "description": "Read-only. Accepted when it equals the flag's status, in any case (on create: the status is_active gives it); any other value answers 422. Turn a flag on or off with is_active.",
@@ -9911,6 +10699,27 @@
           "boundary"
         ],
         "title": "MSPRTResultResponse",
+        "type": "object"
+      },
+      "MergedGroup": {
+        "description": "A group with too few users to estimate, counted with a larger one.",
+        "properties": {
+          "group": {
+            "description": "The group with too few users.",
+            "title": "Group",
+            "type": "string"
+          },
+          "into": {
+            "description": "The group it was counted with.",
+            "title": "Into",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group",
+          "into"
+        ],
+        "title": "MergedGroup",
         "type": "object"
       },
       "MetricBase": {
@@ -15276,7 +16085,7 @@
                 "type": "null"
               }
             ],
-            "description": "Two-tailed p-value from a two-proportion z-test vs. the control. None for the control variant itself.",
+            "description": "Two-sided p-value of Fisher's exact test against the control, the test the headline uses for a conversion rate. None for the control variant itself.",
             "title": "P Value"
           },
           "sample_size": {
@@ -18748,7 +19557,7 @@
   "info": {
     "description": "API for managing experiments and feature flags in test environment",
     "title": "Controlvar",
-    "version": "0.43.2"
+    "version": "0.45.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -18865,6 +19674,7 @@
             "required": false,
             "schema": {
               "default": 0,
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"
@@ -19764,6 +20574,7 @@
             "schema": {
               "default": 1,
               "description": "Page number (1-based)",
+              "format": "int64",
               "minimum": 1,
               "title": "Page",
               "type": "integer"
@@ -20532,6 +21343,87 @@
         ]
       }
     },
+    "/api/v1/auth/cognito/exchange": {
+      "post": {
+        "description": "Exchange the code the Cognito Hosted UI sent to the dashboard for an\naccess token (``AUTH_PROVIDER=cognito`` only; 404 otherwise).\n\nThe body is what the dashboard's callback received and kept: the\n``code``, the PKCE ``code_verifier`` and the ``redirect_uri`` the sign-in\nstarted with. The API asks the token endpoint of ``COGNITO_DOMAIN`` for\nthe app client ``COGNITO_CLIENT_ID``; neither is read from the request.\nThe answer is the access token and its lifetime in seconds, which the\ndashboard then sends as a bearer token like any other; the id and refresh\ntokens are not returned.\n\nRefused: a code, verifier or redirect URI Cognito does not accept (an\nexpired or reused code, say) answers 400; Cognito unreachable or\nanswering with no access token, 502; no answer within\n``COGNITO_TOKEN_TIMEOUT_SECONDS``, 504; the Hosted UI settings unset, 503.\nEach with a fixed sentence: nothing Cognito says is repeated. Limited to\n10 requests a minute per client address. A sign-in by a user who already\nhas an account writes ``user_login`` with the provider ``cognito``.",
+        "operationId": "exchange_cognito_code_api_v1_auth_cognito_exchange_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CognitoCodeExchangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CognitoCodeExchangeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Cognito did not accept the sign-in code. Start the sign-in again."
+          },
+          "404": {
+            "description": "AUTH_PROVIDER is not 'cognito'"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "502": {
+            "description": "Cognito did not complete the sign-in. Try again."
+          },
+          "503": {
+            "description": "Sign-in through the Cognito Hosted UI is not set up on this server: COGNITO_DOMAIN, COGNITO_CLIENT_ID and COGNITO_USER_POOL_ID must all be set."
+          },
+          "504": {
+            "description": "Cognito did not answer in time. Try again."
+          }
+        },
+        "summary": "Exchange Cognito Code",
+        "tags": [
+          "Authentication"
+        ],
+        "x-stability": "beta"
+      }
+    },
+    "/api/v1/auth/config": {
+      "get": {
+        "description": "How the dashboard signs in. Needs no credentials.\n\n* ``AUTH_PROVIDER=local``, or the development sign-in bypass:\n  ``{\"provider\": \"local\"}``.\n* ``AUTH_PROVIDER=cognito`` with ``COGNITO_DOMAIN``, ``COGNITO_CLIENT_ID``\n  and ``COGNITO_USER_POOL_ID`` set: ``{\"provider\": \"cognito\",\n  \"hosted_ui_domain\", \"client_id\", \"scopes\"}``, what the dashboard needs\n  to send the browser to the Hosted UI. The callback is not served: it is\n  the dashboard's own origin followed by ``/auth/callback``, which must be\n  an allowed callback URL of the app client.\n* ``AUTH_PROVIDER=cognito`` with any of the three unset:\n  ``{\"provider\": \"cognito\", \"configured\": false, \"missing\": [...]}``,\n  naming the unset settings.\n\nEvery value comes from the configuration, none from the request.",
+        "operationId": "get_auth_config_api_v1_auth_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Auth Config",
+        "tags": [
+          "Authentication"
+        ],
+        "x-stability": "beta"
+      }
+    },
     "/api/v1/auth/confirm": {
       "post": {
         "description": "Confirm a self sign-up with the verification code Cognito sent.\n\nAnswers 404 unless ``AUTH_PROVIDER=cognito`` and\n``COGNITO_SELF_SIGNUP_ENABLED=true``.",
@@ -20669,13 +21561,21 @@
     },
     "/api/v1/auth/logout": {
       "post": {
-        "description": "Sign out.\n\nLocal tokens are stateless, so this endpoint exists for the client's\nbenefit (it discards the token); nothing is revoked server-side.",
+        "description": "Sign out.\n\n* ``AUTH_PROVIDER=local`` (or the development sign-in bypass): local\n  tokens are stateless, so this endpoint exists for the client's benefit\n  (it discards the token); nothing is revoked server-side, and no token is\n  needed.\n* ``AUTH_PROVIDER=cognito``: the bearer token is checked as every\n  request's is (401 without one, or with one Cognito does not accept),\n  then Cognito is asked to sign the user out everywhere (GlobalSignOut):\n  this token, the user's other access tokens and their refresh tokens stop\n  working, so the user's other sessions end too. If Cognito fails, the\n  answer is still 204 and the failure is logged.",
         "operationId": "logout_local_api_v1_auth_logout_post",
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "AUTH_PROVIDER=cognito: no bearer token, or one Cognito does not accept"
           }
         },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
         "summary": "Logout Local",
         "tags": [
           "Authentication"
@@ -21506,7 +22406,7 @@
     },
     "/api/v1/bandit/{experiment_id}": {
       "get": {
-        "description": "Return the current bandit allocation weights for a MAB experiment.\n\nRequires any authenticated user (VIEWER+).\nReturns equal weights if no bandit state has been computed yet.",
+        "description": "Return the current bandit allocation weights for a MAB experiment.\n\nRequires permission to view the experiment, as GET /api/v1/experiments/{id}\ndoes; every role has it.\nReturns equal weights if no bandit state has been computed yet.",
         "operationId": "get_bandit_status_api_v1_bandit__experiment_id__get",
         "parameters": [
           {
@@ -21767,6 +22667,7 @@
             "schema": {
               "default": 1,
               "description": "Page number (1-indexed)",
+              "format": "int64",
               "minimum": 1,
               "title": "Page",
               "type": "integer"
@@ -22629,6 +23530,7 @@
             "schema": {
               "default": 0,
               "description": "Number of records to skip for pagination",
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"
@@ -22667,7 +23569,7 @@
             }
           },
           {
-            "description": "Field to sort by (created_at, updated_at, name, status)",
+            "description": "Column to sort by, in exact case: id, created_at, updated_at, name, key, description, hypothesis, status, experiment_type, owner_id, start_date, end_date, resume_at, targeting_rules, metrics, tags, experiment_metadata, optimization_type, sequential_testing_enabled, sequential_testing_method, sequential_testing_config, variance_reduction_config, correction_method, confidence_level, mutual_exclusion_group_id, bayesian_enabled, bayesian_config, bayesian_decision, split_url_config, workspace_id. An empty value applies no sort; any other value answers 422.",
             "in": "query",
             "name": "sort_by",
             "required": false,
@@ -22681,7 +23583,7 @@
                 }
               ],
               "default": "created_at",
-              "description": "Field to sort by (created_at, updated_at, name, status)",
+              "description": "Column to sort by, in exact case: id, created_at, updated_at, name, key, description, hypothesis, status, experiment_type, owner_id, start_date, end_date, resume_at, targeting_rules, metrics, tags, experiment_metadata, optimization_type, sequential_testing_enabled, sequential_testing_method, sequential_testing_config, variance_reduction_config, correction_method, confidence_level, mutual_exclusion_group_id, bayesian_enabled, bayesian_config, bayesian_decision, split_url_config, workspace_id. An empty value applies no sort; any other value answers 422.",
               "title": "Sort By"
             }
           },
@@ -23406,7 +24308,7 @@
         ]
       },
       "put": {
-        "description": "Update experiment.\n\nThis endpoint allows users to update an existing experiment.\nThe caller's role must hold UPDATE on experiments; who created the\nexperiment is not considered.\n\nFields that can be updated:\n- Basic properties: name, description, hypothesis\n- Variants: if experiment is in DRAFT status\n- Metrics: if experiment is in DRAFT status\n- Targeting (`targeting_rules`): while the experiment is DRAFT or PAUSED,\n  for every role including superusers. On a PAUSED experiment it must be\n  the only field in the request. On an ACTIVE, COMPLETED or ARCHIVED\n  experiment a request that includes `targeting_rules` is refused, even\n  when the value equals the stored one; pause the experiment first.\n  People already assigned keep their variant; the new rules apply to\n  people not yet in the experiment once it is resumed.\n\n`status` is not changed by an update, for any role including superusers.\nA `status` equal to the current one is accepted and changes nothing, so an\nexperiment fetched with GET can be sent back. Any other value is refused\nwith 422; status changes through `POST /api/v1/experiments/{id}/start`,\n`/pause`, `/complete` or `/archive`. `status` still counts as a field\nsent, so on a PAUSED experiment `targeting_rules` must be sent without it.\n\n`schedule` is not applied here: a request that contains it, with any\nvalue including null, is refused with 422. Schedule an experiment with\n`PUT /api/v1/experiments/{experiment_id}/schedule`.\n\nReturns:\n    ExperimentResponse: The updated experiment\n\nRaises:\n    HTTPException 403: If the caller's role does not hold UPDATE on\n        experiments. This is checked before the experiment's state.\n    HTTPException 400: If the experiment's state does not allow the change\n        (the detail names the state): any change to a non-DRAFT experiment\n        by a non-superuser, other than targeting alone on a PAUSED one;\n        targeting outside DRAFT or PAUSED; targeting with other fields on\n        a PAUSED experiment; variants or metrics outside DRAFT\n    HTTPException 404: If the experiment doesn't exist\n    HTTPException 422: If `targeting_rules` is not a valid rule set,\n        `status` differs from the experiment's current status, the\n        request contains `schedule`, `metrics` is an empty list or repeats\n        a metric name, or a request sending `variants`,\n        `split_url_config` or `experiment_type` would leave a split URL\n        experiment whose `split_url_config` does not match its variants.\n        An empty or repeating `metrics` is refused before the caller's\n        role, the experiment's existence or its state is checked.",
+        "description": "Update experiment.\n\nThis endpoint allows users to update an existing experiment.\nThe caller's role must hold UPDATE on experiments; who created the\nexperiment is not considered.\n\nFields that can be updated:\n- Basic properties: name, description, hypothesis\n- Variants: if experiment is in DRAFT status\n- Metrics: if experiment is in DRAFT status\n- `balance_within`: if experiment is in DRAFT status, for every role\n  including superusers\n- Analysis settings (`correction_method`, `confidence_level`,\n  `variance_reduction_config`, `sequential_testing_enabled`,\n  `sequential_testing_config`, `bayesian_enabled`, `bayesian_config`):\n  if experiment is in DRAFT status, for every role including superusers.\n  Outside DRAFT a request that includes one is refused, even when the\n  value equals the stored one or is null. To change one on a running\n  experiment, clone it (`POST /api/v1/experiments/{id}/clone`, a draft\n  copy) and set it on the copy.\n- Targeting (`targeting_rules`): while the experiment is DRAFT or PAUSED,\n  for every role including superusers. On a PAUSED experiment it must be\n  the only field in the request. On an ACTIVE, COMPLETED or ARCHIVED\n  experiment a request that includes `targeting_rules` is refused, even\n  when the value equals the stored one; pause the experiment first.\n  People already assigned keep their variant; the new rules apply to\n  people not yet in the experiment once it is resumed.\n\n`status` is not changed by an update, for any role including superusers.\nA `status` equal to the current one is accepted and changes nothing, so an\nexperiment fetched with GET can be sent back. Any other value is refused\nwith 422; status changes through `POST /api/v1/experiments/{id}/start`,\n`/pause`, `/complete` or `/archive`. `status` still counts as a field\nsent, so on a PAUSED experiment `targeting_rules` must be sent without it.\n\n`schedule` is not applied here: a request that contains it, with any\nvalue including null, is refused with 422. Schedule an experiment with\n`PUT /api/v1/experiments/{experiment_id}/schedule`.\n\nReturns:\n    ExperimentResponse: The updated experiment\n\nRaises:\n    HTTPException 403: If the caller's role does not hold UPDATE on\n        experiments. This is checked before the experiment's state.\n    HTTPException 400: If the experiment's state does not allow the change\n        (the detail names the state): any change to a non-DRAFT experiment\n        by a non-superuser, other than targeting alone on a PAUSED one;\n        targeting outside DRAFT or PAUSED; targeting with other fields on\n        a PAUSED experiment; variants, metrics, `balance_within` or an\n        analysis setting outside DRAFT\n    HTTPException 404: If the experiment doesn't exist\n    HTTPException 422: If `targeting_rules` is not a valid rule set,\n        `status` differs from the experiment's current status, the\n        request contains `schedule`, `metrics` is an empty list or repeats\n        a metric name, or a request sending `variants`,\n        `split_url_config` or `experiment_type` would leave a split URL\n        experiment whose `split_url_config` does not match its variants.\n        An empty or repeating `metrics` is refused before the caller's\n        role, the experiment's existence or its state is checked.",
         "operationId": "update_experiment_api_v1_experiments__experiment_id__put",
         "parameters": [
           {
@@ -24713,7 +25615,7 @@
     },
     "/api/v1/export/experiments": {
       "get": {
-        "description": "Download all (or filtered) experiments as a CSV or JSON file. Requires authentication. Available to all roles.",
+        "description": "Download all (or filtered) experiments as a CSV or JSON file. Requires the experiment LIST permission.",
         "operationId": "export_experiments_api_v1_export_experiments_get",
         "parameters": [
           {
@@ -24816,7 +25718,7 @@
     },
     "/api/v1/export/feature-flags": {
       "get": {
-        "description": "Download feature flag usage data as a CSV or JSON file. Requires authentication.",
+        "description": "Download feature flag usage data as a CSV or JSON file. Requires the feature-flag LIST permission.",
         "operationId": "export_feature_flags_api_v1_export_feature_flags_get",
         "parameters": [
           {
@@ -25051,7 +25953,7 @@
     },
     "/api/v1/export/variants": {
       "get": {
-        "description": "Download per-variant results for all (or filtered) experiments. Each variant's numbers are its primary-metric result, as GET /api/v1/results/{experiment_id} reports it. Requires authentication.",
+        "description": "Download per-variant results for all (or filtered) experiments. Each variant's numbers are its primary-metric result, as GET /api/v1/results/{experiment_id} reports it. Requires the experiment LIST permission.",
         "operationId": "export_variants_api_v1_export_variants_get",
         "parameters": [
           {
@@ -25154,7 +26056,7 @@
     },
     "/api/v1/feature-flags/": {
       "get": {
-        "description": "Retrieve feature flags.\n- **skip**: Number of feature flags to skip in pagination\n- **limit**: Maximum number of feature flags to return\n- **status**: Filter by status (`active`, `inactive`, `archived`; any case)\n- **search**: Filter by name or key",
+        "description": "Retrieve feature flags.\n- **skip**: Number of feature flags to skip in pagination\n- **limit**: Maximum number of feature flags to return\n- **status**: Filter by status (`active`, `inactive`, `archived`; any case)\n- **search**: Filter by name or key\n- **stale**: `true` for only the stale flags, `false` for the rest\n\nEach item says whether the flag looks ready to remove (`stale`) and why\n(`stale_reasons`); `stale_days` and `evaluations_seen` say what that was\ndecided with. Listing changes no flag.",
         "operationId": "list_feature_flags_api_v1_feature_flags__get",
         "parameters": [
           {
@@ -25163,6 +26065,8 @@
             "required": false,
             "schema": {
               "default": 0,
+              "format": "int64",
+              "minimum": 0,
               "title": "Skip",
               "type": "integer"
             }
@@ -25173,6 +26077,8 @@
             "required": false,
             "schema": {
               "default": 100,
+              "format": "int64",
+              "minimum": 0,
               "title": "Limit",
               "type": "integer"
             }
@@ -25209,6 +26115,24 @@
                 }
               ],
               "title": "Search"
+            }
+          },
+          {
+            "description": "true returns only stale flags, false the rest; omit for all. Archived flags are never stale.",
+            "in": "query",
+            "name": "stale",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "true returns only stale flags, false the rest; omit for all. Archived flags are never stale.",
+              "title": "Stale"
             }
           }
         ],
@@ -26299,7 +27223,7 @@
     },
     "/api/v1/feature-flags/{flag_id}/disable": {
       "post": {
-        "description": "Disable a feature flag (set to INACTIVE status).\n\nThis endpoint explicitly disables a feature flag. An archived flag is\nalready off: it answers 200 and stays archived.\nIncludes complete audit logging with user information and optional reason.\n\n**Authentication**: Requires valid user authentication.\n**Permissions**: User must own the feature flag or be a superuser.\n\nReturns:\n    ToggleResponse: Updated feature flag details with audit log ID\n\nRaises:\n    HTTPException 403: If user doesn't have permission to disable this feature flag\n    HTTPException 404: If feature flag doesn't exist\n    HTTPException 500: If disable operation fails",
+        "description": "Disable a feature flag (set to INACTIVE status).\n\nThis endpoint explicitly disables a feature flag. An archived flag is\nalready off: it answers 200 and stays archived.\nWrites one audit entry with user information and optional reason, also\nwhen the flag already has that status; a failed audit write does not fail\nthe request.\n\n**Authentication**: Requires valid user authentication.\n**Permissions**: Needs the feature_flag (update) permission, which ADMIN\nand DEVELOPER hold; in the full profile a custom role or direct grant can\nadd it, and a superuser always has it. Anyone else gets 403.\n\nReturns:\n    ToggleResponse: Updated feature flag details with audit log ID\n\nRaises:\n    HTTPException 403: If user doesn't have permission to disable this feature flag\n    HTTPException 404: If feature flag doesn't exist\n    HTTPException 500: If disable operation fails",
         "operationId": "disable_feature_flag_api_v1_feature_flags__flag_id__disable_post",
         "parameters": [
           {
@@ -26411,7 +27335,7 @@
     },
     "/api/v1/feature-flags/{flag_id}/enable": {
       "post": {
-        "description": "Enable a feature flag (set to ACTIVE status).\n\nThis endpoint explicitly enables a feature flag. An archived flag answers\n400 and stays archived: unarchive it first.\nIncludes complete audit logging with user information and optional reason.\n\n**Authentication**: Requires valid user authentication.\n**Permissions**: User must own the feature flag or be a superuser.\n\nReturns:\n    ToggleResponse: Updated feature flag details with audit log ID\n\nRaises:\n    HTTPException 400: The flag is archived\n    HTTPException 403: If user doesn't have permission to enable this feature flag\n    HTTPException 404: If feature flag doesn't exist\n    HTTPException 500: If enable operation fails",
+        "description": "Enable a feature flag (set to ACTIVE status).\n\nThis endpoint explicitly enables a feature flag. An archived flag answers\n400 and stays archived: unarchive it first.\nWrites one audit entry with user information and optional reason, also\nwhen the flag already has that status; a failed audit write does not fail\nthe request.\n\n**Authentication**: Requires valid user authentication.\n**Permissions**: Needs the feature_flag (update) permission, which ADMIN\nand DEVELOPER hold; in the full profile a custom role or direct grant can\nadd it, and a superuser always has it. Anyone else gets 403.\n\nReturns:\n    ToggleResponse: Updated feature flag details with audit log ID\n\nRaises:\n    HTTPException 400: The flag is archived\n    HTTPException 403: If user doesn't have permission to enable this feature flag\n    HTTPException 404: If feature flag doesn't exist\n    HTTPException 500: If enable operation fails",
         "operationId": "enable_feature_flag_api_v1_feature_flags__flag_id__enable_post",
         "parameters": [
           {
@@ -26557,6 +27481,7 @@
             "required": false,
             "schema": {
               "default": 0,
+              "format": "int64",
               "minimum": 0,
               "title": "Offset",
               "type": "integer"
@@ -26598,7 +27523,7 @@
     },
     "/api/v1/feature-flags/{flag_id}/toggle": {
       "post": {
-        "description": "Toggle a feature flag between enabled and disabled states.\n\nThis endpoint provides a unified way to toggle feature flags, automatically\ndetermining whether to activate or deactivate based on the current status.\n\nThe toggle operation includes:\n- Status change (ACTIVE ↔ INACTIVE). An archived flag would be turned on,\n  so it answers 400 and stays archived: unarchive it first\n- Complete audit logging with user information and optional reason\n- Response with new status and audit log ID\n\n**Authentication**: Requires valid user authentication.\n**Permissions**: ADMIN and DEVELOPER may toggle any flag, and in the full\nprofile so may anyone whose custom role or direct grant gives\nfeature_flag (update); anyone else gets 403.\n\nReturns:\n    ToggleResponse: Updated feature flag details with audit log ID\n\nRaises:\n    HTTPException 400: The flag is archived\n    HTTPException 403: If user doesn't have permission to toggle this feature flag\n    HTTPException 404: If feature flag doesn't exist\n    HTTPException 500: If toggle operation fails",
+        "description": "Toggle a feature flag between enabled and disabled states.\n\nThis endpoint provides a unified way to toggle feature flags, automatically\ndetermining whether to activate or deactivate based on the current status.\n\nThe toggle operation includes:\n- Status change (ACTIVE ↔ INACTIVE). An archived flag would be turned on,\n  so it answers 400 and stays archived: unarchive it first\n- One audit entry with user information and optional reason; a failed\n  audit write does not fail the request\n- Response with new status and audit log ID\n\n**Authentication**: Requires valid user authentication.\n**Permissions**: ADMIN and DEVELOPER may toggle any flag, and in the full\nprofile so may anyone whose custom role or direct grant gives\nfeature_flag (update); anyone else gets 403.\n\nReturns:\n    ToggleResponse: Updated feature flag details with audit log ID\n\nRaises:\n    HTTPException 400: The flag is archived\n    HTTPException 403: If user doesn't have permission to toggle this feature flag\n    HTTPException 404: If feature flag doesn't exist\n    HTTPException 500: If toggle operation fails",
         "operationId": "toggle_feature_flag_api_v1_feature_flags__flag_id__toggle_post",
         "parameters": [
           {
@@ -26891,6 +27816,7 @@
             "schema": {
               "default": 1,
               "description": "Page number (1-indexed)",
+              "format": "int64",
               "minimum": 1,
               "title": "Page",
               "type": "integer"
@@ -27508,6 +28434,7 @@
             "required": false,
             "schema": {
               "default": 0,
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"
@@ -28155,6 +29082,7 @@
             "required": false,
             "schema": {
               "default": 1,
+              "format": "int64",
               "minimum": 1,
               "title": "Page",
               "type": "integer"
@@ -29115,6 +30043,7 @@
             "schema": {
               "default": 0,
               "description": "Number of records to skip",
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"
@@ -29260,6 +30189,7 @@
             "schema": {
               "default": 0,
               "description": "Number of records to skip",
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"
@@ -29468,6 +30398,7 @@
             "required": false,
             "schema": {
               "default": 0,
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"
@@ -29886,6 +30817,7 @@
             "required": false,
             "schema": {
               "default": 1,
+              "format": "int64",
               "minimum": 1,
               "title": "Page",
               "type": "integer"
@@ -30682,7 +31614,7 @@
     },
     "/api/v1/rbac/users/{user_id}/grant": {
       "post": {
-        "description": "Grant a direct permission to a user. ADMIN only. Supports expiry.",
+        "description": "Grant a direct permission to a user. ADMIN only. Supports expiry.\n\nThe body's ``user_id`` must name the same user as the path: any other\nvalue answers 400, and nothing is written.",
         "operationId": "grant_permission_api_v1_rbac_users__user_id__grant_post",
         "parameters": [
           {
@@ -30956,6 +31888,59 @@
         "tags": [
           "Results"
         ]
+      }
+    },
+    "/api/v1/results/{experiment_id}/balanced-groups": {
+      "get": {
+        "description": "The results of an experiment that balances its split within groups (#448).\n\n``groups`` has one row per group, each user in the group stored when they\nwere assigned: the rows of a breakdown (the 20 groups with the most\nusers, then ``other`` and ``unknown``), with each row's p-value and its\nBonferroni threshold. Per variant the rows add up to every user\nassigned. ``overall`` gives, for the primary metric, one estimate per\ntreatment over every group: each group's difference from the control\nweighted by the group's share of the users, at the experiment's\n``confidence_level``, corrected across the treatments with its\n``correction_method``. It is null, with ``reason``, for a primary metric\nthat is not a conversion, for an experiment with sequential testing, and\nwhen no treatment has users or no group has 2 users in every variant that\nhas users. The experiment's results and their decision do not change.\n\nAn experiment that does not balance within groups answers 409. The\nanswer is computed on each request: it is not cached and no snapshot is\nrecorded.",
+        "operationId": "get_balanced_groups_api_v1_results__experiment_id__balanced_groups_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BalancedGroupsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "This experiment does not balance its split within groups, so it has no balanced groups. For its results by an attribute, add ?breakdown=<attribute> to its results."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Beta: results by the group each user was balanced in",
+        "tags": [
+          "Results"
+        ],
+        "x-stability": "beta"
       }
     },
     "/api/v1/results/{experiment_id}/bayesian": {
@@ -31602,6 +32587,7 @@
             "schema": {
               "default": 0,
               "description": "Number of records to skip",
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"
@@ -32782,6 +33768,7 @@
             "schema": {
               "default": 0,
               "description": "Number of results to skip",
+              "format": "int64",
               "minimum": 0,
               "title": "Offset",
               "type": "integer"
@@ -32922,7 +33909,7 @@
     },
     "/api/v1/segments/{segment_id}": {
       "delete": {
-        "description": "Soft-delete a segment by setting its status to ARCHIVED. Refused (409) while targeting rules use the segment. Requires permission to delete experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (delete).",
+        "description": "Soft-delete a segment by setting its status to ARCHIVED. Refused (409) while targeting rules use the segment or while a draft, active or paused experiment balances within it. Requires permission to delete experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (delete).",
         "operationId": "delete_segment_api_v1_segments__segment_id__delete",
         "parameters": [
           {
@@ -32941,7 +33928,7 @@
             "description": "Successful Response"
           },
           "409": {
-            "description": "The segment is used by the targeting rules of a flag that is not archived or an experiment that is draft, active or paused. `detail` is `{\"code\": \"segment_in_use\", \"message\", \"feature_flags\": [{id, key, name}], \"experiments\": [{id, key, name, status}]}`."
+            "description": "The segment is used by the targeting rules of a flag that is not archived or an experiment that is draft, active or paused, or a draft, active or paused experiment balances within it. `detail` is `{\"code\": \"segment_in_use\", \"message\", \"feature_flags\": [{id, key, name}], \"experiments\": [{id, key, name, status}]}`."
           },
           "422": {
             "content": {
@@ -33014,7 +34001,7 @@
         ]
       },
       "put": {
-        "description": "Update segment name, description, rules, or status. A segment's kind cannot be changed, and an id_list segment takes no rules (422). A status other than active is refused (409) while targeting rules use the segment. Requires permission to change experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (update).",
+        "description": "Update segment name, description, rules, or status. A segment's kind cannot be changed, and an id_list segment takes no rules (422). A status other than active is refused (409) while targeting rules use the segment or while a draft, active or paused experiment balances within it. Requires permission to change experiments: DEVELOPER or ADMIN, or in the full profile a custom role or direct grant giving experiment (update).",
         "operationId": "update_segment_api_v1_segments__segment_id__put",
         "parameters": [
           {
@@ -33050,7 +34037,7 @@
             "description": "Successful Response"
           },
           "409": {
-            "description": "The segment is used by the targeting rules of a flag that is not archived or an experiment that is draft, active or paused. `detail` is `{\"code\": \"segment_in_use\", \"message\", \"feature_flags\": [{id, key, name}], \"experiments\": [{id, key, name, status}]}`."
+            "description": "The segment is used by the targeting rules of a flag that is not archived or an experiment that is draft, active or paused, or a draft, active or paused experiment balances within it. `detail` is `{\"code\": \"segment_in_use\", \"message\", \"feature_flags\": [{id, key, name}], \"experiments\": [{id, key, name, status}]}`."
           },
           "422": {
             "content": {
@@ -33140,7 +34127,7 @@
     },
     "/api/v1/segments/{segment_id}/experiments": {
       "get": {
-        "description": "Return all experiments and feature flags whose targeting_rules reference this segment's UUID.",
+        "description": "Return all experiments and feature flags whose targeting_rules reference this segment's UUID, and the experiments that balance within it.",
         "operationId": "get_segment_experiments_api_v1_segments__segment_id__experiments_get",
         "parameters": [
           {
@@ -33310,7 +34297,7 @@
     },
     "/api/v1/segments/{segment_id}/preview": {
       "post": {
-        "description": "Estimate the percentage of users who would match the provided targeting rules by evaluating them against the stored contexts of up to sample_size assignments. Only assignments that carry a context are counted; the answer's sample_size is how many there were, and 0 when none do.",
+        "description": "Estimate the share of the users seen most recently that the provided rules match. The users are the most recent ones with an exposure (a /tracking/assign call) in the last 30 days, each counted once with the attributes sent as context on their latest one; up to sample_size of them are evaluated. Not a random sample: it leans toward frequent users and the time of day. estimated_percentage is null when fewer than 30 users have attributes (reason says why); sampled_since and ended_by say how far back the read went. Any role that can read segments may preview: the answer is counts and a share, never a stored attribute value.",
         "operationId": "preview_audience_size_api_v1_segments__segment_id__preview_post",
         "parameters": [
           {
@@ -33368,6 +34355,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "503": {
+            "description": "The read of recent exposures, all its fetches together, took longer than its 5-second limit (a large events table with few exposures can). The text is fixed."
           }
         },
         "security": [
@@ -33404,7 +34394,7 @@
     },
     "/api/v1/tracking/assign": {
       "post": {
-        "description": "Assign a user to an experiment variant.\n\nThis endpoint assigns a user to a variant of the specified experiment.\nIt handles consistent assignment for returning users.\n\nThe assignment is deterministic based on:\n- User ID\n- Experiment ID\n- Targeting rules\n- Traffic allocation percentages\n\nThis means that the same user will always get the same variant assignment\nfor a specific experiment, including across experiments in the same mutual\nexclusion group: a user enrolled in one experiment of a group is not\nenrolled in another, even as experiments in the group are activated,\npaused or resumed.\n\nNew users are first checked for eligibility: the global holdout, the\nexperiment's mutual exclusion group and its targeting rules (evaluated\nagainst ``context``; top-level keys also answer ``user.<key>`` /\n``device.<key>`` / ``app.<key>``).  Ineligible users receive HTTP 200 with\nthe control variant, ``assigned: false`` and ``reason`` set to\n``holdout`` | ``mutual_exclusion`` | ``targeting``; nothing is recorded\nfor them.  Existing assignments are always returned as-is.\n\nAn experiment that is not ACTIVE (a draft, or paused, completed or\narchived) answers every user, enrolled or not, with HTTP 200, its control\nvariant, ``assigned: false`` and ``reason`` set to its status: ``draft``\n| ``paused`` | ``completed`` | ``archived``.  Nothing is recorded, and\nusers who were assigned keep their assignment, so a resumed experiment\ngives them their variant again.  A draft with no control variant answers\n404.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.\n\nReturns:\n    VariantAssignmentResponse: The variant assignment with configuration\n    details plus ``assigned`` / ``reason``\n\nRaises:\n    HTTPException 401: If the API key is invalid\n    HTTPException 404: If no experiment has the key, or a draft has no\n        control variant\n    HTTPException 500: If there's an error during assignment",
+        "description": "Assign a user to an experiment variant.\n\nThis endpoint assigns a user to a variant of the specified experiment.\nIt handles consistent assignment for returning users.\n\nThe assignment is deterministic based on:\n- User ID\n- Experiment ID\n- Targeting rules\n- Traffic allocation percentages\n\nFor an experiment that balances within groups, a new user's variant also\ndepends on the users of their group assigned before them.\n\nThis means that the same user will always get the same variant assignment\nfor a specific experiment, including across experiments in the same mutual\nexclusion group: a user enrolled in one experiment of a group is not\nenrolled in another, even as experiments in the group are activated,\npaused or resumed.\n\nNew users are first checked for eligibility: the global holdout, the\nexperiment's mutual exclusion group and its targeting rules (evaluated\nagainst ``context``; top-level keys also answer ``user.<key>`` /\n``device.<key>`` / ``app.<key>``).  Ineligible users receive HTTP 200 with\nthe control variant, ``assigned: false`` and ``reason`` set to\n``holdout`` | ``mutual_exclusion`` | ``targeting``; nothing is recorded\nfor them.  Existing assignments are always returned as-is.\n\nAn experiment that is not ACTIVE (a draft, or paused, completed or\narchived) answers every user, enrolled or not, with HTTP 200, its control\nvariant, ``assigned: false`` and ``reason`` set to its status: ``draft``\n| ``paused`` | ``completed`` | ``archived``.  Nothing is recorded, and\nusers who were assigned keep their assignment, so a resumed experiment\ngives them their variant again.  A draft with no control variant answers\n404.\n\n**Authentication**: Requires a valid API key in the X-API-Key header.\n\nReturns:\n    VariantAssignmentResponse: The variant assignment with configuration\n    details plus ``assigned`` / ``reason``\n\nRaises:\n    HTTPException 401: If the API key is invalid\n    HTTPException 404: If no experiment has the key, or a draft has no\n        control variant\n    HTTPException 500: If there's an error during assignment",
         "operationId": "assign_user_to_experiment_api_v1_tracking_assign_post",
         "requestBody": {
           "content": {
@@ -33452,7 +34442,7 @@
     },
     "/api/v1/tracking/assign/batch": {
       "post": {
-        "description": "Assign up to 1,000 users to an ACTIVE experiment in one request.\n\nEach user gets what ``POST /api/v1/tracking/assign`` would give them, with\nthe bandit weights read at the start of the request: the same eligibility\nchecks for a new user (global holdout, mutual exclusion group, targeting\nrules against that user's ``context``) and the same sticky answer for a\nuser already assigned. Users are processed in request order and each new\nassignment is committed on its own, as N single calls would be.\n\nOnly assignments are recorded, never a view event: the user's first\n``POST /api/v1/tracking/assign`` records that they saw the experiment.\n\n**Authentication**: an API key with the ``sdk:ruleset`` scope, whose owner\ncan change feature flags and experiments: ADMIN, DEVELOPER, a superuser, or\nin the full profile anyone whose custom roles or direct grants give\n``feature_flag (update)`` and ``experiment (update)``. A key whose owner can\nchange feature flags but not experiments is refused with 403 before anyone\nis assigned.\n\nA plain ``def``: FastAPI runs it in the thread pool, so a batch does not\nhold the event loop while it works through its users.",
+        "description": "Assign up to 1,000 users to an ACTIVE experiment in one request.\n\nEach user gets what ``POST /api/v1/tracking/assign`` would give them, with\nthe bandit weights read at the start of the request: the same eligibility\nchecks for a new user (global holdout, mutual exclusion group, targeting\nrules against that user's ``context``) and the same sticky answer for a\nuser already assigned. Users are processed in request order and each new\nassignment is committed on its own, as N single calls would be. For an\nexperiment that balances within groups, the same list sent in another\norder can split differently; each user keeps the variant they got.\n\nOnly assignments are recorded, never a view event: the user's first\n``POST /api/v1/tracking/assign`` records that they saw the experiment.\n\n**Authentication**: an API key with the ``sdk:ruleset`` scope, whose owner\ncan change feature flags and experiments: ADMIN, DEVELOPER, a superuser, or\nin the full profile anyone whose custom roles or direct grants give\n``feature_flag (update)`` and ``experiment (update)``. A key whose owner can\nchange feature flags but not experiments is refused with 403 before anyone\nis assigned.\n\nA plain ``def``: FastAPI runs it in the thread pool, so a batch does not\nhold the event loop while it works through its users.",
         "operationId": "assign_users_to_experiment_batch_api_v1_tracking_assign_batch_post",
         "requestBody": {
           "content": {
@@ -33980,6 +34970,7 @@
             "required": false,
             "schema": {
               "default": 0,
+              "format": "int64",
               "minimum": 0,
               "title": "Skip",
               "type": "integer"

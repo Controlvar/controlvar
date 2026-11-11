@@ -31,6 +31,7 @@ from backend.app.core.targeting_adapter import (
     expand_context,
     match_targeting_rule,
     normalise_targeting_rules,
+    report_unreadable_rules,
     segment_ids_in,
 )
 from backend.app.models.feature_flag import (
@@ -42,6 +43,7 @@ from backend.app.models.feature_flag import (
 )
 from backend.app.models.metrics.metric import AggregatedMetric, ErrorLog, RawMetric
 from backend.app.schemas.feature_flag import (
+    LIST_ITEM_FIELDS,
     READ_ONLY_FIELDS,
     FeatureFlagCreate,
     FeatureFlagRead,
@@ -304,7 +306,9 @@ class FeatureFlagService:
         )
         _check_sent_status(flag_data, status)
 
-        flag_dict = flag_data.model_dump(exclude=READ_ONLY_FIELDS | {"is_active"})
+        flag_dict = flag_data.model_dump(
+            exclude=READ_ONLY_FIELDS | LIST_ITEM_FIELDS | {"is_active"}
+        )
         flag_dict["on_value"], flag_dict["off_value"] = stored_values(
             flag_dict["value_type"], flag_dict["on_value"], flag_dict["off_value"]
         )
@@ -358,7 +362,9 @@ class FeatureFlagService:
         _check_sent_status(flag_data, stored)
         _check_sent_values(flag_data, flag)
 
-        update_data = flag_data.model_dump(exclude_unset=True, exclude=READ_ONLY_FIELDS)
+        update_data = flag_data.model_dump(
+            exclude_unset=True, exclude=READ_ONLY_FIELDS | LIST_ITEM_FIELDS
+        )
         update_data.pop("value_type", None)
         if flag_value_type(flag) == BOOLEAN:
             for field in VALUE_FIELDS:
@@ -481,7 +487,9 @@ class FeatureFlagService:
             context: Optional context data for rule evaluation
 
         Returns:
-            Dictionary mapping flag keys to their values for this user
+            Dictionary mapping flag keys to their values for this user. A
+            flag whose stored rules cannot be read answers ``False``, and the
+            other flags are unaffected (#1674).
         """
         # Get all active flags
         flags = (
@@ -498,9 +506,18 @@ class FeatureFlagService:
         for flag in flags:
             rules = flag.targeting_rules
             if rules and not isinstance(rules, list):
-                referenced |= segment_ids_in(
-                    normalise_targeting_rules(rules, owner=f"flag:{flag.key}")
-                )
+                owner = f"flag:{flag.key}"
+                # Around the pure read only (#1674): stored rules that raise
+                # (only a direct database write leaves them) cost this flag
+                # its segments, and its own evaluation below raises inside
+                # evaluate_flag_detailed's catch and answers false. The other
+                # flags are answered as before.
+                try:
+                    referenced |= segment_ids_in(
+                        normalise_targeting_rules(rules, owner=owner)
+                    )
+                except Exception as exc:
+                    report_unreadable_rules(owner, exc)
         memberships = None
         if referenced:
             memberships = resolve_segment_memberships(

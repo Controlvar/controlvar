@@ -26,6 +26,7 @@ import HomePage from '@/pages/index';
 import PowerCalculatorPage from '@/pages/power-calculator';
 import DocsPage from '@/pages/docs/index';
 import PrivacyPage from '@/pages/privacy';
+import NotFoundPage from '@/pages/404';
 import { AppShell } from '@/components/AppShell';
 
 const mode = isMarketingSite as jest.Mock;
@@ -44,6 +45,7 @@ const PAGES: Array<[string, () => React.ReactElement]> = [
   ['/power-calculator', () => <AppShell><PowerCalculatorPage /></AppShell>],
   ['/docs', () => <AppShell><DocsPage /></AppShell>],
   ['/privacy', () => <AppShell><PrivacyPage /></AppShell>],
+  ['/404', () => <AppShell><NotFoundPage /></AppShell>],
 ];
 
 describe.each(PAGES)('%s on the marketing site', (name, make) => {
@@ -69,10 +71,27 @@ describe.each(PAGES)('%s on the marketing site', (name, make) => {
 
     const SERVED = new Set(['/', '/docs', '/power-calculator', '/privacy', '/favicon.svg']);
     const external = (h: string) => /^[a-z][a-z0-9+.-]*:/i.test(h) || h.startsWith('//');
+    // A fragment on a served page is that page (the footer's `/#walkthroughs`).
     const dead = Array.from(container.querySelectorAll('[href]'))
       .map((a) => a.getAttribute('href') ?? '')
-      .filter((h) => !external(h) && !h.startsWith('#') && !h.startsWith('/_next/') && !SERVED.has(h));
+      .filter((h) => !external(h) && !h.startsWith('#') && !h.startsWith('/_next/') && !SERVED.has(h.split('#')[0]));
     expect({ page: name, dead }).toEqual({ page: name, dead: [] });
+  });
+
+  // One footer on every page (site polish 2026-11-10, #5): /docs had a dark
+  // one of its own with another tagline, /power-calculator and /privacy none.
+  // The homepage renders HomeFooter itself; the shell adds it to the rest.
+  it("ends with the site's footer, and has no other", async () => {
+    const { container } = render(<AuthProvider>{make()}</AuthProvider>);
+    await waitFor(() => expect(container.querySelector('a, h1, h2')).toBeInTheDocument());
+
+    const footers = Array.from(container.querySelectorAll('footer')).map(
+      (f) => f.querySelector('nav')?.getAttribute('aria-label') ?? '(no footer nav)',
+    );
+    expect({ page: name, footers }).toEqual({ page: name, footers: ['Footer'] });
+    const footer = container.querySelector('footer') as HTMLElement;
+    expect({ page: name, inMain: footer.closest('main') !== null }).toEqual({ page: name, inMain: false });
+    expect({ page: name, last: footer.parentElement?.lastElementChild === footer }).toEqual({ page: name, last: true });
   });
 
   it('renders without reaching the API', async () => {
@@ -84,5 +103,20 @@ describe.each(PAGES)('%s on the marketing site', (name, make) => {
       const other = calls.filter((u) => !u.includes('/auth/me'));
       expect({ page: name, other }).toEqual({ page: name, other: [] });
     });
+  });
+});
+
+// The footer is the public site's. A self-hoster's dashboard shares AppShell,
+// and its pages, the docs hub among them, end with no footer: the old hub's
+// own footer is gone from both builds, and the shell adds one only to the
+// marketing build.
+describe.each(PAGES.filter(([name]) => name !== '/'))('%s on a platform build', (name, make) => {
+  beforeEach(() => mode.mockReturnValue(false));
+
+  it('has no footer', async () => {
+    const { container } = render(<AuthProvider>{make()}</AuthProvider>);
+    await waitFor(() => expect(container.querySelector('[data-testid="app-shell"] h1')).toBeInTheDocument());
+    expect({ page: name, footers: container.querySelectorAll('footer').length }).toEqual({ page: name, footers: 0 });
+    expect(container.querySelector('[data-testid="site-header"]')).toBeNull();
   });
 });

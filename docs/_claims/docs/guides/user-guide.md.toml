@@ -371,6 +371,13 @@ by = [
 ]
 
 [[unit]]
+text = "Like the two settings above, it is saved with the experiment and cannot be changed after it starts."
+by = [
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_superuser_cannot_change_an_analysis_setting_once_out_of_draft",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_developer_meets_the_refusal_of_every_change_outside_draft_first",
+]
+
+[[unit]]
 text = "To set the priors, see Bayesian analysis."
 by = ["exempt:baseline"]
 
@@ -834,6 +841,14 @@ text = "The recommendation is then INCONCLUSIVE, and a \"Leading\" variant and t
 by = [
     "journey:experiment-results#ratio-results-api",
     "journey:experiment-results#ratio-results-page",
+]
+
+[[unit]]
+text = "So does the stopping banner on the Sequential tab, whatever it recommends."
+by = [
+    "test:frontend/src/tests/components/ResultsDashboard.test.tsx::says \"Ready to stop\" with the caution when the results carry srm.warning",
+    "test:frontend/src/tests/components/ResultsDashboard.test.tsx::gives %s with the caution too when the results carry srm.warning",
+    "test:frontend/src/tests/components/ResultsDashboard.test.tsx::says \"Ready to stop\" without it when %s",
 ]
 
 [[unit]]
@@ -1392,6 +1407,14 @@ by = [
 ]
 
 [[unit]]
+text = "The dashboard shows an archived flag as Archived, with no on/off switch, and the flag list has an Archived filter."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::reads Archived on its page, with no switch, and says how to unarchive it",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::reads Archived in the list, with no switch in its row and a link saying how to unarchive it",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::the list filters archived flags, asking the API for status ARCHIVED",
+]
+
+[[unit]]
 text = "See Archived flags."
 by = ["exempt:baseline"]
 
@@ -1527,10 +1550,18 @@ text = "Use them to generate hypotheses for follow-up experiments, not as final 
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Access via the Breakdowns tab on any experiment results page, or via the route below, where segment_by is the dimension, such as device:"
+text = "Access via the Breakdowns tab on any experiment results page, which reads GET /api/v1/results/{experiment_id}?breakdown={dimension}."
 by = [
     "test:frontend/src/tests/components/ResultsDashboard.test.tsx::renders Breakdowns tab in the tab list",
+    "test:frontend/src/tests/components/ResultsDashboard.test.tsx::calls getResults with breakdown param when a dimension is selected",
+]
+
+[[unit]]
+text = "The same segments, as counts with no significance test, are at the route below, where segment_by is the dimension, such as device:"
+by = [
     "test:backend/tests/integration/api/test_experiments_lifecycle_api.py::TestSegmentedExperimentResults::test_get_segmented_results_for_active_experiment",
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_a_user_with_events_in_two_segments_is_in_one",
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_the_segmented_results_keep_their_keys",
 ]
 
 [[unit]]

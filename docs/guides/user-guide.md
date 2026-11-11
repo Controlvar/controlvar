@@ -140,7 +140,8 @@ cannot be changed after it starts:
 Below them, **Also analyse the primary metric with Bayesian statistics** is off by default. Turned
 on, the results also carry a Bayesian analysis of the primary metric (the probability that each
 variant is the best) with default priors; the frequentist results and the recommendation do not
-change. To set the priors, see [Bayesian analysis](../api/bayesian.md).
+change. Like the two settings above, it is saved with the experiment and cannot be changed
+after it starts. To set the priors, see [Bayesian analysis](../api/bayesian.md).
 
 The single-page form has the same settings in a collapsed **Analysis settings** section,
 whose title shows the current values.
@@ -290,7 +291,8 @@ The results page compares how many users each variant received with its traffic 
 chi-square test of the assignment counts). If they differ by more than chance allows
 (p < 0.001), a notice above the tabs says so, with each variant's users and the number expected.
 The recommendation is then **INCONCLUSIVE**, and a "Leading" variant and the Bayesian analysis
-carry a warning. A mismatch usually means assignment or tracking is broken, so do not use the
+carry a warning. So does the stopping banner on the **Sequential** tab, whatever it recommends.
+A mismatch usually means assignment or tracking is broken, so do not use the
 numbers for a decision until you find out why.
 
 When the split matches, one line below the summary card says so, with the check's p-value.
@@ -490,7 +492,8 @@ unarchived: the API refuses every request that would turn it on with "This flag 
 archived. Unarchive it before turning it on." Turning it off succeeds and changes
 nothing. Archiving and unarchiving are API calls for now (bulk toggle with
 `archive`, and `POST /api/v1/feature-flags/{id}/unarchive`, which is beta); an
-unarchived flag comes back inactive. See
+unarchived flag comes back inactive. The dashboard shows an archived flag as **Archived**, with
+no on/off switch, and the flag list has an **Archived** filter. See
 [Archived flags](../feature-flags/create.md#archived-flags).
 
 ---
@@ -552,8 +555,10 @@ After an experiment concludes, use dimensional analysis to understand whether th
 
 **Important:** Segment findings are always exploratory. Use them to generate hypotheses for follow-up experiments, not as final conclusions.
 
-Access via the **Breakdowns** tab on any experiment results page, or via the route below,
-where `segment_by` is the dimension, such as `device`:
+Access via the **Breakdowns** tab on any experiment results page, which reads
+`GET /api/v1/results/{experiment_id}?breakdown={dimension}`. The same segments, as counts
+with no significance test, are at the route below, where `segment_by` is the dimension,
+such as `device`:
 ```text
 GET /api/v1/experiments/{experiment_id}/segmented-results/{segment_by}
 ```

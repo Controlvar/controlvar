@@ -434,6 +434,20 @@ by = [
 ]
 
 [[unit]]
+text = "null for name, max_percentage or status, and on PUT .../stages/{stage_id} for a stage's name, stage_order, target_percentage or trigger_type, is refused with 422 naming the field, and nothing is changed."
+by = [
+    "test:backend/tests/integration/api/test_rollout_update_null_required.py::test_a_schedule_update_with_null_for_a_required_field_is_422",
+    "test:backend/tests/integration/api/test_rollout_update_null_required.py::test_a_stage_update_with_null_for_a_required_field_is_422",
+]
+
+[[unit]]
+text = "A field left out keeps its value."
+by = [
+    "test:backend/tests/integration/api/test_rollout_update_null_required.py::test_a_schedule_update_that_leaves_the_fields_out_is_unchanged",
+    "test:backend/tests/integration/api/test_rollout_update_null_required.py::test_a_stage_update_that_leaves_the_fields_out_is_unchanged",
+]
+
+[[unit]]
 text = "Rollout Stages"
 by = ["exempt:baseline"]
 

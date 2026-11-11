@@ -102,7 +102,9 @@ export default function PowerCalculatorPage() {
 
     try {
       // Computed here, not fetched. `utils/power.ts` is a transcription of
-      // the Python service, pinned to it by power.test.ts. The API round trip
+      // the Python service, checked by power.test.ts against vectors the
+      // service produced once (frozen: a server change shows up there only
+      // when they are regenerated). The API round trip
       // bought nothing -- the arithmetic is closed form -- and cost the page
       // its ability to work at all wherever the API is not deployed, which is
       // the published site.

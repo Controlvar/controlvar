@@ -8,6 +8,9 @@ import logging
 
 import pytest
 
+#: The names in ``backend.app.core.logger.HTTP_CLIENT_LOGGERS``.
+_HTTP_CLIENT_LOGGERS = ("httpx", "httpcore", "botocore", "boto3", "s3transfer")
+
 
 @pytest.fixture(autouse=True)
 def restore_root_logger():
@@ -17,7 +20,8 @@ def restore_root_logger():
     ``configure_logging()`` replace its handlers and set its level, and
     importing ``backend.app.core.logging`` or ``backend.app.main`` runs one of
     them. The handlers and the level are put back after each test, and so are
-    the levels of the ``httpx`` and ``httpcore`` loggers, which both hold at
+    the levels of the loggers in ``HTTP_CLIENT_LOGGERS`` (httpx, httpcore,
+    botocore, boto3 and s3transfer), which both of those functions hold at
     WARNING (``quiet_http_client_loggers``).
 
     ``logging.getLogger`` itself is not replaced. ``caplog`` attaches its
@@ -26,7 +30,7 @@ def restore_root_logger():
     """
     root = logging.getLogger()
     handlers, level = list(root.handlers), root.level
-    client_levels = {n: logging.getLogger(n).level for n in ("httpx", "httpcore")}
+    client_levels = {n: logging.getLogger(n).level for n in _HTTP_CLIENT_LOGGERS}
     yield
     root.handlers[:] = handlers
     root.setLevel(level)

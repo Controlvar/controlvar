@@ -25,7 +25,9 @@ The create/update contract (#94, D39 as narrowed by D40):
   back unchanged unless its ``targeting_rules`` are ones PUT now refuses (D41).
 * There is one response representation, :class:`FeatureFlagRead`. It shares no
   base with the request models: ``extra="forbid"`` is inherited, and a response
-  model must never refuse a stored row.
+  model must never refuse a stored row. The list's items,
+  :class:`FeatureFlagListItem`, are that representation plus ``stale`` and
+  ``stale_reasons`` (#1808).
 """
 
 from collections.abc import Mapping
@@ -63,6 +65,10 @@ from backend.app.core.targeting_adapter import (
 #: send them back -- a GET body round-trips -- and they are ignored, except that
 #: a ``status`` must equal the stored one (``FeatureFlagService``).
 READ_ONLY_FIELDS = frozenset({"id", "owner_id", "created_at", "updated_at", "status"})
+
+#: The fields a list item adds to a flag (#1808). A request may send them back,
+#: as it may the read-only fields, and they are ignored.
+LIST_ITEM_FIELDS = frozenset({"stale", "stale_reasons"})
 
 #: Fields stored in a NOT NULL column, or never null in a request: an explicit
 #: null is refused, while leaving one out of an update keeps the stored value.
@@ -123,6 +129,23 @@ STATUS_READ_ONLY = "status is read-only. Use is_active to turn a flag on or off.
 
 _READ_ONLY = {"readOnly": True}
 
+
+def _flag_value_schema() -> Dict[str, Any]:
+    """What the request documents say ``on_value`` and ``off_value`` accept:
+    any JSON value but null (#1571). Only the documents change: the fields
+    stay ``Any``, so the value rules and the null refusal decide, as before.
+    A fresh dict for each field."""
+    return {
+        "anyOf": [
+            {"type": "boolean"},
+            {"type": "string"},
+            {"type": "number"},
+            {"type": "object"},
+            {"type": "array"},
+        ]
+    }
+
+
 #: The description of ``targeting_rules`` on a create and an update.
 TARGETING_RULES_DESCRIPTION = (
     "Who gets the flag: the dashboard rule builder's shape "
@@ -163,6 +186,14 @@ class _FeatureFlagRequest(BaseModel):
         ),
         json_schema_extra=_READ_ONLY,
     )
+    # A list item's (LIST_ITEM_FIELDS): accepted so a list item can be sent
+    # back as it is, and ignored.
+    stale: Any = Field(
+        None, description="Read-only; ignored.", json_schema_extra=_READ_ONLY
+    )
+    stale_reasons: Any = Field(
+        None, description="Read-only; ignored.", json_schema_extra=_READ_ONLY
+    )
 
     @field_validator(*NOT_NULL_FIELDS, mode="before", check_fields=False)
     @classmethod
@@ -185,7 +216,9 @@ class _FeatureFlagRequest(BaseModel):
         start with a letter or a digit."""
         import re
 
-        if not re.match(r"^[a-z0-9][a-z0-9_-]*$", v):
+        # fullmatch, not match with a "$": "$" also matches before a final
+        # newline, which let "search_v2\n" through (#1806).
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", v):
             raise ValueError(
                 "Key must be lowercase alphanumeric characters, hyphens, or underscores only"
             )
@@ -260,10 +293,14 @@ class FeatureFlagCreate(_FeatureFlagRequest):
     )
     value_type: ValueType = Field(BOOLEAN, description=VALUE_TYPE_DESCRIPTION)
     on_value: Any = Field(
-        None, description=ON_VALUE_DESCRIPTION + VALUE_LIMITS_DESCRIPTION
+        None,
+        description=ON_VALUE_DESCRIPTION + VALUE_LIMITS_DESCRIPTION,
+        json_schema_extra=_flag_value_schema(),
     )
     off_value: Any = Field(
-        None, description=OFF_VALUE_DESCRIPTION + VALUE_LIMITS_DESCRIPTION
+        None,
+        description=OFF_VALUE_DESCRIPTION + VALUE_LIMITS_DESCRIPTION,
+        json_schema_extra=_flag_value_schema(),
     )
     tags: Optional[List[str]] = None
 
@@ -314,10 +351,14 @@ class FeatureFlagUpdate(_FeatureFlagRequest):
     )
     value_type: ValueType = Field(None, description=VALUE_TYPE_DESCRIPTION)
     on_value: Any = Field(
-        None, description=ON_VALUE_DESCRIPTION + VALUE_LIMITS_DESCRIPTION
+        None,
+        description=ON_VALUE_DESCRIPTION + VALUE_LIMITS_DESCRIPTION,
+        json_schema_extra=_flag_value_schema(),
     )
     off_value: Any = Field(
-        None, description=OFF_VALUE_DESCRIPTION + VALUE_LIMITS_DESCRIPTION
+        None,
+        description=OFF_VALUE_DESCRIPTION + VALUE_LIMITS_DESCRIPTION,
+        json_schema_extra=_flag_value_schema(),
     )
     tags: Optional[List[str]] = None
 
@@ -410,15 +451,54 @@ def flag_to_read(flag: Any) -> FeatureFlagRead:
     return FeatureFlagRead.model_validate(flag)
 
 
+#: Why the list marks a flag stale (``backend.app.services.stale_flags``).
+StaleReason = Literal["not_evaluated", "on_for_everyone", "off_for_everyone"]
+
+STALE_DESCRIPTION = (
+    "True when the flag looks ready to remove. Advice only: nothing is archived "
+    "or changed automatically. The definition is beta: its conditions and "
+    "threshold may change; the fields will not."
+)
+STALE_REASONS_DESCRIPTION = (
+    "Why: not_evaluated, on_for_everyone, off_for_everyone; more than one can apply."
+)
+STALE_DAYS_DESCRIPTION = (
+    "N, the days a flag must go without an evaluation, or unchanged while it "
+    "serves one answer to everyone, to be stale. STALE_FLAG_DAYS sets it."
+)
+EVALUATIONS_SEEN_DESCRIPTION = (
+    "False when the installation recorded no flag evaluation in the last "
+    "stale_days days; not_evaluated is then not reported."
+)
+
+
+class FeatureFlagListItem(FeatureFlagRead):
+    """A flag in the list: the flag, and whether it looks ready to remove (#1808)."""
+
+    stale: bool = Field(..., description=STALE_DESCRIPTION)
+    stale_reasons: List[StaleReason] = Field(..., description=STALE_REASONS_DESCRIPTION)
+
+    @classmethod
+    def of(cls, flag: Any, reasons: List[str]) -> "FeatureFlagListItem":
+        """*flag* as the list answers it, with its stale reasons (``[]``: not stale)."""
+        return cls(
+            **flag_to_read(flag).model_dump(),
+            stale=bool(reasons),
+            stale_reasons=list(reasons),
+        )
+
+
 class FeatureFlagListResponse(BaseModel):
     """
     Paginated response model for feature flags.
     """
 
-    items: List[FeatureFlagRead]
+    items: List[FeatureFlagListItem]
     total: int
     skip: int
     limit: int
+    stale_days: int = Field(..., description=STALE_DAYS_DESCRIPTION)
+    evaluations_seen: bool = Field(..., description=EVALUATIONS_SEEN_DESCRIPTION)
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -441,11 +521,15 @@ class FeatureFlagListResponse(BaseModel):
                         "owner_id": "5f0c8a52-1d7e-4c3b-9a6f-2b8e4d1c7a90",
                         "created_at": "2023-01-01T00:00:00Z",
                         "updated_at": "2023-01-01T00:00:00Z",
+                        "stale": True,
+                        "stale_reasons": ["not_evaluated", "off_for_everyone"],
                     }
                 ],
                 "total": 1,
                 "skip": 0,
                 "limit": 100,
+                "stale_days": 30,
+                "evaluations_seen": True,
             }
         },
     )

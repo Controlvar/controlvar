@@ -25,7 +25,15 @@ import { isMarketingSite } from '@/utils/site-mode';
  * the file.
  */
 
-export type ScreenId = 'results' | 'flag-rollout' | 'power-calculator' | 'audit-log';
+export type ScreenId = 'flag-rollout' | 'power-calculator' | 'audit-log';
+
+/**
+ * The screenshots were taken at a device scale of 2, so a screenshot shown
+ * wider than half its width in CSS pixels is enlarged on a 2x display. The
+ * hero, which spans the page's width, is capped there (650 px for the power
+ * calculator's 1300 px); the rows' screenshots are sized as before.
+ */
+export const CAPTURE_SCALE = 2;
 
 export interface Screen {
   id: string;
@@ -53,7 +61,10 @@ export function Screenshot({ id, hero = false }: { id: ScreenId; hero?: boolean 
   if (!isMarketingSite()) return null;
   const screen = screenFor(id);
   return (
-    <figure className="min-w-0">
+    <figure
+      className={hero ? 'mx-auto min-w-0' : 'min-w-0'}
+      style={hero ? { maxWidth: `${screen.width / CAPTURE_SCALE}px` } : undefined}
+    >
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
         <div aria-hidden="true" className="flex items-center gap-2 border-b border-slate-200 bg-slate-100 px-3.5 py-2.5">
           <span className="h-2.5 w-2.5 rounded-full bg-slate-300" />

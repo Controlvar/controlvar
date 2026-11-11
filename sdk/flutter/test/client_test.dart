@@ -305,14 +305,14 @@ void main() {
       expect(result.enabled, isTrue, reason: 'last known value served offline');
     });
 
-    test('a 404 never serves a stale value and removes it', () async {
+    test('a 404 (a deleted flag) never serves a stale value and removes it', () async {
       final store = InMemoryOfflineStore();
       server.reply(200, _flagJson);
       final client = await _client(server, offlineFallback: true, store: store);
       await client.evaluateFlag('new-ui', 'user-1');
       client.clearCache();
 
-      server.reply(404, {'detail': 'archived'});
+      server.reply(404, {'detail': "Feature flag with key 'new-ui' not found"});
       final result = await client.evaluateFlag('new-ui', 'user-1');
 
       expect(result.enabled, isFalse);

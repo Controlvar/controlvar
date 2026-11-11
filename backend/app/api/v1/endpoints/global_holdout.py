@@ -30,6 +30,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.query_params import MAX_OFFSET, describe_as_int64
 from backend.app.core.permissions import Action, ResourceType, check_permission
 from backend.app.models.audit_log import ActionType, EntityType
 from backend.app.models.user import User, UserRole
@@ -58,7 +60,7 @@ from backend.app.services.holdout_results import holdout_results
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 
 # ---------------------------------------------------------------------------
@@ -167,7 +169,9 @@ def get_active_holdout(
     tags=["Global Holdout"],
 )
 def list_all_holdouts(
-    skip: int = Query(default=0, ge=0),
+    skip: int = Query(
+        default=0, ge=0, le=MAX_OFFSET, json_schema_extra=describe_as_int64
+    ),
     limit: int = Query(default=100, ge=1, le=1000),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user),

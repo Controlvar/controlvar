@@ -24,25 +24,31 @@ reason = "K1: the compose project name sets the volume names; a new name starts 
 [[keep]]
 path = "backend/tests/unit/infrastructure/test_production_compose.py"
 literal = "experimently-selfhost"
-count = 3
+count = 9
 reason = "K1: the compose project name sets the volume names; a new name starts an empty database"
 
 [[keep]]
 path = "deploy/compose/README.md"
 literal = "experimently-selfhost"
-count = 6
+count = 15
 reason = "K1: the compose project name sets the volume names; a new name starts an empty database"
 
 [[keep]]
 path = "docs/_claims/deploy/compose/README.md.toml"
 literal = "experimently-selfhost"
-count = 2
+count = 5
 reason = "K1: the compose project name sets the volume names; a new name starts an empty database"
 
 [[keep]]
 path = "deploy/compose/compose.yml"
 literal = "experimently-selfhost"
 count = 2
+reason = "K1: the compose project name sets the volume names; a new name starts an empty database"
+
+[[keep]]
+path = "scripts/compose_upgrade.sh"
+literal = "experimently-selfhost"
+count = 1
 reason = "K1: the compose project name sets the volume names; a new name starts an empty database"
 
 [[keep]]
@@ -858,7 +864,7 @@ reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
 [[keep]]
 path = ".github/workflows/compose-production.yml"
 literal = "EXPERIMENTLY_PROFILE"
-count = 1
+count = 2
 reason = "K12: build-arg, self-hoster setting and CDK switch (env-inventory.md)"
 
 [[keep]]
@@ -1348,13 +1354,31 @@ count = 1
 reason = "K14: marker already on restored AWS resources"
 
 [[keep]]
-path = "infrastructure/cdk/stacks/fargate_service_stack.py"
+path = "infrastructure/cdk/stacks/names.py"
+literal = "Experimently/<env>"
+count = 1
+reason = "K15: the CloudWatch namespace; a new one orphans metric history"
+
+[[keep]]
+path = "infrastructure/cdk/stacks/names.py"
 literal = "Experimently/{env"
 count = 1
 reason = "K15: the CloudWatch namespace; a new one orphans metric history"
 
 [[keep]]
 path = "infrastructure/tests/test_standing_alarms.py"
+literal = "Experimently/{env"
+count = 3
+reason = "K15: the CloudWatch namespace; a new one orphans metric history"
+
+[[keep]]
+path = "infrastructure/tests/test_dashboards.py"
+literal = "Experimently/<env>"
+count = 2
+reason = "K15: the CloudWatch namespace; a new one orphans metric history"
+
+[[keep]]
+path = "infrastructure/tests/test_dashboards.py"
 literal = "Experimently/{env"
 count = 1
 reason = "K15: the CloudWatch namespace; a new one orphans metric history"
@@ -1531,6 +1555,12 @@ reason = "K18: CI arming switches; a mismatch fails open (env-inventory.md)"
 path = "backend/tests/integration/api/test_experiment_cache_redis.py"
 literal = "EXPERIMENTLY_REQUIRE_"
 count = 3
+reason = "K18: CI arming switches; a mismatch fails open (env-inventory.md)"
+
+[[keep]]
+path = "backend/tests/integration/api/test_experiment_data_read_rule.py"
+literal = "EXPERIMENTLY_REQUIRE_"
+count = 2
 reason = "K18: CI arming switches; a mismatch fails open (env-inventory.md)"
 
 [[keep]]

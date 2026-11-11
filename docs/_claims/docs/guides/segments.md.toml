@@ -254,6 +254,24 @@ by = [
 ]
 
 [[unit]]
+text = "A key in a browser or a mobile app answers for any user id."
+by = [
+    "test:backend/tests/integration/api/test_plain_key_answers_for_any_user_id.py::test_a_flag_answers_for_any_user_id_and_an_id_list_decides_by_that_id",
+    "test:backend/tests/integration/api/test_plain_key_answers_for_any_user_id.py::test_assign_and_the_assignments_list_answer_for_any_user_id",
+]
+
+[[unit]]
+text = "A key used in a browser or a mobile app is visible to the people who use the app, and it answers for whichever user id it is sent: what that id is served, whether it is in a segment, and which experiments it is assigned to."
+by = [
+    "test:backend/tests/integration/api/test_plain_key_answers_for_any_user_id.py::test_a_flag_answers_for_any_user_id_and_an_id_list_decides_by_that_id",
+    "test:backend/tests/integration/api/test_plain_key_answers_for_any_user_id.py::test_assign_and_the_assignments_list_answer_for_any_user_id",
+]
+
+[[unit]]
+text = "Where that matters, use user ids that do not identify a person (not email addresses), in ID lists too, and read assignments from your server."
+by = ["exempt:advice"]
+
+[[unit]]
 text = "At most 10 segments per ruleset, one per condition; put several conditions in an OR group to match any of them."
 by = ["test:backend/tests/unit/core/test_segment_targeting_validation.py::test_ten_segments_accepted_eleven_refused"]
 
@@ -293,6 +311,13 @@ by = [
     "test:backend/tests/integration/api/test_segment_in_use.py::test_a_disabled_flag_and_a_paused_experiment_block",
     "test:backend/tests/integration/api/test_segment_in_use.py::test_each_live_experiment_status_blocks",
     "test:backend/tests/integration/api/test_segment_in_use.py::test_an_unused_segment_archives",
+]
+
+[[unit]]
+text = "An experiment that balances its split within the segment uses it the same way (Balance within saved segments)."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_a_segment_an_experiment_balances_within_cannot_be_archived",
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_a_completed_experiment_or_an_attribute_value_does_not_hold_a_segment",
 ]
 
 [[unit]]

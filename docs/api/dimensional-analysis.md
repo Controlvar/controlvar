@@ -37,10 +37,30 @@ Heterogeneous treatment effect detection compares the first treatment with the c
 
 ## Where the segments come from
 
-A segment is a value of a key in the events' `metadata`. Send the dimension with the
-events you track, as in `"metadata": {"device": "mobile"}`, and the breakdown groups the
-experiment's users by it. A user whose events don't carry the key is counted under the
-segment `unknown`.
+Each user is counted once, in the segment of the value the user was first assigned with,
+or else the first value tracked for them, so for every variant the segments add up to the
+experiment's users and converting users. The value is a top-level key of the `context`
+sent with `POST /api/v1/tracking/assign`, which is stored with the user's assignment
+event, or of an event's `metadata`. Assignment events come first, then the user's other
+events in the order the server received them; an event's own `timestamp` does not move a
+user. So a user assigned with `{"device": "mobile"}` who checks out on `desktop` is
+counted once, under `mobile`, with that checkout. A user's conversions count in their
+segment whether or not the conversion events carry the key.
+
+Users with no value are counted under `unknown`: users whose events never carry the key,
+or carry it as `null` or `""`, and users with no events at all. A value is compared as
+exact text, with no trimming or change of case: `iOS` and `ios` are two segments, `true`
+is the text `true`, and an object is its JSON text. A value `unknown` is counted under
+`unknown`. `POST /api/v1/tracking/assign/batch` records no assignment event, so its
+`context` sets no segment; send the key on an event. A breakdown lists the 20 values with
+the most users and counts the rest under `other`. A value longer than 255 characters is
+counted under other.
+
+To break results down by an attribute, send it in the user's attributes when you assign
+them: `context` on the API, `user_attributes` in the Python SDK and `attributes` in the
+JavaScript and React SDKs. The events you track then need no properties. The dashboard's
+**Breakdowns** tab offers `platform`, `country` and `user_tier`; any other key works
+through the API.
 
 Run the commands on this page in one terminal, in order, against the stack from the
 [Quick Start](../getting-started/quick-start.md). Each uses the shell variables set by the
@@ -56,8 +76,8 @@ curl -s localhost:8000/api/v1/auth/me -H "Authorization: Bearer $TOKEN" | jq .ro
 <!-- expect: "ADMIN" -->
 
 It prints `"ADMIN"`. The examples use the demo data's `checkout_button_color` experiment,
-whose primary metric counts `checkout_completed` events. Its demo events carry no
-metadata, so this page tracks a few that do. That takes an API key, which this saves in
+whose primary metric counts `checkout_completed` events. Its demo users were assigned with
+no attributes, so this page assigns a few with a `device`. That takes an API key, which this saves in
 `$KEY`, with the experiment's id in `$EXP_ID`. The collection URL ends with a slash,
 `/api/v1/experiments/`; without it the API answers `307`, which `curl` doesn't follow:
 
@@ -75,28 +95,38 @@ echo "${KEY:0:5}"
 <!-- expect: eptk_ -->
 
 It prints `eptk_`, the start of every API key. This assigns eight users to the
-experiment:
+experiment, the odd numbers with the `device` `desktop` and the even ones with `mobile`,
+sent in each user's `context`:
 
 ```{.bash exec}
-for i in 1 2 3 4 5 6 7 8; do
-  curl -s -X POST localhost:8000/api/v1/tracking/assign \
-    -H "X-API-Key: $KEY" \
-    -H 'content-type: application/json' \
-    -d '{"experiment_key": "checkout_button_color", "user_id": "segment-user-'"$i"'"}' \
-    | jq -r .assigned
-done | sort | uniq -c
+{
+  for i in 1 3 5 7; do
+    curl -s -X POST localhost:8000/api/v1/tracking/assign \
+      -H "X-API-Key: $KEY" \
+      -H 'content-type: application/json' \
+      -d '{"experiment_key": "checkout_button_color", "user_id": "segment-user-'"$i"'", "context": {"device": "desktop"}}' \
+      | jq -r .assigned
+  done
+  for i in 2 4 6 8; do
+    curl -s -X POST localhost:8000/api/v1/tracking/assign \
+      -H "X-API-Key: $KEY" \
+      -H 'content-type: application/json' \
+      -d '{"experiment_key": "checkout_button_color", "user_id": "segment-user-'"$i"'", "context": {"device": "mobile"}}' \
+      | jq -r .assigned
+  done
+} | sort | uniq -c
 ```
 <!-- expect: 8 true -->
 
-It prints `8 true`: all eight were enrolled. Then each completes a checkout, the odd
-numbers on `desktop` and the even ones on `mobile`. `jq` builds the batch of eight events:
+It prints `8 true`: all eight were enrolled. Then each completes a checkout. The events
+carry no metadata: each user's segment comes from their assignment. `jq` builds the batch
+of eight events:
 
 ```{.bash exec}
 jq -n '{events: [range(1; 9) | {
   event_type: "checkout_completed",
   user_id: "segment-user-\(.)",
-  experiment_key: "checkout_button_color",
-  metadata: {device: (if . % 2 == 0 then "mobile" else "desktop" end)}
+  experiment_key: "checkout_button_color"
 }]}' \
   | curl -s -X POST localhost:8000/api/v1/tracking/batch \
     -H "X-API-Key: $KEY" \
@@ -109,13 +139,24 @@ It prints `8`.
 
 ---
 
+## Balanced groups
+
+An experiment that balances its split within groups also answers
+`GET /api/v1/results/{experiment_id}/balanced-groups` (beta). Its rows are built the same way,
+with each user in the group stored when they were assigned instead of their first value, and it
+adds one estimate over the groups.
+[Balance the split within groups](../guides/balance-within-groups.md#results-by-group) says what
+it returns and where the two differ.
+
+---
+
 ## API Reference
 
 ### GET /api/v1/results/{experiment_id}?breakdown={dimension}
 
 The experiment's results, with a `breakdown` field that splits the primary metric by one
 dimension, with the Bonferroni-corrected significance test above. Without `breakdown`, the
-field is `null`. Any logged-in user can read it.
+field is `null`. A user who may view the experiment can read it.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -131,14 +172,28 @@ curl -s "localhost:8000/api/v1/results/$EXP_ID?breakdown=device" \
 <!-- expect: "is_exploratory": true -->
 <!-- expect: "desktop" -->
 <!-- expect: "mobile" -->
+<!-- expect: "unknown" -->
 
 It prints the dimension, `"is_exploratory": true`, the corrected threshold and the
-segments: `desktop`, `mobile`, and `unknown` for the users' assignment events, which carry
-no `device`. With three segments the threshold is 0.05 / 3, about `0.0167`.
+segments: `desktop`, `mobile`, and `unknown`: the demo's own users, assigned with no
+`device`. With three segments the threshold is 0.05 / 3, about `0.0167`.
+
+For every variant the segments add up to the experiment's users and converting users:
+
+```{.bash exec}
+curl -s "localhost:8000/api/v1/results/$EXP_ID?breakdown=device" \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq -c '{users: (([.breakdown.segments[].sample_size] | add) == .summary.total_users),
+      conversions: (([.breakdown.segments[].variants[].conversions] | add)
+        == ([.metrics[0].variants[].conversions] | add))}'
+```
+<!-- expect: {"users":true,"conversions":true} -->
+
+It prints `{"users":true,"conversions":true}`.
 
 A variant's `conversions` in a segment are users, as in the rest of `/results`: the
-users assigned to it with at least one conversion event in that segment, each counted
-once. Every segment lists every variant of the experiment by name, with zero counts where the
+segment's users assigned to it with a conversion event, wherever that event was, each
+counted once. Every segment lists every variant of the experiment by name, with zero counts where the
 segment has none of its users, and `is_control` is the flag the experiment gives the
 variant. The control comes first:
 
@@ -182,14 +237,15 @@ It prints `blue_button`, the control, then `green_button`. One segment in full:
 }
 ```
 
-The control's `p_value` is `null`; every other variant's is its test against the control in
-the same segment. The breakdown also carries `has_heterogeneous_effects` and `hte_warning`.
+The control's `p_value` is `null`; every other variant's is Fisher's exact test against the
+control in the same segment, the test the headline uses for a conversion rate. The breakdown
+also carries `has_heterogeneous_effects` and `hte_warning`.
 
 ### GET /api/v1/experiments/{experiment_id}/segmented-results/{segment_by}
 
-Counts per segment, variant and metric, with no significance test. Only segments with the
-key are listed (no `unknown`), `conversion_rate` is a percentage, and an experiment in
-`draft` answers `400`. `metric_id` narrows it to one metric:
+Counts per segment, variant and metric, with no significance test. Its segments are the
+ones above, by the same rule, `unknown` included; `conversion_rate` is a percentage, and an
+experiment in `draft` answers `400`. `metric_id` narrows it to one metric:
 
 ```{.bash exec}
 curl -s localhost:8000/api/v1/experiments/$EXP_ID/segmented-results/device \
@@ -199,9 +255,10 @@ curl -s localhost:8000/api/v1/experiments/$EXP_ID/segmented-results/device \
 <!-- expect: "segment_value": "desktop" -->
 <!-- expect: "variant_name": "blue_button" -->
 <!-- expect: "segment_value": "mobile" -->
+<!-- expect: "segment_value": "unknown" -->
 
-It prints the `desktop` and `mobile` segments, each with the users and conversions of
-`blue_button` and `green_button`.
+It prints the `desktop`, `mobile` and `unknown` segments, each with the users and
+conversions of `blue_button` and `green_button`.
 
 ---
 
@@ -229,4 +286,4 @@ It prints the `desktop` and `mobile` segments, each with the users and conversio
 
 ## Permissions
 
-Any logged-in user can read both breakdowns, whatever the role.
+Reading either breakdown takes permission to view the experiment, as on the experiment page; every role has it.

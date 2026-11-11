@@ -23,12 +23,30 @@
  * /api/v1/auth/login, so a cross-origin run spends its login budget twice as
  * fast.
  *
+ * With `--nginx-headers` it also sends the security headers of
+ * `frontend/nginx.conf`'s server block (`--nginx-conf` names another file),
+ * the Content-Security-Policy among them, with `${CSP_CONNECT_SRC}` given the
+ * default `frontend/docker-entrypoint.sh` gives it: the headers are read from
+ * those files, not copied here, so a journey runs under the policy the image
+ * ships. nginx sends them on every page (`location /` adds no header of its
+ * own, so it inherits them) and not on `/_next/static/` (whose own
+ * `add_header` stops the inheritance); so does this server. The server exits
+ * at start when it finds no Content-Security-Policy there. And, as nginx
+ * does by default (`proxy_ignore_client_abort off`), a request the browser
+ * gives up on is given up on upstream too; without the flag the proxy
+ * carries on with it, as it always has.
+ *
  * Usage:
  *   node tests/e2e/static-server.mjs [--dir out] [--port 3100] [--host 127.0.0.1]
  *                                    [--api http://localhost:8000]
+ *                                    [--nginx-headers [--nginx-conf frontend/nginx.conf]]
+ *
+ * `--port 0` takes a port the OS hands out; the line it prints once it is
+ * listening names that port.
  *
  * Playwright starts it automatically (see playwright.config.ts) whenever an
- * export exists; nothing else depends on it.
+ * export exists; tests/e2e/hosted-ui-sign-in.journey.spec.ts starts its own,
+ * with `--nginx-headers`, on a port the OS hands out (tests/e2e/free-port.ts).
  */
 
 import { createServer, request as httpRequest } from 'node:http';
@@ -52,6 +70,34 @@ const manifestPath = resolve(
 const port = Number(argValue('--port', process.env.PLAYWRIGHT_PORT ?? '3100'));
 const host = argValue('--host', '127.0.0.1');
 const apiOrigin = new URL(argValue('--api', process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:8000'));
+const nginxConfPath = resolve(argValue('--nginx-conf', join(frontendDir, 'nginx.conf')));
+
+/**
+ * The `add_header NAME "VALUE" always;` lines of nginx.conf's server block
+ * that come before its first `location`, with the entrypoint's default for
+ * `${CSP_CONNECT_SRC}`. Exits when the policy is not among them.
+ */
+function nginxServerHeaders() {
+  const conf = readFileSync(nginxConfPath, 'utf8');
+  const entrypoint = readFileSync(join(dirname(nginxConfPath), 'docker-entrypoint.sh'), 'utf8');
+  const connectSrc = /: "\$\{CSP_CONNECT_SRC:=([^}"]*)\}"/.exec(entrypoint)?.[1];
+  const server = conf.slice(conf.search(/^server\s*\{/m));
+  const beforeLocations = server.slice(0, server.search(/^\s*location\b/m));
+  const headers = {};
+  for (const m of beforeLocations.matchAll(/^\s*add_header\s+([A-Za-z-]+)\s+"([^"]*)"\s+always;/gm)) {
+    headers[m[1].toLowerCase()] = m[2];
+  }
+  const csp = headers['content-security-policy'];
+  if (!csp || connectSrc === undefined || !csp.includes('${CSP_CONNECT_SRC}')) {
+    console.error(`static-server: no Content-Security-Policy with \${CSP_CONNECT_SRC} in ${nginxConfPath}`);
+    process.exit(1);
+  }
+  headers['content-security-policy'] = csp.replace('${CSP_CONNECT_SRC}', connectSrc);
+  return headers;
+}
+
+const nginxMode = args.includes('--nginx-headers');
+const pageHeaders = nginxMode ? nginxServerHeaders() : {};
 
 /** Paths the backend owns; everything else is served from the export. */
 const shouldProxy = (pathname) =>
@@ -159,10 +205,19 @@ function proxy(req, res) {
     },
   );
   upstream.on('error', (err) => {
+    // Under --nginx-headers the request below may have been given up on.
+    if (nginxMode && res.destroyed) return;
     console.error(`static-server: proxy to ${apiOrigin.origin}${req.url} failed: ${err.message}`);
     if (!res.headersSent) res.writeHead(502, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ detail: `upstream unreachable: ${err.message}` }));
   });
+  // Under --nginx-headers only: the browser gave up before the answer, so
+  // does the request upstream.
+  if (nginxMode) {
+    res.on('close', () => {
+      if (!res.writableFinished) upstream.destroy();
+    });
+  }
   req.pipe(upstream);
 }
 
@@ -176,9 +231,13 @@ const server = createServer((req, res) => {
 
   const file = resolveFile(pathname === '/' ? '/index.html' : pathname);
 
+  // nginx's `location /_next/static/` has an add_header of its own, so it
+  // does not inherit the server block's; every other page does.
+  const inherited = pathname.startsWith('/_next/static/') ? {} : pageHeaders;
+
   if (file === null) {
     const notFound = join(rootDir, '404.html');
-    res.writeHead(404, { 'content-type': 'text/html; charset=utf-8' });
+    res.writeHead(404, { ...inherited, 'content-type': 'text/html; charset=utf-8' });
     res.end(isFile(notFound) ? readFileSync(notFound) : `Not found: ${pathname}`);
     return;
   }
@@ -189,14 +248,17 @@ const server = createServer((req, res) => {
   const cache = pathname.startsWith('/_next/static/')
     ? 'public, max-age=31536000, immutable'
     : 'no-store';
-  res.writeHead(200, { 'content-type': type, 'cache-control': cache });
+  res.writeHead(200, { ...inherited, 'content-type': type, 'cache-control': cache });
   createReadStream(file).pipe(res);
 });
 
 server.listen(port, host, () => {
+  // The port it got, which is not `port` when that is 0 (the OS picks one):
+  // tests/e2e/free-port.ts reads it from this line.
   console.log(
-    `static-server: serving ${rootDir} on http://${host}:${port} ` +
-      `(${dynamicRoutes.length} dynamic route(s), /api -> ${apiOrigin.origin})`,
+    `static-server: serving ${rootDir} on http://${host}:${server.address().port} ` +
+      `(${dynamicRoutes.length} dynamic route(s), /api -> ${apiOrigin.origin}` +
+      `${Object.keys(pageHeaders).length ? `, ${nginxConfPath}'s headers` : ''})`,
   );
 });
 

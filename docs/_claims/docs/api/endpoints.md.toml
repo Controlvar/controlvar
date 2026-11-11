@@ -585,12 +585,47 @@ text = "The feature flags list is ordered by creation time, oldest first (ties b
 by = ["test:backend/tests/integration/api/test_flag_list_order.py::test_walking_the_pages_returns_every_flag_exactly_once_oldest_first"]
 
 [[unit]]
-text = "The default and the largest limit differ by route (the experiments list: 100, at most 500; the feature flags list: 100, with no maximum)."
-by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+text = "The default and the largest limit differ by route (the experiments list: 100, at most 500; the feature flags list: 100, at most 9223372036854775807)."
+by = [
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+    "test:backend/tests/unit/api/test_paging_params_declared.py::test_1001_the_flag_list_document_gains_only_the_bounds",
+]
 
 [[unit]]
-text = "The API's OpenAPI document, GET /api/v1/openapi.json, gives each route's default limit and, where it has one, its maximum"
-by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+text = "The API's OpenAPI document, GET /api/v1/openapi.json, gives each route's default limit and its maximum; a bound of 9223372036854775807 is given as \"format\": \"int64\""
+by = [
+    "test:backend/tests/unit/api/test_paging_params_declared.py::test_1001_the_served_document_gives_every_paging_param_its_bounds",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]
+
+[[unit]]
+text = "skip (and offset, where a route takes it instead) is at most 9223372036854775807, the largest offset PostgreSQL takes; a larger one answers 422 and nothing is read"
+by = [
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_every_offset_route_takes_the_largest_offset_and_refuses_the_next",
+    "test:backend/tests/unit/api/test_paging_params_declared.py::test_1001_every_paging_param_has_a_minimum_and_a_maximum",
+]
+
+[[unit]]
+text = "page, where a route takes it, is from 1 to 9223372036854775808, and the page must start within the largest offset: (page - 1) times the route's limit (or its page_size) at most 9223372036854775807."
+by = [
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_every_page_route_takes_the_last_page_and_refuses_the_next",
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_every_page_route_refuses_a_page_that_starts_past_the_largest_offset",
+]
+
+[[unit]]
+text = "Otherwise the route answers 422 at [\"query\", \"page\"]"
+by = [
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_every_page_route_takes_the_last_page_and_refuses_the_next",
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_every_page_route_refuses_a_page_that_starts_past_the_largest_offset",
+]
+
+[[unit]]
+text = "A skip one past the largest:"
+by = ["docex:docs/api/endpoints.md#{\"loc\":[\"query\",\"skip\"],\"type\":\"less_than_equal\"}"]
+
+[[unit]]
+text = "A page that starts past it, though page and limit are each in range:"
+by = ["docex:docs/api/endpoints.md#(page - 1) * limit must be at most 9223372036854775807"]
 
 [[unit]]
 text = "Caching"
@@ -740,7 +775,7 @@ count = 6
 [[unit]]
 text = "skip: int (default: 0)"
 by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
-count = 4
+count = 3
 
 [[unit]]
 text = "limit: int (default: 100, max: 100)"
@@ -1002,8 +1037,32 @@ by = ["test:backend/tests/integration/api/test_own_access_put.py::TestDeleteAnsw
 
 [[unit]]
 text = "404 \"User not found\"."
-by = ["test:backend/tests/integration/api/test_admin_users_api.py::TestPatchRefusals::test_an_unknown_user_is_404"]
-count = 4
+by = [
+    "test:backend/tests/integration/api/test_admin_users_api.py::TestPatchRefusals::test_an_unknown_user_is_404",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_a_uuid_with_no_account_still_answers_404",
+]
+count = 5
+
+[[unit]]
+text = "Errors: 400 \"Invalid user ID format\" when {user_id} is not a UUID (a caller who is not a superuser gets 403 first)."
+by = [
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_a_superuser_gets_400_for_an_id_that_is_not_a_uuid",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_a_viewer_gets_403_on_get_and_400_on_put_and_delete",
+]
+
+[[unit]]
+text = "403 \"Not enough permissions\" when a caller who is not a superuser asks for another account."
+by = ["test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_a_viewer_gets_403_on_get_and_400_on_put_and_delete"]
+
+[[unit]]
+text = "400 \"Invalid user ID format\" when {user_id} is not a UUID, me included: GET /api/v1/users/me returns your account and its id."
+by = [
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_a_superuser_gets_400_for_an_id_that_is_not_a_uuid",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_a_viewer_gets_403_on_get_and_400_on_put_and_delete",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_me_is_an_id_that_is_not_a_uuid_on_put_and_delete",
+    "test:backend/tests/integration/api/test_non_uuid_ids_answer_400.py::test_get_users_me_still_returns_the_callers_account",
+]
+count = 2
 
 [[unit]]
 text = "Change Your Password"
@@ -1375,8 +1434,20 @@ text = "status: string (optional): ACTIVE, INACTIVE or ARCHIVED, in upper case (
 by = ["test:backend/tests/integration/api/test_feature_flags_api.py::TestFeatureFlagsList::test_list_status_filter_uses_db_enum_casing"]
 
 [[unit]]
-text = "limit: int (default: 100; the route sets no maximum)"
-by = ["test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot"]
+text = "skip: int (default: 0; 0 to 9223372036854775807)"
+by = [
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_every_offset_route_takes_the_largest_offset_and_refuses_the_next",
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_the_flag_list_refuses_a_negative_skip_or_limit",
+    "test:backend/tests/unit/api/test_paging_params_declared.py::test_1001_the_flag_list_document_gains_only_the_bounds",
+]
+
+[[unit]]
+text = "limit: int (default: 100; 0 to 9223372036854775807, and 0 answers no items)"
+by = [
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_the_flag_list_still_takes_limit_0_and_the_largest_limit",
+    "test:backend/tests/integration/api/test_offset_bounds_api.py::test_1001_the_flag_list_refuses_a_negative_skip_or_limit",
+    "test:backend/tests/unit/api/test_paging_params_declared.py::test_1001_the_flag_list_document_gains_only_the_bounds",
+]
 
 [[unit]]
 text = "search: string (optional): matches part of the name or the key, in any case"
@@ -1414,6 +1485,15 @@ count = 2
 [[unit]]
 text = "context: object (optional), URL-encoded JSON; at most 8,192 bytes and 10 levels deep (Targeting Context Limits)"
 by = ["test:backend/tests/integration/api/test_targeting_context_limits.py::test_a_context_over_the_limits_answers_422_and_nothing_is_recorded"]
+
+[[unit]]
+text = "A flag whose stored rules the server cannot read (only a direct database write leaves one) answers false, and the other flags are unaffected."
+by = [
+    "test:backend/tests/integration/api/test_unreadable_stored_rules_api.py::test_the_bulk_route_answers_every_other_flag",
+    "test:backend/tests/integration/api/test_unreadable_stored_rules_api.py::test_the_bulk_route_answers_every_other_flag_when_a_segment_is_unreadable",
+    "test:backend/tests/unit/services/test_unreadable_stored_rules.py::test_unreadable_stored_rules_affect_only_their_flag",
+    "test:backend/tests/unit/services/test_unreadable_stored_rules.py::test_only_a_direct_database_write_leaves_such_rules",
+]
 
 [[unit]]
 text = "Archived Flags"
@@ -2669,8 +2749,78 @@ text = "A refusal because of the experiment's state is a 400 whose detail names 
 by = ["test:backend/tests/integration/api/test_experiment_update_refusals.py::test_a_role_without_update_gets_403_before_any_state_check"]
 
 [[unit]]
-text = "Outside draft, only a superuser may change an experiment's other fields (Cannot update experiments in active status), and variants, metrics, start_date, end_date, correction_method and confidence_level cannot be changed by anyone (Cannot update variants for experiments in active status)."
-by = ["test:backend/tests/integration/api/test_experiment_targeting_by_state.py::test_superuser_still_changes_other_fields_when_not_draft"]
+text = "Outside draft, only a superuser may change an experiment's other fields (Cannot update experiments in active status), and variants, metrics, correction_method, confidence_level, balance_within, variance_reduction_config, sequential_testing_enabled, sequential_testing_config, bayesian_enabled and bayesian_config cannot be changed by anyone, even to the value already stored (Cannot update variants for experiments in active status); a request that includes several is refused naming the first of them in that order."
+by = [
+    "test:backend/tests/integration/api/test_experiment_targeting_by_state.py::test_superuser_still_changes_other_fields_when_not_draft",
+    "test:backend/tests/integration/api/test_experiment_update_refusals.py::test_a_state_refusal_answers_400_with_its_detail",
+    "test:backend/tests/integration/api/test_experiment_correction_settings_api.py::test_a_superuser_cannot_change_the_settings_once_out_of_draft",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_is_locked_after_draft_for_every_role",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_superuser_cannot_change_an_analysis_setting_once_out_of_draft",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_sending_back_the_stored_value_is_refused_too",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_body_naming_every_fixed_field_is_refused_naming_each_in_the_routes_order",
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_balance_within_with_an_analysis_setting_is_refused_naming_balance_within",
+    "test:backend/tests/unit/api/test_experiment_update_fields_classified.py::test_the_fixed_fields_are_exactly_the_routes_list",
+]
+
+[[unit]]
+text = "To change one of those for a running experiment, clone it (POST /api/v1/experiments/{experiment_id}/clone): the copy is a new experiment, a draft, and takes the change."
+by = ["test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_clone_of_a_running_experiment_takes_the_settings_as_a_draft"]
+
+[[unit]]
+text = "start_date and end_date are not fields of this request, so a body that names them changes neither."
+by = [
+    "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_start_date_and_end_date_in_a_body_change_nothing",
+    "test:backend/tests/unit/api/test_experiment_update_fields_classified.py::test_the_routes_list_has_no_other_entry_that_is_not_a_field",
+]
+
+[[unit]]
+text = "Balancing the split within groups (beta)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "balance_within, sent on create or on a draft's PUT, gives each group of users the experiment's split among themselves: with {\"attribute\": \"tier\", \"values\": [\"gold\", \"silver\"]}, each new user is balanced within the group of their context.tier."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_create_stores_and_echoes_the_setting",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_put_on_a_draft_sets_echoes_and_clears_it",
+    "test:backend/tests/integration/api/test_balanced_assignment.py::test_a_list_and_single_assigns_share_each_groups_places",
+]
+
+[[unit]]
+text = "With {\"segments\": [\"<segment id>\", ...]}, 1 to 10 saved segments, each new user is balanced within the first listed segment they belong to, or other when they belong to none."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_each_user_is_balanced_in_the_first_listed_segment_they_belong_to",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_segments_are_stored_and_echoed",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_is_refused_verbatim",
+]
+
+[[unit]]
+text = "Every experiment response carries it, null when the experiment balances nothing, and a clone copies it."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_put_on_a_draft_sets_echoes_and_clears_it",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_clone_balances_within_the_same_groups_and_starts_fresh",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_the_snapshot_carries_balance_within_and_never_its_key",
+]
+
+[[unit]]
+text = "It answers 422 at [\"body\", \"balance_within\"] for a bandit, a split URL experiment, or a split whose shares are not all multiples of 5, and at [\"body\", \"balance_within\", \"segments\"] for a segment that does not exist, is archived or inactive, or whose rules are not valid; a clone answers 409 when a segment it would balance within cannot be used."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_bandit_cannot_balance",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_split_url_experiment_cannot_balance_on_create",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_split_not_in_steps_of_5_is_refused",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_segment_that_cannot_be_used_is_refused",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_clone_of_an_experiment_balanced_within_an_archived_segment_is_refused",
+]
+
+[[unit]]
+text = "See Balance the split within groups."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Balanced experiments: for an experiment that balances within groups, a new user's variant also depends on the users of their group assigned before them; the group is read from the top level of context (Balancing the split within groups)."
+by = [
+    "test:backend/tests/integration/services/test_balance_across_processes.py::test_four_processes_keep_every_group_balanced",
+    "test:backend/tests/unit/services/test_balanced_allocation.py::test_the_label_table",
+]
 
 [[unit]]
 text = "schedule is not accepted by this endpoint."
@@ -3146,19 +3296,167 @@ text = "Bulk-evaluate checks its one user_context once, whatever the number of s
 by = ["test:backend/tests/integration/api/test_segment_context_limits.py::test_bulk_evaluate_checks_its_one_user_context_once"]
 
 [[unit]]
-text = "POST /api/v1/segments/{id}/preview evaluates the rules in its body against the stored contexts of up to sample_size assignments (10 to 10,000, default 1,000)."
-by = ["test:backend/tests/integration/api/test_segment_rules_validated.py::test_preview_counts_only_assignments_with_a_context"]
+text = "Estimating a segment's size."
+by = ["exempt:label"]
 
 [[unit]]
-text = "Only assignments that carry a context are counted, and sample_size in the answer is how many there were."
-by = ["test:backend/tests/integration/api/test_segment_rules_validated.py::test_preview_counts_only_assignments_with_a_context"]
-
-[[unit]]
-text = "Assignment does not store a context today, so the answer is usually {\"estimated_percentage\": 0.0, \"sample_size\": 0, \"matched\": 0}: there was nothing to estimate from, which is not the same as 0%."
+text = "POST /api/v1/segments/{id}/preview estimates how many users the rules in its body match, from the attributes users sent as context to POST /api/v1/tracking/assign."
 by = [
-    "test:backend/tests/unit/services/test_audience_service.py::TestPreviewAudienceSize::test_preview_returns_zero_of_zero_when_no_assignment_has_a_context",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_counts_users_who_were_assigned_through_the_tracking_api",
+    "docex:docs/api/endpoints.md#\"source\": \"exposure_metadata\"",
+]
+
+[[unit]]
+text = "Every assign call records an exposure that carries those attributes."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_each_user_is_counted_once_across_experiments_and_repeats",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_users_latest_attributes_are_the_ones_evaluated",
+]
+
+[[unit]]
+text = "The preview reads the exposures of the last 30 days, newest first, and takes each user's latest one."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_exposures_older_than_the_window_are_not_read",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_uses_newest_not_oldest_rows",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_users_latest_attributes_are_the_ones_evaluated",
+]
+
+[[unit]]
+text = "It evaluates the rules, as evaluate does, against up to sample_size users (10 to 10,000, default 1,000) whose latest exposure carries attributes."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_matched_equals_membership_of_each_user",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_the_read_is_capped_and_stops_at_sample_size",
     "test:backend/tests/integration/api/test_segment_rules_validated.py::test_preview_counts_only_assignments_with_a_context",
 ]
+
+[[unit]]
+text = "Nothing is copied or stored for it: it reads the exposures where they are, and they are kept as long as other events are."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_the_preview_runs_the_same_statements_for_10_and_1000_users"]
+
+[[unit]]
+text = "Any role that can read segments may preview; the answer is counts and a share, never a stored attribute value."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_every_role_may_preview",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_no_stored_attribute_is_echoed_or_logged",
+]
+
+[[unit]]
+text = "On a stack with traffic, the answer looks like this:"
+by = ["exempt:example"]
+
+[[unit]]
+text = "sample_size in the request is a maximum."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_the_read_is_capped_and_stops_at_sample_size"]
+
+[[unit]]
+text = "In the answer it is the number of users evaluated, and matched is how many of them the rules match."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_counts_users_who_were_assigned_through_the_tracking_api"]
+
+[[unit]]
+text = "estimated_percentage is matched divided by sample_size, as a percentage to two decimals."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_users_latest_attributes_are_the_ones_evaluated",
+    "test:backend/tests/unit/services/test_audience_service.py::TestPreviewAudienceSize::test_only_rows_with_a_context_object_count",
+]
+
+[[unit]]
+text = "ended_by says what ended the read: sample_size (enough users were found), cap (the read takes at most 5 exposures per user asked for, and never more than 50,000), or window (every exposure of the last 30 days was read)."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_sampled_since_is_the_oldest_row_read_and_ended_by_says_why",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_the_read_is_capped_and_stops_at_sample_size",
+]
+
+[[unit]]
+text = "sampled_since is the time of the oldest exposure read, and window_days is always 30."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_sampled_since_is_the_oldest_row_read_and_ended_by_says_why",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_exposures_older_than_the_window_are_not_read",
+]
+
+[[unit]]
+text = "users_without_context counts the users read whose latest exposure carried no attributes, because their SDK sent no context; they are not in sample_size."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_empty_sample_is_not_a_percentage",
+    "test:backend/tests/integration/api/test_segment_rules_validated.py::test_preview_counts_only_assignments_with_a_context",
+]
+
+[[unit]]
+text = "If most callers send none, it is the larger number."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "With no user with attributes, estimated_percentage is null and reason is no_exposures_with_context."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_empty_sample_is_not_a_percentage"]
+
+[[unit]]
+text = "With 1 to 29, it is null and reason is too_few_users; sample_size and matched are still given."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_fewer_than_30_users_give_no_percentage"]
+
+[[unit]]
+text = "This is a floor on the estimate's quality."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "It is not a random sample."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_uses_newest_not_oldest_rows"]
+
+[[unit]]
+text = "Unless ended_by is window, the users are the ones seen most recently, since sampled_since, which on a busy site can be minutes ago."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_sampled_since_is_the_oldest_row_read_and_ended_by_says_why"]
+
+[[unit]]
+text = "So the sample leans toward users who call assign often and toward the time of day."
+by = ["exempt:theory"]
+
+[[unit]]
+text = "Use it as a sanity check and an order of magnitude: rules that match none of 1,000 recent users usually name an attribute that is misspelt or not sent."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "It counts only users who reached /tracking/assign: a user assigned only through /tracking/assign/batch has no exposure, and a visitor whose SDK sends attributes only after sign-in is counted from then on."
+by = [
+    "test:backend/tests/integration/api/test_tracking_assign_batch.py::TestParity::test_each_user_gets_what_a_single_call_gives",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_preview_counts_users_who_were_assigned_through_the_tracking_api",
+]
+
+[[unit]]
+text = "It takes each user's latest attributes, not their first exposure's, so a user whose attributes changed is counted by the new ones."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_users_latest_attributes_are_the_ones_evaluated",
+    "test:backend/tests/unit/services/test_audience_service.py::TestPreviewAudienceSize::test_a_users_latest_attributes_win",
+]
+
+[[unit]]
+text = "An exposure dated more than 5 minutes after the server's clock is not read, nor one whose stored attributes are longer than 8,192 bytes as PostgreSQL prints them."
+by = ["test:backend/tests/integration/api/test_segment_preview_exposures.py::test_future_dated_and_oversize_exposures_are_not_sampled"]
+
+[[unit]]
+text = "PostgreSQL prints a space after each colon and comma, which assign's own 8,192-byte limit does not count, so attributes that assign accepted close to that limit may not be read."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_future_dated_and_oversize_exposures_are_not_sampled",
+    "test:backend/tests/unit/core/test_context_limits.py::test_size_is_counted_in_utf8_bytes_of_compact_json",
+]
+
+[[unit]]
+text = "The read has 5 seconds in all."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_read_of_quick_fetches_that_passes_the_limit_in_all_answers_503",
+    "test:backend/tests/unit/services/test_audience_service.py::TestPreviewRead::test_postgresql_gives_each_fetch_what_is_left_of_one_budget",
+]
+
+[[unit]]
+text = "It fetches rows from the database in batches and gives each fetch only the time left, so PostgreSQL stops it at 5 seconds however many fetches it has made, and the preview then answers 503 with a fixed message."
+by = [
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_the_read_streams_from_a_server_side_cursor",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_read_of_quick_fetches_that_passes_the_limit_in_all_answers_503",
+    "test:backend/tests/integration/api/test_segment_preview_exposures.py::test_a_read_past_the_statement_timeout_answers_503",
+    "test:backend/tests/unit/services/test_audience_service.py::TestPreviewRead::test_postgresql_gives_each_fetch_what_is_left_of_one_budget",
+    "test:backend/tests/unit/services/test_audience_service.py::TestPreviewRead::test_the_read_stops_when_its_time_is_up",
+]
+
+[[unit]]
+text = "A large events table with few exposures can take that long."
+by = ["exempt:theory"]
 
 [[unit]]
 text = "The preview also refuses, before any query, regex conditions times sample_size above 500 and conditions plus groups times sample_size above 50,000, at loc [\"query\", \"sample_size\"]."
@@ -3179,8 +3477,11 @@ text = "Flags and experiments target a segment with in_segment / not_in_segment 
 by = ["test:backend/tests/integration/api/test_segment_targeting_api.py::test_rules_naming_an_active_segment_are_accepted"]
 
 [[unit]]
-text = "DELETE /api/v1/segments/{id}, and a PUT that sets status to inactive or archived, answer 409 and change nothing while a flag that is not archived (a disabled one included), or an experiment that is draft, active or paused, has a rule naming the segment:"
-by = ["test:backend/tests/integration/api/test_segment_in_use.py::test_a_disabled_flag_and_a_paused_experiment_block"]
+text = "DELETE /api/v1/segments/{id}, and a PUT that sets status to inactive or archived, answer 409 and change nothing while a flag that is not archived (a disabled one included), or an experiment that is draft, active or paused, has a rule naming the segment, or while such an experiment balances within the segment (Balancing the split within groups):"
+by = [
+    "test:backend/tests/integration/api/test_segment_in_use.py::test_a_disabled_flag_and_a_paused_experiment_block",
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_a_segment_an_experiment_balances_within_cannot_be_archived",
+]
 
 [[unit]]
 text = "A stored row that mentions the segment's id but whose rules cannot be read is listed too."
@@ -3661,3 +3962,31 @@ by = [
     "test:backend/tests/unit/infrastructure/test_proxy_headers_trust.py::TestUvicornItself::test_the_private_ranges_return_the_real_client",
     "test:backend/tests/unit/middleware/test_rate_limiter.py::TestGetClientIp::test_it_uses_the_resolved_client_and_not_the_header",
 ]
+
+[[unit]]
+text = "Balanced Groups (beta)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "See Balance the split within groups for full documentation."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Returns an experiment that balances its split within groups by the group each user was balanced in: one row per group, one estimate per treatment over the groups (overall, or null with a reason), merged_groups, users_outside_blocks, unknown_share and engine_version."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_rows_are_the_stored_groups_and_add_up_to_every_user",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_too_few_users_has_no_estimate",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_a_small_group_is_merged_into_the_largest",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_the_balanced_groups_route_is_beta_and_carries_no_place_in_a_group",
+]
+
+[[unit]]
+text = "It takes no query parameters and is computed on each request."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_route_reads_and_writes_no_cache",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_the_balanced_groups_route_is_beta_and_carries_no_place_in_a_group",
+]
+
+[[unit]]
+text = "An experiment that does not balance within groups answers 409."
+by = ["test:backend/tests/integration/api/test_balanced_groups_results.py::test_an_experiment_that_balances_nothing_answers_409"]

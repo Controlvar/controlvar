@@ -136,7 +136,8 @@ interface UserContext {
 
 ### Targeting context
 
-`attributes` is what the platform's targeting rules evaluate against. It is sent as `context` in
+`attributes` is what the platform's targeting rules evaluate against, and what sets the user's
+segment in a breakdown. It is sent as `context` in
 the `POST /api/v1/tracking/assign` body and, when it is a non-empty object, as
 `context=<url-encoded JSON>` on `GET /api/v1/feature-flags/evaluate/{flagKey}` (and on
 `getAllFlags(userId, attributes)`), so a flag whose dashboard rule says
@@ -147,6 +148,10 @@ answers `app.version`).
 
 Attributes are assumed **stable per user**: evaluations and assignments are cached by user + key
 only, so call `clearCache()` after changing a user's attributes.
+
+An experiment that [balances its split within groups](../guides/balance-within-groups.md) reads
+its attribute from the top level of `attributes` only: `{ tier: 'gold' }`, not
+`{ user: { tier: 'gold' } }`.
 
 `getAssignment` and `evaluateFlag` reject with `ExperimentationError` (`code: 'INVALID_RESPONSE'`,
 `user.userId is required`) when `userId` is missing or empty; `getVariant` / `isFeatureEnabled`
@@ -528,7 +533,10 @@ troubleshooting: [Local evaluation](local-evaluation.md).
 
 The SDK is isomorphic. In the browser the API key is visible to end users, and keys are not scoped
 for browser use: every active key, including one shipped to a browser, can evaluate flags and track
-events as the user who created it. Use a dedicated key for browser traffic so it can be revoked on its
+events as the user who created it. Such a key answers for whichever user id it is sent: what that id
+is served, whether it is in a segment, and which experiments it is assigned to. Where that matters, use
+user ids that do not identify a person (not email addresses), in ID lists too, and read assignments from
+your server. Use a dedicated key for browser traffic so it can be revoked on its
 own, and never give it the `sdk:ruleset` scope, which lets a key download every flag's targeting
 rules. Server-side, lower `timeoutMs` if the SDK sits on a request path:
 

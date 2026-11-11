@@ -627,6 +627,7 @@ EXEMPT_CATEGORIES: Tuple[str, ...] = (
 #: Where a policy statement (what the project does, not what the product does)
 #: may stand as exempt:policy, and nowhere else.
 POLICY_DOCUMENTS: Tuple[str, ...] = (
+    "ROADMAP.md",
     "SECURITY.md",
     "docs/api/stability.md",
     "docs/security/incident-response.md",
@@ -765,18 +766,8 @@ MECHANISMS: Dict[str, Mechanism] = {
             "Each assistant starts the server itself, with two settings: "
             "CONTROLVAR_API_URL is your instance's address and "
             "CONTROLVAR_API_KEY is the key.",
-            "Run this in the sdk/mcp directory you built, with the key in $KEY:",
-        ),
-    ),
-    # "Not yet published": while the page says so it names no npx command.
-    "mcp-page-state": Mechanism(
-        "backend/tests/unit/docs/test_mcp_page_config.py"
-        "::test_an_unpublished_page_names_no_install_by_npx",
-        holds=_whole(
-            "docs/mcp-server.md",
-            "Not yet published.",
-            "@controlvar/mcp-server is not on npm, so build it from a clone of "
-            "this repository:",
+            "Run this in the project directory where you want the server, "
+            "with the key in $KEY:",
         ),
     ),
     "integrations-claims": Mechanism(
@@ -811,7 +802,38 @@ MECHANISMS: Dict[str, Mechanism] = {
             (
                 "docs/getting-started/faq.md",
                 r"\((?:npm|pip) install (?:@controlvar/[A-Za-z0-9_-]{1,60}"
-                r"|controlvar), [0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}, beta\)",
+                r"|controlvar(?:-openfeature)?), [0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4},"
+                r" beta\)",
+            ),
+        ),
+    ),
+    # A sentence that puts SDKs on npm, PyPI, Maven Central or NuGet names
+    # only SDKs on that registry (ON_REGISTRY in test_sdk_doc_versions.py).
+    # The sweep reads every page; these are the units that cite it.
+    "registry-availability": Mechanism(
+        "backend/tests/unit/docs/test_registry_availability.py"
+        "::test_every_registry_sentence_names_only_sdks_on_that_registry",
+        holds=(
+            (
+                "docs/getting-started/faq.md",
+                r"\b(?:is|are) on (?:npm|PyPI|Maven Central|NuGet)\b|^So are the ",
+            ),
+            (
+                "docs/getting-started/limitations.md",
+                r"^Every SDK on a package registry \| ",
+            ),
+            ("demo/DEMO_GUIDE.md", r"\bon (?:npm and PyPI|PyPI and npm)\b"),
+            (
+                "docs/sdk-guide.md",
+                r"^The Java SDK and its Spring Boot starter are on Maven Central:$",
+            ),
+            (
+                "docs/capabilities.md",
+                r"^Released SDKs: ",
+            ),
+            (
+                "README.md",
+                r"^The @controlvar/mcp-server package is on npm\.$",
             ),
         ),
     ),
@@ -934,6 +956,33 @@ MECHANISMS: Dict[str, Mechanism] = {
                 r"\b(?:BigQuery|Snowflake|Amazon Athena) is available\b",
             ),
         ),
+    ),
+    # The Troubleshooting table: one row per error code, each with the status a
+    # route answers with (#1809). The wording of a row's two last cells is read
+    # in review; the test holds the code set and the status.
+    "warehouse-troubleshooting": Mechanism(
+        "modules/backend/tests/unit/test_warehouse_docs_availability.py"
+        "::test_the_troubleshooting_table_has_one_row_per_error_code_with_its_status",
+        holds=(
+            (
+                "docs/api/warehouse-analytics.md",
+                r"^(?:Code \| Status \| What it means \| What to check"
+                r"|[a-z0-9_]{3,40} \| [0-9]{3} \| [^|]{1,700} \| [^|]{1,700})$",
+            ),
+        )
+        + _whole(
+            "docs/api/warehouse-analytics.md",
+            "The codes below are the whole set.",
+            "A failed call answers with one as code, and a failed run reports one as its error_code.",
+            'A metric that could not be computed can carry fewer_than_2_units, no_units or join_key_mismatch as its "Not computed" reason while the run itself succeeds.',
+            "Status is the HTTP status of a route that answers with the code directly.",
+        ),
+    ),
+    # The heading the unrecognised-error text points at.
+    "warehouse-troubleshooting-pointer": Mechanism(
+        "modules/backend/tests/unit/test_warehouse_docs_availability.py"
+        "::test_the_unrecognised_error_text_names_a_section_the_page_has",
+        holds=_whole("docs/api/warehouse-analytics.md", "Troubleshooting"),
     ),
     # The Doc Examples guide's "When the check fails" sample is what the check
     # prints; the sentence above the sample says what that output is.
@@ -1875,6 +1924,10 @@ MECHANISMS: Dict[str, Mechanism] = {
             "docs/self-hosting/migrations.md",
             "Each file represents one atomic schema change, identified by a unique revision ID.",
             "Run the upgrade, which locks the table, checks for groups and builds the index in one transaction.",
+        )
+        + _whole(
+            "deploy/compose/README.md",
+            "It does not when the migration failed: a migration that fails is undone with every other migration of that start.",
         ),
     ),
     # The upgrade locks users and waits at most its lock timeout.

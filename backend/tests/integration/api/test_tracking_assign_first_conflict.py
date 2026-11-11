@@ -28,7 +28,9 @@ Covered:
   with the user last, so no later commit stores the row this request wrote
   again (the batch records no view, and the single route's view commits it);
 * any other refusal of the insert (a foreign key, a duplicate primary key)
-  still answers the fixed 500 and stores nothing.
+  still answers the fixed 500 and stores nothing;
+* a balanced experiment (#448): the losing request's place in its group is
+  given back with its row, so the group's places stay exactly ``0 .. n - 1``.
 """
 
 from __future__ import annotations
@@ -57,6 +59,7 @@ from backend.app.services.global_holdout_service import (
     GlobalHoldoutService,
     holdout_bucket,
 )
+from backend.tests.integration.balance_checks import balance_rows
 
 pytestmark = [pytest.mark.integration, pytest.mark.regression]
 
@@ -459,6 +462,76 @@ def test_batch_holdout_population_is_committed_under_the_conflict(
     assert _views(session_factory, experiment.id, user_id) == []
     assert _population(session_factory, measurable_holdout.id, user_id) == [(False,)]
     assert _population(session_factory, measurable_holdout.id, earlier) == [(False,)]
+
+
+@pytest.fixture
+def balanced_experiment(db_session, experiment):
+    """The same experiment, balancing within ``tier`` (#448)."""
+    db_session.execute(
+        text(
+            "UPDATE experiments SET balance_within = CAST(:setting AS jsonb), "
+            "balance_seed = :seed WHERE id = :id"
+        ),
+        {
+            "setting": '{"attribute": "tier", "values": ["gold"]}',
+            "seed": "b" * 64,
+            "id": str(experiment.id),
+        },
+    )
+    db_session.commit()
+    db_session.refresh(experiment)
+    return experiment
+
+
+def _balanced_assign(session, user_id: str, experiment_id) -> None:
+    """The other process assigns the user through the blocks, as a request
+    with the same ``context`` would."""
+    AssignmentService(session).assign_user(
+        user_id=user_id,
+        experiment_id=str(experiment_id),
+        context={"tier": "gold"},
+    )
+
+
+def test_a_balanced_first_assignment_gives_its_place_back_when_it_loses(
+    client, headers, balanced_experiment, session_factory, monkeypatch
+):
+    """#448: the losing request took the group's next place before its insert
+    was refused; the rollback gives the place back with the row, so the
+    group's places stay exactly 0 .. n - 1 and the answer is the stored row."""
+    experiment = balanced_experiment
+    user_id = _new_user("balanced")
+    fired = _another_request_stores_it_first(
+        monkeypatch,
+        session_factory,
+        user_id,
+        experiment.id,
+        lambda session, uid, eid: _balanced_assign(session, uid, eid),
+    )
+
+    resp = client.post(
+        SINGLE_URL,
+        json={
+            "experiment_key": experiment.key,
+            "user_id": user_id,
+            "context": {"tier": "gold"},
+        },
+        headers=headers,
+    )
+
+    assert fired == [user_id]
+    assert resp.status_code == 200, resp.text
+    stored = _rows(session_factory, experiment.id, user_id)
+    assert len(stored) == 1
+    assert resp.json()["variant_id"] == stored[0]
+    session = session_factory()
+    try:
+        found = balance_rows(session, experiment.id)
+    finally:
+        session.close()
+    assert found.problems == [], found.problems
+    assert found.groups["gold"].next_seq == 1
+    assert sorted(found.groups["gold"].seqs) == [0]
 
 
 # ---------------------------------------------------------------------------

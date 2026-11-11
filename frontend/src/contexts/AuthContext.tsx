@@ -3,6 +3,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -18,9 +19,19 @@ import {
   clearToken,
   getToken,
   loginPathWithNext,
+  navigation,
   setToken,
   unreachableMessage,
 } from '@/services/api';
+import { useAuthConfig } from '@/contexts/AuthConfigContext';
+import type { AuthConfig } from '@/services/authConfig';
+import {
+  CALLBACK_PATH,
+  beginSilentSignIn,
+  hostedUiLogoutUrl,
+  silentSignInAllowed,
+  writeSignInNotice,
+} from '@/services/hostedUi';
 
 export type AuthStatus = 'loading' | 'authenticated' | 'anonymous';
 
@@ -44,6 +55,8 @@ export interface AuthContextValue {
    * Signs out at once: clears the token and the user before anything else,
    * then sends `POST /api/v1/auth/logout` without waiting for it (best effort;
    * its answer, failure or silence changes nothing). Resolves straight away.
+   * Under Cognito it then sends the browser to Cognito's `/logout`, which
+   * returns to `/login`.
    */
   logout: (options?: LogoutOptions) => Promise<void>;
   /**
@@ -53,7 +66,13 @@ export interface AuthContextValue {
    * (#1006). `null` until this tab logs out, and again after a sign-in.
    */
   afterLogoutPath: string | null;
-  /** Re-fetch `/auth/me` (e.g. after a profile change). */
+  /**
+   * Re-fetch `/auth/me` (e.g. after a profile change). Resolves `null`, and
+   * changes nothing, when a sign-in, sign-out or newer check came first.
+   * The same function for the provider's whole life, so a caller may keep
+   * the one from its first render. Before the sign-in configuration is known
+   * it resolves `null` at once; the check then runs when it is.
+   */
   refresh: () => Promise<UserMe | null>;
   /** True when the current user has one of the given roles. */
   hasRole: (...roles: Role[]) => boolean;
@@ -68,8 +87,59 @@ export interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const ME_PATH = '/api/v1/auth/me';
+/**
+ * Who the user is under Cognito (#708): `GET /auth/me` there answers Cognito's
+ * own profile, not the account, so the dashboard reads `GET /users/me`.
+ */
+const COGNITO_ME_PATH = '/api/v1/users/me';
 const LOGIN_PATH = '/api/v1/auth/login';
 const LOGOUT_PATH = '/api/v1/auth/logout';
+
+/** The sign-in page's copy for an account the API reports as not active. */
+export const INACTIVE_ACCOUNT_MESSAGE = 'Your account is not active. Ask an administrator.';
+
+/** `GET /users/me`'s answer: the account, without `auth_provider`. */
+interface UsersMeAnswer {
+  id: string;
+  email: string | null;
+  username: string;
+  full_name?: string | null;
+  role?: Role | null;
+  is_superuser: boolean;
+  is_active: boolean;
+}
+
+/**
+ * The signed-in user under Cognito: `/users/me`'s account, with
+ * `auth_provider` from `/auth/config` (the account carries none).
+ */
+function cognitoUser(me: UsersMeAnswer): UserMe {
+  return {
+    id: String(me.id),
+    email: me.email ?? '',
+    username: me.username,
+    full_name: me.full_name ?? null,
+    role: me.role ?? 'VIEWER',
+    is_superuser: me.is_superuser === true,
+    is_active: me.is_active !== false,
+    auth_provider: 'cognito',
+  };
+}
+
+function isCognito(config: AuthConfig): boolean {
+  return config.kind !== 'local';
+}
+
+/**
+ * The pages a silent re-sign-in never starts from: the sign-in page (which
+ * never sends anyone anywhere without a click) and the Hosted UI's callback
+ * (which is finishing a sign-in of its own).
+ */
+function onSignInPage(): boolean {
+  if (typeof window === 'undefined' || !window.location) return false;
+  const path = window.location.pathname.replace(/\/+$/, '');
+  return path === '/login' || path === CALLBACK_PATH;
+}
 
 /** Copy for a session that could not be restored for a reason other than 401. */
 export function sessionErrorMessage(err: unknown): string {
@@ -84,8 +154,9 @@ export function sessionErrorMessage(err: unknown): string {
 
 /**
  * Only the bearer token is persisted (`localStorage["experimently.token"]`).
- * The user object is always re-derived from `GET /api/v1/auth/me` on mount so
- * a stale or revoked token can never resurrect a session.
+ * The user object is always re-derived from `GET /api/v1/auth/me` (under
+ * Cognito, `GET /api/v1/users/me`) on mount so a stale or revoked token can
+ * never resurrect a session.
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserMe | null>(null);
@@ -93,6 +164,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [afterLogoutPath, setAfterLogoutPath] = useState<string | null>(null);
   const mounted = useRef(true);
+  // Bumped by every sign-in, sign-out and session check (#1579). A check that
+  // is no longer the latest when its answer arrives changes nothing, whatever
+  // the answer: it was about a session that has since ended or been replaced.
+  const generation = useRef(0);
 
   const applyAnonymous = useCallback(() => {
     if (!mounted.current) return;
@@ -100,13 +175,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus('anonymous');
   }, []);
 
+  // How this dashboard signs in (#708). Outside an AuthConfigProvider it is
+  // the local provider, already known, and nothing below changes.
+  const { loading: configLoading, config } = useAuthConfig();
+  const cognito = isCognito(config);
+
   const loadMe = useCallback(async (): Promise<UserMe | null> => {
-    if (!getToken()) {
+    // Which route says who the user is depends on the configuration; the
+    // check waits for it (the effect below runs it once it is known).
+    if (configLoading) return null;
+    const check = ++generation.current;
+    const sent = getToken();
+    if (!sent) {
       applyAnonymous();
       return null;
     }
     try {
-      const me = await apiFetch<UserMe>(ME_PATH, { redirectOn401: false });
+      const me = cognito
+        ? cognitoUser(await apiFetch<UsersMeAnswer>(COGNITO_ME_PATH, { redirectOn401: false }))
+        : await apiFetch<UserMe>(ME_PATH, { redirectOn401: false });
+      if (check !== generation.current) return null;
       if (mounted.current) {
         setUser(me);
         setStatus('authenticated');
@@ -115,8 +203,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return me;
     } catch (err) {
+      if (check !== generation.current) return null;
       if (err instanceof ApiError && err.status === 401) {
-        // apiFetch already cleared the token.
+        // apiFetch cleared the token if it was still the one this check sent.
+        applyAnonymous();
+        // Under Cognito a session that has run out is started again once,
+        // without a page while the Hosted UI's own session lasts; never from
+        // the sign-in pages, and never twice in ten minutes.
+        if (
+          config.kind === 'cognito' &&
+          !getToken() &&
+          !onSignInPage() &&
+          silentSignInAllowed()
+        ) {
+          void beginSilentSignIn(config, navigation.currentPath()).catch(() => undefined);
+        }
+        return null;
+      }
+      if (cognito && err instanceof ApiError && err.status === 400) {
+        // "Inactive user": the account exists and is switched off. The token
+        // can never work, so it is not kept for the next reload.
+        if (getToken() === sent) clearToken();
+        if (mounted.current) setSessionError(INACTIVE_ACCOUNT_MESSAGE);
         applyAnonymous();
         return null;
       }
@@ -127,10 +235,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       applyAnonymous();
       return null;
     }
-  }, [applyAnonymous]);
+  }, [applyAnonymous, cognito, config, configLoading]);
+
+  // `refresh` is one function for the provider's whole life, and runs the
+  // check as it stands when it is called. loadMe is a new function once the
+  // configuration is known, and a page that keeps the `refresh` of its first
+  // render (/sso/complete does) would otherwise hold the one from before,
+  // which does nothing: the SSO sign-in then landed signed out (#708).
+  const latestLoadMe = useRef(loadMe);
+  useLayoutEffect(() => {
+    latestLoadMe.current = loadMe;
+  }, [loadMe]);
+  const refresh = useCallback((): Promise<UserMe | null> => latestLoadMe.current(), []);
 
   useEffect(() => {
     mounted.current = true;
+    // loadMe does nothing until the configuration is known, and is a new
+    // function once it is: this runs the session check then.
     void loadMe();
     return () => {
       mounted.current = false;
@@ -143,6 +264,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const onStorage = (event: StorageEvent) => {
       if (event.key !== TOKEN_STORAGE_KEY && event.key !== null) return;
       if (!getToken()) {
+        generation.current += 1;
         applyAnonymous();
       } else {
         void loadMe();
@@ -158,6 +280,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       json: { email, password },
       auth: false,
     });
+    // A check still in flight from before this sign-in must not undo it.
+    generation.current += 1;
     setToken(result.access_token);
     if (mounted.current) {
       setUser(result.user);
@@ -171,6 +295,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(
     async (options: LogoutOptions = {}): Promise<void> => {
       const token = getToken();
+      // A session check still in flight must not sign this tab back in (#1579).
+      generation.current += 1;
       // Sign out here first (#1040): awaiting the server left the user signed
       // in for as long as a stalled API took to answer. These updates are made
       // together, so a protected page sees `anonymous` and `afterLogoutPath`
@@ -179,20 +305,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSessionError(null);
       setAfterLogoutPath(loginPathWithNext(options.next));
       applyAnonymous();
-      if (!token) return;
-      // Then tell the server, without waiting. The token is passed by hand
-      // with `auth: false`, so an answer arriving after the next sign-in
-      // (even a 401) cannot clear that session's token. The API revokes
-      // nothing at logout (tokens are stateless), so nothing depends on the
-      // request arriving.
-      void apiFetch<void>(LOGOUT_PATH, {
-        method: 'POST',
-        auth: false,
-        redirectOn401: false,
-        headers: { Authorization: `Bearer ${token}` },
-      }).catch(() => undefined);
+      // Then tell the server, without waiting, and whatever it answers. The
+      // token is passed by hand with `auth: false`, so an answer arriving
+      // after the next sign-in (even a 401) cannot clear that session's
+      // token. Under the local provider the API revokes nothing (its tokens
+      // are stateless). Under Cognito the API asks Cognito to sign the user
+      // out (GlobalSignOut); there the request is sent with `keepalive`, so
+      // that it still goes out when the page leaves for Cognito's `/logout`
+      // straight after.
+      if (token) {
+        void apiFetch<void>(LOGOUT_PATH, {
+          method: 'POST',
+          auth: false,
+          redirectOn401: false,
+          ...(cognito ? { keepalive: true } : {}),
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => undefined);
+      }
+      // Under Cognito the browser then goes to Cognito's /logout, to end the
+      // Hosted UI's own session too, so that the next "Sign in" on this
+      // browser asks for the user again. Its logout_uri is always this
+      // origin's /login, which then says the user signed out.
+      if (config.kind === 'cognito') {
+        writeSignInNotice({ code: 'signed_out', next: options.next ?? '' });
+        navigation.assign(hostedUiLogoutUrl(config));
+      }
     },
-    [applyAnonymous],
+    [applyAnonymous, cognito, config],
   );
 
   const hasRole = useCallback(
@@ -208,11 +347,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       logout,
       afterLogoutPath,
-      refresh: loadMe,
+      refresh,
       hasRole,
       sessionError,
     }),
-    [user, status, login, logout, afterLogoutPath, loadMe, hasRole, sessionError],
+    [user, status, login, logout, afterLogoutPath, refresh, hasRole, sessionError],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

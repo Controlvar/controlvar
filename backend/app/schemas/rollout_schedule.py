@@ -15,10 +15,13 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    ValidationInfo,
     field_validator,
     model_validator,
 )
 from pydantic_core import PydanticCustomError
+
+from backend.app.api.datetime_bounds import storable_offset
 
 #: The largest ``stage_order`` a request may set. A schedule has a handful of
 #: stages (the documented example has three, and their target percentages run
@@ -222,6 +225,25 @@ class RolloutStageCreate(RolloutStageBase):
         return _check_duration(value)
 
 
+def _refuse_null(value: Any, info: ValidationInfo) -> Any:
+    """Refuse an explicit ``null`` for a field that has no "cleared" state.
+
+    The update models make every field optional so that a request sends only
+    what it changes, and omitting a field leaves the stored value alone. An
+    explicit ``null`` is different: it was applied to a NOT NULL column and
+    answered 500. A ``mode="before"`` validator sees the ``null`` and not the
+    default of a field the request left out. Nothing in the message comes from
+    the value.
+    """
+    if value is None:
+        raise PydanticCustomError(
+            "value_error",
+            "{field} cannot be null; leave it out to keep it",
+            {"field": info.field_name},
+        )
+    return value
+
+
 class RolloutStageUpdate(BaseModel):
     """Model for updating a rollout stage."""
 
@@ -245,6 +267,11 @@ class RolloutStageUpdate(BaseModel):
         None, description=_TRIGGER_CONFIGURATION_DESCRIPTION
     )
     start_date: Optional[datetime] = Field(None, description="For time-based triggers")
+
+    # These four are NOT NULL in the table; the others can be cleared.
+    _refuse_null_required = field_validator(
+        "name", "stage_order", "target_percentage", "trigger_type", mode="before"
+    )(_refuse_null)
 
     @field_validator("trigger_configuration")
     @classmethod
@@ -354,8 +381,9 @@ class RolloutScheduleCreate(RolloutScheduleBase):
     @field_validator("start_date", "end_date")
     @classmethod
     def take_unzoned_as_utc(cls, value: Optional[datetime]) -> Optional[datetime]:
-        """Store a date with no zone as that moment in UTC (#1534)."""
-        return _as_utc(value)
+        """Refuse an offset the database cannot store, which answered 500
+        (#956), and store a date with no zone as that moment in UTC (#1534)."""
+        return _as_utc(storable_offset(value))
 
     @model_validator(mode="after")
     def validate_stages(self) -> "RolloutScheduleCreate":
@@ -436,11 +464,17 @@ class RolloutScheduleUpdate(BaseModel):
         json_schema_extra={"deprecated": True},
     )
 
+    # These three are NOT NULL in the table; the others can be cleared.
+    _refuse_null_required = field_validator(
+        "name", "max_percentage", "status", mode="before"
+    )(_refuse_null)
+
     @field_validator("start_date", "end_date")
     @classmethod
     def take_unzoned_as_utc(cls, value: Optional[datetime]) -> Optional[datetime]:
-        """Store a date with no zone as that moment in UTC (#1534)."""
-        return _as_utc(value)
+        """Refuse an offset the database cannot store, which answered 500
+        (#956), and store a date with no zone as that moment in UTC (#1534)."""
+        return _as_utc(storable_offset(value))
 
     @field_validator("stages")
     @classmethod

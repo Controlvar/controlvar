@@ -42,6 +42,17 @@ export interface ExperimentMetric {
   updated_at?: string;
 }
 
+/**
+ * What an experiment balances its split within (beta): an attribute of the
+ * assign `context` with the values to keep apart (`values` is left out for a
+ * closed `web_*` key), or saved segments by id, in the order listed.
+ */
+export interface BalanceWithin {
+  attribute?: string;
+  values?: string[];
+  segments?: string[];
+}
+
 /** `ExperimentResponse` */
 export interface Experiment {
   id: string;
@@ -83,6 +94,11 @@ export interface Experiment {
   correction_method?: CorrectionMethod;
   /** Whether results also carry a Bayesian analysis of the primary metric (#216). */
   bayesian_enabled?: boolean;
+  /**
+   * Null when the experiment balances nothing. Absent when the server is older
+   * than the feature and does not answer the field at all.
+   */
+  balance_within?: BalanceWithin | null;
 }
 
 /** `VariantBase` (create payload) */
@@ -147,6 +163,12 @@ export interface DesignMetric {
 export interface ExperimentDesignUpdate {
   variants: DesignVariant[];
   metrics: DesignMetric[];
+  /**
+   * Sent only when the form changed it (null turns balancing off), so a save
+   * that does not touch it leaves the stored setting and its server-side state
+   * alone.
+   */
+  balance_within?: BalanceWithin | null;
 }
 
 /** `ExperimentCreate` */
@@ -173,6 +195,8 @@ export interface CreateExperimentRequest {
    * sequential analysis then uses the API's defaults (beta).
    */
   sequential_testing_enabled?: boolean;
+  /** Sent only when balancing is on. */
+  balance_within?: BalanceWithin;
 }
 
 /** `ExperimentListResponse` (offset pagination: `skip`/`limit`). */

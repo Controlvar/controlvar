@@ -49,7 +49,8 @@ export interface ApiRequest {
   template: string;
   /** The path itself, already encoded. */
   path: string;
-  query?: Record<string, string | number | undefined>;
+  /** Each value is sent as `String(value)`, `false` as "false"; only `undefined` is left out. */
+  query?: Record<string, string | number | boolean | undefined>;
   body?: unknown;
 }
 

@@ -160,7 +160,7 @@ def test_upstream_error_text_absent_from_responses_and_logs(case, caplog):
             "code": "unrecognised_warehouse_error",
             "message": (
                 "BigQuery returned an error we don't recognise (code invalidQuery). "
-                "See Troubleshooting."
+                "See Troubleshooting in the warehouse analysis docs."
             ),
             "vendor_code": "invalidQuery",
         }

@@ -141,7 +141,9 @@ def test_the_demo_seed_writes_the_platform_shapes_once(
     dev = _user(db_session, UserRole.DEVELOPER)
     on = make_feature_flag(status=FeatureFlagStatus.ACTIVE, name="Seed on")
     off = make_feature_flag(name="Seed off")
-    exp = make_experiment(name=f"Seed exp {uuid.uuid4().hex[:6]}")
+    exp = make_experiment(
+        name=f"Seed exp {uuid.uuid4().hex[:6]}", bayesian_enabled=True
+    )
     users = {"admin@demo.com": admin, "dev@demo.com": dev}
     flags = {on.key: on, off.key: off}
 
@@ -178,6 +180,12 @@ def test_the_demo_seed_writes_the_platform_shapes_once(
     assert set(json.loads(created.new_value)) == set(
         AUDIT_VALUE_FIELDS[EntityType.EXPERIMENT]
     )
+    # #848: the experiment's own switches, as values (Bayesian is on).
+    created_value = json.loads(created.new_value)
+    assert {
+        field: created_value[field]
+        for field in ("sequential_testing_enabled", "bayesian_enabled")
+    } == {"sequential_testing_enabled": False, "bayesian_enabled": True}
     (started,) = by_action["experiment_start"]
     assert json.loads(started.old_value) == {"status": ExperimentStatus.DRAFT.value}
     assert json.loads(started.new_value) == {"status": ExperimentStatus.ACTIVE.value}

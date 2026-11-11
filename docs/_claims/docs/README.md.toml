@@ -35,7 +35,19 @@ text = "Demo guide | ShopLab and StreamPulse, two sample apps that ./demo/setup-
 by = ["exempt:navigation"]
 
 [[unit]]
+text = "What Controlvar does | The main capabilities in one list, each linked to the page that explains it"
+by = ["exempt:navigation"]
+
+[[unit]]
 text = "Limitations | What Controlvar does not do, and what happens instead"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Roadmap | What is planned Now, Next and Later, and how to influence it"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The Controlvar books | Engineering, programming and the craft of shipping software, taught through this codebase, for newcomers to a language or framework, engineers who already code, and contributors (CC BY 4.0)"
 by = ["exempt:navigation"]
 
 [[unit]]

@@ -1,0 +1,506 @@
+# What verifies each unit of docs/guides/balance-within-groups.md (#448).
+# The contract is scripts/doc_claims.py's docstring; check with
+# `python scripts/doc_claims.py check`.
+document = "docs/guides/balance-within-groups.md"
+
+[[unit]]
+text = "Balance the split within groups (beta)"
+by = ["exempt:label"]
+
+[[unit]]
+text = "An experiment that balances its split within groups gives each group of users the same split as the whole experiment, as they are assigned."
+by = [
+    "test:backend/tests/integration/services/test_balance_across_processes.py::test_four_processes_keep_every_group_balanced",
+    "test:backend/tests/unit/services/test_balanced_allocation.py::test_the_bound_holds_for_every_split_in_steps_of_5",
+]
+
+[[unit]]
+text = "With a 50/50 split balanced within tier, the users of each tier are split 50/50 among themselves, so a lucky mix of tiers cannot tip the result."
+by = ["test:backend/tests/integration/services/test_balance_across_processes.py::test_four_processes_keep_every_group_balanced"]
+
+[[unit]]
+text = "You set balance_within on the experiment, and send the attribute in each assign request's context."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_create_stores_and_echoes_the_setting",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_clone_balances_within_the_same_groups_and_starts_fresh",
+]
+
+[[unit]]
+text = "How it works"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Within each group, each new user takes the next place in a block, a shuffled list of the experiment's split."
+by = [
+    "test:backend/tests/integration/services/test_balance_across_processes.py::test_four_processes_keep_every_group_balanced",
+    "test:backend/tests/unit/services/test_balanced_allocation.py::test_the_order_depends_on_the_key_and_the_group",
+]
+
+[[unit]]
+text = "Every user's chance of each variant is still its share."
+by = ["test:backend/tests/unit/services/test_balanced_allocation.py::test_each_users_chance_is_their_share"]
+
+[[unit]]
+text = "For the users balanced in the blocks, a variant's count in a group stays within a few users of its share at every moment, and is exactly its share each time the group completes a block: at 50/50, the two variants of a group never differ by more than one user."
+by = [
+    "test:backend/tests/unit/services/test_balanced_allocation.py::test_the_bound_holds_for_every_split_in_steps_of_5",
+    "test:backend/tests/integration/services/test_balance_across_processes.py::test_four_processes_keep_every_group_balanced",
+]
+
+[[unit]]
+text = "The global holdout, the exclusion group and the targeting rules come first: only users who take part are balanced."
+by = ["test:backend/tests/integration/api/test_balanced_assignment.py::test_ineligible_users_take_no_place"]
+
+[[unit]]
+text = "A user keeps their variant and their group if their attribute changes later."
+by = ["test:backend/tests/integration/api/test_balanced_assignment.py::test_a_sticky_user_keeps_their_variant_and_group"]
+
+[[unit]]
+text = "An experiment that does not set balance_within assigns its users exactly as before."
+by = [
+    "test:backend/tests/integration/api/test_balanced_assignment.py::test_an_unbalanced_experiment_is_assigned_by_the_hash_alone",
+    "test:backend/tests/integration/api/test_tracking_api.py::TestAssignStatementCounts::test_statement_counts_with_no_active_holdout",
+]
+
+[[unit]]
+text = "Turn it on"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Send balance_within when you create the experiment, or with PUT /api/v1/experiments/{id} while it is a draft:"
+by = [
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_create_stores_and_echoes_the_setting",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_put_on_a_draft_sets_echoes_and_clears_it",
+]
+
+[[unit]]
+text = "The response echoes balance_within."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_create_stores_and_echoes_the_setting",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_put_on_a_draft_sets_echoes_and_clears_it",
+]
+
+[[unit]]
+text = "Check that it does: a server version without this feature ignores the field and still answers 200."
+by = ["exempt:advice"]
+
+[[unit]]
+text = "attribute is a top-level key of the assign context, such as tier or country."
+by = ["test:backend/tests/unit/services/test_balanced_allocation.py::test_the_label_table"]
+
+[[unit]]
+text = "values lists the values to keep apart, 1 to 20 of them, each matched exactly: Gold and gold are different values."
+by = [
+    "test:backend/tests/unit/services/test_balanced_allocation.py::test_the_label_table",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_is_refused_verbatim",
+]
+
+[[unit]]
+text = "A user whose value is not listed is balanced with the others in other, and a user without the key in unknown."
+by = ["test:backend/tests/unit/services/test_balanced_allocation.py::test_the_label_table"]
+
+[[unit]]
+text = "null turns balancing off on a draft."
+by = ["test:backend/tests/integration/api/test_balance_within_api.py::test_put_on_a_draft_sets_echoes_and_clears_it"]
+
+[[unit]]
+text = "Once the experiment has started, balance_within cannot be changed."
+by = ["test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_is_locked_after_draft_for_every_role"]
+
+[[unit]]
+text = "A clone balances within the same groups, and its groups start from their first place."
+by = ["test:backend/tests/integration/api/test_balance_within_api.py::test_a_clone_balances_within_the_same_groups_and_starts_fresh"]
+
+[[unit]]
+text = "In the dashboard"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The Variants step of guided setup and the single-page form have Balance the split within groups, off until you turn it on."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::guided setup offers it on the Variants step, off, before the targeting rules",
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::the single-page form offers the same switch",
+]
+
+[[unit]]
+text = "A draft's Edit variants and metrics, on the experiment page, has the same switch."
+by = ["test:frontend/src/tests/pages/experiment-detail-balance.test.tsx::a fixed-split draft has it, off, with its label"]
+
+[[unit]]
+text = "Group users by offers Platform, Country and User Tier, Another attribute… (type its name) and Saved segments…."
+by = ["test:frontend/src/tests/pages/experiment-new-balance.test.tsx::turning it on asks what to group by, with the dashboard breakdown keys and two more"]
+
+[[unit]]
+text = "For an attribute, Values to keep apart (up to 20) takes one chip per value."
+by = ["test:frontend/src/tests/pages/experiment-new-balance.test.tsx::a key that is not a closed set asks for its values, as chips each with a named remove button"]
+
+[[unit]]
+text = "An attribute named web_device, web_visitor or web_browser needs no values."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::a closed web_ key needs no values, and says so",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_closed_key_needs_no_list_and_is_stored_without_one",
+]
+
+[[unit]]
+text = "For saved segments, Add a saved segment adds one at the end of the list, and each can be moved up or down: a user is balanced in the first segment in the list they belong to."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::sends a closed key without values, and saved segments in the order listed",
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_each_user_is_balanced_in_the_first_listed_segment_they_belong_to",
+]
+
+[[unit]]
+text = "A split with a share that is not a multiple of 5, such as 34/33/33, shows the refusal under the allocations as you type it."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::a split that is not in steps of 5 shows at the split as it is typed, and not when the split is allowed",
+    "test:frontend/src/tests/pages/experiment-detail-balance.test.tsx::a split that is not in steps of 5 shows at the split as it is typed, and Save sends nothing",
+]
+
+[[unit]]
+text = "Next and Create Experiment wait until it is fixed."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::guided: Next waits on a split that is not in steps of 5, and focus goes to the split",
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::single page: Create sends nothing for a split that is not in steps of 5, and focus goes to the split",
+]
+
+[[unit]]
+text = "When the API refuses the setting, its own sentence is shown at the control it is about, and focus moves there."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::a 422 on the attribute shows its text verbatim at the key, and focus goes there",
+    "test:frontend/src/tests/pages/experiment-new-balance.test.tsx::a 422 on the segments shows verbatim at the segments, and focus goes there",
+    "test:frontend/src/tests/pages/experiment-detail-balance.test.tsx::a 422 on the attribute shows verbatim at the key, with focus there, and Save stays usable",
+]
+
+[[unit]]
+text = "A draft that is a bandit or a split URL experiment shows a sentence in place of the switch."
+by = [
+    "test:frontend/src/tests/pages/experiment-detail-balance.test.tsx::a bandit draft gets a text line, not a control, and sends no setting",
+    "test:frontend/src/tests/pages/experiment-detail-balance.test.tsx::a split URL draft gets the sentence the API gives for it",
+]
+
+[[unit]]
+text = "The experiment page's Balance row says what the split is balanced within, such as within Platform (ios, android, web), or off."
+by = [
+    "test:frontend/src/tests/pages/experiment-detail-balance.test.tsx::names the key and its values",
+    "test:frontend/src/tests/pages/experiment-detail-balance.test.tsx::says off for an experiment that does not balance",
+]
+
+[[unit]]
+text = "Once the experiment has started the row is all there is: the setting cannot be changed."
+by = [
+    "test:frontend/src/tests/pages/experiment-detail-balance.test.tsx::a %s experiment has no switch anywhere: the setting is read-only",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_is_locked_after_draft_for_every_role",
+]
+
+[[unit]]
+text = "Assign users"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Put the attribute at the top level of context in every assign request:"
+by = ["exempt:instruction"]
+
+[[unit]]
+text = "A nested key ({\"user\": {\"tier\": \"high_value\"}}) or a dotted one (user.tier) is not read, so that user is balanced in unknown."
+by = ["test:backend/tests/unit/services/test_balanced_allocation.py::test_the_label_table"]
+
+[[unit]]
+text = "POST /api/v1/tracking/assign and POST /api/v1/tracking/assign/batch take their places from the same groups, so users assigned one at a time and users of an uploaded list are balanced together (see Assign a customer list)."
+by = ["test:backend/tests/integration/api/test_balanced_assignment.py::test_a_list_and_single_assigns_share_each_groups_places"]
+
+[[unit]]
+text = "The same list sent in another order can split differently; each user keeps the variant they got."
+by = [
+    "test:backend/tests/integration/api/test_balanced_assignment.py::test_a_list_and_single_assigns_share_each_groups_places",
+    "test:backend/tests/integration/api/test_balanced_assignment.py::test_a_sticky_user_keeps_their_variant_and_group",
+]
+
+[[unit]]
+text = "Balance within saved segments"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Instead of an attribute, balance_within can list 1 to 10 saved segments by their id:"
+by = [
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_segments_are_stored_and_echoed",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_is_refused_verbatim",
+    "test:backend/tests/unit/services/test_balance_segments.py::test_the_schema_takes_up_to_ten_segment_ids",
+]
+
+[[unit]]
+text = "A new user is balanced in the group of the first listed segment they belong to, so for a user in two of them the order of the list decides."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_each_user_is_balanced_in_the_first_listed_segment_they_belong_to",
+    "test:backend/tests/unit/services/test_balance_segments.py::test_the_first_listed_segment_a_user_belongs_to_is_their_group",
+]
+
+[[unit]]
+text = "A user in none of them is balanced in other."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_each_user_is_balanced_in_the_first_listed_segment_they_belong_to",
+    "test:backend/tests/unit/services/test_balance_segments.py::test_the_first_listed_segment_a_user_belongs_to_is_their_group",
+]
+
+[[unit]]
+text = "Membership is decided as it is for targeting rules: an ID list by the assign request's user_id, a rules segment by its context."
+by = ["test:backend/tests/integration/api/test_balance_within_segments.py::test_each_user_is_balanced_in_the_first_listed_segment_they_belong_to"]
+
+[[unit]]
+text = "When the membership of a segment listed before the first one the user belongs to cannot be decided, the user is balanced in unknown."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_a_user_whose_membership_cannot_be_decided_is_balanced_in_unknown",
+    "test:backend/tests/unit/services/test_balance_segments.py::test_the_first_listed_segment_a_user_belongs_to_is_their_group",
+]
+
+[[unit]]
+text = "A user keeps their variant and their group if they leave the segment later."
+by = ["test:backend/tests/integration/api/test_balance_within_segments.py::test_a_user_who_leaves_their_segment_keeps_their_variant_and_group"]
+
+[[unit]]
+text = "Every segment must exist and be active, and a rules segment's rules must be valid."
+by = ["test:backend/tests/integration/api/test_balance_within_api.py::test_a_segment_that_cannot_be_used_is_refused"]
+
+[[unit]]
+text = "A segment that a draft, active or paused experiment balances within cannot be archived or made inactive: the request answers 409, as for a segment that targeting rules use."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_a_segment_an_experiment_balances_within_cannot_be_archived",
+    "test:backend/tests/integration/api/test_balance_within_segments.py::test_a_completed_experiment_or_an_attribute_value_does_not_hold_a_segment",
+]
+
+[[unit]]
+text = "A clone answers 409 when a segment it would balance within cannot be used."
+by = ["test:backend/tests/integration/api/test_balance_within_api.py::test_a_clone_of_an_experiment_balanced_within_an_archived_segment_is_refused"]
+
+[[unit]]
+text = "What is refused"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The request answers 422 with the reason when:"
+by = ["test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_is_refused_verbatim"]
+
+[[unit]]
+text = "the attribute has a dot, has a character other than letters, digits, _ and -, or is user_id or segment;"
+by = ["test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_is_refused_verbatim"]
+
+[[unit]]
+text = "values is missing (web_device, web_visitor and web_browser need none: their values are a fixed set), has more than 20 values, lists other or unknown, or lists a value twice;"
+by = [
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_is_refused_verbatim",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_closed_key_needs_no_list_and_is_stored_without_one",
+]
+
+[[unit]]
+text = "a share of the split is not a multiple of 5, such as 34/33/33 (50/50, 20/80, 35/35/30 and 40/30/30 are allowed);"
+by = [
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_split_not_in_steps_of_5_is_refused",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_split_in_steps_of_5_is_accepted",
+    "test:backend/tests/unit/services/test_balanced_allocation.py::test_a_split_in_steps_of_5_is_accepted",
+]
+
+[[unit]]
+text = "the experiment is a bandit or a split URL experiment;"
+by = [
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_bandit_cannot_balance",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_split_url_experiment_cannot_balance_on_create",
+]
+
+[[unit]]
+text = "both attribute and segments are sent, or neither is;"
+by = ["test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_is_refused_verbatim"]
+
+[[unit]]
+text = "segments has more than 10 ids, lists one twice, or names a segment that does not exist, is archived or inactive, or whose rules are not valid."
+by = [
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_is_refused_verbatim",
+    "test:backend/tests/integration/api/test_balance_within_api.py::test_a_segment_that_cannot_be_used_is_refused",
+]
+
+[[unit]]
+text = "Changing balance_within after the experiment has started answers 400."
+by = ["test:backend/tests/integration/api/test_balance_within_api.py::test_the_setting_is_locked_after_draft_for_every_role"]
+
+[[unit]]
+text = "Users assigned without balancing"
+by = ["exempt:label"]
+
+[[unit]]
+text = "When the server is busy balancing other users at that moment, a new user is assigned by the experiment's ordinary hash instead."
+by = [
+    "test:backend/tests/integration/api/test_balanced_assignment.py::test_a_held_counter_row_is_answered_by_hash",
+    "test:backend/tests/integration/api/test_balanced_assignment.py::test_a_held_counter_row_holds_up_nothing_else",
+]
+
+[[unit]]
+text = "They keep their group, their chance of each variant is still its share, and they are counted in the experiment_balance_fallback_total metric by reason (timeout or busy)."
+by = [
+    "test:backend/tests/integration/api/test_balanced_assignment.py::test_a_held_counter_row_is_answered_by_hash",
+    "test:backend/tests/integration/api/test_balanced_assignment.py::test_a_held_counter_row_holds_up_nothing_else",
+]
+
+[[unit]]
+text = "An older server version, during a rolling deploy or a rollback, assigns every new user by the hash and stores no group."
+by = ["test:backend/tests/integration/database/test_balance_within_migration.py::test_the_previous_releases_statements_run_on_this_schema"]
+
+[[unit]]
+text = "Limitations lists what balancing does not do."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The results by group count both kinds in users_outside_blocks."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_a_fallback_row_that_kept_its_group_is_outside_the_blocks",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_rows_with_no_stored_group_count_under_unknown_and_outside_the_blocks",
+]
+
+[[unit]]
+text = "Results by group"
+by = ["exempt:label"]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id}/balanced-groups (beta) gives the experiment's results by the group each user was balanced in, the group stored when they were assigned."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_rows_are_the_stored_groups_and_add_up_to_every_user",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_the_balanced_groups_route_is_beta_and_carries_no_place_in_a_group",
+]
+
+[[unit]]
+text = "The experiment's own results and their decision do not change."
+by = [
+    "test:backend/tests/unit/services/test_sufficient_stats_fingerprint.py",
+    "test:backend/tests/unit/services/test_results_correction_pins.py",
+    "test:backend/tests/unit/services/test_binomial_metric_result_characterisation.py",
+]
+
+[[unit]]
+text = "groups has one row per group, built as a breakdown's rows are: the groups with the most users, then other and unknown, each with a p-value and the Bonferroni threshold over the rows returned."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_rows_are_the_stored_groups_and_add_up_to_every_user",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_for_users_assigned_with_a_listed_value_the_rows_are_the_breakdowns",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_each_rows_threshold_counts_every_row_returned",
+    "test:backend/tests/unit/services/test_balanced_groups_rows_one_source.py",
+]
+
+[[unit]]
+text = "Per variant, the rows add up to every user assigned."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_rows_are_the_stored_groups_and_add_up_to_every_user",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_rows_with_no_stored_group_count_under_unknown_and_outside_the_blocks",
+]
+
+[[unit]]
+text = "overall gives one estimate per treatment of the primary metric: each group's difference from the control, weighted by the group's share of all the users."
+by = [
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_the_hand_worked_example_gives_its_constants",
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_three_variants_equal_one_regression_over_all_of_them",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_overall_estimate_is_corrected_across_the_treatments",
+]
+
+[[unit]]
+text = "Its interval is at the experiment's confidence level, and the treatments are corrected together with the experiment's correction method."
+by = [
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_the_interval_and_p_value_are_the_normal_ones_at_the_level",
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_three_variants_are_corrected_together_with_the_experiments_method",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_overall_estimate_is_corrected_across_the_treatments",
+]
+
+[[unit]]
+text = "No CUPED adjustment is applied to it."
+by = ["test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_the_hand_worked_example_equals_the_regression"]
+
+[[unit]]
+text = "overall is null, with reason, for a primary metric that is not a conversion (mean_metric), for an experiment with sequential testing (sequential_testing), and when no treatment has users or no group has 2 users in every variant that has users (too_few_users)."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_a_mean_primary_metric_has_no_estimate",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_sequential_testing_has_no_estimate",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_too_few_users_has_no_estimate",
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_only_the_control_having_users_gives_too_few_users",
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_no_group_with_two_users_in_every_variant_gives_too_few_users",
+]
+
+[[unit]]
+text = "A group with fewer than 2 users in a variant that has users is counted with the largest group that has 2 in every variant that has users, and listed in merged_groups."
+by = [
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_a_group_with_one_user_in_a_variant_is_merged_into_the_largest",
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_a_large_group_with_one_user_in_a_variant_is_merged_too",
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_a_variant_with_no_users_has_an_empty_estimate_and_merges_nothing",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_a_small_group_is_merged_into_the_largest",
+]
+
+[[unit]]
+text = "users_outside_blocks is the number of users split without balancing."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_a_fallback_row_that_kept_its_group_is_outside_the_blocks",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_rows_with_no_stored_group_count_under_unknown_and_outside_the_blocks",
+]
+
+[[unit]]
+text = "unknown_share is the share in unknown of the users whose group was stored."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_rows_with_no_stored_group_count_under_unknown_and_outside_the_blocks",
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_the_rows_are_the_stored_groups_and_add_up_to_every_user",
+]
+
+[[unit]]
+text = "An experiment that does not balance within groups answers 409."
+by = ["test:backend/tests/integration/api/test_balanced_groups_results.py::test_an_experiment_that_balances_nothing_answers_409"]
+
+[[unit]]
+text = "How they differ from ?breakdown="
+by = ["exempt:label"]
+
+[[unit]]
+text = "GET /api/v1/results/{experiment_id}?breakdown=tier puts each user in the value of their first event that carries tier (Where the segments come from)."
+by = ["test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_an_exposure_value_wins_over_an_earlier_keyed_event_order"]
+
+[[unit]]
+text = "For users assigned through POST /api/v1/tracking/assign with a listed value, the two agree."
+by = ["test:backend/tests/integration/api/test_balanced_groups_results.py::test_for_users_assigned_with_a_listed_value_the_rows_are_the_breakdowns"]
+
+[[unit]]
+text = "Otherwise they can differ:"
+by = ["exempt:label"]
+
+[[unit]]
+text = "Users assigned from a list have no exposure, so the breakdown counts them under unknown until they send an event with tier; here they are in their group."
+by = ["test:backend/tests/integration/api/test_balanced_groups_results.py::test_users_assigned_from_a_list_are_in_their_group_here_and_unknown_there"]
+
+[[unit]]
+text = "A user assigned without tier who later sends an event with it is in that value in the breakdown, and in unknown here."
+by = ["test:backend/tests/integration/api/test_balanced_groups_results.py::test_a_later_keyed_event_moves_the_breakdown_and_not_the_group"]
+
+[[unit]]
+text = "A value that is not listed, a decimal number such as 3.0, a list or an object, or text of 101 to 255 characters is other here, and the value itself in the breakdown."
+by = [
+    "test:backend/tests/integration/api/test_balanced_groups_results.py::test_a_value_of_101_to_255_characters_is_other_here_and_itself_there",
+    "test:backend/tests/unit/services/test_balanced_allocation.py::test_the_label_table",
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_values_are_the_exact_text_of_a_top_level_key",
+]
+
+[[unit]]
+text = "With more than 20 distinct values the breakdown can count a listed value under other; here every listed group has its own row."
+by = [
+    "test:backend/tests/unit/services/test_balanced_groups_fit_the_breakdown.py::test_every_named_group_fits_in_the_breakdowns_listed_rows",
+    "test:backend/tests/integration/api/test_breakdown_one_segment_per_user.py::test_values_beyond_the_listed_ones_fold_into_other_cap",
+]
+
+[[unit]]
+text = "A user an older server version assigned has no stored group, so they are in unknown here."
+by = ["test:backend/tests/integration/api/test_balanced_groups_results.py::test_rows_with_no_stored_group_count_under_unknown_and_outside_the_blocks"]
+
+[[unit]]
+text = "Method"
+by = ["exempt:label"]
+
+[[unit]]
+text = "The overall estimate is the stratified difference in conversion rates (Cochran, Sampling Techniques, chapter 5): the sum over the groups of each group's share of the users times its treatment rate minus its control rate, with the variance summed the same way from each group's two rates and the group's share squared."
+by = [
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_the_hand_worked_example_gives_its_constants",
+    "test:backend/tests/unit/stats_validation/test_balanced_groups_estimate_rates.py",
+]
+
+[[unit]]
+text = "It equals the treatment's coefficient, and its HC2 standard error, in one regression over every variant with the group indicators centred and interacted with each treatment."
+by = [
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_two_variants_equal_the_regression",
+    "test:backend/tests/unit/services/test_balanced_groups_estimate.py::test_three_variants_equal_one_regression_over_all_of_them",
+]

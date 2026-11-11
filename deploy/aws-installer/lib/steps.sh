@@ -383,29 +383,61 @@ cv_step_images() {
 
 # The certificate, ISSUED within 45 minutes; FAILED, VALIDATION_TIMED_OUT or REVOKED stop the
 # install with ACM's reason (a CAA record that does not allow Amazon shows here).
+# The wait runs no command substitution, $(...), in which bash drops a Ctrl-C (#1565; see
+# cv_deploy_wait): each look at the certificate runs in a subshell the wait runs in the
+# foreground, and writes what it found to a file the wait reads back with read.
 cv_wait_certificate() {
-    local f="$CV_RECORD/tmp/status.json" deadline status reason
-    deadline=$(($(date +%s) + CV_CERT_MINUTES * 60))
+    local found="$CV_RECORD/tmp/certificate-look.txt" deadline kind seen detail name status=""
+    cv_now
+    deadline=$((CV_NOW + CV_CERT_MINUTES * 60))
     while :; do
-        if ! cv_read "the certificate" "$f" acm describe-certificate --certificate-arn "$CERTIFICATE_ARN" \
-            --query '[Certificate.Status, Certificate.FailureReason]'; then
-            msg_tool_failed "aws acm describe-certificate" "1" "${CV_CODE:-no answer}"
+        kind="" seen="" detail="" name=""
+        (cv_certificate_look "$found")
+        {
+            IFS= read -r kind
+            IFS= read -r seen
+            IFS= read -r detail
+            IFS= read -r name
+        } 2> /dev/null < "$found" || :
+        if [ -n "$seen" ]; then
+            status=$seen
         fi
-        if cv_list "$f" 'length == 2 and (.[0] | type == "string")'; then
-            status=$(jq -r '.[0]' "$f")
-            case "$status" in
-                ISSUED) return 0 ;;
-                FAILED | VALIDATION_TIMED_OUT | REVOKED)
-                    reason=$(jq -r '.[1] // "no reason given"' "$f")
-                    msg_certificate_failed "$CV_DOMAIN" "$status" "$reason"
-                    ;;
-            esac
-        fi
-        if [ "$(date +%s)" -ge "$deadline" ]; then
-            msg_certificate_timeout "$CV_DOMAIN" "${status:-unread}" "$(jq -r '.name' "$CV_RECORD/records/1.json" 2> /dev/null || printf 'its validation name')"
+        case "$kind" in
+            issued) return 0 ;;
+            failed) msg_certificate_failed "$CV_DOMAIN" "$status" "$detail" ;;
+            pending) ;;
+            *) msg_tool_failed "aws acm describe-certificate" "1" "${detail:-no answer}" ;;
+        esac
+        cv_now
+        if [ "$CV_NOW" -ge "$deadline" ]; then
+            msg_certificate_timeout "$CV_DOMAIN" "${status:-unread}" "$name"
         fi
         cv_sleep "$CV_POLL_SECONDS"
     done
+}
+
+# cv_certificate_look <file>: one look at the certificate, for cv_wait_certificate, which
+# runs it in a subshell. Four lines to <file>: issued, failed, pending (an answer that is not
+# the status, too) or unread; the status read, if any; ACM's reason, or the read's error
+# code; the validation record's name.
+cv_certificate_look() {
+    local f="$CV_RECORD/tmp/status.json" kind=pending status="" detail="" name
+    if ! cv_read "the certificate" "$f" acm describe-certificate --certificate-arn "$CERTIFICATE_ARN" \
+        --query '[Certificate.Status, Certificate.FailureReason]'; then
+        kind=unread
+        detail=${CV_CODE:-}
+    elif cv_list "$f" 'length == 2 and (.[0] | type == "string")'; then
+        status=$(jq -r '.[0]' "$f")
+        case "$status" in
+            ISSUED) kind=issued ;;
+            FAILED | VALIDATION_TIMED_OUT | REVOKED)
+                kind=failed
+                detail=$(jq -r '.[1] // "no reason given"' "$f")
+                ;;
+        esac
+    fi
+    name=$(jq -r '.name' "$CV_RECORD/records/1.json" 2> /dev/null || printf 'its validation name')
+    printf '%s\n' "$kind" "${status//$'\n'/ }" "${detail//$'\n'/ }" "${name//$'\n'/ }" > "$1"
 }
 
 # --- deploy ----------------------------------------------------------------------------------
@@ -471,11 +503,11 @@ cv_session_check() {
 # an INT that arrives while it waits for one whose command then ends normally, though INT is
 # trapped (not a TERM), so a Ctrl-C there never reached cv_on_signal and the deploy carried
 # on (#1558). An INT during a command run in the foreground runs the trap once that command
-# ends, and one during `wait` at once. So the clock is read through a file, the watcher's
-# EXIT line with read, and the heartbeat, whose reads use $(...), runs in a subshell the
-# wait runs in the foreground.
+# ends, and one during `wait` at once. So the clock is read through a file (cv_now), the
+# watcher's EXIT line with read, and the heartbeat, whose reads use $(...), runs in a
+# subshell the wait runs in the foreground.
 cv_deploy_wait() {
-    local deploy_pid="$1" watch_pid="$2" rc=0 last=0 now exit_line line
+    local deploy_pid="$1" watch_pid="$2" rc=0 last=0 exit_line line
     while :; do
         if ! kill -0 "$deploy_pid" 2> /dev/null; then
             cv_wait "$deploy_pid" || rc=$?
@@ -503,10 +535,9 @@ cv_deploy_wait() {
                     ;;
             esac
         fi
-        date +%s > "$CV_RECORD/tmp/now" 2> /dev/null || :
-        read -r now < "$CV_RECORD/tmp/now" || :
-        if [ $((now - last)) -ge "$CV_HEARTBEAT_SECONDS" ]; then
-            last=$now
+        cv_now
+        if [ $((CV_NOW - last)) -ge "$CV_HEARTBEAT_SECONDS" ]; then
+            last=$CV_NOW
             (cv_heartbeat)
         fi
         cv_sleep "$CV_TICK_SECONDS"

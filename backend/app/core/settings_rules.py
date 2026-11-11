@@ -292,6 +292,39 @@ def public_base_url_error(value: str) -> Optional[str]:
     return None
 
 
+#: What a COGNITO_DOMAIN looks like: a Cognito prefix domain (a custom domain
+#: is a domain name too).
+COGNITO_DOMAIN_EXAMPLE = "<prefix>.auth.<region>.amazoncognito.com"
+
+_COGNITO_DOMAIN_CHARACTERS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789.-")
+
+
+def cognito_domain_error(value: str) -> Optional[str]:
+    """Why *value* is not a usable COGNITO_DOMAIN, or ``None`` if it is.
+
+    The Cognito Hosted UI's domain name and nothing else: 3 to 253 lower-case
+    letters, digits, dots and hyphens, with at least one dot and no empty
+    label. The dot is what refuses a bare domain prefix (``controlvar-prod``),
+    with which every sign-in would go to ``https://controlvar-prod/...`` and
+    fail in the browser with nothing reported anywhere else. *value* is
+    non-empty; the caller decides what an empty one means. The message never
+    repeats the value. Set membership and ``split``, no pattern, so the check
+    is linear in the length it has already bounded.
+    """
+    if (
+        3 <= len(value) <= 253
+        and set(value) <= _COGNITO_DOMAIN_CHARACTERS
+        and "." in value
+        and all(value.split("."))
+    ):
+        return None
+    return (
+        "COGNITO_DOMAIN must be the Cognito Hosted UI's domain name and nothing "
+        f"else, e.g. {COGNITO_DOMAIN_EXAMPLE}: lower-case letters, digits, dots "
+        "and hyphens, with at least one dot, and no scheme, path, port or spaces"
+    )
+
+
 def parse_allowed_hosts(value: Any) -> List[str]:
     """ALLOWED_HOSTS as a list: comma-separated or a JSON array.
 

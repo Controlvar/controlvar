@@ -50,6 +50,7 @@ export interface Row {
 const MAIN = 'main:frontend/src/pages/index.tsx';
 const UX = 'v1-ux-designer.md';
 const HEADER = 'SiteHeader.tsx, unchanged (#1458)';
+const BOOKS = "the Controlvar books' README (amarkanday/controlvar-books, #1859)";
 
 /** The JavaScript snippet's first line: the install command of main:index.tsx:124, as a comment (UX, How it works). */
 export const SNIPPET_COMMENT = '// npm install @controlvar/js-sdk';
@@ -143,6 +144,11 @@ export const TYPED: readonly Row[] = [
     text: 'The change on each metric with its p-value, whether the planned sample is reached, and a sample ratio check of the traffic split.',
     source: `${UX}; docs/guides/user-guide.md:231, :257-266, :298`,
   },
+  {
+    tag: 'p',
+    text: 'How to read a results page, in the user guide →',
+    source: 'site polish 2026-11-10 (#7): docs/guides/user-guide.md "Reading Results"',
+  },
 
   // Row 1: rollouts and safety.
   { tag: 'h2', text: 'Roll features out gradually, and watch their safety signals', source: `${UX} Row 1; feature-flags/index.tsx:134` },
@@ -192,8 +198,8 @@ export const TYPED: readonly Row[] = [
   { tag: 'p', text: 'All MIT-licensed. By default, flag evaluation and experiment assignment happen on the server.', source: `${MAIN}:124` },
   {
     tag: 'p',
-    text: 'The JavaScript SDK is on npm (npm install @controlvar/js-sdk) and the Python SDK is on PyPI (pip install controlvar), both as betas; the others are not on npm or the other package registries yet, and each of their guides shows how to install it from the repository.',
-    source: `${MAIN}:124, verbatim`,
+    text: 'The SDKs marked beta have a release: the JavaScript, React, React Native, Python, Java and .NET SDKs and the OpenFeature providers are on npm, PyPI, Maven Central or NuGet, and the Go SDK installs by module path. The others install from the repository. Each guide shows how to install its SDK.',
+    source: 'SdkChips.tsx, as the packages published for #1498 made it',
   },
 
   // Walkthroughs: the section's own words (its videos are read from the manifest).
@@ -221,6 +227,15 @@ export const TYPED: readonly Row[] = [
   },
   { tag: 'p', text: 'Deploy with CDK →', source: 'the approved mockup, Main.dc.html:275 (the UX names the page, not the words)' },
 
+  // The Controlvar books (#1859): the books' own README's words, and no count of books.
+  { tag: 'h2', text: 'The Controlvar books', source: `${BOOKS}: its title` },
+  {
+    tag: 'p',
+    text: 'Learn engineering, programming and the craft of shipping software through one real, open-source codebase: Controlvar itself. The books are for newcomers to a language or framework, engineers who already code, and contributors. They are licensed CC BY 4.0.',
+    source: `${BOOKS}: its subtitle, "Who these books are for" and "Licence"`,
+  },
+  { tag: 'p', text: 'Read the Controlvar books on GitHub →', source: '#1859: the link to the books repository' },
+
   // Closing band.
   { tag: 'h2', text: 'Open, and checkable', source: `${MAIN}:131` },
   {
@@ -238,6 +253,7 @@ export const TYPED: readonly Row[] = [
   { tag: 'p', text: 'Product', source: `${UX} Footer` },
   { tag: 'li', text: 'Quick start', source: `${UX} Footer` },
   { tag: 'li', text: 'Docs', source: `${MAIN}:192` },
+  { tag: 'li', text: 'The Controlvar books', source: '#1859: the footer link to the books repository' },
   { tag: 'li', text: 'Power calculator', source: `${UX} Footer` },
   { tag: 'li', text: 'Walkthroughs', source: `${UX} Footer`, build: 'marketing' },
   { tag: 'li', text: 'Sign in', source: `${MAIN}:228`, build: 'platform' },

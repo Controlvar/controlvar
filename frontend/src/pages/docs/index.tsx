@@ -1,5 +1,4 @@
 import { PageTitle } from '@/components/PageTitle';
-import Link from 'next/link';
 import { DOCS_BRANCH, DOCS_REPO, docsUrl } from '@/services/docs';
 
 const sections = [
@@ -38,6 +37,7 @@ const sections = [
       { label: 'Multi-Armed Bandits', href: docsUrl('api/multi-armed-bandit'), desc: 'Thompson Sampling, UCB1, Epsilon-Greedy (create a bandit through the API)' },
       { label: 'Split URL Testing', href: docsUrl('api/split-url'), desc: 'Full profile: give each variant its own URL. Your server or edge, or on AWS an optional CloudFront router, asks Controlvar where to send each visitor, and conversions count for the variant they saw.' },
       { label: 'Mutual Exclusion Groups', href: docsUrl('api/mutual-exclusion-groups'), desc: 'Keep users out of conflicting experiments, and a share of new users out of every experiment' },
+      { label: 'Balance Within Groups', href: docsUrl('guides/balance-within-groups'), desc: 'Give each group of users the same split as the whole experiment, set through the API (beta)' },
       { label: 'Live Results Streaming', href: docsUrl('websocket-streaming'), desc: 'Live experiment results over WebSocket: a snapshot on connect, then a fresh one every 30 seconds (by default), whatever the client sends.' },
     ],
   },
@@ -53,7 +53,7 @@ const sections = [
   {
     category: 'SDKs',
     icon: '📦',
-    description: 'Client libraries for web, mobile and server. The JavaScript SDK is on npm and the Python SDK is on PyPI.',
+    description: 'Client libraries for web, mobile and server. The JavaScript, React, React Native, Python, Java and .NET SDKs and the OpenFeature providers are on npm, PyPI, Maven Central or NuGet.',
     links: [
       { label: 'JavaScript SDK', href: docsUrl('sdk/javascript'), desc: 'Browser and Node.js' },
       { label: 'Python SDK', href: docsUrl('sdk/python'), desc: 'A synchronous Python client with no dependencies' },
@@ -240,31 +240,9 @@ export default function DocsIndex() {
           </div>
         </div>
 
-        {/* Footer */}
-        <footer className="bg-gray-900 text-white py-12 px-6">
-          <div className="max-w-7xl mx-auto">
-            <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-              <div>
-                <Link href="/" className="text-xl font-semibold text-white">
-                  Controlvar
-                </Link>
-                <p className="text-gray-400 text-sm mt-1">Modern experimentation platform</p>
-              </div>
-              <div className="flex flex-wrap gap-6 text-sm text-gray-400">
-                <Link href="/" className="hover:text-white transition">Home</Link>
-                <Link href="/docs" className="hover:text-white transition">Docs</Link>
-                <a href={docsUrl('api/endpoints')} className="hover:text-white transition">API Reference</a>
-                <a href={docsUrl('sdk/javascript')} className="hover:text-white transition">SDKs</a>
-                <a href="mailto:hello@controlvar.com" className="hover:text-white transition">Contact</a>
-              </div>
-            </div>
-            <div className="border-t border-gray-800 mt-8 pt-8">
-              <p className="text-gray-400 text-sm text-center">
-                © 2024–2026 The Controlvar authors. Apache-2.0; SDKs MIT.
-              </p>
-            </div>
-          </div>
-        </footer>
+        {/* No footer of its own: on the marketing build the shell adds the
+            site's footer (HomeFooter) below every page; a platform build's
+            dashboard has none. */}
       </div>
     </>
   );

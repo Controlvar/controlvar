@@ -152,7 +152,7 @@ class DimensionalAnalysisService:
                     p_value = None
                     is_significant = False
                 else:
-                    p_value = self._two_prop_z_test(
+                    p_value = self._fisher_exact_p_value(
                         control_conversions,
                         control_total,
                         v_conversions,
@@ -336,32 +336,27 @@ class DimensionalAnalysisService:
         return (lower, upper)
 
     @staticmethod
-    def _two_prop_z_test(
+    def _fisher_exact_p_value(
         control_conversions: int,
         control_total: int,
         treatment_conversions: int,
         treatment_total: int,
     ) -> Optional[float]:
         """
-        Two-proportion z-test (pooled).
+        Two-sided p-value of Fisher's exact test, treatment against control.
 
-        Returns the two-tailed p-value, or None when the test cannot be run
-        (e.g., zero-sample groups).
+        The test the headline uses for a conversion rate, on the same 2x2
+        table (``sufficient_stats_analysis.binomial_variant_results``):
+        converting and non-converting users, treatment row first.  Exact at
+        every sample size, so a segment of a few users is not flagged on an
+        approximation.  None when either arm has no users.
         """
         if control_total <= 0 or treatment_total <= 0:
             return None
 
-        p_c = control_conversions / control_total
-        p_t = treatment_conversions / treatment_total
-        total = control_total + treatment_total
-        pooled_p = (control_conversions + treatment_conversions) / total
-
-        se = math.sqrt(
-            pooled_p * (1.0 - pooled_p) * (1.0 / control_total + 1.0 / treatment_total)
-        )
-        if se == 0.0:
-            return 1.0
-
-        z = (p_t - p_c) / se
-        p_value = 2.0 * (1.0 - float(stats.norm.cdf(abs(z))))
-        return min(1.0, max(0.0, p_value))
+        table = [
+            [treatment_conversions, treatment_total - treatment_conversions],
+            [control_conversions, control_total - control_conversions],
+        ]
+        _, p_value = stats.fisher_exact(table)
+        return float(p_value)

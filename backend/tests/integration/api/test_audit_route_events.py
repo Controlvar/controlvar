@@ -15,9 +15,11 @@ in a session of the test's own:
 * a superuser's change to a user's role, superuser flag or active status is
   written together with its entry or not at all; user changes record the
   superuser flag;
-* a Cognito sign-in through ``POST /auth/token`` (against a moto user pool,
-  never AWS) writes ``user_login`` with the provider ``cognito`` when the
-  identity has an account, and nothing when it has none or is refused.
+* a Cognito sign-in through ``POST /auth/token`` or the Hosted UI's code
+  exchange, ``POST /auth/cognito/exchange`` (against a moto user pool and a
+  fake token endpoint, never AWS), writes ``user_login`` with the provider
+  ``cognito`` when the identity has an account, and nothing when it has none
+  or is refused.
 """
 
 from __future__ import annotations
@@ -32,7 +34,7 @@ from unittest.mock import patch
 import boto3
 import pytest
 from fastapi.testclient import TestClient
-from moto import mock_cognitoidp
+from moto import mock_aws
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
@@ -44,16 +46,20 @@ from backend.app.core.metrics import audit_write_failures_total
 from backend.app.main import app
 from backend.app.middleware import rate_limiter
 from backend.app.models.api_key import APIKey
-from backend.app.models.audit_log import AuditLog
+from backend.app.models.audit_log import ActionType, AuditLog, EntityType
 from backend.app.models.bandit_state import BanditState
-from backend.app.models.experiment import Experiment, ExperimentStatus
+from backend.app.models.experiment import Experiment, ExperimentStatus, Variant
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.models.global_holdout import GlobalHoldout
 from backend.app.models.mutual_exclusion_group import MutualExclusionGroup
 from backend.app.models.rollout_schedule import RolloutSchedule
 from backend.app.models.segment import Segment
 from backend.app.models.user import User, UserRole
-from backend.app.services.audit_service import AuditService
+from backend.app.services.audit_service import (
+    AuditService,
+    audit_snapshot,
+    record_experiment_change,
+)
 from backend.app.services.cognito_accounts import cognito_external_id
 
 pytestmark = [pytest.mark.integration, pytest.mark.requires_db]
@@ -443,6 +449,65 @@ def test_flag_activate_that_changes_nothing_writes_nothing(
     assert w.rows() == []
 
 
+def test_flag_deactivate_that_changes_nothing_writes_nothing(
+    client, fresh, db_session, developer
+):
+    flag = _flag(db_session, FeatureFlagStatus.INACTIVE)
+    w = Written(fresh)
+    response = client.post(
+        f"{V1}/feature-flags/{flag.id}/deactivate", headers=_auth(developer)
+    )
+    assert response.status_code == 200, response.text
+    assert w.rows() == []
+
+
+@pytest.mark.parametrize(
+    "via,verb,start,action",
+    [
+        ("route", "enable", FeatureFlagStatus.ACTIVE, "toggle_enable"),
+        ("route", "disable", FeatureFlagStatus.INACTIVE, "toggle_disable"),
+        ("route", "disable", FeatureFlagStatus.ARCHIVED, "toggle_disable"),
+        ("bulk", "enable", FeatureFlagStatus.ACTIVE, "toggle_enable"),
+        ("bulk", "disable", FeatureFlagStatus.INACTIVE, "toggle_disable"),
+        ("bulk", "disable", FeatureFlagStatus.ARCHIVED, "toggle_disable"),
+        ("bulk", "archive", FeatureFlagStatus.ARCHIVED, "feature_flag_update"),
+    ],
+)
+def test_enable_and_disable_that_change_nothing_still_write_one_entry(
+    client, fresh, db_session, developer, via, verb, start, action
+):
+    """audit-logging.md: a request that leaves the status unchanged writes one
+    entry with old_value equal to new_value (``/activate`` and ``/deactivate``
+    write none, pinned beside this test)."""
+    flag = _flag(db_session, start)
+    w = Written(fresh)
+    if via == "route":
+        response = client.post(
+            f"{V1}/feature-flags/{flag.id}/{verb}", json={}, headers=_auth(developer)
+        )
+        assert response.status_code == 200, response.text
+    else:
+        # A second id that does not exist fails and must get no entry or id.
+        response = client.post(
+            f"{V1}/feature-flags/bulk-toggle",
+            json={"flag_ids": [str(flag.id), str(uuid.uuid4())], "action": verb},
+            headers=_auth(developer),
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert (body["succeeded"], body["failed"]) == (1, 1), body
+    row = _one(w, action, "feature_flag", flag.id, developer)
+    # The status words are stored as they are, not as JSON.
+    assert row.old_value == row.new_value == start.value, (
+        row.old_value,
+        row.new_value,
+    )
+    if via == "bulk":
+        assert body["audit_log_ids"] == [str(row.id)]
+    flag_status = db_session.query(FeatureFlag.status).filter_by(id=flag.id).scalar()
+    assert flag_status == start
+
+
 def test_bulk_toggle_one_entry_per_flag(client, fresh, db_session, developer):
     flags = [_flag(db_session) for _ in range(2)]
     w = Written(fresh)
@@ -541,6 +606,11 @@ def test_experiment_create_update_delete(client, fresh, developer):
     created = _values(row)[1]
     assert created["status"] == "draft"
     assert {"correction_method", "confidence_level"} <= set(created)
+    # #848: whether sequential and Bayesian analysis are on, as values.
+    assert (created["sequential_testing_enabled"], created["bayesian_enabled"]) == (
+        False,
+        False,
+    )
 
     w = Written(fresh)
     response = client.put(
@@ -562,7 +632,188 @@ def test_experiment_create_update_delete(client, fresh, developer):
         headers=_auth(developer),
     )
     assert response.status_code == 204, response.text
-    _one(w, "experiment_delete", "experiment", exp["id"], developer, v2_delta=1)
+    row = _one(w, "experiment_delete", "experiment", exp["id"], developer, v2_delta=1)
+    deleted, after = _values(row)
+    assert after is None
+    assert (deleted["sequential_testing_enabled"], deleted["bayesian_enabled"]) == (
+        False,
+        False,
+    )
+
+
+def _design():
+    """The dashboard's design save: every variant and every metric, re-sent."""
+    payload = _experiment_payload()
+    return {"variants": payload["variants"], "metrics": payload["metrics"]}
+
+
+def _save_design(client, user, exp, design):
+    response = client.put(
+        f"{V1}/experiments/{exp['id']}", json=design, headers=_auth(user)
+    )
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.regression
+def test_a_design_save_names_the_variants_and_metrics_it_changed(
+    client, fresh, developer
+):
+    """A design save names the variants and the metrics it changed (#1782).
+
+    A PUT of ``{variants, metrics}`` on a draft writes one ``experiment_update``
+    entry whose ``new_value.changed_fields`` names both parts, sorted, and
+    holds nothing else: no variant or metric name or content is stored.
+    Before #1782 both values were null.
+    """
+    exp = _create_experiment(client, developer)
+    design = _design()
+    design["variants"][0]["name"] = "Control renamed"
+    design["metrics"][0]["name"] = "Conversion Rate renamed"
+
+    w = Written(fresh)
+    _save_design(client, developer, exp, design)
+    row = _one(w, "experiment_update", "experiment", exp["id"], developer, v2_delta=1)
+    assert row.timestamp is not None
+    assert (_values(row), row.reason) == (
+        (None, {"changed_fields": ["metrics", "variants"]}),
+        None,
+    )
+
+
+# Each case changes a design save and returns the (old_value, new_value) its
+# entry must hold.
+
+
+def _split_only(exp, design):
+    design["variants"][0]["traffic_allocation"] = 10
+    design["variants"][1]["traffic_allocation"] = 90
+    return None, {"changed_fields": ["variants"]}
+
+
+def _configuration_only(exp, design):
+    design["variants"][1]["configuration"] = {"button_color": "green"}
+    return None, {"changed_fields": ["variants"]}
+
+
+def _metrics_only(exp, design):
+    design["metrics"][0]["event_name"] = "checkout"
+    return None, {"changed_fields": ["metrics"]}
+
+
+def _unchanged(exp, design):
+    return None, None
+
+
+def _experiment_renamed(exp, design):
+    design["name"] = f"{P} exp renamed"
+    design["variants"][1]["name"] = "Treatment renamed"
+    design["metrics"][0]["name"] = "Conversion Rate renamed"
+    return (
+        {"name": exp["name"]},
+        {"name": f"{P} exp renamed", "changed_fields": ["metrics", "variants"]},
+    )
+
+
+@pytest.mark.parametrize(
+    "change",
+    [_split_only, _configuration_only, _metrics_only, _unchanged, _experiment_renamed],
+    ids=lambda change: change.__name__.lstrip("_"),
+)
+def test_a_design_save_names_exactly_the_parts_it_changed(
+    client, fresh, developer, change
+):
+    """One entry per save, in D8's one format: only what changed is named.
+
+    Every save re-sends both lists, so every save re-creates the rows; a part
+    whose rows hold the same values is not named.
+    """
+    exp = _create_experiment(client, developer)
+    design = _design()
+    expected = change(exp, design)
+
+    w = Written(fresh)
+    _save_design(client, developer, exp, design)
+    row = _one(w, "experiment_update", "experiment", exp["id"], developer, v2_delta=1)
+    assert (_values(row), row.reason) == (expected, None)
+
+
+def test_an_entry_reads_the_rows_a_save_wrote_not_the_rows_the_session_held(
+    client, fresh, developer
+):
+    """``record_experiment_change`` reloads the variants and metrics.
+
+    A session that does not expire on commit keeps the rows it loaded for the
+    ``before`` snapshot in the experiment's collections after a save has
+    replaced them; the entry must compare the saved rows.
+    """
+    exp = _create_experiment(client, developer)
+    session = fresh()
+    try:
+        row = session.get(Experiment, uuid.UUID(exp["id"]))
+        before = audit_snapshot(EntityType.EXPERIMENT, row)
+        for variant in list(row.variants):
+            session.delete(variant)
+        session.flush()
+        for name, control, share in (("Control", True, 10), ("Treatment", False, 90)):
+            session.add(
+                Variant(
+                    experiment_id=row.id,
+                    name=name,
+                    is_control=control,
+                    traffic_allocation=share,
+                )
+            )
+        session.commit()
+
+        w = Written(fresh)
+        record_experiment_change(
+            session, developer, ActionType.EXPERIMENT_UPDATE, row.id, before
+        )
+    finally:
+        session.close()
+    entry = _one(w, "experiment_update", "experiment", exp["id"], developer)
+    assert _values(entry) == (None, {"changed_fields": ["variants"]})
+
+
+def test_a_pause_writes_the_entry_it_wrote_before_variants_were_named(
+    client, fresh, developer
+):
+    """The writers that pass ``before`` but change no variant or metric row
+    write the entries they wrote before #1782; here a route, and below a
+    differently shaped writer (the bandit weights override)."""
+    exp = _create_experiment(client, developer)
+    h = _auth(developer)
+    response = client.post(f"{V1}/experiments/{exp['id']}/start", headers=h)
+    assert response.status_code == 200, response.text
+
+    w = Written(fresh)
+    response = client.post(f"{V1}/experiments/{exp['id']}/pause", headers=h)
+    assert response.status_code == 200, response.text
+    row = _one(w, "experiment_pause", "experiment", exp["id"], developer)
+    assert (_values(row), row.reason) == (
+        ({"status": "active"}, {"status": "paused"}),
+        None,
+    )
+
+
+def test_bandit_weights_on_an_experiment_with_a_design_name_nothing(
+    client, fresh, db_session, admin
+):
+    exp = _create_experiment(client, admin)
+    stored = db_session.get(Experiment, uuid.UUID(exp["id"]))
+    stored.status = ExperimentStatus.ACTIVE
+    stored.optimization_type = "thompson_sampling"
+    db_session.commit()
+
+    w = Written(fresh)
+    response = client.put(
+        f"{V1}/bandit/{exp['id']}/weights",
+        json={"weights": {"Control": 0.5, "Treatment": 0.5}},
+        headers=_auth(admin),
+    )
+    assert response.status_code == 200, response.text
+    row = _one(w, "experiment_update", "experiment", exp["id"], admin)
+    assert (_values(row), row.reason) == ((None, None), "bandit weights")
 
 
 def test_experiment_lifecycle(client, fresh, developer):
@@ -1097,7 +1348,7 @@ def cognito_pool(monkeypatch):
     monkeypatch.setattr(settings, "AUTH_PROVIDER", "cognito")
     allow_all = {"return_value": (True, 999)}
     with (
-        mock_cognitoidp(),
+        mock_aws(),
         patch.object(rate_limiter.RedisRateLimiter, "is_allowed", **allow_all),
         patch.object(rate_limiter.SlidingWindowRateLimiter, "is_allowed", **allow_all),
     ):
@@ -1203,6 +1454,86 @@ def test_cognito_token_for_another_pool_writes_nothing(
     assert w.rows() == []
 
 
+@pytest.fixture
+def hosted_ui_sign_in(cognito_pool, monkeypatch):
+    """The Hosted UI's code exchange against the fake token endpoint (#708).
+
+    Yields ``sign_in(username)``: the user signs in on the Hosted UI (here,
+    moto's USER_PASSWORD_AUTH for the configured app client), and the
+    dashboard sends the code Cognito gave it to ``POST /auth/cognito/exchange``.
+    """
+    from backend.app.services import cognito_hosted_ui
+    from backend.tests.integration.cognito_hosted_ui_fake import (
+        FakeIssuer,
+        new_verifier,
+    )
+
+    redirect = "https://dashboard.example.com/auth/callback"
+    monkeypatch.setattr(
+        settings, "COGNITO_DOMAIN", "ae221.auth.us-east-1.amazoncognito.com"
+    )
+    with FakeIssuer() as issuer:
+        monkeypatch.setattr(cognito_hosted_ui, "transport", issuer.transport())
+        idp = boto3.client("cognito-idp", region_name="us-east-1")
+        app_client = os.environ["COGNITO_CLIENT_ID"]
+
+        def sign_in(client, username):
+            tokens = idp.initiate_auth(
+                ClientId=app_client,
+                AuthFlow="USER_PASSWORD_AUTH",
+                AuthParameters={"USERNAME": username, "PASSWORD": PASSWORD},
+            )["AuthenticationResult"]
+            verifier = new_verifier()
+            code = issuer.issue_code(
+                tokens, verifier=verifier, client_id=app_client, redirect_uri=redirect
+            )
+            response = client.post(
+                f"{V1}/auth/cognito/exchange",
+                json={
+                    "code": code,
+                    "code_verifier": verifier,
+                    "redirect_uri": redirect,
+                },
+            )
+            return response, tokens
+
+        yield sign_in
+
+
+def test_hosted_ui_sign_in_with_an_account_is_recorded(
+    client, fresh, db_session, cognito_pool, hosted_ui_sign_in
+):
+    user = _cognito_account(db_session, cognito_pool)
+    w = Written(fresh)
+    response, tokens = hosted_ui_sign_in(client, user.username)
+    assert response.status_code == 200, response.text
+    row = _one(w, "user_login", "user", user.id, user)
+    assert row.entity_name == user.username
+    assert _values(row) == (None, {"provider": "cognito"})
+    assert row.reason is None
+    for column in (row.old_value, row.new_value, row.reason, row.entity_name):
+        for key in ("AccessToken", "IdToken", "RefreshToken"):
+            assert tokens[key] not in (column or "")
+
+
+def test_hosted_ui_sign_in_without_an_account_writes_nothing(
+    client, fresh, db_session, cognito_pool, hosted_ui_sign_in
+):
+    """The first request made with the token creates the account (and writes
+    ``user_create``); the exchange itself creates nothing and records none."""
+    username = f"{P}_unlinked_{uuid.uuid4().hex[:8]}"
+    cognito_pool(username, f"{username}@example.com")
+    w = Written(fresh)
+    response, _ = hosted_ui_sign_in(client, username)
+    assert response.status_code == 200, response.text
+    assert w.rows() == []
+    session = fresh()
+    try:
+        assert session.query(User).filter(User.username == username).count() == 0
+    finally:
+        session.close()
+
+
 def test_cognito_sign_in_succeeds_when_the_entry_cannot_be_written(
     client, fresh, db_session, cognito_pool, audit_insert_refused, caplog
 ):
@@ -1264,6 +1595,23 @@ def test_free_text_never_reaches_an_entry(client, fresh, db_session, developer):
     payload.update(description=canary, hypothesis=canary)
     exp = client.post(f"{V1}/experiments/", json=payload, headers=h)
     assert exp.status_code == 201, exp.text
+    # A design save with the canary in every free-text field of the variants
+    # and the metric: its entry may name the two parts, never hold their text.
+    design = _design()
+    for i, variant in enumerate(design["variants"]):
+        variant.update(
+            name=f"{canary}v{i}",
+            description=canary,
+            configuration={canary: canary},
+        )
+    design["metrics"][0].update(
+        name=canary,
+        description=canary,
+        event_name=canary,
+        event_value_path=canary,
+    )
+    saved = client.put(f"{V1}/experiments/{exp.json()['id']}", json=design, headers=h)
+    assert saved.status_code == 200, saved.text
     seg = client.post(
         f"{V1}/segments",
         json={
@@ -1275,7 +1623,7 @@ def test_free_text_never_reaches_an_entry(client, fresh, db_session, developer):
     )
     assert seg.status_code in (200, 201), seg.text
     rows = w.rows()
-    assert len(rows) == 4
+    assert len(rows) == 5
     for row in rows:
         for column in (
             row.entity_name,

@@ -21,7 +21,8 @@ Given a complete ``.env`` (``--env-file``), it asserts:
    its value from a copy that does. The shell's variables are not passed to
    compose, so the value can only have come from the file.
 6. so does each optional setting in ``PASSED_SETTINGS``: FORWARDED_ALLOW_IPS,
-   the proxies the API believes besides its own network.
+   the proxies the API believes besides its own network, and the Cognito user
+   pool, app client and Hosted UI domain (#708).
 
 Usage::
 
@@ -61,7 +62,12 @@ FEATURE_KEYS = (
 
 #: Optional settings that are not feature keys, passed to the api the same
 #: way, ``${NAME:-}``: empty unless ``.env`` sets them.
-PASSED_SETTINGS = ("FORWARDED_ALLOW_IPS",)
+PASSED_SETTINGS = (
+    "FORWARDED_ALLOW_IPS",
+    "COGNITO_USER_POOL_ID",
+    "COGNITO_CLIENT_ID",
+    "COGNITO_DOMAIN",
+)
 
 
 def feature_key_failures(

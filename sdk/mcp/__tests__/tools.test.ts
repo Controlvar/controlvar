@@ -39,6 +39,21 @@ function flag(key: string, extra: Record<string, unknown> = {}) {
   };
 }
 
+/** A flag item as list_feature_flags answers it, with its stale fields (#1808). */
+function listed(key: string, stale: boolean, reasons: string[]) {
+  return {
+    key,
+    name: `Flag ${key}`,
+    status: "ACTIVE",
+    rollout_percentage: 100,
+    value_type: "boolean",
+    tags: ["t"],
+    updated_at: "2026-10-02T00:00:00",
+    stale,
+    stale_reasons: reasons,
+  };
+}
+
 function path(request: Recorded): string {
   return request.url.split("?")[0];
 }
@@ -84,6 +99,52 @@ describe("what each tool sends and answers", () => {
     const { stub, proc } = await serve((_request, response) => json(response, 200, { items: [], total: 0, skip: 0, limit: 50 }));
     await call(proc, "list_feature_flags");
     expect(query(stub.requests[0])).toEqual({ skip: "0", limit: "50" });
+  });
+
+  test("list_feature_flags: stale is sent as true or false, exactly, and only when given", async () => {
+    const { stub, proc } = await serve((_request, response) => json(response, 200, { items: [], total: 0, skip: 0, limit: 50 }));
+    await call(proc, "list_feature_flags", { stale: true });
+    await call(proc, "list_feature_flags", { stale: false });
+    await call(proc, "list_feature_flags");
+    expect(stub.requests.map(query)).toEqual([
+      { skip: "0", limit: "50", stale: "true" },
+      { skip: "0", limit: "50", stale: "false" },
+      { skip: "0", limit: "50" },
+    ]);
+  });
+
+  test("list_feature_flags: stale that is not a boolean is refused before any request", async () => {
+    const { stub, proc } = await serve((_request, response) => json(response, 200, {}));
+    const result = await call(proc, "list_feature_flags", { stale: "true" });
+    expect(result.isError).toBe(true);
+    expect(stub.requests).toEqual([]);
+  });
+
+  test("list_feature_flags: each item keeps stale and stale_reasons, and the answer stale_days and evaluations_seen", async () => {
+    const { proc } = await serve((_request, response) =>
+      json(response, 200, {
+        items: [
+          flag("a", { stale: true, stale_reasons: ["not_evaluated", "on_for_everyone"] }),
+          flag("b", { stale: false, stale_reasons: [] }),
+        ],
+        total: 2,
+        skip: 0,
+        limit: 50,
+        stale_days: 30,
+        evaluations_seen: false,
+        unknown_top_level: "dropped",
+      }),
+    );
+    const result = await call(proc, "list_feature_flags", { stale: true });
+    expect(result.isError).toBe(false);
+    expect(JSON.parse(result.text)).toEqual({
+      total: 2,
+      skip: 0,
+      limit: 50,
+      stale_days: 30,
+      evaluations_seen: false,
+      items: [listed("a", true, ["not_evaluated", "on_for_everyone"]), listed("b", false, [])],
+    });
   });
 
   test("list_feature_flags: a limit over 100 is refused before any request", async () => {

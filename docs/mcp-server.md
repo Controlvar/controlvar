@@ -32,18 +32,6 @@ network unencrypted. If your instance runs on a private network you trust and
 has no HTTPS, add `CONTROLVAR_ALLOW_INSECURE_HTTP=1` to the server's `env`; the
 server then prints a warning each time it starts.
 
-## Build the server
-
-**Not yet published.** `@controlvar/mcp-server` is not on npm, so build it from
-a clone of this repository:
-
-```{.bash skip reason="registry: the package is not on npm yet; npm ci installs its dependencies"}
-git clone https://github.com/Controlvar/controlvar.git
-cd controlvar/sdk/mcp
-npm ci
-npm run build
-```
-
 ## Create an API key
 
 The server needs an API key that carries the `mcp:read` scope. It acts as the
@@ -83,13 +71,14 @@ is your instance's address and `CONTROLVAR_API_KEY` is the key.
 
 ### Claude Code
 
-Run this in the `sdk/mcp` directory you built, with the key in `$KEY`:
+Run this in the project directory where you want the server, with the key in
+`$KEY`:
 
 ```{.bash skip reason="toolchain: needs the Claude Code CLI and the key from the step above"}
 claude mcp add controlvar \
   -e CONTROLVAR_API_URL=http://localhost:8000 \
   -e CONTROLVAR_API_KEY="$KEY" \
-  -- node "$PWD/dist/index.js"
+  -- npx -y @controlvar/mcp-server@0.1.0
 ```
 
 The shell expands `$KEY`, so your shell history keeps `$KEY`, but Claude Code
@@ -106,8 +95,8 @@ Desktop fully and open it again.
 {
   "mcpServers": {
     "controlvar": {
-      "command": "node",
-      "args": ["/path/to/controlvar/sdk/mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "@controlvar/mcp-server@0.1.0"],
       "env": {
         "CONTROLVAR_API_URL": "http://localhost:8000",
         "CONTROLVAR_API_KEY": "paste the key here"
@@ -149,6 +138,12 @@ The server offers six tools:
 None of them changes a flag, an experiment or a setting. A list tool returns at
 most 100 items and the total, and the assistant asks for the next page with
 `skip`.
+
+`list_feature_flags` also takes `stale`: `true` lists only the flags that look
+ready to remove and `false` the others, and each flag carries `stale` and
+`stale_reasons`; see [Stale Flags](feature-flags/stale-flags.md). On 2026-11-07
+the published server is 0.1.0, and the `stale` filter, and the stale fields in
+`list_feature_flags`, come with version 0.2.0.
 
 ## What leaves your instance
 
@@ -388,7 +383,10 @@ curl -s -X POST localhost:8000/api/v1/ai/interpret/checkout-v2 \
 Give a baseline rate (`baseline_rate`) and a minimum detectable effect
 (`mde`); a confidence level (`confidence`) and power (`power`) are optional,
 0.95 and 0.80 by default. `mde` is an absolute change in the rate: 0.004 on a
-baseline of 0.08 plans for 8% against 8.4%, a 5% relative lift.
+baseline of 0.08 plans for 8% against 8.4%, a 5% relative lift. Inputs it
+cannot calculate with answer `422` with a fixed message: a `baseline_rate`,
+`confidence` or `power` outside 0 to 1, an `mde` of 0, and a treatment rate
+(`baseline_rate + mde`) above 1 or below 0.
 
 The estimate is for a control and one treatment. Add `daily_traffic`, the
 users a day who enter the experiment (1 to 10^12), and `days_to_significance`

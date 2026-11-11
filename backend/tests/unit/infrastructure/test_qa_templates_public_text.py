@@ -28,7 +28,8 @@ therefore checked on the template, before anything is posted:
   summary, is classified in ``WORKFLOW_POSTERS``: ``template`` (posts with
   ``--body-file`` from a rendered template, never ``--body``) or
   ``legacy-inline`` (a named list of the workflows that built their text inline
-  before these templates existed). A new poster fails until it is classified.
+  before these templates existed, and the copies of Doc Examples' failure-issue
+  job). A new poster fails until it is classified.
 
 Every refusal is also planted against a real template in ``PLANTS`` below, so
 a rule that stops firing fails here, not only when a template breaks it.
@@ -727,11 +728,19 @@ def test_what_public_text_may_say_passes(line):
 #: a pull request, or writes its step summary, by path under .github/.
 #: ``template``: posts only with ``--body-file``, from a template rendered out
 #: of .github/qa-templates/. ``legacy-inline``: built its text inline before the
-#: templates existed; this list may shrink, and a new poster is a template one.
+#: templates existed, or is a copy of Doc Examples' failure-issue job that a
+#: test holds identical to it; this list may shrink, and any other new poster
+#: is a template one.
 WORKFLOW_POSTERS: Dict[str, Tuple[str, str]] = {
     "workflows/chart-kind.yml": (
         "legacy-inline",
         "the chart-kind-failure issue: date, commit and run link",
+    ),
+    # A copy of Doc Examples' failure-issue job, as chart-kind's is, which
+    # test_compose_failure_issue.py holds identical to it (#1807).
+    "workflows/compose-production.yml": (
+        "legacy-inline",
+        "the compose-production-failure issue: date, commit and run link",
     ),
     "workflows/db-migrate.yml": (
         "legacy-inline",

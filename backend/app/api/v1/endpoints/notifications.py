@@ -17,6 +17,12 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import deps
 from backend.app.api.enum_filters import enum_filter
+from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.query_params import (
+    MAX_PAGE,
+    check_page_offset,
+    describe_as_int64,
+)
 from backend.app.core.logger import unexpected_failure
 from backend.app.models.notification import (
     NotificationDeliveryLog,
@@ -33,7 +39,7 @@ from backend.app.schemas.notification import (
 from backend.app.schemas.scheduler import NotificationEvent
 from backend.app.services.notification_service import NotificationService
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 logger = logging.getLogger(__name__)
 
 #: The delivery log's ``status`` filter values, as its entries spell them (#955).
@@ -92,7 +98,7 @@ def list_all_preferences(
 
 @router.get("/delivery-log", response_model=NotificationDeliveryLogListResponse)
 def get_delivery_log(
-    page: int = Query(1, ge=1),
+    page: int = Query(1, ge=1, le=MAX_PAGE, json_schema_extra=describe_as_int64),
     limit: int = Query(20, ge=1, le=100),
     event_type: Optional[str] = None,
     status: Optional[str] = Query(None, description=DELIVERY_STATUS_DESCRIPTION),
@@ -107,6 +113,7 @@ def get_delivery_log(
     status_member = enum_filter(
         status, NotificationStatus, "status", DELIVERY_STATUS_SPELLINGS
     )
+    check_page_offset(page, limit, "limit")
 
     query = db.query(NotificationDeliveryLog)
     if event_type:

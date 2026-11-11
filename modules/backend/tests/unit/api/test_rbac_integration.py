@@ -227,7 +227,11 @@ class TestRBACIntegration:
         # Mock the Cognito response with developer group
         mock_auth_service.get_user_with_groups.return_value = {
             "username": "dev_user",
-            "attributes": {"sub": "sub-dev_user", "email": "dev@example.com"},
+            "attributes": {
+                "sub": "sub-dev_user",
+                "email": "dev@example.com",
+                "email_verified": "true",
+            },
             "groups": ["Developers"],
         }
 
@@ -282,7 +286,11 @@ class TestRBACIntegration:
         # Mock the Cognito response with admin group
         mock_auth_service.get_user_with_groups.return_value = {
             "username": "admin_user",
-            "attributes": {"sub": "sub-admin_user", "email": "admin@example.com"},
+            "attributes": {
+                "sub": "sub-admin_user",
+                "email": "admin@example.com",
+                "email_verified": "true",
+            },
             "groups": ["Admins"],  # In COGNITO_ADMIN_GROUPS
         }
 

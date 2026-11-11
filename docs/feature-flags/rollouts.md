@@ -207,7 +207,10 @@ first.
 `stages`, with any value including `null` and `[]`, is refused with `422`, and nothing is
 changed. A `PUT` that would leave the end date not after the start date, the stored one
 included, is refused with `422` too, and so is a `min_stage_duration` outside 0 to 8760;
-`null` clears it.
+`null` clears it. `null` for `name`, `max_percentage` or `status`, and on
+`PUT .../stages/{stage_id}` for a stage's `name`, `stage_order`, `target_percentage` or
+`trigger_type`, is refused with `422` naming the field, and nothing is changed. A field
+left out keeps its value.
 
 ---
 

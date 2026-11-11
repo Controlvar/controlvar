@@ -169,6 +169,11 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
             "A conversion counts for a variant only when it is tracked with the same visitor id"
         ),
     ),
+    "Give each group of users the same split as the whole experiment, set through the API (beta)": (
+        lede("Balance the split within groups (beta)"),
+        lede("gives each group of users the same split as the whole experiment"),
+        says("PUT /api/v1/experiments/{id}"),
+    ),
     "Keep users out of conflicting experiments, and a share of new users out of every experiment": (
         lede("prevent users from being enrolled in multiple conflicting experiments"),
         lede(
@@ -217,13 +222,30 @@ CLAIMS: Dict[str, Tuple[Said, ...]] = {
         lede("Steps 3 to 5 need a provider key"),
     ),
     # SDKs
-    "Client libraries for web, mobile and server. The JavaScript SDK is on npm and the Python SDK is on PyPI.": (
+    "Client libraries for web, mobile and server. The JavaScript, React, React Native, Python, Java and .NET SDKs and the OpenFeature providers are on npm, PyPI, Maven Central or NuGet.": (
         lede("for Node >= 18 and browsers", "docs/sdk/javascript.md"),
         lede("iOS 14+", "docs/sdk/ios.md"),
         lede("Android applications", "docs/sdk/android.md"),
         lede("for Go services", "docs/sdk/go.md"),
         says("The @controlvar/js-sdk package is on npm", "docs/sdk/javascript.md"),
+        says("The @controlvar/react-sdk package is on npm", "docs/sdk/react.md"),
+        says(
+            "The @controlvar/react-native-sdk package is on npm",
+            "docs/sdk/react-native.md",
+        ),
         says("The controlvar package is on PyPI", "docs/sdk/python.md"),
+        says(
+            "com.controlvar:controlvar-sdk and the Spring Boot starter are on Maven Central",
+            "docs/sdk/java.md",
+        ),
+        says("The Controlvar.SDK package is on NuGet", "docs/sdk/dotnet.md"),
+        says(
+            "The @controlvar/openfeature-provider package is on npm",
+            "docs/sdk/openfeature.md",
+        ),
+        says(
+            "The controlvar-openfeature package is on PyPI", "docs/sdk/openfeature.md"
+        ),
     ),
     "Browser and Node.js": (lede("for Node >= 18 and browsers"),),
     "A synchronous Python client with no dependencies": (

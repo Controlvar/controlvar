@@ -1,5 +1,5 @@
 # models/assignment.py
-from sqlalchemy import Column, ForeignKey, Index, String
+from sqlalchemy import BigInteger, Column, ForeignKey, Index, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm import relationship
@@ -26,6 +26,12 @@ class Assignment(Base, BaseModel):
     )
     user_id = Column(String(255), nullable=False)  # External user identifier
     context = Column(JSONB)  # User attributes used for targeting
+    # #448: for an experiment that balances its split within groups, the
+    # group the user was balanced in and their place in it (the group's seq,
+    # from 0). A user assigned outside the blocks (by hash) keeps the group
+    # with a NULL seq; both are NULL for every other experiment.
+    balance_group = Column(String(100), nullable=True)
+    balance_seq = Column(BigInteger, nullable=True)
 
     # Relationships with explicit back_populates
     experiment = relationship("Experiment", back_populates="assignments")

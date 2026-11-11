@@ -9,7 +9,7 @@ from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import InstrumentedAttribute, Session, joinedload
 
 from backend.app.core.targeting_adapter import (
     _is_dashboard_rules_shape,
@@ -47,6 +47,63 @@ KEY_GENERATION_ATTEMPTS = 3
 #: cannot drift. A clone's "Copy of <name>" is cut to it: the caller never sent
 #: that name, so refusing it would refuse a value they cannot change (#627).
 NAME_MAX = Experiment.__table__.c.name.type.length
+
+#: The names ``sort_by`` accepts: every column of the experiments table, in
+#: exact case, the JSON ones included (#786), except #448's two: the beta
+#: ``balance_within`` and ``balance_seed``, which is never answered. Any other
+#: name is refused before it reaches ``getattr``: an attribute that is no
+#: column (``metadata``, ``to_dict``, a relationship) used to answer 500, and a
+#: name that is no attribute (``foo``, ``Name``) was ignored. Written out rather
+#: than read from the table, so a new column is sortable only once someone adds
+#: it here; backend/tests/unit/services/test_experiment_sort_by_columns.py
+#: holds this list and the columns left out to ``Experiment.__table__.columns``.
+SORT_BY_COLUMNS = (
+    "id",
+    "created_at",
+    "updated_at",
+    "name",
+    "key",
+    "description",
+    "hypothesis",
+    "status",
+    "experiment_type",
+    "owner_id",
+    "start_date",
+    "end_date",
+    "resume_at",
+    "targeting_rules",
+    "metrics",
+    "tags",
+    "experiment_metadata",
+    "optimization_type",
+    "sequential_testing_enabled",
+    "sequential_testing_method",
+    "sequential_testing_config",
+    "variance_reduction_config",
+    "correction_method",
+    "confidence_level",
+    "mutual_exclusion_group_id",
+    "bayesian_enabled",
+    "bayesian_config",
+    "bayesian_decision",
+    "split_url_config",
+    "workspace_id",
+)
+
+
+def sort_column(sort_by: Optional[str]) -> Optional[InstrumentedAttribute]:
+    """The column *sort_by* names, or ``None`` for no sort (``None`` or ``""``).
+
+    Raises ``ValueError`` for any other name than :data:`SORT_BY_COLUMNS`,
+    without calling ``getattr`` on it. The list route refuses such a name with
+    a 422 before it calls the service, so this is reached only by a caller that
+    did not check.
+    """
+    if not sort_by:
+        return None
+    if sort_by not in SORT_BY_COLUMNS:
+        raise ValueError("sort_by must be one of SORT_BY_COLUMNS")
+    return getattr(Experiment, sort_by)
 
 
 def is_experiment_key_conflict(exc: BaseException) -> bool:
@@ -282,6 +339,16 @@ def _normalise_analysis_configs(
         elif isinstance(value, dict):
             data[field] = schema.model_validate(value).model_dump(mode="json")
 
+    # #448: the balance setting is stored with only the keys it was given
+    # (a closed key's setting keeps no ``values``; no ``segments: null``).
+    balance = data.get("balance_within")
+    if isinstance(balance, BaseModel):
+        balance = balance.model_dump(mode="json")
+    if isinstance(balance, dict):
+        data["balance_within"] = {
+            key: value for key, value in balance.items() if value is not None
+        }
+
     # The correction method is stored as its value ('benjamini_hochberg'),
     # never as an enum's repr (#580).
     method = data.get("correction_method")
@@ -413,6 +480,9 @@ CLONED_ANALYSIS_FIELDS = (
     # #580: a clone is a draft, so its own settings can still be changed.
     "correction_method",
     "confidence_level",
+    # #448: the clone balances within the same groups; its block-order key is
+    # its own (made on insert), and its groups start from their first place.
+    "balance_within",
 )
 
 
@@ -476,12 +546,14 @@ class ExperimentService:
             limit: Maximum number of records to return
             status: Optional status filter
             search: Optional search term to filter experiments
-            sort_by: Field to sort by (created_at, updated_at, name, status)
+            sort_by: A column of SORT_BY_COLUMNS, or None/"" for no sort;
+                any other name raises ValueError (#786)
             sort_order: Sort order (asc, desc)
 
         Returns:
             List of experiment dictionaries
         """
+        sort_field = sort_column(sort_by)
         query = self.db.query(Experiment).options(
             joinedload(Experiment.variants), joinedload(Experiment.metric_definitions)
         )
@@ -506,8 +578,7 @@ class ExperimentService:
             )
 
         # Apply sorting
-        if sort_by and hasattr(Experiment, sort_by):
-            sort_field = getattr(Experiment, sort_by)
+        if sort_field is not None:
             if sort_order and sort_order.lower() == "asc":
                 query = query.order_by(sort_field.asc())
             else:
@@ -535,12 +606,14 @@ class ExperimentService:
             limit: Maximum number of records to return
             status: Optional status filter
             search: Optional search term to filter experiments
-            sort_by: Field to sort by (created_at, updated_at, name, status)
+            sort_by: A column of SORT_BY_COLUMNS, or None/"" for no sort;
+                any other name raises ValueError (#786)
             sort_order: Sort order (asc, desc)
 
         Returns:
             List of experiment dictionaries
         """
+        sort_field = sort_column(sort_by)
         query = (
             self.db.query(Experiment)
             .options(
@@ -570,8 +643,7 @@ class ExperimentService:
             )
 
         # Apply sorting
-        if sort_by and hasattr(Experiment, sort_by):
-            sort_field = getattr(Experiment, sort_by)
+        if sort_field is not None:
             if sort_order and sort_order.lower() == "asc":
                 query = query.order_by(sort_field.asc())
             else:
@@ -1183,6 +1255,10 @@ class ExperimentService:
             # not re-judged. Only the rule id the server stamped from the
             # source's own id is dropped, so the clone gets its own (#533).
             targeting_rules=rules_for_clone(experiment),
+            # Copied as stored, like the rules: start checks it, as it checks
+            # any split URL experiment's (#1781). A clone without it could
+            # never start.
+            split_url_config=copy.deepcopy(experiment.split_url_config),
             status=ExperimentStatus.DRAFT,
             owner_id=str(user_id),
             tags=experiment.tags,
@@ -1470,6 +1546,8 @@ class ExperimentService:
             "key": experiment.key,
             "experiment_metadata": experiment.experiment_metadata or {},
             "split_url_config": experiment.split_url_config,
+            # #448: the setting only; its block-order key is never answered.
+            "balance_within": experiment.balance_within,
             # Issue #197: every column ExperimentResponse declares with a
             # default must be copied here, or the response reports the
             # default instead of the stored value (a bandit read as "fixed").

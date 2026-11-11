@@ -30,6 +30,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.query_params import MAX_OFFSET, describe_as_int64
 from backend.app.core.context_limits import check_context
 from backend.app.core.permissions import Action, ResourceType, check_permission
 from backend.app.core.segment_preview_limits import preview_ruleset_violations
@@ -53,6 +55,7 @@ from backend.app.schemas.segment import (
 )
 from backend.app.services.audience_service import (
     AudienceService,
+    PreviewTimedOut,
     SegmentChangeRefused,
     SegmentRulesNotValid,
     _segment_to_response_dict,
@@ -66,7 +69,7 @@ from backend.app.services.audit_service import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 #: The 409 ``detail`` for a stored segment whose rules fail validation. Fixed
 #: text: it never carries the stored rules.
@@ -112,7 +115,13 @@ def list_segments(
         None, alias="status", description="Filter by segment status"
     ),
     limit: int = Query(50, ge=1, le=200, description="Maximum results to return"),
-    offset: int = Query(0, ge=0, description="Number of results to skip"),
+    offset: int = Query(
+        0,
+        ge=0,
+        le=MAX_OFFSET,
+        description="Number of results to skip",
+        json_schema_extra=describe_as_int64,
+    ),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user),
 ) -> List[SegmentResponse]:
@@ -264,7 +273,8 @@ def get_segment(
         "Update segment name, description, rules, or status. A segment's kind "
         "cannot be changed, and an id_list segment takes no rules (422). A "
         "status other than active is refused (409) while targeting rules use "
-        "the segment. Requires permission to change experiments: DEVELOPER or "
+        "the segment or while a draft, active or paused experiment balances "
+        "within it. Requires permission to change experiments: DEVELOPER or "
         "ADMIN, or in the full profile a custom role or direct grant giving "
         "experiment (update)."
     ),
@@ -272,7 +282,8 @@ def get_segment(
         409: {
             "description": (
                 "The segment is used by the targeting rules of a flag that is "
-                "not archived or an experiment that is draft, active or paused. "
+                "not archived or an experiment that is draft, active or paused, "
+                "or a draft, active or paused experiment balances within it. "
                 '`detail` is `{"code": "segment_in_use", "message", '
                 '"feature_flags": [{id, key, name}], "experiments": '
                 "[{id, key, name, status}]}`."
@@ -321,7 +332,8 @@ def update_segment(
     summary="Archive an audience segment",
     description=(
         "Soft-delete a segment by setting its status to ARCHIVED. Refused (409) "
-        "while targeting rules use the segment. Requires permission to delete "
+        "while targeting rules use the segment or while a draft, active or "
+        "paused experiment balances within it. Requires permission to delete "
         "experiments: DEVELOPER or ADMIN, or in the full profile a custom role or "
         "direct grant giving experiment (delete)."
     ),
@@ -329,7 +341,8 @@ def update_segment(
         409: {
             "description": (
                 "The segment is used by the targeting rules of a flag that is "
-                "not archived or an experiment that is draft, active or paused. "
+                "not archived or an experiment that is draft, active or paused, "
+                "or a draft, active or paused experiment balances within it. "
                 '`detail` is `{"code": "segment_in_use", "message", '
                 '"feature_flags": [{id, key, name}], "experiments": '
                 "[{id, key, name, status}]}`."
@@ -421,7 +434,7 @@ def evaluate_segment_membership(
     summary="List experiments using this segment",
     description=(
         "Return all experiments and feature flags whose targeting_rules reference "
-        "this segment's UUID."
+        "this segment's UUID, and the experiments that balance within it."
     ),
     tags=["Segments"],
 )
@@ -443,16 +456,33 @@ def get_segment_experiments(
 # ---------------------------------------------------------------------------
 
 
+#: The 503 answer when the preview's read passes its time limit.
+PREVIEW_TIMED_OUT = "The preview took too long. Try again later."
+
+
 @router.post(
     "/{segment_id}/preview",
     response_model=AudiencePreviewResponse,
     summary="Preview estimated audience size",
     description=(
-        "Estimate the percentage of users who would match the provided targeting rules "
-        "by evaluating them against the stored contexts of up to sample_size "
-        "assignments. Only assignments that carry a context are counted; the "
-        "answer's sample_size is how many there were, and 0 when none do."
+        "Estimate the share of the users seen most recently that the provided "
+        "rules match. The users are the most recent ones with an exposure (a "
+        "/tracking/assign call) in the last 30 days, each counted once with the "
+        "attributes sent as context on their latest one; up to sample_size of "
+        "them are evaluated. Not a random sample: it leans toward frequent users "
+        "and the time of day. estimated_percentage is null when fewer than 30 "
+        "users have attributes (reason says why); sampled_since and ended_by say "
+        "how far back the read went. Any role that can read segments may "
+        "preview: the answer is counts and a share, never a stored attribute "
+        "value."
     ),
+    responses={
+        503: {
+            "description": "The read of recent exposures, all its fetches "
+            "together, took longer than its 5-second limit (a large events table "
+            "with few exposures can). The text is fixed."
+        },
+    },
     tags=["Segments"],
 )
 def preview_audience_size(
@@ -468,7 +498,9 @@ def preview_audience_size(
 
     The ruleset and ``sample_size`` are checked against the limits in
     ``backend.app.core.segment_preview_limits`` before any database query; a
-    request over any of them is answered 422.
+    request over any of them is answered 422. A read that passes its time limit
+    in all (``PREVIEW_READ_TIMEOUT_MS``, every fetch together) answers 503 with
+    fixed text; any other database error propagates.
     """
     _require_permission(current_user, Action.READ)
     if data.rules is None:
@@ -483,9 +515,14 @@ def preview_audience_size(
         AudienceService.get_segment(db, segment_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    return AudienceService.preview_audience_size(
-        db, data.rules, sample_size=sample_size
-    )
+    try:
+        return AudienceService.preview_audience_size(
+            db, data.rules, sample_size=sample_size
+        )
+    except PreviewTimedOut:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=PREVIEW_TIMED_OUT
+        ) from None
 
 
 # ---------------------------------------------------------------------------

@@ -23,10 +23,12 @@ from pydantic import (
 )
 from pydantic_core import InitErrorDetails, PydanticCustomError
 
+from backend.app.core.balanced_blocks import balance_problem
 from backend.app.core.targeting_adapter import (
     TargetingRulesError,
     validate_experiment_targeting,
 )
+from backend.app.schemas.balance_within import BalanceWithin
 from backend.app.schemas.bandit import OptimizationType
 from backend.app.schemas.bayesian import BayesianConfig
 from backend.app.schemas.results import CorrectionMethod
@@ -36,6 +38,25 @@ from backend.app.schemas.split_url_config import (
     find_split_url_config_problem,
 )
 from backend.app.schemas.variance_reduction import VarianceReductionConfig
+
+#: What ``balance_within`` takes on a create and an update (#448).
+BALANCE_WITHIN_DESCRIPTION = (
+    "Beta. Balance the split within groups of users as they are assigned: "
+    '`{"attribute": "tier", "values": ["gold", "silver"]}` puts each new '
+    "user in the group of their `context.tier` (a top-level key, matched "
+    "exactly; any other value is `other`, no value is `unknown`), and each "
+    "group gets the experiment's split among its own users. "
+    '`{"segments": ["<segment id>", ...]}` (1 to 10 active saved segments) '
+    "puts each new user in the group of the first listed segment they belong "
+    "to, and in `other` when they belong to none. Every share must be a "
+    "multiple of 5; a bandit or a split URL experiment cannot balance. Null "
+    "balances nothing."
+)
+
+
+def balance_within_error(message: str) -> PydanticCustomError:
+    """A refusal of ``balance_within`` judged with the rest of the experiment."""
+    return PydanticCustomError("value_error", message)
 
 
 class ExperimentStatus(str, Enum):
@@ -534,6 +555,12 @@ class ExperimentCreate(ExperimentBase):
         description="Split URL experiment configuration (required when experiment_type=split_url).",
     )
 
+    # #448: declared after `variants`, `experiment_type` and
+    # `optimization_type`, which its validator reads.
+    balance_within: Optional[BalanceWithin] = Field(
+        default=None, description=BALANCE_WITHIN_DESCRIPTION
+    )
+
     # #580: how the results judge this experiment
     correction_method: CorrectionMethod = Field(
         default=CorrectionMethod.BENJAMINI_HOCHBERG,
@@ -655,6 +682,27 @@ class ExperimentCreate(ExperimentBase):
             raise split_url_config_error(cls.__name__, problem.loc, problem.message)
         return config
 
+    @field_validator("balance_within")
+    @classmethod
+    def validate_balance_within(
+        cls, value: Optional[BalanceWithin], info: ValidationInfo
+    ) -> Optional[BalanceWithin]:
+        """A bandit, a split URL experiment or a split not in steps of 5 cannot
+        balance (#448). When ``variants`` was refused on its own there is no
+        split to judge. Idempotent: the value is returned as given."""
+        variants = info.data.get("variants")
+        if value is None or variants is None:
+            return value
+        problem = balance_problem(
+            value,
+            optimization_type=info.data.get("optimization_type"),
+            experiment_type=info.data.get("experiment_type"),
+            allocations=[variant.traffic_allocation for variant in variants],
+        )
+        if problem is not None:
+            raise balance_within_error(problem)
+        return value
+
     @model_validator(mode="after")
     def default_bayesian_config(self):
         """Turning Bayesian analysis on without a config stores the defaults."""
@@ -689,6 +737,11 @@ NOT_NULL_UPDATE_FIELDS = (
     "correction_method",
     "confidence_level",
 )
+
+
+#: Ends the description of each analysis setting an update may change only on
+#: a draft (#848), as #580's two say it.
+ANALYSIS_SETTING_DRAFT_ONLY = "Changeable only while the experiment is a draft."
 
 
 #: The one message for a ``schedule`` sent to ``PUT /experiments/{id}`` (#595).
@@ -758,19 +811,26 @@ class ExperimentUpdate(BaseModel):
         json_schema_extra={"deprecated": True},
     )
 
-    # EP-021: Sequential testing
+    # EP-021: Sequential testing. #848: this and the analysis settings below
+    # are refused outside draft, like #580's two.
     sequential_testing_enabled: bool = Field(
-        default=None, description="Enable or disable sequential testing."
+        default=None,
+        description=(
+            "Enable or disable sequential testing. " + ANALYSIS_SETTING_DRAFT_ONLY
+        ),
     )
     sequential_testing_config: Optional[SequentialTestingConfigInput] = Field(
         default=None,
-        description="Sequential testing configuration.",
+        description="Sequential testing configuration. " + ANALYSIS_SETTING_DRAFT_ONLY,
     )
 
     # Issue #21: CUPED variance reduction
     variance_reduction_config: Optional[VarianceReductionConfig] = Field(
         default=None,
-        description="CUPED / Winsorization variance-reduction configuration.",
+        description=(
+            "CUPED / Winsorization variance-reduction configuration. "
+            + ANALYSIS_SETTING_DRAFT_ONLY
+        ),
     )
 
     # EP-035: Bayesian analysis (#216). bayesian_decision is not accepted:
@@ -779,12 +839,16 @@ class ExperimentUpdate(BaseModel):
         default=None,
         description=(
             "Turn Bayesian analysis on or off. Turning it on with no stored or "
-            "supplied bayesian_config stores the default BayesianConfig."
+            "supplied bayesian_config stores the default BayesianConfig. "
+            + ANALYSIS_SETTING_DRAFT_ONLY
         ),
     )
     bayesian_config: Optional[BayesianConfig] = Field(
         default=None,
-        description="Bayesian analysis configuration (priors, loss threshold, ROPE).",
+        description=(
+            "Bayesian analysis configuration (priors, loss threshold, ROPE). "
+            + ANALYSIS_SETTING_DRAFT_ONLY
+        ),
     )
 
     # Issue #22: MAB optimization type
@@ -797,6 +861,14 @@ class ExperimentUpdate(BaseModel):
     split_url_config: Optional[SplitUrlConfig] = Field(
         default=None,
         description="Split URL experiment configuration.",
+    )
+
+    # #448: draft only, judged with the rest of the experiment as it would be
+    # stored (the update route).
+    balance_within: Optional[BalanceWithin] = Field(
+        default=None,
+        description=BALANCE_WITHIN_DESCRIPTION
+        + " Changeable only while the experiment is a draft.",
     )
 
     # #580: how the results judge this experiment; draft only
@@ -986,6 +1058,17 @@ class ExperimentResponse(BaseModel):
 
     # EP-036: Split URL testing configuration
     split_url_config: Optional[Dict[str, Any]] = None
+
+    # #448: echoed, so a client learns whether the server stored it (an older
+    # server ignores the field and answers 200 without it).
+    balance_within: Optional[Dict[str, Any]] = Field(
+        None,
+        description=(
+            "Beta. What the experiment balances its split within: "
+            '`{"attribute": ..., "values": [...]}`, `{"segments": [...]}`, or '
+            "null when it balances nothing."
+        ),
+    )
 
     # #580: how the results judge this experiment. The defaults are what the
     # migration backfilled; ExperimentService._experiment_to_dict copies the

@@ -142,7 +142,8 @@ An experiment that is not ACTIVE answers every user with its control variant, `a
 
 ### Targeting context
 
-`user_attributes` is what the platform's targeting rules evaluate against. It is sent as `context`
+`user_attributes` is what the platform's targeting rules evaluate against, and what sets the
+user's segment in a breakdown. It is sent as `context`
 in the `POST /api/v1/tracking/assign` body and, when non-empty, as `context=<url-encoded JSON>`
 (compact `json.dumps(..., separators=(",", ":"))`, percent-encoded) on
 `GET /api/v1/feature-flags/evaluate/{flag_key}` and `GET /api/v1/feature-flags/user/{user_id}` —
@@ -153,6 +154,10 @@ aliases in rules (`country` matches `user.country`), and nested dicts flatten to
 
 Attributes are assumed **stable per user**: evaluations and assignments are cached by user + key
 only, so call `clear_cache()` after changing a user's attributes.
+
+An experiment that [balances its split within groups](../guides/balance-within-groups.md) reads
+its attribute from the top level of `user_attributes` only: `{"tier": "gold"}`, not
+`{"user": {"tier": "gold"}}`.
 
 ### Caching and retries
 

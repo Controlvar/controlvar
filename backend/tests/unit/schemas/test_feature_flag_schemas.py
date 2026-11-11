@@ -19,9 +19,11 @@ from pydantic import ValidationError
 from backend.app.models.feature_flag import FeatureFlag, FeatureFlagStatus
 from backend.app.schemas.feature_flag import (
     DEFAULT_VALUE_UNSUPPORTED,
+    LIST_ITEM_FIELDS,
     NOT_NULL_FIELDS,
     READ_ONLY_FIELDS,
     FeatureFlagCreate,
+    FeatureFlagListItem,
     FeatureFlagListResponse,
     FeatureFlagRead,
     FeatureFlagUpdate,
@@ -111,14 +113,39 @@ class TestFeatureFlagReadStatus:
 
     def test_list_response_serialises_status_and_is_active(self):
         response = FeatureFlagListResponse(
-            items=[_flag(FeatureFlagStatus.INACTIVE), _flag(FeatureFlagStatus.ACTIVE)],
+            items=[
+                FeatureFlagListItem.of(_flag(FeatureFlagStatus.INACTIVE), []),
+                FeatureFlagListItem.of(
+                    _flag(FeatureFlagStatus.ACTIVE), ["not_evaluated"]
+                ),
+            ],
             total=2,
             skip=0,
             limit=100,
+            stale_days=30,
+            evaluations_seen=True,
         )
         dumped = response.model_dump(mode="json")
         assert [i["status"] for i in dumped["items"]] == ["inactive", "active"]
         assert [i["is_active"] for i in dumped["items"]] == [False, True]
+        assert [i["stale"] for i in dumped["items"]] == [False, True]
+        assert [i["stale_reasons"] for i in dumped["items"]] == [[], ["not_evaluated"]]
+        assert (dumped["stale_days"], dumped["evaluations_seen"]) == (30, True)
+
+    def test_a_list_item_is_the_flag_and_its_two_stale_fields(self):
+        flag = _flag(FeatureFlagStatus.INACTIVE)
+        item = FeatureFlagListItem.of(flag, ["off_for_everyone"])
+        assert (
+            item.model_dump(exclude=LIST_ITEM_FIELDS) == flag_to_read(flag).model_dump()
+        )
+        assert (
+            set(FeatureFlagListItem.model_fields) - set(FeatureFlagRead.model_fields)
+            == LIST_ITEM_FIELDS
+        )
+
+    def test_a_list_item_refuses_an_unknown_reason(self):
+        with pytest.raises(ValidationError):
+            FeatureFlagListItem.of(_flag(FeatureFlagStatus.INACTIVE), ["unused"])
 
 
 class TestFeatureFlagReadShape:
@@ -241,6 +268,23 @@ class TestReadOnlySet:
         FeatureFlagCreate.model_validate(
             {**body, "status": "inactive", "key": "checkout-v2"}
         )
+
+    @pytest.mark.regression
+    def test_a_list_item_validates_as_both_request_models(self):
+        """A list item can be sent back unchanged too: its stale fields (#1808)
+        are declared read-only on both requests, and neither writes them."""
+        item = FeatureFlagListItem.of(
+            _flag(FeatureFlagStatus.INACTIVE), ["not_evaluated", "off_for_everyone"]
+        )
+        body = item.model_dump(mode="json")
+        update = FeatureFlagUpdate.model_validate(body)
+        create = FeatureFlagCreate.model_validate({**body, "key": "checkout-v2"})
+        for model in (update, create):
+            assert LIST_ITEM_FIELDS <= model.model_fields_set
+        for model in (FeatureFlagCreate, FeatureFlagUpdate):
+            for name in LIST_ITEM_FIELDS:
+                extra = model.model_fields[name].json_schema_extra or {}
+                assert extra.get("readOnly") is True, (model.__name__, name)
 
 
 class TestRequestModels:

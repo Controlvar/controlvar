@@ -14,13 +14,21 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
-from backend.app.api.deps import get_current_active_user, get_current_superuser, get_db
+from backend.app.api.deps import (
+    get_current_active_user,
+    get_current_superuser,
+    get_db,
+    require_experiment_read,
+)
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.analysis_status import analysis_notice, analysis_status
+from backend.app.core.balanced_blocks import UNKNOWN, balance_setting
 from backend.app.core.logger import unexpected_failure
 from backend.app.core.stats_engine import ENGINE_VERSION
 from backend.app.models.analysis_snapshot import AnalysisKind
 from backend.app.models.experiment import Experiment, Metric, MetricType
 from backend.app.models.user import User
+from backend.app.schemas.balanced_groups import BalancedGroupsResponse
 from backend.app.schemas.bayesian import BayesianResultsResponse
 from backend.app.schemas.dimensional import (
     DimensionalBreakdownResponse,
@@ -47,6 +55,15 @@ from backend.app.schemas.variance_reduction import (
 from backend.app.services.analysis_service import AnalysisService
 from backend.app.services.analysis_settings import resolve_analysis_settings
 from backend.app.services.analysis_snapshot_service import record_snapshot
+from backend.app.services.balanced_groups_estimate import (
+    Arm,
+    GroupCounts,
+    overall_estimate,
+)
+from backend.app.services.balanced_groups_results import (
+    stored_strata,
+    users_outside_blocks,
+)
 from backend.app.services.cache import CacheService
 from backend.app.services.dimensional_analysis_service import DimensionalAnalysisService
 from backend.app.services.event_matching import (
@@ -61,6 +78,11 @@ from backend.app.services.power_calculator_service import (
     compute_power,
     sample_size_two_proportions,
 )
+from backend.app.services.segment_breakdown import (
+    NUL_IN_DIMENSION,
+    ValueSource,
+    segment_rows,
+)
 from backend.app.services.sequential_testing_service import SequentialTestingService
 from backend.app.services.sufficient_stats_analysis import (
     SufficientStatsNotComputed,
@@ -70,7 +92,10 @@ from backend.app.services.sufficient_stats_analysis import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+# Every route here reads an experiment's data, so each admits a caller by the
+# rule of GET /api/v1/experiments/{id}, before the handler runs.
+router = APIRouter(route_class=OffLoopRoute)
+router.dependencies.append(Depends(require_experiment_read))
 
 
 # ---------------------------------------------------------------------------
@@ -175,33 +200,28 @@ def _compute_dimensional_breakdown(
     dimension: str,
     db,
     base_alpha: float = 0.05,
+    value_source: Optional[ValueSource] = None,
 ) -> DimensionalBreakdownResponse:
     """
-    Query the database for per-segment event counts and compute breakdown statistics.
+    The per-segment breakdown of an experiment's results by ``dimension``.
 
-    Fetches segment values from event metadata (JSONB field), groups assignment
-    and conversion counts by (segment_value, variant_id), then delegates to
-    DimensionalAnalysisService for statistical computation.
+    The rows come from ``segment_breakdown.segment_rows``: every assigned
+    user in exactly one segment, with the converting users of the metric the
+    response lists first, so per variant the rows add up to that metric's
+    headline.  DimensionalAnalysisService computes the statistics.
 
-    This function is tolerant: any error during data retrieval silently returns
-    an empty-segment breakdown so that the main results response is not affected.
+    ``value_source`` is passed to ``segment_rows`` when given: the
+    balanced-groups route passes ``stored_strata``.  ``/results`` passes
+    none, so its breakdown reads each user's value as ``segment_rows``
+    describes.
+
+    A failure to read or compute the breakdown raises: the route answers it
+    as an error, never with a partial breakdown.
     """
-    from sqlalchemy import text
-
-    from backend.app.core.database_config import get_schema_name
-
     dim_service = DimensionalAnalysisService()
     segments: Dict[str, Dict[str, Any]] = {}
 
-    # Conversions are the events named after the experiment's primary metric
-    # (see services/event_matching.py); fall back to the legacy
-    # event_type = 'conversion' convention when no metric row exists.
-    from backend.app.models.experiment import Metric, Variant
-    from backend.app.services.event_matching import (
-        CONVERSION_SQL_PREDICATE,
-        CONVERTING_USERS_JOIN,
-        CONVERTING_USERS_SQL,
-    )
+    from backend.app.models.experiment import Variant
 
     # Every variant of the experiment, with its real name and control flag
     # (#218).  Each segment is seeded from this list, so a variant with no
@@ -216,127 +236,40 @@ def _compute_dimensional_breakdown(
         key=lambda row: (not row[2], row[1], row[0]),
     )
 
-    primary_metric = (
-        db.query(Metric)
-        .filter(Metric.experiment_id == experiment_id)
-        .order_by(Metric.is_primary.desc())
-        .first()
-    )
-    if primary_metric is not None and primary_metric.event_name:
-        conversion_predicate = CONVERSION_SQL_PREDICATE
-        conversion_params: Dict[str, Any] = {"event_name": primary_metric.event_name}
+    # Conversions are the converting users of the metric the response lists
+    # first (AnalysisService orders the metrics); with no metric row, the
+    # legacy event_type = 'conversion' convention (event_matching.py).
+    experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
+    metrics = AnalysisService._ordered_metrics(experiment) if experiment else []
+    event_name = metrics[0].event_name if metrics else None
+
+    if value_source is None:
+        rows = segment_rows(db, experiment_id, dimension, [event_name])
     else:
-        conversion_predicate = "event_type = 'conversion'"
-        conversion_params = {}
-
-    try:
-        schema = get_schema_name()
-
-        # Pull distinct segment values for this dimension from event metadata.
-        # `schema` comes from get_schema_name(), which only ever returns one of
-        # two literal identifiers; all request-derived values are bound params.
-        seg_val_q = text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
-            f"""
-            SELECT DISTINCT
-                COALESCE(
-                    jsonb_extract_path_text(event_metadata, :dim_key),
-                    'unknown'
-                ) AS segment_value
-            FROM {schema}.events
-            WHERE experiment_id = :exp_id
-              AND event_metadata IS NOT NULL
-            """  # nosec B608 - schema is a fixed config identifier, not user input
+        rows = segment_rows(
+            db, experiment_id, dimension, [event_name], value_source=value_source
         )
-        seg_val_rows = db.execute(
-            seg_val_q, {"dim_key": dimension, "exp_id": str(experiment_id)}
-        ).fetchall()
-        segment_values = [row[0] for row in seg_val_rows if row[0]]
-
-        for seg_val in segment_values:
-            # Count assignments per variant for this segment
-            asgn_q = text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
-                f"""
-                SELECT a.variant_id::text, COUNT(DISTINCT a.user_id) AS total
-                FROM {schema}.assignments a
-                JOIN {schema}.events e
-                  ON a.user_id = e.user_id
-                 AND a.experiment_id = e.experiment_id
-                WHERE a.experiment_id = :exp_id
-                  AND e.event_metadata IS NOT NULL
-                  AND COALESCE(
-                      jsonb_extract_path_text(e.event_metadata, :dim_key),
-                      'unknown'
-                  ) = :seg_val
-                GROUP BY a.variant_id
-                """  # nosec B608 - schema is a fixed config identifier, not user input
-            )
-            asgn_rows = db.execute(
-                asgn_q,
-                {
-                    "exp_id": str(experiment_id),
-                    "dim_key": dimension,
-                    "seg_val": seg_val,
-                },
-            ).fetchall()
-
-            # Converting users per variant for this segment: assigned users
-            # with a conversion event in the segment, each counted once
-            # (event_matching.py), as /results counts them.
-            conv_q = text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
-                f"""
-                SELECT e.variant_id::text, {CONVERTING_USERS_SQL} AS conversions
-                FROM {schema}.events e
-                JOIN {schema}.assignments a ON {CONVERTING_USERS_JOIN}
-                WHERE e.experiment_id = :exp_id
-                  AND {conversion_predicate}
-                  AND e.event_metadata IS NOT NULL
-                  AND COALESCE(
-                      jsonb_extract_path_text(e.event_metadata, :dim_key),
-                      'unknown'
-                  ) = :seg_val
-                GROUP BY e.variant_id
-                """  # nosec B608 - schema is a fixed config identifier, not user input
-            )
-            conv_rows = db.execute(
-                conv_q,
-                {
-                    "exp_id": str(experiment_id),
-                    "dim_key": dimension,
-                    "seg_val": seg_val,
-                    **conversion_params,
-                },
-            ).fetchall()
-
-            # Build variant_map for this segment, seeded with every variant
-            variant_map: Dict[str, Any] = {
-                vid: {
-                    "variant_name": name,
-                    "is_control": is_control,
-                    "total": 0,
-                    "conversions": 0,
-                }
-                for vid, name, is_control in experiment_variants
+    for row in rows:
+        # Every variant is listed, with zero counts where it has no users.
+        variant_map: Dict[str, Any] = {
+            vid: {
+                "variant_name": name,
+                "is_control": is_control,
+                "total": 0,
+                "conversions": 0,
             }
-            for vid, total in asgn_rows:
-                variant_map.setdefault(
-                    vid,
-                    {"variant_name": vid, "is_control": False, "conversions": 0},
-                )["total"] = int(total)
-            for vid, conv in conv_rows:
-                variant_map.setdefault(
-                    vid, {"variant_name": vid, "is_control": False, "total": 0}
-                )["conversions"] = int(conv)
-
-            if variant_map:
-                segments[seg_val] = variant_map
-
-    except Exception as exc:
-        # Non-fatal: log and return empty breakdown
-        import logging
-
-        logging.getLogger(__name__).warning(
-            "Failed to fetch segment data for dimension %r: %s", dimension, exc
-        )
+            for vid, name, is_control in experiment_variants
+        }
+        for vid, total in row.users.items():
+            variant_map.setdefault(
+                vid,
+                {"variant_name": vid, "is_control": False, "conversions": 0},
+            )["total"] = total
+        for vid, conv in row.converters[event_name].items():
+            variant_map.setdefault(
+                vid, {"variant_name": vid, "is_control": False, "total": 0}
+            )["conversions"] = conv
+        segments[row.value] = variant_map
 
     # Compute statistics
     segment_results = dim_service.compute_segment_results(
@@ -457,6 +390,9 @@ def get_experiment_results(
     experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
     if experiment is None:
         raise HTTPException(status_code=404, detail="Experiment not found")
+    if breakdown and "\x00" in breakdown:
+        # Refused before the cache: the database driver cannot bind it.
+        raise HTTPException(status_code=400, detail=NUL_IN_DIMENSION)
     try:
         stored = resolve_analysis_settings(experiment)
         settings = resolve_analysis_settings(
@@ -1803,3 +1739,136 @@ def get_bayesian_results(
         )
 
     return response
+
+
+# ---------------------------------------------------------------------------
+# Endpoint 8 — GET /{experiment_id}/balanced-groups (#448)
+# ---------------------------------------------------------------------------
+
+#: The 409 an experiment that does not balance within groups answers.
+NOT_BALANCED = (
+    "This experiment does not balance its split within groups, so it has no "
+    "balanced groups. For its results by an attribute, add "
+    "?breakdown=<attribute> to its results."
+)
+BALANCED_GROUPS_FAILURE = "Could not compute the experiment's balanced groups"
+
+
+def _balanced_groups(
+    experiment: Experiment, setting: Dict[str, Any], db: Session
+) -> BalancedGroupsResponse:
+    """The balanced-groups response of an experiment that balances within groups.
+
+    The rows are ``_compute_dimensional_breakdown``'s, with ``stored_strata``
+    as the value source; the overall estimate is computed from those rows'
+    counts, so it counts the same users in the same groups.
+    """
+    from backend.app.models.experiment import Variant
+
+    settings = resolve_analysis_settings(experiment)
+    stored: Dict[str, str] = {}
+
+    def stored_groups(session: Session, experiment_id: Any, dimension: str):
+        # The source segment_rows calls; the groups it read also give
+        # unknown_share, so both come from one statement.
+        stored.update(stored_strata(session, experiment_id, dimension))
+        return stored
+
+    groups = _compute_dimensional_breakdown(
+        experiment_id=experiment.id,
+        dimension=str(setting.get("attribute") or "group"),
+        db=db,
+        base_alpha=1.0 - settings.confidence_level,
+        value_source=stored_groups,
+    )
+    arms = [
+        Arm(str(v.id), v.name, bool(v.is_control))
+        for v in sorted(
+            db.query(Variant).filter(Variant.experiment_id == experiment.id),
+            key=lambda v: (not bool(v.is_control), v.name or "", str(v.id)),
+        )
+    ]
+    counts = [
+        GroupCounts(
+            segment.segment_value,
+            {
+                v.variant_id: (v.sample_size, v.conversions or 0)
+                for v in segment.variants
+            },
+        )
+        for segment in groups.segments
+    ]
+    metrics = AnalysisService._ordered_metrics(experiment)
+    estimate = overall_estimate(
+        counts,
+        arms,
+        confidence_level=settings.confidence_level,
+        correction_method=settings.correction_method,
+        is_proportion=not metrics or _metric_is_proportion(metrics[0]),
+        sequential_testing=bool(
+            getattr(experiment, "sequential_testing_enabled", False)
+        ),
+    )
+    in_unknown = sum(1 for group in stored.values() if group == UNKNOWN)
+    return BalancedGroupsResponse(
+        experiment_id=str(experiment.id),
+        confidence_level=settings.confidence_level,
+        correction_method=settings.correction_method,
+        groups=groups,
+        overall=estimate["overall"],
+        reason=estimate["reason"],
+        merged_groups=estimate["merged_groups"],
+        users_outside_blocks=users_outside_blocks(db, experiment.id),
+        unknown_share=in_unknown / len(stored) if stored else None,
+        engine_version=ENGINE_VERSION,
+    )
+
+
+@router.get(
+    "/{experiment_id}/balanced-groups",
+    response_model=BalancedGroupsResponse,
+    summary="Beta: results by the group each user was balanced in",
+    responses={409: {"description": NOT_BALANCED}},
+    openapi_extra={"x-stability": "beta"},
+)
+def get_balanced_groups(
+    experiment_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> BalancedGroupsResponse:
+    """
+    The results of an experiment that balances its split within groups (#448).
+
+    ``groups`` has one row per group, each user in the group stored when they
+    were assigned: the rows of a breakdown (the 20 groups with the most
+    users, then ``other`` and ``unknown``), with each row's p-value and its
+    Bonferroni threshold. Per variant the rows add up to every user
+    assigned. ``overall`` gives, for the primary metric, one estimate per
+    treatment over every group: each group's difference from the control
+    weighted by the group's share of the users, at the experiment's
+    ``confidence_level``, corrected across the treatments with its
+    ``correction_method``. It is null, with ``reason``, for a primary metric
+    that is not a conversion, for an experiment with sequential testing, and
+    when no treatment has users or no group has 2 users in every variant that
+    has users. The experiment's results and their decision do not change.
+
+    An experiment that does not balance within groups answers 409. The
+    answer is computed on each request: it is not cached and no snapshot is
+    recorded.
+    """
+    experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
+    if experiment is None:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    setting = balance_setting(experiment)
+    if setting is None:
+        raise HTTPException(status_code=409, detail=NOT_BALANCED)
+    try:
+        return _balanced_groups(experiment, dict(setting), db)
+    except Exception as exc:
+        raise unexpected_failure(
+            exc,
+            "Balanced groups",
+            BALANCED_GROUPS_FAILURE,
+            db=db,
+            logger=logger,
+        )

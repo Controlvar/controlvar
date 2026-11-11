@@ -11,7 +11,8 @@ Endpoints:
     POST /api/v1/counters/bulk                      — atomic bulk increment
     POST /api/v1/counters/{experiment_id}/reset     — reset (ADMIN only)
 
-Reading a counter needs nothing beyond a session; *writing* one needs UPDATE
+Reading a counter needs permission to view the experiment, as
+``GET /api/v1/experiments/{id}`` does; *writing* one needs UPDATE
 on experiments (ADMIN, DEVELOPER, a superuser, or anyone whose custom role or
 direct grant gives it), because these counters are
 the first source ``BanditScheduler`` consults for a bandit experiment's arm
@@ -32,6 +33,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.core.permissions import Action, ResourceType, check_permission
 from backend.app.models.user import User, UserRole
 from modules.backend.app.schemas.realtime_counters import (
@@ -46,7 +48,7 @@ from modules.backend.app.services.dynamodb_counter_service import DynamoDBCounte
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 # ---------------------------------------------------------------------------
 # Dependency — provides a shared DynamoDBCounterService instance
@@ -55,9 +57,12 @@ router = APIRouter()
 _counter_service: Optional[DynamoDBCounterService] = None
 
 
-def get_counter_service() -> DynamoDBCounterService:
+async def get_counter_service() -> DynamoDBCounterService:
     """
     Dependency that returns a singleton DynamoDBCounterService.
+
+    ``async`` so that FastAPI calls it on the event loop rather than in a
+    worker thread; the service is built once per process, on first use.
 
     This can be overridden in tests via app.dependency_overrides.
     """
@@ -150,6 +155,7 @@ def _require_body_matches_path(*, path_experiment_id: str, body_experiment_id: s
         200: {"description": "Experiment counters returned"},
         404: {"description": "No counter data found for this experiment"},
     },
+    dependencies=[Depends(deps.require_experiment_read)],
 )
 def get_experiment_counters(
     experiment_id: str,

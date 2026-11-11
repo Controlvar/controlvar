@@ -353,7 +353,7 @@ function UsageSection({ segmentId }: { segmentId: string }) {
       )}
       {usage && flags.length === 0 && experiments.length === 0 && (
         <p className="text-sm text-slate-700" data-testid="segment-usage-none">
-          No flag or experiment targeting rules name this segment.
+          No flag or experiment uses this segment.
         </p>
       )}
       {usage && (flags.length > 0 || experiments.length > 0) && (
@@ -385,8 +385,12 @@ function InUseList({ name, inUse }: { name: string; inUse: SegmentInUse }) {
   return (
     <div data-testid="segment-in-use">
       <p>
-        {name} is used by {usageCount(inUse.flags.length, inUse.experiments.length)}. Remove the segment from their
-        targeting rules, then archive it.
+        {name} is used by {usageCount(inUse.flags.length, inUse.experiments.length)}.{' '}
+        {inUse.experiments.length > 0
+          ? 'Remove the segment from the targeting rules that name it and from the segments an experiment balances ' +
+            'within, then archive it. A started experiment that balances within it lets it go once it is completed ' +
+            'or archived.'
+          : 'Remove the segment from their targeting rules, then archive it.'}
       </p>
       <ul className="mt-1 list-disc pl-5">
         {inUse.flags.map((f) => (

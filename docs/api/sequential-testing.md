@@ -67,7 +67,8 @@ planned-looks table is needed to use it.
 ## Turning it on
 
 Sequential testing is set on the experiment, when you create it
-(`POST /api/v1/experiments/`) or change it (`PUT /api/v1/experiments/{id}`):
+(`POST /api/v1/experiments/`) or while it is a draft (`PUT /api/v1/experiments/{id}`);
+once it has left draft neither field can be changed (see [Permissions](#permissions)):
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -100,26 +101,39 @@ curl -s localhost:8000/api/v1/auth/me -H "Authorization: Bearer $TOKEN" | jq .ro
 ```
 <!-- expect: "ADMIN" -->
 
-It prints `"ADMIN"`. The examples use the demo data's `checkout_button_color` experiment,
-which is running and has data. This saves its id in `$EXP_ID` and turns sequential testing
-on with five planned looks.
+It prints `"ADMIN"`. This creates an experiment of its own, on the `checkout_completed`
+event, with sequential testing on and five planned looks, saves its id in `$EXP_ID` and
+starts it:
 
 ```{.bash exec}
-EXP_ID=$(curl -s localhost:8000/api/v1/experiments/ \
-  -H "Authorization: Bearer $TOKEN" \
-  | jq -r '.items[] | select(.key == "checkout_button_color") | .id')
-
-curl -s -o /dev/null -w '%{http_code}\n' -X PUT localhost:8000/api/v1/experiments/$EXP_ID \
+EXP_ID=$(curl -s -X POST localhost:8000/api/v1/experiments/ \
   -H "Authorization: Bearer $TOKEN" \
   -H 'content-type: application/json' \
   -d '{
+    "name": "Checkout Sequential Test",
+    "hypothesis": "Green button increases conversion rate",
     "sequential_testing_enabled": true,
-    "sequential_testing_config": {"spending_function": "obrien_fleming", "planned_looks": 5}
-  }'
-```
-<!-- expect: 200 -->
+    "sequential_testing_config": {"spending_function": "obrien_fleming", "planned_looks": 5},
+    "variants": [
+      {"name": "control", "is_control": true, "traffic_allocation": 50},
+      {"name": "treatment", "traffic_allocation": 50}
+    ],
+    "metrics": [
+      {"name": "Checkout", "event_name": "checkout_completed", "is_primary": true}
+    ]
+  }' | jq -r .id)
 
-It prints `200`.
+curl -s -X POST localhost:8000/api/v1/experiments/$EXP_ID/start \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '{status, sequential_testing_enabled, planned_looks: .sequential_testing_config.planned_looks}'
+```
+<!-- expect: "status": "active" -->
+<!-- expect: "sequential_testing_enabled": true -->
+<!-- expect: "planned_looks": 5 -->
+
+It prints `"status": "active"`, `"sequential_testing_enabled": true` and
+`"planned_looks": 5`. The experiment has no users yet, so the requests below read an
+analysis with nothing to weigh: `lambda_ratio` is `1` and the interval is `[-1, 1]`.
 
 ---
 
@@ -132,7 +146,7 @@ against the treatment created first, so an experiment with three or more variant
 only that one, and the same one on every call. It takes
 one optional query parameter, `alpha`: the significance level for this request, above 0
 and at most 0.2, which overrides the stored `sequential_testing_config.alpha` (default
-`0.05`); a value outside the range answers `422`. Any logged-in user can read it. It answers `404` with
+`0.05`); a value outside the range answers `422`. Anyone who may view the experiment can read it. It answers `404` with
 `"Sequential testing is not enabled for this experiment"` when it is off, and
 `"Experiment not found"` when there is no such experiment.
 
@@ -157,7 +171,8 @@ curl -s "localhost:8000/api/v1/results/$EXP_ID/sequential?alpha=0.01" \
 It prints `"method": "msprt"`, the boundary `20.0` (that is 1/α at the default α of
 0.05), the strength of the evidence so far, the recommended action, the advisory
 `at_risk`, an empty `alpha_spending` and `"analysis_status": "beta"`. The second request
-asks for α = 0.01, so its boundary is `100.0`. A full response, abridged:
+asks for α = 0.01, so its boundary is `100.0`. With traffic, a full response looks like
+this, abridged; the numbers are illustrative:
 
 ```json
 {
@@ -263,8 +278,8 @@ and the rest of the response is unaffected.
 
 It is cached with the rest of the results: for up to 5 minutes for a running experiment
 and 24 hours otherwise. A change to `sequential_testing_enabled` or
-`sequential_testing_config`, which only a superuser can make once the experiment is
-running (see [Permissions](#permissions)), therefore shows here only when the cached
+`sequential_testing_config`, which can be made only while the experiment is a draft
+(see [Permissions](#permissions)), therefore shows here only when the cached
 answer expires or
 `POST /api/v1/results/{experiment_id}/invalidate-cache` clears it, not immediately;
 `/sequential` is not cached. The request below passes `use_cache=false` for that reason:
@@ -286,14 +301,17 @@ It prints `"embedded_method": "msprt"` and the boundary `20.0`, the same as the 
 
 Changing an experiment's sequential testing
 settings is a change to the experiment, decided by permission and by the experiment's state,
-not by who created it. ADMIN and DEVELOPER may change experiments, and in the full profile so
-may anyone whose custom role or direct grant gives `experiment (update)`; for anyone else the
-`PUT` above answers `403` with `"You don't have permission to update experiments"`. Only a
-superuser may change an experiment that is no longer a draft, and the demo experiment is
-running: for anyone else who may change experiments, such as a DEVELOPER or an ADMIN who is
-not a superuser, the `PUT` above answers `400` with
-`"Cannot update experiments in active status"`. The demo's `admin@demo.com` is a superuser,
-which is why it gets `200`.
+not by who created it. Set them when you create the experiment, as above, or with
+`PUT /api/v1/experiments/{id}` while the experiment is a draft. ADMIN and DEVELOPER may
+change experiments, and in the full profile so may anyone whose custom role or direct grant
+gives `experiment (update)`; for anyone else that `PUT` answers `403` with
+`"You don't have permission to update experiments"`. Once the experiment has left draft,
+nobody can change them, a superuser included, even to the values they already have: on an
+active experiment the `PUT` answers `400` with
+`"Cannot update sequential_testing_enabled for experiments in active status"` (or
+`sequential_testing_config`) for a superuser and `"Cannot update experiments in active status"`
+for anyone else who may change experiments. To use other settings, clone the experiment
+(`POST /api/v1/experiments/{id}/clone`): the copy is a new experiment, a draft, and takes them.
 
 ---
 
@@ -301,8 +319,7 @@ which is why it gets `200`.
 
 **Long-running risk is informational only.** An experiment flagged `at_risk` (the same value as `long_running_risk.is_at_risk`) may still be producing valid results. It means the experiment is running well past its expected duration or collecting samples slowly, not that there is no effect.
 
-**Do not change the configuration mid-experiment.** Choose `alpha` and `tau_squared`
-before the experiment starts. Once it is running, the `PUT` that would change
-`sequential_testing_enabled` or `sequential_testing_config` answers `400` with
-`"Cannot update experiments in active status"` for anyone who may change experiments but is
-not a superuser.
+**Choose the configuration before the experiment starts.** Choose `alpha` and `tau_squared`
+while it is a draft. Once it is running, the `PUT` that would change
+`sequential_testing_enabled` or `sequential_testing_config` answers `400` for anyone who may
+change experiments, a superuser included, so the analysis keeps the settings it started with.

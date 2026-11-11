@@ -91,7 +91,8 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini history
 Output, for example:
 
 ```text
-85dd4796bb8b -> 7b6b4b4fe246 (head), Rollout stages: record when each stage started
+7b6b4b4fe246 -> c448_balance_within (head), Experiments: balance the split within groups as users arrive
+85dd4796bb8b -> 7b6b4b4fe246, Rollout stages: record when each stage started
 607c51a59bf5 -> 85dd4796bb8b, Events: an event_id is stored once per user, experiment, flag and event name
 4c2c09a2b3e8 -> 607c51a59bf5, Feature flags: a value type and two values, held by one check
 ...
@@ -117,7 +118,7 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini current
 Output, for a full install (a core install prints the first line only):
 
 ```text
-7b6b4b4fe246 (head)
+c448_balance_within (head)
 modules_0004_rbac_activation (head)
 ```
 
@@ -413,9 +414,13 @@ Past `85dd4796bb8b` it also drops the table `event_dedup_keys`, and with it ever
 stored `event_id` (see
 [`85dd4796bb8b`](#85dd4796bb8b-stores-an-event-sent-again-with-its-event_id-once)).
 
-Past `7b6b4b4fe246` it first runs that revision's downgrade, which drops
+Past `7b6b4b4fe246` it also runs that revision's downgrade, which drops
 `rollout_stages.started_at`, the recorded start of every rollout stage (see
 [`7b6b4b4fe246`](#7b6b4b4fe246-records-when-each-rollout-stage-started)).
+
+Past `c448_balance_within` it first runs that revision's downgrade, which drops
+every experiment's balance setting, every user's group and every counter (see
+[`c448_balance_within`](#c448_balance_within-balances-the-split-within-groups)).
 
 ### `d29a479daafe` records who each global holdout covers
 
@@ -493,6 +498,10 @@ From a release that carries `7b6b4b4fe246`, it also runs that revision's
 downgrade, which drops `rollout_stages.started_at`, the recorded start of every
 rollout stage (see
 [`7b6b4b4fe246`](#7b6b4b4fe246-records-when-each-rollout-stage-started)).
+From a release that carries `c448_balance_within`, it also runs that
+revision's downgrade, which drops every experiment's balance setting, every
+user's group and every counter (see
+[`c448_balance_within`](#c448_balance_within-balances-the-split-within-groups)).
 
 ### `4c2c09a2b3e8` keeps rollback records without a safety configuration
 
@@ -550,10 +559,14 @@ backup taken before the upgrade. With only boolean flags stored, the downgrade
 drops the check and the three columns, and nothing else. Neither the upgrade
 nor the downgrade can be emitted as SQL (`--sql`).
 
-From a release that carries `7b6b4b4fe246`, a downgrade to `4c2c09a2b3e8` first
+From a release that carries `7b6b4b4fe246`, a downgrade to `4c2c09a2b3e8` also
 runs that revision's downgrade, which drops `rollout_stages.started_at`, the
 recorded start of every rollout stage (see
 [`7b6b4b4fe246`](#7b6b4b4fe246-records-when-each-rollout-stage-started)).
+From a release that carries `c448_balance_within`, it first runs that
+revision's downgrade, which drops every experiment's balance setting, every
+user's group and every counter (see
+[`c448_balance_within`](#c448_balance_within-balances-the-split-within-groups)).
 
 ### `85dd4796bb8b` stores an event sent again with its event_id once
 
@@ -606,8 +619,11 @@ start against this revision. To go back to it, first downgrade to the previous
 release's heads, with this release still running
 ([An Older Image Against a Newer Database](#an-older-image-against-a-newer-database)),
 and with the Engineering Lead's approval at the moment it runs when any stage
-is `IN_PROGRESS`. This revision's own `down_revision` is `85dd4796bb8b`; this
-undoes this revision alone:
+is `IN_PROGRESS`. This revision's own `down_revision` is `85dd4796bb8b`; from a
+release that carries `c448_balance_within`, this first runs that revision's
+downgrade, which drops every experiment's balance setting, every user's group
+and every counter (see
+[`c448_balance_within`](#c448_balance_within-balances-the-split-within-groups)):
 
 ```{.bash skip reason="destructive: drops rollout_stages.started_at"}
 docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade 85dd4796bb8b
@@ -616,6 +632,52 @@ docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrad
 On Helm, run the same command in an API pod with `kubectl exec`. Once the
 database is at the previous release's heads, start the previous release. The
 upgrade cannot be emitted as SQL (`--sql`).
+
+### `c448_balance_within` balances the split within groups
+
+This revision adds what an experiment needs to
+[balance its split within groups](../guides/balance-within-groups.md):
+`experiments.balance_within`, the setting, and `experiments.balance_seed`, the
+key of the experiment's block order, which the server makes and never answers;
+`assignments.balance_group` and `assignments.balance_seq`, the group each user
+was balanced in and their place in it; and the table `balance_group_counters`,
+each group's next place. Every column is nullable with no default, nothing is
+backfilled, and every experiment stored before the upgrade balances nothing.
+
+The previous release runs against this schema unchanged: it never reads or
+writes the new columns or the table. While it serves, during a rolling deploy
+or for as long as a rollback to it lasts, it assigns every new user of a
+balanced experiment by the hash and stores no group, so those users stay
+outside the blocks for good. To count them:
+
+```sql
+-- Users of balanced experiments assigned without a group
+SELECT a.experiment_id, count(*) FROM experimentation.assignments a
+  JOIN experimentation.experiments e ON e.id = a.experiment_id
+ WHERE e.balance_within IS NOT NULL AND a.balance_group IS NULL
+ GROUP BY a.experiment_id;
+```
+
+**The downgrade drops every balance setting.** c448_balance_within adds the
+balance setting, each user's group and place in it, and the per-group
+counters. Its downgrade drops every experiment's balance setting, every user's
+group and every counter; they cannot be recovered. Run it only with a human go
+at that moment. It does not refuse, and it removes no assignment: every user
+keeps their variant. An upgrade afterwards starts every experiment with no
+balance setting. Where the API migrates on start (Docker Compose, and the Helm
+chart's init container), the previous release refuses to start against this
+revision. To go back to it, first downgrade to the previous release's heads,
+with this release still running
+([An Older Image Against a Newer Database](#an-older-image-against-a-newer-database)).
+This revision's own `down_revision` is `7b6b4b4fe246`; this undoes this
+revision alone:
+
+```{.bash skip reason="destructive: drops every experiment's balance setting and every user's group"}
+docker compose exec api python -m alembic -c backend/app/db/alembic.ini downgrade 7b6b4b4fe246
+```
+
+On Helm, run the same command in an API pod with `kubectl exec`. The upgrade
+cannot be emitted as SQL (`--sql`).
 
 Roll back to a specific revision:
 
@@ -831,6 +893,11 @@ names:
 - restore the backup taken before that upgrade, and run the older image
   against the restored database.
 
+On Docker Compose, the Compose README's
+[Upgrade](https://github.com/Controlvar/controlvar/blob/main/deploy/compose/README.md#upgrade)
+procedure takes that backup before it upgrades, and its last step restores it
+only when the older image refuses the database.
+
 A third way, when the newer release's migrations can be undone: with the newer
 release still running, downgrade to the heads of the older release, then start
 the older image. Those are its core head and, on a full install, its modules
@@ -841,7 +908,11 @@ the modules revision. Each migration in between runs its downgrade on the way:
 from a release that carries `7b6b4b4fe246`, whose own `down_revision` is
 `85dd4796bb8b`, that includes its downgrade, which drops the recorded start of
 every rollout stage (see
-[`7b6b4b4fe246`](#7b6b4b4fe246-records-when-each-rollout-stage-started)).
+[`7b6b4b4fe246`](#7b6b4b4fe246-records-when-each-rollout-stage-started)); from
+a release that carries `c448_balance_within`, whose own `down_revision` is
+`7b6b4b4fe246`, that includes its downgrade, which drops every experiment's
+balance setting, every user's group and every counter (see
+[`c448_balance_within`](#c448_balance_within-balances-the-split-within-groups)).
 
 Do not edit `alembic_version` to make the older image start.
 
@@ -919,6 +990,11 @@ What this means for you:
   is backward-compatible for a rollback too, and undoing it drops the recorded
   start of every rollout stage; an upgrade afterwards sets each stage in
   progress from its `updated_at`.
+  [`c448_balance_within`](#c448_balance_within-balances-the-split-within-groups)
+  is backward-compatible for a rollback too: the older release assigns every
+  balanced experiment's new users by the hash, with no group, for as long as
+  it serves. Undoing it drops every experiment's balance setting, every user's
+  group and every counter.
   [`modules_0003_lower_is_better`](#modules_0003_lower_is_better-gives-each-warehouse-metric-source-a-direction)
   is backward-compatible for a rollback, and undoing it drops every warehouse
   metric source's lower-is-better setting; an upgrade afterwards sets each back

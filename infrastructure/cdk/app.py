@@ -143,9 +143,26 @@ secret_arns = resolve_secret_arns(
 
 app = App()
 
-# Create the authentication stack
+# The absolute origin users reach the dashboard and the API at -- one origin,
+# e.g. https://app.example.com (DECISIONS D14).
+# Required at synth by FargateServiceStack -- the application refuses to start
+# in staging/production without knowing what hostname it answers on, because
+# the Host header is attacker-controlled (#220). Both the service and the
+# migration task get it: they build the same settings, and a migration that
+# cannot import its settings fails a deployment after the image is rolling.
+# With `-c cognito_hosted_ui=true` the auth stack registers the dashboard's
+# sign-in callback and sign-out pages on it too.
+public_base_url = os.environ.get("PUBLIC_BASE_URL", None)
+
+# Create the authentication stack. Dashboard sign-in through the Cognito
+# Hosted UI is off unless `-c cognito_hosted_ui=true` (#708); off, this stack
+# and the API task are what they were before that key existed.
 auth_stack = AuthenticationStack(
-    app, f"experimentation-auth-{env_name}", environment=env_name, env=env
+    app,
+    f"experimentation-auth-{env_name}",
+    environment=env_name,
+    public_base_url=public_base_url,
+    env=env,
 )
 
 # Create the networking stack (VPC, subnets, etc.)
@@ -263,15 +280,6 @@ if analytics_stack is not None:
 # required).
 certificate_arn = os.environ.get("CERTIFICATE_ARN", None)
 
-# The absolute origin users reach the dashboard and the API at -- one origin,
-# e.g. https://app.example.com (DECISIONS D14).
-# Required at synth by FargateServiceStack -- the application refuses to start
-# in staging/production without knowing what hostname it answers on, because
-# the Host header is attacker-controlled (#220). Both the service and the
-# migration task get it: they build the same settings, and a migration that
-# cannot import its settings fails a deployment after the image is rolling.
-public_base_url = os.environ.get("PUBLIC_BASE_URL", None)
-
 # Fargate service stack: ALB, blue/green CodeDeploy, auto-scaling
 fargate_stack = FargateServiceStack(
     app,
@@ -306,6 +314,11 @@ fargate_stack = FargateServiceStack(
     # depends on this stack, so there is no cycle. The no-healthy-task
     # composite and the error-log alarm (#390, #205) email through it too.
     alarm_topic=monitoring_stack.alerts_topic,
+    # None unless `-c cognito_hosted_ui=true`. When on, the API task is given
+    # AUTH_PROVIDER=cognito and the pool, client and Hosted UI domain by
+    # reference to the auth stack, whose exports this stack then imports
+    # (which pins them: see stacks/authentication_stack.py).
+    cognito_hosted_ui=auth_stack.hosted_ui,
     env=env,
 )
 fargate_stack.add_dependency(compute_stack)

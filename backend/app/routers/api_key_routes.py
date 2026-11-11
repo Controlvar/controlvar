@@ -6,10 +6,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.models.api_key import APIKey
 from backend.app.models.user import User
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 
 class APIKeyCreate(BaseModel):

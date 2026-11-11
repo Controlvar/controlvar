@@ -18,6 +18,7 @@ from fastapi import (
     HTTPException,
     Path,
     Query,
+    Response,
     status,
 )
 from fastapi.responses import StreamingResponse
@@ -26,6 +27,13 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.datetime_bounds import refuse_unstorable_offset
+from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.query_params import (
+    MAX_PAGE,
+    check_page_offset,
+    describe_as_int64,
+)
 from backend.app.core.logger import unexpected_failure
 from backend.app.core.permissions import can_read_all_audit_logs
 from backend.app.models.audit_log import ActionType, AuditLog, EntityType
@@ -53,6 +61,7 @@ INVALID_ACTION_TYPE = (
 
 # Create router with tag for documentation grouping
 router = APIRouter(
+    route_class=OffLoopRoute,
     tags=["Audit Logs"],
     responses={
         status.HTTP_401_UNAUTHORIZED: {
@@ -126,12 +135,16 @@ def resolve_audit_log_filters(
     role or direct grant gives ``audit_log (read)``, see other users' entries
     too. Anyone else sees only their own: ``user_id`` is replaced by their own
     id, whatever was asked. An unknown ``entity_type`` or ``action_type``, or a
-    ``to_date`` that is not after ``from_date``, answers 400.
+    ``to_date`` that is not after ``from_date``, answers 400. A date with a UTC
+    offset the database cannot store (16 hours or more) answers 422.
     """
     # Other users' entries need can_read_all_audit_logs; anyone else reads
     # their own.
     if not can_read_all_audit_logs(current_user):
         user_id = current_user.id
+
+    refuse_unstorable_offset("from_date", from_date)
+    refuse_unstorable_offset("to_date", to_date)
 
     entity_type_enum = None
     if entity_type:
@@ -189,7 +202,13 @@ async def list_audit_logs(
     to_date: Optional[datetime] = Query(
         None, description="Filter logs until this date (ISO format)"
     ),
-    page: int = Query(1, ge=1, description="Page number (1-based)"),
+    page: int = Query(
+        1,
+        ge=1,
+        le=MAX_PAGE,
+        description="Page number (1-based)",
+        json_schema_extra=describe_as_int64,
+    ),
     limit: int = Query(50, ge=1, le=1000, description="Number of records per page"),
 ) -> AuditLogListResponse:
     """
@@ -219,6 +238,9 @@ async def list_audit_logs(
         from_date=from_date,
         to_date=to_date,
     )
+    # Before the `try`, whose `except Exception` would make the 422 a 500
+    # (#1001).
+    check_page_offset(page, limit, "limit")
 
     try:
         # Get audit logs
@@ -291,8 +313,9 @@ def _stream_items(query, fmt: str) -> Iterator[str]:
             for row in rows:
                 yield audit_export.entry_item(row)
         except Exception as e:
-            # The status line has gone: the body ends here, short of
-            # X-Total-Count. Only the exception type is logged.
+            # The body ends here, short of X-Total-Count, as it did when the
+            # body was sent while it was read. Only the exception type is
+            # logged.
             logger.error("Audit log export stopped early (%s)", type(e).__name__)
 
     if fmt == "csv":
@@ -359,7 +382,7 @@ def export_audit_logs(
     to_date: Optional[datetime] = Query(
         None, description="Entries at or before this time (ISO format)"
     ),
-) -> StreamingResponse:
+) -> Response:
     """
     Download every audit entry the filters match, as CSV or JSON.
 
@@ -403,8 +426,11 @@ def export_audit_logs(
         )
 
     filename = audit_export.export_filename(requested_at, export_format)
-    return StreamingResponse(
-        _stream_items(query, export_format),
+    # The whole body is built here, before the response starts: at most
+    # EXPORT_MAX_ROWS entries, read EXPORT_BATCH_SIZE at a time.
+    body = "".join(_stream_items(query, export_format))
+    return Response(
+        content=body,
         media_type=audit_export.MEDIA_TYPES[export_format],
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
@@ -510,6 +536,9 @@ async def get_user_activity(
             detail="Not enough permissions to view this user's activity",
         )
 
+    refuse_unstorable_offset("from_date", from_date)
+    refuse_unstorable_offset("to_date", to_date)
+
     # Validate date range
     if from_date and to_date and to_date <= from_date:
         raise HTTPException(
@@ -567,6 +596,9 @@ async def get_audit_stats(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to view audit statistics",
         )
+
+    refuse_unstorable_offset("from_date", from_date)
+    refuse_unstorable_offset("to_date", to_date)
 
     # Validate date range
     if from_date and to_date and to_date <= from_date:

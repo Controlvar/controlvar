@@ -14,8 +14,10 @@ const BUTTON = `inline-flex min-h-11 items-center rounded-md px-5 font-medium ${
  * The second button is the only sentence that differs between the builds: the
  * power calculator on controlvar.com, which has no API, and "Sign in to the
  * dashboard" on a self-hoster's platform build (`check-platform-export.mjs`
- * looks for those words). The results screenshot is the marketing build's
- * only (`Screenshot`).
+ * looks for those words). The screenshot under it is the marketing build's
+ * only (`Screenshot`): the power calculator (site polish 2026-11-10). It was an
+ * experiment's results page, which said "Planned sample: Reached" beside "not
+ * every variant has reached the minimum sample size yet".
  *
  * The commands have no `$` prompts: a copied prompt breaks the command, and
  * axe passes a line of punctuation whatever its contrast. They wrap rather
@@ -91,7 +93,7 @@ docker compose up -d --wait`}</code>
 
       {marketing && (
         <div className={`${WIDTH} pt-14`}>
-          <Screenshot id="results" hero />
+          <Screenshot id="power-calculator" hero />
         </div>
       )}
     </section>

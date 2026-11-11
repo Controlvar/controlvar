@@ -13,7 +13,10 @@ exposure hook received, and no other SDK may report it. An SDK listed in
 ``ATTRIBUTE_SDKS`` must also report how it evaluated the seed's
 ``sdk_contract_targeted`` flag (0% rollout, one rule ``plan`` equals ``pro`` at
 100%) with ``{"plan": "pro"}`` and ``{"plan": "free"}``: on with the server's
-reason ``targeting_rule``, and off. No other SDK may report it.
+reason ``targeting_rule``, and off. No other SDK may report it. An SDK listed
+in ``VALUE_SDKS`` must also report what its typed getters returned for the
+seed's string, number and json flags, each on at 100%: exactly their on
+values. No other SDK may report them.
 
 After the react row, the React SDK's bootstrap runs for one new user
 (``BOOTSTRAP_SMOKE``): the documented ``ServerClient.bootstrap()`` call and a
@@ -201,6 +204,26 @@ ATTRIBUTE_SDKS: frozenset[str] = frozenset(
 )
 TARGETED_FLAG_KEY = "sdk_contract_targeted"
 
+# The SDKs whose contract smoke must report what its typed getters return
+# (#1810). A listed SDK's smoke is to read the seed's three value flags
+# (VALUE_FLAG_KEYS, each on at 100% while the SDK rows run) with its string,
+# number and json getters, each given a default that is not a flag value, and
+# report
+#   "values": {"string": <returned>, "number": <returned>, "json": <returned>}
+# validate() requires VALUE_EXPECTED, the seed's on values: an SDK that reads
+# the off value, or falls back to its default, fails. A number is compared as
+# a number (10.0 is 10; true and "10" are not). The check runs both ways, as
+# EXPOSURE_SDKS does. The pull request that gives an SDK typed getters is to
+# add its line here and its report to the smoke.
+VALUE_SDKS: frozenset[str] = frozenset(
+    [
+        # One line per SDK, in the form "js",
+        "js",
+    ]
+)
+#: The seed's on values (backend/scripts/seed_sdk_contract.py VALUE_FLAGS).
+VALUE_EXPECTED = {"string": "on-copy", "number": 10, "json": {"color": "blue"}}
+
 # The React SDK's bootstrap (#1518), run after the react row (which builds
 # sdk/react/dist) for one new user, in two steps: "server" is the documented
 # ``ServerClient.bootstrap()`` call and the page's server render with it,
@@ -266,6 +289,28 @@ def validate(sdk: str, payload: dict, experiment_key: str = "sdk_contract_ab") -
     problems.extend(_exposure_problems(sdk, payload, experiment_key))
     problems.extend(_targeting_problems(sdk, payload))
     problems.extend(_event_id_problems(sdk, payload))
+    problems.extend(_value_problems(sdk, payload))
+    return problems
+
+
+def _value_problems(sdk: str, payload: dict) -> list[str]:
+    """What is wrong with the smoke's ``values`` report (see ``VALUE_SDKS``)."""
+    if sdk not in VALUE_SDKS:
+        return [f"values reported but {sdk} is not in VALUE_SDKS"] if "values" in payload else []
+    values = payload.get("values")
+    if not isinstance(values, dict):
+        return [f"values missing ({sdk} is in VALUE_SDKS)"]
+    problems: list[str] = []
+    for kind, expected in VALUE_EXPECTED.items():
+        got = values.get(kind)
+        if kind == "number":
+            # Any JSON number (an SDK that reads numbers as doubles may report 10.0);
+            # never a bool or text.
+            same = type(got) in (int, float) and got == expected
+        else:
+            same = type(got) is type(expected) and got == expected
+        if not same:
+            problems.append(f"values.{kind}={got!r} (expected {expected!r}, the seed's on value)")
     return problems
 
 

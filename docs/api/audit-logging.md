@@ -88,7 +88,7 @@ curl -s -X POST localhost:8000/api/v1/feature-flags/bulk-toggle \
 
 It prints `"succeeded": 2` and `"failed": 1`, with the error `"Feature flag not found"`
 for the third id. The full response lists each flag's result, and the id of the audit
-entry written for each flag that changed:
+entry written for each flag that succeeded, including one that was already in the requested state:
 
 ```json
 {
@@ -282,9 +282,12 @@ writes it after the change is saved, with the signed-in user as the actor; the
 written. An update records only the fields that changed, as
 `old_value` and `new_value` JSON; a create records the new entity's identifying fields in
 `new_value`, and a delete the old ones in `old_value`. Descriptions, hypotheses, targeting
-rules, segment rules, variants and metrics are never stored: when they change, their names
-are listed in `new_value.changed_fields`. No entry holds a password, a token, any part of
-an API key, or a request body.
+rules, segment rules, variants, metrics and an experiment's analysis configurations
+(`variance_reduction_config` for CUPED, `sequential_testing_config`, `bayesian_config`)
+are never stored. A change to any of them is named in `new_value.changed_fields`.
+Whether sequential testing and Bayesian analysis are on (`sequential_testing_enabled`,
+`bayesian_enabled`) is stored as a value, in an experiment's create and delete entries too.
+No entry holds a password, a token, any part of an API key, or a request body.
 
 | Action Type | Entity | Written when |
 |-------------|--------|--------------|
@@ -312,6 +315,8 @@ an API key, or a request body.
 | `feature_flag_update` | `feature_flag` | The rollout scheduler starts a rollout stage and sets the flag's rollout percentage. `reason` is `rollout schedule stage started` |
 | `user_create` | `user` | A user's first Cognito sign-in creates their account. The actor is the new user; `reason` is `first sign-in` |
 | `role_assign` | `user` | Cognito group sync (`SYNC_ROLES_ON_LOGIN`) changes a user's role or superuser flag when they sign in; `old_value` and `new_value` are `{"role", "is_superuser"}` |
+
+`/enable`, `/disable` and bulk toggle also record a request that leaves the status unchanged: one `toggle_enable` or `toggle_disable` entry (`feature_flag_update` for bulk `archive`), with `old_value` equal to `new_value`, such as `INACTIVE` and `INACTIVE` for a flag that was already off. `/activate` and `/deactivate` write nothing then.
 
 With the modules installed (the full profile), these are written too:
 
@@ -371,8 +376,9 @@ entry. No entry ever holds:
 - failed sign-ins (there is no account to attach them to) or sign-outs;
 - passwords or their hashes, tokens, or any part of an API key or its hash;
 - request bodies, IP addresses or user agents;
-- the contents of descriptions, hypotheses, targeting rules, segment rules, variants and
-  metrics (only their names, under `changed_fields`);
+- the contents of descriptions, hypotheses, targeting rules, segment rules, variants,
+  metrics and an experiment's CUPED, sequential testing and Bayesian configurations
+  (a change to one is named under `changed_fields`);
 - error text;
 - changes made directly in the database rather than through the platform.
 
@@ -398,9 +404,16 @@ Each entry that cannot be written logs one ERROR line from the API:
 Failed to create audit log for <action> on <entity type> <entity id> (<exception type>)
 ```
 
-In a deployed stack that line is the only signal that an entry is missing. The API also
-counts these failures in a Prometheus counter, `audit_write_failures_total`, but do not
-rely on it there: the AWS deployment does not collect it.
+The AWS deployment counts those lines: `experimentation-api-audit-write-failed-<env>` goes
+into alarm on the first one in any 5 minutes and emails `ALARM_EMAIL`, once that address
+has [confirmed its subscription](../self-hosting/cdk.md#required-environment-variables).
+It sends one email when it goes into alarm, not one per line, and each line also counts
+toward `experimentation-api-error-logs-<env>`. To find which entries are missing, search
+the log group `/ecs/experimentation-backend-<env>` for `Failed to create audit log`: each
+line names the action and the entity of one missing entry. Nothing writes a missing entry
+later. The API also counts these failures in a Prometheus counter,
+`audit_write_failures_total`, but do not rely on it there: the AWS deployment does not
+collect it.
 
 ### Keeping entries, and deleted users
 

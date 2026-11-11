@@ -132,10 +132,22 @@ text = "It prints \"succeeded\": 2 and \"failed\": 1, with the error \"Feature f
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "The full response lists each flag's result, and the id of the audit entry written for each flag that changed:"
+text = "The full response lists each flag's result, and the id of the audit entry written for each flag that succeeded, including one that was already in the requested state:"
 by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_bulk_toggle_one_entry_per_flag",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_enable_and_disable_that_change_nothing_still_write_one_entry",
+]
+
+[[unit]]
+text = "/enable, /disable and bulk toggle also record a request that leaves the status unchanged: one toggle_enable or toggle_disable entry (feature_flag_update for bulk archive), with old_value equal to new_value, such as INACTIVE and INACTIVE for a flag that was already off."
+by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_enable_and_disable_that_change_nothing_still_write_one_entry"]
+
+[[unit]]
+text = "/activate and /deactivate write nothing then."
+by = [
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_activate_that_changes_nothing_writes_nothing",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_flag_deactivate_that_changes_nothing_writes_nothing",
 ]
 
 [[unit]]
@@ -449,8 +461,27 @@ by = [
 ]
 
 [[unit]]
-text = "Descriptions, hypotheses, targeting rules, segment rules, variants and metrics are never stored: when they change, their names are listed in new_value.changed_fields."
-by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_free_text_never_reaches_an_entry"]
+text = "Descriptions, hypotheses, targeting rules, segment rules, variants, metrics and an experiment's analysis configurations (variance_reduction_config for CUPED, sequential_testing_config, bayesian_config) are never stored."
+by = [
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_free_text_never_reaches_an_entry",
+    "test:backend/tests/integration/api/test_audit_analysis_settings.py::test_a_draft_put_of_an_analysis_setting_is_named_in_its_entry",
+]
+
+[[unit]]
+text = "A change to any of them is named in new_value.changed_fields."
+by = [
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_experiment_create_update_delete",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_a_design_save_names_the_variants_and_metrics_it_changed",
+    "test:backend/tests/integration/api/test_audit_analysis_settings.py::test_a_draft_put_of_an_analysis_setting_is_named_in_its_entry",
+]
+
+[[unit]]
+text = "Whether sequential testing and Bayesian analysis are on (sequential_testing_enabled, bayesian_enabled) is stored as a value, in an experiment's create and delete entries too."
+by = [
+    "test:backend/tests/integration/api/test_audit_analysis_settings.py::test_a_draft_put_of_an_analysis_setting_is_named_in_its_entry",
+    "test:backend/tests/integration/api/test_audit_analysis_settings.py::test_a_create_and_a_delete_record_whether_the_analyses_are_on",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_experiment_create_update_delete",
+]
 
 [[unit]]
 text = "No entry holds a password, a token, any part of an API key, or a request body."
@@ -866,8 +897,12 @@ text = "request bodies, IP addresses or user agents;"
 by = ["test:backend/tests/unit/models/test_audit_log_text_normalised.py"]
 
 [[unit]]
-text = "the contents of descriptions, hypotheses, targeting rules, segment rules, variants and metrics (only their names, under changed_fields);"
-by = ["test:backend/tests/integration/api/test_audit_route_events.py::test_free_text_never_reaches_an_entry"]
+text = "the contents of descriptions, hypotheses, targeting rules, segment rules, variants, metrics and an experiment's CUPED, sequential testing and Bayesian configurations (a change to one is named under changed_fields);"
+by = [
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_free_text_never_reaches_an_entry",
+    "test:backend/tests/integration/api/test_audit_route_events.py::test_a_design_save_names_the_variants_and_metrics_it_changed",
+    "test:backend/tests/integration/api/test_audit_analysis_settings.py::test_a_draft_put_of_an_analysis_setting_is_named_in_its_entry",
+]
 
 [[unit]]
 text = "error text;"
@@ -947,10 +982,32 @@ by = [
 ]
 
 [[unit]]
-text = "In a deployed stack that line is the only signal that an entry is missing."
+text = "The AWS deployment counts those lines: experimentation-api-audit-write-failed-<env> goes into alarm on the first one in any 5 minutes and emails ALARM_EMAIL, once that address has confirmed its subscription."
+by = [
+    "test:infrastructure/tests/test_standing_alarms.py::test_one_failed_audit_write_raises_the_alarm",
+    "test:infrastructure/tests/test_standing_alarms.py::test_every_standing_alarm_emails_the_topic_but_the_per_colour_two",
+    "test:backend/tests/unit/services/test_audit_write_failed_line.py::test_a_failed_write_renders_the_line_the_filter_counts",
+]
+
+[[unit]]
+text = "It sends one email when it goes into alarm, not one per line, and each line also counts toward experimentation-api-error-logs-<env>."
+by = [
+    "test:infrastructure/tests/test_standing_alarms.py::test_one_failed_audit_write_raises_the_alarm",
+    "test:infrastructure/tests/test_standing_alarms.py::test_the_error_filter_is_on_the_api_tasks_log_group",
+]
+
+[[unit]]
+text = "To find which entries are missing, search the log group /ecs/experimentation-backend-<env> for Failed to create audit log: each line names the action and the entity of one missing entry."
 by = [
     "test:backend/tests/unit/services/test_audit_log_rules.py::test_a_failed_write_logs_one_error_line_and_counts_it",
-    "test:infrastructure/tests/test_api_task_and_data_resources.py::test_nothing_collects_the_apis_prometheus_metrics",
+    "test:infrastructure/tests/test_standing_alarms.py::test_the_error_filter_is_on_the_api_tasks_log_group",
+]
+
+[[unit]]
+text = "Nothing writes a missing entry later."
+by = [
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_a_refused_entry_for_one_experiment_of_three_keeps_every_transition",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_a_refused_entry_still_applies_the_role_change",
 ]
 
 [[unit]]

@@ -8,6 +8,7 @@ manage feature flags for gradual rollouts and A/B testing.
 
 import json
 import logging
+from datetime import datetime
 from typing import Annotated, Any, Dict, Optional
 from uuid import UUID
 
@@ -28,8 +29,11 @@ from sqlalchemy.orm import Session
 
 from backend.app.api import deps
 from backend.app.api.enum_filters import enum_filter
+from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.query_params import MAX_OFFSET, describe_as_int64
 from backend.app.api.read_scope import get_current_reader
 from backend.app.api.segment_rules import refuse_unusable_segments
+from backend.app.core.config import settings
 from backend.app.core.context_limits import (
     CONTEXT_TOO_DEEP,
     check_context,
@@ -59,6 +63,7 @@ from backend.app.schemas.audit_log import ToggleRequest, ToggleResponse
 from backend.app.schemas.feature_flag import (
     STATUS_READ_ONLY,
     FeatureFlagCreate,
+    FeatureFlagListItem,
     FeatureFlagListResponse,
     FeatureFlagRead,
     FeatureFlagUpdate,
@@ -78,6 +83,7 @@ from backend.app.services.feature_flag_service import (
     FlagVerb,
     transition,
 )
+from backend.app.services.stale_flags import stale_clock, stale_reasons
 
 # Setup logger
 logger = logging.getLogger(__name__)
@@ -91,6 +97,12 @@ FLAG_STATUS_SPELLINGS = ("active", "inactive", "archived")
 FLAG_STATUS_FILTER_DESCRIPTION = (
     "Only flags with this status: `active`, `inactive` or `archived`, in any "
     "case. Any other value answers 422; an empty value means no filter."
+)
+
+#: The list's ``stale`` filter (#1808).
+FLAG_STALE_FILTER_DESCRIPTION = (
+    "true returns only stale flags, false the rest; omit for all. Archived "
+    "flags are never stale."
 )
 
 
@@ -197,6 +209,7 @@ async def _skip_cache_ignored(skip_cache: bool = False) -> None:
 
 # Create router with tag for documentation grouping
 router = APIRouter(
+    route_class=OffLoopRoute,
     tags=["Feature Flags"],
     responses={
         status.HTTP_401_UNAUTHORIZED: {
@@ -261,8 +274,9 @@ router = APIRouter(
 async def list_feature_flags(
     *,
     db: Session = Depends(deps.get_db),
-    skip: int = 0,
-    limit: int = 100,
+    # The database's own limit, and no smaller cap: limit=0 stays 200 (#1001).
+    skip: int = Query(0, ge=0, le=MAX_OFFSET, json_schema_extra=describe_as_int64),
+    limit: int = Query(100, ge=0, le=MAX_OFFSET, json_schema_extra=describe_as_int64),
     # `status` in the URL only: a Python parameter called `status` hid the
     # `fastapi.status` module in this body, so reaching the 403 below raised
     # AttributeError and answered 500.
@@ -270,6 +284,9 @@ async def list_feature_flags(
         None, alias="status", description=FLAG_STATUS_FILTER_DESCRIPTION
     ),
     search: Optional[str] = None,
+    stale: Optional[bool] = Query(None, description=FLAG_STALE_FILTER_DESCRIPTION),
+    # The time the flags are classified at (#1808); tests override it.
+    now: datetime = Depends(stale_clock),
     # A sign-in, or an API key with the mcp:read scope (read_scope.py).
     current_user=Depends(get_current_reader),
 ) -> FeatureFlagListResponse:
@@ -279,6 +296,11 @@ async def list_feature_flags(
     - **limit**: Maximum number of feature flags to return
     - **status**: Filter by status (`active`, `inactive`, `archived`; any case)
     - **search**: Filter by name or key
+    - **stale**: `true` for only the stale flags, `false` for the rest
+
+    Each item says whether the flag looks ready to remove (`stale`) and why
+    (`stale_reasons`); `stale_days` and `evaluations_seen` say what that was
+    decided with. Listing changes no flag.
     """
     # Check if user has permission to list feature flags
     if not check_permission(current_user, ResourceType.FEATURE_FLAG, Action.LIST):
@@ -305,20 +327,33 @@ async def list_feature_flags(
     # All four roles carry Action.LIST on feature flags, a deployment is single
     # tenant (founder, 2026-09-21), and tenant isolation belongs to the
     # workspaces module rather than to row ownership. See #83.
-    feature_flags_data = crud_feature_flag.get_multi(
-        db, skip=skip, limit=limit, status=status_member, search=search
-    )
-    total = crud_feature_flag.count(db, status=status_member, search=search)
+    days = settings.STALE_FLAG_DAYS
+    if stale is None:
+        # The page as before; only its flags are classified.
+        flags = crud_feature_flag.get_multi(
+            db, skip=skip, limit=limit, status=status_member, search=search
+        )
+        total = crud_feature_flag.count(db, status=status_member, search=search)
+        reasons, evaluations_seen = stale_reasons(db, flags, now=now, days=days)
+    else:
+        # Every matching flag is classified, so the filter comes before the
+        # page: `total` counts the filtered flags, in the list's order.
+        matching = crud_feature_flag.get_multi(
+            db, skip=0, limit=None, status=status_member, search=search
+        )
+        reasons, evaluations_seen = stale_reasons(db, matching, now=now, days=days)
+        kept = [flag for flag in matching if bool(reasons[flag.id]) is stale]
+        total = len(kept)
+        flags = kept[skip : skip + limit]
 
-    # Create response with pagination
-    response = FeatureFlagListResponse(
-        items=[FeatureFlagRead.model_validate(flag) for flag in feature_flags_data],
+    return FeatureFlagListResponse(
+        items=[FeatureFlagListItem.of(flag, reasons[flag.id]) for flag in flags],
         total=total,
         skip=skip,
         limit=limit,
+        stale_days=days,
+        evaluations_seen=evaluations_seen,
     )
-
-    return response
 
 
 @router.post(
@@ -1077,6 +1112,26 @@ class FlagEvaluationRequest(BaseModel):
     )
 
 
+def evaluation_answer(
+    flag_key: str, db_flag: Any, evaluation: Dict[str, Any]
+) -> Dict[str, Any]:
+    """The body the evaluate endpoints send for *evaluation* of *db_flag*.
+
+    Pure: no database, no metric. ``backend/scripts/generate_value_vectors.py``
+    builds the served half of ``tests/sdk-contract/value-vectors.json`` with it,
+    so the bodies the SDKs' typed getters are tested against are this
+    function's (#1810).
+    """
+    answer: Dict[str, Any] = {"key": flag_key, "enabled": evaluation["enabled"]}
+    servable, value = served_value(db_flag, evaluation["enabled"])
+    if servable:
+        answer["value"] = value
+    answer["value_type"] = flag_value_type(db_flag)
+    answer["config"] = None
+    answer["reason"] = evaluation["reason"]
+    return answer
+
+
 def _evaluate_flag_by_key(
     db: Session, flag_key: str, user_id: str, context: Optional[Dict[str, Any]]
 ) -> Dict[str, Any]:
@@ -1105,15 +1160,7 @@ def _evaluate_flag_by_key(
     feature_flag_service = FeatureFlagService(db)
     evaluation = feature_flag_service.evaluate_flag_detailed(db_flag, user_id, context)
     record_flag_evaluation(flag_key, "enabled" if evaluation["enabled"] else "disabled")
-
-    answer: Dict[str, Any] = {"key": flag_key, "enabled": evaluation["enabled"]}
-    servable, value = served_value(db_flag, evaluation["enabled"])
-    if servable:
-        answer["value"] = value
-    answer["value_type"] = flag_value_type(db_flag)
-    answer["config"] = None
-    answer["reason"] = evaluation["reason"]
-    return answer
+    return evaluation_answer(flag_key, db_flag, evaluation)
 
 
 @router.get(
@@ -1289,7 +1336,8 @@ async def toggle_feature_flag(
     The toggle operation includes:
     - Status change (ACTIVE ↔ INACTIVE). An archived flag would be turned on,
       so it answers 400 and stays archived: unarchive it first
-    - Complete audit logging with user information and optional reason
+    - One audit entry with user information and optional reason; a failed
+      audit write does not fail the request
     - Response with new status and audit log ID
 
     **Authentication**: Requires valid user authentication.
@@ -1403,10 +1451,14 @@ async def enable_feature_flag(
 
     This endpoint explicitly enables a feature flag. An archived flag answers
     400 and stays archived: unarchive it first.
-    Includes complete audit logging with user information and optional reason.
+    Writes one audit entry with user information and optional reason, also
+    when the flag already has that status; a failed audit write does not fail
+    the request.
 
     **Authentication**: Requires valid user authentication.
-    **Permissions**: User must own the feature flag or be a superuser.
+    **Permissions**: Needs the feature_flag (update) permission, which ADMIN
+    and DEVELOPER hold; in the full profile a custom role or direct grant can
+    add it, and a superuser always has it. Anyone else gets 403.
 
     Returns:
         ToggleResponse: Updated feature flag details with audit log ID
@@ -1498,10 +1550,14 @@ async def disable_feature_flag(
 
     This endpoint explicitly disables a feature flag. An archived flag is
     already off: it answers 200 and stays archived.
-    Includes complete audit logging with user information and optional reason.
+    Writes one audit entry with user information and optional reason, also
+    when the flag already has that status; a failed audit write does not fail
+    the request.
 
     **Authentication**: Requires valid user authentication.
-    **Permissions**: User must own the feature flag or be a superuser.
+    **Permissions**: Needs the feature_flag (update) permission, which ADMIN
+    and DEVELOPER hold; in the full profile a custom role or direct grant can
+    add it, and a superuser always has it. Anyone else gets 403.
 
     Returns:
         ToggleResponse: Updated feature flag details with audit log ID

@@ -52,15 +52,22 @@ PREVIOUS_CORE_HEAD = "d12cbd384bbe"
 #: database built by ``create_all`` already has, and ``d29a479daafe`` (holdout
 #: population), ``37dcb2969766`` (segment kind and members), ``4c2c09a2b3e8``
 #: (rollback records keep without a safety configuration), ``607c51a59bf5``
-#: (a flag's value type and two values), ``85dd4796bb8b`` (the event_id keys)
-#: and ``7b6b4b4fe246`` (when each rollout stage started) find their objects
-#: already built by ``create_all`` and add none.
-CORE_HEAD = "7b6b4b4fe246"
+#: (a flag's value type and two values), ``85dd4796bb8b`` (the event_id keys),
+#: ``7b6b4b4fe246`` (when each rollout stage started) and
+#: ``c448_balance_within`` (balance the split within groups) find their
+#: objects already built by ``create_all`` and add none.
+CORE_HEAD = "c448_balance_within"
 #: Tables that a later core revision's downgrade drops: a downgrade from the
 #: head to this test's target unapplies those revisions too.  ``d29a479daafe``
 #: (#445) drops ``holdout_population``; ``37dcb2969766`` (#440) drops
-#: ``segment_members``; ``85dd4796bb8b`` (#1543) drops ``event_dedup_keys``.
-LATER_DOWNGRADE_TABLES = {"holdout_population", "segment_members", "event_dedup_keys"}
+#: ``segment_members``; ``85dd4796bb8b`` (#1543) drops ``event_dedup_keys``;
+#: ``c448_balance_within`` (#448) drops ``balance_group_counters``.
+LATER_DOWNGRADE_TABLES = {
+    "holdout_population",
+    "segment_members",
+    "event_dedup_keys",
+    "balance_group_counters",
+}
 #: ``feature_flags`` columns a later core revision's downgrade drops:
 #: ``607c51a59bf5`` (#1497) drops a flag's value type and its two values.
 LATER_DOWNGRADE_COLUMNS = {"value_type", "on_value", "off_value"}

@@ -33,8 +33,8 @@ same numbers.
 
 ### GET /api/v1/results/{experiment_id}/bayesian
 
-Returns the Bayesian block on its own, always freshly computed. Any logged-in user can
-read it. An experiment that hasn't turned Bayesian analysis on answers `200` with
+Returns the Bayesian block on its own, always freshly computed. Anyone who may view the
+experiment can read it. An experiment that hasn't turned Bayesian analysis on answers `200` with
 `"is_enabled": false`; an experiment that doesn't exist answers `404`.
 
 Run the commands on this page in one terminal, in order, against the stack from the
@@ -74,8 +74,15 @@ demo experiment hasn't turned Bayesian analysis on.
 
 ## Turning Bayesian analysis on
 
-Set `bayesian_enabled` to `true` on `POST /api/v1/experiments/` or
-`PUT /api/v1/experiments/{experiment_id}`, and optionally a `bayesian_config`. In the dashboard,
+Set `bayesian_enabled` to `true` on `POST /api/v1/experiments/`, or with
+`PUT /api/v1/experiments/{experiment_id}` while the experiment is a draft, and optionally a
+`bayesian_config`. Once the experiment has left draft neither can be changed, by anyone, a
+superuser included: on an active experiment the `PUT` answers `400` with
+`"Cannot update bayesian_enabled for experiments in active status"` (or `bayesian_config`)
+for a superuser and `"Cannot update experiments in active status"` for anyone else who may
+change experiments. To use
+other settings, clone the experiment (`POST /api/v1/experiments/{experiment_id}/clone`): the
+copy is a new experiment, a draft, and takes them. In the dashboard,
 the new-experiment form's **Also analyse the primary metric with Bayesian statistics** checkbox
 sends `bayesian_enabled: true` with no config. Turning it on
 without a config stores the defaults in the table below. This creates an experiment with
@@ -130,8 +137,8 @@ it is answered as if it had not.
 | `credible_level` | `float` | `0.95` | Credible interval level, between 0 and 1 |
 
 A config that fails these checks is refused with `422`, and the error's `loc` names the
-field, for example `["body", "bayesian_config", "alpha"]`. So is a `PUT` that sends
-`"bayesian_config": null` while Bayesian analysis stays on; to turn it off and clear the
+field, for example `["body", "bayesian_config", "alpha"]`. So is a `PUT` to a draft that
+sends `"bayesian_config": null` while Bayesian analysis stays on; to turn it off and clear the
 config, send `"bayesian_enabled": false` with it.
 
 ---

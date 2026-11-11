@@ -12,8 +12,8 @@
 # scripts/doc_examples.py), and each page's residual counts can only fall.
 
 [meta]
-documents = 57
-exec = 327
+documents = 58
+exec = 334
 universe = [
     ".github/pull_request_template.md",
     ".github/qa-templates/README.md",
@@ -21,6 +21,7 @@ universe = [
     "CODE_OF_CONDUCT.md",
     "CONTRIBUTING.md",
     "README.md",
+    "ROADMAP.md",
     "SECURITY.md",
     "THIRD_PARTY_LICENSES.md",
     "backend/app/api/v1/endpoints/README_SAFETY.md",
@@ -64,6 +65,7 @@ universe = [
     "docs/auth/cognito-auth-testing.md",
     "docs/auth/flow.md",
     "docs/auth/sso.md",
+    "docs/capabilities.md",
     "docs/cognito_integration.md",
     "docs/deployment/README.md",
     "docs/deployment/deployment-guide.md",
@@ -84,6 +86,7 @@ universe = [
     "docs/feature-flags/kill-switch.md",
     "docs/feature-flags/rollouts.md",
     "docs/feature-flags/safety.md",
+    "docs/feature-flags/stale-flags.md",
     "docs/getting-started/README.md",
     "docs/getting-started/architecture.md",
     "docs/getting-started/concepts.md",
@@ -98,6 +101,7 @@ universe = [
     "docs/getting-started/quick-start.md",
     "docs/getting-started/vscode-settings.md",
     "docs/guides/assign-customer-list.md",
+    "docs/guides/balance-within-groups.md",
     "docs/guides/dashboard-and-api.md",
     "docs/guides/experiment-wizard.md",
     "docs/guides/guided-examples.md",
@@ -119,6 +123,7 @@ universe = [
     "docs/sdk/dotnet.md",
     "docs/sdk/edge.md",
     "docs/sdk/elixir.md",
+    "docs/sdk/exposure-hook.md",
     "docs/sdk/flutter.md",
     "docs/sdk/go.md",
     "docs/sdk/ios.md",
@@ -279,6 +284,13 @@ skip = 0
 expects = 20
 
 [[document]]
+path = "docs/feature-flags/stale-flags.md"
+environment = "stack"
+exec = 3
+skip = 0
+expects = 3
+
+[[document]]
 path = "docs/api/multi-armed-bandit.md"
 environment = "stack"
 exec = 5
@@ -346,7 +358,7 @@ path = "docs/api/cuped.md"
 environment = "stack"
 exec = 5
 skip = 0
-expects = 7
+expects = 8
 
 [[document]]
 path = "docs/api/data-export.md"
@@ -358,9 +370,9 @@ expects = 18
 [[document]]
 path = "docs/api/dimensional-analysis.md"
 environment = "stack"
-exec = 7
+exec = 8
 skip = 0
-expects = 12
+expects = 15
 
 [[document]]
 path = "docs/api/interaction-detection.md"
@@ -374,7 +386,7 @@ path = "docs/api/sequential-testing.md"
 environment = "stack"
 exec = 4
 skip = 0
-expects = 12
+expects = 14
 
 [[document]]
 path = "docs/statistics/fdr-correction.md"
@@ -463,12 +475,13 @@ expects = 0
 path = "docs/self-hosting/kubernetes.md"
 reason = "run on a kind cluster by the chart-kind workflow (scripts/chart_kind.sh), which extracts its marked blocks"
 
-# Read on GitHub, beside compose.yml: its blocks start the production stack,
-# which the compose-production workflow boots with generate-env.sh and
-# docker compose up --wait.
+# Read on GitHub, beside compose.yml: its blocks start, back up and upgrade
+# the production stack. The compose-production workflow's compose-upgrade job
+# extracts and runs them (scripts/guide_blocks.py --marker compose-upgrade),
+# so they carry that job's markers, not tags.
 [[exempt]]
 path = "deploy/compose/README.md"
-reason = "starts the production stack on a Docker host: the compose-production workflow runs generate-env.sh and docker compose up --wait on this directory's files"
+reason = "starts and upgrades the production stack on a Docker host: compose-production boots this directory's files, and its compose-upgrade job (scripts/compose_upgrade.sh) runs the marked blocks"
 
 [pending]
 "backend/lambda/README.md" = { comments = 0, unlabelled = 1, syntax = 0 }
@@ -523,7 +536,7 @@ reason = "starts the production stack on a Docker host: the compose-production w
 path = "docs/guides/assign-customer-list.md"
 environment = "stack"
 exec = 9
-skip = 0
+skip = 1
 expects = 11
 
 [[document]]
@@ -547,7 +560,7 @@ expects = 5
 path = "docs/mcp-server.md"
 environment = "stack"
 exec = 13
-skip = 2
+skip = 1
 expects = 36
 
 # #1075: the API reference, compliance, RBAC and technical guide pages, each
@@ -555,9 +568,9 @@ expects = 36
 [[document]]
 path = "docs/api/endpoints.md"
 environment = "stack"
-exec = 21
+exec = 24
 skip = 3
-expects = 40
+expects = 43
 
 [[document]]
 path = "docs/architecture/technical-guide.md"
@@ -596,7 +609,7 @@ expects = 33
 path = "docs/self-hosting/migrations.md"
 environment = "stack"
 exec = 7
-skip = 12
+skip = 13
 expects = 6
 
 # The beta AWS installer's page. One block runs: the installer's --help, which

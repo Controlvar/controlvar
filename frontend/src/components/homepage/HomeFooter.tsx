@@ -4,7 +4,7 @@ import { Wordmark } from '@/components/Wordmark';
 import { LOGIN_PATH } from '@/services/api';
 import { docsUrl } from '@/services/docs';
 import { CONTACT_EMAIL, isMarketingSite } from '@/utils/site-mode';
-import { BUILDER_URL, RELEASES_URL, REPO_URL, SECURITY_URL } from '@/content/site-links';
+import { BOOKS_URL, BUILDER_URL, RELEASES_URL, REPO_URL, SECURITY_URL } from '@/content/site-links';
 import { FOCUS, WIDTH } from '@/components/homepage/styles';
 
 const LINK = `text-slate-700 hover:text-slate-900 ${FOCUS}`;
@@ -26,10 +26,16 @@ function Group({ id, label, children }: { id: string; label: string; children: R
  * The footer: three groups of links in one `<nav aria-label="Footer">` (the
  * group names are not headings), then the credit.
  *
+ * Every page of the marketing build ends with it: the homepage renders it, and
+ * AppShell renders it below /docs, /power-calculator, /privacy and the
+ * not-found page. A platform build's shell does not, so the dashboard has none.
+ *
  * Every same-site link is a path, never `https://controlvar.com/…`, so the
  * platform build's links stay on the self-hoster's own host. "Walkthroughs"
- * is the marketing build's only; the platform build has "Sign in" instead.
- * "Source" is the footer's only repository link (`index.site-mode.test.tsx`).
+ * is the marketing build's only, and is `/#walkthroughs` so that it works from
+ * every page, not just the homepage; the platform build has "Sign in" instead.
+ * "Source" is the footer's only link to this repository
+ * (`index.site-mode.test.tsx`); "The Controlvar books" links theirs (#1859).
  */
 export function HomeFooter() {
   const marketing = isMarketingSite();
@@ -55,15 +61,20 @@ export function HomeFooter() {
               </Link>
             </li>
             <li>
+              <a href={BOOKS_URL} className={LINK}>
+                The Controlvar books
+              </a>
+            </li>
+            <li>
               <Link href="/power-calculator" className={LINK}>
                 Power calculator
               </Link>
             </li>
             <li>
               {marketing ? (
-                <a href="#walkthroughs" className={LINK}>
+                <Link href="/#walkthroughs" className={LINK}>
                   Walkthroughs
-                </a>
+                </Link>
               ) : (
                 <Link href={LOGIN_PATH} className={LINK}>
                   Sign in

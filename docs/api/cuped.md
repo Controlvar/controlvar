@@ -119,7 +119,9 @@ experiment.
 ## Choosing the method
 
 The method is part of the experiment, in its `variance_reduction_config`, set when you
-create it (`POST /api/v1/experiments/`) or change it (`PUT /api/v1/experiments/{id}`):
+create it (`POST /api/v1/experiments/`) or while it is a draft
+(`PUT /api/v1/experiments/{id}`); once it has left draft it cannot be changed (see
+[Permissions](#permissions)):
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -137,17 +139,21 @@ create it (`POST /api/v1/experiments/`) or change it (`PUT /api/v1/experiments/{
   listed with `unavailable_reason: "winsorization_needs_mean_metric"`. To limit a whale's
   effect today, cap or filter the value before you send the event.
 
-This sets the demo experiment's method to `cuped` with a 7-day lookback:
+The demo data creates `checkout_button_color` with the method `cuped` and a 7-day
+lookback. This reads the setting the experiment stores:
 
 ```{.bash exec}
-curl -s -o /dev/null -w '%{http_code}\n' -X PUT localhost:8000/api/v1/experiments/$EXP_ID \
+curl -s localhost:8000/api/v1/experiments/$EXP_ID \
   -H "Authorization: Bearer $TOKEN" \
-  -H 'content-type: application/json' \
-  -d '{"variance_reduction_config": {"method": "cuped", "covariate_lookback_days": 7}}'
+  | jq .variance_reduction_config
 ```
-<!-- expect: 200 -->
+<!-- expect: "method": "cuped" -->
+<!-- expect: "covariate_lookback_days": 7 -->
 
-It prints `200`.
+It prints `"method": "cuped"` and `"covariate_lookback_days": 7`, with the other two
+fields at their defaults. A stack whose demo data an earlier release seeded may print
+`null`: start it once with `SEED_FORCE=true`, which runs the demo seed again and sets a
+missing setting, or seed a fresh database.
 
 ---
 
@@ -160,8 +166,9 @@ takes no query parameters: the method comes from the experiment, the interval us
 experiment's stored `confidence_level`, and `corrected_p_value` applies its stored
 `correction_method` across the metric's treatments
 ([How results are judged](endpoints.md#how-results-are-judged)). Like the main results, the
-view is fixed-horizon: do not stop an experiment the first time it looks significant. Any
-logged-in user can read it; an experiment that doesn't exist answers `404`.
+view is fixed-horizon: do not stop an experiment the first time it looks significant. A
+user who may view the experiment can read it; without that permission it answers `403`, and
+an experiment that doesn't exist answers `404`.
 
 ```{.bash exec}
 curl -s localhost:8000/api/v1/results/$EXP_ID/cuped \
@@ -287,13 +294,17 @@ Three things can surprise:
 
 ## Permissions
 
-Any logged-in user can read the results. Changing an experiment's
+Anyone who may view the experiment can read the results. Changing an experiment's
 `variance_reduction_config` is a change to the experiment, decided by permission and by the
-experiment's state, not by who created it. ADMIN and DEVELOPER may change experiments, and in
-the full profile so may anyone whose custom role or direct grant gives `experiment (update)`;
-for anyone else the `PUT` above answers `403` with
-`"You don't have permission to update experiments"`. Only a superuser may change an experiment
-that is no longer a draft, and the demo experiment is running: for anyone else who may change
-experiments, such as a DEVELOPER or an ADMIN who is not a superuser, the `PUT` above answers
-`400` with `"Cannot update experiments in active status"`. The demo's `admin@demo.com` is a
-superuser, which is why it gets `200`.
+experiment's state, not by who created it. Set it when you create the experiment, or with
+`PUT /api/v1/experiments/{id}` while the experiment is a draft. ADMIN and DEVELOPER may
+change experiments, and in the full profile so may anyone whose custom role or direct grant
+gives `experiment (update)`; for anyone else that `PUT` answers `403` with
+`"You don't have permission to update experiments"`. Once the experiment has left draft,
+nobody can change it, a superuser included, even to the value it already has: on an active
+experiment the `PUT` answers `400` with
+`"Cannot update variance_reduction_config for experiments in active status"` for a superuser
+and `"Cannot update experiments in active status"` for anyone else who may change
+experiments. To use another method,
+clone the experiment (`POST /api/v1/experiments/{id}/clone`): the copy is a new experiment,
+a draft, and takes it.

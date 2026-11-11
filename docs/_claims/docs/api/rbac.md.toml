@@ -772,7 +772,11 @@ by = ["test:modules/backend/tests/integration/api/test_rbac_api.py::TestEffectiv
 
 [[unit]]
 text = "404 Not Found — User does not exist"
-by = ["test:modules/backend/tests/integration/api/test_rbac_api.py::TestEffectivePermissions::test_get_permissions_nonexistent_user_returns_404"]
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_api.py::TestEffectivePermissions::test_get_permissions_nonexistent_user_returns_404",
+    "test:modules/backend/tests/integration/rbac/test_rbac_grant_unknown_user.py::test_a_grant_to_an_id_with_no_account_answers_404_and_writes_nothing",
+]
+count = 2
 
 [[unit]]
 text = "View your own permissions."
@@ -824,6 +828,14 @@ by = [
 ]
 
 [[unit]]
+text = "user_id must name the same user as the path: any other value, or one that is not a UUID, is refused with 400, and nothing is written."
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_grant_body_user_id_differing_from_path_is_refused",
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_grant_body_user_id_that_is_not_a_uuid_is_refused",
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_grant_body_user_id_written_another_way_is_the_same_user",
+]
+
+[[unit]]
 text = "expires_at is optional."
 by = [
     "test:modules/backend/tests/integration/api/test_rbac_api.py::TestDirectPermissionGrants::test_grant_appears_in_effective_permissions",
@@ -842,6 +854,13 @@ text = "resource and actions are checked as a role's permissions are (see What a
 by = [
     "test:modules/backend/tests/unit/schemas/test_rbac_schemas.py::test_exactly_the_eleven_pairs_are_accepted",
     "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_granting_a_pair_no_grant_may_hold_is_refused",
+]
+
+[[unit]]
+text = "400 Bad Request — user_id in the body differs from the path's"
+by = [
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_grant_body_user_id_differing_from_path_is_refused",
+    "test:modules/backend/tests/integration/api/test_rbac_grantable_routes.py::test_a_mismatch_whose_path_id_has_no_account_answers_400",
 ]
 
 [[unit]]

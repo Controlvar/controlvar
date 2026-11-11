@@ -5,7 +5,7 @@ This module provides API endpoints for retrieving metrics related to
 feature flag evaluations, performance, and errors.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Annotated, Any, Dict, List, Optional
 from uuid import UUID
 
@@ -14,7 +14,10 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import AfterValidator
 from sqlalchemy.orm import Session
 
+from backend.app.api.datetime_bounds import storable_offset
 from backend.app.api.deps import get_current_user, get_db
+from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.query_params import MAX_OFFSET, describe_as_int64
 from backend.app.models.user import User
 from backend.app.schemas.metrics import (
     AggregatedMetricResponse,
@@ -26,37 +29,15 @@ from backend.app.schemas.metrics import (
 )
 from backend.app.services.metrics_service import SUMMARY_DEFAULT_PERIOD, MetricsService
 
-router = APIRouter()
-
-#: PostgreSQL stores a UTC offset of at most 15:59:59 either way, and fails a
-#: query that compares with a larger one ("time zone displacement out of
-#: range"), which answered 500 (#956, #1561).
-OFFSET_LIMIT = timedelta(hours=16)
+router = APIRouter(route_class=OffLoopRoute)
 
 #: The fixed messages of the summary's two date refusals. Neither includes the
 #: value sent. Pydantic prefixes a validator's message with "Value error, ";
 #: the second refusal is raised by hand, so it carries the prefix itself.
-OFFSET_TOO_LARGE = "the UTC offset must be less than 16 hours"
 END_DATE_TOO_EARLY = (
     "Value error, end_date is too early for the default 30-day period; "
     "send start_date as well"
 )
-
-
-def _storable_offset(value: Optional[datetime]) -> Optional[datetime]:
-    """Refuse a date whose UTC offset is 16 hours or more either way.
-
-    A refusal is a validation error, i.e. 422 at ``["query", <field>]``. A
-    naive date, ``Z`` and offsets up to 15:59 either way pass unchanged. Used
-    as the ``AfterValidator`` inside the parameter's ``Annotated``, with the
-    ``Query`` beside it and ``None`` as the plain default: with the default
-    given as ``= Query(None, ...)`` instead, the validator is not run at all.
-    """
-    if value is not None:
-        offset = value.utcoffset()
-        if offset is not None and abs(offset) >= OFFSET_LIMIT:
-            raise ValueError(OFFSET_TOO_LARGE)
-    return value
 
 
 def _end_date_too_early() -> RequestValidationError:
@@ -94,12 +75,12 @@ def get_metrics_summary(
     start_date: Annotated[
         Optional[datetime],
         Query(description="Start date for metrics"),
-        AfterValidator(_storable_offset),
+        AfterValidator(storable_offset),
     ] = None,
     end_date: Annotated[
         Optional[datetime],
         Query(description="End date for metrics"),
-        AfterValidator(_storable_offset),
+        AfterValidator(storable_offset),
     ] = None,
     period: AggregationPeriod = Query(
         AggregationPeriod.DAY, description="Aggregation period"
@@ -151,9 +132,23 @@ def get_aggregated_metrics(
         None, description="Filter by targeting rule ID"
     ),
     period: Optional[AggregationPeriod] = Query(None, description="Aggregation period"),
-    start_date: Optional[datetime] = Query(None, description="Start date for metrics"),
-    end_date: Optional[datetime] = Query(None, description="End date for metrics"),
-    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    start_date: Annotated[
+        Optional[datetime],
+        Query(description="Start date for metrics"),
+        AfterValidator(storable_offset),
+    ] = None,
+    end_date: Annotated[
+        Optional[datetime],
+        Query(description="End date for metrics"),
+        AfterValidator(storable_offset),
+    ] = None,
+    skip: int = Query(
+        0,
+        ge=0,
+        le=MAX_OFFSET,
+        description="Number of records to skip",
+        json_schema_extra=describe_as_int64,
+    ),
     limit: int = Query(
         100, ge=1, le=1000, description="Maximum number of records to return"
     ),
@@ -197,15 +192,21 @@ def get_error_logs(
     start_date: Annotated[
         Optional[datetime],
         Query(description="Start date for errors"),
-        AfterValidator(_storable_offset),
+        AfterValidator(storable_offset),
     ] = None,
     end_date: Annotated[
         Optional[datetime],
         Query(description="End date for errors"),
-        AfterValidator(_storable_offset),
+        AfterValidator(storable_offset),
     ] = None,
     error_type: Optional[str] = Query(None, description="Filter by error type"),
-    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    skip: int = Query(
+        0,
+        ge=0,
+        le=MAX_OFFSET,
+        description="Number of records to skip",
+        json_schema_extra=describe_as_int64,
+    ),
     limit: int = Query(
         100, ge=1, le=1000, description="Maximum number of records to return"
     ),
@@ -247,10 +248,16 @@ def trigger_aggregation(
     metric_type: Optional[MetricType] = Query(
         None, description="Filter by metric type"
     ),
-    start_time: Optional[datetime] = Query(
-        None, description="Start time for aggregation"
-    ),
-    end_time: Optional[datetime] = Query(None, description="End time for aggregation"),
+    start_time: Annotated[
+        Optional[datetime],
+        Query(description="Start time for aggregation"),
+        AfterValidator(storable_offset),
+    ] = None,
+    end_time: Annotated[
+        Optional[datetime],
+        Query(description="End time for aggregation"),
+        AfterValidator(storable_offset),
+    ] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:

@@ -991,12 +991,13 @@ by = [
 ]
 
 [[unit]]
-text = "Full REST API + SDKs: Python and JavaScript on PyPI and npm, Go with go get, Java and React built from sdk/"
+text = "Full REST API + SDKs: JavaScript, React, React Native and Python on npm and PyPI, Java on Maven Central, .NET on NuGet, Go with go get"
 by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
     "journey:sdk-python#quick-start-user-on",
     "journey:sdk-javascript#quick-start-user-on",
     "journey:sdk-go#quick-start-user-on",
+    "mechanism:registry-availability",
     "test:sdk/java/spring-boot-starter/src/test/java/com/controlvar/sdk/spring/ExperimentationAutoConfigurationTest.java::beansCreatedWhenApiKeyPresent",
     "test:sdk/react/src/__tests__/ServerClient.test.ts::returns an enabled evaluation with the full structure",
 ]
@@ -1050,19 +1051,13 @@ text = "\"What about our tech stack?\""
 by = ["exempt:label"]
 
 [[unit]]
-text = "The Python and JavaScript/TypeScript SDKs are on PyPI and npm, and the Go SDK installs with go get."
+text = "The Python, JavaScript/TypeScript, React and React Native SDKs are on PyPI and npm, the Java SDK (with Spring Boot auto-configuration) is on Maven Central, the .NET SDK is on NuGet, and the Go SDK installs with go get."
 by = [
     "journey:sdk-python#quick-start-user-on",
     "journey:sdk-javascript#quick-start-user-on",
     "journey:sdk-go#quick-start-user-on",
-]
-
-[[unit]]
-text = "The Java SDK (with Spring Boot auto-configuration) and the React SDK (with hooks and SSR support) build from the repository's sdk/ directory."
-by = [
+    "mechanism:registry-availability",
     "test:sdk/java/spring-boot-starter/src/test/java/com/controlvar/sdk/spring/ExperimentationAutoConfigurationTest.java::beansCreatedWhenApiKeyPresent",
-    "test:sdk/react/src/__tests__/ServerClient.test.ts::returns an enabled evaluation with the full structure",
-    "test:sdk/react/src/__tests__/useExperiment.test.tsx::reports a control assignment with isControl: true",
 ]
 
 [[unit]]

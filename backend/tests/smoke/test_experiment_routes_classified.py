@@ -10,7 +10,11 @@ given a class below.
 
 This pins the inventory and its labels, not behaviour. What each label claims
 for the experiment routes is proved by
-``backend/tests/integration/api/test_experiment_access_by_role.py``.
+``backend/tests/integration/api/test_experiment_access_by_role.py``, and for the
+results, export, interaction, bandit, counters and stream routes by
+``backend/tests/integration/api/test_experiment_data_read_rule.py``. The export
+and interaction routes have a second exact table,
+``EXPORT_AND_INTERACTION_ROUTES``, since the selection rule sees only two.
 
 HTTP routes are read through ``effective_route_contexts`` (FastAPI keeps
 ``include_router`` lazy), as in ``test_sdk_scoped_routes.py``. Those contexts
@@ -44,7 +48,7 @@ CHANGE_DELETE = "CHANGE-DELETE"
 ROLE_ONLY = "ROLE-ONLY"
 SUPERUSER = "SUPERUSER"
 AUTHENTICATED = "AUTHENTICATED"
-NO_ROLE_CHECK = "no role check, #457"
+NO_ROLE_CHECK = "no role check, request body only"
 ANONYMOUS = "anonymous, T65"
 
 #: One line per class: what admits a caller.
@@ -58,9 +62,8 @@ CLASS_REASONS = {
     ROLE_ONLY: "a role check only (LIST, CREATE, UPDATE, READ or a named role); "
     "who created the experiment is not considered",
     SUPERUSER: "superusers only",
-    AUTHENTICATED: "any signed-in user: the route lists experiments, which every "
-    "role may LIST, or reads no experiment at all",
-    NO_ROLE_CHECK: "any signed-in user; tracked in #457",
+    AUTHENTICATED: "authentication only: /experiments/analysis/sample-size",
+    NO_ROLE_CHECK: "any signed-in user: the route reads only its request body",
     ANONYMOUS: "no token required; tracked in T65",
 }
 
@@ -88,24 +91,25 @@ CORE_ROUTES = {
     ("DELETE", f"{E}/{{experiment_id}}"): CHANGE_DELETE,
     ("GET", f"{E}/{{experiment_id}}/split-url/preview"): ROLE_ONLY,
     # results.py and post_stratification.py
-    ("GET", R): NO_ROLE_CHECK,
-    ("GET", f"{R}/daily"): NO_ROLE_CHECK,
-    ("GET", f"{R}/sample-size"): NO_ROLE_CHECK,
-    ("GET", f"{R}/bayesian"): NO_ROLE_CHECK,
-    ("GET", f"{R}/sequential"): NO_ROLE_CHECK,
-    ("GET", f"{R}/cuped"): NO_ROLE_CHECK,
-    ("POST", f"{R}/post-stratification"): NO_ROLE_CHECK,
-    ("POST", f"{R}/fdr-correction"): NO_ROLE_CHECK,
+    ("GET", R): READ,
+    ("GET", f"{R}/daily"): READ,
+    ("GET", f"{R}/sample-size"): READ,
+    ("GET", f"{R}/bayesian"): READ,
+    ("GET", f"{R}/sequential"): READ,
+    ("GET", f"{R}/cuped"): READ,
+    ("GET", f"{R}/balanced-groups"): READ,
+    ("POST", f"{R}/post-stratification"): READ,
+    ("POST", f"{R}/fdr-correction"): READ,
     ("POST", f"{R}/invalidate-cache"): SUPERUSER,
     # websocket_results.py
-    ("WS", "/api/v1/ws/experiments/{experiment_id}/results"): NO_ROLE_CHECK,
+    ("WS", "/api/v1/ws/experiments/{experiment_id}/results"): READ,
     ("GET", "/api/v1/ws/experiments/{experiment_id}/results/subscribers"): ANONYMOUS,
     ("GET", "/api/v1/ws/active-experiments"): ANONYMOUS,
     # export, AI interpretation, bandits
-    ("GET", "/api/v1/export/experiments"): AUTHENTICATED,
-    ("GET", "/api/v1/export/reports/experiments/{experiment_id}"): NO_ROLE_CHECK,
+    ("GET", "/api/v1/export/experiments"): ROLE_ONLY,
+    ("GET", "/api/v1/export/reports/experiments/{experiment_id}"): READ,
     ("POST", "/api/v1/ai/interpret/{experiment_id}"): NO_ROLE_CHECK,
-    ("GET", "/api/v1/bandit/{experiment_id}"): NO_ROLE_CHECK,
+    ("GET", "/api/v1/bandit/{experiment_id}"): READ,
     ("POST", "/api/v1/bandit/{experiment_id}/update"): ROLE_ONLY,
     ("PUT", "/api/v1/bandit/{experiment_id}/weights"): ROLE_ONLY,
     # mutual-exclusion groups
@@ -132,7 +136,7 @@ CORE_ROUTES = {
 
 #: Added by the full profile.
 MODULE_ROUTES = {
-    ("GET", "/api/v1/counters/{experiment_id}"): AUTHENTICATED,
+    ("GET", "/api/v1/counters/{experiment_id}"): READ,
     ("POST", "/api/v1/counters/{experiment_id}/increment"): ROLE_ONLY,
     ("POST", "/api/v1/counters/{experiment_id}/reset"): ROLE_ONLY,
     ("GET", "/api/v1/warehouse/analysis/experiments/{experiment_id}/runs"): ROLE_ONLY,
@@ -142,8 +146,23 @@ MODULE_ROUTES = {
 #: Not matched by the selection rule; listed so it stays pinned.
 EXPLICIT = {("GET", "/api/v1/ws/active-experiments")}
 
-CORE_COUNT = 48  # 46 HTTP + 1 WebSocket selected, and the explicit entry
-FULL_COUNT = 53
+#: Every route under ``/api/v1/export/`` and ``/api/v1/interactions/``, most of
+#: which the selection rule above does not see: the list exports ask the LIST
+#: permission of their list pages, the report the experiment's READ, and the
+#: interaction routes name the roles they admit.
+EXPORT_AND_INTERACTION_ROUTES = {
+    ("GET", "/api/v1/export/experiments"): ROLE_ONLY,
+    ("GET", "/api/v1/export/variants"): ROLE_ONLY,
+    ("GET", "/api/v1/export/feature-flags"): ROLE_ONLY,
+    ("GET", "/api/v1/export/reports/overview"): ROLE_ONLY,
+    ("GET", "/api/v1/export/reports/experiments/{experiment_id}"): READ,
+    ("GET", "/api/v1/interactions/scan"): ROLE_ONLY,
+    ("GET", "/api/v1/interactions/{exp_a_id}/{exp_b_id}"): ROLE_ONLY,
+}
+EXPORT_AND_INTERACTION_PREFIXES = ("/api/v1/export/", "/api/v1/interactions/")
+
+CORE_COUNT = 49  # 47 HTTP + 1 WebSocket selected, and the explicit entry
+FULL_COUNT = 54
 
 
 def _full_profile() -> bool:
@@ -234,6 +253,28 @@ def test_the_inventory_is_exactly_this():
     assert not gone, f"classified routes the application no longer serves: {gone}"
     assert {k: expected[k] for k in found} == expected
     assert len(found) == (FULL_COUNT if _full_profile() else CORE_COUNT)
+
+
+def test_export_and_interaction_routes_are_exactly_these():
+    found = {
+        (m, p)
+        for m, p in _http_routes(app)
+        if p.startswith(EXPORT_AND_INTERACTION_PREFIXES)
+    }
+    unclassified = sorted(found - EXPORT_AND_INTERACTION_ROUTES.keys())
+    gone = sorted(EXPORT_AND_INTERACTION_ROUTES.keys() - found)
+    assert not unclassified, f"unclassified: {unclassified}"
+    assert not gone, f"classified routes the application no longer serves: {gone}"
+    # A route in both tables carries the same label in each.
+    both = EXPORT_AND_INTERACTION_ROUTES.keys() & CORE_ROUTES.keys()
+    assert both == {
+        ("GET", "/api/v1/export/experiments"),
+        ("GET", "/api/v1/export/reports/experiments/{experiment_id}"),
+    }
+    assert {k: CORE_ROUTES[k] for k in both} == {
+        k: EXPORT_AND_INTERACTION_ROUTES[k] for k in both
+    }
+    assert set(EXPORT_AND_INTERACTION_ROUTES.values()) <= set(CLASS_REASONS)
 
 
 def test_every_class_has_a_reason():

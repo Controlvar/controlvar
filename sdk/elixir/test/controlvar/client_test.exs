@@ -210,7 +210,7 @@ defmodule Controlvar.ClientTest do
                Client.evaluate_flag(pid, "disabled-flag", "user-123")
     end
 
-    test "returns {:error, {:api_error, 404, _}} when the flag is not ACTIVE" do
+    test "returns {:error, {:api_error, 404, _}} when the flag key is unknown" do
       pid = start_client()
 
       assert {:error, {:api_error, 404, _body}} =

@@ -19,11 +19,8 @@ text = "Website: controlvar.com · Documentation: docs.controlvar.com"
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "The results page of a ShopLab demo experiment in the Controlvar dashboard: its users, the planned sample reached, the leading variant and the sample ratio check."
-by = [
-    "journey:experiment-results#results-page",
-    "journey:experiment-results#ratio-results-page",
-]
+text = "The power calculator: the baseline conversion rate, the minimum detectable effect, the sample size each variant needs, and a power curve."
+by = ["journey:power-calculator#calculator"]
 
 [[unit]]
 text = "Watch the walkthrough videos on controlvar.com."
@@ -334,10 +331,11 @@ text = "Configurable Thresholds: Per-feature flag safety configuration"
 by = ["test:backend/tests/integration/api/test_safety_api.py::TestFeatureFlagSafetyConfig::test_superuser_can_set_safety_config"]
 
 [[unit]]
-text = "Complete Audit Trail: All rollbacks logged with reasoning"
+text = "Rollback History: every rollback, automatic or manual, is stored with its reason; it also appears in the flag's audit history, unless that entry could not be written"
 by = [
     "test:backend/tests/unit/schedulers/test_safety_scheduler_rollback.py::test_automatic_rollback_reason_words_the_breach_in_the_scheduler",
     "test:backend/tests/integration/services/test_safety_service_coverage.py::TestExecuteRollback::test_every_rollback_is_recorded_and_audited_with_its_reason",
+    "test:backend/tests/integration/services/test_audit_service_sites.py::test_a_refused_monitor_entry_never_blocks_a_rollback",
 ]
 
 [[unit]]
@@ -463,6 +461,30 @@ text = "Go | go get github.com/controlvar/controlvar/sdk/go"
 by = ["journey:sdk-go#quick-start-user-on"]
 
 [[unit]]
+text = "React | npm install @controlvar/react-sdk"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "React Native | npm install @controlvar/react-native-sdk"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "OpenFeature (Node) | npm install @controlvar/openfeature-provider @openfeature/server-sdk"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "OpenFeature (Python) | pip install controlvar-openfeature"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = "Java | com.controlvar:controlvar-sdk (Maven Central)"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
+text = ".NET | dotnet add package Controlvar.SDK"
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_the_sdk_package_names"]
+
+[[unit]]
 text = "Every other SDK installs from a clone of this repository."
 by = ["exempt:instruction"]
 
@@ -471,7 +493,26 @@ text = "The SDK guide says how, and what CI runs for each one."
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "sdk/mcp holds the Controlvar MCP server, which is not an SDK and is not yet published; it is meant for an AI assistant such as Claude Code to start on your computer, to read your instance's feature flags, experiments and results with your API key."
+text = "The Controlvar MCP server is not an SDK."
+by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_sdk_mcp_is_the_mcp_server_and_not_an_sdk"]
+
+[[unit]]
+text = "An AI assistant such as Claude Code starts it on your computer to read your instance's feature flags, experiments and results with your API key, and it changes no flag or experiment."
+by = [
+    "test:sdk/mcp/__tests__/surface.test.ts::the six tools and their annotations, whatever tools.json says",
+    "test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_sdk_mcp_is_the_mcp_server_and_not_an_sdk",
+]
+
+[[unit]]
+text = "The @controlvar/mcp-server package is on npm."
+by = ["mechanism:registry-availability"]
+
+[[unit]]
+text = "The MCP Server and the AI Endpoints has the command that adds it to Claude Code, and the settings for Claude Desktop and Cursor."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "Its source is sdk/mcp."
 by = ["test:backend/tests/unit/infrastructure/test_front_door_facts.py::test_sdk_mcp_is_the_mcp_server_and_not_an_sdk"]
 
 [[unit]]
@@ -488,6 +529,10 @@ by = ["exempt:navigation"]
 
 [[unit]]
 text = "Targeting rules: operators, attribute aliases and examples"
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "The Controlvar books: engineering, programming and the craft of shipping software, taught through this codebase, for newcomers to a language or framework, engineers who already code, and contributors (CC BY 4.0)"
 by = ["exempt:navigation"]
 
 [[unit]]
@@ -718,4 +763,8 @@ by = ["exempt:label"]
 
 [[unit]]
 text = "CONTRIBUTING.md covers the development setup, the test suites and the core/modules boundary."
+by = ["exempt:navigation"]
+
+[[unit]]
+text = "ROADMAP.md says what is planned Now, Next and Later, and how to influence it."
 by = ["exempt:navigation"]

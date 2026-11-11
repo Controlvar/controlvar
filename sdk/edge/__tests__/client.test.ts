@@ -193,7 +193,7 @@ describe('evaluateFlag', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
-  test('returns a disabled evaluation on 404 (flag not ACTIVE) and does not cache it', async () => {
+  test('returns a disabled evaluation on 404 (unknown flag key) and does not cache it', async () => {
     mockJson({ detail: 'Feature flag not found' }, 404);
     mockJson(flagBody());
     const client = makeClient();

@@ -13,7 +13,10 @@ export const SRM_HEADING = 'The traffic split does not match the allocation.';
 export const SRM_BODY =
   'When this happens, assignment or tracking is usually broken, so these results should not ' +
   'be trusted, including the recommendation. Find the cause before you decide.';
-/** The qualifier the "Leading" chip and the Bayesian panel carry under a mismatch. */
+/**
+ * The qualifier the "Leading" chip, the Bayesian panel and the Sequential
+ * tab's stopping banner carry under a mismatch.
+ */
 export const SRM_QUALIFIER =
   'The traffic split does not match the allocation, so treat this with caution.';
 

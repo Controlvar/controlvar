@@ -33,13 +33,16 @@ this test reads the fragments. Within a card the order is the order
 ``capture.director.card_html`` draws it (label, body, note), checked once by a
 person against the video.
 
-Exactly two placeholders may stand in a source string. Each is matched as a
+Exactly three placeholders may stand in a source string. Each is matched as a
 pattern, and its value is checked by hand against the video's render record
 when the entry is reviewed:
 
 * ``{version}``, only in ``RECORDED_LINE``: ``v<major>.<minor>.<patch>``;
 * ``{traffic_minutes}``, only in a card's ``headline`` or ``note``:
-  ``<n> minute(s)``, as the capture measured it (``capture.run.minutes_text``).
+  ``<n> minute(s)``, as the capture measured it (``capture.run.minutes_text``);
+* ``{rollback_minutes}``, only in a card's ``headline``: ``<n> minute(s)``, the
+  wall-clock gap the card hides, as ``capture.incident.minutes_text`` writes it
+  (video 4's "1 minute later").
 
 Any other ``{name}`` in a string a transcript quotes fails: a new placeholder
 needs its rule written here first.
@@ -101,6 +104,7 @@ PLACEHOLDER = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 PLACEHOLDERS = {
     "version": r"v[0-9]+\.[0-9]+\.[0-9]+",
     "traffic_minutes": r"[1-9][0-9]* minutes?",
+    "rollback_minutes": r"[1-9][0-9]* minutes?",
 }
 
 FIX = (
@@ -129,7 +133,8 @@ class Source:
                 raise AssertionError(
                     f"{self.where} has the placeholder {{{part}}}, which a transcript "
                     "may not fill there (the rule allows {version} in RECORDED_LINE "
-                    "and {traffic_minutes} in a card's headline or note). Write its "
+                    "{traffic_minutes} in a card's headline or note, and "
+                    "{rollback_minutes} in a card's headline). Write its "
                     "rule in this test's docstring before a transcript quotes it."
                 )
         return re.compile("".join(out))
@@ -173,7 +178,7 @@ def expected_items(storyboard: dict) -> list[tuple[str, list[Source]]]:
                 headline = Source(
                     card["headline"],
                     f"{where} headline",
-                    frozenset({"traffic_minutes"}),
+                    frozenset({"traffic_minutes", "rollback_minutes"}),
                 )
                 items.append(("on_screen", [label, headline, note]))
             elif "code" in card:
@@ -417,6 +422,95 @@ DESCRIPTION_FACTS: dict[str, dict[str, Any]] = {
                     "feature_flag_update",
                     "toggle_disable",
                 ],
+            }
+        },
+    },
+    "04-streampulse-rollout": {
+        "description": (
+            "A device rule, a kill switch, then the safety monitor rolls a staged "
+            "rollout back by itself after simulated crashes. The demo uses the web "
+            "SDK; iOS, Android and Flutter send only the user id to flags."
+        ),
+        "seed": "demo",
+        # The rule's page; the kill switch; Player v2's stage and its safety
+        # check; the schedule the monitor paused; the audit log's top row.
+        "actions": [
+            ["look", {"testid": "flag-targeting-section"}],
+            ["click", {"testid": "flag-toggle"}],
+            ["look", {"testid": "safety-status"}],
+            ["look", {"testid": "rollout-schedule-status"}],
+            ["look", {"css": "[data-testid=audit-log-table] tbody tr"}],
+        ],
+        "said": [
+            "A kill switch: turn Recommendations v2 off, with no app release.",
+            "Simulated: Android 12 devices crash in Player v2.",
+            "By itself, the monitor paused the schedule.",
+            "The dashboard's audit log shows the safety monitor did it, and why.",
+        ],
+        # "simulated crashes", stated on the card that says so; the wait for the
+        # monitor is the time skip the second card states.
+        "departures": ["simulated traffic", "time skip"],
+        # What the capture reads back through the API (gate 10/4): Player v2
+        # rolled back to 5% with its schedule paused, by the safety monitor,
+        # and the kill switch off.
+        "end_state": {
+            "rollback": {
+                "name": "StreamPulse: Player v2",
+                "key": "streampulse_player_v2",
+                "percentage": 5,
+                "schedule": "paused",
+                "audit": [
+                    "feature_flag_update",
+                    "feature_flag_update",
+                    "safety_rollback",
+                ],
+                "kill_switch": {
+                    "name": "StreamPulse: Recommendations v2",
+                    "audit": ["toggle_disable"],
+                },
+            }
+        },
+    },
+    "10-serve-a-value": {
+        "description": (
+            "Create a flag that serves a string instead of on or off: its type, an "
+            "on value and an off value, and a rule for pro plan users. Switch it "
+            "on, then see the Go SDK lines that read the value."
+        ),
+        "seed": "demo",
+        # New Flag; the String type; the on and off values typed into their
+        # fields; the rule's group and its value; the switch to on.
+        "actions": [
+            ["click", {"testid": "new-flag-btn"}],
+            ["click", {"role": "radio", "name": "String", "exact": True}],
+            ["type", {"label": "On value", "exact": True}],
+            ["type", {"label": "Off value", "exact": True}],
+            ["click", {"testid": "add-group"}],
+            ["type", {"testid": "condition-value"}],
+            ["click", {"testid": "flag-toggle"}],
+        ],
+        # The Go card's lines are the docs' own (test_showcase_quoted_docs.py);
+        # the narration says what they do.
+        "said": [
+            "A flag can serve a value instead of on or off.",
+            "Add a rule: users on the pro plan get the on value.",
+            "In your app, the Go SDK reads the value for each user.",
+        ],
+        # What the capture reads back through the API (gate 10): the one flag,
+        # a string flag with both values and the pro-plan rule, switched on.
+        "end_state": {
+            "flag": {
+                "name": "Checkout button label",
+                "key": "checkout-button-label",
+                "rule": {
+                    "attribute": "user.plan",
+                    "operator": "equals",
+                    "value": "pro",
+                },
+                "status": "active",
+                "value_type": "string",
+                "on_value": "Complete purchase",
+                "off_value": "Buy now",
             }
         },
     },
@@ -693,6 +787,32 @@ def animation_fact_problems(transcript: dict, facts: dict[str, Any]) -> list[str
     return problems
 
 
+LIMITATIONS = REPO / "docs" / "getting-started" / "limitations.md"
+STREAMPULSE_README = REPO / "demo" / "streampulse" / "README.md"
+
+
+def test_video_4s_native_sdk_sentence_is_the_documented_limitation():
+    """D163: video 4's description says what the docs say about native SDKs.
+
+    Its second sentence has two claims that are not in the storyboard, so each is
+    held to the file that states it: the demo's README (the app is built on the
+    web SDK) and the Limitations page's row on flag targeting from a native SDK.
+    """
+    description = next(
+        e["description"]
+        for e in MANIFEST_ENTRIES
+        if e["slug"] == "04-streampulse-rollout"
+    )
+    assert "iOS, Android and Flutter send only the user id to flags" in description
+    assert "The demo uses the web SDK" in description
+    limitations = LIMITATIONS.read_text(encoding="utf-8")
+    assert (
+        "iOS, Android and Flutter send only the user id on flag evaluation, so rules "
+        "on attributes do not match"
+    ) in limitations
+    assert "(web SDK)" in STREAMPULSE_README.read_text(encoding="utf-8").splitlines()[0]
+
+
 def test_every_listed_video_has_its_facts_and_no_other_does():
     assert sorted(DESCRIPTION_FACTS) == sorted(SLUGS)
 
@@ -832,6 +952,33 @@ def test_a_known_placeholder_outside_its_place_fails():
 
     with pytest.raises(AssertionError, match=r"\{traffic_minutes\}"):
         planted(change)
+
+
+def test_rollback_minutes_outside_a_card_headline_fails():
+    def change(items, sb):
+        sb["scenes"][0]["card"]["note"] = "Waited {rollback_minutes} (measured)."
+        items[1]["on_screen"][2] = "Waited 1 minute (measured)."
+
+    with pytest.raises(AssertionError, match=r"\{rollback_minutes\}"):
+        planted(change)
+
+
+@pytest.mark.parametrize(
+    ("filled", "matches"),
+    [
+        ("1 minute", True),
+        ("2 minutes", True),
+        ("minutes", False),
+        ("0 minutes", False),
+        ("a minute", False),
+    ],
+)
+def test_rollback_minutes_matches_only_what_the_capture_writes(filled, matches):
+    def change(items, sb):
+        sb["scenes"][0]["card"]["headline"] = "{rollback_minutes} later"
+        items[1]["on_screen"][1] = f"{filled} later"
+
+    assert (planted(change) == []) is matches
 
 
 @pytest.mark.parametrize(

@@ -33,6 +33,13 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from backend.app.api import deps
+from backend.app.api.datetime_bounds import refuse_unstorable_offset
+from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.query_params import (
+    MAX_PAGE,
+    check_page_offset,
+    describe_as_int64,
+)
 from backend.app.core.optional_modules import (
     COMPLIANCE_REPORTING_UNAVAILABLE_DETAIL,
     compliance_export_handler,
@@ -48,7 +55,7 @@ from backend.app.services.audit_log_service import AuditLogService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 # Roles that may read the core compliance audit event listing
 _ALLOWED_ROLES = (UserRole.ADMIN, UserRole.ANALYST)
@@ -100,7 +107,13 @@ def list_audit_events(
         None,
         description="Only return events at or before this UTC datetime (ISO 8601)",
     ),
-    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page: int = Query(
+        1,
+        ge=1,
+        le=MAX_PAGE,
+        description="Page number (1-indexed)",
+        json_schema_extra=describe_as_int64,
+    ),
     limit: int = Query(50, ge=1, le=200, description="Records per page"),
     current_user: User = Depends(deps.get_current_active_user),
     db: Session = Depends(get_db),
@@ -125,6 +138,12 @@ def list_audit_events(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Compliance audit logs require ADMIN or ANALYST role",
             )
+
+    refuse_unstorable_offset("start_time", start_time)
+    refuse_unstorable_offset("end_time", end_time)
+    # After the role check, so a caller it refuses is answered 403, and after
+    # the date refusals, which answer as before (#1001).
+    check_page_offset(page, limit, "limit")
 
     service = AuditLogService(db)
     result = service.get_events(
@@ -192,6 +211,8 @@ def generate_compliance_report(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail=COMPLIANCE_REPORTING_UNAVAILABLE_DETAIL,
         )
+    refuse_unstorable_offset("start_time", start_time)
+    refuse_unstorable_offset("end_time", end_time)
     return handler(
         standard=standard,
         start_time=start_time,
@@ -250,6 +271,8 @@ def export_audit_events(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail=COMPLIANCE_REPORTING_UNAVAILABLE_DETAIL,
         )
+    refuse_unstorable_offset("start_time", start_time)
+    refuse_unstorable_offset("end_time", end_time)
     return handler(
         format=format,
         start_time=start_time,

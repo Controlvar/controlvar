@@ -15,7 +15,8 @@ interface Row {
   /** A paragraph after the bullets, if the row has one. */
   after?: React.ReactNode;
   link: { text: string; href: string };
-  screen: ScreenId;
+  /** None for the statistics row: its screenshot, the power calculator, is the hero's. */
+  screen?: ScreenId;
   /** From `lg` up, the screenshot sits on the left. The DOM order is always text, then screenshot. */
   reverse?: boolean;
 }
@@ -58,8 +59,6 @@ const ROWS: Row[] = [
     // page it quotes (tests/content/home-quotes.test.tsx).
     after: <Quote id="revenue-metric" />,
     link: { text: 'Open the power calculator', href: '/power-calculator' },
-    screen: 'power-calculator',
-    reverse: true,
   },
   {
     id: 'teams',
@@ -73,6 +72,7 @@ const ROWS: Row[] = [
 ];
 
 function ProductRow({ row, marketing }: { row: Row; marketing: boolean }) {
+  const screen = marketing ? row.screen : undefined;
   const link = (
     <>
       {row.link.text} <span aria-hidden="true">→</span>
@@ -81,7 +81,7 @@ function ProductRow({ row, marketing }: { row: Row; marketing: boolean }) {
   const linkClass = `font-semibold text-blue-700 hover:text-blue-900 ${FOCUS}`;
   return (
     <section aria-labelledby={`${row.id}-heading`} className={`${WIDTH} py-12 lg:py-16`}>
-      <div className={marketing ? 'grid gap-10 lg:grid-cols-5 lg:items-center lg:gap-14' : 'max-w-2xl'}>
+      <div className={screen ? 'grid gap-10 lg:grid-cols-5 lg:items-center lg:gap-14' : 'max-w-2xl'}>
         <div className="min-w-0 lg:col-span-2">
           <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-700">{row.icon}</span>
           <h2 id={`${row.id}-heading`} className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl">
@@ -111,9 +111,9 @@ function ProductRow({ row, marketing }: { row: Row; marketing: boolean }) {
             )}
           </p>
         </div>
-        {marketing && (
+        {screen && (
           <div className={`min-w-0 lg:col-span-3${row.reverse ? ' lg:order-first' : ''}`}>
-            <Screenshot id={row.screen} />
+            <Screenshot id={screen} />
           </div>
         )}
       </div>
@@ -122,8 +122,9 @@ function ProductRow({ row, marketing }: { row: Row; marketing: boolean }) {
 }
 
 /**
- * Three rows, each a feature with its screenshot: rollouts and safety,
- * statistics, and teams with the audit log.
+ * Three rows, each a feature: rollouts and safety, statistics, and teams with
+ * the audit log. The first and the last have a screenshot; the statistics
+ * row's, the power calculator, is the hero's now, so that row is text only.
  *
  * The platform build renders them as text only (#1459 C2), so the rows keep
  * their words and lose their pictures there.

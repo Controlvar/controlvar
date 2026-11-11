@@ -1,5 +1,10 @@
-import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import React, { useState } from 'react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import axe from 'axe-core';
+// The dialog makes `#__next` inert and portals beside it, so every render is
+// mounted the way Next mounts the page (#369).
+import { APP_ROOT_ID, renderInAppRoot as render } from '@/tests/helpers/renderInAppRoot';
 import { EffectivePermissionsModal } from '@/components/admin/users/EffectivePermissionsModal';
 import { RbacService } from '@modules/rbac';
 import { shapeErrors } from '@/tests/helpers/openapiShape';
@@ -159,5 +164,90 @@ describe('EffectivePermissionsModal', () => {
     await waitFor(() => {
       expect(mockGetUserPermissions).toHaveBeenCalledWith('user-123');
     });
+  });
+});
+
+/** A page with the real opener: the row button that opens the dialog. */
+function OpenedFromButton() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}>
+        Permissions for ada
+      </button>
+      <EffectivePermissionsModal
+        isOpen={open}
+        userId="user-123"
+        userEmail="ada@example.com"
+        onClose={() => setOpen(false)}
+      />
+    </>
+  );
+}
+
+describe('EffectivePermissionsModal on the shared Dialog (#369)', () => {
+  const appRoot = () => document.getElementById(APP_ROOT_ID) as HTMLElement;
+
+  async function open() {
+    mockGetUserPermissions.mockResolvedValue(answer({ experiment: ['read'] }));
+    const user = userEvent.setup();
+    render(<OpenedFromButton />);
+    const opener = screen.getByRole('button', { name: 'Permissions for ada' });
+    await user.click(opener);
+    await screen.findByTestId('permissions-list');
+    return { user, opener };
+  }
+
+  it('opens as a modal dialog, with the email under the title and the note as its description', async () => {
+    await open();
+    const dialog = screen.getByRole('dialog', { name: 'Effective permissions' });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(dialog).toBe(screen.getByTestId('effective-permissions-modal'));
+    expect(dialog).toHaveAccessibleDescription(ACCESS_NOTE);
+    expect(screen.getByText('ada@example.com')).toBeInTheDocument();
+  });
+
+  it('the page behind it is inert while it is open, and not after', async () => {
+    const { user } = await open();
+    expect(appRoot()).toHaveAttribute('inert');
+    expect(appRoot().contains(screen.getByTestId('effective-permissions-modal'))).toBe(false);
+    await user.keyboard('{Escape}');
+    expect(appRoot()).not.toHaveAttribute('inert');
+  });
+
+  it('Escape closes it once, from the dialog or from document, and focus returns to the opener', async () => {
+    const { user, opener } = await open();
+    expect(screen.getByTestId('permissions-close-button')).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('effective-permissions-modal')).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+
+    await user.click(opener);
+    await screen.findByTestId('permissions-list');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByTestId('effective-permissions-modal')).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+  });
+
+  it('focus returns to the opener after either Close button', async () => {
+    const { user, opener } = await open();
+    await user.click(screen.getByTestId('permissions-close-button'));
+    expect(opener).toHaveFocus();
+    await user.click(opener);
+    await screen.findByTestId('permissions-list');
+    // Two buttons are named Close: the × in the title row, then the one in the footer.
+    const closes = screen.getAllByRole('button', { name: 'Close' });
+    expect(closes).toHaveLength(2);
+    await user.click(closes[1]);
+    expect(opener).toHaveFocus();
+  });
+
+  it('the dialog has no axe violations, and the rule that names it ran on it', async () => {
+    await open();
+    const dialog = screen.getByRole('dialog');
+    expect(document.body).toContainElement(dialog);
+    const result = await axe.run(dialog, { rules: { 'color-contrast': { enabled: false } } });
+    expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`)).toStrictEqual([]);
+    expect(result.passes.map((p) => p.id)).toContain('aria-dialog-name');
   });
 });

@@ -1,5 +1,6 @@
-import React from 'react';
-import { render, screen, fireEvent, act, within } from '@testing-library/react';
+import React, { useState } from 'react';
+import { screen, fireEvent, act, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import axe from 'axe-core';
 import {
   DEACTIVATE_WARNING,
@@ -12,6 +13,9 @@ import {
 import { ModulesProvider } from '@/contexts/ModulesContext';
 import { ApiError } from '@/services/api';
 import { AdminUser } from '@/types/admin';
+// The dialog makes `#__next` inert and portals beside it, so every render is
+// mounted the way Next mounts the page (#369).
+import { APP_ROOT_ID, renderInAppRoot as render } from '@/tests/helpers/renderInAppRoot';
 
 const mockUser: AdminUser = {
   id: 'user-1',
@@ -325,33 +329,120 @@ describe('editErrorMessage', () => {
   });
 });
 
+/** A page with the real opener: a button that opens the dialog, as the users table does. */
+function OpenedFromButton({ currentUserId = 'admin-1' }: { currentUserId?: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}>
+        Edit jdoe
+      </button>
+      <EditUserModal
+        isOpen={open}
+        user={mockUser}
+        currentUserId={currentUserId}
+        onClose={() => setOpen(false)}
+        onSave={() => Promise.resolve()}
+      />
+    </>
+  );
+}
+
+describe('EditUserModal on the shared Dialog (#369)', () => {
+  const appRoot = () => document.getElementById(APP_ROOT_ID) as HTMLElement;
+
+  it('opens as a modal dialog named "Edit user"', async () => {
+    const user = userEvent.setup();
+    render(<OpenedFromButton />);
+    await user.click(screen.getByRole('button', { name: 'Edit jdoe' }));
+    const dialog = screen.getByRole('dialog', { name: 'Edit user' });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(dialog).toBe(screen.getByTestId('edit-user-modal'));
+  });
+
+  it('Escape dispatched on document closes it, once', () => {
+    const onClose = jest.fn();
+    render(<EditUserModal isOpen user={mockUser} currentUserId="admin-1" onClose={onClose} onSave={jest.fn()} />);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledWith(undefined);
+  });
+
+  it('focus returns to the button that opened it, after Escape and after Cancel', async () => {
+    const user = userEvent.setup();
+    render(<OpenedFromButton />);
+    const opener = screen.getByRole('button', { name: 'Edit jdoe' });
+
+    await user.click(opener);
+    expect(screen.getByTestId('edit-role-select')).toHaveFocus();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByTestId('edit-user-modal')).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+
+    await user.click(opener);
+    await user.click(screen.getByTestId('edit-cancel-button'));
+    expect(screen.queryByTestId('edit-user-modal')).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+  });
+
+  it('the page behind it is inert while it is open, and not after', async () => {
+    const user = userEvent.setup();
+    render(<OpenedFromButton />);
+    await user.click(screen.getByRole('button', { name: 'Edit jdoe' }));
+    expect(appRoot()).toHaveAttribute('inert');
+    expect(appRoot().contains(screen.getByTestId('edit-user-modal'))).toBe(false);
+    await user.keyboard('{Escape}');
+    expect(appRoot()).not.toHaveAttribute('inert');
+  });
+
+  it('Tab from the last control wraps to the first; the page behind is never reached', async () => {
+    const user = userEvent.setup();
+    render(<OpenedFromButton />);
+    await user.click(screen.getByRole('button', { name: 'Edit jdoe' }));
+    // Save is disabled until something changes, so Cancel is the last control.
+    expect(screen.getByTestId('edit-role-select')).toHaveFocus();
+    await user.tab();
+    expect(screen.getByTestId('edit-active-toggle')).toHaveFocus();
+    await user.tab();
+    expect(screen.getByTestId('edit-cancel-button')).toHaveFocus();
+    await user.tab();
+    expect(screen.getByTestId('edit-role-select')).toHaveFocus();
+  });
+});
+
 describe('EditUserModal accessibility (axe-core in jsdom; colour contrast is not computable here)', () => {
   const axeOptions: axe.RunOptions = { rules: { 'color-contrast': { enabled: false } } };
 
-  async function violations(node: Element) {
-    const result = await axe.run(node, axeOptions);
-    return result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`);
+  // Changed for #369 (was `violations(container)`): the dialog now portals to
+  // document.body, outside the render container, so a container scan passed
+  // while checking nothing. The scan is of the dialog node itself, and asserts
+  // that the rule naming the dialog ran on it.
+  async function dialogViolations() {
+    // By role alone: a lost name must be axe's finding, not a failed query.
+    const dialog = screen.getByRole('dialog');
+    expect(document.body).toContainElement(dialog);
+    const result = await axe.run(dialog, axeOptions);
+    const violations = result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`);
+    // A clean scan must have run the rule that names the dialog, on it.
+    if (violations.length === 0) expect(result.passes.map((p) => p.id)).toContain('aria-dialog-name');
+    return violations;
   }
 
   it('the dialog has no axe violations: editing another user, with the warning and an error', async () => {
     const onSave = jest.fn(() =>
       Promise.reject(new ApiError({ status: 403, detail: 'Not enough permissions' })),
     );
-    const { container } = render(
-      <EditUserModal isOpen user={mockUser} currentUserId="admin-1" onClose={jest.fn()} onSave={onSave} />,
-    );
+    render(<EditUserModal isOpen user={mockUser} currentUserId="admin-1" onClose={jest.fn()} onSave={onSave} />);
     fireEvent.click(screen.getByTestId('edit-active-toggle'));
     await act(async () => {
       fireEvent.click(screen.getByTestId('edit-save-button'));
     });
     expect(screen.getByTestId('edit-error-message')).toBeInTheDocument();
-    expect(await violations(container)).toStrictEqual([]);
+    expect(await dialogViolations()).toStrictEqual([]);
   });
 
   it('the dialog has no axe violations on the own row', async () => {
-    const { container } = render(
-      <EditUserModal isOpen user={mockUser} currentUserId="user-1" onClose={jest.fn()} onSave={jest.fn()} />,
-    );
-    expect(await violations(container)).toStrictEqual([]);
+    render(<EditUserModal isOpen user={mockUser} currentUserId="user-1" onClose={jest.fn()} onSave={jest.fn()} />);
+    expect(await dialogViolations()).toStrictEqual([]);
   });
 });

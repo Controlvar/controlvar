@@ -9,7 +9,7 @@ AB testing and feature experimentation.
 import copy
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 from uuid import UUID
 
 from fastapi import (
@@ -24,18 +24,24 @@ from fastapi import (
     status,
 )
 from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from backend.app.api import deps, experiment_cache
+from backend.app.api.off_loop_route import OffLoopRoute
+from backend.app.api.query_params import MAX_OFFSET, describe_as_int64
 from backend.app.api.read_scope import get_current_reader
 from backend.app.api.segment_rules import (
+    refuse_clone_with_unusable_balance_segments,
     refuse_clone_with_unusable_segments,
+    refuse_unusable_balance_segments,
     refuse_unusable_segments,
 )
 from backend.app.api.v1.endpoints import results as results_endpoints
 from backend.app.api.v1.endpoints.power_calculator import OUT_OF_RANGE_MESSAGE
+from backend.app.core.balanced_blocks import balance_problem, balance_setting
 from backend.app.core.logger import failure_detail, unexpected_failure
 from backend.app.core.logging import logger
 from backend.app.core.optional_modules import (
@@ -78,6 +84,7 @@ from backend.app.schemas.split_url_config import (
     split_url_conflict,
     split_url_entries,
 )
+from backend.app.schemas.storable_text import storable_text_param
 from backend.app.services.analysis_service import AnalysisService
 from backend.app.services.audit_log_service import AuditLogService
 from backend.app.services.audit_service import (
@@ -88,6 +95,7 @@ from backend.app.services.audit_service import (
 )
 from backend.app.services.experiment_service import (
     END_DATE_PASSED,
+    SORT_BY_COLUMNS,
     AnalysisConfigError,
     EndDatePassedError,
     ExperimentService,
@@ -100,11 +108,49 @@ from backend.app.services.power_calculator_service import (
     SampleSizeNotFiniteError,
     sample_size_two_proportions,
 )
+from backend.app.services.segment_breakdown import NUL_IN_DIMENSION
+
+#: ``sort_by`` on the list (#786): the columns, in exact case. The message is
+#: the 422's for any other non-empty value; it never repeats the value sent.
+SORT_BY_MESSAGE = "sort_by must be one of: " + ", ".join(SORT_BY_COLUMNS)
+SORT_BY_DESCRIPTION = (
+    "Column to sort by, in exact case: "
+    + ", ".join(SORT_BY_COLUMNS)
+    + ". An empty value applies no sort; any other value answers 422."
+)
 
 #: The states in which ``PUT /experiments/{id}`` accepts ``targeting_rules``
 #: (#523). PAUSED only when targeting is the one field sent; see the route.
 TARGETING_EDITABLE_STATUSES = frozenset(
     {ExperimentStatus.DRAFT, ExperimentStatus.PAUSED}
+)
+
+#: What ``PUT /experiments/{id}`` refuses to change once the experiment has left
+#: DRAFT, for every role, a superuser included: on presence, so the stored
+#: value or null sent back is refused too, with "Cannot update <field> for
+#: experiments in <status> status" naming the first match in this order. The
+#: variants and metrics, how the results are judged (#580), which users share
+#: a group's blocks (#448: decided before the first one is assigned), and how
+#: the results are analysed: CUPED, sequential testing and Bayesian analysis,
+#: each switch with its config (#848). ``balance_within`` precedes #848's five,
+#: so a request this check refused before #848 keeps the field its detail
+#: names. ``start_date`` and ``end_date`` are not fields of ``ExperimentUpdate``,
+#: so the schema drops them and they never match here; a body naming them
+#: changes nothing. Every request field is classified against this list by
+#: ``backend/tests/unit/api/test_experiment_update_fields_classified.py``.
+FIXED_AFTER_DRAFT = (
+    "variants",
+    "metrics",
+    "start_date",
+    "end_date",
+    "correction_method",
+    "confidence_level",
+    "balance_within",
+    "variance_reduction_config",
+    "sequential_testing_enabled",
+    "sequential_testing_config",
+    "bayesian_enabled",
+    "bayesian_config",
 )
 
 #: An experiment's status changes only through the lifecycle endpoints, which
@@ -156,6 +202,7 @@ SPLIT_URL_START_CHECK_SKIPPED = (
 
 # Create router with tag for documentation grouping
 router = APIRouter(
+    route_class=OffLoopRoute,
     tags=["Experiments"],
     responses={
         status.HTTP_401_UNAUTHORIZED: {
@@ -372,6 +419,61 @@ def _refuse_split_url_update(
     )
 
 
+#: The update fields a balanced experiment is judged on (#448).
+_BALANCE_FIELDS = frozenset(
+    {"balance_within", "variants", "optimization_type", "experiment_type"}
+)
+
+
+def _balance_refusal(experiment: Experiment) -> Optional[str]:
+    """Why a stored experiment cannot balance as it is, or None (#448)."""
+    return balance_problem(
+        balance_setting(experiment),
+        optimization_type=getattr(experiment, "optimization_type", None),
+        experiment_type=getattr(experiment, "experiment_type", None),
+        allocations=[v.traffic_allocation for v in experiment.variants or []],
+    )
+
+
+def _refuse_unbalanceable_update(
+    experiment: Experiment, experiment_in: ExperimentUpdate, fields_sent: set
+) -> None:
+    """Refuse an update whose result balances a bandit, a split URL experiment
+    or a split not in steps of 5 (#448), in either order: the setting sent to
+    a bandit, or a bandit, a split or a type sent to a balanced experiment.
+
+    The result is what the request sent, and what is stored for every field
+    it left out (a ``variants`` of null changes nothing). Only a request that
+    sends one of ``_BALANCE_FIELDS`` is judged. The 422 is at
+    ``balance_within``, whichever field changed.
+    """
+    if not fields_sent & _BALANCE_FIELDS:
+        return
+
+    def result(name: str) -> Any:
+        if name in fields_sent:
+            return getattr(experiment_in, name)
+        return getattr(experiment, name)
+
+    variants = experiment_in.variants if "variants" in fields_sent else None
+    if variants is None:
+        variants = experiment.variants or []
+    problem = balance_problem(
+        result("balance_within"),
+        optimization_type=result("optimization_type"),
+        experiment_type=result("experiment_type"),
+        allocations=[v.traffic_allocation for v in variants],
+    )
+    if problem is None:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=[
+            {"loc": ["body", "balance_within"], "msg": problem, "type": "value_error"}
+        ],
+    )
+
+
 def _split_url_start_refusal(db: Session, experiment: Experiment) -> Optional[str]:
     """Why a split URL experiment cannot start, as start's 400 text, or None.
 
@@ -432,17 +534,20 @@ async def list_experiments(
         None,
         description="Filter by experiment status (draft, active, paused, completed, archived)",
     ),
-    skip: int = Query(0, ge=0, description="Number of records to skip for pagination"),
+    skip: int = Query(
+        0,
+        ge=0,
+        le=MAX_OFFSET,
+        description="Number of records to skip for pagination",
+        json_schema_extra=describe_as_int64,
+    ),
     limit: int = Query(
         100, ge=1, le=500, description="Maximum number of records to return"
     ),
     search: Optional[str] = Query(
         None, description="Search term to filter experiment names and descriptions"
     ),
-    sort_by: Optional[str] = Query(
-        "created_at",
-        description="Field to sort by (created_at, updated_at, name, status)",
-    ),
+    sort_by: Optional[str] = Query("created_at", description=SORT_BY_DESCRIPTION),
     sort_order: Optional[str] = Query("desc", description="Sort order (asc, desc)"),
 ) -> ExperimentListResponse:
     """
@@ -475,6 +580,14 @@ async def list_experiments(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to list experiments",
+        )
+
+    # After the permission check, so a caller who may not list learns nothing
+    # about the columns; before the `try`, whose `except Exception` would turn
+    # this 422 into a 500 (#786).
+    if sort_by and sort_by not in SORT_BY_COLUMNS:
+        raise RequestValidationError(
+            [{"type": "enum", "loc": ("query", "sort_by"), "msg": SORT_BY_MESSAGE}]
         )
 
     try:
@@ -578,6 +691,8 @@ async def create_experiment(
 
     # Every segment the rules name exists and is active (#440).
     refuse_unusable_segments(db, experiment_in.targeting_rules)
+    # So is every segment the experiment balances within (#448).
+    refuse_unusable_balance_segments(db, experiment_in.balance_within)
 
     try:
         # Create experiment service
@@ -830,6 +945,16 @@ async def update_experiment(
     - Basic properties: name, description, hypothesis
     - Variants: if experiment is in DRAFT status
     - Metrics: if experiment is in DRAFT status
+    - `balance_within`: if experiment is in DRAFT status, for every role
+      including superusers
+    - Analysis settings (`correction_method`, `confidence_level`,
+      `variance_reduction_config`, `sequential_testing_enabled`,
+      `sequential_testing_config`, `bayesian_enabled`, `bayesian_config`):
+      if experiment is in DRAFT status, for every role including superusers.
+      Outside DRAFT a request that includes one is refused, even when the
+      value equals the stored one or is null. To change one on a running
+      experiment, clone it (`POST /api/v1/experiments/{id}/clone`, a draft
+      copy) and set it on the copy.
     - Targeting (`targeting_rules`): while the experiment is DRAFT or PAUSED,
       for every role including superusers. On a PAUSED experiment it must be
       the only field in the request. On an ACTIVE, COMPLETED or ARCHIVED
@@ -859,7 +984,8 @@ async def update_experiment(
             (the detail names the state): any change to a non-DRAFT experiment
             by a non-superuser, other than targeting alone on a PAUSED one;
             targeting outside DRAFT or PAUSED; targeting with other fields on
-            a PAUSED experiment; variants or metrics outside DRAFT
+            a PAUSED experiment; variants, metrics, `balance_within` or an
+            analysis setting outside DRAFT
         HTTPException 404: If the experiment doesn't exist
         HTTPException 422: If `targeting_rules` is not a valid rule set,
             `status` differs from the experiment's current status, the
@@ -961,21 +1087,13 @@ async def update_experiment(
         update_data = experiment_in.model_dump(exclude_unset=True)
         update_data.pop("status", None)
 
-        # For non-draft experiments, prevent updates to restricted fields.
-        # This runs after the superuser passes the guard above, so it binds
-        # every role: once an experiment leaves draft, nobody changes how its
-        # results are judged (#580). It works on presence, so re-sending the
-        # stored value is refused too.
+        # For non-draft experiments, refuse FIXED_AFTER_DRAFT. This runs after
+        # the superuser passes the guard above, so it binds every role: once
+        # an experiment leaves draft, nobody changes how its results are
+        # judged or analysed (#580, #848). It works on presence, so re-sending
+        # the stored value, or null, is refused too.
         if experiment.status != ExperimentStatus.DRAFT:
-            restricted_fields = [
-                "variants",
-                "metrics",
-                "start_date",
-                "end_date",
-                "correction_method",
-                "confidence_level",
-            ]
-            for field in restricted_fields:
+            for field in FIXED_AFTER_DRAFT:
                 if field in update_data:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
@@ -985,6 +1103,15 @@ async def update_experiment(
         # A split URL experiment's URL variants match its variants (#393), on
         # the result of this update.
         _refuse_split_url_update(experiment, experiment_in, fields_sent)
+
+        # A balanced experiment is not a bandit, not a split URL experiment,
+        # and its shares are multiples of 5 (#448), on the result too.
+        _refuse_unbalanceable_update(experiment, experiment_in, fields_sent)
+
+        # Every segment a draft is set to balance within exists and is
+        # active (#448).
+        if "balance_within" in fields_sent:
+            refuse_unusable_balance_segments(db, experiment_in.balance_within)
 
         # Capture pre-update snapshot for audit trail. The update below
         # rebinds targeting_rules (setattr) rather than changing the dict,
@@ -1361,6 +1488,14 @@ async def start_experiment(
         if split_url_refusal is not None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=split_url_refusal
+            )
+
+        # A balanced experiment the API would refuse to store as it is (#448):
+        # only a write that bypassed create and update makes one.
+        balance_refusal = _balance_refusal(experiment)
+        if balance_refusal is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=balance_refusal
             )
 
         before_audit = audit_snapshot(EntityType.EXPERIMENT, experiment)
@@ -1918,8 +2053,10 @@ async def clone_experiment(
         _reject_unroutable_split_url(experiment.experiment_type)
 
         # The clone's rules are the source's, and every segment they name
-        # must still be usable (#440).
+        # must still be usable (#440); so must every segment it would
+        # balance within (#448).
         refuse_clone_with_unusable_segments(db, experiment.targeting_rules)
+        refuse_clone_with_unusable_balance_segments(db, balance_setting(experiment))
 
         # Create experiment service
         experiment_service = ExperimentService(db)
@@ -2138,6 +2275,11 @@ async def get_segmented_experiment_results(
         refusal = _results_read_refusal(current_user)
         db.close()
         await run_in_threadpool(_admit_results_read, experiment_id, refusal, db)
+        if "\x00" in segment_by:
+            # Refused before the cache: the database driver cannot bind it.
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=NUL_IN_DIMENSION
+            )
 
         metric_part = f":{metric_id}" if metric_id else ""
         cache_key = (
@@ -2199,8 +2341,15 @@ def _segmented_results(
     response_description="Returns the updated experiment with metadata",
 )
 async def update_experiment_metadata(
+    # NUL or a lone surrogate anywhere in the body answers 422 (#961). Body()
+    # sits inside Annotated because, as the default, FastAPI 0.141 drops the
+    # validator beside it; with no default the parameter must come first.
+    metadata: Annotated[
+        Dict[str, Any],
+        Body(..., description="Metadata to update"),
+        storable_text_param("metadata"),
+    ],
     experiment_id: UUID = Path(..., description="The ID of the experiment to update"),
-    metadata: Dict[str, Any] = Body(..., description="Metadata to update"),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user),
     cache_control: Dict[str, Any] = Depends(deps.get_cache_control),

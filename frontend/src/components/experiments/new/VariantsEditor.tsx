@@ -31,7 +31,16 @@ interface VariantsEditorProps {
    */
   invalid?: { index: number; field: 'name' | 'traffic_allocation' | 'is_control' } | null;
   invalidDescribedBy?: string;
+  /**
+   * The API's refusal of this split for a balanced experiment, shown under the
+   * allocations it is about. Every allocation field then carries
+   * `aria-invalid` and `aria-describedby` pointing at it.
+   */
+  splitProblem?: string | null;
 }
+
+/** The id of the line `splitProblem` is shown in. */
+export const SPLIT_PROBLEM_ID = 'balance-split-error';
 
 const hasText = (v: VariantFormData) => (v.configuration_text ?? '').trim() !== '';
 
@@ -42,8 +51,18 @@ export function VariantsEditor({
   revealProblems = 0,
   invalid = null,
   invalidDescribedBy,
+  splitProblem = null,
 }: VariantsEditorProps) {
   const allocationTotal = allocationTotalOf(variants);
+  // An allocation field is described by the split's refusal, and by a refusal shown elsewhere when it is the one marked.
+  const allocationMarks = (index: number) => {
+    const marked = marks(index, 'traffic_allocation');
+    if (!splitProblem) return marked;
+    const describedBy = [SPLIT_PROBLEM_ID, (marked as { 'aria-describedby'?: string })['aria-describedby']]
+      .filter(Boolean)
+      .join(' ');
+    return { 'aria-invalid': true as const, 'aria-describedby': describedBy };
+  };
   const problems = configurationProblems(variants);
   // A radio takes no aria-invalid; it is described by the refusal only.
   const marks = (index: number, field: 'name' | 'traffic_allocation' | 'is_control') =>
@@ -113,6 +132,12 @@ export function VariantsEditor({
         </button>
       </div>
 
+      {splitProblem && (
+        <p id={SPLIT_PROBLEM_ID} className="text-sm text-red-700" data-testid={SPLIT_PROBLEM_ID}>
+          {splitProblem}
+        </p>
+      )}
+
       <div className="space-y-3">
         {variants.map((variant, index) => (
           <div
@@ -136,24 +161,13 @@ export function VariantsEditor({
                   {...marks(index, 'name')}
                 />
                 <div className="flex items-center gap-1">
-                  <input
-                    type="number"
-                    name={`variant_allocation_${index}`}
-                    min={0}
-                    max={100}
+                  <ShareInput
+                    index={index}
                     value={variant.traffic_allocation}
-                    onChange={(e) =>
-                      dispatch({
-                        type: 'changeVariant',
-                        index,
-                        field: 'traffic_allocation',
-                        value: Number(e.target.value),
-                      })
+                    onChange={(value) =>
+                      dispatch({ type: 'changeVariant', index, field: 'traffic_allocation', value })
                     }
-                    aria-label={`Variant ${index + 1} allocation`}
-                    className={`w-16 text-center ${smallInputClass}`}
-                    data-testid={`variant-allocation-${index}`}
-                    {...marks(index, 'traffic_allocation')}
+                    marks={allocationMarks(index)}
                   />
                   <span className="text-xs text-slate-500">%</span>
                 </div>
@@ -198,6 +212,47 @@ export function VariantsEditor({
         ))}
       </div>
     </>
+  );
+}
+
+interface ShareInputProps {
+  index: number;
+  /** The share the form holds. A blank box holds 0, as before. */
+  value: number;
+  onChange: (value: number) => void;
+  marks: Pick<React.InputHTMLAttributes<HTMLInputElement>, 'aria-invalid' | 'aria-describedby'>;
+}
+
+/**
+ * One version's traffic share box (#1428).
+ *
+ * The form holds a number, so an emptied box holds 0. Given the number, React
+ * wrote "0" into the emptied box, the caret stayed at its end, and the digits
+ * typed next landed after it: emptying the box and typing 34 showed "034"
+ * (React leaves "034" alone, because it reads as 34). So the box shows what
+ * was typed while that text still reads as the share the form holds, and an
+ * emptied box stays empty. Leaving the box shows the number the form holds.
+ */
+function ShareInput({ index, value, onChange, marks }: ShareInputProps) {
+  const [typed, setTyped] = useState<string | null>(null);
+  const shown = typed !== null && Number(typed) === value ? typed : String(value);
+  return (
+    <input
+      type="number"
+      name={`variant_allocation_${index}`}
+      min={0}
+      max={100}
+      value={shown}
+      onChange={(e) => {
+        setTyped(e.target.value);
+        onChange(Number(e.target.value));
+      }}
+      onBlur={() => setTyped(null)}
+      aria-label={`Variant ${index + 1} allocation`}
+      className={`w-16 text-center ${smallInputClass}`}
+      data-testid={`variant-allocation-${index}`}
+      {...marks}
+    />
   );
 }
 

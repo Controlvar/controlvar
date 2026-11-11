@@ -40,103 +40,40 @@
 # sends the requests that answered 500 on GET /api/v1/rollout-schedules/
 # (#1001) and POST /api/v1/metrics/aggregate (#956), so their superuser
 # entries were removed because the run stopped sending those requests, not
-# because the bugs were fixed: both still answer 500 to the requests sent
-# before, and both issues stay open.
+# because the bugs were fixed: both answered 500 to the requests sent
+# before. POST /api/v1/metrics/aggregate's is now fixed by #956 (below).
 #
-# The same for the superuser entry of POST /api/v1/rbac/users/{user_id}/grant
-# (#1002), removed by #891: the grant validation refuses the seed's bodies with
-# 422 before the insert, so the run no longer sends a request that answers 500.
-# The 500 for a valid resource and a user id with no account remains, and #1002
-# stays open.
+# The superuser entry of POST /api/v1/rbac/users/{user_id}/grant (#1002) was
+# removed by #891: the grant validation refuses the seed's bodies with 422
+# before the insert, so the run stopped sending a request that answered 500.
+# The 500 that remained, for a valid resource and a user id with no account,
+# is fixed too: the user is looked up before the insert, and such a grant
+# answers 404 "User not found".
 # GET /api/v1/metrics/errors (#956) is fixed, as GET /api/v1/metrics/summary
 # was (#1572): a start_date or end_date with a UTC offset of 16 hours or more
-# answers 422, so both its entries (superuser and viewer) were removed.
+# answers 422, so both its entries (superuser and viewer) were removed. The
+# other routes that took such a date as a query parameter are fixed the same
+# way: GET /api/v1/audit-logs/export, GET /api/v1/compliance/export and GET
+# /api/v1/hipaa/report answer 422, and their entries were removed. A date in
+# a request body is fixed too (#1826): an API key's expires_at and a rollout
+# schedule's start_date and end_date answer 422 for an offset of 16 hours or
+# more. No entry cited it, so none was removed; the POST /api/v1/api-keys
+# entries were #957 (a field of the wrong type), a different cause.
+# #958 and #959 are fixed, so their entries were removed from both passes:
+# the two sample-size routes answer 422 for the inputs they cannot calculate
+# with, and GET, PUT and DELETE /api/v1/users/{user_id} and
+# POST /api/v1/llm-experiments/{experiment_id}/evaluate answer 400 for an id
+# that is not a UUID.
+# #1001 is fixed: every skip and offset accepts at most 2**63 - 1 and every
+# page at most 2**63, and a page whose (page - 1) * size is past 2**63 - 1
+# answers 422, so the entries of GET /api/v1/users/ (superuser) and
+# GET /api/v1/audit-logs/ (viewer) were removed.
+# #957 is fixed: a body value of the wrong type on POST /api/v1/api-keys,
+# POST and PUT /api/v1/mutual-exclusion-groups and POST and PUT
+# /api/v1/holdout answers 422, so their ten entries (superuser and viewer)
+# were removed.
 
 # --- superuser: the seeded demo administrator's bearer token ----------------
-
-[[known]]
-pass = "superuser"
-operation = "POST /api/v1/api-keys"
-status = 500
-issue = 957
-reason = "A field of the wrong type reaches the handler before validation."
-
-[[known]]
-pass = "superuser"
-operation = "GET /api/v1/users/"
-status = 500
-issue = 1001
-reason = "A skip or page beyond the database's offset range reaches the query."
-
-[[known]]
-pass = "superuser"
-operation = "DELETE /api/v1/users/{user_id}"
-status = 500
-issue = 959
-reason = "A path id that is not a UUID reaches the database query."
-
-[[known]]
-pass = "superuser"
-operation = "PUT /api/v1/users/{user_id}"
-status = 500
-issue = 959
-reason = "A path id that is not a UUID reaches the database query."
-
-[[known]]
-pass = "superuser"
-operation = "GET /api/v1/audit-logs/export"
-status = 500
-issue = 956
-reason = "A date-time with a UTC offset beyond 15:59 reaches the database."
-
-[[known]]
-pass = "superuser"
-operation = "POST /api/v1/utils/utils/sample-size"
-status = 500
-issue = 958
-reason = "A zero or near-zero input reaches the sample-size arithmetic."
-
-[[known]]
-pass = "superuser"
-operation = "POST /api/v1/mutual-exclusion-groups"
-status = 500
-issue = 957
-reason = "A field of the wrong type reaches the handler before validation."
-
-[[known]]
-pass = "superuser"
-operation = "PUT /api/v1/mutual-exclusion-groups/{group_id}"
-status = 500
-issue = 957
-reason = "A field of the wrong type reaches the handler before validation."
-
-[[known]]
-pass = "superuser"
-operation = "POST /api/v1/holdout"
-status = 500
-issue = 957
-reason = "A field of the wrong type reaches the handler before validation."
-
-[[known]]
-pass = "superuser"
-operation = "PUT /api/v1/holdout/{holdout_id}"
-status = 500
-issue = 957
-reason = "A field of the wrong type reaches the handler before validation."
-
-[[known]]
-pass = "superuser"
-operation = "GET /api/v1/ai/sample-size"
-status = 500
-issue = 958
-reason = "A zero or near-zero input reaches the sample-size arithmetic."
-
-[[known]]
-pass = "superuser"
-operation = "GET /api/v1/compliance/export"
-status = 500
-issue = 956
-reason = "A date-time with a UTC offset beyond 15:59 reaches the database."
 
 [[known]]
 pass = "superuser"
@@ -144,13 +81,6 @@ operation = "POST /api/v1/results/{experiment_id}/post-stratification"
 status = 501
 issue = 963
 reason = "Published, and always answers 501: not implemented."
-
-[[known]]
-pass = "superuser"
-operation = "POST /api/v1/llm-experiments/{experiment_id}/evaluate"
-status = 500
-issue = 959
-reason = "A path id that is not a UUID reaches the database query."
 
 [[known]]
 pass = "superuser"
@@ -189,13 +119,6 @@ reason = "Needs WAREHOUSE_CREDENTIALS_KEYS, which the fuzz stack leaves unset, a
 
 [[known]]
 pass = "superuser"
-operation = "GET /api/v1/hipaa/report"
-status = 500
-issue = 956
-reason = "A date-time with a UTC offset beyond 15:59 reaches the database."
-
-[[known]]
-pass = "superuser"
 operation = "POST /api/v1/hipaa/encrypt"
 status = 503
 cause = "config"
@@ -209,69 +132,6 @@ cause = "config"
 reason = "Needs PHI_ENCRYPTION_KEY, which the fuzz stack leaves unset, and answers 503."
 
 # --- viewer: the seeded VIEWER's bearer token ------------------------------
-
-[[known]]
-pass = "viewer"
-operation = "POST /api/v1/api-keys"
-status = 500
-issue = 957
-reason = "A field of the wrong type reaches the handler before validation."
-
-[[known]]
-pass = "viewer"
-operation = "DELETE /api/v1/users/{user_id}"
-status = 500
-issue = 959
-reason = "A path id that is not a UUID reaches the database query."
-
-[[known]]
-pass = "viewer"
-operation = "GET /api/v1/audit-logs/"
-status = 500
-issue = 1001
-reason = "A skip or page beyond the database's offset range reaches the query."
-
-[[known]]
-pass = "viewer"
-operation = "POST /api/v1/utils/utils/sample-size"
-status = 500
-issue = 958
-reason = "A zero or near-zero input reaches the sample-size arithmetic."
-
-[[known]]
-pass = "viewer"
-operation = "POST /api/v1/mutual-exclusion-groups"
-status = 500
-issue = 957
-reason = "A field of the wrong type reaches the handler before validation."
-
-[[known]]
-pass = "viewer"
-operation = "PUT /api/v1/mutual-exclusion-groups/{group_id}"
-status = 500
-issue = 957
-reason = "A field of the wrong type reaches the handler before validation."
-
-[[known]]
-pass = "viewer"
-operation = "POST /api/v1/holdout"
-status = 500
-issue = 957
-reason = "A field of the wrong type reaches the handler before validation."
-
-[[known]]
-pass = "viewer"
-operation = "PUT /api/v1/holdout/{holdout_id}"
-status = 500
-issue = 957
-reason = "A field of the wrong type reaches the handler before validation."
-
-[[known]]
-pass = "viewer"
-operation = "GET /api/v1/ai/sample-size"
-status = 500
-issue = 958
-reason = "A zero or near-zero input reaches the sample-size arithmetic."
 
 [[known]]
 pass = "viewer"

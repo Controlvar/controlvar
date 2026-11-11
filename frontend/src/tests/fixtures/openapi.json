@@ -1,7 +1,7 @@
 {
   "info": {
     "title": "Controlvar",
-    "version": "0.43.2"
+    "version": "0.45.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -127,6 +127,18 @@
       "get": {
         "operationId": "get_user_activity_api_v1_audit_logs_user__user_id__get",
         "summary": "Get audit logs for a specific user"
+      }
+    },
+    "/api/v1/auth/cognito/exchange": {
+      "post": {
+        "operationId": "exchange_cognito_code_api_v1_auth_cognito_exchange_post",
+        "summary": "Exchange Cognito Code"
+      }
+    },
+    "/api/v1/auth/config": {
+      "get": {
+        "operationId": "get_auth_config_api_v1_auth_config_get",
+        "summary": "Get Auth Config"
       }
     },
     "/api/v1/auth/confirm": {
@@ -963,6 +975,12 @@
       "get": {
         "operationId": "get_experiment_results_api_v1_results__experiment_id__get",
         "summary": "Get Experiment Results"
+      }
+    },
+    "/api/v1/results/{experiment_id}/balanced-groups": {
+      "get": {
+        "operationId": "get_balanced_groups_api_v1_results__experiment_id__balanced_groups_get",
+        "summary": "Beta: results by the group each user was balanced in"
       }
     },
     "/api/v1/results/{experiment_id}/bayesian": {

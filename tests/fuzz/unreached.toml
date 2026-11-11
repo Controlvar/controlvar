@@ -58,6 +58,94 @@
 # (200), so it reaches that one. Its list is 103. The three were read from
 # fuzz_check's evaluation of a local run of the pass at this seed on the pull
 # request's earlier head; its CI runs gave the same counts.
+#
+# Then #959 answered 400 for an id that is not a UUID on
+# PUT and DELETE /api/v1/users/{user_id} and on
+# POST /api/v1/llm-experiments/{experiment_id}/evaluate, where it answered 500,
+# and a 5xx reaches an operation. So the superuser pass's three were listed
+# from the code before the pull request's own fuzz run. That run kept two:
+# PUT /api/v1/users/{user_id} is still reached, because an id Schemathesis
+# reuses from an earlier answer names a stored account and the update answers
+# 200, as it did before #959, so it is not listed. The viewer pass does not
+# select DELETE /api/v1/users/{user_id} (exclusions.toml), so it has no entry
+# here. And #958 answered 422 for the sample-size inputs that answered 500:
+# every request the seed generates for GET /api/v1/ai/sample-size now answers
+# 422, so neither pass reaches it.
+# The superuser list is 106 and the viewer's 175, read from fuzz_check's
+# evaluation of local runs of both passes at this seed on the pull request's
+# earlier head; its CI runs gave the same counts.
+#
+# Then #1571 typed on_value and off_value in the flag request schemas as any
+# JSON value but null. That changed the requests the seed generates, and with
+# them the ids Schemathesis reuses from earlier answers: the superuser pass
+# now sends a DELETE /api/v1/rollout-schedules/{schedule_id} that names a
+# stored schedule (204), so it reaches it again, and its list is 105. The
+# viewer pass may not write flags (403), and its list does not change. Both
+# read from fuzz_check's evaluation of local runs at this seed on the pull
+# request's earlier head; its CI runs gave the same counts.
+#
+# Then #708 added POST /api/v1/auth/cognito/exchange, the Cognito Hosted UI's
+# code exchange. It exists only for the Cognito provider and the stack signs in
+# with the local one, so it answers 404 in the superuser and viewer passes (and
+# 429 once its 10 a minute are spent): those lists are 106 and 176 (the 105
+# and 175 above, plus this one each). It is not an SDK route, so the sdk pass does not select it. GET /api/v1/auth/config,
+# added beside it, answers 200 with no credentials, so it needs no entry.
+# Listed from that reasoning before the pull request's own fuzz run.
+#
+# Then #1842 (#1808) gave GET /api/v1/feature-flags/ the `stale` parameter
+# and the flag request schemas two read-only fields. That changed the requests
+# the seed generates, and with them the ids Schemathesis reuses from earlier
+# answers: the superuser pass now sends a PUT
+# /api/v1/rollout-schedules/{schedule_id} that names a stored schedule and
+# updates it (200), so it reaches it again, and its list is 105. The viewer
+# pass's GET /api/v1/feature-flags/{flag_id} now names no stored flag (the id
+# it reuses is a user's, 404), so it no longer reaches it, and its list is
+# 177. Read from fuzz_check's evaluation of local runs at this seed: the
+# superuser pass on main after #1842 and on the head of the pull request that
+# changed these entries, the viewer pass on that head (its flag-by-id
+# requests come before any request that head answers differently from main).
+#
+# Then #1001 bounded every skip, page and offset at the largest offset
+# PostgreSQL takes (int64 in the document), on the 16 list operations that
+# take one. That changed the requests the seed generates for them, and with
+# them the ids Schemathesis reuses from earlier answers: the superuser pass no
+# longer sends the POST /api/v1/experiments/{experiment_id}/complete that
+# named the experiment its coverage phase had started (200). Every id it sends
+# that passes validation names a draft experiment (400), although the run has
+# an active one, so it no longer reaches it, and its list is 107: the 106 of
+# #1853's paragraph below (#1853 merged first) and this one. On #1001's head
+# alone the pass also no longer reached GET /api/v1/bandit/{experiment_id},
+# which #1853 lists. The viewer pass's list does not change. Read from
+# fuzz_check's evaluation of local runs of both passes at this seed on the
+# pull request's head merged with main (3c13e68d); a local run of the
+# superuser pass on that head alone gave the counts of its CI run.
+
+# Then #1853 (#448) gave the experiment create and update schemas
+# balance_within. That changed the requests the seed generates for
+# POST /api/v1/experiments/, and with them the experiments whose ids
+# Schemathesis reuses from earlier answers: the superuser pass no longer sends
+# the GET /api/v1/bandit/{experiment_id} that named a stored bandit experiment
+# (200). Every id it sends names a fixed-allocation experiment (404), although
+# the run makes bandit experiments, so it no longer reaches it, and its list
+# is 106. The viewer pass's list does not change. Read from fuzz_check's
+# evaluation of local runs of both passes at this seed on the pull request's
+# head merged with #1858; the superuser pass's CI run on that head alone gave
+# the same reach counts.
+#
+# Then #957 answered 422 for a body value of the wrong type on POST and PUT
+# /api/v1/holdout and POST and PUT /api/v1/mutual-exclusion-groups, where it
+# answered 500, and a 5xx reaches an operation. The viewer pass reached those
+# four only through that 500: the VIEWER role may not use them, and the role
+# check comes after the body is validated, so a viewer gets 422, 400 for a
+# body that does not parse, or 403, never a 2xx. So it no longer reaches them,
+# and its list is 181 (the 177 of #1842's paragraph above and these four). The
+# superuser pass still reaches all four, and its list does not change. Read
+# from fuzz_check's evaluation of local runs of both passes at this seed on the
+# pull request's head, on main after #1867 (#1001).
+
+# Then #1789 answered 400 to a grant whose body's user_id is not the path's, so
+# the superuser pass no longer reaches POST /api/v1/rbac/users/{user_id}/grant
+# and its list is 108.
 
 # --- superuser: the seeded demo administrator's bearer token ----------------
 
@@ -88,8 +176,18 @@ reason = "Cognito sign-up and recovery: the stack signs in with the local provid
 
 [[unreached]]
 pass = "superuser"
+operation = "POST /api/v1/auth/cognito/exchange"
+reason = "The Cognito Hosted UI's code exchange: the stack signs in with the local provider, so it answers 404 (and 429 once its limit is spent)."
+
+[[unreached]]
+pass = "superuser"
 operation = "POST /api/v1/users/"
 reason = "Every generated request fails the operation's own validation (422)."
+
+[[unreached]]
+pass = "superuser"
+operation = "DELETE /api/v1/users/{user_id}"
+reason = "An id that is not a UUID answers 400 (#959), one that names no account 404, and the caller's own account 400."
 
 [[unreached]]
 pass = "superuser"
@@ -100,6 +198,11 @@ reason = "The handler refuses the generated values (400); ids that name no store
 pass = "superuser"
 operation = "POST /api/v1/experiments/{experiment_id}/pause"
 reason = "The handler refuses the generated values (400); invalid requests answer 422."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/experiments/{experiment_id}/complete"
+reason = "No request names an active or paused experiment: every id sent that passes validation names a draft (400), and the other requests fail validation (422)."
 
 [[unreached]]
 pass = "superuser"
@@ -228,16 +331,6 @@ reason = "The handler refuses the generated values (400); ids that name no store
 
 [[unreached]]
 pass = "superuser"
-operation = "PUT /api/v1/rollout-schedules/{schedule_id}"
-reason = "The ids sent name no stored schedule (404), and the other requests fail validation (422) or, once, body parsing (400)."
-
-[[unreached]]
-pass = "superuser"
-operation = "DELETE /api/v1/rollout-schedules/{schedule_id}"
-reason = "The ids sent name no stored schedule (404), and the other requests fail validation (422)."
-
-[[unreached]]
-pass = "superuser"
 operation = "POST /api/v1/rollout-schedules/{schedule_id}/activate"
 reason = "Generated ids never name a stored row (404); the other requests fail validation (422)."
 
@@ -293,6 +386,11 @@ reason = "Generated ids never name a stored row (404); the other requests fail v
 
 [[unreached]]
 pass = "superuser"
+operation = "GET /api/v1/bandit/{experiment_id}"
+reason = "No request names a stored bandit experiment: every id sent names a fixed-allocation experiment (404), and the other requests fail validation (422)."
+
+[[unreached]]
+pass = "superuser"
 operation = "POST /api/v1/bandit/{experiment_id}/update"
 reason = "No request names a stored bandit experiment: an id that names no stored row, or a fixed-allocation experiment, answers 404; the other requests fail validation (422)."
 
@@ -305,6 +403,11 @@ reason = "The handler refuses the generated values (400); invalid requests answe
 pass = "superuser"
 operation = "GET /api/v1/interactions/{exp_a_id}/{exp_b_id}"
 reason = "Generated ids never name a stored row (404); the other requests fail validation (422)."
+
+[[unreached]]
+pass = "superuser"
+operation = "GET /api/v1/ai/sample-size"
+reason = "The document gives its rates no bounds, and every generated request answers 422: a rate outside 0 to 1, an mde of 0 or a size that is not finite (#958), or a value that fails validation."
 
 [[unreached]]
 pass = "superuser"
@@ -363,6 +466,11 @@ reason = "Generated ids never name a stored row (404); the other requests fail v
 
 [[unreached]]
 pass = "superuser"
+operation = "POST /api/v1/llm-experiments/{experiment_id}/evaluate"
+reason = "An evaluation_id that is not a UUID answers 400 (#959) and one that names no stored evaluation 404; bodies that fail validation answer 422."
+
+[[unreached]]
+pass = "superuser"
 operation = "GET /api/v1/llm-experiments/{experiment_id}/results"
 reason = "Generated ids never name a stored row (404); the other requests fail validation (422)."
 
@@ -385,6 +493,11 @@ reason = "Generated ids never name a stored row (404); the other requests fail v
 pass = "superuser"
 operation = "POST /api/v1/rbac/roles/revoke"
 reason = "Generated ids never name a stored row (404); the other requests fail validation (422)."
+
+[[unreached]]
+pass = "superuser"
+operation = "POST /api/v1/rbac/users/{user_id}/grant"
+reason = "No generated body's user_id is the path's: those that pass validation answer 400 (#1789, a body naming another user than the path), and the other requests fail validation (422)."
 
 [[unreached]]
 pass = "superuser"
@@ -605,6 +718,11 @@ reason = "Cognito sign-up and recovery: the stack signs in with the local provid
 
 [[unreached]]
 pass = "viewer"
+operation = "POST /api/v1/auth/cognito/exchange"
+reason = "The Cognito Hosted UI's code exchange: the stack signs in with the local provider, so it answers 404 (and 429 once its limit is spent)."
+
+[[unreached]]
+pass = "viewer"
 operation = "POST /api/v1/users/"
 reason = "The VIEWER role may not use it, so the role check answers 403; requests that fail validation first answer 422."
 
@@ -737,6 +855,11 @@ reason = "An SDK route: it takes an API key, and this pass sends a bearer token 
 pass = "viewer"
 operation = "POST /api/v1/feature-flags/"
 reason = "The VIEWER role may not use it, so the role check answers 403, and a few 400."
+
+[[unreached]]
+pass = "viewer"
+operation = "GET /api/v1/feature-flags/{flag_id}"
+reason = "The ids sent name no stored flag (404; the one reused from an earlier answer is a user's id), and the other requests fail validation (422)."
 
 [[unreached]]
 pass = "viewer"
@@ -965,8 +1088,18 @@ reason = "The VIEWER role may not use it, so the role check answers 403; request
 
 [[unreached]]
 pass = "viewer"
+operation = "POST /api/v1/mutual-exclusion-groups"
+reason = "The VIEWER role may not use it, so the role check answers 403; requests that fail validation first answer 422."
+
+[[unreached]]
+pass = "viewer"
 operation = "GET /api/v1/mutual-exclusion-groups/{group_id}"
 reason = "The VIEWER role may not use it, so the role check answers 403; requests that fail validation first answer 422."
+
+[[unreached]]
+pass = "viewer"
+operation = "PUT /api/v1/mutual-exclusion-groups/{group_id}"
+reason = "The VIEWER role may not use it, so the role check answers 403; requests that fail validation first answer 422, and a body that does not parse 400."
 
 [[unreached]]
 pass = "viewer"
@@ -990,8 +1123,18 @@ reason = "The VIEWER role may not use it, so the role check answers 403."
 
 [[unreached]]
 pass = "viewer"
+operation = "POST /api/v1/holdout"
+reason = "The VIEWER role may not use it, so the role check answers 403; requests that fail validation first answer 422."
+
+[[unreached]]
+pass = "viewer"
 operation = "GET /api/v1/holdout/all"
 reason = "The VIEWER role may not use it, so the role check answers 403; requests that fail validation first answer 422."
+
+[[unreached]]
+pass = "viewer"
+operation = "PUT /api/v1/holdout/{holdout_id}"
+reason = "The VIEWER role may not use it, so the role check answers 403; requests that fail validation first answer 422, and a body that does not parse 400."
 
 [[unreached]]
 pass = "viewer"
@@ -1022,6 +1165,11 @@ reason = "The VIEWER role may not use it, so the role check answers 403."
 pass = "viewer"
 operation = "GET /api/v1/interactions/{exp_a_id}/{exp_b_id}"
 reason = "The VIEWER role may not use it, so the role check answers 403; requests that fail validation first answer 422."
+
+[[unreached]]
+pass = "viewer"
+operation = "GET /api/v1/ai/sample-size"
+reason = "The document gives its rates no bounds, and every generated request answers 422: a rate outside 0 to 1, an mde of 0 or a size that is not finite (#958), or a value that fails validation."
 
 [[unreached]]
 pass = "viewer"

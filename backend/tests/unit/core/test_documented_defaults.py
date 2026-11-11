@@ -57,6 +57,10 @@ def test_the_metrics_tick_purges_the_analysis_history(monkeypatch):
     assert called == [True]
 
 
+def test_a_flag_is_stale_after_30_days_by_default():
+    assert _default("STALE_FLAG_DAYS") == 30
+
+
 def test_the_compliance_reports_cover_365_and_730_days_by_default():
     assert _default("AUDIT_RETENTION_DAYS_SOC2") == 365
     assert _default("AUDIT_RETENTION_DAYS_ISO27001") == 730

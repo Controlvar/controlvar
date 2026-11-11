@@ -4,7 +4,7 @@
 
 **Website:** [controlvar.com](https://controlvar.com) · **Documentation:** [docs.controlvar.com](https://docs.controlvar.com)
 
-![The results page of a ShopLab demo experiment in the Controlvar dashboard: its users, the planned sample reached, the leading variant and the sample ratio check.](frontend/public/screens/results-88c79d580b09.webp)
+![The power calculator: the baseline conversion rate, the minimum detectable effect, the sample size each variant needs, and a power curve.](frontend/public/screens/power-calculator-2268c898864d.webp)
 
 Watch the [walkthrough videos](https://controlvar.com/#walkthroughs) on controlvar.com.
 
@@ -117,7 +117,7 @@ step: [Guided examples](docs/guides/guided-examples.md).
 - **Real-time Metrics**: Error rate, latency, custom metrics tracking
 - **Auto-Rollback**: Automatic rollback on threshold violations
 - **Configurable Thresholds**: Per-feature flag safety configuration
-- **Complete Audit Trail**: All rollbacks logged with reasoning
+- **Rollback History**: every rollback, automatic or manual, is stored with its reason; it also appears in the flag's audit history, unless that entry could not be written
 
 ---
 
@@ -165,13 +165,21 @@ tracking against a live API in CI (the SDK Live Contract job of `pr-qa-gate.yml`
 | JavaScript | `npm install @controlvar/js-sdk` |
 | Python | `pip install controlvar` |
 | Go | `go get github.com/controlvar/controlvar/sdk/go` |
+| React | `npm install @controlvar/react-sdk` |
+| React Native | `npm install @controlvar/react-native-sdk` |
+| OpenFeature (Node) | `npm install @controlvar/openfeature-provider @openfeature/server-sdk` |
+| OpenFeature (Python) | `pip install controlvar-openfeature` |
+| Java | `com.controlvar:controlvar-sdk` (Maven Central) |
+| .NET | `dotnet add package Controlvar.SDK` |
 
 Every other SDK installs from a clone of this repository. The [SDK guide](docs/sdk-guide.md) says
 how, and what CI runs for each one.
 
-[`sdk/mcp`](sdk/mcp/) holds the Controlvar MCP server, which is not an SDK and is not yet published;
-it is meant for an AI assistant such as Claude Code to start on your computer, to read your
-instance's feature flags, experiments and results with your API key.
+The Controlvar MCP server is not an SDK. An AI assistant such as Claude Code starts it on your
+computer to read your instance's feature flags, experiments and results with your API key, and it
+changes no flag or experiment. The `@controlvar/mcp-server` package is on npm.
+[The MCP Server and the AI Endpoints](docs/mcp-server.md) has the command that adds it to Claude
+Code, and the settings for Claude Desktop and Cursor. Its source is [`sdk/mcp`](sdk/mcp/).
 
 ---
 
@@ -180,6 +188,9 @@ instance's feature flags, experiments and results with your API key.
 - [Documentation home](docs/README.md)
 - [Architecture overview](docs/getting-started/architecture.md)
 - [Targeting rules](docs/feature-flags/create.md): operators, attribute aliases and examples
+- [The Controlvar books](https://github.com/amarkanday/controlvar-books): engineering, programming and the craft of
+  shipping software, taught through this codebase, for newcomers to a language or framework, engineers who already
+  code, and contributors (CC BY 4.0)
 
 ---
 
@@ -251,3 +262,5 @@ public issues. Contributions are accepted under the DCO — see [CONTRIBUTING.md
 
 [CONTRIBUTING.md](CONTRIBUTING.md) covers the development setup, the test suites and the
 core/modules boundary.
+
+[ROADMAP.md](ROADMAP.md) says what is planned Now, Next and Later, and how to influence it.

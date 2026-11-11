@@ -19,11 +19,12 @@ import logging
 
 from fastapi import APIRouter
 
+from backend.app.api.off_loop_route import OffLoopRoute
 from backend.app.schemas.ai_design import MCPManifestResponse, MCPToolSchema
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=OffLoopRoute)
 
 # ---------------------------------------------------------------------------
 # The six tools the MCP server offers (sdk/mcp/tools.json)
@@ -52,13 +53,20 @@ MCP_TOOLS = [
         description=(
             "Lists the feature flags on the Controlvar instance. Each item has its "
             "`key`, `name`, `status` (ACTIVE, INACTIVE or ARCHIVED), `value_type`, "
-            "`rollout_percentage`, `tags` and `updated_at`. `search` matches part of "
-            "a flag's name or key; `status` keeps one status. Returns at most `limit` "
-            "flags (default 50, at most 100) and `total`, the number that match. When "
-            "`total` is larger, call again with `skip`. The list is ordered by creation "
-            "time, oldest first, so paging with `skip` reads each flag once unless "
-            "flags are created or deleted meanwhile; to read one flag by its "
-            "key, use get_feature_flag."
+            "`rollout_percentage`, `tags`, `updated_at`, `stale` and `stale_reasons`, "
+            "and the answer has `stale_days` and `evaluations_seen`. `stale` is true "
+            "when the flag looks ready to remove, and `stale_reasons` says why "
+            "(not_evaluated, on_for_everyone, off_for_everyone); this is advice only, "
+            "and nothing is archived or changed. `stale_days` is the number of days "
+            "those reasons look back, and `evaluations_seen` is false when the "
+            "instance recorded no flag evaluation in that time, so not_evaluated is "
+            "not reported. `search` matches part of a flag's name or key; `status` "
+            "keeps one status; `stale` keeps the stale flags (true) or the others "
+            "(false). Returns at most `limit` flags (default 50, at most 100) and "
+            "`total`, the number that match. When `total` is larger, call again with "
+            "`skip`. The list is ordered by creation time, oldest first, so paging "
+            "with `skip` reads each flag once unless flags are created or deleted "
+            "meanwhile; to read one flag by its key, use get_feature_flag."
         ),
         parameters={
             "search": {
@@ -66,6 +74,13 @@ MCP_TOOLS = [
                 "description": "Part of a flag's name or key, 1 to 100 characters.",
             },
             "status": {"type": "string", "description": "Only flags with this status."},
+            "stale": {
+                "type": "boolean",
+                "description": (
+                    "true returns only stale flags, false the rest; omit for all. "
+                    "Archived flags are never stale."
+                ),
+            },
             "limit": dict(_LIMIT),
             "skip": dict(_SKIP),
         },

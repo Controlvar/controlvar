@@ -1,5 +1,10 @@
-import React from 'react';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import React, { useState } from 'react';
+import { screen, fireEvent, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import axe from 'axe-core';
+// The dialog makes `#__next` inert and portals beside it, so every render is
+// mounted the way Next mounts the page (#369).
+import { APP_ROOT_ID, renderInAppRoot as render } from '@/tests/helpers/renderInAppRoot';
 import { CreateRoleModal } from '@modules/components/admin/roles/CreateRoleModal';
 import { RbacService } from '@modules/rbac';
 import { makeRole } from './rbacFixtures';
@@ -251,5 +256,109 @@ describe('CreateRoleModal', () => {
     );
     fireEvent.click(screen.getByTestId('modal-cancel-button'));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+/** A page with the real opener: the button that opens the dialog, as the roles page has. */
+function OpenedFromButton({ role = null }: { role?: typeof mockRole | null }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}>
+        Create role
+      </button>
+      <CreateRoleModal isOpen={open} role={role} onClose={() => setOpen(false)} onSuccess={() => setOpen(false)} />
+    </>
+  );
+}
+
+describe('CreateRoleModal on the shared Dialog (#369)', () => {
+  const appRoot = () => document.getElementById(APP_ROOT_ID) as HTMLElement;
+
+  async function open(role: typeof mockRole | null = null) {
+    const user = userEvent.setup();
+    render(<OpenedFromButton role={role} />);
+    const opener = screen.getByRole('button', { name: 'Create role' });
+    await user.click(opener);
+    return { user, opener };
+  }
+
+  it('opens as a modal dialog named "Create Role", or "Edit Role" for an existing role', async () => {
+    await open();
+    const dialog = screen.getByRole('dialog', { name: 'Create Role' });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(dialog).toBe(screen.getByTestId('create-role-modal'));
+  });
+
+  it('is named "Edit Role" for an existing role', async () => {
+    await open(mockRole);
+    expect(screen.getByRole('dialog', { name: 'Edit Role' })).toBeInTheDocument();
+  });
+
+  it('the page behind it is inert while it is open, and not after', async () => {
+    const { user } = await open();
+    expect(appRoot()).toHaveAttribute('inert');
+    expect(appRoot().contains(screen.getByTestId('create-role-modal'))).toBe(false);
+    await user.click(screen.getByTestId('modal-cancel-button'));
+    expect(appRoot()).not.toHaveAttribute('inert');
+  });
+
+  it('Escape now closes it, once, and focus returns to the opener', async () => {
+    const { user, opener } = await open();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('create-role-modal')).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+
+    await user.click(opener);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByTestId('create-role-modal')).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+  });
+
+  it('Escape calls onClose exactly once', () => {
+    const onClose = jest.fn();
+    render(<CreateRoleModal isOpen onClose={onClose} onSuccess={jest.fn()} />);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('a click on the backdrop no longer closes it', () => {
+    const onClose = jest.fn();
+    render(<CreateRoleModal isOpen onClose={onClose} onSuccess={jest.fn()} />);
+    // The Dialog's overlay; before #369 the role dialog's own `absolute inset-0` layer.
+    const backdrop = (document.querySelector('[data-dialog-root]') ??
+      screen.getByTestId('create-role-modal').querySelector('.absolute.inset-0')) as HTMLElement;
+    expect(backdrop).not.toBeNull();
+    fireEvent.click(backdrop);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByTestId('create-role-modal')).toBeInTheDocument();
+  });
+
+  it('focus returns to the opener after Cancel and after the close button', async () => {
+    const { user, opener } = await open();
+    await user.click(screen.getByTestId('modal-cancel-button'));
+    expect(opener).toHaveFocus();
+    await user.click(opener);
+    await user.click(screen.getByTestId('modal-close-x-button'));
+    expect(opener).toHaveFocus();
+  });
+
+  it('the first focus is the name field to create', async () => {
+    await open();
+    expect(screen.getByTestId('role-name-input')).toHaveFocus();
+  });
+
+  it('the first focus is the description to edit, because the name is fixed then', async () => {
+    await open(mockRole);
+    expect(screen.getByTestId('role-description-input')).toHaveFocus();
+  });
+
+  it('the dialog has no axe violations, and the rule that names it ran on it', async () => {
+    await open();
+    const dialog = screen.getByRole('dialog');
+    expect(document.body).toContainElement(dialog);
+    const result = await axe.run(dialog, { rules: { 'color-contrast': { enabled: false } } });
+    expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`)).toStrictEqual([]);
+    expect(result.passes.map((p) => p.id)).toContain('aria-dialog-name');
   });
 });

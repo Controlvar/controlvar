@@ -183,6 +183,8 @@ gets the control variant with `assigned: false` and `reason: "targeting"`.
 - **The server decides membership.** For an ID list, the user is the `user_id` the flag or the
   assignment is evaluated for; a `user_id` (or anything else) in the context you send does not
   make a user a member.
+- **A key in a browser or a mobile app answers for any user id.** A key used in a browser or a mobile app is visible to the people who use the app, and it answers for whichever user id it is sent: what that id is served, whether it is in a segment, and which experiments it is assigned to.
+  Where that matters, use user ids that do not identify a person (not email addresses), in ID lists too, and read assignments from your server.
 - **At most 10 segments per ruleset**, one per condition; put several conditions in an `OR`
   group to match any of them.
 - **Saving rules that name a segment that is unknown, inactive or archived answers `422`.** If
@@ -199,7 +201,9 @@ The full rule is in the
 
 A segment that a flag or an experiment still uses cannot be archived or made inactive: it
 answers `409` and lists them. A flag counts until it is archived, and an experiment until it is
-completed or archived, because until then its rules can still be evaluated.
+completed or archived, because until then its rules can still be evaluated. An experiment that
+balances its split within the segment uses it the same way
+([Balance within saved segments](balance-within-groups.md#balance-within-saved-segments)).
 
 ```{.bash exec}
 curl -s -X DELETE localhost:8000/api/v1/segments/$SEGMENT \
