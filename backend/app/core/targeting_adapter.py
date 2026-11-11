@@ -233,34 +233,32 @@ def normalise_targeting_rules(
     return None
 
 
-#: What a flag does when its stored rules cannot be read (#1674): the
-#: consequence :func:`report_unreadable_rules` logs for ``flag:<key>``.
-FLAG_RULES_UNREADABLE = (
-    'that flag answers false (reason "error") and the SDK ruleset marks it '
-    '"remote"; the other flags are unaffected'
-)
-
-#: The same for a rules segment (``segment:<id>``).
-SEGMENT_RULES_UNREADABLE = (
-    "its membership is unavailable, so the flags and experiments that use it "
-    "are not evaluated; the other segments are unaffected"
-)
-
-
-def report_unreadable_rules(owner: str, exc: Exception, consequence: str) -> None:
+def report_unreadable_rules(owner: str, exc: Exception) -> None:
     """Log, once per owner, that its stored rules raised when read (#1674).
 
-    ``owner`` is ``flag:<key>`` or ``segment:<id>``; ``consequence`` is fixed
-    text (:data:`FLAG_RULES_UNREADABLE`, :data:`SEGMENT_RULES_UNREADABLE`).
-    The exception's type only, never its text, which can repeat the rule's
-    content.
+    ``owner`` is ``flag:<key>`` or ``segment:<id>``. The consequence text is a
+    string literal chosen here per owner kind, so no free text reaches the log
+    call: a flag answers false (reason "error") and the SDK ruleset marks it
+    "remote"; a segment's membership is unavailable. The exception's type
+    only, never its text, which can repeat the rule's content.
     """
-    if EVALUATION_NOTES.first(owner, "stored rules unreadable"):
+    if not EVALUATION_NOTES.first(owner, "stored rules unreadable"):
+        return
+    if owner.startswith("segment:"):
         logger.warning(
-            "Cannot read the stored targeting rules for %s (%s); %s. Logged once.",
+            "Cannot read the stored targeting rules for %s (%s); its membership "
+            "is unavailable, so the flags and experiments that use it are not "
+            "evaluated; the other segments are unaffected. Logged once.",
             owner,
             type(exc).__name__,
-            consequence,
+        )
+    else:
+        logger.warning(
+            "Cannot read the stored targeting rules for %s (%s); that flag "
+            'answers false (reason "error") and the SDK ruleset marks it '
+            '"remote"; the other flags are unaffected. Logged once.',
+            owner,
+            type(exc).__name__,
         )
 
 

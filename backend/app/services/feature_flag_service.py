@@ -28,7 +28,6 @@ from backend.app.core.rules_engine import (
     TimeWindowUnreadable,
 )
 from backend.app.core.targeting_adapter import (
-    FLAG_RULES_UNREADABLE,
     expand_context,
     match_targeting_rule,
     normalise_targeting_rules,
@@ -518,7 +517,7 @@ class FeatureFlagService:
                         normalise_targeting_rules(rules, owner=owner)
                     )
                 except Exception as exc:
-                    report_unreadable_rules(owner, exc, FLAG_RULES_UNREADABLE)
+                    report_unreadable_rules(owner, exc)
         memberships = None
         if referenced:
             memberships = resolve_segment_memberships(

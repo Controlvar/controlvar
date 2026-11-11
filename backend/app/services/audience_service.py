@@ -34,7 +34,6 @@ from backend.app.core.context_limits import MAX_CONTEXT_BYTES
 from backend.app.core.pattern_match import PatternUnevaluable, report_unevaluable
 from backend.app.core.rules_engine import TimeWindowUnreadable, evaluate_condition
 from backend.app.core.targeting_adapter import (
-    SEGMENT_RULES_UNREADABLE,
     TargetingRulesError,
     convert_dashboard_condition,
     expand_context,
@@ -258,7 +257,7 @@ def stored_segment_rules(segment: Segment) -> TargetingRules:
     except TargetingRulesError:
         raise SegmentRulesNotValid(segment_id) from None
     except Exception as exc:
-        report_unreadable_rules(f"segment:{segment_id}", exc, SEGMENT_RULES_UNREADABLE)
+        report_unreadable_rules(f"segment:{segment_id}", exc)
         raise SegmentRulesNotValid(segment_id) from None
 
 

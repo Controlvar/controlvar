@@ -98,7 +98,6 @@ from backend.app.core.flag_values import (
     servable_values,
 )
 from backend.app.core.targeting_adapter import (
-    FLAG_RULES_UNREADABLE,
     normalise_targeting_rules,
     report_unreadable_rules,
 )
@@ -276,7 +275,7 @@ def build_flag_entry(flag: FeatureFlag) -> Dict[str, Any]:
         try:
             native = normalise_targeting_rules(stored, owner=owner)
         except Exception as exc:
-            report_unreadable_rules(owner, exc, FLAG_RULES_UNREADABLE)
+            report_unreadable_rules(owner, exc)
             return remote
     if native is not None:
         for rule in sorted(native.rules, key=lambda r: r.priority):

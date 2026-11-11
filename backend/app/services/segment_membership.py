@@ -42,7 +42,6 @@ from backend.app.core.balanced_blocks import balance_segments, balances_within_s
 from backend.app.core.pattern_match import PatternUnevaluable, report_unevaluable
 from backend.app.core.rules_engine import SEGMENT_MEMBERSHIP_KEY, TimeWindowUnreadable
 from backend.app.core.targeting_adapter import (
-    SEGMENT_RULES_UNREADABLE,
     TargetingRulesError,
     _is_dashboard_rules_shape,
     _segment_conditions,
@@ -185,9 +184,7 @@ def resolve_segment_memberships(
                     # Stored rules that raise (#1674): this segment only. The
                     # pure check alone is guarded, so a database error still
                     # reaches the SQLAlchemyError branch below.
-                    report_unreadable_rules(
-                        f"segment:{sid}", exc, SEGMENT_RULES_UNREADABLE
-                    )
+                    report_unreadable_rules(f"segment:{sid}", exc)
                     unavailable.add(sid)
                     continue
                 if seg_ctx is None:
@@ -298,9 +295,7 @@ def segment_reference_problem(db: Session, raw_rules: Any) -> Optional[str]:
             except Exception as exc:
                 # Stored rules that raise (#1674): refused like rules that
                 # are not valid, never a 500.
-                report_unreadable_rules(
-                    f"segment:{row.id}", exc, SEGMENT_RULES_UNREADABLE
-                )
+                report_unreadable_rules(f"segment:{row.id}", exc)
                 return f"{path}.value: {SEGMENT_RULES_NOT_VALID}"
     return None
 
