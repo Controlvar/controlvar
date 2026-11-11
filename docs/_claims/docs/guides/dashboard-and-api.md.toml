@@ -200,11 +200,11 @@ text = "Download results as CSV | API only | Data export"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "The effect size in the metric comparison table | API only | Running experiments"
+text = "The effect size in the metric comparison table | Dashboard | Running experiments"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Each variant's confidence interval on the results page | API only | Running experiments"
+text = "Each variant's confidence interval on the results page | Dashboard | Running experiments"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]

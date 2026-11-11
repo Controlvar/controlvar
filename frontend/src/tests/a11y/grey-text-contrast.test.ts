@@ -35,6 +35,8 @@ const FILES = [
   'pages/experiments/[id].tsx',
   'components/experiments/new/BasicInfoFields.tsx',
   'components/experiments/new/ExperimentTypeField.tsx',
+  // #442: the results table's Effect size and Interval columns and their help.
+  'components/results/MetricComparison/MetricComparisonTable.tsx',
 ];
 
 /**

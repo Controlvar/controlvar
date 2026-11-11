@@ -557,10 +557,10 @@ steps:
             - region "Metric comparison":
               - table:
                 - rowgroup:
-                  - row "Metric Variant Sample Size Value Change Impact p-value Significance"
+                  - row "Metric Variant Sample Size Value Effect size Interval (95%) Change Impact p-value Significance"
                 - rowgroup:
                   - row /Control\(control\) 400 10\.00%/
-                  - row /Treatment 400 16\.00% \+60\.0%/
+                  - row /Treatment 400 16\.00% 0\.18 \(negligible\) 12\.41% to 19\.59% \+60\.0%/
     fail: the results page shows other counts or rates than were sent, a failed sample-ratio check, no recommendation to ship, or a p-value that is not Fisher's
   - id: results-api
     doc: exporting-results
@@ -729,10 +729,10 @@ steps:
             - region "Metric comparison":
               - table:
                 - rowgroup:
-                  - row "Metric Variant Sample Size Value Change Impact p-value Significance"
+                  - row "Metric Variant Sample Size Value Effect size Interval (95%) Change Impact p-value Significance"
                 - rowgroup:
                   - row /Control\(control\) 300 10\.00%/
-                  - row /Treatment 200 20\.00% \+100\.0%/
+                  - row /Treatment 200 20\.00% 0\.28 \(small\) 14\.46% to 25\.54% \+100\.0%/
     fail: the results page shows no sample-ratio notice with each variant's users and the number expected, or recommends anything but INCONCLUSIVE
   - id: floor-experiment
     doc: experiment-summary-card
@@ -895,10 +895,10 @@ steps:
             - region "Metric comparison":
               - table:
                 - rowgroup:
-                  - row "Metric Variant Sample Size Value Change Impact p-value Significance"
+                  - row "Metric Variant Sample Size Value Effect size Interval (95%) Change Impact p-value Significance"
                 - rowgroup:
                   - row /Control\(control\) 60 10\.00%/
-                  - row /Treatment 60 40\.00% \+300\.0%/
+                  - row /Treatment 60 40\.00% 0\.73 \(medium\) 27\.60% to 52\.40% \+300\.0%/
     fail: the results page reads "Planned sample Reached" before the planned sample is met, or recommends shipping a variant before every variant has 100 users
   - id: sequential-results
     doc: sequential-testing-stop-experiments-early

@@ -66,7 +66,8 @@ describe('MetricComparisonTable', () => {
 
   it('renders variant names', () => {
     render(<MetricComparisonTable metrics={mockMetrics} confidenceLevel={0.95} />);
-    expect(screen.getByText('Control')).toBeInTheDocument();
+    // The Effect size column also says "Control" for the control's row.
+    expect(screen.getByText('Control', { selector: 'td:not([data-testid])' })).toBeInTheDocument();
     expect(screen.getByText('Variant B')).toBeInTheDocument();
   });
 
