@@ -636,7 +636,7 @@ by = [
 ]
 
 [[unit]]
-text = "GET /api/v1/export/reports/overview | #244, number of the PR | experiments_with_winners counts the experiments in the period whose current results name a winner, as the export's winner_variant column does, where it counted saved reports through a column they do not have, swallowed the error and answered 0 for every request. The overview now runs an analysis for each experiment in the period, so the call costs as much as GET /api/v1/export/experiments for the same period, and an analysis error other than results that cannot be computed fails the call with 500 instead of reporting 0. The OpenAPI document does not change. Clients that read the field see a real number instead of 0."
+text = "GET /api/v1/export/reports/overview | #244, #1907 | experiments_with_winners counts the experiments in the period whose current results name a winner, as the export's winner_variant column does, where it counted saved reports through a column they do not have, swallowed the error and answered 0 for every request. The overview now runs an analysis for each experiment in the period, so the call costs as much as GET /api/v1/export/experiments for the same period, and an analysis error other than results that cannot be computed fails the call with 500 instead of reporting 0. The OpenAPI document does not change. Clients that read the field see a real number instead of 0."
 by = [
     "test:backend/tests/unit/services/test_export_overview_winners.py",
     "test:backend/tests/integration/api/test_export_overview_winners.py::test_the_overview_counts_a_completed_experiment_with_a_winner",
