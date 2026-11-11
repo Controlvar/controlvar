@@ -22,12 +22,16 @@ from backend.app.core.config import cors_start_up_messages, settings
 from backend.app.core.finite_json import refuse_non_finite_json
 from backend.app.core.health import is_development_or_test
 from backend.app.core.health import router as health_router
+from backend.app.core.logger import configure_logging, log_format_from_env
 from backend.app.core.metrics_scheduler import metrics_scheduler
 from backend.app.core.rollout_scheduler import rollout_scheduler
 from backend.app.core.safety_scheduler import safety_scheduler
 from backend.app.core.scheduler import experiment_scheduler
 from backend.app.core.settings_rules import ENVIRONMENT_NOT_SET_MESSAGE
 from backend.app.core.validation_errors import request_validation_error_handler
+from backend.app.middleware.prometheus_metrics_middleware import (
+    PrometheusMetricsMiddleware,
+)
 from backend.app.middleware.rate_limiter import RateLimitMiddleware
 from backend.app.middleware.relative_redirect_middleware import (
     RelativeSlashRedirectMiddleware,
@@ -35,22 +39,11 @@ from backend.app.middleware.relative_redirect_middleware import (
 from backend.app.middleware.request_body_limit_middleware import (
     RequestBodyLimitMiddleware,
 )
+from backend.app.middleware.request_id_middleware import RequestIDMiddleware
 from backend.app.middleware.security_middleware import SecurityHeadersMiddleware
 from backend.app.middleware.trusted_host_middleware import TrustedHostMiddleware
 from backend.app.middleware.unhandled_error_middleware import UnhandledErrorMiddleware
 from backend.app.modules_loader import abort_if_modules_broken, load_modules
-
-# --- EP-013 additions ---
-try:
-    from backend.app.core.logger import configure_logging, log_format_from_env
-    from backend.app.middleware.prometheus_metrics_middleware import (
-        PrometheusMetricsMiddleware,
-    )
-    from backend.app.middleware.request_id_middleware import RequestIDMiddleware
-
-    _monitoring_imports_ok = True
-except Exception:  # pragma: no cover
-    _monitoring_imports_ok = False
 
 # ---------------------------------------------------------------------------
 # Structured logging — initialise before anything else so that startup
@@ -60,20 +53,21 @@ except Exception:  # pragma: no cover
 # LOG_FORMAT=console -> coloured console output
 # unset            -> console in development/test, JSON everywhere else
 # ---------------------------------------------------------------------------
-_log_format: str = "console"
-if _monitoring_imports_ok:
-    _log_format = str(
-        getattr(settings, "LOG_FORMAT", "") or ""
-    ).lower() or log_format_from_env(
-        default="console" if is_development_or_test() else "json"
-    )
+_log_format: str = str(
+    getattr(settings, "LOG_FORMAT", "") or ""
+).lower() or log_format_from_env(
+    default="console" if is_development_or_test() else "json"
+)
 _json_logs: bool = _log_format == "json"
-if _monitoring_imports_ok:
-    configure_logging(
-        log_level=str(settings.LOG_LEVEL or "INFO").upper(),
-        json_logs=_json_logs,
-        service_name="experimentation-platform",
-    )
+configure_logging(
+    log_level=str(settings.LOG_LEVEL or "INFO").upper(),
+    json_logs=_json_logs,
+    service_name="experimentation-platform",
+)
+
+# The logger and the two monitoring middleware (EP-013) are imported plainly, so
+# in every environment a module that cannot be imported stops the API from
+# starting (#1041) rather than leaving it serving with no request IDs or metrics.
 
 # Standard-library logger (used by the existing schedulers etc.)
 logger = logging.getLogger(__name__)
@@ -298,12 +292,11 @@ app.add_middleware(
 app.add_middleware(SecurityHeadersMiddleware)
 
 # Prometheus latency / request-count middleware (EP-013)
-if _monitoring_imports_ok:
-    app.add_middleware(PrometheusMetricsMiddleware)
-    # X-Request-ID on every response + request_id/path/method bound into the
-    # log context. Registered after the middlewares it should wrap, so every
-    # log line from them already carries the id.
-    app.add_middleware(RequestIDMiddleware)
+app.add_middleware(PrometheusMetricsMiddleware)
+# X-Request-ID on every response + request_id/path/method bound into the
+# log context. Registered after the middlewares it should wrap, so every
+# log line from them already carries the id.
+app.add_middleware(RequestIDMiddleware)
 
 # CORS last, i.e. outermost -- see the note at the top of this block.
 #

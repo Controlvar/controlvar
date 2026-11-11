@@ -103,6 +103,10 @@ text = "To add your own for the rest of a request:"
 by = ["exempt:baseline"]
 
 [[unit]]
+text = "The API does not start without the request-ID middleware: if it cannot be imported, startup stops with the import error, in every environment."
+by = ["test:backend/tests/smoke/test_monitoring_imports_required.py::test_api_does_not_start_when_a_monitoring_middleware_cannot_be_imported"]
+
+[[unit]]
 text = "request_id is the field to correlate on."
 by = [
     "test:backend/tests/unit/middleware/test_request_id_middleware.py::test_request_id_added_to_response_headers",
