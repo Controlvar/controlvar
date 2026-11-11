@@ -835,6 +835,10 @@ text = "credentials_unavailable | 503 | WAREHOUSE_CREDENTIALS_KEYS is not set, s
 by = ["mechanism:warehouse-troubleshooting"]
 
 [[unit]]
+text = "aws_identity_unavailable | 503 | This deployment has no AWS identity to assume a connection's AWS role from. Not raised for Snowflake or BigQuery, which use no AWS role. | An operator runs the API with an AWS identity that may call sts:AssumeRole on the connection's role."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
 text = "auth_failed | 502 | The warehouse did not accept the connection's credentials. | Snowflake: the public key registered on the user is the one Controlvar shows, and the account identifier is right. BigQuery: the service account and its JSON key still exist. Then test the connection."
 by = ["mechanism:warehouse-troubleshooting"]
 
@@ -868,6 +872,10 @@ by = ["mechanism:warehouse-troubleshooting"]
 
 [[unit]]
 text = "workgroup_unsafe | 502 | Not raised for Snowflake or BigQuery. | Nothing."
+by = ["mechanism:warehouse-troubleshooting"]
+
+[[unit]]
+text = "role_trust_unsafe | 502 | The trust policy of a connection's AWS role admits this deployment without the connection's external ID, so the role is refused. Not raised for Snowflake or BigQuery, which use no AWS role. | The role's trust policy has a condition that requires sts:ExternalId to equal the external ID shown on the connection's page."
 by = ["mechanism:warehouse-troubleshooting"]
 
 [[unit]]

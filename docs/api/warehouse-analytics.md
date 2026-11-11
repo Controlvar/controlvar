@@ -321,6 +321,7 @@ a route that answers with the code directly.
 | Code | Status | What it means | What to check |
 |---|---|---|---|
 | `credentials_unavailable` | 503 | `WAREHOUSE_CREDENTIALS_KEYS` is not set, so no stored credential can be used. | An operator sets it: see [For operators](#for-operators). |
+| `aws_identity_unavailable` | 503 | This deployment has no AWS identity to assume a connection's AWS role from. Not raised for Snowflake or BigQuery, which use no AWS role. | An operator runs the API with an AWS identity that may call `sts:AssumeRole` on the connection's role. |
 | `auth_failed` | 502 | The warehouse did not accept the connection's credentials. | Snowflake: the public key registered on the user is the one Controlvar shows, and the account identifier is right. BigQuery: the service account and its JSON key still exist. Then test the connection. |
 | `key_revoked` | 502 | BigQuery reports that the key's service account client was disabled or deleted. | Enable the service account or create a new JSON key, and paste it into the connection. Snowflake does not report this. |
 | `permission_denied` | 502 | The role may not run this query. | Snowflake: `USAGE` on the warehouse, database and schema, and `SELECT` on the table. BigQuery: BigQuery Job User on the billing project, and BigQuery Data Viewer on each dataset. |
@@ -330,6 +331,7 @@ a route that answers with the code directly.
 | `time_limit` | 504 | The warehouse did not finish within `query_timeout_seconds`. | Raise it (up to `WAREHOUSE_MAX_QUERY_TIMEOUT_SECONDS`), or give the source a smaller table or a shorter window. |
 | `cancelled` | 502 | The warehouse cancelled the query. | Whether someone, or a resource monitor, cancelled it: see the warehouse's own query history. |
 | `workgroup_unsafe` | 502 | Not raised for Snowflake or BigQuery. | Nothing. |
+| `role_trust_unsafe` | 502 | The trust policy of a connection's AWS role admits this deployment without the connection's external ID, so the role is refused. Not raised for Snowflake or BigQuery, which use no AWS role. | The role's trust policy has a condition that requires `sts:ExternalId` to equal the external ID shown on the connection's page. |
 | `timezone_not_utc` | 502 | Snowflake reported a session time zone other than UTC, after Controlvar set it. The run is refused because times would be compared in another zone. | Start the analysis again; if it recurs, report it. BigQuery does not report this. |
 | `result_invalid` | 502 | The warehouse returned a result in a shape Controlvar does not accept, or one that was too large. | Start the analysis again; if it recurs, check that the source maps the columns you mean, and report it. |
 | `too_many_variant_values` | 502 | The variant column has more distinct values than allowed. | The assignment source's variant column holds a variant label, not an id that differs per unit. |

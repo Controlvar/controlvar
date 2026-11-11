@@ -71,6 +71,24 @@ describe('failureCopy', () => {
     );
   });
 
+  it('says a deployment with no AWS identity is for an operator to fix', () => {
+    const c = { warehouse: 'Amazon Redshift', connection: 'Prod analytics' };
+    expect(failureCopy('aws_identity_unavailable', null, c)).toEqual({
+      title: 'This deployment has no AWS identity to assume your role from, so Amazon Redshift can’t be used here.',
+      fix: 'An operator must run the API with an AWS identity that may assume the role Prod analytics uses.',
+    });
+  });
+
+  it('says a role that does not require its external ID is for an admin to fix', () => {
+    const c = { warehouse: 'Amazon Redshift', connection: 'Prod analytics' };
+    expect(failureCopy('role_trust_unsafe', null, c)).toEqual({
+      title: 'The trust policy of the role Prod analytics uses doesn’t require its external ID, so the role was refused.',
+      fix:
+        'An admin adds a condition requiring the external ID shown in Warehouse › Connections › Prod analytics ' +
+        'to the role’s trust policy.',
+    });
+  });
+
   it('falls back to the API message, then to the code', () => {
     expect(failureCopy('something_new', 'API words')).toEqual({ title: 'API words' });
     expect(failureCopy('something_new', null)).toEqual({ title: 'The analysis failed (code something_new).' });

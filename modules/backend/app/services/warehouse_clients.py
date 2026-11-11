@@ -29,7 +29,10 @@ from modules.backend.app.core.credential_crypto import (
     CredentialKeysUnavailable,
     CredentialUndecryptable,
 )
-from modules.backend.app.models.warehouse_connection import WarehouseConnection
+from modules.backend.app.models.warehouse_connection import (
+    ROLE_TYPES,
+    WarehouseConnection,
+)
 from modules.backend.app.services.warehouse_query_builder import (
     BIGQUERY_SQL,
     SNOWFLAKE_SQL,
@@ -87,13 +90,18 @@ NUMERIC_TYPES: Mapping[str, FrozenSet[str]] = {
 
 @dataclass(frozen=True, repr=False)
 class ConnectionSpec:
-    """Everything needed to reach one warehouse.  ``credential`` is plaintext."""
+    """Everything needed to reach one warehouse.  ``credential`` is plaintext.
+
+    A role-based connection (``ROLE_TYPES``) has no credential and carries the
+    ``external_id`` generated when it was saved instead.
+    """
 
     warehouse_type: str
     parameters: Mapping[str, str]
     query_timeout_seconds: int
     max_bytes_per_query: Optional[int]
     credential: Optional[bytes] = None
+    external_id: Optional[str] = None
 
     def __repr__(self) -> str:  # never the credential
         return f"ConnectionSpec(warehouse_type={self.warehouse_type!r})"
@@ -209,7 +217,10 @@ def spec_for(
     (409) from :mod:`~modules.backend.app.core.credential_crypto`.
     """
     credential = None
-    if connection.warehouse_type != "athena":
+    external_id = None
+    if connection.warehouse_type in ROLE_TYPES:
+        external_id = connection.external_id
+    else:
         credential = connection.get_credentials(pending=pending)
         if credential is None:
             raise CredentialUndecryptable("no stored credential")
@@ -219,12 +230,13 @@ def spec_for(
         query_timeout_seconds=int(connection.query_timeout_seconds),
         max_bytes_per_query=connection.max_bytes_per_query,
         credential=credential,
+        external_id=external_id,
     )
 
 
 def credentials_status(connection: WarehouseConnection) -> str:
     """``ok``, ``unavailable``, ``needs_new_credentials`` or ``pending_key``."""
-    if connection.warehouse_type == "athena":
+    if connection.warehouse_type in ROLE_TYPES:
         return "ok"
     try:
         if connection.get_credentials() is None:
