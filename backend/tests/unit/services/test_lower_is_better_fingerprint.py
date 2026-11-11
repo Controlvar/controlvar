@@ -53,6 +53,14 @@ BEFORE_DIRECTION = "1.4.0"
 ABSENT = object()
 
 
+def _direction_id(value: Any) -> str:
+    """The parameter's test id, the same in every process. ``repr`` of
+    ``ABSENT`` holds its address, which is not, and a sharded run puts a test
+    in the shard its id hashes to: with a different id in each shard's
+    process, the test runs in no shard, or in two (#1895)."""
+    return "ABSENT" if value is ABSENT else repr(value)
+
+
 def _with_direction(metric: Any, lower_is_better: Any) -> SimpleNamespace:
     fields = dict(vars(metric))
     fields.pop("lower_is_better", None)
@@ -95,7 +103,7 @@ def _hash(outputs: Any) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-@pytest.mark.parametrize("lower_is_better", [ABSENT, False, None], ids=repr)
+@pytest.mark.parametrize("lower_is_better", [ABSENT, False, None], ids=_direction_id)
 @pytest.mark.parametrize(
     "function, metric_name",
     [
@@ -119,7 +127,7 @@ def test_a_higher_is_better_metric_gives_the_output_of_1_4_0(
     )
 
 
-@pytest.mark.parametrize("lower_is_better", [ABSENT, False], ids=repr)
+@pytest.mark.parametrize("lower_is_better", [ABSENT, False], ids=_direction_id)
 @pytest.mark.parametrize("case", sorted(characterisation.CHARACTERISATION))
 def test_results_for_higher_is_better_metrics_are_those_of_1_4_0(
     case, lower_is_better, monkeypatch

@@ -156,6 +156,21 @@ def _job(name: str, conclusion: str = "success", status: str = "completed"):
     return {"name": name, "status": status, "conclusion": conclusion, "html_url": ""}
 
 
+#: A JUnit outcome as a shard report's ``ran`` record gives it.
+SHARD_OUTCOME = {
+    "passed": "passed",
+    "failed": "failed",
+    "errored": "error",
+    "skipped": "skipped",
+}
+
+
+def _node(case: Tuple[str, ...]) -> str:
+    """A made-up node id for a case: a shard report's ids need only be the
+    same in every shard."""
+    return f"{case[0]}::{case[1]}"
+
+
 def _junit(cases: List[Tuple[str, ...]]) -> str:
     """A JUnit report of (classname, name, outcome[, jest's own title])."""
     body = []
@@ -277,6 +292,9 @@ class World:
         self.jest_cases = list(JEST_CASES)
         self.report_cases = copy.deepcopy(SUITE_CASES)
         self.suite_reports: Dict[str, Optional[str]] = {}
+        #: A shard report's text in place of the good one, by its file name;
+        #: None leaves it out.
+        self.shard_reports: Dict[str, Optional[str]] = {}
         self.root = tmp / "tree"
         (self.root / rc.JOURNEYS).mkdir(parents=True)
         for name in JOURNEYS + DEMO_JOURNEYS:
@@ -623,38 +641,102 @@ class World:
             data = self.verdicts[name]
             return None if data is None else {"verdicts.json": json.dumps(data)}
         if run_id == self.ids["rc-evidence.yml"]:
-            for suite in rc.SUITES:
-                if name == rc.JUNIT_ARTIFACT.format(suite):
-                    return self.suite_files(suite)
+            for leg in rc.LEGS:
+                if name == rc.JUNIT_ARTIFACT.format(leg):
+                    return self.leg_files(leg)
         return None
 
-    def suite_files(self, suite: str) -> Dict[str, str]:
+    def sharded_cases(self, leg: Any) -> List[Tuple[str, ...]]:
+        """The cases of a shard's sharded session: unit's are ``self.cases``
+        and integration's eight made-up ones, dealt out over the shards."""
+        (session,) = [i for i in leg.sessions if i.shard]
+        if session.report in self.report_cases:
+            return self.report_cases[session.report]
+        if leg.suite == "unit":
+            every = self.cases
+        else:
+            every = [
+                (f"backend.tests.{leg.suite}.test_w", f"test_{k}", "passed")
+                for k in range(2 * leg.of)
+            ]
+        return [c for k, c in enumerate(every) if k % leg.of == leg.shard - 1]
+
+    def shard_doc(self, name: str) -> Dict[str, Any]:
+        """A shard's report as backend/tests/shard.py writes it, over the
+        cases its JUnit holds: every shard of the suite collected them all."""
+        leg = rc.LEGS[name]
+        (session,) = [i for i in leg.sessions if i.shard]
+        siblings = [g for g in rc.LEGS.values() if g.suite == leg.suite]
+        collected = sorted(_node(c) for g in siblings for c in self.sharded_cases(g))
+        mine = self.sharded_cases(leg)
+        return {
+            "version": 1,
+            "suite": " ".join(sorted(session.roots)),
+            "shard": leg.shard,
+            "of": leg.of,
+            "collected": collected,
+            "selected": sorted(_node(c) for c in mine),
+            "markexpr": "",
+            "keyword": "",
+            "deselect": [],
+            # As pytest records --ignore: the argument as given.
+            "ignore": [
+                a[len("--ignore=") :] for a in session.args if a.startswith("--ignore=")
+            ],
+            "ignore_glob": [],
+            "last_failed": False,
+            "pre_deselected": 0,
+            "unannounced": [],
+            "fabricated": [],
+            "disabled_plugins": ["cov"],
+            "autoload_disabled": False,
+            "collect_errors": [],
+            "ran": [
+                {
+                    "nodeid": _node(c),
+                    "outcome": SHARD_OUTCOME[c[2]],
+                    "skip_reason": "no reason" if c[2] == "skipped" else None,
+                }
+                for c in mine
+            ],
+        }
+
+    def leg_files(self, name: str) -> Dict[str, str]:
+        """What one leg's job uploads: its JUnit reports, and a shard's report."""
+        leg = rc.LEGS[name]
         files = {}
-        for number, invocation in zip(range(len(rc.SUITES[suite])), rc.SUITES[suite]):
+        for number, invocation in zip(range(len(leg.sessions)), leg.sessions):
             if invocation.report in self.suite_reports:
                 text = self.suite_reports[invocation.report]
                 if text is not None:
                     files[invocation.report] = text
                 continue
-            if suite == "frontend":
+            if leg.suite == "frontend":
                 cases = self.jest_cases
-            elif suite == "unit" and number == 0:
-                cases = self.cases
+            elif invocation.shard:
+                cases = self.sharded_cases(leg)
             elif invocation.report in self.report_cases:
                 cases = self.report_cases[invocation.report]
             elif invocation.runner == "jest":
                 cases = [(f"{invocation.cwd}/x.test.ts", "it works", "passed")]
             else:
-                cases = [(f"backend.tests.{suite}.test_{number}", "test_ok", "passed")]
+                cases = [(f"backend.tests.{name}.test_{number}", "test_ok", "passed")]
             files[invocation.report] = _junit(cases)
+        if leg.shard:
+            if leg.shard_report in self.shard_reports:
+                text = self.shard_reports[leg.shard_report]
+                if text is not None:
+                    files[leg.shard_report] = text
+            else:
+                files[leg.shard_report] = json.dumps(self.shard_doc(name))
         return files
 
     def junit_dir(self) -> pathlib.Path:
         """The reports as rc-evidence.yml's verify job has them, merged."""
         directory = self.tmp / "junit-here"
         directory.mkdir(exist_ok=True)
-        for suite in rc.SUITES:
-            for name, text in self.suite_files(suite).items():
+        for leg in rc.LEGS:
+            for name, text in self.leg_files(leg).items():
                 (directory / name).write_text(text)
         return directory
 
@@ -725,7 +807,12 @@ def test_a_green_release_passes_and_archives_what_it_read(world):
     assert record["sha"] == RC and all(c["ok"] for c in record["checks"])
     for artifact in (rc.JOURNEY_VERDICTS, rc.DEMO_VERDICTS):
         assert json.loads((out / "verdicts" / artifact / "verdicts.json").read_text())
-    assert (out / "junit" / "unit.xml").is_file()
+    for name, leg in rc.LEGS.items():
+        for session in leg.sessions:
+            assert (out / "junit" / session.report).is_file(), name
+        if leg.shard:
+            assert (out / "junit" / leg.shard_report).is_file(), name
+    assert "each ran exactly once" in text
 
 
 def test_the_verify_job_passes_on_its_own_run_and_reports(world):
@@ -1362,11 +1449,12 @@ def test_a_jest_each_title_matches_every_test_that_fills_it_in():
 
 @pytest.mark.parametrize("outcome", ["failed", "errored"])
 def test_a_failing_test_no_target_names_fails_the_rc(world, outcome):
-    """Any failure or error in a suite's report, registry target or not."""
+    """Any failure or error in a suite's report, registry target or not: the
+    seventh unit case, dealt to shard 3 of 4, fails that shard's report."""
     world.cases.append(("backend.tests.unit.x.test_gamma", "test_unrelated", outcome))
     _fails(
         world,
-        "suite unit: 1 tests failed or errored in unit.xml (first:"
+        "suite unit (shard 3 of 4): 1 tests failed or errored in unit-3.xml (first:"
         " backend.tests.unit.x.test_gamma::test_unrelated)",
     )
 
@@ -1463,6 +1551,263 @@ def test_the_verify_job_reads_its_own_reports(world):
     world.cases = [c for c in world.cases if c[1] != "test_one"]
     code, text = world.in_workflow()
     assert code == 1 and "not in the suites' JUnit" in text
+
+
+# ---------------------------------------------------------------------------
+# The sharded suites (#1895): every shard reports, and every shard's report
+# is read
+# ---------------------------------------------------------------------------
+NOBODY = "backend/tests/integration/test_new.py::test_no_shard_runs"
+BENCHMARK = "absolute-timing benchmark; set RUN_BENCHMARKS=1 to run it"
+
+
+def _shard_row(text: str) -> str:
+    (row,) = [
+        line
+        for line in text.splitlines()
+        if line.startswith("| E4 | every test ran in exactly one shard |")
+    ]
+    return row
+
+
+def _plant_docs(world: World, suite: str, change: Callable[[Dict[str, Any]], None]):
+    """Every shard report of *suite*, changed by *change*."""
+    for name, leg in rc.LEGS.items():
+        if leg.suite == suite and leg.shard:
+            doc = world.shard_doc(name)
+            change(doc)
+            world.shard_reports[leg.shard_report] = json.dumps(doc)
+
+
+def test_unit_and_integration_run_in_four_shards_and_the_rest_whole():
+    sharded = {
+        name: (leg.suite, leg.shard, leg.of)
+        for name, leg in rc.LEGS.items()
+        if leg.shard
+    }
+    assert sharded == {
+        **{f"unit-{i}": ("unit", i, 4) for i in range(1, 5)},
+        **{f"integration-{i}": ("integration", i, 4) for i in range(1, 5)},
+    }
+    # The sessions run whole are in the first shard only: e2e and contract
+    # as integration-tests.yml's shard 1 runs them, performance with unit.
+    reports = {name: [i.report for i in leg.sessions] for name, leg in rc.LEGS.items()}
+    assert reports["integration-1"] == ["integration-1.xml", "e2e.xml", "contract.xml"]
+    assert reports["unit-1"] == ["unit-1.xml", "performance.xml"]
+    for index in (2, 3, 4):
+        assert reports[f"integration-{index}"] == [f"integration-{index}.xml"]
+        assert reports[f"unit-{index}"] == [f"unit-{index}.xml"]
+    # Every other suite is one leg under its own name, as before.
+    whole = [name for name, leg in rc.LEGS.items() if not leg.shard]
+    assert whole == [s for s in rc.SUITES if s not in ("unit", "integration")]
+    for name in whole:
+        assert rc.LEGS[name].sessions == rc.SUITES[name]
+
+
+def test_the_shard_variables_and_report_names_are_the_plugins_and_checkers():
+    import fnmatch
+
+    from backend.tests import shard
+
+    assert (rc.SHARD_SPEC, rc.SHARD_REPORT) == (shard.ENV_SHARD, shard.ENV_REPORT)
+    for leg in rc.LEGS.values():
+        if leg.shard:
+            assert fnmatch.fnmatch(leg.shard_report, rc.SHARD_CHECK.REPORT_GLOB)
+
+
+def test_a_green_release_proves_each_sharded_suite_ran_every_test_once(world):
+    code, text = world.main()
+    assert code == 0, text
+    row = _shard_row(text)
+    assert "| PASS |" in row
+    assert (
+        "backend/tests/integration: 8 tests in 4 shards, each ran exactly once" in row
+    )
+    assert (
+        "backend/tests/installer_sweeps backend/tests/realistic backend/tests/unit:"
+        " 6 tests in 4 shards, each ran exactly once"
+    ) in row
+
+
+def test_a_test_no_shard_runs_fails(world):
+    """PEK13-4's plant: a test every shard collected and none selected."""
+    _plant_docs(
+        world,
+        "integration",
+        lambda doc: doc.update(collected=sorted(doc["collected"] + [NOBODY])),
+    )
+    text = _fails(
+        world,
+        f"backend/tests/integration: 1 collected but selected by no shard ['{NOBODY}']",
+    )
+    assert "| FAIL |" in _shard_row(text)
+
+
+def test_a_test_whose_id_differs_between_shards_fails(world):
+    """The way a test lands in no shard, or two: a node id built from an
+    address or uuid4() is another id in each shard's process."""
+
+    def unstable(doc: Dict[str, Any]) -> None:
+        mine = (
+            f"backend/tests/integration/test_x.py::test_x[<object at 0x{doc['shard']}>]"
+        )
+        doc["collected"] = sorted(doc["collected"] + [mine])
+        if doc["shard"] == 2:
+            doc["selected"] = sorted(doc["selected"] + [mine])
+            doc["ran"].append(
+                {"nodeid": mine, "outcome": "passed", "skip_reason": None}
+            )
+
+    _plant_docs(world, "integration", unstable)
+    _fails(
+        world,
+        "backend/tests/integration: shard 2 collected a different list from shard 1"
+        " (node ids differ between processes?)",
+    )
+    # The table cell is cut at 400 characters; the record keeps every line.
+    record = json.loads((world.tmp / "out" / "runs.json").read_text())
+    (check,) = [
+        c
+        for c in record["checks"]
+        if c["subject"] == "every test ran in exactly one shard"
+    ]
+    assert (
+        "backend/tests/integration: 1 collected but selected by no shard"
+        " ['backend/tests/integration/test_x.py::test_x[<object at 0x1>]']"
+    ) in check["problems"]
+
+
+@pytest.mark.parametrize("mode", ["download", "in the workflow"])
+def test_a_shard_without_its_junit_fails_naming_the_shard(world, mode):
+    world.suite_reports["integration-3.xml"] = None
+    code, text = world.main() if mode == "download" else world.in_workflow()
+    assert code == 1 and text.rstrip().endswith("RC EVIDENCE: FAIL"), text
+    assert (
+        "suite integration (shard 3 of 4): no readable JUnit report integration-3.xml"
+        in text
+    )
+
+
+def test_a_shard_whose_artifact_is_missing_fails_naming_the_shard(world):
+    run = world.ids["rc-evidence.yml"]
+    world.artifacts[(run, "rc-evidence-junit-unit-2")] = None
+    _fails(
+        world,
+        f"suite unit (shard 2 of 4): no rc-evidence-junit-unit-2 artifact in run {run}",
+        "suite unit (shard 2 of 4): no readable JUnit report unit-2.xml",
+    )
+    _fails(world, "suite unit (shard 2 of 4): no shard report shard-unit-2.json")
+
+
+@pytest.mark.parametrize("mode", ["download", "in the workflow"])
+def test_a_shard_without_its_shard_report_fails_naming_the_shard(world, mode):
+    world.shard_reports["shard-integration-4.json"] = None
+    code, text = world.main() if mode == "download" else world.in_workflow()
+    assert code == 1 and text.rstrip().endswith("RC EVIDENCE: FAIL"), text
+    row = _shard_row(text)
+    assert (
+        "suite integration (shard 4 of 4): no shard report shard-integration-4.json"
+        in row
+    )
+    assert "backend/tests/integration: shard(s) [4] of 4 have no report" in row
+
+
+def test_a_shard_killed_before_its_report_was_written_fails(world):
+    """shard.py claims the file when the session starts; a session cancelled
+    at the job's limit leaves it empty."""
+    world.shard_reports["shard-integration-2.json"] = ""
+    _fails(
+        world,
+        "suite integration (shard 2 of 4): shard-integration-2.json: empty (the"
+        " session did not finish writing it)",
+    )
+
+
+@pytest.mark.parametrize("outcome", ["failed", "errored"])
+def test_a_failure_in_one_shard_fails(world, outcome):
+    world.report_cases["integration-2.xml"] = [
+        ("backend.tests.integration.test_w", "test_1", "passed"),
+        ("backend.tests.integration.test_w", "test_5", outcome),
+    ]
+    text = _fails(
+        world,
+        "suite integration (shard 2 of 4): 1 tests failed or errored in"
+        " integration-2.xml (first: backend.tests.integration.test_w::test_5)",
+    )
+    word = "failed" if outcome == "failed" else "error"
+    assert (
+        f"backend/tests/integration: shard 2: backend.tests.integration.test_w::test_5"
+        f" {word}" in _shard_row(text)
+    )
+
+
+def test_a_skip_in_unit_passes_as_before_and_in_integration_only_the_benchmark(world):
+    # unit: any skip, as before it was sharded (E4 judges a target's skip).
+    world.cases.append(("backend.tests.unit.x.test_zeta", "test_skips", "skipped"))
+    code, text = world.main()
+    assert code == 0, text
+    # integration: integration-tests.yml's one reason, and no other.
+    world.report_cases["integration-1.xml"] = [
+        ("backend.tests.integration.test_w", "test_0", "passed"),
+        ("backend.tests.integration.test_w", "test_4", "skipped"),
+    ]
+    text = _fails(world, "was skipped, and its reason is not allowed: 'no reason'")
+    assert "| FAIL |" in _shard_row(text)
+
+    def benchmark(doc: Dict[str, Any]) -> None:
+        for record in doc["ran"]:
+            if record["outcome"] == "skipped":
+                record["skip_reason"] = BENCHMARK
+
+    _plant_docs(world, "integration", benchmark)
+    code, text = world.main()
+    assert code == 0, text
+
+
+@pytest.mark.parametrize(
+    "change, needle",
+    [
+        (
+            lambda doc: doc.update(ignore=doc["ignore"] + ["backend/tests/unit/core"]),
+            "narrowed by ignore=['backend/tests/unit/chart', 'backend/tests/unit/core']",
+        ),
+        (lambda doc: doc.update(ignore=[]), None),
+        (
+            lambda doc: doc.update(markexpr="not slow"),
+            "narrowed by markexpr='not slow'",
+        ),
+        (
+            lambda doc: doc.update(disabled_plugins=["cov", "xdist"]),
+            "narrowed by disabled_plugins=['xdist']",
+        ),
+        (lambda doc: doc.update(of=5), "shard-unit-1.json is shard 1 of 5"),
+        (
+            lambda doc: doc.update(suite="backend/tests/unit"),
+            "shard-unit-1.json is a report of 'backend/tests/unit', not",
+        ),
+    ],
+    ids=[
+        "another-ignore",
+        "unit-without-its-own-ignore",
+        "a-marker",
+        "another-plugin-off",
+        "another-count",
+        "another-tree",
+    ],
+)
+def test_a_shard_that_ran_something_else_fails(world, change, needle):
+    """Only the session's own --ignore is not a narrowing; a report of another
+    count or tree is not this suite's."""
+    doc = world.shard_doc("unit-1")
+    change(doc)
+    world.shard_reports["shard-unit-1.json"] = json.dumps(doc)
+    code, text = world.main()
+    if needle is None:
+        # unit's own --ignore missing from the report is not narrowing.
+        assert code == 0, text
+        return
+    assert code == 1, text
+    assert needle in _shard_row(text), _shard_row(text)
 
 
 # ---------------------------------------------------------------------------
@@ -1654,14 +1999,43 @@ def test_a_suite_runs_every_session_and_fails_if_any_did(tmp_path, monkeypatch):
         assert cwd == str(rc.ROOT) and check is False
         return Done(1 if "e2e.xml" in command[-1] else 0)
 
-    assert rc.run_suite("integration", tmp_path, runner=runner) == 1
-    assert len(calls) == len(rc.SUITES["integration"])  # it ran them all
-    for (command, env), invocation in zip(calls, rc.SUITES["integration"]):
+    # The first shard runs its slice of integration, then e2e and contract
+    # whole: a spec the job's environment held slices none of them but the
+    # first, which gets its own.
+    monkeypatch.setenv(rc.SHARD_SPEC, "3/4")
+    monkeypatch.setenv(rc.SHARD_REPORT, str(tmp_path / "shard-leaked.json"))
+    first = rc.LEGS["integration-1"]
+    assert rc.run_suite("integration-1", tmp_path, runner=runner) == 1
+    assert len(calls) == len(rc.SUITES["integration"]) == 3  # it ran them all
+    assert [i.report for i in first.sessions] == [
+        "integration-1.xml",
+        "e2e.xml",
+        "contract.xml",
+    ]
+    for (command, env), invocation in zip(calls, first.sessions):
         assert command[-1] == f"--junitxml={tmp_path / invocation.report}"
         assert "-x" not in command and "--exitfirst" not in command
         for key, value in invocation.env:
             assert env[key] == value
-    assert rc.run_suite("smoke", tmp_path, runner=lambda c, **k: Done(0)) == 0
+    (_, sliced), *whole = calls
+    assert sliced[rc.SHARD_SPEC] == "1/4"
+    assert sliced[rc.SHARD_REPORT] == str(tmp_path / "shard-integration-1.json")
+    for _, env in whole:
+        assert rc.SHARD_SPEC not in env and rc.SHARD_REPORT not in env
+    # Every other shard runs its slice of integration alone.
+    for index in (2, 3, 4):
+        calls.clear()
+        assert rc.run_suite(f"integration-{index}", tmp_path, runner=runner) == 0
+        ((command, env),) = calls
+        assert "backend/tests/integration/" in command
+        assert command[-1] == f"--junitxml={tmp_path / f'integration-{index}.xml'}"
+        assert env[rc.SHARD_SPEC] == f"{index}/4"
+        assert env[rc.SHARD_REPORT] == str(tmp_path / f"shard-integration-{index}.json")
+    # A suite run whole is sliced by nothing.
+    calls.clear()
+    assert rc.run_suite("smoke", tmp_path, runner=runner) == 0
+    ((command, env),) = calls
+    assert rc.SHARD_SPEC not in env and rc.SHARD_REPORT not in env
     # The chart suite: its tree, with the variable its module skips without.
     calls.clear()
     assert rc.run_suite("chart", tmp_path, runner=runner) == 0
@@ -1715,8 +2089,13 @@ def test_a_frontend_suite_that_wrote_no_report_fails(tmp_path):
 
 
 def test_the_suites_report_names_are_unique():
+    """The verify job merges every leg's artifact into one directory."""
     names = [i.report for invocations in rc.SUITES.values() for i in invocations]
     assert len(names) == len(set(names))
+    files = [i.report for leg in rc.LEGS.values() for i in leg.sessions] + [
+        leg.shard_report for leg in rc.LEGS.values() if leg.shard
+    ]
+    assert len(files) == len(set(files))
 
 
 def test_the_demo_simulators_run_as_a_session_each(tmp_path):
