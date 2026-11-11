@@ -4,7 +4,7 @@ import { PageTitle } from '@/components/PageTitle';
 import { FlagToggle } from '@/components/feature-flags/FlagToggle';
 import {
   ARCHIVED_LABEL,
-  ArchivedFlagRowLink,
+  ArchivedFlagRowNote,
   isFlagArchived,
 } from '@/components/feature-flags/ArchivedFlag';
 import { useOptionalAuth } from '@/contexts/AuthContext';
@@ -363,7 +363,8 @@ export default function FeatureFlagsPage() {
                 {flags.map((flag) => {
                   const on = isFlagOn(flag);
                   // The API refuses to turn an archived flag on (400), so its
-                  // row has no switch: it says how to unarchive it (#1748).
+                  // row has no switch: it says to unarchive it first, which is
+                  // done on the flag's page (#1748, #442).
                   const archived = isFlagArchived(flag);
                   return (
                     <tr
@@ -431,7 +432,7 @@ export default function FeatureFlagsPage() {
                       {canChange && (
                         <td className="px-4 py-3 text-right">
                           {archived ? (
-                            <ArchivedFlagRowLink flagKey={flag.key} />
+                            <ArchivedFlagRowNote flagKey={flag.key} />
                           ) : (
                             <FlagToggle
                               on={on}

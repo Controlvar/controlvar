@@ -509,6 +509,10 @@ describe('who may change a flag (#917)', () => {
       expect(screen.getByTestId('rollout-percentage')).toBeDisabled();
       expect(screen.queryByTestId('save-flag')).toBeNull();
 
+      // #442: no "Manage this flag" group, so no Archive.
+      expect(screen.queryByTestId('flag-archive')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Archive' })).toBeNull();
+
       // Reading stays: the schedule and the safety check load, and Re-check is offered.
       expect(await screen.findByTestId('rollout-schedule-name')).toHaveTextContent('Gradual checkout rollout');
       expect(await screen.findByTestId('safety-status')).toHaveTextContent('Healthy');
@@ -544,6 +548,8 @@ describe('who may change a flag (#917)', () => {
     expect(screen.getByTestId('rollout-percentage')).toBeEnabled();
     expect(screen.getByTestId('save-flag')).toBeInTheDocument();
     expect(screen.queryByTestId('flag-role-note')).toBeNull();
+    // #442: the "Manage this flag" group, with Archive for an inactive flag.
+    expect(within(screen.getByTestId('flag-archive')).getByRole('button', { name: 'Archive' })).toBeEnabled();
   });
 
   it('an ADMIN still gets "Replace rules" over rules the builder cannot show', async () => {

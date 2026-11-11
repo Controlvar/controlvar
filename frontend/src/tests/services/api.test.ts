@@ -32,6 +32,7 @@ import { ResultsService } from '@/services/results';
 import { UserTable, deleteTimedOutMessage } from '@/components/admin/users/UserTable';
 import { UNREACHABLE, errorCopy } from '@/components/experiments/ExperimentManageSection';
 import { SCHEDULE_ERROR_COPY, scheduleErrorCopy } from '@/components/experiments/ExperimentScheduleSection';
+import { flagManageErrorCopy } from '@/components/feature-flags/FlagManageSection';
 import { rolloutErrorCopy } from '@/components/feature-flags/RolloutScheduleManager';
 import { resultsErrorMessage } from '@/components/results/ResultsDashboard/ResultsDashboard';
 import { sessionErrorMessage } from '@/contexts/AuthContext';
@@ -904,6 +905,8 @@ const STATUS_ZERO_SITES: Record<string, { count: number; kind: string }> = {
   // SCHEDULE_ERROR_COPY's `0:` entry.
   'components/experiments/ExperimentScheduleSection.tsx': { count: 1, kind: 'write' },
   'components/feature-flags/RolloutScheduleManager.tsx': { count: 1, kind: 'write' },
+  // flagManageErrorCopy: archive and unarchive a flag (#442).
+  'components/feature-flags/FlagManageSection.tsx': { count: 1, kind: 'write' },
   // Returns `e.message` for every status 0, so the time-out text already shows.
   'components/results/ResultsDashboard/ResultsDashboard.tsx': { count: 1, kind: 'passes-message' },
   'contexts/AuthContext.tsx': { count: 1, kind: 'read' },
@@ -1083,6 +1086,12 @@ describe('each status-0 place says what a time-out means (#1040 D7)', () => {
     'components/feature-flags/RolloutScheduleManager.tsx': (write) => {
       expect(rolloutErrorCopy(write)).toBe(WRITE_TEXT);
       expect(rolloutErrorCopy(unreachable())).toBe(UNREACHABLE);
+    },
+    'components/feature-flags/FlagManageSection.tsx': (write) => {
+      for (const action of ['archive', 'unarchive'] as const) {
+        expect(flagManageErrorCopy(action, write)).toBe(WRITE_TEXT);
+        expect(flagManageErrorCopy(action, unreachable())).toBe(UNREACHABLE);
+      }
     },
     'components/results/ResultsDashboard/ResultsDashboard.tsx': (_write, read) => {
       expect(resultsErrorMessage(read)).toBe(READ_TEXT);

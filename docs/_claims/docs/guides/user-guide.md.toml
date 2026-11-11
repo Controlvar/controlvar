@@ -1420,8 +1420,19 @@ text = "Unarchive it before turning it on.\" Turning it off succeeds and changes
 by = ["exempt:baseline"]
 
 [[unit]]
-text = "Archiving and unarchiving are API calls for now (bulk toggle with archive, and POST /api/v1/feature-flags/{id}/unarchive, which is beta); an unarchived flag comes back inactive."
+text = "To archive a flag, open its page and choose Archive, then confirm; an archived flag's page offers Unarchive, and an unarchived flag comes back inactive (off)."
 by = [
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::no bulk-toggle call before Archive is confirmed in the dialog",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::confirming archives the flag: it reads Archived, with no switch, and offers Unarchive",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::Unarchive asks nothing, sends one POST /unarchive, and the flag reads Off with its switch back",
+    "test:backend/tests/integration/api/test_archived_flag_verbs.py::test_unarchive_is_the_way_back",
+]
+
+[[unit]]
+text = "Both need permission to change feature flags, which the ADMIN and DEVELOPER roles have; through the API they are a bulk toggle with archive and POST /api/v1/feature-flags/{id}/unarchive (beta)."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::ADMIN and DEVELOPER see Archive on an %s flag and Unarchive on an archived one",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::ANALYST and VIEWER see no archive control and the role note",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
     "test:backend/tests/integration/api/test_archived_flag_verbs.py",
 ]
@@ -1429,8 +1440,8 @@ by = [
 [[unit]]
 text = "The dashboard shows an archived flag as Archived, with no on/off switch, and the flag list has an Archived filter."
 by = [
-    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::reads Archived on its page, with no switch, and says how to unarchive it",
-    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::reads Archived in the list, with no switch in its row and a link saying how to unarchive it",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::reads Archived on its page, with no switch, and says to unarchive it before turning it on",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::reads Archived in the list, with no switch in its row and a note to unarchive it before turning it on",
     "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::the list filters archived flags, asking the API for status ARCHIVED",
 ]
 

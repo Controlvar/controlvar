@@ -1025,16 +1025,24 @@ text = "A flag is archived with POST /api/v1/feature-flags/bulk-toggle and \"act
 by = ["test:backend/tests/integration/api/test_bulk_toggle_api.py"]
 
 [[unit]]
-text = "The dashboard has no archive or unarchive action yet."
-by = ["test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::neither page offers archive or unarchive for an %s flag"]
+text = "In the dashboard, anyone with permission to change feature flags (the ADMIN and DEVELOPER roles have it) archives a flag with Archive on its page, which asks you to confirm, and brings it back with Unarchive there."
+by = [
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::ADMIN and DEVELOPER see Archive on an %s flag and Unarchive on an archived one",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::ANALYST and VIEWER see no archive control and the role note",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::no bulk-toggle call before Archive is confirmed in the dialog",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::Unarchive asks nothing, sends one POST /unarchive, and the flag reads Off with its switch back",
+]
 
 [[unit]]
-text = "It shows an archived flag as Archived, with no on/off switch and a link to this section, and the flag list has an Archived filter."
+text = "An archived flag reads Archived, with no on/off switch on either page: in its place each page says to unarchive it first, and the flag's page links to this section."
 by = [
-    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::reads Archived on its page, with no switch, and says how to unarchive it",
-    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::reads Archived in the list, with no switch in its row and a link saying how to unarchive it",
-    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::the list filters archived flags, asking the API for status ARCHIVED",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::reads Archived on its page, with no switch, and says to unarchive it before turning it on",
+    "test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::reads Archived in the list, with no switch in its row and a note to unarchive it before turning it on",
 ]
+
+[[unit]]
+text = "The flag list has an Archived filter."
+by = ["test:frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx::the list filters archived flags, asking the API for status ARCHIVED"]
 
 [[unit]]
 text = "Stale Flags lists the flags that look ready to archive."

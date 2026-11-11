@@ -493,11 +493,12 @@ flag off for every user and pauses its rollout schedule (see
 An archived flag is retired: every evaluation answers it as off, with its off value. It cannot be turned on until it is
 unarchived: the API refuses every request that would turn it on with "This flag is
 archived. Unarchive it before turning it on." Turning it off succeeds and changes
-nothing. Archiving and unarchiving are API calls for now (bulk toggle with
-`archive`, and `POST /api/v1/feature-flags/{id}/unarchive`, which is beta); an
-unarchived flag comes back inactive. The dashboard shows an archived flag as **Archived**, with
-no on/off switch, and the flag list has an **Archived** filter. See
-[Archived flags](../feature-flags/create.md#archived-flags).
+nothing. To archive a flag, open its page and choose **Archive**, then confirm; an archived
+flag's page offers **Unarchive**, and an unarchived flag comes back inactive (off). Both need
+permission to change feature flags, which the ADMIN and DEVELOPER roles have; through the API
+they are a bulk toggle with `archive` and `POST /api/v1/feature-flags/{id}/unarchive` (beta).
+The dashboard shows an archived flag as **Archived**, with no on/off switch, and the flag list
+has an **Archived** filter. See [Archived flags](../feature-flags/create.md#archived-flags).
 
 ---
 

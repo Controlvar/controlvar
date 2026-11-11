@@ -416,9 +416,12 @@ and leaves the flag archived. A request that turns it off (`"is_active": false`,
 archived flag is already off. The way back is
 `POST /api/v1/feature-flags/$FLAG_ID/unarchive` (beta), which makes the flag
 inactive; turn it on afterwards as usual. A flag is archived with
-`POST /api/v1/feature-flags/bulk-toggle` and `"action": "archive"`. The dashboard has no
-archive or unarchive action yet. It shows an archived flag as **Archived**, with no on/off
-switch and a link to this section, and the flag list has an **Archived** filter.
+`POST /api/v1/feature-flags/bulk-toggle` and `"action": "archive"`. In the dashboard, anyone
+with permission to change feature flags (the ADMIN and DEVELOPER roles have it) archives a
+flag with **Archive** on its page, which asks you to confirm, and brings it back with
+**Unarchive** there. An archived flag reads **Archived**, with no on/off switch on either
+page: in its place each page says to unarchive it first, and the flag's page links to this
+section. The flag list has an **Archived** filter.
 [Stale Flags](stale-flags.md) lists the flags that look ready to archive.
 
 ### Deleting a flag

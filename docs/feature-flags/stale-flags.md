@@ -133,8 +133,8 @@ filter: see [The MCP Server](../mcp-server.md#the-tools).
 
 ## Next steps
 
-Remove the flag from your code, then archive it with
-`POST /api/v1/feature-flags/bulk-toggle` and `"action": "archive"`; the
-dashboard has no archive action yet. An archived flag answers every evaluation
+Remove the flag from your code, then archive it with **Archive** on the flag's
+page, or with `POST /api/v1/feature-flags/bulk-toggle` and `"action": "archive"`.
+An archived flag answers every evaluation
 as off, and `POST /api/v1/feature-flags/{flag_id}/unarchive` makes it inactive
 again. See [Archived flags](create.md#archived-flags).
