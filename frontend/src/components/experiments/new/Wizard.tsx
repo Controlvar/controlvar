@@ -6,6 +6,7 @@ import { PageTitle } from '@/components/PageTitle';
 import { docsUrl } from '@/services/docs';
 import { EXPERIMENT_TYPE_LABELS, METRIC_TYPE_LABELS } from '@/types/experiments';
 import {
+  bayesianConfigProblem,
   buildCreatePayload,
   checkVariants,
   configurationProblems,
@@ -114,6 +115,7 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
   const [visitedMax, setVisitedMax] = useState(0);
   const [estimate, setEstimate] = useState<EstimatePanelState>(INITIAL_ESTIMATE_PANEL);
   const [revealProblems, setRevealProblems] = useState(0);
+  const [revealBayesian, setRevealBayesian] = useState(0);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const firstRunRef = useRef(true);
   const shownRef = useRef<number | null>(null);
@@ -213,6 +215,8 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
       }
       // The split is the problem (its line is under the allocations): focus goes there.
       if (step === 'variants' && checkVariants(state.variants) === null) focusBalanceField('split');
+      // An Advanced Bayesian setting may sit in a closed section: open it and focus it.
+      if (step === 'estimate' && bayesianConfigProblem(state) !== null) setRevealBayesian((n) => n + 1);
       return;
     }
     setStepError(null);
@@ -439,7 +443,9 @@ export function Wizard({ state, dispatch, error, isSubmitting, onCreate, onClear
                 dispatch={dispatch}
                 variantCount={state.variants.length}
                 bayesianEnabled={state.bayesianEnabled}
+                bayesianConfig={state.bayesianConfig}
                 sequentialEnabled={state.sequentialEnabled}
+                revealProblems={revealBayesian}
               />
               {/* Saved settings above; the estimate below, whose effect is saved. */}
               <section

@@ -93,3 +93,27 @@ describe.each(CASES)('shapeErrors($schema)', (c) => {
     expect(shapeErrors(c.schema, rest).join('\n')).toContain(`missing "${c.missing}"`);
   });
 });
+
+// #442: the create request's bayesian_config is the first body checked here
+// with numbers and their bounds (alpha > 0, 0 < credible_level < 1).
+describe('shapeErrors(BayesianConfig): numbers and their bounds', () => {
+  const good = { prior_family: 'beta', alpha: 2, beta: 1, loss_threshold: 0.001, credible_level: 0.95 };
+
+  it('accepts a known-good value', () => {
+    expect(shapeErrors('BayesianConfig', good)).toEqual([]);
+  });
+
+  it.each([
+    ['alpha', 0, 'not above 0'],
+    ['loss_threshold', -0.5, 'not above 0'],
+    ['credible_level', 1, 'not below 1'],
+    ['alpha', '2', 'expected a number'],
+    ['beta', null, 'expected a number'],
+  ])('refuses %s = %p', (field, value, words) => {
+    expect(shapeErrors('BayesianConfig', { ...good, [field]: value }).join('\n')).toContain(words);
+  });
+
+  it('refuses a prior family the API does not know', () => {
+    expect(shapeErrors('BayesianConfig', { ...good, prior_family: 'cauchy' }).length).toBeGreaterThan(0);
+  });
+});

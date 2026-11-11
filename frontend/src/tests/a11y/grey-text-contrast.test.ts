@@ -44,6 +44,8 @@ const FILES = [
   // Unarchive), and the archived flag's note on both flag pages.
   'components/feature-flags/FlagManageSection.tsx',
   'components/feature-flags/ArchivedFlag.tsx',
+  // #442: the new-experiment form's analysis settings and Advanced Bayesian settings.
+  'components/experiments/new/AnalysisSettingsFields.tsx',
 ];
 
 /**
