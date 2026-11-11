@@ -1,5 +1,4 @@
 import { PageTitle } from '@/components/PageTitle';
-import Link from 'next/link';
 import { DOCS_BRANCH, DOCS_REPO, docsUrl } from '@/services/docs';
 
 const sections = [
@@ -241,31 +240,9 @@ export default function DocsIndex() {
           </div>
         </div>
 
-        {/* Footer */}
-        <footer className="bg-gray-900 text-white py-12 px-6">
-          <div className="max-w-7xl mx-auto">
-            <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-              <div>
-                <Link href="/" className="text-xl font-semibold text-white">
-                  Controlvar
-                </Link>
-                <p className="text-gray-400 text-sm mt-1">Modern experimentation platform</p>
-              </div>
-              <div className="flex flex-wrap gap-6 text-sm text-gray-400">
-                <Link href="/" className="hover:text-white transition">Home</Link>
-                <Link href="/docs" className="hover:text-white transition">Docs</Link>
-                <a href={docsUrl('api/endpoints')} className="hover:text-white transition">API Reference</a>
-                <a href={docsUrl('sdk/javascript')} className="hover:text-white transition">SDKs</a>
-                <a href="mailto:hello@controlvar.com" className="hover:text-white transition">Contact</a>
-              </div>
-            </div>
-            <div className="border-t border-gray-800 mt-8 pt-8">
-              <p className="text-gray-400 text-sm text-center">
-                © 2024–2026 The Controlvar authors. Apache-2.0; SDKs MIT.
-              </p>
-            </div>
-          </div>
-        </footer>
+        {/* No footer of its own: on the marketing build the shell adds the
+            site's footer (HomeFooter) below every page; a platform build's
+            dashboard has none. */}
       </div>
     </>
   );

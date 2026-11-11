@@ -443,7 +443,7 @@ jobs:
           rm -rf .next out
           npm run build:marketing
           node scripts/check-site-media.mjs out
-          node --test scripts/site-head.test.mjs
+          node --test scripts/site-head.test.mjs scripts/site-pages.test.mjs
 
       # The export above in a real browser (#1459): phone width, axe and Tab
       # focus on its four pages (tests/e2e/marketing-site.site.spec.ts).

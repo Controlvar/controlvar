@@ -4,7 +4,7 @@
 
 **Website:** [controlvar.com](https://controlvar.com) · **Documentation:** [docs.controlvar.com](https://docs.controlvar.com)
 
-![The results page of a ShopLab demo experiment in the Controlvar dashboard: its users, the planned sample reached, the leading variant and the sample ratio check.](frontend/public/screens/results-88c79d580b09.webp)
+![The power calculator: the baseline conversion rate, the minimum detectable effect, the sample size each variant needs, and a power curve.](frontend/public/screens/power-calculator-2268c898864d.webp)
 
 Watch the [walkthrough videos](https://controlvar.com/#walkthroughs) on controlvar.com.
 

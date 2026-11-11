@@ -19,11 +19,8 @@ text = "Website: controlvar.com · Documentation: docs.controlvar.com"
 by = ["exempt:navigation"]
 
 [[unit]]
-text = "The results page of a ShopLab demo experiment in the Controlvar dashboard: its users, the planned sample reached, the leading variant and the sample ratio check."
-by = [
-    "journey:experiment-results#results-page",
-    "journey:experiment-results#ratio-results-page",
-]
+text = "The power calculator: the baseline conversion rate, the minimum detectable effect, the sample size each variant needs, and a power curve."
+by = ["journey:power-calculator#calculator"]
 
 [[unit]]
 text = "Watch the walkthrough videos on controlvar.com."

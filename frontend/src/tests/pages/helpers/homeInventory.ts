@@ -144,6 +144,11 @@ export const TYPED: readonly Row[] = [
     text: 'The change on each metric with its p-value, whether the planned sample is reached, and a sample ratio check of the traffic split.',
     source: `${UX}; docs/guides/user-guide.md:231, :257-266, :298`,
   },
+  {
+    tag: 'p',
+    text: 'How to read a results page, in the user guide →',
+    source: 'site polish 2026-11-10 (#7): docs/guides/user-guide.md "Reading Results"',
+  },
 
   // Row 1: rollouts and safety.
   { tag: 'h2', text: 'Roll features out gradually, and watch their safety signals', source: `${UX} Row 1; feature-flags/index.tsx:134` },

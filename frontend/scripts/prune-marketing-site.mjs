@@ -19,8 +19,11 @@
  * either been pointed at the wrong directory or is out of step with the route
  * list, and both are worth a loud failure rather than a silent success. That
  * is the same reasoning as the vacuity guards in the docs sweeps.
+ *
+ * Last, it copies each kept page to `<page>/index.html`, so `/docs/` is the
+ * docs hub as well as `/docs` (the comment above that step says why a copy).
  */
-import { existsSync, rmSync, readdirSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, rmSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const PLATFORM_ONLY = [
@@ -107,3 +110,24 @@ if (missing.length) {
   );
   process.exit(1);
 }
+
+// Each kept page at `<page>/` too. The export writes `docs.html`, which a host
+// serves for `/docs`; `/docs/` -- a common way to type it -- looks for
+// `docs/index.html`, and controlvar.com answered it with the homepage (site
+// polish 2026-11-10, #4). A copy, not a redirect page: once both files exist,
+// which one a host picks for `/docs` is up to the host, and with a copy either
+// one is the right page, where a redirect from `/docs/` to `/docs` would send
+// a visitor back and forth on a host that sends `/docs` on to `/docs/`.
+// Skipped when the export already has the index (a build with
+// `trailingSlash`); scripts/site-pages.test.mjs checks the result.
+const aliased = [];
+for (const name of KEEP) {
+  const page = join(outDir, `${name}.html`);
+  const index = join(outDir, name, 'index.html');
+  if (existsSync(index) || !existsSync(page)) continue;
+  mkdirSync(join(outDir, name), { recursive: true });
+  copyFileSync(page, index);
+  aliased.push(`${name}/index.html`);
+}
+console.log(`prune-marketing-site: copied ${aliased.length} page(s) to their trailing-slash path`);
+for (const n of aliased) console.log(`  + ${n}`);

@@ -4,7 +4,8 @@ import { BASE_URL } from "./env";
 
 /**
  * The public site in a real browser (#1459, PR G): controlvar.com's four
- * pages at a phone's width and a desktop's, over the MARKETING export.
+ * pages and its not-found page at a phone's width and a desktop's, over the
+ * MARKETING export.
  *
  * The `site` project (playwright.config.ts) runs this file and nothing else
  * does: it is the iPhone 13 descriptor on Chromium, the only browser CI
@@ -30,7 +31,10 @@ import { BASE_URL } from "./env";
  * looks at it.
  */
 
-const PAGES = ["/", "/docs", "/power-calculator", "/privacy"] as const;
+// The last is a path that does not exist: the export server answers it with
+// out/404.html, the not-found page, as nginx does (Amplify does what its
+// console's 404 rule says).
+const PAGES = ["/", "/docs", "/power-calculator", "/privacy", "/no-such-page"] as const;
 const PHONE_WIDTH = 390;
 const DESKTOP = { width: 1440, height: 900 };
 
@@ -99,6 +103,64 @@ async function checkAxe(page: Page, label: string): Promise<void> {
   );
   expect.soft(violations, `${label}: axe violations`).toEqual([]);
 }
+
+/**
+ * What is wrong with the code blocks in "How it works" at this width (site
+ * polish 2026-11-10, #7):
+ *   - a block whose content is wider than its box. Step 2's block scrolled
+ *     sideways, showing 295 of its 823 px on a phone and 311 at 1440 px, with
+ *     no scrollbar on macOS or iOS, so its lines read as cut off mid-word;
+ *   - a line that wraps anywhere but at a space or right after a `(`. Wrapped
+ *     with nothing more, the block broke 'user-123' after its `-` at 360 px,
+ *     the package name at 375 px, and a string at 320 px.
+ * Each character's line is read from its own rectangle (a Range over it).
+ */
+async function codeProblems(page: Page): Promise<string[]> {
+  return page
+    .locator('section[aria-labelledby="how-it-works-heading"] pre')
+    .evaluateAll((pres) =>
+      pres.flatMap((pre) => {
+        const name = pre.getAttribute("aria-label");
+        const problems: string[] = [];
+        if (pre.scrollWidth > pre.clientWidth) {
+          problems.push(`${name}: ${pre.scrollWidth} px of content in a ${pre.clientWidth} px box`);
+        }
+        const range = document.createRange();
+        const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT);
+        let line = "";
+        let top: number | null = null;
+        let prev = "";
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          const text = node.textContent ?? "";
+          for (let i = 0; i < text.length; i += 1) {
+            const ch = text[i];
+            if (ch === "\n") {
+              line = "";
+              top = null;
+              prev = "";
+              continue;
+            }
+            range.setStart(node, i);
+            range.setEnd(node, i + 1);
+            const rect = range.getClientRects()[0];
+            if (rect && top !== null && rect.top > top + 2) {
+              if (prev !== " " && prev !== "(" && ch !== " ") {
+                problems.push(`${name}: a line breaks inside "${line.slice(-12)}${text.slice(i, i + 8)}"`);
+              }
+              line = "";
+            }
+            if (rect) top = rect.top;
+            line += ch;
+            prev = ch;
+          }
+        }
+        return problems;
+      }),
+    );
+}
+
+/** Narrow phones as well as the project's 390 px: a 320 px phone, a 360 px Android, a 375 px iPhone. */
+const CODE_WIDTHS = [320, 360, 375, PHONE_WIDTH] as const;
 
 type Stop = { end: true } | { end: false; repeat: boolean; what: string; visible: boolean; style: string };
 
@@ -236,6 +298,28 @@ test.describe("the public site", () => {
     });
   }
 
+  test(`How it works: every code block fits its box, and breaks only at a space or after a "(", at ${CODE_WIDTHS.join(", ")} px`, async ({
+    page,
+  }) => {
+    await open(page, "/");
+    const problems: string[] = [];
+    for (const width of CODE_WIDTHS) {
+      await page.setViewportSize({ width, height: 844 });
+      problems.push(...(await codeProblems(page)).map((p) => `${width} px: ${p}`));
+    }
+    expect(problems).toEqual([]);
+  });
+
+  test("/docs/ is the docs hub, and a missing path is the not-found page", async ({ page }) => {
+    const hub = await page.goto("/docs/");
+    expect(hub?.status(), "/docs/").toBe(200);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Controlvar Documentation");
+
+    const missing = await page.goto("/no-such-page");
+    expect(missing?.status(), "/no-such-page").toBe(404);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Page not found");
+  });
+
   test.describe(`at ${DESKTOP.width} px`, () => {
     test.use({
       viewport: DESKTOP,
@@ -255,5 +339,27 @@ test.describe("the public site", () => {
         await checkFocus(page, `${path} ${DESKTOP.width}`);
       });
     }
+
+    test(`How it works: every code block fits its box, and breaks only at a space or after a "(", at ${DESKTOP.width} px`, async ({
+      page,
+    }) => {
+      await open(page, "/");
+      expect(await codeProblems(page), `${DESKTOP.width} px`).toEqual([]);
+    });
+
+    // The hero is the power calculator's screenshot since 2026-11-10, 1300 px
+    // wide, taken at a device scale of 2 (Screenshot.tsx CAPTURE_SCALE): wider
+    // than 650 CSS px it would be enlarged on a 2x display.
+    test(`the hero's screenshot is not enlarged at ${DESKTOP.width} px`, async ({ page }) => {
+      await open(page, "/");
+      const hero = await page.locator("h1").locator("xpath=ancestor::section[1]").locator("img").evaluate((img: HTMLImageElement) => ({
+        src: img.getAttribute("src"),
+        natural: img.naturalWidth,
+        shown: img.getBoundingClientRect().width,
+      }));
+      expect(hero.src).toMatch(/^\/screens\/power-calculator-[0-9a-f]{12}\.webp$/);
+      expect(hero.natural).toBeGreaterThan(0);
+      expect(hero.shown, `shown ${hero.shown} CSS px of a ${hero.natural} px image`).toBeLessThanOrEqual(hero.natural / 2);
+    });
   });
 });
