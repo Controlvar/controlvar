@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/contexts/AuthContext';
 import { SiteHeader } from '@/components/SiteHeader';
+import { HomeFooter } from '@/components/homepage/HomeFooter';
 import { Wordmark } from '@/components/Wordmark';
 import { LOGIN_PATH, Role, UserMe, safeNextPath } from '@/services/api';
 import { isMarketingSite } from '@/utils/site-mode';
@@ -348,6 +349,9 @@ export function AppShell({ children }: AppShellProps) {
     </a>
   );
 
+  // The homepage's footer too, so every page of the public site ends the same
+  // way (/docs had a footer of its own, /power-calculator and /privacy none).
+  // The homepage is a `bare` route and renders HomeFooter itself.
   if (marketing) {
     return (
       <div data-testid="app-shell" className="min-h-screen bg-slate-50 flex flex-col">
@@ -356,6 +360,7 @@ export function AppShell({ children }: AppShellProps) {
         <main id="main-content" className="flex-1 flex flex-col">
           {children}
         </main>
+        <HomeFooter />
       </div>
     );
   }
