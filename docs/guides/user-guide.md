@@ -140,10 +140,10 @@ cannot be changed after it starts:
 Below them, **Also analyse the primary metric with Bayesian statistics** is off by default. Turned
 on, the results also carry a Bayesian analysis of the primary metric (the probability that each
 variant is the best); the frequentist results and the recommendation do not change. Under it,
-**Advanced Bayesian settings** opens to the prior family, prior alpha, prior beta, loss threshold
-and credible level, each at its default (beta, 1.0, 1.0, 0.001 and 0.95); they are sent only when
-one of them is changed. A value the API would refuse is named under its field, and nothing is
-created until it is fixed. Like the two settings above, Bayesian analysis and its settings are saved with the
+**Advanced Bayesian settings** opens to the prior alpha, prior beta, loss threshold and credible
+level, each at its default (1.0, 1.0, 0.001 and 0.95); they are sent only when one of them is
+changed. A value the API would refuse is named under its field, and nothing is created until it
+is fixed. Like the two settings above, Bayesian analysis and its settings are saved with the
 experiment and cannot be changed after it starts. For what each setting does, see
 [Bayesian analysis](../api/bayesian.md).
 

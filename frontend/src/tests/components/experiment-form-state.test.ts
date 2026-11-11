@@ -45,7 +45,7 @@ describe('INITIAL_FORM_STATE', () => {
       correctionMethod: 'benjamini_hochberg',
       bayesianEnabled: false,
       // #442: Advanced Bayesian settings, as typed, at the API's defaults.
-      bayesianConfig: { priorFamily: 'beta', alpha: '1.0', beta: '1.0', lossThreshold: '0.001', credibleLevel: '0.95' },
+      bayesianConfig: { alpha: '1.0', beta: '1.0', lossThreshold: '0.001', credibleLevel: '0.95' },
       sequentialEnabled: false,
       plannedEffectPct: '',
       balance: { on: false, groupBy: 'platform', customKey: '', values: [], segments: [] },

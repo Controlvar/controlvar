@@ -85,8 +85,9 @@ other settings, clone the experiment (`POST /api/v1/experiments/{experiment_id}/
 copy is a new experiment, a draft, and takes them. In the dashboard,
 the new-experiment form's **Also analyse the primary metric with Bayesian statistics** checkbox
 sends `bayesian_enabled: true`, and **Advanced Bayesian settings** under it sets the prior
-family, alpha, beta, loss threshold and credible level. The form sends those five as a
-`bayesian_config` only when one of them differs from its default, and never sends a `rope`.
+alpha, prior beta, loss threshold and credible level. The form sends those four, with
+`prior_family` `"beta"`, as a `bayesian_config` only when one of them differs from its default,
+and never sends a `rope`.
 Turning it on without a config stores the defaults in the table below. This creates an
 experiment with Bayesian analysis on, prints the stored settings, and saves its id in
 `$BAYES_ID`:

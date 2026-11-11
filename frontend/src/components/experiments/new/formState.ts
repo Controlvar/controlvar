@@ -154,42 +154,37 @@ export interface ExperimentFormState {
 
 // --- Advanced Bayesian settings (#442) ---------------------------------------
 //
-// The five fields of the API's `BayesianConfig` that the create form offers
-// (`backend/app/schemas/bayesian.py`); `rope` is never sent. They are set only
-// when an experiment is created: the design edit does not send them, and the
-// API refuses a change once the experiment has left draft.
-
-/** `BayesianConfig.prior_family`. */
-export type PriorFamily = BayesianConfigInput['prior_family'];
-export const PRIOR_FAMILIES: PriorFamily[] = ['beta', 'normal', 'gamma'];
+// The four numbers of the API's `BayesianConfig` that the create form offers
+// (`backend/app/schemas/bayesian.py`). `prior_family` is not offered: the
+// analysis reads only alpha and beta, so every family gives the same results
+// (T337), and the form always sends "beta". `rope` is never sent. They are set
+// only when an experiment is created: the design edit does not send them, and
+// the API refuses a change once the experiment has left draft.
 
 /**
- * The fields as typed. The four numbers are kept as text, so a value that is
- * half typed shows as it is; `bayesianConfigProblems` reads them as the API's
+ * The fields as typed. The numbers are kept as text, so a value that is half
+ * typed shows as it is; `bayesianConfigProblems` reads them as the API's
  * `BayesianConfig` does.
  */
 export interface BayesianConfigFormState {
-  priorFamily: PriorFamily;
   alpha: string;
   beta: string;
   lossThreshold: string;
   credibleLevel: string;
 }
 
-export type BayesianNumberField = 'alpha' | 'beta' | 'lossThreshold' | 'credibleLevel';
+export type BayesianNumberField = keyof BayesianConfigFormState;
 export const BAYESIAN_NUMBER_FIELDS: BayesianNumberField[] = ['alpha', 'beta', 'lossThreshold', 'credibleLevel'];
 
 /** The fields as they start: the API's defaults. */
 export const DEFAULT_BAYESIAN_CONFIG: BayesianConfigFormState = {
-  priorFamily: 'beta',
   alpha: '1.0',
   beta: '1.0',
   lossThreshold: '0.001',
   credibleLevel: '0.95',
 };
 
-export const BAYESIAN_FIELD_LABELS: Record<keyof BayesianConfigFormState, string> = {
-  priorFamily: 'Prior family',
+export const BAYESIAN_FIELD_LABELS: Record<BayesianNumberField, string> = {
   alpha: 'Prior alpha',
   beta: 'Prior beta',
   lossThreshold: 'Loss threshold',
@@ -239,21 +234,21 @@ export function bayesianConfigProblem(
 }
 
 /**
- * The `bayesian_config` to send, or undefined when all five fields hold the
- * API's defaults: the API then stores the defaults itself. Compared by value,
- * so "1" is alpha's default as much as "1.0" is. Validation refuses a field
- * with a problem before this is called.
+ * The `bayesian_config` to send, or undefined when all four numbers hold the
+ * API's defaults: the API then stores the defaults itself. Otherwise the five
+ * fields, `prior_family` always "beta", so the stored config is complete.
+ * Compared by value, so "1" is alpha's default as much as "1.0" is.
+ * Validation refuses a field with a problem before this is called.
  */
 export function buildBayesianConfig(config: BayesianConfigFormState): BayesianConfigInput | undefined {
   const sent: BayesianConfigInput = {
-    prior_family: config.priorFamily,
+    prior_family: 'beta',
     alpha: Number(config.alpha),
     beta: Number(config.beta),
     loss_threshold: Number(config.lossThreshold),
     credible_level: Number(config.credibleLevel),
   };
   const atDefaults =
-    sent.prior_family === DEFAULT_BAYESIAN_CONFIG.priorFamily &&
     sent.alpha === Number(DEFAULT_BAYESIAN_CONFIG.alpha) &&
     sent.beta === Number(DEFAULT_BAYESIAN_CONFIG.beta) &&
     sent.loss_threshold === Number(DEFAULT_BAYESIAN_CONFIG.lossThreshold) &&
@@ -783,7 +778,6 @@ export type ExperimentFormAction =
   | { type: 'setCorrectionMethod'; correctionMethod: CorrectionMethod }
   | { type: 'setBayesianEnabled'; bayesianEnabled: boolean }
   | { type: 'setBayesianField'; field: BayesianNumberField; value: string }
-  | { type: 'setPriorFamily'; priorFamily: PriorFamily }
   | { type: 'setSequentialEnabled'; sequentialEnabled: boolean }
   | { type: 'setPlannedEffect'; plannedEffectPct: string }
   | { type: 'setBalanceOn'; on: boolean }
@@ -839,8 +833,6 @@ export function experimentFormReducer(
       return { ...state, bayesianEnabled: action.bayesianEnabled };
     case 'setBayesianField':
       return { ...state, bayesianConfig: { ...state.bayesianConfig, [action.field]: action.value } };
-    case 'setPriorFamily':
-      return { ...state, bayesianConfig: { ...state.bayesianConfig, priorFamily: action.priorFamily } };
     case 'setSequentialEnabled':
       return { ...state, sequentialEnabled: action.sequentialEnabled };
     case 'setPlannedEffect':

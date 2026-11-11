@@ -370,11 +370,11 @@ by = [
 ]
 
 [[unit]]
-text = "Under it, Advanced Bayesian settings opens to the prior family, prior alpha, prior beta, loss threshold and credible level, each at its default (beta, 1.0, 1.0, 0.001 and 0.95); they are sent only when one of them is changed."
+text = "Under it, Advanced Bayesian settings opens to the prior alpha, prior beta, loss threshold and credible level, each at its default (1.0, 1.0, 0.001 and 0.95); they are sent only when one of them is changed."
 by = [
-    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::shown only while the box is ticked, closed by default, and opens to five fields at their defaults with their helps",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::shown only while the box is ticked, closed by default, and opens to four fields at their defaults with their helps",
     "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::untouched, the POST has no bayesian_config",
-    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::alpha 2 sends the five-field object, as the API defines it",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::changed alone, sends the five-field object with prior_family \"beta\"",
     "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestTurningBayesianOn::test_create_enabled_without_config_stores_defaults",
 ]
 

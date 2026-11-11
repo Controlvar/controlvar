@@ -8,10 +8,11 @@
  * refuses, that a problem is never left in a closed section, what Review
  * shows, who sees it, and that it passes axe.
  *
- * The last part is Advanced Bayesian settings (#442): the priors, loss
- * threshold and credible level, set only when creating an experiment. The
- * request carries `bayesian_config` only when one of the five fields left its
- * default, and is checked against the API's own schema (openapiShape).
+ * The last part is Advanced Bayesian settings (#442): the prior's alpha and
+ * beta, the loss threshold and the credible level, set only when creating an
+ * experiment. The request carries `bayesian_config` (with prior_family always
+ * "beta", T337) only when one of the four left its default, and is checked
+ * against the API's own schema (openapiShape).
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
@@ -419,9 +420,8 @@ const PRIORS_HELP =
 const MUST_POSITIVE = 'Must be greater than 0.';
 const MUST_BETWEEN = 'Must be more than 0 and less than 1.';
 
-/** Each field: its label, its test id, the value it starts with, and its help. */
+/** Each field: its label, its test id, the value it starts with, and its help. No prior family (T337). */
 const PRIOR_FIELDS: [string, string, string, string][] = [
-  ['Prior family', 'bayesian-prior-family', 'beta', 'Default: beta.'],
   ['Prior alpha', 'bayesian-alpha', '1.0', `Default 1.0. ${MUST_POSITIVE}`],
   ['Prior beta', 'bayesian-beta', '1.0', `Default 1.0. ${MUST_POSITIVE}`],
   ['Loss threshold', 'bayesian-loss-threshold', '0.001', `Default 0.001. ${MUST_POSITIVE}`],
@@ -485,7 +485,7 @@ describe('#442: Advanced Bayesian settings, set when creating an experiment', ()
   });
 
   it.each(VIEWS)(
-    '%s: shown only while the box is ticked, closed by default, and opens to five fields at their defaults with their helps',
+    '%s: shown only while the box is ticked, closed by default, and opens to four fields at their defaults with their helps',
     (_view, advanced) => {
       openForm(advanced);
       expect(screen.queryByTestId('bayesian-config-toggle')).not.toBeInTheDocument();
@@ -505,8 +505,6 @@ describe('#442: Advanced Bayesian settings, set when creating an experiment', ()
         expect(field).toHaveProperty('value', value);
         expect(field).toHaveAccessibleDescription(help);
       }
-      const family = within(fields).getByLabelText('Prior family');
-      expect(within(family).getAllByRole('option').map((o) => o.textContent)).toEqual(['beta', 'normal', 'gamma']);
 
       tickBayesian();
       expect(screen.queryByTestId('bayesian-config-toggle')).not.toBeInTheDocument();
@@ -575,19 +573,47 @@ describe('#442: Advanced Bayesian settings, set when creating an experiment', ()
     expect(posts()).toHaveLength(0);
   });
 
-  it('the prior family alone changed sends the five-field object', async () => {
-    openForm(false);
+  // T337: each number changed alone is sent, with the other three at their
+  // defaults and prior_family always "beta".
+  const ALONE: [string, string, Record<string, number>][] = [
+    ['bayesian-alpha', '3', { alpha: 3 }],
+    ['bayesian-beta', '7', { beta: 7 }],
+    ['bayesian-loss-threshold', '0.01', { loss_threshold: 0.01 }],
+    ['bayesian-credible-level', '0.9', { credible_level: 0.9 }],
+  ];
+  const ALONE_CASES = VIEWS.flatMap(([view, advanced]) =>
+    ALONE.map(([testId, value, change]) => [view, testId, value, change, advanced] as const),
+  );
+  it.each(ALONE_CASES)(
+    '%s: %s set to %s, changed alone, sends the five-field object with prior_family "beta"',
+    async (_view, testId, value, change, advanced) => {
+      openForm(advanced);
+      tickBayesian();
+      togglePriors();
+      setValue(testId, value);
+      const body = await createdBody(advanced);
+      expect(body.bayesian_config).toStrictEqual({
+        prior_family: 'beta',
+        alpha: 1,
+        beta: 1,
+        loss_threshold: 0.001,
+        credible_level: 0.95,
+        ...change,
+      });
+      expect(shapeErrors('ExperimentCreate', body)).toEqual([]);
+    },
+  );
+
+  it.each(VIEWS)('%s: offers no Prior family control (T337: every family is analysed as Beta)', (_view, advanced) => {
+    openForm(advanced);
     tickBayesian();
     togglePriors();
-    setValue('bayesian-prior-family', 'normal');
-    const body = await createdBody(false);
-    expect(body.bayesian_config).toStrictEqual({
-      prior_family: 'normal',
-      alpha: 1,
-      beta: 1,
-      loss_threshold: 0.001,
-      credible_level: 0.95,
-    });
+    const fields = screen.getByTestId('bayesian-config-fields');
+    expect(within(fields).queryByLabelText(/prior family/i)).not.toBeInTheDocument();
+    expect(fields.querySelector('select')).toBeNull();
+    expect(within(fields).getAllByRole('spinbutton')).toHaveLength(4);
+    expect(document.body.textContent).not.toMatch(/prior family/i);
+    expect(screen.queryByTestId('bayesian-prior-family')).not.toBeInTheDocument();
   });
 
   it('a field changed back to its default value sends no bayesian_config', async () => {

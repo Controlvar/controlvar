@@ -172,9 +172,10 @@ export interface ExperimentDesignUpdate {
 }
 
 /**
- * `BayesianConfig` as the new-experiment form sends it (#442): the five fields
- * it offers, never `rope`. The API refuses alpha, beta or loss_threshold <= 0
- * and a credible_level outside (0, 1).
+ * `BayesianConfig` as the new-experiment form sends it (#442): its four numbers
+ * and `prior_family`, which the form always sends as "beta" (T337), never
+ * `rope`. The API refuses alpha, beta or loss_threshold <= 0 and a
+ * credible_level outside (0, 1).
  */
 export interface BayesianConfigInput {
   prior_family: 'beta' | 'normal' | 'gamma';

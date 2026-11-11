@@ -17,8 +17,6 @@ import {
   ExperimentFormAction,
   MUST_BE_BETWEEN_0_AND_1,
   MUST_BE_POSITIVE,
-  PRIOR_FAMILIES,
-  PriorFamily,
 } from './formState';
 import { wizardInputClass } from './fieldStyles';
 
@@ -57,7 +55,6 @@ export const BAYESIAN_HELP =
 
 /** Advanced Bayesian settings (#442): the disclosure's name and each field's help. */
 export const BAYESIAN_CONFIG_TOGGLE = 'Advanced Bayesian settings';
-export const PRIOR_FAMILY_HELP = 'Default: beta.';
 export const BAYESIAN_FIELD_HELPS: Record<BayesianNumberField, string> = {
   alpha: `Default 1.0. ${MUST_BE_POSITIVE}`,
   beta: `Default 1.0. ${MUST_BE_POSITIVE}`,
@@ -258,9 +255,9 @@ interface BayesianConfigFieldsProps {
 }
 
 /**
- * Advanced Bayesian settings (#442): a button that shows or hides the prior
- * family, the prior's alpha and beta, the loss threshold and the credible
- * level. Closed by default; a section whose fields have left their defaults
+ * Advanced Bayesian settings (#442): a button that shows or hides the prior's
+ * alpha and beta, the loss threshold and the credible level. No prior family:
+ * the analysis is always Beta-Binomial (T337). Closed by default; a section whose fields have left their defaults
  * starts open, so switching between guided setup and the single-page form
  * shows them. Each number is checked as it is typed, and a problem is shown
  * under its field and blocks Next and Create.
@@ -315,28 +312,6 @@ function BayesianConfigFields({ config, dispatch, revealProblems }: BayesianConf
           className="mt-3 grid gap-4 sm:grid-cols-2"
           data-testid="bayesian-config-fields"
         >
-          <div>
-            <label htmlFor="bayesian-prior-family" className="block text-sm font-medium text-slate-700 mb-1">
-              {BAYESIAN_FIELD_LABELS.priorFamily}
-            </label>
-            <select
-              id="bayesian-prior-family"
-              value={config.priorFamily}
-              onChange={(e) => dispatch({ type: 'setPriorFamily', priorFamily: e.target.value as PriorFamily })}
-              aria-describedby="bayesian-prior-family-help"
-              className={wizardInputClass}
-              data-testid="bayesian-prior-family"
-            >
-              {PRIOR_FAMILIES.map((family) => (
-                <option key={family} value={family}>
-                  {family}
-                </option>
-              ))}
-            </select>
-            <p id="bayesian-prior-family-help" className="text-xs text-slate-600 mt-1">
-              {PRIOR_FAMILY_HELP}
-            </p>
-          </div>
           {BAYESIAN_NUMBER_FIELDS.map((field) => {
             const id = BAYESIAN_FIELD_IDS[field];
             const problem = problems[field];
