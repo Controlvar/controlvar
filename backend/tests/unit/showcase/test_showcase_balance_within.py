@@ -11,8 +11,9 @@ claims it makes that no frame can prove.
   in the release it is recorded at).
 * The key its card quotes is the key typed on camera and the end state's; the
   form's own key differs, so the beat that changes it says so (video 10's
-  precedent). The attribute and values said are the ones typed and the end
-  state's, an underscore said as a space.
+  precedent). The attribute said is the one typed and the end state's; the
+  values typed are the end state's, and the narration does not name them
+  (values match exactly, and a sentence cannot say ``high_value``).
 * S3: ``DesignEnd.balance_within``. Set, the API's echo must equal it exactly,
   and absent or null refuses; the Review row and the experiment page's row are
   each held to their own string (PE 1). Unset, it is not read, not compared
@@ -352,26 +353,16 @@ def test_a_key_that_drifts_anywhere_is_caught(change, words):
 
 
 # ---------------------------------------------------------------------------
-# The attribute and the values: said, typed and declared alike
+# The attribute: said, typed and declared alike; the values: typed and declared
 # ---------------------------------------------------------------------------
 
 SAID_ATTRIBUTE = re.compile(r"\banother attribute: (\w+)\.$")
-SAID_VALUES = re.compile(r"\bthe values to keep apart: (.+)\.$")
-
-
-def said_values(text: str) -> List[str]:
-    """ "a, b and c" as its items, each with an underscore read as a space."""
-    head, _sep, last = text.rpartition(" and ")
-    return [v.strip() for v in head.split(",") if v.strip()] + [last.strip()]
 
 
 def balance_problems(made: storyboard.Storyboard) -> List[str]:
     end = made.end_state.design.balance_within
     sentences = [s for _s, _b, _l, s in storyboard.narration_lines(made)]
     attributes = [m.group(1) for s in sentences if (m := SAID_ATTRIBUTE.search(s))]
-    values = [
-        said_values(m.group(1)) for s in sentences if (m := SAID_VALUES.search(s))
-    ]
     typed: Dict[str, List[str]] = {}
     chosen = []
     switched = [
@@ -403,16 +394,15 @@ def balance_problems(made: storyboard.Storyboard) -> List[str]:
             f"the attribute typed is {typed.get('balance-custom-key')} and said"
             f" {attributes}; the end state's is {end.attribute!r}"
         )
-    spoken = [v.replace("_", " ") for v in end.values]
-    if typed.get("balance-value-input") != end.values or values != [spoken]:
+    if typed.get("balance-value-input") != end.values:
         problems.append(
-            f"the values typed are {typed.get('balance-value-input')} and said"
-            f" {values}; the end state's are {end.values}"
+            f"the values typed are {typed.get('balance-value-input')}; the end"
+            f" state's are {end.values}"
         )
     return problems
 
 
-def test_the_attribute_and_values_said_are_the_ones_typed_and_declared():
+def test_the_attribute_said_and_the_values_typed_are_the_ones_declared():
     made = board()
     assert balance_problems(made) == []
     assert made.end_state.design.balance_within.model_dump() == {
@@ -437,12 +427,6 @@ def _typed_value(data: Dict[str, Any], index: int) -> Dict[str, Any]:
     "change, words",
     [
         (lambda d: _typed_value(d, 1).update(text="churn"), "the values typed"),
-        (
-            lambda d: _values_beat(d)["say"].__setitem__(
-                1, "Then the values to keep apart: high value, new and churn risk."
-            ),
-            "the values typed",
-        ),
         (
             lambda d: d["end_state"]["design"]["balance_within"].update(
                 values=["high_value", "new", "churn_risk"]
@@ -470,7 +454,6 @@ def _typed_value(data: Dict[str, Any], index: int) -> Dict[str, Any]:
     ],
     ids=[
         "typed",
-        "said-order",
         "declared-order",
         "attribute",
         "segments",

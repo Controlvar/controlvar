@@ -1093,7 +1093,7 @@ CLAIMS_12: Dict[str, Claim] = {
             ),
         ),
     ),
-    "Then the values to keep apart: high value, churn risk and new.": Claim(
+    "Then add the values to keep apart, one at a time.": Claim(
         B,
         5,
         (

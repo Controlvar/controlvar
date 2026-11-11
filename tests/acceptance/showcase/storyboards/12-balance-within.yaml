@@ -23,9 +23,11 @@
 #   multiples of 5, and the API refuses anything else. "50" is drawn while it
 #   is said (G2): the two share boxes hold it.
 # * The values are typed one at a time and added with "Add value"; the
-#   narration says each one as it is drawn, an underscore read as a space
-#   (a caption is plain text). test_showcase_balance_within.py holds the
-#   values said, the values typed and the end state's equal.
+#   narration does not name them (narration review, round 1): values match
+#   exactly, so "high value" is not the value high_value, and a caption is
+#   plain text, so it cannot say high_value. test_showcase_balance_within.py
+#   holds the attribute said, typed and declared equal, and the values typed
+#   and the end state's equal.
 # * The Estimate step is passed in the values beat's exit, on camera with the
 #   caption still up, as video 9's first beat passes the Type step: this
 #   video leaves its settings as they are.
@@ -143,7 +145,7 @@ scenes:
         focus: {testid: balance-within}
         say:
           - "Group users by another attribute: tier."
-          - "Then the values to keep apart: high value, churn risk and new."
+          - Then add the values to keep apart, one at a time.
         steps:
           - choose: {testid: balance-group-by}
             option: Another attribute…
