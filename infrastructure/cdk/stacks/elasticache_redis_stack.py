@@ -38,16 +38,18 @@ class ElastiCacheRedisStack(Stack):
             subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
         ).subnet_ids
 
+        # ElastiCache refuses a name ending in a hyphen, and for prod and demo
+        # the 40-character cut ends in one. Keep the cut: without it staging's
+        # and dev's names change, and a new name replaces the subnet group and
+        # the Redis that uses it. test_physical_names_are_valid.py pins all four.
         redis_subnet_group = elasticache.CfnSubnetGroup(
             self,
             "RedisSubnetGroup",
             description=f"Subnet group for {construct_id} Redis cluster",
             subnet_ids=subnet_ids,
-            cache_subnet_group_name=f"{construct_id}-redis-subnet-group".lower().replace(
-                "_", "-"
-            )[
-                :40
-            ],
+            cache_subnet_group_name=f"{construct_id}-redis-subnet-group".lower()
+            .replace("_", "-")[:40]
+            .rstrip("-"),
         )
 
         # 2. CONFIGURE SECURITY GROUP
