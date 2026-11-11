@@ -1,9 +1,12 @@
-"""Every test id video 9's board names is one the dashboard draws (PE 4, EM-9).
+"""Every test id a dashboard board names is one the dashboard draws (PE 4,
+EM-9; video 12's PE 8).
 
-The board finds its elements by ``data-testid``; a renamed id fails the take
+A board finds its elements by ``data-testid``; a renamed id fails the take
 only when it is reached, minutes into a capture. This reads frontend/src
 (tests aside) and resolves each id the product writes, by rule and with no
-list of exceptions:
+list of exceptions. The boards it holds are ``BOARDS``: video 9's, and video
+12's (#1890), whose Variants-step switch, "Group users by", attribute and
+values, and Review and experiment-page balance rows are new ids:
 
 * a quoted id is itself;
 * an id written as a template literal, or held in a ``const`` such a literal
@@ -128,17 +131,23 @@ def missing(ids: List[str], patterns: List[str]) -> List[str]:
     return [i for i in ids if not any(p.fullmatch(i) for p in compiled)]
 
 
-def board() -> storyboard.Storyboard:
-    return storyboard.load(SHOWCASE / config.VIDEOS[SLUG])
+def board(slug: str = SLUG) -> storyboard.Storyboard:
+    return storyboard.load(SHOWCASE / config.VIDEOS[slug])
 
 
-def raw() -> dict:
-    return yaml.safe_load((SHOWCASE / config.VIDEOS[SLUG]).read_text(encoding="utf-8"))
+def raw(slug: str = SLUG) -> dict:
+    return yaml.safe_load((SHOWCASE / config.VIDEOS[slug]).read_text(encoding="utf-8"))
 
 
-def test_every_test_id_video_9_names_is_one_the_dashboard_draws():
-    ids = board_ids(board())
-    assert len(ids) == 65
+#: The boards this file ties to frontend/src, each with the number of test ids
+#: it names: a board that names fewer or more is read again, not passed.
+BOARDS = {SLUG: 65, "12-balance-within": 23}
+
+
+@pytest.mark.parametrize("slug, count", sorted(BOARDS.items()))
+def test_every_test_id_the_board_names_is_one_the_dashboard_draws(slug, count):
+    ids = board_ids(board(slug))
+    assert len(ids) == count, ids
     assert missing(ids, product_ids(frontend_sources())) == []
 
 
@@ -178,4 +187,73 @@ def test_a_renamed_product_id_is_refused():
     sources[name] = sources[name].replace("${id}-readback`}", "${id}-read-back`}")
     assert missing(board_ids(board()), product_ids(sources)) == [
         "schedule-start-readback"
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Video 12 (PE 8): the balance setting's ids, tied to frontend/src
+# ---------------------------------------------------------------------------
+
+V12 = "12-balance-within"
+#: The ids video 12 names that video 9's does not: the Variants step's balance
+#: fields and the two rows that read the setting back.
+V12_BALANCE_IDS = [
+    "balance-custom-key",
+    "balance-group-by",
+    "balance-switch",
+    "balance-value-add",
+    "balance-value-input",
+    "balance-values",
+    "balance-within",
+    "experiment-balance",
+    "review-balance",
+]
+
+
+def test_video_12_names_the_balance_fields_and_both_rows_that_read_it_back():
+    ids = board_ids(board(V12))
+    assert [i for i in ids if "balance" in i] == V12_BALANCE_IDS
+
+
+@pytest.mark.parametrize(
+    "name, drawn, renamed",
+    [
+        (
+            "components/experiments/new/BalanceWithinFields.tsx",
+            'data-testid="balance-switch"',
+            'data-testid="balance-toggle"',
+        ),
+        (
+            "components/experiments/new/Wizard.tsx",
+            'data-testid="review-balance"',
+            'data-testid="review-balance-row"',
+        ),
+        (
+            "pages/experiments/[id].tsx",
+            'data-testid="experiment-balance"',
+            'data-testid="experiment-balance-value"',
+        ),
+    ],
+    ids=["switch", "review-row", "page-row"],
+)
+def test_a_balance_id_renamed_in_the_tree_is_refused_by_name(name, drawn, renamed):
+    """PE 8's plant on the product side: one id renamed in frontend/src (in
+    memory) leaves exactly that id of video 12's board unmatched."""
+    sources = frontend_sources()
+    assert sources[name].count(drawn) == 1, name
+    sources[name] = sources[name].replace(drawn, renamed)
+    wanted = drawn.split('"')[1]
+    assert missing(board_ids(board(V12)), product_ids(sources)) == [wanted]
+
+
+def test_a_video_12_board_id_the_dashboard_does_not_draw_is_refused():
+    """PE 8's plant on the board side: the values' list looked at by an id
+    the dashboard does not draw."""
+    data = raw(V12)
+    steps = data["scenes"][0]["beats"][4]["steps"]
+    look = next(s for s in steps if s.get("look", {}).get("testid") == "balance-values")
+    look["look"]["testid"] = "balance-value-list"
+    patterns = product_ids(frontend_sources())
+    assert missing(board_ids(storyboard.parse(data)), patterns) == [
+        "balance-value-list"
     ]

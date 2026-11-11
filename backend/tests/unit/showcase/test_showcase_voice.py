@@ -993,8 +993,10 @@ def test_the_gain_and_the_precheck_are_the_plans():
     gains = {slug: contract.voice_gain_db(slug) for slug in config.VIDEOS}
     assert gains.pop("09-design-in-depth") == 3.7
     assert gains.pop("10-serve-a-value") == 3.8
-    # Every other video takes the default: six at 4.5 dB.
-    assert len(gains) == 6 and set(gains.values()) == {4.5}, gains
+    # Every other video takes the default: seven at 4.5 dB. Video 12's own gain
+    # is measured from its voice sitting and lands before the tag that records
+    # it (EMV11-4); until then it is on the default.
+    assert len(gains) == 7 and set(gains.values()) == {4.5}, gains
     assert contract.PRECHECK_PEAK_DBTP == -1.3
     assert (contract.LOUDNESS_TARGET_LUFS, contract.PRECHECK_LOUDNESS_LU) == (
         -19.0,

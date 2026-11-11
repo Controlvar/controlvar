@@ -1029,14 +1029,25 @@ DesignReading = Literal[
     "detail_group",
     "detail_holdout",
     "detail_note",
+    "review_balance",
+    "detail_balance",
 ]
-#: The readings that compare what the video set on the draft's own pages, each
-#: with the end state's field it needs.
+#: The readings that compare a field a design end state declares only when the
+#: video sets it (on the draft's own pages, or the balance setting in guided
+#: setup), each with the end state's field it needs.
 DESIGN_SET_READINGS: Dict[str, str] = {
     "detail_start": "scheduled_start",
     "detail_group": "group",
     "detail_holdout": "holdout",
+    "review_balance": "balance_within",
+    "detail_balance": "balance_within",
 }
+#: A balance setting's attribute, as the API takes it (backend/app/schemas/
+#: balance_within.py ``ATTRIBUTE_PATTERN``): a top-level key of the assign
+#: ``context``, no dot.
+BALANCE_ATTRIBUTE = r"^[A-Za-z0-9_][A-Za-z0-9_-]{0,99}$"
+#: The share step of a balanced split: the API refuses any other (#448).
+BALANCE_SHARE_STEP = 5
 
 
 class DesignVariant(_Strict):
@@ -1164,6 +1175,22 @@ class DesignHoldout(_Strict):
     percentage: int = Field(ge=1, le=20)
 
 
+class DesignBalance(_Strict):
+    """What the draft balances its split within (#448), as the API echoes it:
+    one attribute, typed under "Another attribute…" or chosen, and the values
+    to keep apart in the order they were added. A setting of saved segments
+    names ids made at run time, so a design end state does not declare one."""
+
+    attribute: str = Field(pattern=BALANCE_ATTRIBUTE)
+    values: List[str] = Field(min_length=1, max_length=20)
+
+    @model_validator(mode="after")
+    def _as_the_api_takes_it(self) -> "DesignBalance":
+        if len(set(self.values)) != len(self.values):
+            raise ValueError(f"a value to keep apart repeats: {self.values}")
+        return self
+
+
 class DesignEnd(_Strict):
     """Gate 10 for an experiment the video designs and leaves a draft
     (``gates.design_end``): it exists once, exactly as declared, with nothing
@@ -1172,7 +1199,13 @@ class DesignEnd(_Strict):
     pages is declared too (``gates.eligibility_end``): its start (the reading
     of the ``date`` step named ``scheduled_start``), the setup's exclusion
     group it joins (``group``), and the global holdout it makes and activates
-    (``holdout``). Absent, each is held untouched as before."""
+    (``holdout``). Absent, each is held untouched as before.
+
+    ``balance_within`` (#448) is what the video balances the split within at
+    the Variants step: set, the API's echo must equal it exactly, and the
+    split's shares are multiples of 5. Unset, it is not read, not compared and
+    left out of the dump, so a design declared before it existed (video 9) is
+    judged and recorded exactly as it was (PE 2)."""
 
     name: str = Field(min_length=1, max_length=100)
     key: str = Field(min_length=1)
@@ -1192,6 +1225,18 @@ class DesignEnd(_Strict):
     #: The setup's exclusion group the draft is added to, by its name.
     group: Optional[str] = Field(default=None, min_length=1, max_length=200)
     holdout: Optional[DesignHoldout] = None
+    #: What the split is balanced within, as the API echoes it (#448).
+    balance_within: Optional[DesignBalance] = None
+
+    @model_serializer(mode="wrap")
+    def _unset_balance_left_out(self, handler: Any) -> Dict[str, Any]:
+        """The dump without ``balance_within`` when it is unset: a design
+        declared before it existed records exactly what it did (gate 10's
+        ``storyboard`` number, PE 2)."""
+        data = handler(self)
+        if data.get("balance_within") is None:
+            data.pop("balance_within", None)
+        return data
 
     @model_validator(mode="after")
     def _as_the_wizard_saves(self) -> "DesignEnd":
@@ -1218,6 +1263,17 @@ class DesignEnd(_Strict):
             if kind in self.shown and getattr(self, needs) is None:
                 raise ValueError(
                     f"the design end state compares {kind}, and declares no {needs}"
+                )
+        if self.balance_within is not None:
+            off_step = [
+                f"{variant.name} {variant.allocation}"
+                for variant in self.variants
+                if variant.allocation % BALANCE_SHARE_STEP
+            ]
+            if off_step:
+                raise ValueError(
+                    f"a balanced split's shares are multiples of {BALANCE_SHARE_STEP}"
+                    f" (the API refuses any other), not {off_step}"
                 )
         return self
 
