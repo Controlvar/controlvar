@@ -1010,15 +1010,17 @@ def _sts_identity() -> bytes:
     ).encode()
 
 
-def test_the_temporary_credentials_reach_no_log_and_no_repr(
-    aws_env, monkeypatch, caplog
-):
-    """At DEBUG, through botocore's own serialiser, signer and parser: the
-    credentials STS hands out appear in no log record and no repr -- not when
-    the answer is parsed, and not when the session they make signs a call."""
+def _assume_and_call_at_debug(monkeypatch, caplog):
+    """The role assumed, then one call signed with its session, with the root
+    at DEBUG and the AWS SDK's loggers at the levels core holds them at
+    (``quiet_http_client_loggers``, which ``configure_logging`` applies when the
+    API starts).  Returns the session and the text of every record."""
     from botocore.awsrequest import AWSResponse
 
+    from backend.app.core.logger import quiet_http_client_loggers
+
     caplog.set_level(logging.DEBUG)
+    quiet_http_client_loggers()
     _only_loopback_resolves(monkeypatch)
     answers = [(403, _sts_denied()), (200, _sts_assumed()), (200, _sts_identity())]
     sent = []
@@ -1069,23 +1071,62 @@ def test_the_temporary_credentials_reach_no_log_and_no_repr(
     assert real[0]["ExternalId"] == [EXTERNAL_ID]
     assert real[0]["RoleSessionName"] == ["controlvar-warehouse"]
     assert real[0]["DurationSeconds"] == ["900"]
-    # Positive controls: the session signs with the role's credentials, and
-    # botocore did log at DEBUG, so the absence below looked at real records.
+    # Positive control: the session signs with the role's credentials.
     assert signed[1]["X-Amz-Security-Token"] in (
         "token-" + TEMP_SENTINEL,
         ("token-" + TEMP_SENTINEL).encode(),
     )
     assert identity["Account"] == "123456789012"
-    assert any(
-        r.name.startswith("botocore") and r.levelno == logging.DEBUG
-        for r in caplog.records
+    return session, caplog.text + "\n".join(repr(r.__dict__) for r in caplog.records)
+
+
+def test_the_temporary_credentials_reach_no_log_and_no_repr(
+    aws_env, monkeypatch, caplog
+):
+    """At DEBUG, through botocore's own serialiser, signer and parser, with the
+    AWS SDK's loggers where core holds them: the credentials STS hands out
+    appear in no log record and no repr -- not when the answer is parsed, and
+    not when the session they make signs a call.  The control below shows the
+    same steps would find them."""
+    session, logged = _assume_and_call_at_debug(monkeypatch, caplog)
+    below_warning = sorted(
+        {
+            r.name
+            for r in caplog.records
+            if r.name.split(".")[0] == "botocore" and r.levelno < logging.WARNING
+        }
     )
-    logged = caplog.text + "\n".join(repr(r.__dict__) for r in caplog.records)
+    assert below_warning == []
     leaks = sorted(
         {r.name for r in caplog.records if TEMP_SENTINEL in repr(r.__dict__)}
     )
     assert TEMP_SENTINEL not in logged, leaks
     assert TEMP_SENTINEL not in repr(session)
+
+
+def test_off_cores_logger_list_the_same_steps_find_botocores_debug_records(
+    aws_env, monkeypatch, caplog
+):
+    """The control for the test above: with ``botocore`` taken off core's
+    ``HTTP_CLIENT_LOGGERS``, the same steps put botocore's DEBUG records on the
+    handler, and what the test above looks for is in them.  So its absence
+    there is measured, not vacuous."""
+    from backend.app.core import logger as logger_module
+
+    monkeypatch.setattr(
+        logger_module,
+        "HTTP_CLIENT_LOGGERS",
+        tuple(n for n in logger_module.HTTP_CLIENT_LOGGERS if n != "botocore"),
+    )
+    # Importing the application already held it at WARNING; restore_root_logger
+    # puts that level back after the test.
+    logging.getLogger("botocore").setLevel(logging.NOTSET)
+    _, logged = _assume_and_call_at_debug(monkeypatch, caplog)
+    assert any(
+        r.name.startswith("botocore") and r.levelno == logging.DEBUG
+        for r in caplog.records
+    )
+    assert TEMP_SENTINEL in logged
 
 
 def test_region_list_is_the_committed_data():

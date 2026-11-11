@@ -27,7 +27,6 @@ only for a role whose trust policy requires that id.
 
 from __future__ import annotations
 
-import logging
 import re
 from typing import Any, Mapping, Optional
 from urllib.parse import urlsplit
@@ -60,16 +59,6 @@ from modules.backend.app.warehouse.errors import (
     error_for_status,
     sanitised,
 )
-
-#: botocore's loggers that, at DEBUG, write an assumed role's temporary
-#: credentials into the log (measured, botocore 1.43): ``botocore.endpoint``
-#: the request it sends, headers included; ``botocore.auth`` the canonical
-#: request it signs; ``botocore.parsers`` every response body -- an
-#: AssumeRole answer, and the vendor's own error text.  They never go below
-#: INFO, whatever the deployment's LOG_LEVEL (test_aws.py holds this).
-BOTOCORE_QUIET_LOGGERS = ("botocore.auth", "botocore.endpoint", "botocore.parsers")
-for _name in BOTOCORE_QUIET_LOGGERS:
-    logging.getLogger(_name).setLevel(logging.INFO)
 
 #: The services a connector may call.
 AWS_SERVICES = frozenset({"sts", "athena", "glue"})
