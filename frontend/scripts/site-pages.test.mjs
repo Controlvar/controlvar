@@ -13,6 +13,9 @@
  *     <footer>, and it is the site's (its <nav aria-label="Footer">);
  *   - each kept page is also at <page>/index.html, byte for byte, so /docs/
  *     is the docs hub (prune-marketing-site.mjs writes the copies);
+ *   - the marketing build's own pages (site design 2026-11-11): /books links
+ *     every book of src/content/books.ts to its README, and /walkthroughs is
+ *     the walkthroughs page, where the homepage's teaser links each card;
  *   - out/robots.txt lets every crawler in.
  *
  * What controlvar.com answers for a missing path is Amplify's console rule,
@@ -26,7 +29,7 @@ import { fileURLToPath } from 'node:url';
 const OUT = fileURLToPath(new URL('../out/', import.meta.url));
 
 /** The kept pages prune-marketing-site.mjs copies to `<page>/index.html`. */
-const KEPT = ['docs', 'power-calculator', 'privacy'];
+const KEPT = ['docs', 'books', 'walkthroughs', 'power-calculator', 'privacy'];
 const PAGES = ['index.html', ...KEPT.map((p) => `${p}.html`), '404.html'];
 
 function readOut(name) {
@@ -69,6 +72,41 @@ describe('each kept page is at its trailing-slash path too', () => {
       assert.ok(readOut(`${page}/index.html`).equals(readOut(`${page}.html`)), `out/${page}/index.html differs`);
     });
   }
+});
+
+/** The `<main>` of a page, with its scripts removed. */
+const mainOf = (name) => /<main\b[\s\S]*?<\/main>/.exec(markup(name))?.[0] ?? '';
+const hrefsIn = (html) => [...html.matchAll(/<a\b[^>]*\bhref="([^"]*)"/g)].map((m) => m[1].replace(/&amp;/g, '&'));
+
+describe("the marketing build's own pages", () => {
+  const BOOKS_TS = fileURLToPath(new URL('../src/content/books.ts', import.meta.url));
+
+  it('out/books.html links every book to its README, and the books repository', () => {
+    const source = readFileSync(BOOKS_TS, 'utf8');
+    const repo = /export const BOOKS_URL = '([^']+)'/.exec(
+      readFileSync(fileURLToPath(new URL('../src/content/site-links.ts', import.meta.url)), 'utf8'),
+    )?.[1];
+    assert.ok(repo, 'no BOOKS_URL in src/content/site-links.ts');
+    const dirs = [...source.matchAll(/\bdir: '([a-z0-9-]+)'/g)].map((m) => m[1]);
+    assert.ok(dirs.length > 0, 'no book in src/content/books.ts');
+    const main = mainOf('books.html');
+    assert.match(main, /<h1\b[^>]*>The Controlvar books<\/h1>/);
+    const hrefs = hrefsIn(main);
+    assert.deepEqual(
+      hrefs.filter((h) => h.startsWith(`${repo}/blob/`)),
+      dirs.map((d) => `${repo}/blob/main/${d}/README.md`),
+    );
+    assert.ok(hrefs.includes(repo), 'out/books.html does not link the books repository');
+  });
+
+  it('out/walkthroughs.html is the walkthroughs page, and each homepage card links a row of it', () => {
+    const page = mainOf('walkthroughs.html');
+    assert.match(page, /<h1\b[^>]*>Walkthroughs<\/h1>/);
+    const rows = new Set([...page.matchAll(/<li\b[^>]*\bid="([^"]+)"/g)].map((m) => m[1]));
+    const cards = hrefsIn(mainOf('index.html')).filter((h) => h.startsWith('/walkthroughs#'));
+    assert.ok(cards.length > 0, 'the homepage links no walkthrough');
+    for (const card of cards) assert.ok(rows.has(card.slice('/walkthroughs#'.length)), `${card} is no row of out/walkthroughs.html`);
+  });
 });
 
 describe('robots.txt', () => {

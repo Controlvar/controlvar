@@ -4,14 +4,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { PageTitle } from '@/components/PageTitle';
 import { SiteHeader } from '@/components/SiteHeader';
 import { isMarketingSite } from '@/utils/site-mode';
-import { Walkthroughs } from '@/components/Walkthroughs';
 import { Hero } from '@/components/homepage/Hero';
 import { FactsStrip } from '@/components/homepage/FactsStrip';
 import { HowItWorks } from '@/components/homepage/HowItWorks';
+import { Books } from '@/components/homepage/Books';
 import { ProductRows } from '@/components/homepage/ProductRows';
 import { SdkChips } from '@/components/homepage/SdkChips';
-import { DeployCards } from '@/components/homepage/DeployCards';
-import { Books } from '@/components/homepage/Books';
+import { WalkthroughsTeaser } from '@/components/homepage/WalkthroughsTeaser';
 import { ClosingBand } from '@/components/homepage/ClosingBand';
 import { HomeFooter } from '@/components/homepage/HomeFooter';
 
@@ -44,9 +43,15 @@ export const HOME_AFTER_LOGIN = '/experiments';
  * `tests/pages/helpers/homeInventory.ts` with its source, and
  * `tests/pages/home-page.test.tsx` fails a rendered sentence that is not a row
  * and a row that is not rendered, in both builds. The two builds differ in
- * three things only: the walkthroughs and the screenshots are the marketing
- * build's, and its second hero button is the power calculator where a
- * self-hosted platform build offers "Sign in to the dashboard".
+ * these only: the walkthroughs teaser and the screenshots are the marketing
+ * build's; its second hero button is the power calculator where a self-hosted
+ * platform build offers "Sign in to the dashboard"; and the books and
+ * walkthroughs links go to the marketing build's own /books and
+ * /walkthroughs pages, which a platform build does not have.
+ *
+ * The order is the site design of 2026-11-11 (D377): the hero, the facts
+ * strip (which took in the deploy cards), How it works, the books, the
+ * product rows, the SDKs, the walkthroughs teaser and the closing band.
  */
 export default function HomePage() {
   const router = useRouter();
@@ -82,11 +87,10 @@ export default function HomePage() {
           <Hero />
           <FactsStrip />
           <HowItWorks />
+          <Books />
           <ProductRows />
           <SdkChips />
-          {marketing && <Walkthroughs />}
-          <DeployCards />
-          <Books />
+          {marketing && <WalkthroughsTeaser />}
           <ClosingBand />
         </main>
 

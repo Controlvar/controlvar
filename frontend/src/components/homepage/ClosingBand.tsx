@@ -14,7 +14,7 @@ export function ClosingBand() {
     <section aria-labelledby="closing-heading" className={`${WIDTH} pb-20 pt-8`}>
       <div className="flex flex-wrap items-center justify-between gap-8 rounded-2xl bg-slate-900 px-6 py-10 text-white sm:px-12 sm:py-12">
         <div className="min-w-0 max-w-2xl">
-          <h2 id="closing-heading" className="text-3xl font-semibold tracking-tight">
+          <h2 id="closing-heading" className="text-2xl font-semibold tracking-tight sm:text-3xl">
             Open, and checkable
           </h2>
           <p className="mt-3 leading-relaxed text-slate-300">

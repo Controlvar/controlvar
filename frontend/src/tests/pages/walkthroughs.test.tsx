@@ -1,20 +1,24 @@
 /**
- * The walkthrough videos on the homepage (#1290): rendered in the marketing
- * build only, wired as the plan says, and carrying no claim a test does not
- * hold.
+ * The walkthrough videos (#1290): the /walkthroughs page of the marketing
+ * build since the site design of 2026-11-11 (they were a homepage section),
+ * wired as the plan says, and carrying no claim a test does not hold; and the
+ * homepage's teaser, which links each of its cards to a row of the page.
  *
  * What each block pins (the plan's gate names):
- *   G3   the marketing build renders exactly the pinned videos, the platform
- *        build none; each player's attributes, its one caption track (not
- *        `default`), names, headings, and axe's `video-caption` in `passes`
+ *   G3   the page renders exactly the pinned videos, and only the marketing
+ *        build has the page (`getStaticProps`); each player's attributes, its
+ *        one caption track (not `default`), names, headings, and axe's
+ *        `video-caption` in `passes`
  *   G4   every `src` and `poster` is a path on this site; no `<iframe>`
  *   C10  each player is named by its title and described by its description;
  *        each transcript summary has a name of its own
- *   C11  the platform homepage has no section, no player and no `/media/`
+ *   C11  the platform homepage has no teaser, no player and no `/media/`
  *   C12  showing the section and opening a transcript writes no storage and
  *        no cookie, so `/privacy` stays true
  *   C13  the section promises nothing and claims no accessibility standard
  *   C16  the anchors exist and every id on the page is unique
+ *   teaser  the marketing homepage has no player: three posters, each in a
+ *        link to its row's anchor on /walkthroughs, after the SDKs
  * and the copy is the plan's WORDS table, verbatim. The transcripts are held
  * to the videos by `backend/tests/unit/showcase/test_site_walkthroughs.py`
  * (the storyboards) and `scripts/check-site-media.mjs` (the captions).
@@ -37,7 +41,11 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AuthProvider } from '@/contexts/AuthContext';
 import HomePage from '@/pages/index';
+import WalkthroughsPage, { getStaticProps } from '@/pages/walkthroughs';
+import { TEASER } from '@/components/homepage/WalkthroughsTeaser';
 import { isMarketingSite } from '@/utils/site-mode';
+import { keyOf, renderedItems, surplus } from './helpers/homeText';
+import { walkthroughsInventory } from './helpers/homeInventory';
 import {
   KIND_LABEL,
   Transcript,
@@ -102,6 +110,7 @@ const animationTranscriptProblems = (transcript: Transcript): string[] => {
 };
 const mode = isMarketingSite as jest.Mock;
 const renderHome = () => render(<AuthProvider><HomePage /></AuthProvider>);
+const renderPage = () => render(<WalkthroughsPage />);
 
 beforeEach(() => {
   localStorage.clear();
@@ -201,29 +210,56 @@ describe('length labels', () => {
   });
 });
 
+/**
+ * C13: nothing about videos that do not exist yet, no YouTube (it would
+ * need a line on /privacy), and no accessibility claim: the site claims no
+ * accessibility standard (T176 condition 13). Fragments, so the words this
+ * forbids never appear whole in this file. The page's section and the
+ * homepage's teaser both answer to it.
+ */
+const promises: Array<[string, string]> = [
+  ['coming\\s+' + 'soon', 'no video is promised'],
+  ['\\b' + 'soon\\b', 'the same'],
+  ['more\\s+' + 'videos', 'no count, no series'],
+  ['stay\\s+' + 'tuned', 'the same'],
+  ['you' + 'tube', 'no third-party copy is linked'],
+  ['accessi' + 'b', 'the site claims no accessibility standard'],
+  ['WC' + 'AG', 'the same'],
+];
+
 describe('marketing build (G3)', () => {
   beforeEach(() => mode.mockReturnValue(true));
 
   const section = (container: HTMLElement) => container.querySelector('section#walkthroughs') as HTMLElement;
 
-  // #1459 moved the section from straight after the hero (#1290's place) to
-  // between the SDKs and the deploy cards, the approved redesign's order.
-  it('renders the section after the SDKs and before the deploy cards, with exactly the pinned videos in order', () => {
-    const { container } = renderHome();
+  // The site design of 2026-11-11 moved the section from the homepage (#1459
+  // put it between the SDKs and the deploy cards) to a page of its own.
+  it('renders the page with exactly the pinned videos in order, and the page only in the marketing build', () => {
+    const { container } = renderPage();
     const walk = section(container);
     expect(walk).toBeInTheDocument();
-    expect(walk.previousElementSibling?.querySelector('h2')).toHaveTextContent(/^SDKs for the stack you have$/);
-    expect(walk.nextElementSibling?.querySelector('h2')).toHaveTextContent(/^Deploy it yourself$/);
     expect(Array.from(walk.querySelectorAll('ol > li')).map((li) => li.id)).toEqual(PINNED.map(anchorFor));
     expect(walk.querySelectorAll('video')).toHaveLength(PINNED.length);
+    expect(getStaticProps()).toEqual({ props: {} });
+    mode.mockReturnValue(false);
+    expect(getStaticProps()).toEqual({ notFound: true });
+  });
+
+  it('renders exactly its inventory, every video read from the manifest, and nothing else', () => {
+    const have = renderedItems(section(renderPage().container)).map(keyOf);
+    const want = walkthroughsInventory().map(keyOf);
+    expect({ unlisted: surplus(have, want), 'listed, not rendered': surplus(want, have) }).toEqual({
+      unlisted: [],
+      'listed, not rendered': [],
+    });
   });
 
   it('says exactly the words the plan wrote', () => {
-    const { container } = renderHome();
+    const { container } = renderPage();
     const walk = section(container);
-    expect(within(walk).getByRole('heading', { level: 2 })).toHaveTextContent(/^Walkthroughs$/);
+    expect(within(walk).getByRole('heading', { level: 1 })).toHaveTextContent(/^Walkthroughs$/);
     // Sentence 1 covers the recordings only; each row says which kind it is.
-    expect(walk.querySelector('h2 + p')?.textContent).toBe(
+    expect(walk.querySelector('h1 + p')?.textContent).toBe(
       'The recordings were made on a local stack with demo data. Turn captions on in the player; the transcript is below each video.',
     );
     for (const video of WALKTHROUGHS) {
@@ -234,7 +270,7 @@ describe('marketing build (G3)', () => {
   });
 
   it('says on each row, in visible text, whether it is a narrated recording or an animation without sound', () => {
-    const { container } = renderHome();
+    const { container } = renderPage();
     for (const video of WALKTHROUGHS) {
       const kind = kindOf(transcriptFor(video.slug));
       const label = section(container).querySelector(`#${anchorFor(video.slug)} [data-kind]`) as HTMLElement;
@@ -253,7 +289,7 @@ describe('marketing build (G3)', () => {
   });
 
   it('wires each player as the plan says', () => {
-    const { container } = renderHome();
+    const { container } = renderPage();
     for (const video of WALKTHROUGHS) {
       const el = section(container).querySelector(`#${anchorFor(video.slug)} video`) as HTMLVideoElement;
       expect(el).toHaveAttribute('src', `/media/${video.mp4.name}`);
@@ -275,7 +311,7 @@ describe('marketing build (G3)', () => {
   });
 
   it('names each player by its title and describes it by its description (C10)', () => {
-    renderHome();
+    renderPage();
     for (const video of WALKTHROUGHS) {
       const el = document.querySelector(`#${anchorFor(video.slug)} video`) as HTMLElement;
       expect(el).toHaveAccessibleName(video.title);
@@ -288,7 +324,7 @@ describe('marketing build (G3)', () => {
   });
 
   it('shows each length as the player does, and says it in words', () => {
-    const { container } = renderHome();
+    const { container } = renderPage();
     for (const video of WALKTHROUGHS) {
       const row = section(container).querySelector(`#${anchorFor(video.slug)}`) as HTMLElement;
       const length = lengthLabel(video.duration_seconds);
@@ -298,14 +334,14 @@ describe('marketing build (G3)', () => {
     }
   });
 
-  it('heads the section h2 and each video h3', () => {
-    const { container } = renderHome();
-    const levels = Array.from(section(container).querySelectorAll('h1, h2, h3, h4, h5, h6')).map((h) => h.tagName);
-    expect(levels).toEqual(['H2', ...WALKTHROUGHS.map(() => 'H3')]);
+  it('heads the page h1 and each video h2', () => {
+    const { container } = renderPage();
+    const levels = Array.from(container.querySelectorAll('h1, h2, h3, h4, h5, h6')).map((h) => h.tagName);
+    expect(levels).toEqual(['H1', ...WALKTHROUGHS.map(() => 'H2')]);
   });
 
   it("passes axe's video-caption rule for every video, with no violation in the section", async () => {
-    const { container } = renderHome();
+    const { container } = renderPage();
     const result = await axe.run(section(container), { rules: { 'color-contrast': { enabled: false } } });
     expect(result.violations.map((v) => v.id)).toEqual([]);
     // Without a captions track axe reports `incomplete`, not a violation, so
@@ -315,7 +351,7 @@ describe('marketing build (G3)', () => {
   });
 
   it('closes each transcript under its video, and writes each item in order', () => {
-    const { container } = renderHome();
+    const { container } = renderPage();
     for (const video of WALKTHROUGHS) {
       const row = section(container).querySelector(`#${anchorFor(video.slug)}`) as HTMLElement;
       const details = row.querySelector('details') as HTMLDetailsElement;
@@ -330,7 +366,7 @@ describe('marketing build (G3)', () => {
   });
 
   it('loads nothing from anywhere but this site (G4)', () => {
-    const { container } = renderHome();
+    const { container } = renderPage();
     const walk = section(container);
     expect(walk.querySelector('iframe')).toBeNull();
     const urls = Array.from(walk.querySelectorAll('[src], [poster]')).flatMap((el) =>
@@ -349,29 +385,13 @@ describe('marketing build (G3)', () => {
     expect(document.cookie).toBe('');
   });
 
-  /**
-   * C13: nothing about videos that do not exist yet, no YouTube (it would
-   * need a line on /privacy), and no accessibility claim: the site claims no
-   * accessibility standard (T176 condition 13). Fragments, so the words this
-   * forbids never appear whole in this file.
-   */
-  const promises: Array<[string, string]> = [
-    ['coming\\s+' + 'soon', 'no video is promised'],
-    ['\\b' + 'soon\\b', 'the same'],
-    ['more\\s+' + 'videos', 'no count, no series'],
-    ['stay\\s+' + 'tuned', 'the same'],
-    ['you' + 'tube', 'no third-party copy is linked'],
-    ['accessi' + 'b', 'the site claims no accessibility standard'],
-    ['WC' + 'AG', 'the same'],
-  ];
-
   it.each(promises)('the section says nothing matching /%s/ (%s)', (pattern) => {
-    const { container } = renderHome();
+    const { container } = renderPage();
     expect(section(container).textContent ?? '').not.toMatch(new RegExp(pattern, 'i'));
   });
 
   it('has the anchors, and every id on the page is unique (C16)', () => {
-    const { container } = renderHome();
+    const { container } = renderPage();
     expect(container.querySelector('#walkthroughs')).toBeInTheDocument();
     for (const slug of PINNED) expect(container.querySelector(`#${anchorFor(slug)}`)).toBeInTheDocument();
     const ids = Array.from(container.querySelectorAll('[id]')).map((el) => el.id);
@@ -379,15 +399,58 @@ describe('marketing build (G3)', () => {
   });
 });
 
+/**
+ * The homepage's teaser (site design 2026-11-11, item 7): the manifest's first
+ * three as posters, titles and lengths, each linking its row of the page, and
+ * then the page itself. No player, so no `<video>` and no caption track.
+ */
+describe('marketing homepage: the teaser', () => {
+  beforeEach(() => mode.mockReturnValue(true));
+
+  const teaser = (container: HTMLElement) =>
+    container.querySelector('section[aria-labelledby="walkthroughs-heading"]') as HTMLElement;
+
+  it('sits after the SDKs and before the closing band, and plays nothing', () => {
+    const { container } = renderHome();
+    const section = teaser(container);
+    expect(section).toBeInTheDocument();
+    expect(section.previousElementSibling?.querySelector('h2')).toHaveTextContent(/^SDKs for the stack you have$/);
+    expect(section.nextElementSibling?.querySelector('h2')).toHaveTextContent(/^Open, and checkable$/);
+    expect(within(section).getByRole('heading', { level: 2 })).toHaveTextContent(/^Walkthroughs$/);
+    expect(container.querySelectorAll('video, track, iframe')).toHaveLength(0);
+    expect(container.querySelector('#walkthroughs')).toBeNull();
+  });
+
+  it("links each card to its row's anchor on /walkthroughs, then the page", () => {
+    const section = teaser(renderHome().container);
+    const cards = Array.from(section.querySelectorAll('ul > li > a'));
+    expect(TEASER.map((v) => v.slug)).toEqual(PINNED.slice(0, 3));
+    expect(cards.map((a) => a.getAttribute('href'))).toEqual(TEASER.map((v) => `/walkthroughs#${anchorFor(v.slug)}`));
+    cards.forEach((a, i) => {
+      const video = TEASER[i];
+      expect(a.querySelector('h3')?.textContent).toBe(video.title);
+      expect(a.querySelector('img')?.getAttribute('src')).toBe(`/media/${video.poster.name}`);
+      expect(a).toHaveAccessibleName(`${video.title} ${lengthLabel(video.duration_seconds).spoken}`);
+    });
+    const all = within(section).getByRole('link', { name: 'All the walkthroughs' });
+    expect(all).toHaveAttribute('href', '/walkthroughs');
+  });
+
+  it.each(promises)('the teaser says nothing matching /%s/ (%s)', (pattern) => {
+    expect(teaser(renderHome().container).textContent ?? '').not.toMatch(new RegExp(pattern, 'i'));
+  });
+});
+
 describe('platform build (C11)', () => {
   beforeEach(() => mode.mockReturnValue(false));
 
-  it('renders no section, no player and no media path', async () => {
+  it('renders no teaser, no player and no media path, and has no page', async () => {
     const { container } = renderHome();
     await screen.findByRole('link', { name: /sign in to the dashboard/i });
-    expect(container.querySelector('#walkthroughs')).toBeNull();
-    expect(container.querySelectorAll('video')).toHaveLength(0);
+    expect(container.querySelector('#walkthroughs, section[aria-labelledby="walkthroughs-heading"]')).toBeNull();
+    expect(container.querySelectorAll('video, img')).toHaveLength(0);
     expect(container.textContent).not.toMatch(/Walkthroughs/);
     expect(container.innerHTML).not.toContain('/media/');
+    expect(getStaticProps()).toEqual({ notFound: true });
   });
 });

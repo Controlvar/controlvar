@@ -37,8 +37,10 @@ const PLATFORM_ONLY = [
   'login',
 ];
 
-// Kept deliberately: all three work with no backend.
-const KEEP = ['docs', 'power-calculator', 'privacy'];
+// Kept deliberately: all of them work with no backend. `books` and
+// `walkthroughs` exist in the marketing build only (src/utils/marketing-only.ts),
+// so their absence here is a build that went wrong.
+const KEEP = ['docs', 'books', 'walkthroughs', 'power-calculator', 'privacy'];
 
 const outDir = resolve(process.argv[2] ?? 'out');
 

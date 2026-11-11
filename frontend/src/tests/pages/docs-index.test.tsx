@@ -20,8 +20,10 @@
  * grep of the marketing build's HTML sweeps those (#1459, PE 11).
  */
 import React from 'react';
-import { render } from '@testing-library/react';
+import { render, within } from '@testing-library/react';
 import DocsIndex from '@/pages/docs/index';
+import { BOOKS_URL } from '@/content/site-links';
+import { docsUrl } from '@/services/docs';
 import { claimText, metaDescriptions } from './helpers/claimText';
 
 jest.mock('next/head', () => { const H=({children}:{children:React.ReactNode})=><>{children}</>; H.displayName='H'; return H; });
@@ -137,5 +139,71 @@ describe('/docs hub entries for methods that do not work yet', () => {
     );
     expect(compose[0].getAttribute('href')).not.toMatch(/docker-guide/);
     expect(compose[0].textContent ?? '').toMatch(/deploy\/compose\/compose\.yml/);
+  });
+});
+
+/**
+ * The hub's layout since the site design of 2026-11-11 (/docs items 1-4). The
+ * stretched three-column grid made each row as tall as its tallest card and
+ * left 4,000 px of empty card at 1440 px; "Label — sentence" started each
+ * sentence at a different x; the books were not linked at all; the icons were
+ * emoji and letters. jsdom lays nothing out, so this pins the structure and
+ * the classes that do it; the heights were measured in Chromium.
+ */
+describe('/docs hub layout', () => {
+  it('has one h1, then "Start here" and "Every topic" as h2s, and each group an h3', () => {
+    const { container } = render(<DocsIndex />);
+    const headings = Array.from(container.querySelectorAll('h1, h2, h3')).map((h) => `${h.tagName} ${h.textContent}`);
+    expect(headings.slice(0, 4)).toEqual(['H1 Controlvar Documentation', 'H2 Start here', 'H2 Every topic', 'H3 Getting Started']);
+    expect(headings.filter((h) => h.startsWith('H1'))).toHaveLength(1);
+    expect(headings.filter((h) => h.startsWith('H3')).length).toBeGreaterThanOrEqual(10);
+  });
+
+  it('starts with the quick start, the concepts and the Controlvar books (BOOKS_URL)', () => {
+    const { container } = render(<DocsIndex />);
+    const start = container.querySelector('section[aria-labelledby="start-here-heading"]') as HTMLElement;
+    expect(within(start).getAllByRole('link').map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+      ['Quick start', docsUrl('getting-started/quick-start')],
+      ['Core concepts', docsUrl('getting-started/concepts')],
+      ['The Controlvar books', BOOKS_URL],
+    ]);
+  });
+
+  it('offers one button to the whole documentation, and no search-styled box', () => {
+    const { container, getAllByRole } = render(<DocsIndex />);
+    const browse = getAllByRole('link').filter((a) => a.getAttribute('href') === docsUrl(''));
+    expect(browse).toHaveLength(1);
+    expect(browse[0]).toHaveAccessibleName('Browse the documentation');
+    expect(claimText(container)).not.toMatch(/search/i);
+  });
+
+  it('flows the groups in CSS columns, each kept whole, instead of a stretched grid', () => {
+    const { container } = render(<DocsIndex />);
+    const topics = container.querySelector('section[aria-labelledby="topics-heading"]') as HTMLElement;
+    const flow = topics.querySelector('h2 + div') as HTMLElement;
+    expect(flow.className.split(/\s+/)).toEqual(expect.arrayContaining(['md:columns-2', 'lg:columns-3']));
+    expect(flow.className).not.toMatch(/\bgrid\b/);
+    const groups = Array.from(flow.children);
+    expect(groups.length).toBeGreaterThanOrEqual(10);
+    for (const group of groups) expect(group.className.split(/\s+/)).toContain('break-inside-avoid');
+  });
+
+  it('puts each link title on a line of its own, with its description under it', () => {
+    const { container } = render(<DocsIndex />);
+    const links = Array.from(container.querySelectorAll('section[aria-labelledby="topics-heading"] li > a'));
+    expect(links.length).toBeGreaterThan(60);
+    for (const a of links) {
+      const parts = Array.from(a.children);
+      expect(parts.map((p) => p.className.split(/\s+/).includes('block'))).toEqual([true, true]);
+      expect(a.textContent).not.toMatch(/—/);
+    }
+  });
+
+  it('draws line icons, never emoji', () => {
+    const { container } = render(<DocsIndex />);
+    // A character outside the Basic Multilingual Plane (🚀, 📦, 🔒 …) or in Miscellaneous Symbols and Dingbats (⚗, 🏗's ⚙ kin).
+    expect(container.textContent ?? '').not.toMatch(/[\uD800-\uDBFF][\uDC00-\uDFFF]|[☀-➿]/);
+    const groups = Array.from(container.querySelectorAll('section[aria-labelledby="topics-heading"] h3'));
+    for (const h3 of groups) expect(h3.parentElement?.querySelector('svg[aria-hidden="true"] path')).not.toBeNull();
   });
 });

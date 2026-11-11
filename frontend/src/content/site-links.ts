@@ -26,6 +26,18 @@ export const SECURITY_URL = `${REPO_URL}/blob/main/SECURITY.md`;
 export const COMPOSE_GUIDE_URL = `${REPO_URL}/blob/main/deploy/compose/README.md`;
 
 /**
+ * The facts strip's checkable facts (site design 2026-11-11, BORROW 1): the
+ * licence, the changelog, and the tests that hold the statistics to known
+ * answers. Each is a file or a folder of this repository, which
+ * `tests/pages/home-page.test.tsx` holds to the working tree.
+ */
+export const LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`;
+
+export const CHANGELOG_URL = `${REPO_URL}/blob/main/CHANGELOG.md`;
+
+export const STATS_TESTS_URL = `${REPO_URL}/tree/main/backend/tests/unit/stats_validation`;
+
+/**
  * The Controlvar books (#1859): their own repository, not this one's. The
  * homepage's books section and the footer link it; mkdocs.yml's nav, the docs
  * home page and README.md carry the same URL

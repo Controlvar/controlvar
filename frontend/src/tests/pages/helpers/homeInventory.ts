@@ -16,9 +16,11 @@
  * of main's `index.tsx` (main at 314bd3e7) the redesign keeps, the UX draft
  * (`v1-ux-designer.md`) that wrote or moved it, or the unchanged header. Rows
  * that are DATA are read from the data, never typed (EM-3):
- *   - the walkthroughs: titles, descriptions, kinds, lengths and transcripts,
- *     from `content/videos.json` and `content/walkthroughs/` through the very
- *     helpers the section renders with, so a manifest entry adds its rows;
+ *   - the walkthroughs teaser's cards: posters, titles and lengths, from
+ *     `content/videos.json` through the very helpers the teaser renders with
+ *     (the /walkthroughs page's rows, every title, description, kind, length
+ *     and transcript, are `walkthroughsInventory`);
+ *   - the books band's cards, from `content/books.ts`;
  *   - the screenshots' alt texts and caption, from `content/site-screens.json`;
  *   - the quoted sentences and code, from `content/home-quotes.json`;
  *   - the SDK chips, from `content/sdks.ts`.
@@ -36,6 +38,8 @@ import {
   transcriptFor,
 } from '@/components/Walkthroughs';
 import { sdkChips } from '@/components/homepage/SdkChips';
+import { TEASER } from '@/components/homepage/WalkthroughsTeaser';
+import { CORE_PATH } from '@/content/books';
 
 export type Build = 'platform' | 'marketing';
 
@@ -49,26 +53,34 @@ export interface Row {
 
 const MAIN = 'main:frontend/src/pages/index.tsx';
 const UX = 'v1-ux-designer.md';
-const HEADER = 'SiteHeader.tsx, unchanged (#1458)';
+const HEADER = 'SiteHeader.tsx (#1458)';
 const BOOKS = "the Controlvar books' README (amarkanday/controlvar-books, #1859)";
+/** The site design of 2026-11-11 (D376, D377): launch-readiness/site-design-2026-11-11/design-review-v1.md. */
+const SD = 'site design 2026-11-11 (design-review-v1.md)';
+/** Its competitor study's BORROW list, of which items 1 and 7 were taken (competitors-v1.md). */
+const BORROW = 'site design 2026-11-11, competitors-v1.md BORROW';
 
 /** The JavaScript snippet's first line: the install command of main:index.tsx:124, as a comment (UX, How it works). */
 export const SNIPPET_COMMENT = '// npm install @controlvar/js-sdk';
 
 export const TYPED: readonly Row[] = [
-  // The header, unchanged: the row and the phone menu (hidden until opened, still in the DOM).
+  // The header: the row and the phone menu (hidden until opened, still in the DOM). Books and
+  // Walkthroughs are the marketing build's pages (SD item 0); the call to action sits outside
+  // the menu at every width (BORROW 7), so it is a link of the row's div, not of a nav.
   { tag: 'div', text: 'CControlvar', source: `${HEADER}: Wordmark` },
   { tag: 'aria-label', text: 'Main', source: `${HEADER}: the row's nav` },
   { tag: 'aria-label', text: 'Main', source: `${HEADER}: the menu's nav` },
   { tag: 'aria-label', text: 'Menu', source: `${HEADER}: the menu button` },
   { tag: 'nav', text: 'Docs', source: `${HEADER}: row` },
   { tag: 'nav', text: 'Docs', source: `${HEADER}: menu` },
+  { tag: 'nav', text: 'Books', source: `${SD} item 0: row`, build: 'marketing' },
+  { tag: 'nav', text: 'Books', source: `${SD} item 0: menu`, build: 'marketing' },
+  { tag: 'nav', text: 'Walkthroughs', source: `${SD} item 0: row`, build: 'marketing' },
+  { tag: 'nav', text: 'Walkthroughs', source: `${SD} item 0: menu`, build: 'marketing' },
   { tag: 'nav', text: 'Power calculator', source: `${HEADER}: row` },
   { tag: 'nav', text: 'Power calculator', source: `${HEADER}: menu` },
-  { tag: 'nav', text: 'Source', source: `${HEADER}: row`, build: 'marketing' },
-  { tag: 'nav', text: 'Source', source: `${HEADER}: menu`, build: 'marketing' },
-  { tag: 'nav', text: 'Sign in', source: `${HEADER}: row`, build: 'platform' },
-  { tag: 'nav', text: 'Sign in', source: `${HEADER}: menu`, build: 'platform' },
+  { tag: 'div', text: 'Source', source: `${BORROW} 7: GitHub's mark and "Source", kept on a phone`, build: 'marketing' },
+  { tag: 'div', text: 'Sign in', source: `${HEADER}: the platform's call to action, outside the menu`, build: 'platform' },
 
   // The meta description, which the marketing build copies into og:description (QA 5c).
   {
@@ -88,46 +100,56 @@ export const TYPED: readonly Row[] = [
   { tag: 'div', text: 'Get started', source: `${MAIN}:83` },
   { tag: 'div', text: 'Try the power calculator', source: `${MAIN}:90`, build: 'marketing' },
   { tag: 'div', text: 'Sign in to the dashboard', source: `${MAIN}:97 (index.test.tsx; check-platform-export.mjs)`, build: 'platform' },
-  { tag: 'p', text: 'Run it locally', source: `${MAIN}:145, the terminal's title (UX Hero)` },
-  { tag: 'aria-label', text: 'Run it locally', source: 'PR G (#1459): the terminal <pre>' },
-  {
-    tag: 'pre',
-    text: 'git clone https://github.com/Controlvar/controlvar.git\ncd controlvar\ndocker compose up -d --wait',
-    source: `${MAIN}:158-160, without $ prompts (UX Hero)`,
-  },
-  {
-    tag: 'p',
-    text: 'Four containers — Postgres, Redis, the API and the dashboard — with the database created and seeded on the way up.',
-    source: `${MAIN}:154-155`,
-  },
-  {
-    tag: 'p',
-    text: 'Then open localhost:3000. The quick start has the default credentials and what to change before anyone else can reach it.',
-    source: `${MAIN}:163-167`,
-  },
+  // Hero B (SD): the "Run it locally" box, its commands and its two lines moved to step 1.
 
-  // Facts strip.
+  // Facts strip: four checkable facts, each linked (SD item 2; BORROW 1). The deploy fact took in
+  // the "Deploy it yourself" cards (SD item 8) and "No hosted tier"; the SDK fact is the SDK chips'.
   { tag: 'aria-label', text: 'At a glance', source: `${UX} Facts strip` },
   { tag: 'dt', text: 'Apache-2.0, SDKs MIT', source: `${UX} Facts 1; ${MAIN}:175` },
-  { tag: 'dd', text: 'Both build profiles are the same licence and the same price: none.', source: `${MAIN}:102` },
-  { tag: 'dt', text: 'SDKs for web, mobile and server', source: `${UX} Facts 2; ${MAIN}:63` },
-  { tag: 'dd', text: 'Plus OpenFeature providers for JavaScript and Python.', source: `${UX} Facts 2; ${MAIN}:124` },
+  {
+    tag: 'dd',
+    text: 'Both build profiles are the same licence and the same price: none. Read the LICENSE.',
+    source: `${MAIN}:102; ${BORROW} 1: LICENSE`,
+  },
   { tag: 'dt', text: 'Compose, Helm or AWS CDK', source: `${UX} Facts 3; ${MAIN}:128` },
-  { tag: 'dd', text: 'One machine, Kubernetes, or your own AWS account.', source: `${UX} Facts 3; ${MAIN}:128` },
-  { tag: 'dt', text: 'No hosted tier', source: `${UX} Facts 4; ${MAIN}:128` },
-  { tag: 'dd', text: 'There is nothing to be locked into.', source: `${UX} Facts 4; ${MAIN}:128` },
+  {
+    tag: 'dd',
+    text: 'One machine, Kubernetes, or your own AWS account. There is no hosted tier.',
+    source: `${UX} Facts 3 and 4; ${MAIN}:128; ${SD} item 2: the three deploy guides`,
+  },
+  { tag: 'dt', text: 'Statistics you can check', source: `${BORROW} 1: the statistics code` },
+  {
+    tag: 'dd',
+    text: 'Tests hold the analysis to known answers: the false-positive rate of A/A tests, interval coverage and a planted lift.',
+    source: 'backend/tests/unit/stats_validation: test_golden_aa_significance_rate, test_golden_interval_coverage, test_golden_planted_lift',
+  },
+  { tag: 'dt', text: 'Released in the open', source: `${BORROW} 1: Releases/CHANGELOG` },
+  {
+    tag: 'dd',
+    text: 'Versions are published on the Releases page, and the CHANGELOG says what changed in each.',
+    source: `${BORROW} 1: Releases/CHANGELOG (release-please, release-please-config.json)`,
+  },
 
-  // How it works.
+  // How it works. Step 1 spans the row and holds the hero's commands and its localhost line (SD item 3).
   { tag: 'h2', text: 'How it works', source: `${UX} How it works (the issue's own words)` },
   { tag: 'li', text: '1', source: `${UX}: step number, aria-hidden` },
   { tag: 'h3', text: 'Run it', source: `${UX} How it works` },
   {
     tag: 'p',
-    text: 'Clone the repository and start everything from its root: the first start builds the images, creates the database and applies the demo seed.',
-    source: `${UX}; docs/getting-started/quick-start.md:20-35`,
+    text: 'Clone the repository and start everything from its root: four containers — Postgres, Redis, the API and the dashboard. The first start builds the images, creates the database and applies the demo seed.',
+    source: `${UX}; ${MAIN}:154-155 (the hero's "Four containers" line, folded in: SD finding 7); docs/getting-started/quick-start.md:20-35`,
+  },
+  {
+    tag: 'p',
+    text: 'Then open localhost:3000. The quick start has the default credentials and what to change before anyone else can reach it.',
+    source: `${MAIN}:163-167, moved from the hero (SD item 3)`,
   },
   { tag: 'aria-label', text: 'Run it', source: 'the step heading, naming its code block' },
-  { tag: 'pre', text: 'docker compose up -d --wait', source: `${MAIN}:160; docs/getting-started/quick-start.md` },
+  {
+    tag: 'pre',
+    text: 'git clone https://github.com/Controlvar/controlvar.git\ncd controlvar\ndocker compose up -d --wait',
+    source: `${MAIN}:158-160, without $ prompts, moved from the hero (SD item 3); docs/getting-started/quick-start.md`,
+  },
   { tag: 'li', text: '2', source: `${UX}: step number, aria-hidden` },
   { tag: 'h3', text: 'Add the SDK', source: `${UX} How it works` },
   {
@@ -149,6 +171,16 @@ export const TYPED: readonly Row[] = [
     text: 'How to read a results page, in the user guide →',
     source: 'site polish 2026-11-10 (#7): docs/guides/user-guide.md "Reading Results"',
   },
+
+  // The Controlvar books (#1859), moved up (SD item 4): the books' own README's words, and no count
+  // of books. The core path's cards are read from content/books.ts.
+  { tag: 'h2', text: 'The Controlvar books', source: `${BOOKS}: its title` },
+  {
+    tag: 'p',
+    text: 'Learn engineering, programming and the craft of shipping software through one real, open-source codebase: Controlvar itself. The books are for newcomers to a language or framework, engineers who already code, and contributors. They are licensed CC BY 4.0.',
+    source: `${BOOKS}: its subtitle, "Who these books are for" and "Licence"`,
+  },
+  { tag: 'p', text: 'All the books →', source: `${SD} item 4: the link to /books (the books repository on a platform build)` },
 
   // Row 1: rollouts and safety.
   { tag: 'h2', text: 'Roll features out gradually, and watch their safety signals', source: `${UX} Row 1; feature-flags/index.tsx:134` },
@@ -196,45 +228,13 @@ export const TYPED: readonly Row[] = [
   // SDKs (the chips are read from content/sdks.ts).
   { tag: 'h2', text: 'SDKs for the stack you have', source: `${MAIN}:123` },
   { tag: 'p', text: 'All MIT-licensed. By default, flag evaluation and experiment assignment happen on the server.', source: `${MAIN}:124` },
-  {
-    tag: 'p',
-    text: 'The SDKs marked beta have a release: the JavaScript, React, React Native, Python, Java and .NET SDKs and the OpenFeature providers are on npm, PyPI, Maven Central or NuGet, and the Go SDK installs by module path. The others install from the repository. Each guide shows how to install its SDK.',
-    source: 'SdkChips.tsx, as the packages published for #1498 made it',
-  },
+  // The closing paragraph on which SDKs have a release went (SD item 6): the beta badges say it.
 
-  // Walkthroughs: the section's own words (its videos are read from the manifest).
-  { tag: 'h2', text: 'Walkthroughs', source: 'Walkthroughs.tsx, unchanged (#1290; walkthroughs.test.tsx)', build: 'marketing' },
-  {
-    tag: 'p',
-    text: 'The recordings were made on a local stack with demo data. Turn captions on in the player; the transcript is below each video.',
-    source: 'Walkthroughs.tsx, unchanged (#1290; walkthroughs.test.tsx)',
-    build: 'marketing',
-  },
+  // Walkthroughs: the homepage's teaser (SD item 7); its cards are read from the manifest.
+  { tag: 'h2', text: 'Walkthroughs', source: `${SD} item 7: the teaser; Walkthroughs.tsx's heading (#1290)`, build: 'marketing' },
+  { tag: 'p', text: 'All the walkthroughs →', source: `${SD} item 7: the link to /walkthroughs, with no count`, build: 'marketing' },
 
-  // Deploy.
-  { tag: 'h2', text: 'Deploy it yourself', source: `${MAIN}:127 (#1415 finds it by name)` },
-  { tag: 'h3', text: 'Docker Compose', source: `${UX} Deploy` },
-  { tag: 'p', text: 'Run the published container images on one machine.', source: `${MAIN}:128; ${UX} Deploy` },
-  { tag: 'p', text: 'Docker Compose (self-hosting stack) →', source: 'mkdocs.yml nav label of deploy/compose/README.md' },
-  { tag: 'h3', text: 'Kubernetes', source: `${UX} Deploy` },
-  { tag: 'p', text: 'Install them with the Helm chart attached to each release.', source: `${MAIN}:128; ${UX} Deploy` },
-  { tag: 'p', text: 'Self-host on Kubernetes →', source: `${MAIN}:150` },
-  { tag: 'h3', text: 'Your AWS account', source: `${UX} Deploy` },
-  {
-    tag: 'p',
-    text: 'Use the CDK app to deploy to ECS Fargate, Aurora PostgreSQL and ElastiCache in your own AWS account.',
-    source: `${MAIN}:128`,
-  },
-  { tag: 'p', text: 'Deploy with CDK →', source: 'the approved mockup, Main.dc.html:275 (the UX names the page, not the words)' },
-
-  // The Controlvar books (#1859): the books' own README's words, and no count of books.
-  { tag: 'h2', text: 'The Controlvar books', source: `${BOOKS}: its title` },
-  {
-    tag: 'p',
-    text: 'Learn engineering, programming and the craft of shipping software through one real, open-source codebase: Controlvar itself. The books are for newcomers to a language or framework, engineers who already code, and contributors. They are licensed CC BY 4.0.',
-    source: `${BOOKS}: its subtitle, "Who these books are for" and "Licence"`,
-  },
-  { tag: 'p', text: 'Read the Controlvar books on GitHub →', source: '#1859: the link to the books repository' },
+  // The "Deploy it yourself" cards are folded into the facts strip (SD item 8).
 
   // Closing band.
   { tag: 'h2', text: 'Open, and checkable', source: `${MAIN}:131` },
@@ -253,9 +253,9 @@ export const TYPED: readonly Row[] = [
   { tag: 'p', text: 'Product', source: `${UX} Footer` },
   { tag: 'li', text: 'Quick start', source: `${UX} Footer` },
   { tag: 'li', text: 'Docs', source: `${MAIN}:192` },
-  { tag: 'li', text: 'The Controlvar books', source: '#1859: the footer link to the books repository' },
+  { tag: 'li', text: 'The Controlvar books', source: `#1859; ${SD} item 10: /books, or the books repository on a platform build` },
   { tag: 'li', text: 'Power calculator', source: `${UX} Footer` },
-  { tag: 'li', text: 'Walkthroughs', source: `${UX} Footer`, build: 'marketing' },
+  { tag: 'li', text: 'Walkthroughs', source: `${UX} Footer; ${SD} item 10: /walkthroughs`, build: 'marketing' },
   { tag: 'li', text: 'Sign in', source: `${MAIN}:228`, build: 'platform' },
   { tag: 'p', text: 'Project', source: `${UX} Footer` },
   { tag: 'li', text: 'Source', source: `${MAIN}:200` },
@@ -292,6 +292,11 @@ export function dataRows(build: Build): Row[] {
       text: chip.beta ? `${chip.name} beta` : chip.name,
       source: 'content/sdks.ts SDKS',
     })),
+    // The books band's cards: the core path (SD item 4).
+    ...CORE_PATH.flatMap((book) => [
+      { tag: 'h3', text: book.title, source: `content/books.ts ${book.dir}` },
+      { tag: 'p', text: book.line, source: `content/books.ts ${book.dir}` },
+    ]),
   ];
   if (build === 'marketing') {
     for (const screen of registry.screens) {
@@ -300,19 +305,36 @@ export function dataRows(build: Build): Row[] {
         rows.push({ tag: 'figcaption', text: screen.caption, source: `content/site-screens.json ${screen.id}` });
       }
     }
-    rows.push(...videoRows());
+    rows.push(...teaserRows());
   }
   return rows;
 }
 
-/** Each walkthrough's rows, from the manifest and its transcript, through the section's own helpers. */
+/**
+ * The homepage teaser's cards (SD item 7): each poster (`alt=""`: the title in
+ * the same link names it), title and length, from the manifest, through the
+ * teaser's own helpers.
+ */
+export function teaserRows(): Row[] {
+  return TEASER.flatMap((video) => {
+    const length = lengthLabel(video.duration_seconds);
+    const source = `content/videos.json ${video.slug}, a teaser card`;
+    return [
+      { tag: 'alt', text: '', source: `${source}: its poster, named by its title` },
+      { tag: 'h3', text: video.title, source },
+      { tag: 'p', text: `${length.shown}${length.spoken}`, source: `${source}: duration_seconds` },
+    ];
+  });
+}
+
+/** Each walkthrough's rows on the /walkthroughs page, from the manifest and its transcript, through the page's own helpers. */
 export function videoRows(): Row[] {
   return WALKTHROUGHS.flatMap((video) => {
     const transcript = transcriptFor(video.slug);
     const length = lengthLabel(video.duration_seconds);
     const source = `content/videos.json ${video.slug}`;
     return [
-      { tag: 'h3', text: video.title, source },
+      { tag: 'h2', text: video.title, source },
       { tag: 'p', text: video.description, source },
       { tag: 'p', text: KIND_LABEL[kindOf(transcript)], source: `${source}: its kind` },
       { tag: 'p', text: `${length.shown}${length.spoken}`, source: `${source}: duration_seconds` },
@@ -331,6 +353,29 @@ export function videoRows(): Row[] {
 /** The inventory of one build: its typed rows and its data rows. */
 export function inventory(build: Build): Row[] {
   return [...TYPED.filter((row) => row.build === undefined || row.build === build), ...dataRows(build)];
+}
+
+/**
+ * The /walkthroughs page's body (`Walkthroughs`), which the homepage carried
+ * until the site design of 2026-11-11: its own words, unchanged since #1290,
+ * and every video's rows (`videoRows`). `walkthroughs.test.tsx` renders the
+ * section and holds it to this, both ways.
+ */
+export function walkthroughsInventory(): Row[] {
+  return [
+    {
+      tag: 'meta',
+      text: 'Videos of Controlvar at work, from getting started to a flag rollout, each with captions and a transcript.',
+      source: `pages/walkthroughs.tsx (${SD}): the first and the third video's subjects`,
+    },
+    { tag: 'h1', text: 'Walkthroughs', source: `Walkthroughs.tsx (#1290), the page's h1 since ${SD}` },
+    {
+      tag: 'p',
+      text: 'The recordings were made on a local stack with demo data. Turn captions on in the player; the transcript is below each video.',
+      source: 'Walkthroughs.tsx, unchanged (#1290; walkthroughs.test.tsx)',
+    },
+    ...videoRows(),
+  ];
 }
 
 /** Typed rows that repeat a row read from data, as `tag|text`: each should be read from the data instead (EM-3). */

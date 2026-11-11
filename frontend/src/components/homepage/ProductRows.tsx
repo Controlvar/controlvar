@@ -4,7 +4,7 @@ import { docsUrl } from '@/services/docs';
 import { isMarketingSite } from '@/utils/site-mode';
 import { Quote } from '@/components/homepage/Quote';
 import { Screenshot, type ScreenId } from '@/components/homepage/Screenshot';
-import { FOCUS, WIDTH } from '@/components/homepage/styles';
+import { FOCUS, H2, WIDTH } from '@/components/homepage/styles';
 
 interface Row {
   id: string;
@@ -84,7 +84,7 @@ function ProductRow({ row, marketing }: { row: Row; marketing: boolean }) {
       <div className={screen ? 'grid gap-10 lg:grid-cols-5 lg:items-center lg:gap-14' : 'max-w-2xl'}>
         <div className="min-w-0 lg:col-span-2">
           <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-700">{row.icon}</span>
-          <h2 id={`${row.id}-heading`} className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl">
+          <h2 id={`${row.id}-heading`} className={`mt-4 ${H2}`}>
             {row.heading}
           </h2>
           <p className="mt-3 leading-relaxed text-slate-600">{row.body}</p>
