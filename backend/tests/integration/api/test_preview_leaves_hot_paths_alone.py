@@ -12,6 +12,15 @@ A statement is pinned as its verb and table (to read a failure) and the first
 column, a new filter or a reordered clause fails too). COMMIT is not a cursor
 statement and is not seen. A change to these paths that is meant must
 re-record the lists, and say why in its pull request.
+
+An experiment that balances within groups (#448) is assigned in a worker
+thread after the route releases the request's sessions, and the release
+expires every object they loaded. Its case runs through a ``get_db`` that
+registers its session as ``deps.get_db`` does: the shared client's override
+is synchronous, so FastAPI runs it in a worker, the registration never
+reaches the route, and the release rolls nothing back. Its lists were
+recorded on main before #1545 (#1545 added two columns these paths must not
+read).
 """
 
 from __future__ import annotations
@@ -24,9 +33,14 @@ from typing import Iterator, List, Tuple
 
 import pytest
 from sqlalchemy import event as sa_event
-from sqlalchemy import update
+from sqlalchemy import text, update
+from sqlalchemy.orm import sessionmaker
 
+from backend.app.api import deps
+from backend.app.db import request_sessions
+from backend.app.main import app
 from backend.app.models.assignment import Assignment
+from backend.app.models.balance_group_counter import BalanceGroupCounter
 from backend.app.models.event import Event
 from backend.app.models.experiment import ExperimentStatus, Variant
 from backend.app.models.feature_flag import FeatureFlagStatus
@@ -55,6 +69,45 @@ ASSIGN_NEW_USER = [
 ASSIGN_STICKY_REPEAT = [
     ("SET search_path TO test_experimentation", "ff5c96ca3f3a2d4d"),
     ("SELECT experiments", "deb03a6ac648343e"),
+    ("SELECT experiments+variants", "92e5c9fa28954735"),
+    ("SELECT assignments", "9f4f07bfbdd34878"),
+    ("SELECT assignments", "9f4f07bfbdd34878"),
+    ("SELECT variants", "17dfe07abcf55f97"),
+    ("INSERT events", "19bd997a94b8dc62"),
+    ("SELECT events", "dc44e28bf432a997"),
+    ("SELECT experiments", "dc0a2d5b8215565b"),
+    ("SELECT variants", "ef2cccb95e119ad1"),
+]
+
+#: A new user's ``/tracking/assign`` to an experiment that balances within
+#: ``tier``, with the request's session released before the worker runs.
+BALANCED_NEW_USER = [
+    ("SET search_path TO test_experimentation", "ff5c96ca3f3a2d4d"),
+    ("SELECT experiments", "deb03a6ac648343e"),
+    ("SELECT experiments", "dc0a2d5b8215565b"),
+    ("SELECT experiments+variants", "92e5c9fa28954735"),
+    ("SELECT assignments", "9f4f07bfbdd34878"),
+    ("SELECT global_holdouts", "0b4c48f8051086b3"),
+    ("SAVEPOINT ?", "a83745f24726618a"),
+    ("SELECT ?", "ee9369be3df20b8f"),
+    ("INSERT balance_group_counters", "faf46b1dade87892"),
+    ("SET LOCAL statement_timeout TO DEFAULT", "b1a54eb52a262953"),
+    ("RELEASE ?", "e4d8093d4e1a8eaa"),
+    ("INSERT assignments", "22aea8689339e06a"),
+    ("SELECT assignments", "670c054a379fec6a"),
+    ("INSERT events", "19bd997a94b8dc62"),
+    ("SELECT events", "dc44e28bf432a997"),
+    ("SELECT assignments", "9f4f07bfbdd34878"),
+    ("SELECT variants", "17dfe07abcf55f97"),
+    ("SELECT experiments", "dc0a2d5b8215565b"),
+    ("SELECT variants", "ef2cccb95e119ad1"),
+]
+
+#: The same user and context again: the stored variant, and one exposure.
+BALANCED_STICKY_REPEAT = [
+    ("SET search_path TO test_experimentation", "ff5c96ca3f3a2d4d"),
+    ("SELECT experiments", "deb03a6ac648343e"),
+    ("SELECT experiments", "dc0a2d5b8215565b"),
     ("SELECT experiments+variants", "92e5c9fa28954735"),
     ("SELECT assignments", "9f4f07bfbdd34878"),
     ("SELECT assignments", "9f4f07bfbdd34878"),
@@ -137,12 +190,37 @@ def no_active_holdout(db_session):
 
 
 @pytest.fixture
-def active_experiment(db_session, make_experiment):
+def registering_client(admin_client, db_session):
+    """``admin_client`` with an async ``get_db`` that registers its session as
+    ``deps.get_db`` does, so the balanced branch of ``/tracking/assign``
+    releases it before the worker runs, as in production."""
+    factory = sessionmaker(
+        bind=db_session.get_bind(), autocommit=False, autoflush=False
+    )
+
+    async def registering_get_db():
+        session = factory()
+        session.execute(text("SET search_path TO test_experimentation"))
+        request_sessions.register(session)
+        try:
+            yield session
+        finally:
+            try:
+                session.close()
+            finally:
+                request_sessions.unregister(session)
+
+    app.dependency_overrides[deps.get_db] = registering_get_db
+    yield admin_client
+
+
+def _active_experiment(make_experiment, db_session, **fields):
     suffix = uuid.uuid4().hex[:8]
     experiment = make_experiment(
         name=f"Hot path {suffix}",
         key=f"hot-path-{suffix}",
         status=ExperimentStatus.ACTIVE,
+        **fields,
     )
     for name, is_control in (("control", True), ("treatment", False)):
         db_session.add(
@@ -156,36 +234,88 @@ def active_experiment(db_session, make_experiment):
         )
     db_session.commit()
     db_session.refresh(experiment)
-    yield experiment
+    return experiment
+
+
+def _remove_what_assign_wrote(db_session, experiment) -> None:
     db_session.rollback()
     db_session.query(Event).filter(Event.experiment_id == experiment.id).delete()
     db_session.query(Assignment).filter(
         Assignment.experiment_id == experiment.id
     ).delete()
+    db_session.query(BalanceGroupCounter).filter(
+        BalanceGroupCounter.experiment_id == experiment.id
+    ).delete()
     db_session.commit()
+
+
+@pytest.fixture
+def active_experiment(db_session, make_experiment):
+    experiment = _active_experiment(make_experiment, db_session)
+    yield experiment
+    _remove_what_assign_wrote(db_session, experiment)
+
+
+@pytest.fixture
+def balanced_experiment(db_session, make_experiment):
+    experiment = _active_experiment(
+        make_experiment,
+        db_session,
+        balance_within={"attribute": "tier", "values": ["gold", "silver"]},
+    )
+    yield experiment
+    _remove_what_assign_wrote(db_session, experiment)
+
+
+def _assign_twice(client, engine, experiment_key, context):
+    """A new user's ``/tracking/assign``, then the same call again; the
+    statements of each."""
+    body = {
+        "experiment_key": experiment_key,
+        "user_id": f"hot-{uuid.uuid4().hex[:8]}",
+        "context": context,
+    }
+    with _statements(engine) as new_user:
+        response = client.post("/api/v1/tracking/assign", json=body)
+    assert response.status_code == 200, response.text
+    assert response.json()["reason"] == "assigned"
+    with _statements(engine) as sticky:
+        response = client.post("/api/v1/tracking/assign", json=body)
+    assert response.status_code == 200, response.text
+    assert response.json()["reason"] == "assigned"
+    return new_user, sticky
 
 
 @pytest.mark.regression
 def test_assign_runs_the_statements_it_ran_before(
     admin_client, db_session, active_experiment, no_active_holdout
 ):
-    user_id = f"hot-{uuid.uuid4().hex[:8]}"
-    body = {
-        "experiment_key": active_experiment.key,
-        "user_id": user_id,
-        "context": {"country": "US", "plan": "pro"},
-    }
-    engine = db_session.get_bind()
-    with _statements(engine) as new_user:
-        response = admin_client.post("/api/v1/tracking/assign", json=body)
-    assert response.status_code == 200, response.text
-    assert response.json()["reason"] == "assigned"
-    with _statements(engine) as sticky:
-        response = admin_client.post("/api/v1/tracking/assign", json=body)
-    assert response.status_code == 200, response.text
+    new_user, sticky = _assign_twice(
+        admin_client,
+        db_session.get_bind(),
+        active_experiment.key,
+        {"country": "US", "plan": "pro"},
+    )
 
     assert _pinned(new_user) == ASSIGN_NEW_USER
     assert _pinned(sticky) == ASSIGN_STICKY_REPEAT
+
+
+@pytest.mark.regression
+def test_a_balanced_assign_runs_the_statements_it_ran_before(
+    registering_client, db_session, balanced_experiment, no_active_holdout
+):
+    """The release expires the experiment, and the worker reads it again
+    (#1545: without the visual columns)."""
+    new_user, sticky = _assign_twice(
+        registering_client,
+        db_session.get_bind(),
+        balanced_experiment.key,
+        {"country": "US", "tier": "gold"},
+    )
+
+    assert _pinned(new_user) == BALANCED_NEW_USER
+    assert _pinned(sticky) == BALANCED_STICKY_REPEAT
 
 
 @pytest.mark.regression

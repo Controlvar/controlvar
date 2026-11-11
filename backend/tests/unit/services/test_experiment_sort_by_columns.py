@@ -5,8 +5,8 @@ any attribute of the class was a sort key: ``metadata`` (SQLAlchemy's
 ``MetaData``), ``registry``, ``to_dict``, a dunder or a relationship answered
 500, and a name that is no attribute (``foo``, ``Name``) answered 200 and was
 ignored. The allow-list is now the columns of the experiments table, in exact
-case, the JSON columns included, except the two #448 added, which are not sort
-keys (``NOT_SORT_KEYS``).
+case, the JSON columns included, except the two #448 added and the one #1545
+added, which are not sort keys (``NOT_SORT_KEYS``).
 
 These tests need no database. They pin the list three ways, so none of them can
 move alone:
@@ -85,6 +85,9 @@ NOT_SORT_KEYS = {
     # The block-order key: server-side only, never answered, so never an
     # order of experiments either.
     "balance_seed": "server-side only",
+    # #1545: a visual experiment's pages and goals, null on every other
+    # experiment; sorting by it would change the stable list and its 422.
+    "visual_config": "not an order of experiments",
 }
 
 #: The 422's message, written out from the list above.
@@ -100,9 +103,9 @@ def test_the_written_list_is_exactly_the_experiment_tables_columns():
         f"not listed: {sorted(set(columns) - listed)}; "
         f"not a column: {sorted(listed - set(columns))}"
     )
-    assert len(columns) == 32
+    assert len(columns) == 33
     jsonb = {c.key for c in Experiment.__table__.columns if isinstance(c.type, JSONB)}
-    assert jsonb == EXPECTED_JSONB | {"balance_within"}
+    assert jsonb == EXPECTED_JSONB | {"balance_within", "visual_config"}
 
 
 @pytest.mark.regression
