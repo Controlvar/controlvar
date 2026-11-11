@@ -1,29 +1,76 @@
 import React from 'react';
-import { WIDTH } from '@/components/homepage/styles';
+import { docsUrl } from '@/services/docs';
+import { CHANGELOG_URL, COMPOSE_GUIDE_URL, LICENSE_URL, RELEASES_URL, STATS_TESTS_URL } from '@/content/site-links';
+import { FOCUS, WIDTH } from '@/components/homepage/styles';
+
+const LINK = `text-blue-700 underline hover:text-blue-900 ${FOCUS}`;
 
 /**
- * Four facts under the hero, as a description list.
+ * Four facts under the hero, as a description list, each with the link that
+ * checks it (site design 2026-11-11, item 2; the competitor study's BORROW 1):
+ * the licence file, the three deploy guides, the tests that hold the
+ * statistics to known answers, and the releases with their changelog.
  *
+ * The deploy fact replaced the "Deploy it yourself" cards, which said the
+ * same thing three times lower down; its three guides are the cards' links.
  * No SDK count: the number drifted from `sdk/` before, so the pages carry none
  * (`content/sdks.ts`; `tests/content/sdks.test.tsx` fails a digit count).
  */
-const FACTS: ReadonlyArray<readonly [string, string]> = [
-  ['Apache-2.0, SDKs MIT', 'Both build profiles are the same licence and the same price: none.'],
-  ['SDKs for web, mobile and server', 'Plus OpenFeature providers for JavaScript and Python.'],
-  ['Compose, Helm or AWS CDK', 'One machine, Kubernetes, or your own AWS account.'],
-  ['No hosted tier', 'There is nothing to be locked into.'],
-];
-
 export function FactsStrip() {
   return (
     <section aria-label="At a glance" className="border-y border-slate-200">
-      <dl className={`${WIDTH} grid gap-6 py-12 sm:grid-cols-2 lg:grid-cols-4`}>
-        {FACTS.map(([term, detail]) => (
-          <div key={term} className="min-w-0">
-            <dt className="font-semibold">{term}</dt>
-            <dd className="mt-1 text-sm leading-relaxed text-slate-600">{detail}</dd>
-          </div>
-        ))}
+      <dl className={`${WIDTH} grid gap-6 py-10 sm:grid-cols-2 lg:grid-cols-4 lg:py-12`}>
+        <div className="min-w-0">
+          <dt className="font-semibold">Apache-2.0, SDKs MIT</dt>
+          <dd className="mt-1 text-sm leading-relaxed text-slate-600">
+            Both build profiles are the same licence and the same price: none. Read the{' '}
+            <a href={LICENSE_URL} className={LINK}>
+              LICENSE
+            </a>
+            .
+          </dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="font-semibold">Compose, Helm or AWS CDK</dt>
+          <dd className="mt-1 text-sm leading-relaxed text-slate-600">
+            <a href={COMPOSE_GUIDE_URL} className={LINK}>
+              One machine
+            </a>
+            ,{' '}
+            <a href={docsUrl('self-hosting/kubernetes')} className={LINK}>
+              Kubernetes
+            </a>
+            , or{' '}
+            <a href={docsUrl('self-hosting/cdk')} className={LINK}>
+              your own AWS account
+            </a>
+            . There is no hosted tier.
+          </dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="font-semibold">Statistics you can check</dt>
+          <dd className="mt-1 text-sm leading-relaxed text-slate-600">
+            <a href={STATS_TESTS_URL} className={LINK}>
+              Tests
+            </a>{' '}
+            hold the analysis to known answers: the false-positive rate of A/A tests, interval coverage and a planted
+            lift.
+          </dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="font-semibold">Released in the open</dt>
+          <dd className="mt-1 text-sm leading-relaxed text-slate-600">
+            Versions are published on the{' '}
+            <a href={RELEASES_URL} className={LINK}>
+              Releases
+            </a>{' '}
+            page, and the{' '}
+            <a href={CHANGELOG_URL} className={LINK}>
+              CHANGELOG
+            </a>{' '}
+            says what changed in each.
+          </dd>
+        </div>
       </dl>
     </section>
   );

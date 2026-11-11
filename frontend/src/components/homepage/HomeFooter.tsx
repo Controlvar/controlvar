@@ -27,15 +27,16 @@ function Group({ id, label, children }: { id: string; label: string; children: R
  * group names are not headings), then the credit.
  *
  * Every page of the marketing build ends with it: the homepage renders it, and
- * AppShell renders it below /docs, /power-calculator, /privacy and the
- * not-found page. A platform build's shell does not, so the dashboard has none.
+ * AppShell renders it below /docs, /books, /walkthroughs, /power-calculator,
+ * /privacy and the not-found page. A platform build's shell does not, so the dashboard has none.
  *
  * Every same-site link is a path, never `https://controlvar.com/…`, so the
  * platform build's links stay on the self-hoster's own host. "Walkthroughs"
- * is the marketing build's only, and is `/#walkthroughs` so that it works from
- * every page, not just the homepage; the platform build has "Sign in" instead.
- * "Source" is the footer's only link to this repository
- * (`index.site-mode.test.tsx`); "The Controlvar books" links theirs (#1859).
+ * is the marketing build's only, and is the /walkthroughs page (site design
+ * 2026-11-11, item 10); the platform build has "Sign in" instead. "The
+ * Controlvar books" is the /books page on the marketing build and the books'
+ * repository on a platform build, which has no /books page (#1859). "Source"
+ * is the footer's only link to this repository (`index.site-mode.test.tsx`).
  */
 export function HomeFooter() {
   const marketing = isMarketingSite();
@@ -61,9 +62,15 @@ export function HomeFooter() {
               </Link>
             </li>
             <li>
-              <a href={BOOKS_URL} className={LINK}>
-                The Controlvar books
-              </a>
+              {marketing ? (
+                <Link href="/books" className={LINK}>
+                  The Controlvar books
+                </Link>
+              ) : (
+                <a href={BOOKS_URL} className={LINK}>
+                  The Controlvar books
+                </a>
+              )}
             </li>
             <li>
               <Link href="/power-calculator" className={LINK}>
@@ -72,7 +79,7 @@ export function HomeFooter() {
             </li>
             <li>
               {marketing ? (
-                <Link href="/#walkthroughs" className={LINK}>
+                <Link href="/walkthroughs" className={LINK}>
                   Walkthroughs
                 </Link>
               ) : (

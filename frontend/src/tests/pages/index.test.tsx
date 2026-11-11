@@ -228,6 +228,7 @@ describe('HomePage (/)', () => {
     });
 
     it('renders the marketing section only in the marketing build', () => {
+      // The walkthroughs teaser, and the header and footer links to the /walkthroughs page.
       expect(text().includes('Walkthroughs')).toBe(marketing);
     });
   });
@@ -262,9 +263,12 @@ describe('_app routeKind', () => {
     expect(routeKind('/sso/complete')).toBe('bare');
   });
 
-  it('keeps docs, the power calculator, the privacy page and error pages open', () => {
+  it('keeps docs, the books, the walkthroughs, the power calculator, the privacy page and error pages open', () => {
     expect(routeKind('/docs')).toBe('open');
     expect(routeKind('/docs/[...slug]')).toBe('open');
+    // The marketing build's own pages (site design 2026-11-11): in the shell, no session.
+    expect(routeKind('/books')).toBe('open');
+    expect(routeKind('/walkthroughs')).toBe('open');
     expect(routeKind('/power-calculator')).toBe('open');
     expect(routeKind('/privacy')).toBe('open');
     expect(routeKind('/404')).toBe('open');

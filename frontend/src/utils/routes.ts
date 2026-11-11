@@ -10,9 +10,12 @@ const BARE_ROUTES = new Set<string>(['/login', '/', '/sso/complete', '/auth/call
 /**
  * Routes inside the shell that do not require a session. The API is still the
  * enforcement point; these pages are either static or call public endpoints
- * (the power calculator). `/privacy` is the public site's privacy notice.
+ * (the power calculator). `/privacy` is the public site's privacy notice;
+ * `/books` and `/walkthroughs` are pages of the marketing build only
+ * (`utils/marketing-only.ts`), listed so that, where they exist, they sit in
+ * the shell with no session.
  */
-const OPEN_ROUTE_PREFIXES = ['/docs', '/power-calculator', '/privacy', '/404', '/500', '/_error'];
+const OPEN_ROUTE_PREFIXES = ['/docs', '/books', '/walkthroughs', '/power-calculator', '/privacy', '/404', '/500', '/_error'];
 
 export type RouteKind = 'bare' | 'open' | 'protected';
 

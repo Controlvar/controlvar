@@ -1,5 +1,6 @@
 import { PageTitle } from '@/components/PageTitle';
 import { CONTACT_EMAIL } from '@/utils/site-mode';
+import { H1 } from '@/components/homepage/styles';
 
 /**
  * The privacy notice for the website at controlvar.com.
@@ -25,7 +26,7 @@ export default function PrivacyPage() {
       />
       <div className="flex-1 bg-white">
         <article className="mx-auto max-w-3xl px-6 py-14 text-slate-700">
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Privacy</h1>
+          <h1 className={H1}>Privacy</h1>
           <p className="mt-2 text-sm text-slate-500">Last updated 3 October 2026.</p>
 
           <p className="mt-6 leading-relaxed">

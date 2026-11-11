@@ -6,7 +6,7 @@
 
 ![The power calculator: the baseline conversion rate, the minimum detectable effect, the sample size each variant needs, and a power curve.](frontend/public/screens/power-calculator-2268c898864d.webp)
 
-Watch the [walkthrough videos](https://controlvar.com/#walkthroughs) on controlvar.com.
+Watch the [walkthrough videos](https://controlvar.com/walkthroughs) on controlvar.com.
 
 The core, the optional modules and the dashboard are Apache-2.0; the client SDKs under `sdk/`
 are MIT. Controlvar is pre-1.0: see the

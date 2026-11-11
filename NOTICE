@@ -58,3 +58,5 @@ of them, and each remains under its own licence:
 `caniuse-lite`, pulled in transitively by the dashboard build toolchain, carries
 a CC-BY-4.0 licence over its browser-support database. It is a build-time
 dependency only and its data is not redistributed by Controlvar.
+
+  frontend/src/components/GitHubMark.tsx   GitHub's mark, Primer Octicons mark-github-16, MIT, Copyright (c) GitHub Inc. (LICENSES/MIT.txt)

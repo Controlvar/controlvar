@@ -1,10 +1,12 @@
 import React from 'react';
 import { SDK_GUIDES, SDKS } from '@/content/sdks';
-import { FOCUS, WIDTH } from '@/components/homepage/styles';
+import { FOCUS, H2, WIDTH } from '@/components/homepage/styles';
 
 /**
- * The SDKs with a release, all betas (the install sentence below): the ones on
- * a package registry, and Go, whose release is its module's tag.
+ * The SDKs with a release, all betas: the ones on a package registry, and Go,
+ * whose release is its module's tag. The paragraph that said so in words is
+ * gone (site design 2026-11-11, item 6): the beta badges say it, and each
+ * chip's guide says how to install its SDK.
  */
 const BETA: ReadonlySet<string> = new Set([
   'js',
@@ -48,7 +50,7 @@ export function SdkChips() {
   return (
     <section aria-labelledby="sdks-heading" className={`${WIDTH} py-12 lg:py-16`}>
       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 sm:p-10">
-        <h2 id="sdks-heading" className="text-2xl font-semibold tracking-tight">
+        <h2 id="sdks-heading" className={H2}>
           SDKs for the stack you have
         </h2>
         <p className="mt-3 max-w-3xl leading-relaxed text-slate-600">
@@ -74,11 +76,6 @@ export function SdkChips() {
             </li>
           ))}
         </ul>
-        <p className="mt-6 max-w-3xl text-sm leading-relaxed text-slate-600">
-          The SDKs marked beta have a release: the JavaScript, React, React Native, Python, Java and .NET SDKs and the
-          OpenFeature providers are on npm, PyPI, Maven Central or NuGet, and the Go SDK installs by module path. The
-          others install from the repository. Each guide shows how to install its SDK.
-        </p>
       </div>
     </section>
   );

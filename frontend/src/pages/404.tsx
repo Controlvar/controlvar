@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { PageTitle } from '@/components/PageTitle';
-import { FOCUS, WIDTH } from '@/components/homepage/styles';
+import { FOCUS, H1, WIDTH } from '@/components/homepage/styles';
 
 const BUTTON = `inline-flex min-h-11 items-center rounded-md px-5 font-medium ${FOCUS}`;
 
@@ -27,7 +27,7 @@ export default function NotFoundPage() {
       <div className="flex-1 bg-white">
         <div className={`${WIDTH} py-20`}>
           <p className="text-sm font-semibold text-blue-700">404</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">Page not found</h1>
+          <h1 className={`mt-2 ${H1}`}>Page not found</h1>
           <p className="mt-4 max-w-xl leading-relaxed text-slate-600">
             There is no page at this address. Check it for a typing mistake, or start from the homepage or the
             documentation.

@@ -13,9 +13,16 @@
  * after its `-` at 360 px and `@controlvar/js-sdk` at 375 px (measured
  * 2026-11-10). So this test treats a break as possible after ANY character
  * that is not inside a `whitespace-nowrap` span. It passes only when every
- * character but the spaces is in one, each `<wbr>` follows a `(`, and no run
- * between two allowed breaks is longer than a 320 px phone's continuation
- * line.
+ * character but the spaces is in one, each `<wbr>` follows a `(` or a `/` of a
+ * URL, and no run between two allowed breaks is longer than a 320 px phone's
+ * continuation line.
+ *
+ * Step 1 holds the clone command since the site design of 2026-11-11 (it was
+ * the hero's). Its URL, `https://github.com/Controlvar/controlvar.git`, is 44
+ * characters, more than any phone's line holds at 12 px, so a URL may also
+ * break right after a `/` past its `//`, and nowhere else: after
+ * `github.com/` and `Controlvar/`. A `/` in any other token (the package name
+ * `@controlvar/js-sdk`) is no break.
  *
  * jsdom has no layout, so this checks what decides the layout. The browser
  * check is `tests/e2e/marketing-site.site.spec.ts`: no code block in the
@@ -25,7 +32,8 @@
  */
 import React from 'react';
 import { render, within } from '@testing-library/react';
-import { HowItWorks } from '@/components/homepage/HowItWorks';
+import { HowItWorks, RUN_COMMANDS } from '@/components/homepage/HowItWorks';
+import { breakPieces } from '@/components/homepage/CodeLine';
 import { docsUrl } from '@/services/docs';
 import quotes from '@/content/home-quotes.json';
 
@@ -42,9 +50,13 @@ interface Walk {
   runs: string[];
   /** Each whitespace-separated word with a character outside a `whitespace-nowrap` span. */
   unprotected: string[];
-  /** The text before each `<wbr>` that does not end in `(`. */
+  /** The text before each `<wbr>` that ends in neither a `(` nor a `/` of a URL past its `//`. */
   strayWbr: string[];
 }
+
+/** Whether a `<wbr>` may follow `word`, the word so far: after a `(`, or after a `/` of a URL past its `//`. */
+const breakAllowed = (word: string): boolean =>
+  word.endsWith('(') || (word.startsWith('https://') && word.length > 'https://'.length && word.endsWith('/'));
 
 function walk(pre: Element): Walk {
   const runs: string[] = [];
@@ -78,7 +90,7 @@ function walk(pre: Element): Walk {
       return;
     }
     if ((node as Element).tagName === 'WBR') {
-      if (!run.endsWith('(')) strayWbr.push(run);
+      if (!breakAllowed(word)) strayWbr.push(run);
       endRun();
       return;
     }
@@ -106,12 +118,28 @@ describe('How it works', () => {
     expect(pre.className.split(/\s+/)).toEqual(expect.arrayContaining(['whitespace-pre-wrap', 'text-[12px]', 'sm:text-[13px]']));
   });
 
-  it.each(['Run it', 'Add the SDK'])('lets the %s block break only at a space or after a `(`', (name) => {
+  it.each(['Run it', 'Add the SDK'])('lets the %s block break only at a space, after a `(` or after a `/` of a URL', (name) => {
     const b = blocks();
     const w = walk(name === 'Run it' ? b.run : b.sdk);
     expect(w.runs.length).toBeGreaterThan(name === 'Run it' ? 4 : 10);
     expect({ unprotected: w.unprotected, strayWbr: w.strayWbr }).toEqual({ unprotected: [], strayWbr: [] });
     expect(w.runs.filter((r) => r.length > MAX_UNBREAKABLE)).toEqual([]);
+  });
+
+  it('breaks the clone URL after github.com/ and Controlvar/ only, and no other token at a /', () => {
+    const b = blocks();
+    expect(walk(b.run).runs).toEqual([
+      'git', 'clone', 'https://github.com/', 'Controlvar/', 'controlvar.git',
+      'cd', 'controlvar',
+      'docker', 'compose', 'up', '-d', '--wait',
+    ]);
+    expect(breakPieces('@controlvar/js-sdk')).toEqual(['@controlvar/js-sdk']);
+    expect(breakPieces('http://example.com/a/b')).toEqual(['http://example.com/a/b']);
+    expect(breakPieces('fn(a,(b))')).toEqual(['fn(', 'a,(', 'b))']);
+    // The rule the walk applies: a plant of a break after any other `/` is refused.
+    expect(breakAllowed('@controlvar/')).toBe(false);
+    expect(breakAllowed('https://')).toBe(false);
+    expect(breakAllowed('https://github.com/')).toBe(true);
   });
 
   it("keeps the hyphen in 'user-123' and in the package name inside one token", () => {
@@ -121,7 +149,8 @@ describe('How it works', () => {
 
   it('renders the same text, so a copy is the guide\'s lines', () => {
     const b = blocks();
-    expect(b.run.textContent).toBe('docker compose up -d --wait');
+    expect(b.run.textContent).toBe(RUN_COMMANDS.join('\n'));
+    expect(RUN_COMMANDS).toEqual(['git clone https://github.com/Controlvar/controlvar.git', 'cd controlvar', 'docker compose up -d --wait']);
     expect(b.sdk.textContent).toBe(['// npm install @controlvar/js-sdk', ...SNIPPET].join('\n'));
     expect(SNIPPET).toHaveLength(2);
   });
@@ -133,6 +162,14 @@ describe('How it works', () => {
     for (const line of [...lines, b.run.querySelector('code > span') as Element]) {
       expect(line.className.split(/\s+/)).toEqual(expect.arrayContaining(['block', 'pl-[2ch]', '-indent-[2ch]']));
     }
+  });
+
+  it('spans step 1 over the row and lets each card be as tall as its own content from lg (review r1)', () => {
+    const b = blocks();
+    const grid = b.steps[0].parentElement as HTMLElement;
+    expect(grid.className.split(/\s+/)).toEqual(expect.arrayContaining(['lg:grid-cols-2', 'lg:items-start']));
+    expect(b.steps[0].className.split(/\s+/)).toContain('lg:col-span-2');
+    expect(b.steps.slice(1).map((s) => s.className.includes('col-span'))).toEqual([false, false]);
   });
 
   it('ends step 3 with a link to how a results page is read', () => {

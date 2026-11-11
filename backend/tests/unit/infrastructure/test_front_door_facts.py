@@ -40,7 +40,16 @@ def test_the_tree_is_apache_and_the_sdks_are_mit():
     licences = {
         tuple(a["path"]): a["SPDX-License-Identifier"] for a in reuse["annotations"]
     }
-    assert licences == {("**",): "Apache-2.0", ("sdk/**",): "MIT"}
+    # One third-party file besides: GitHub's mark in the public site's header,
+    # Primer Octicons' mark-github-16, MIT, GitHub Inc. (NOTICE). Exactly that
+    # path, so a second exception has to be added here on purpose.
+    mark = ("frontend/src/components/GitHubMark.tsx",)
+    assert licences == {("**",): "Apache-2.0", ("sdk/**",): "MIT", mark: "MIT"}
+    owners = {
+        tuple(a["path"]): a["SPDX-FileCopyrightText"] for a in reuse["annotations"]
+    }
+    assert owners[mark] == "GitHub Inc."
+    assert "Primer Octicons" in _text(mark[0]) and "GitHub Inc." in _text("NOTICE")
     assert "Apache License" in _text("LICENSE").split("\n", 3)[1]
     assert _text("sdk/LICENSE").startswith("MIT License")
 

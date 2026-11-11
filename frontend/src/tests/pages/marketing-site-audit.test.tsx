@@ -25,9 +25,12 @@ jest.mock('next/router', () => ({ useRouter: () => ({ pathname:'/', asPath:'/', 
 import HomePage from '@/pages/index';
 import PowerCalculatorPage from '@/pages/power-calculator';
 import DocsPage from '@/pages/docs/index';
+import BooksPage, { getStaticProps as booksProps } from '@/pages/books';
+import WalkthroughsPage, { getStaticProps as walkthroughsProps } from '@/pages/walkthroughs';
 import PrivacyPage from '@/pages/privacy';
 import NotFoundPage from '@/pages/404';
 import { AppShell } from '@/components/AppShell';
+import { H1, H2 } from '@/components/homepage/styles';
 
 const mode = isMarketingSite as jest.Mock;
 
@@ -44,9 +47,15 @@ const PAGES: Array<[string, () => React.ReactElement]> = [
   ['/', () => <HomePage />],
   ['/power-calculator', () => <AppShell><PowerCalculatorPage /></AppShell>],
   ['/docs', () => <AppShell><DocsPage /></AppShell>],
+  // The marketing build's own pages (site design 2026-11-11).
+  ['/books', () => <AppShell><BooksPage /></AppShell>],
+  ['/walkthroughs', () => <AppShell><WalkthroughsPage /></AppShell>],
   ['/privacy', () => <AppShell><PrivacyPage /></AppShell>],
   ['/404', () => <AppShell><NotFoundPage /></AppShell>],
 ];
+
+/** Pages a platform build does not have at all (`utils/marketing-only.ts`): no platform-build case for them. */
+const MARKETING_ONLY = new Set(['/books', '/walkthroughs']);
 
 describe.each(PAGES)('%s on the marketing site', (name, make) => {
   it('links to nothing that 404s there', async () => {
@@ -69,9 +78,9 @@ describe.each(PAGES)('%s on the marketing site', (name, make) => {
     const { container } = render(<AuthProvider>{make()}</AuthProvider>);
     await waitFor(() => expect(container.querySelector('a, h1, h2')).toBeInTheDocument());
 
-    const SERVED = new Set(['/', '/docs', '/power-calculator', '/privacy', '/favicon.svg']);
+    const SERVED = new Set(['/', '/docs', '/books', '/walkthroughs', '/power-calculator', '/privacy', '/favicon.svg']);
     const external = (h: string) => /^[a-z][a-z0-9+.-]*:/i.test(h) || h.startsWith('//');
-    // A fragment on a served page is that page (the footer's `/#walkthroughs`).
+    // A fragment on a served page is that page (the teaser's `/walkthroughs#getting-started`).
     const dead = Array.from(container.querySelectorAll('[href]'))
       .map((a) => a.getAttribute('href') ?? '')
       .filter((h) => !external(h) && !h.startsWith('#') && !h.startsWith('/_next/') && !SERVED.has(h.split('#')[0]));
@@ -94,6 +103,25 @@ describe.each(PAGES)('%s on the marketing site', (name, make) => {
     expect({ page: name, last: footer.parentElement?.lastElementChild === footer }).toEqual({ page: name, last: true });
   });
 
+  // One type scale (site design 2026-11-11, finding 9): the h1 was 48/600 on
+  // home, 36/700 on /docs, 30/700 on the calculator, 30/600 on /privacy and 404.
+  it("sets its one h1, and every section h2 outside a card, in the site's one scale", async () => {
+    const { container } = render(<AuthProvider>{make()}</AuthProvider>);
+    await waitFor(() => expect(container.querySelector('h1')).toBeInTheDocument());
+    const h1s = Array.from(container.querySelectorAll('h1'));
+    expect({ page: name, h1s: h1s.length }).toEqual({ page: name, h1s: 1 });
+    const missing = H1.split(' ').filter((c) => !h1s[0].className.split(/\s+/).includes(c));
+    expect({ page: name, missing }).toEqual({ page: name, missing: [] });
+    // A section heading (an h2 set larger than a card title) is the scale's: 24 px, and 30 from sm.
+    const sizes = H2.split(' ').filter((c) => /^(sm:)?text-\d?xl$/.test(c));
+    expect(sizes).toEqual(['text-2xl', 'sm:text-3xl']);
+    const offScale = Array.from(container.querySelectorAll('h2'))
+      .filter((h) => /(^|\s)(sm:|lg:)?text-[2-9]xl\b/.test(h.className))
+      .filter((h) => !sizes.every((c) => h.className.split(/\s+/).includes(c)) || /(^|\s)lg:text-|(^|\s)text-[3-9]xl\b/.test(h.className))
+      .map((h) => `${h.textContent}: ${h.className}`);
+    expect({ page: name, offScale }).toEqual({ page: name, offScale: [] });
+  });
+
   it('renders without reaching the API', async () => {
     render(<AuthProvider>{make()}</AuthProvider>);
     await waitFor(() => {
@@ -110,7 +138,7 @@ describe.each(PAGES)('%s on the marketing site', (name, make) => {
 // and its pages, the docs hub among them, end with no footer: the old hub's
 // own footer is gone from both builds, and the shell adds one only to the
 // marketing build.
-describe.each(PAGES.filter(([name]) => name !== '/'))('%s on a platform build', (name, make) => {
+describe.each(PAGES.filter(([name]) => name !== '/' && !MARKETING_ONLY.has(name)))('%s on a platform build', (name, make) => {
   beforeEach(() => mode.mockReturnValue(false));
 
   it('has no footer', async () => {
@@ -118,5 +146,21 @@ describe.each(PAGES.filter(([name]) => name !== '/'))('%s on a platform build', 
     await waitFor(() => expect(container.querySelector('[data-testid="app-shell"] h1')).toBeInTheDocument());
     expect({ page: name, footers: container.querySelectorAll('footer').length }).toEqual({ page: name, footers: 0 });
     expect(container.querySelector('[data-testid="site-header"]')).toBeNull();
+  });
+});
+
+// The marketing build's own pages are not in a platform build at all: their
+// getStaticProps answers notFound there, so `next build` writes no file
+// (scripts/check-platform-export.mjs refuses one in a platform export).
+describe.each([
+  ['/books', booksProps],
+  ['/walkthroughs', walkthroughsProps],
+])('%s', (name, getStaticProps) => {
+  it('is a page of the marketing build only', () => {
+    expect(MARKETING_ONLY.has(name)).toBe(true);
+    mode.mockReturnValue(true);
+    expect(getStaticProps()).toEqual({ props: {} });
+    mode.mockReturnValue(false);
+    expect(getStaticProps()).toEqual({ notFound: true });
   });
 });

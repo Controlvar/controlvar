@@ -3,8 +3,9 @@ import { devices, expect, test, type Page } from "@playwright/test";
 import { BASE_URL } from "./env";
 
 /**
- * The public site in a real browser (#1459, PR G): controlvar.com's four
- * pages and its not-found page at a phone's width and a desktop's, over the
+ * The public site in a real browser (#1459, PR G): controlvar.com's pages
+ * (the homepage, /docs, /books, /walkthroughs, /power-calculator, /privacy)
+ * and its not-found page at a phone's width and a desktop's, over the
  * MARKETING export.
  *
  * The `site` project (playwright.config.ts) runs this file and nothing else
@@ -33,13 +34,19 @@ import { BASE_URL } from "./env";
 
 // The last is a path that does not exist: the export server answers it with
 // out/404.html, the not-found page, as nginx does (Amplify does what its
-// console's 404 rule says).
-const PAGES = ["/", "/docs", "/power-calculator", "/privacy", "/no-such-page"] as const;
+// console's 404 rule says). /books and /walkthroughs are the marketing build's
+// own pages (site design 2026-11-11).
+const PAGES = ["/", "/docs", "/books", "/walkthroughs", "/power-calculator", "/privacy", "/no-such-page"] as const;
 const PHONE_WIDTH = 390;
 const DESKTOP = { width: 1440, height: 900 };
 
-/** The marketing homepage renders one <video> per walkthrough (six today); the platform build renders none. */
+/**
+ * The marketing build's /walkthroughs page renders one <video> per walkthrough
+ * (nine today); the platform build has no such page, and no homepage has a
+ * player since the site design of 2026-11-11 (its teaser shows posters).
+ */
 const MIN_VIDEOS = 6;
+const VIDEOS_PAGE = "/walkthroughs";
 
 /** A focus walk longer than this is a focus trap, not a page. */
 const MAX_TAB_STOPS = 400;
@@ -112,7 +119,10 @@ async function checkAxe(page: Page, label: string): Promise<void> {
  *     no scrollbar on macOS or iOS, so its lines read as cut off mid-word;
  *   - a line that wraps anywhere but at a space or right after a `(`. Wrapped
  *     with nothing more, the block broke 'user-123' after its `-` at 360 px,
- *     the package name at 375 px, and a string at 320 px.
+ *     the package name at 375 px, and a string at 320 px. The one other
+ *     place is right after a `/` of a URL past its `//`: step 1's clone URL
+ *     (site design 2026-11-11) is 44 characters, wider than a phone's line,
+ *     and may break after `github.com/` or `Controlvar/` (CodeLine.tsx).
  * Each character's line is read from its own rectangle (a Range over it).
  */
 async function codeProblems(page: Page): Promise<string[]> {
@@ -128,6 +138,8 @@ async function codeProblems(page: Page): Promise<string[]> {
         const range = document.createRange();
         const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT);
         let line = "";
+        // The token so far: the text since the last space or newline, across visual line breaks.
+        let token = "";
         let top: number | null = null;
         let prev = "";
         for (let node = walker.nextNode(); node; node = walker.nextNode()) {
@@ -136,6 +148,7 @@ async function codeProblems(page: Page): Promise<string[]> {
             const ch = text[i];
             if (ch === "\n") {
               line = "";
+              token = "";
               top = null;
               prev = "";
               continue;
@@ -144,13 +157,15 @@ async function codeProblems(page: Page): Promise<string[]> {
             range.setEnd(node, i + 1);
             const rect = range.getClientRects()[0];
             if (rect && top !== null && rect.top > top + 2) {
-              if (prev !== " " && prev !== "(" && ch !== " ") {
+              const afterUrlSlash = prev === "/" && token.startsWith("https://") && token.length > "https://".length;
+              if (prev !== " " && prev !== "(" && ch !== " " && !afterUrlSlash) {
                 problems.push(`${name}: a line breaks inside "${line.slice(-12)}${text.slice(i, i + 8)}"`);
               }
               line = "";
             }
             if (rect) top = rect.top;
             line += ch;
+            token = ch === " " ? "" : token + ch;
             prev = ch;
           }
         }
@@ -267,17 +282,31 @@ async function checkFocus(page: Page, label: string): Promise<void> {
 
 test.describe("the public site", () => {
   // The export under test must be the marketing build: the platform export
-  // has the same four pages, so every check below could pass on the wrong one.
+  // has the same homepage and hub, so every check below could pass on the
+  // wrong one. Only the marketing build has the walkthroughs page.
   test.beforeAll(async ({ browser }) => {
     const page = await browser.newPage();
     try {
-      await page.goto(`${BASE_URL}/`);
+      await page.goto(`${BASE_URL}${VIDEOS_PAGE}`);
       const videos = await page.locator("video").count();
-      expect(videos, `not the marketing build: ${videos} <video> on /, want at least ${MIN_VIDEOS}`).toBeGreaterThanOrEqual(
-        MIN_VIDEOS,
-      );
+      expect(
+        videos,
+        `not the marketing build: ${videos} <video> on ${VIDEOS_PAGE}, want at least ${MIN_VIDEOS}`,
+      ).toBeGreaterThanOrEqual(MIN_VIDEOS);
     } finally {
       await page.close();
+    }
+  });
+
+  test("the homepage plays nothing, and each teaser card opens its row of /walkthroughs", async ({ page }) => {
+    await open(page, "/");
+    expect(await page.locator("video").count(), "<video> on /").toBe(0);
+    const cards = await page.locator('a[href^="/walkthroughs#"]').evaluateAll((as) => as.map((a) => a.getAttribute("href") ?? ""));
+    expect(cards.length, "teaser cards").toBeGreaterThan(0);
+    for (const href of cards) {
+      await page.goto(href);
+      const id = href.slice("/walkthroughs#".length);
+      await expect(page.locator(`li#${id} video`), href).toHaveCount(1);
     }
   });
 
@@ -298,7 +327,7 @@ test.describe("the public site", () => {
     });
   }
 
-  test(`How it works: every code block fits its box, and breaks only at a space or after a "(", at ${CODE_WIDTHS.join(", ")} px`, async ({
+  test(`How it works: every code block fits its box, and breaks only at a space, after a "(" or after a URL's "/", at ${CODE_WIDTHS.join(", ")} px`, async ({
     page,
   }) => {
     await open(page, "/");
@@ -318,6 +347,17 @@ test.describe("the public site", () => {
     const missing = await page.goto("/no-such-page");
     expect(missing?.status(), "/no-such-page").toBe(404);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Page not found");
+  });
+
+  test("/books/ and /walkthroughs/ are their pages", async ({ page }) => {
+    for (const [path, h1] of [
+      ["/books/", "The Controlvar books"],
+      ["/walkthroughs/", "Walkthroughs"],
+    ] as const) {
+      const answer = await page.goto(path);
+      expect(answer?.status(), path).toBe(200);
+      await expect(page.getByRole("heading", { level: 1 }), path).toHaveText(h1);
+    }
   });
 
   test.describe(`at ${DESKTOP.width} px`, () => {
@@ -340,11 +380,25 @@ test.describe("the public site", () => {
       });
     }
 
-    test(`How it works: every code block fits its box, and breaks only at a space or after a "(", at ${DESKTOP.width} px`, async ({
+    test(`How it works: every code block fits its box, and breaks only at a space, after a "(" or after a URL's "/", at ${DESKTOP.width} px`, async ({
       page,
     }) => {
       await open(page, "/");
       expect(await codeProblems(page), `${DESKTOP.width} px`).toEqual([]);
+    });
+
+    // Hero B (site design 2026-11-11): the text on the left, the screenshot
+    // on the right, its top above the headline's bottom, and no code box.
+    test(`the hero's screenshot sits beside the headline, with no code in the hero, at ${DESKTOP.width} px`, async ({ page }) => {
+      await open(page, "/");
+      const hero = page.locator("h1").locator("xpath=ancestor::section[1]");
+      expect(await hero.locator("pre, code").count(), "code in the hero").toBe(0);
+      const h1 = await page.locator("h1").boundingBox();
+      const img = await hero.locator("img").boundingBox();
+      expect(h1 && img, "the h1 and the screenshot have boxes").toBeTruthy();
+      if (!h1 || !img) return;
+      expect(img.x, `screenshot left ${img.x}, headline right ${h1.x + h1.width}`).toBeGreaterThanOrEqual(h1.x + h1.width);
+      expect(img.y, `screenshot top ${img.y}, headline bottom ${h1.y + h1.height}`).toBeLessThan(h1.y + h1.height);
     });
 
     // The hero is the power calculator's screenshot since 2026-11-10, 1300 px

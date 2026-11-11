@@ -33,9 +33,14 @@
  * other `kind` is refused. Whether the captions are the animation's own text
  * is checked outside CI, by re-running the extractor that wrote them.
  *
- * and in `out/index.html`: one `<video>` per entry, wired as the section
- * renders it (`src/components/Walkthroughs.tsx`), its one caption track not
- * `default`, no `<iframe>`, and every `src` and `poster` on this site.
+ * and in `out/walkthroughs.html`, the walkthroughs page (site design
+ * 2026-11-11): one `<video>` per entry, wired as the page renders it
+ * (`src/components/Walkthroughs.tsx`), its one caption track not `default`,
+ * no `<iframe>`, and every `src` and `poster` on this site. In
+ * `out/index.html`, whose teaser shows posters
+ * (`src/components/homepage/WalkthroughsTeaser.tsx`): no `<video>`, no
+ * `<iframe>`, every `src` on this site, and every `/media/` path a manifest
+ * poster shown as an `<img>` of 1280x720.
  *
  * POSTER FRAMES (#1459). `src/content/poster-frames.json` is
  * `{"posters": [row, ...]}`, one row per manifest entry and none for a video
@@ -81,7 +86,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MANIFEST, SITE_SETTING, parseManifest, placedNames, stemOf } from './fetch-site-media.mjs';
+import { HOME, MANIFEST, PAGE, SITE_SETTING, mediaReferences, parseManifest, placedNames, stemOf } from './fetch-site-media.mjs';
 
 const TRANSCRIPTS = fileURLToPath(new URL('../src/content/walkthroughs/', import.meta.url));
 export const POSTER_FRAMES = fileURLToPath(new URL('../src/content/poster-frames.json', import.meta.url));
@@ -218,14 +223,53 @@ export function attributes(source) {
 
 const unescapeHtml = (s) => s.replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
-/** Problems with the exported page against the manifest. */
+/** Every `src` and `poster` of a page that is not a path on this site. */
+function offSite(html, page) {
+  const problems = [];
+  for (const m of html.matchAll(/\s(src|poster)\s*=\s*"([^"]*)"/gi)) {
+    const value = unescapeHtml(m[2]);
+    if (!/^\/[^/]/.test(value)) problems.push(`out/${page} ${m[1]}=${JSON.stringify(value)} is not a path on this site`);
+  }
+  return problems;
+}
+
+/**
+ * Problems with the exported homepage against the manifest: its teaser shows
+ * posters as images, and plays nothing.
+ */
+export function homeProblems(html, videos) {
+  const problems = [];
+  const videosFound = (html.match(/<video\b/gi) ?? []).length;
+  if (videosFound) problems.push(`out/${HOME} has ${videosFound} <video>; the players are the walkthroughs page's`);
+  if (/<iframe\b/i.test(html)) problems.push(`out/${HOME} has an <iframe>`);
+  const posters = new Set(videos.map((entry) => entry.poster.name));
+  const referenced = mediaReferences(html);
+  if (!referenced.size) problems.push(`out/${HOME} shows no walkthrough poster`);
+  for (const name of referenced) {
+    if (!posters.has(name)) problems.push(`out/${HOME} references /media/${name}, which is not a manifest poster`);
+  }
+  const images = [...html.matchAll(/<img\b([^>]*?)\/?>/gi)].map((m) => attributes(m[1]));
+  for (const name of referenced) {
+    const shown = images.filter((img) => img.get('src') === `/media/${name}`);
+    if (shown.length !== 1) problems.push(`out/${HOME} shows /media/${name} as ${shown.length} <img>, want 1`);
+    for (const img of shown) {
+      if (img.get('width') !== String(POSTER.width) || img.get('height') !== String(POSTER.height)) {
+        problems.push(`out/${HOME} <img> /media/${name} is ${img.get('width')}x${img.get('height')}, want ${POSTER.width}x${POSTER.height}`);
+      }
+    }
+  }
+  problems.push(...offSite(html, HOME));
+  return problems;
+}
+
+/** Problems with the exported walkthroughs page against the manifest. */
 export function pageProblems(html, videos) {
   const problems = [];
   const found = [...html.matchAll(/<video\b([^>]*)>([\s\S]*?)<\/video>/gi)];
-  if (found.length !== videos.length) problems.push(`out/index.html has ${found.length} <video>, the manifest lists ${videos.length}`);
+  if (found.length !== videos.length) problems.push(`out/${PAGE} has ${found.length} <video>, the manifest lists ${videos.length}`);
   found.slice(0, videos.length).forEach((match, i) => {
     const entry = videos[i];
-    const where = `out/index.html <video> ${i + 1} (${entry.slug})`;
+    const where = `out/${PAGE} <video> ${i + 1} (${entry.slug})`;
     const video = attributes(match[1]);
     const want = {
       src: `/media/${entry.mp4.name}`,
@@ -252,11 +296,8 @@ export function pageProblems(html, videos) {
     }
     if (track.has('default')) problems.push(`${where} <track>: default is set; an enabled track covers the burned-in headline`);
   });
-  if (/<iframe\b/i.test(html)) problems.push('out/index.html has an <iframe>');
-  for (const m of html.matchAll(/\s(src|poster)\s*=\s*"([^"]*)"/gi)) {
-    const value = unescapeHtml(m[2]);
-    if (!/^\/[^/]/.test(value)) problems.push(`out/index.html ${m[1]}=${JSON.stringify(value)} is not a path on this site`);
-  }
+  if (/<iframe\b/i.test(html)) problems.push(`out/${PAGE} has an <iframe>`);
+  problems.push(...offSite(html, PAGE));
   return problems;
 }
 
@@ -477,8 +518,11 @@ export function check(outDir, manifestPath = MANIFEST, transcriptDir = TRANSCRIP
   const videos = parseManifest(readFileSync(manifestPath, 'utf8'));
   const mediaDir = join(outDir, 'media');
   const problems = [];
-  const indexPath = join(outDir, 'index.html');
-  if (!existsSync(indexPath)) return [`${indexPath} is missing; run npm run build:marketing first`];
+  const indexPath = join(outDir, HOME);
+  const pagePath = join(outDir, PAGE);
+  for (const path of [indexPath, pagePath]) {
+    if (!existsSync(path)) return [`${path} is missing; run npm run build:marketing first`];
+  }
   if (!existsSync(mediaDir)) return [`${mediaDir} is missing; npm run build:marketing places it`];
   const want = videos.flatMap(placedNames).sort();
   const have = readdirSync(mediaDir).sort();
@@ -486,7 +530,8 @@ export function check(outDir, manifestPath = MANIFEST, transcriptDir = TRANSCRIP
   for (const entry of videos) problems.push(...entryProblems(entry, mediaDir, transcriptDir));
   if (!existsSync(framesPath)) problems.push(`${framesPath} is missing: every listed poster needs its frame row`);
   else problems.push(...frameProblems(readFileSync(framesPath, 'utf8'), videos, mediaDir, transcriptDir));
-  problems.push(...pageProblems(readFileSync(indexPath, 'utf8'), videos));
+  problems.push(...pageProblems(readFileSync(pagePath, 'utf8'), videos));
+  problems.push(...homeProblems(readFileSync(indexPath, 'utf8'), videos));
   return problems;
 }
 
@@ -509,6 +554,6 @@ if (invokedAsScript()) {
     process.exitCode = 1;
   } else {
     const count = parseManifest(readFileSync(MANIFEST, 'utf8')).length;
-    console.log(`check-site-media: ${count} video(s): pinned bytes, faststart, sound as declared (recordings: AAC narration; animations: none), captions = pinned .vtt + line:-5, transcript = cues, poster 1280x720, poster frame at or after the first cue, page wiring: all hold`);
+    console.log(`check-site-media: ${count} video(s): pinned bytes, faststart, sound as declared (recordings: AAC narration; animations: none), captions = pinned .vtt + line:-5, transcript = cues, poster 1280x720, poster frame at or after the first cue, ${PAGE} wiring, ${HOME} posters only: all hold`);
   }
 }
