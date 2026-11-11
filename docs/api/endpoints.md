@@ -996,6 +996,9 @@ segment it would balance within cannot be used. See
   }
   ```
 
+A flag whose stored rules the server cannot read (only a direct database write leaves one) answers
+`false`, and the other flags are unaffected.
+
 ### Archived Flags
 An archived flag stays archived until it is unarchived:
 
