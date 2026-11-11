@@ -21,7 +21,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from pydantic_core import InitErrorDetails, PydanticCustomError
+from pydantic_core import InitErrorDetails, PydanticCustomError, PydanticKnownError
 
 from backend.app.core.balanced_blocks import balance_problem
 from backend.app.core.targeting_adapter import (
@@ -38,6 +38,12 @@ from backend.app.schemas.split_url_config import (
     find_split_url_config_problem,
 )
 from backend.app.schemas.variance_reduction import VarianceReductionConfig
+from backend.app.schemas.visual import (
+    VisualChanges,
+    VisualConfig,
+    visual_write_error,
+    visual_write_problem,
+)
 
 #: What ``balance_within`` takes on a create and an update (#448).
 BALANCE_WITHIN_DESCRIPTION = (
@@ -353,6 +359,17 @@ class VariantBase(BaseModel):
     configuration: Optional[Dict[str, Any]] = Field(
         None, description="Variant-specific configuration"
     )
+    visual_changes: Optional[VisualChanges] = Field(
+        None,
+        description=(
+            "A visual experiment's page changes for this variant (#1545): "
+            '{"version": 1, "changes": [...]}, at most 100 changes and 64 KiB. '
+            "Only on a non-control variant of an experiment with visual_config. "
+            "On an update, a variant sent without this field keeps the changes "
+            "stored for the variant of the same name; null removes them. Stored "
+            "and returned; nothing applies them to a page yet."
+        ),
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -493,6 +510,18 @@ CONFIDENCE_LEVEL_DESCRIPTION = (
     "follows it; sequential analysis does not."
 )
 
+#: ``visual_config`` on a create and an update (#1545).
+VISUAL_CONFIG_DESCRIPTION = (
+    "Makes this a visual experiment (#1545): "
+    '{"version": 1, "editor_url": ..., "pages": [{"match": "exact"|"prefix", '
+    '"url": ...}], "goals": [...]}, with 1 to 10 pages and 0 to 10 goals; each '
+    "goal's event_name is the event_name of one of the metrics. Not on a split "
+    "URL experiment. Cannot change once the experiment leaves draft. A visual draft "
+    "keeps it (null is refused with 422), cannot be given a scheduled start, "
+    "and starts only with POST /api/v1/experiments/{id}/start carrying its "
+    "design_etag. Stored and returned; nothing applies it to a page yet."
+)
+
 
 class ExperimentCreate(ExperimentBase):
     """Model for creating a new experiment."""
@@ -505,13 +534,20 @@ class ExperimentCreate(ExperimentBase):
             "`POST /api/v1/experiments/{id}/start`."
         ),
     )
+    # #1545. Declared before `variants` and `metrics`, whose validators read it.
+    visual_config: Optional[VisualConfig] = Field(
+        default=None, description=VISUAL_CONFIG_DESCRIPTION
+    )
     variants: List[VariantBase] = Field(
         ..., min_length=1, description="Experiment variants"
     )
     metrics: List[MetricBase] = Field(
         ...,
-        min_length=1,
-        description="Metrics to track, at least one. " + METRIC_NAMES_DESCRIPTION,
+        description=(
+            "Metrics to track: at least one, except on an experiment created "
+            "with visual_config, which may have none until it starts (start "
+            "still refuses an experiment without a metric). " + METRIC_NAMES_DESCRIPTION
+        ),
     )
 
     # EP-021: Sequential testing
@@ -655,8 +691,19 @@ class ExperimentCreate(ExperimentBase):
 
     @field_validator("metrics")
     @classmethod
-    def validate_metric_names(cls, value: List[MetricBase]) -> List[MetricBase]:
-        """Refuse a repeated metric name (#1461); the list is returned as is."""
+    def validate_metric_names(
+        cls, value: List[MetricBase], info: ValidationInfo
+    ) -> List[MetricBase]:
+        """Refuse a repeated metric name (#1461); the list is returned as is.
+
+        An empty list is refused with the ``too_short`` error a ``min_length``
+        of 1 gives, unless the experiment is created with ``visual_config``
+        (S2', #1545): a visual experiment's metrics are chosen in its editor.
+        """
+        if not value and info.data.get("visual_config") is None:
+            raise PydanticKnownError(
+                "too_short", {"field_type": "List", "min_length": 1, "actual_length": 0}
+            )
         return refuse_duplicate_metric_names(value)
 
     @field_validator("split_url_config")
@@ -723,6 +770,19 @@ class ExperimentCreate(ExperimentBase):
                 f"Traffic allocations must sum to 100% (currently {total_allocation}%)"
             )
 
+        return self
+
+    @model_validator(mode="after")
+    def validate_visual_design(self):
+        """A visual experiment's rules across fields (#1545): no visual
+        settings on a split URL experiment, page changes only beside
+        ``visual_config`` and never on the control, and every goal's
+        event name one of the metrics'. The 422 is at the rule's place."""
+        problem = visual_write_problem(
+            self.experiment_type, self.visual_config, self.variants, self.metrics
+        )
+        if problem is not None:
+            raise visual_write_error(type(self).__name__, problem)
         return self
 
 
@@ -871,6 +931,13 @@ class ExperimentUpdate(BaseModel):
         + " Changeable only while the experiment is a draft.",
     )
 
+    # #1545: a visual experiment's pages, editor page and goals; draft only.
+    visual_config: Optional[VisualConfig] = Field(
+        default=None,
+        description=VISUAL_CONFIG_DESCRIPTION
+        + " Refused with 422 on a draft that has a scheduled start.",
+    )
+
     # #580: how the results judge this experiment; draft only
     correction_method: CorrectionMethod = Field(
         default=None,
@@ -966,6 +1033,10 @@ class VariantResponse(BaseModel):
     is_control: bool
     traffic_allocation: int
     configuration: Optional[Dict[str, Any]] = None
+    visual_changes: Optional[Dict[str, Any]] = Field(
+        None,
+        description="The variant's page changes, as stored (#1545); null when none.",
+    )
     experiment_id: UUID4
     created_at: datetime
     updated_at: datetime
@@ -1070,6 +1141,27 @@ class ExperimentResponse(BaseModel):
         ),
     )
 
+    # #1545: a visual experiment's settings, and the version of its design.
+    visual_config: Optional[Dict[str, Any]] = Field(
+        None,
+        description=(
+            "The experiment's visual settings, as stored (#1545); null for an "
+            "experiment that is not visual."
+        ),
+    )
+    design_etag: Optional[str] = Field(
+        None,
+        description=(
+            "A visual experiment's design version (#1545): the SHA-256 hex of "
+            "its targeting rules, exclusion group, balance_within (when set), "
+            "visual_config and every field of every variant and metric. Any "
+            "change to one of them "
+            "changes it. Starting a visual draft sends it in the body of POST "
+            "/api/v1/experiments/{id}/start, and a different value answers 409. "
+            "Null for an experiment that is not visual."
+        ),
+    )
+
     # #580: how the results judge this experiment. The defaults are what the
     # migration backfilled; ExperimentService._experiment_to_dict copies the
     # stored values, so a response never reports a default over a choice.
@@ -1090,6 +1182,28 @@ class ExperimentResponse(BaseModel):
         if hasattr(value, "value"):
             return value.value
         return value
+
+
+class ExperimentStartRequest(BaseModel):
+    """The optional body of ``POST /api/v1/experiments/{id}/start`` (#1545).
+
+    No body, ``null`` and ``{}`` all start as before. An unknown key is
+    ignored, as on ``PUT /experiments/{id}`` (#595).
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    design_etag: Optional[str] = Field(
+        None,
+        max_length=128,
+        description=(
+            "Required to start a visual draft: the design_etag of the version "
+            "being started, as GET /api/v1/experiments/{id} returned it. "
+            "Missing answers 400; different from the experiment's current one "
+            "answers 409 and nothing is started. Ignored for any other "
+            "experiment and on a resume."
+        ),
+    )
 
 
 class ExperimentDetailResponse(ExperimentResponse):

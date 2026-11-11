@@ -35,9 +35,11 @@ from backend.app.main import app
 
 pytestmark = [pytest.mark.unit]
 
-#: Request body models reachable from the routes, per profile.
-CORE_MODEL_COUNT = 79
-FULL_MODEL_COUNT = 121
+#: Request body models reachable from the routes, per profile. #1545 added 11
+#: to both: /start's body, VisualConfig with its page and two goal kinds, and
+#: VisualChanges with its five change operations.
+CORE_MODEL_COUNT = 90
+FULL_MODEL_COUNT = 132
 
 #: ``(model, field)`` pairs that a ``mode="before"`` field validator covers.
 CORE_BEFORE_COUNT = 46

@@ -1320,3 +1320,18 @@ by = [
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
     "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
 ]
+
+[[unit]]
+text = "GET /api/v1/experiments/, POST /api/v1/experiments/, GET/PUT /api/v1/experiments/{experiment_id}, POST /api/v1/experiments/{experiment_id}/start, POST /api/v1/experiments/{experiment_id}/pause, PUT /api/v1/experiments/{experiment_id}/schedule, POST /api/v1/experiments/{experiment_id}/complete, POST /api/v1/experiments/{experiment_id}/archive, POST /api/v1/experiments/{experiment_id}/clone | #1545 | Additive. Every one of these operations answers with an experiment that carries visual_config and design_etag, and variants that carry visual_changes: all three are null on an experiment that is not visual, which is every experiment stored before. POST /api/v1/experiments/ and PUT /api/v1/experiments/{experiment_id} accept visual_config and, on a variant, visual_changes; a request that sends neither is answered as before, and a PUT variant sent without visual_changes keeps the stored ones. POST /api/v1/experiments/ accepts metrics: [] when it sends visual_config: the schema's minItems on metrics is gone, and without visual_config an empty list answers the same 422 too_short as before. POST /api/v1/experiments/{experiment_id}/start takes an optional body, {\"design_etag\": ...}: no body, an empty body, null and {} start an experiment as before, and an unknown key is ignored. Only a visual draft needs the etag: without one it answers 400, and with another 409, and nothing is started. PUT /api/v1/experiments/{experiment_id}/schedule answers 400 to a start date on a visual draft. The OpenAPI document changes in these schemas and in the start operation's optional request body."
+by = [
+    "test:backend/tests/integration/api/test_visual_experiment_api.py::test_a_visual_experiment_is_stored_and_answered_as_sent",
+    "test:backend/tests/integration/api/test_visual_experiment_api.py::test_an_ordinary_experiment_has_no_etag",
+    "test:backend/tests/integration/api/test_visual_experiment_api.py::test_a_variants_put_without_changes_keeps_them_and_null_clears",
+    "test:backend/tests/integration/api/test_visual_experiment_api.py::test_uc9_a_visual_experiment_without_a_metric_is_created_and_cannot_start",
+    "test:backend/tests/integration/api/test_experiment_metric_names.py::test_an_update_with_an_empty_list_is_422_too_short_as_on_create",
+    "test:backend/tests/integration/api/test_visual_experiment_api.py::test_r6_an_ordinary_start_takes_no_body",
+    "test:backend/tests/integration/api/test_visual_experiment_api.py::test_v68_start_refuses_a_design_changed_after_it_was_read",
+    "test:backend/tests/integration/api/test_visual_experiment_api.py::test_v71a_schedule_refuses_a_start_date_on_a_visual_draft",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_core_api_matches_stable_snapshot",
+    "test:backend/tests/smoke/test_openapi_snapshot.py::test_full_api_matches_full_snapshot",
+]

@@ -18,9 +18,10 @@ never the value sent, checked after the LIST permission and before the route's
 column still sorts, in both directions, and an empty ``sort_by`` is still no
 sort. The four values the dashboard sends (``frontend/src/services/experiments.ts``)
 answer byte for byte what main answered: ``golden/experiment_list_sort_by.json``
-was captured on main from the rows ``_golden_rows`` writes. The one field added
-to the answer since, #448's ``balance_within`` (null for those rows), is
-inserted where the response schema puts it; every other byte is main's.
+was captured on main from the rows ``_golden_rows`` writes. The fields added
+to the answer since, #448's ``balance_within`` and #1545's ``visual_config`` and
+``design_etag`` (null for those rows), are inserted where the response schema
+puts them; every other byte is main's.
 
 Each test reads only its own rows, by a ``search`` term that only they carry,
 because the test database is shared by the session.
@@ -413,12 +414,13 @@ def _golden_rows(db_session) -> None:
     db_session.commit()
 
 
-#: The one field added to every experiment of the answer since the golden file
-#: was captured: #448's ``balance_within``, null for these rows (they balance
-#: nothing), which ``ExperimentResponse`` declares right after
+#: The fields added to every experiment of the answer since the golden file
+#: was captured: #448's ``balance_within``, and #1545's ``visual_config`` and
+#: ``design_etag``, all null for these rows (they balance nothing and are not
+#: visual), which ``ExperimentResponse`` declares in that order right after
 #: ``split_url_config``. The golden file stays main's bytes.
 ADDED_AFTER = '"split_url_config":null,'
-ADDED_FIELD = '"balance_within":null,'
+ADDED_FIELD = '"balance_within":null,"visual_config":null,"design_etag":null,'
 
 
 def _main_answer_with_the_added_field(main_answer: str) -> str:

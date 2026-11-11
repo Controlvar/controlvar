@@ -725,6 +725,67 @@ def test_a_change_through_the_experiment_routes_is_read_back_at_once(
     assert INVALIDATION_FAILED not in caplog.text
 
 
+#: A visual draft (#1545): one page, one page change.
+VISUAL_PAGE = {"match": "prefix", "url": "https://shop.example.com/"}
+
+
+def _create_visual(client: TestClient) -> dict:
+    resp = client.post(
+        f"{BASE}/",
+        json={
+            "name": f"{PREFIX}{uuid.uuid4().hex[:8]}",
+            "experiment_type": "a_b",
+            "visual_config": {
+                "version": 1,
+                "editor_url": "https://shop.example.com/",
+                "pages": [VISUAL_PAGE],
+            },
+            "variants": [
+                {"name": "Control", "is_control": True, "traffic_allocation": 50},
+                {
+                    "name": "Treatment",
+                    "is_control": False,
+                    "traffic_allocation": 50,
+                    "visual_changes": {
+                        "version": 1,
+                        "changes": [{"op": "hide", "selector": ".banner"}],
+                    },
+                },
+            ],
+            "metrics": [{"name": "Conversion", "event_name": "purchase"}],
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def test_start_hashes_the_row_not_the_cached_detail(
+    cached_superuser_client, redis_server, db_session, detail_key_prefix
+):
+    """C5 (#1545): with the detail cached, the row changes without a route
+    (so nothing drops the cache). /start computes the etag from the row: the
+    cached etag e1 is refused with 409 and the row's own starts it. A /start
+    that read the cache would answer the reverse."""
+    client = cached_superuser_client
+    exp = _create_visual(client)
+    e1 = _warm(client, redis_server, exp["id"], detail_key_prefix)["design_etag"]
+    session = _session_factory(db_session)()
+    try:
+        row = session.get(Experiment, uuid.UUID(exp["id"]))
+        row.targeting_rules = {"logical_operator": "AND", "groups": []}
+        session.commit()
+        row_etag = ExperimentService(session).to_response_dict(row)["design_etag"]
+    finally:
+        session.close()
+    assert row_etag != e1
+    assert _detail(client, exp["id"])["design_etag"] == e1  # still cached
+
+    stale = client.post(f"{BASE}/{exp['id']}/start", json={"design_etag": e1})
+    assert stale.status_code == 409, stale.text
+    started = client.post(f"{BASE}/{exp['id']}/start", json={"design_etag": row_etag})
+    assert started.status_code == 200, started.text
+
+
 @pytest.fixture
 def uncached_superuser_client(db_session, admin_user, monkeypatch):
     """The real ``get_cache_control`` with ``CACHE_ENABLED`` off, the default."""

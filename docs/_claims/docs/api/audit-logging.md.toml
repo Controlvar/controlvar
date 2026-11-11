@@ -461,10 +461,12 @@ by = [
 ]
 
 [[unit]]
-text = "Descriptions, hypotheses, targeting rules, segment rules, variants, metrics and an experiment's analysis configurations (variance_reduction_config for CUPED, sequential_testing_config, bayesian_config) are never stored."
+text = "Descriptions, hypotheses, targeting rules, segment rules, variants, metrics, an experiment's analysis configurations (variance_reduction_config for CUPED, sequential_testing_config, bayesian_config) and a visual experiment's pages, goals and page changes (visual_config, visual_changes) are never stored."
 by = [
     "test:backend/tests/integration/api/test_audit_route_events.py::test_free_text_never_reaches_an_entry",
     "test:backend/tests/integration/api/test_audit_analysis_settings.py::test_a_draft_put_of_an_analysis_setting_is_named_in_its_entry",
+    "test:backend/tests/integration/api/test_visual_experiment_api.py::test_v30_a_save_names_visual_config_and_stores_none_of_it",
+    "test:backend/tests/integration/api/test_visual_experiment_api.py::test_d8_a_save_names_page_changes_as_visual_changes",
 ]
 
 [[unit]]
@@ -473,6 +475,8 @@ by = [
     "test:backend/tests/integration/api/test_audit_route_events.py::test_experiment_create_update_delete",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_a_design_save_names_the_variants_and_metrics_it_changed",
     "test:backend/tests/integration/api/test_audit_analysis_settings.py::test_a_draft_put_of_an_analysis_setting_is_named_in_its_entry",
+    "test:backend/tests/integration/api/test_visual_experiment_api.py::test_v30_a_save_names_visual_config_and_stores_none_of_it",
+    "test:backend/tests/integration/api/test_visual_experiment_api.py::test_d8_a_save_names_page_changes_as_visual_changes",
 ]
 
 [[unit]]
@@ -897,11 +901,13 @@ text = "request bodies, IP addresses or user agents;"
 by = ["test:backend/tests/unit/models/test_audit_log_text_normalised.py"]
 
 [[unit]]
-text = "the contents of descriptions, hypotheses, targeting rules, segment rules, variants, metrics and an experiment's CUPED, sequential testing and Bayesian configurations (a change to one is named under changed_fields);"
+text = "the contents of descriptions, hypotheses, targeting rules, segment rules, variants, metrics, an experiment's CUPED, sequential testing and Bayesian configurations, and a visual experiment's pages, goals and page changes (a change to one is named under changed_fields);"
 by = [
     "test:backend/tests/integration/api/test_audit_route_events.py::test_free_text_never_reaches_an_entry",
     "test:backend/tests/integration/api/test_audit_route_events.py::test_a_design_save_names_the_variants_and_metrics_it_changed",
     "test:backend/tests/integration/api/test_audit_analysis_settings.py::test_a_draft_put_of_an_analysis_setting_is_named_in_its_entry",
+    "test:backend/tests/integration/api/test_visual_experiment_api.py::test_v30_a_save_names_visual_config_and_stores_none_of_it",
+    "test:backend/tests/integration/api/test_visual_experiment_api.py::test_d8_a_save_names_page_changes_as_visual_changes",
 ]
 
 [[unit]]
