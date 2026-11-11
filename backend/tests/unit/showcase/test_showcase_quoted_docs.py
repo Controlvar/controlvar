@@ -1045,6 +1045,7 @@ CLAIMS_11: Dict[str, Claim] = {
         3,
         (
             Drawn("testid", "flag-stale-reasons"),
+            Drawn("cue", "left unchanged"),
             Drawn(
                 "copy", "return `Off for everyone, unchanged for ${n} days`;", FLAG_LIST
             ),
@@ -1157,7 +1158,7 @@ CLAIMS_11: Dict[str, Claim] = {
         ),
         ((STALE_DOC, "Tags are set through the API"),),
     ),
-    "Listing them changes no flag.": Claim(
+    "Listing the stale flags changes none of them.": Claim(
         FL,
         6,
         (

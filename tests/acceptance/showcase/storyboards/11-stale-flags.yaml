@@ -149,7 +149,7 @@ scenes:
           - look: {css: "[data-flag-key=legacy-signup-form] [data-testid=flag-stale-reasons]"}
             ms: 1500
 
-      - cue: An off flag nobody changed is stale too.
+      - cue: An off flag left unchanged is stale too.
         focus: {css: "[data-testid=flag-row][data-flag-key=holiday-banner]"}
         say:
           - Holiday banner is off for everyone, unchanged for 30 days.
@@ -186,7 +186,7 @@ scenes:
           - "Stale is a suggestion: nothing is changed or archived for you."
           - A flag tagged permanent is never stale.
           - Tags are set through the API.
-          - Listing them changes no flag.
+          - Listing the stale flags changes none of them.
         record:
           stale-legacy-signup: {css: "[data-testid=flag-row][data-flag-key=legacy-signup-form]"}
           stale-holiday-banner: {css: "[data-testid=flag-row][data-flag-key=holiday-banner]"}

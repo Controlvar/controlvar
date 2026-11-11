@@ -34,7 +34,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import pytest
 import yaml
 from showcase import contract
-from showcase.capture import compose, config, gates, offcamera, run, storyboard
+from showcase.capture import compose, config, gates, offcamera, run, storyboard, voiced
 from showcase.capture import stack as stacks
 
 pytestmark = [pytest.mark.unit]
@@ -344,21 +344,30 @@ def test_the_filtered_list_is_read_only_after_the_table_has_lost_the_kill_switch
 
 def test_the_narration_is_15_sentences_and_the_voiced_projection_is_in_range():
     """Video 9's fitted clip model (0.376 s + 0.0664 s a character; p90 0.406
-    s more), as the plan sizes a board before its voice sitting."""
+    s more), as the plan sizes a board before its voice sitting, projected as
+    the capture projects it (``voiced.projected_ms``: the title and end cards
+    included), since the 55 s floor and the cap are both on that length."""
     made = board()
     lines = storyboard.narration_lines(made)
     assert len(lines) == 15
 
-    def samples(extra: float) -> Dict[Tuple[str, int, int], int]:
-        return {
-            (scene, beat, line): int(
-                (0.376 + 0.0664 * len(text) + extra) * contract.VOICE_RATE
+    def clips(extra: float) -> List[voiced.Clip]:
+        return [
+            voiced.Clip(
+                scene=scene,
+                beat=beat,
+                line=line,
+                text=text,
+                key="",
+                path=Path(),
+                samples=int((0.376 + 0.0664 * len(text) + extra) * contract.VOICE_RATE),
+                sha256="",
             )
             for scene, beat, line, text in lines
-        }
+        ]
 
-    central = storyboard.voiced_estimate_ms(made, samples(0.0))
-    p90 = storyboard.voiced_estimate_ms(made, samples(0.406))
+    central = voiced.projected_ms(made, clips(0.0))
+    p90 = voiced.projected_ms(made, clips(0.406))
     cap = round(contract.max_video_ms(SLUG) * contract.PROJECTION_SHARE)
     assert contract.MIN_VIDEO_MS < central < p90 < cap, (central, p90, cap)
 
