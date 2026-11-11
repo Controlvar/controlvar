@@ -48,6 +48,13 @@ def test_the_downgrade_drops_columns_as_the_downgrade_docs_test_reads_it():
 
 def test_it_extends_the_core_head_it_sits_on_and_fits_the_version_table():
     revision = _script().get_revision(REVISION)
+    # Kept literal on purpose. Written on 7b6b4b4fe246 and re-pointed onto
+    # c448_balance_within (#448's first migration, which merged first). A
+    # re-point changes this line, every CORE_HEAD pin, the
+    # "c448_balance_within" key of NAMED_DOWNGRADES in
+    # test_db_migrate_target_graph.py, the three sentences that give this
+    # revision's down_revision (migrations.md, the rollback runbook,
+    # db-migrate.yml's help text) and the migration's own docstring, together.
     assert revision.down_revision == "c448_balance_within"
     assert len(REVISION) <= 32
 

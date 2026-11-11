@@ -38,6 +38,7 @@ heads``. Then:
 from __future__ import annotations
 
 import json
+import pathlib
 import re
 import shutil
 import textwrap
@@ -45,6 +46,8 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, text
 
 from backend.app.db import bootstrap
@@ -63,7 +66,8 @@ PREVIOUS_CORE_HEAD = "85dd4796bb8b"
 #: drops the table ``balance_group_counters`` and four columns of
 #: ``experiments`` and ``assignments``.
 CORE_HEAD = "4955571d232c"
-#: The core revisions after this one, newer than release N-1 too.
+#: The core revisions after this one today, newer than release N-1 too: the
+#: walk from the revision graph below must find each of them.
 LATER_REVISIONS = ("c448_balance_within", "4955571d232c")
 #: Tables a later core revision's downgrade drops: a downgrade from the head to
 #: this test's target unapplies those revisions too.
@@ -460,6 +464,55 @@ _PREVIOUS_RELEASE_REMOVALS = (
 )
 
 
+def _this_revision_and_every_later_one(tree) -> dict:
+    """``{revision id: script file}`` for REVISION and every revision after
+    it, in *tree*'s own script directory: each is newer than release N-1.
+
+    Read from the revision graph, not listed, so a revision added on top
+    later, or re-pointed onto another, is removed with the rest."""
+    script = ScriptDirectory.from_config(Config(str(tree_profiles.alembic_ini(tree))))
+    found, pending = {}, [REVISION]
+    while pending:
+        revision = script.get_revision(pending.pop())
+        if revision.revision not in found:
+            found[revision.revision] = pathlib.Path(revision.path)
+            pending.extend(sorted(revision.nextrev))
+    return found
+
+
+#: A revision written on top of the core head in a copy of the tree, as a
+#: later release (or a re-point) would add one.
+_LATER = "9f8e7d6c5b4a"
+
+
+@pytest.mark.parametrize("profile", BOTH_PROFILES)
+def test_the_previous_release_loses_this_revision_and_each_later_one(profile, tmp_path):
+    """The walk above, on a copy of each profile's tree with one more revision
+    on top of the core head: this revision, the core head and the one on top,
+    never one of release N-1's and never the modules branch's."""
+    destination = tmp_path / "walk"
+    if profile == FULL:
+        tree = tree_profiles.full_tree(destination)
+    else:
+        tree = tree_profiles.core_tree(destination)
+    versions = tree / "backend" / "app" / "db" / "migrations" / "versions"
+    (versions / f"{_LATER}_a_later_revision.py").write_text(
+        f'revision = "{_LATER}"\ndown_revision = "{CORE_HEAD}"\n'
+        "branch_labels = None\ndepends_on = None\n\n\n"
+        "def upgrade():\n    pass\n\n\ndef downgrade():\n    pass\n",
+        encoding="utf-8",
+    )
+
+    newer = _this_revision_and_every_later_one(tree)
+
+    print(f"[{profile}] newer than release N-1: {sorted(newer)}")
+    assert {REVISION, *LATER_REVISIONS, CORE_HEAD, _LATER} <= set(newer)
+    assert PREVIOUS_CORE_HEAD not in newer
+    assert not any(revision.startswith("modules") for revision in newer)
+    parents = {path.parent.resolve() for path in newer.values()}
+    assert parents == {versions.resolve()}
+
+
 def _previous_release(profile: str, tmp_path):
     """Release N-1: a copy of this tree without the revision, the column and
     its writes.
@@ -472,9 +525,7 @@ def _previous_release(profile: str, tmp_path):
         tree = tree_profiles.full_tree(destination)
     else:
         tree = tree_profiles.core_tree(destination)
-    versions = tree / "backend" / "app" / "db" / "migrations" / "versions"
-    for newer in (REVISION, *LATER_REVISIONS):
-        (revision_file,) = versions.glob(f"{newer}_*.py")
+    for revision_file in _this_revision_and_every_later_one(tree).values():
         revision_file.unlink()
     for parts, pattern, expected in _PREVIOUS_RELEASE_REMOVALS:
         path = tree.joinpath(*parts)
