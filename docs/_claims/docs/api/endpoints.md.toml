@@ -499,6 +499,17 @@ text = "A targeting context has limits of its own, below"
 by = ["test:backend/tests/unit/core/test_context_limits.py::test_the_limits_are_8192_bytes_and_10_levels"]
 
 [[unit]]
+text = "An event's metadata on /tracking/track, /tracking/batch and /tracking/events has limits of its own: 16,384 bytes and 64 levels (Track Event)"
+by = [
+    "test:backend/tests/unit/schemas/test_event_metadata_size.py::test_the_limit_in_the_schema_is_the_documented_one",
+    "test:backend/tests/unit/schemas/test_event_metadata_size.py::test_metadata_over_the_limit_is_refused_naming_the_field",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_metadata_within_the_limit_is_stored_as_sent",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_metadata_over_the_limit_is_refused_and_nothing_is_stored",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_over_deep_metadata_is_refused_and_nothing_is_stored",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_metadata_at_the_limit_is_stored",
+]
+
+[[unit]]
 text = "Targeting Context Limits"
 by = ["exempt:label"]
 
@@ -1941,16 +1952,42 @@ by = [
 ]
 
 [[unit]]
-text = "Deeper answers 422 and nothing is stored."
-by = ["test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_over_deep_metadata_is_refused_and_nothing_is_stored"]
+text = "/tracking/track, /tracking/batch and /tracking/events also hold it to 16,384 bytes as compact JSON (no spaces, characters not escaped) in UTF-8, and check depth first."
+by = [
+    "test:backend/tests/unit/schemas/test_event_metadata_size.py::test_the_limit_counts_bytes_not_characters",
+    "test:backend/tests/unit/schemas/test_event_metadata_size.py::test_the_limit_reads_characters_unescaped_and_without_spaces",
+    "test:backend/tests/unit/schemas/test_event_metadata_size.py::test_a_value_over_both_limits_gets_the_depth_message",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_metadata_within_the_limit_is_stored_as_sent",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_metadata_over_the_limit_is_refused_and_nothing_is_stored",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_events_checks_depth_before_size",
+]
 
 [[unit]]
-text = "/tracking/events accepts properties as well as metadata, with the same limit."
-by = ["test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_events_route_refuses_over_deep_properties_too"]
+text = "Over either limit /tracking/track and /tracking/events answer 422 and /tracking/batch reports the entry in errors; nothing is stored for the event, even when one with that event_id is already stored, and events stored before the limits are not changed."
+by = [
+    "test:backend/tests/unit/schemas/test_event_metadata_size.py::test_metadata_over_the_limit_is_refused_naming_the_field",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_metadata_over_the_limit_is_refused_and_nothing_is_stored",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_an_oversize_retry_of_a_stored_event_id_is_refused_not_a_duplicate",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_over_deep_metadata_is_refused_and_nothing_is_stored",
+]
 
 [[unit]]
-text = "A refusal on /tracking/track and /tracking/batch names properties, which is what the stored event calls metadata."
-by = ["test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_over_deep_metadata_is_refused_and_nothing_is_stored"]
+text = "/tracking/events accepts properties as well as metadata, with the same limits."
+by = [
+    "test:backend/tests/unit/schemas/test_event_metadata_size.py::test_each_field_is_held_on_its_own_not_their_sum",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_events_refuses_the_field_that_is_over",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_events_stores_both_fields_at_the_limit_each",
+    "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_events_route_refuses_over_deep_properties_too",
+]
+
+[[unit]]
+text = "A refusal on /tracking/track and /tracking/batch reads Invalid event: properties not valid for either limit, properties being what the stored event calls metadata; /tracking/events names the field and the limit."
+by = [
+    "test:backend/tests/unit/schemas/test_event_metadata_size.py::test_metadata_over_the_limit_is_refused_naming_the_field",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_track_and_batch_read_the_same_text_for_either_limit",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_the_events_refusal_names_the_field_and_the_limit_never_the_value",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_events_checks_depth_before_size",
+]
 
 [[unit]]
 text = "A timestamp at the very edge of the date range whose UTC offset moves it past 0001-01-01 or 9999-12-31 answers 422 too."
@@ -2074,8 +2111,11 @@ by = [
 ]
 
 [[unit]]
-text = "An entry that is valid as a request but refused when its event is built (metadata nested too deep, an edge timestamp, a key not found) is reported in errors and the others are stored"
+text = "An entry that is valid as a request but refused when its event is built (metadata nested too deep or larger than 16,384 bytes, an edge timestamp, a key not found) is reported in errors and the others are stored"
 by = [
+    "test:backend/tests/unit/schemas/test_event_metadata_size.py::test_metadata_over_the_limit_is_refused_naming_the_field",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_batch_reports_the_oversize_entry_and_stores_the_others",
+    "test:backend/tests/integration/api/test_tracking_metadata_size.py::test_batch_holds_each_entry_to_the_limit_not_their_sum",
     "test:backend/tests/integration/api/test_tracking_edge_timestamp_and_metadata_depth.py::test_one_over_deep_item_does_not_fail_its_batch",
 ]
 
