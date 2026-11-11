@@ -21,7 +21,7 @@ import React from 'react';
 import { render, within } from '@testing-library/react';
 import BooksPage, { getStaticProps } from '@/pages/books';
 import { BOOK_GROUPS, BOOKS, CORE_PATH, bookUrl } from '@/content/books';
-import { BOOKS_URL } from '@/content/site-links';
+import { BOOKS_LICENCE_URL, BOOKS_URL } from '@/content/site-links';
 import { isMarketingSite } from '@/utils/site-mode';
 import { claimText, metaDescriptions } from './helpers/claimText';
 
@@ -33,6 +33,32 @@ jest.mock('next/head', () => { const H = ({ children }: { children: React.ReactN
 jest.mock('next/router', () => ({ useRouter: () => ({ pathname: '/books', asPath: '/books', query: {}, push: jest.fn(), replace: jest.fn(), isReady: true }) }));
 
 const mode = isMarketingSite as jest.Mock;
+
+/**
+ * The ten books' folders, typed from the books' README ("The library", whose
+ * links are `./<folder>/README.md`), in its order. Typed, not read from
+ * `content/books.ts`: a folder misspelt there is a link that 404s, and every
+ * other test here builds its expectation from that same file (review r1, N3).
+ * Each answered 200 at https://github.com/amarkanday/controlvar-books/blob/main/<folder>/README.md
+ * on 2026-11-11.
+ */
+const README_FOLDERS = [
+  'learn-python-in-24-hours',
+  'learn-fastapi-in-24-hours',
+  'learn-react-nextjs-in-24-hours',
+  'build-a-platform-in-28-days',
+  'experimentation-statistics',
+  'sdk-engineering',
+  'platform-operations',
+  'production-engineering',
+  'before-you-change-controlvar',
+  'using-ai-tools-effectively',
+];
+
+/** The README's "Licence" conditions, in its words (its straight quotes set as curly ones). */
+const README_LICENCE =
+  'You may share and adapt them for any purpose, including commercially, as long as you give credit ' +
+  '(“The Controlvar Books, The Controlvar authors”), link to the licence and say what you changed.';
 
 beforeEach(() => mode.mockReset().mockReturnValue(true));
 
@@ -71,6 +97,23 @@ describe('/books', () => {
       'Working with AI coding tools',
     ]);
     expect(CORE_PATH).toBe(BOOK_GROUPS[0].books);
+  });
+
+  it("links each book to its folder's README as the books' README names the folders, in its order", () => {
+    expect(BOOKS.map((book) => book.dir)).toEqual(README_FOLDERS);
+    const { container } = render(<BooksPage />);
+    const readmes = Array.from(container.querySelectorAll('a'))
+      .map((a) => a.getAttribute('href') ?? '')
+      .filter((href) => href.startsWith(`${BOOKS_URL}/blob/`));
+    expect(readmes).toEqual(README_FOLDERS.map((dir) => `https://github.com/amarkanday/controlvar-books/blob/main/${dir}/README.md`));
+  });
+
+  it("states the licence's conditions as the books' README does, and links the licence", () => {
+    const { container } = render(<BooksPage />);
+    const licence = Array.from(container.querySelectorAll('a')).filter((a) => a.getAttribute('href') === BOOKS_LICENCE_URL);
+    expect(licence.map((a) => a.textContent)).toEqual(['CC BY 4.0']);
+    expect(BOOKS_LICENCE_URL).toBe('https://creativecommons.org/licenses/by/4.0/');
+    expect(licence[0].closest('p')?.textContent).toContain(README_LICENCE);
   });
 
   it('links each book to a README in the books repository, each once', () => {

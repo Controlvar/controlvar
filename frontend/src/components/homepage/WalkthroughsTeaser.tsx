@@ -35,15 +35,29 @@ export function WalkthroughsTeaser() {
           return (
             <li key={video.slug} className="min-w-0">
               <Link href={`/walkthroughs#${anchorFor(video.slug)}`} className={`group block rounded-lg ${FOCUS}`}>
-                <img
-                  src={`/media/${video.poster.name}`}
-                  alt=""
-                  width={1280}
-                  height={720}
-                  loading="lazy"
-                  decoding="async"
-                  className="block h-auto w-full rounded-lg border border-slate-200 bg-slate-900"
-                />
+                <span className="relative block">
+                  <img
+                    src={`/media/${video.poster.name}`}
+                    alt=""
+                    width={1280}
+                    height={720}
+                    loading="lazy"
+                    decoding="async"
+                    className="block h-auto w-full rounded-lg border border-slate-200 bg-slate-900"
+                  />
+                  {/* A play mark, so the poster reads as a video and not a screenshot (review r1). Decorative. */}
+                  <span
+                    aria-hidden="true"
+                    data-play-mark=""
+                    className="absolute inset-0 flex items-center justify-center rounded-lg bg-slate-900/10 group-hover:bg-slate-900/20"
+                  >
+                    <span className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-900/75 text-white shadow-lg group-hover:bg-blue-700">
+                      <svg className="ml-0.5 h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8 5.5v13a1 1 0 0 0 1.5.87l11-6.5a1 1 0 0 0 0-1.74l-11-6.5A1 1 0 0 0 8 5.5z" />
+                      </svg>
+                    </span>
+                  </span>
+                </span>
                 <h3 className="mt-3 font-semibold text-slate-900 group-hover:text-blue-700">{video.title}</h3>
                 <p className="mt-1 text-sm text-slate-600">
                   <span aria-hidden="true">{length.shown}</span>

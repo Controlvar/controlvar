@@ -45,5 +45,8 @@ export const STATS_TESTS_URL = `${REPO_URL}/tree/main/backend/tests/unit/stats_v
  */
 export const BOOKS_URL = 'https://github.com/amarkanday/controlvar-books';
 
+/** The books' licence, as their README links it: Creative Commons Attribution 4.0 International. */
+export const BOOKS_LICENCE_URL = 'https://creativecommons.org/licenses/by/4.0/';
+
 /** The footer's credit. */
 export const BUILDER_URL = 'https://www.linkedin.com/in/ashish-markanday/';

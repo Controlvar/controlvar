@@ -115,6 +115,21 @@ describe.each<[string, Build]>([
   });
 });
 
+// F12 (review r1): on a phone the hero's two buttons were 124 and 221 px wide. Full width below sm, so equal.
+describe.each<[string, boolean]>([
+  ['platform build', false],
+  ['marketing build', true],
+])("the homepage's hero buttons, %s", (_name, marketing) => {
+  beforeEach(() => mode.mockReturnValue(marketing));
+
+  it('are full width below sm and their own width from it', () => {
+    const hero = page().querySelector('h1')?.closest('section') as HTMLElement;
+    const buttons = Array.from(hero.querySelectorAll('a'));
+    expect(buttons.map((a) => a.textContent)).toEqual(['Get started', marketing ? 'Try the power calculator' : 'Sign in to the dashboard']);
+    for (const a of buttons) expect(a.className.split(/\s+/)).toEqual(expect.arrayContaining(['w-full', 'justify-center', 'sm:w-auto']));
+  });
+});
+
 describe('the homepage, platform build: the rows as text only (C2)', () => {
   beforeEach(() => mode.mockReturnValue(false));
 

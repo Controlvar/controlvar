@@ -1,6 +1,6 @@
 import React from 'react';
 import { PageTitle } from '@/components/PageTitle';
-import { BOOKS_URL } from '@/content/site-links';
+import { BOOKS_LICENCE_URL, BOOKS_URL } from '@/content/site-links';
 import { BOOK_GROUPS, BOOK_READERS, bookUrl } from '@/content/books';
 import { marketingOnly } from '@/utils/marketing-only';
 import { FOCUS, H1, H2, MORE_LINK, WIDTH } from '@/components/homepage/styles';
@@ -51,9 +51,15 @@ export default function BooksPage() {
             </div>
             <div className="min-w-0">
               <p className="font-semibold text-slate-900">Licence</p>
+              {/* The books' README, "Licence": its conditions in its words (books-page.test.tsx). */}
               <p className="mt-3 leading-relaxed text-slate-700">
-                The books are licensed CC BY 4.0: you may share and adapt them for any purpose, including commercially,
-                as long as you give credit. Code quoted from Controlvar keeps its own licences, Apache-2.0 and MIT.
+                The books are licensed{' '}
+                <a href={BOOKS_LICENCE_URL} className={`text-blue-700 underline hover:text-blue-900 ${FOCUS}`}>
+                  CC BY 4.0
+                </a>
+                . You may share and adapt them for any purpose, including commercially, as long as you give credit
+                (&ldquo;The Controlvar Books, The Controlvar authors&rdquo;), link to the licence and say what you
+                changed. Code quoted from Controlvar keeps its own licences, Apache-2.0 and MIT.
               </p>
               <p className="mt-4">
                 <a href={BOOKS_URL} className={MORE_LINK}>

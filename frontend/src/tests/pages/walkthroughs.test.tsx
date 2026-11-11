@@ -436,6 +436,21 @@ describe('marketing homepage: the teaser', () => {
     expect(all).toHaveAttribute('href', '/walkthroughs');
   });
 
+  it('marks each poster as a video with a play mark that adds no text and no name (review r1)', () => {
+    const section = teaser(renderHome().container);
+    const cards = Array.from(section.querySelectorAll('ul > li > a'));
+    expect(cards).toHaveLength(TEASER.length);
+    for (const card of cards) {
+      const marks = card.querySelectorAll('[data-play-mark]');
+      expect(marks).toHaveLength(1);
+      expect(marks[0]).toHaveAttribute('aria-hidden', 'true');
+      expect(marks[0].querySelector('svg path')).not.toBeNull();
+      expect(marks[0].textContent).toBe('');
+      // Over the poster: in the same box as the image.
+      expect(marks[0].parentElement).toBe(card.querySelector('img')?.parentElement);
+    }
+  });
+
   it.each(promises)('the teaser says nothing matching /%s/ (%s)', (pattern) => {
     expect(teaser(renderHome().container).textContent ?? '').not.toMatch(new RegExp(pattern, 'i'));
   });

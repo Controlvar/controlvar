@@ -164,6 +164,14 @@ describe('How it works', () => {
     }
   });
 
+  it('spans step 1 over the row and lets each card be as tall as its own content from lg (review r1)', () => {
+    const b = blocks();
+    const grid = b.steps[0].parentElement as HTMLElement;
+    expect(grid.className.split(/\s+/)).toEqual(expect.arrayContaining(['lg:grid-cols-2', 'lg:items-start']));
+    expect(b.steps[0].className.split(/\s+/)).toContain('lg:col-span-2');
+    expect(b.steps.slice(1).map((s) => s.className.includes('col-span'))).toEqual([false, false]);
+  });
+
   it('ends step 3 with a link to how a results page is read', () => {
     const links = within(blocks().steps[2]).getAllByRole('link');
     expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([

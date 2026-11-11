@@ -69,7 +69,8 @@ export function HowItWorks() {
       <h2 id="how-it-works-heading" className={H2}>
         How it works
       </h2>
-      <ol role="list" className="mt-10 grid gap-6 lg:grid-cols-2">
+      {/* `lg:items-start`: each card is as tall as its own content; stretched to step 2's height, step 3's had about 200 px of empty card at 1440 (review r1). */}
+      <ol role="list" className="mt-10 grid gap-6 lg:grid-cols-2 lg:items-start">
         <Step n={1} title="Run it" wide>
           <div className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-10">
             <div className="min-w-0">

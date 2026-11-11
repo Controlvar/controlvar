@@ -6,7 +6,8 @@ import { isMarketingSite } from '@/utils/site-mode';
 import { Screenshot } from '@/components/homepage/Screenshot';
 import { FOCUS, H1, WIDTH } from '@/components/homepage/styles';
 
-const BUTTON = `inline-flex min-h-11 items-center rounded-md px-5 font-medium ${FOCUS}`;
+/** Full width, so equal, on a phone (they were 124 and 221 px wide: F12); their own width from `sm`. */
+const BUTTON = `inline-flex min-h-11 w-full items-center justify-center rounded-md px-5 font-medium sm:w-auto ${FOCUS}`;
 
 /**
  * The hero (site design 2026-11-11, hero B): what this is and the way in on
