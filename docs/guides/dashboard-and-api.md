@@ -40,7 +40,7 @@ The table lists each capability and where you do it today:
 | Schedule a paused experiment's resume | API only | [Running experiments](user-guide.md#pausing-and-stopping) |
 | Create or edit a rollout schedule and its stages | Dashboard | [Gradual rollouts](../feature-flags/rollouts.md#in-the-dashboard) |
 | Activate, pause, resume or cancel a rollout schedule, and advance a manual stage | Dashboard | [Gradual rollouts](../feature-flags/rollouts.md#in-the-dashboard) |
-| Set a rollout schedule's own start and end dates, maximum percentage and minimum stage duration | API only | [Gradual rollouts](../feature-flags/rollouts.md#creating-a-rollout-schedule-via-api) |
+| Set a rollout schedule's own start and end dates, maximum percentage and minimum stage duration | Dashboard | [Gradual rollouts](../feature-flags/rollouts.md#in-the-dashboard) |
 | Delete a feature flag | API only | [Deleting a flag](../feature-flags/create.md#deleting-a-flag) |
 | Archive and unarchive a feature flag | API only | [Running experiments](user-guide.md) |
 | Create a bandit experiment | API only | [Multi-armed bandits](../api/multi-armed-bandit.md) |

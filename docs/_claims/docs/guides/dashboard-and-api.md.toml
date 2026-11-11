@@ -156,7 +156,7 @@ text = "Activate, pause, resume or cancel a rollout schedule, and advance a manu
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Set a rollout schedule's own start and end dates, maximum percentage and minimum stage duration | API only | Gradual rollouts"
+text = "Set a rollout schedule's own start and end dates, maximum percentage and minimum stage duration | Dashboard | Gradual rollouts"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
