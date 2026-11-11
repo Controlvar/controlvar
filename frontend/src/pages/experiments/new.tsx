@@ -8,6 +8,7 @@ import { Wizard, NEW_EXPERIMENT_PATH } from '@/components/experiments/new/Wizard
 import { navigateHard, useLeaveGuard } from '@/components/experiments/new/leaveGuard';
 import {
   balanceSplitProblem,
+  bayesianConfigProblem,
   buildCreatePayload,
   checkTargeting,
   configurationProblems,
@@ -47,6 +48,7 @@ export default function NewExperimentPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<CreateError | null>(null);
   const [revealProblems, setRevealProblems] = useState(0);
+  const [revealBayesian, setRevealBayesian] = useState(0);
   const submittingRef = useRef(false);
   // Cleared synchronously before the page navigates away after a create, so
   // the unsaved-answers warning never fires for work that was saved.
@@ -81,6 +83,15 @@ export default function NewExperimentPage() {
       if (configurationProblems(state.variants).some((p) => p !== null)) {
         setRevealProblems((n) => n + 1);
       }
+      return;
+    }
+
+    // An Advanced Bayesian setting the API would refuse (#442): said beside its
+    // field, which is opened and focused, and nothing is sent.
+    const bayesianProblem = bayesianConfigProblem(state);
+    if (bayesianProblem) {
+      setError({ message: bayesianProblem });
+      setRevealBayesian((n) => n + 1);
       return;
     }
 
@@ -206,6 +217,7 @@ export default function NewExperimentPage() {
               isSubmitting={isSubmitting}
               onSubmit={handleAdvancedSubmit}
               revealProblems={revealProblems}
+              revealBayesianProblems={revealBayesian}
             />
           </>
         ) : (

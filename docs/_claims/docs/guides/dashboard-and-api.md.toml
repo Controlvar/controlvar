@@ -208,7 +208,7 @@ text = "Each variant's confidence interval on the results page | Dashboard | Run
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Bayesian priors, loss threshold and credible level | API only | Bayesian analysis"
+text = "Bayesian priors, loss threshold and credible level | Dashboard | Bayesian analysis"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]

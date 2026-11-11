@@ -6,7 +6,9 @@
  * of the wrong shape (#891).
  *
  * It understands the subset those snapshots use: `$ref`, `type`, `properties`,
- * `required`, `items`, `minItems`, `enum`, `anyOf` and `additionalProperties`.
+ * `required`, `items`, `minItems`, `enum`, `anyOf` and `additionalProperties`,
+ * and a number's `minimum`, `maximum`, `exclusiveMinimum` and
+ * `exclusiveMaximum` (#442: the create request's `bayesian_config`).
  * A keyword it does not know throws, so a schema that grows cannot be skipped
  * silently.
  */
@@ -19,7 +21,21 @@ const SNAPSHOT = path.resolve(__dirname, '..', '..', '..', '..', 'docs', 'api', 
 const KNOWN = new Set([
   '$ref', 'type', 'properties', 'required', 'items', 'minItems', 'maxItems', 'enum', 'anyOf',
   'additionalProperties', 'title', 'description', 'default', 'format', 'maxLength', 'minLength', 'pattern',
+  'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'example',
 ]);
+
+/** A number outside the schema's bounds, in words; null when it is within them. */
+function boundProblem(value: number, schema: Schema): string | null {
+  if (typeof schema.minimum === 'number' && value < schema.minimum) return `below its minimum ${schema.minimum}`;
+  if (typeof schema.maximum === 'number' && value > schema.maximum) return `above its maximum ${schema.maximum}`;
+  if (typeof schema.exclusiveMinimum === 'number' && value <= schema.exclusiveMinimum) {
+    return `not above ${schema.exclusiveMinimum}`;
+  }
+  if (typeof schema.exclusiveMaximum === 'number' && value >= schema.exclusiveMaximum) {
+    return `not below ${schema.exclusiveMaximum}`;
+  }
+  return null;
+}
 
 let spec: { components: { schemas: Record<string, Schema> } } | null = null;
 
@@ -57,8 +73,16 @@ function check(value: unknown, schema: Schema, where: string, errors: string[]):
       if (typeof value !== 'string') errors.push(`${where}: expected a string, got ${JSON.stringify(value)}`);
       break;
     case 'integer':
-      if (!Number.isInteger(value)) errors.push(`${where}: expected an integer, got ${JSON.stringify(value)}`);
+    case 'number': {
+      const ok = schema.type === 'integer' ? Number.isInteger(value) : Number.isFinite(value);
+      if (!ok) {
+        errors.push(`${where}: expected ${schema.type === 'integer' ? 'an integer' : 'a number'}, got ${JSON.stringify(value)}`);
+        break;
+      }
+      const bound = boundProblem(value as number, schema);
+      if (bound) errors.push(`${where}: ${JSON.stringify(value)} is ${bound}`);
       break;
+    }
     case 'boolean':
       if (typeof value !== 'boolean') errors.push(`${where}: expected a boolean, got ${JSON.stringify(value)}`);
       break;

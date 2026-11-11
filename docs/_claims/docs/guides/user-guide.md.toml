@@ -363,23 +363,38 @@ text = "Below them, Also analyse the primary metric with Bayesian statistics is 
 by = ["test:frontend/src/tests/pages/experiment-new-configuration.test.tsx"]
 
 [[unit]]
-text = "Turned on, the results also carry a Bayesian analysis of the primary metric (the probability that each variant is the best) with default priors; the frequentist results and the recommendation do not change."
+text = "Turned on, the results also carry a Bayesian analysis of the primary metric (the probability that each variant is the best); the frequentist results and the recommendation do not change."
 by = [
     "test:backend/tests/integration/api/test_bayesian_route_claims.py::test_turning_it_on_changes_neither_the_frequentist_results_nor_the_recommendation",
     "test:frontend/src/tests/components/experiment-form-state.test.ts::sends bayesian_enabled: true only when it is turned on",
+]
+
+[[unit]]
+text = "Under it, Advanced Bayesian settings opens to the prior alpha, prior beta, loss threshold and credible level, each at its default (1.0, 1.0, 0.001 and 0.95); they are sent only when one of them is changed."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::shown only while the box is ticked, closed by default, and opens to four fields at their defaults with their helps",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::untouched, the POST has no bayesian_config",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::changed alone, sends the five-field object with prior_family \"beta\"",
     "test:backend/tests/integration/api/test_experiment_bayesian_config_api.py::TestTurningBayesianOn::test_create_enabled_without_config_stores_defaults",
 ]
 
 [[unit]]
-text = "Like the two settings above, it is saved with the experiment and cannot be changed after it starts."
+text = "A value the API would refuse is named under its field, and nothing is created until it is fixed."
+by = [
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::alpha 0 reads \"Must be greater than 0.\" and sends nothing",
+    "test:frontend/src/tests/pages/experiment-new-configuration.test.tsx::is refused beside the field and at Next",
+]
+
+[[unit]]
+text = "Like the two settings above, Bayesian analysis and its settings are saved with the experiment and cannot be changed after it starts."
 by = [
     "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_superuser_cannot_change_an_analysis_setting_once_out_of_draft",
     "test:backend/tests/integration/api/test_experiment_analysis_settings_fixed.py::test_a_developer_meets_the_refusal_of_every_change_outside_draft_first",
 ]
 
 [[unit]]
-text = "To set the priors, see Bayesian analysis."
-by = ["exempt:baseline"]
+text = "For what each setting does, see Bayesian analysis."
+by = ["exempt:navigation"]
 
 [[unit]]
 text = "The single-page form has the same settings in a collapsed Analysis settings section, whose title shows the current values."
