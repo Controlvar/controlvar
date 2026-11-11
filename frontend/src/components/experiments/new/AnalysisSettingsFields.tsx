@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { CorrectionMethod } from '@/types/results';
 import {
   CONFIDENCE_OPTIONS,
@@ -7,7 +7,19 @@ import {
   formatConfidence,
 } from '@/components/results/shared/analysisSettings';
 import { docsUrl } from '@/services/docs';
-import { ExperimentFormAction } from './formState';
+import {
+  BAYESIAN_FIELD_LABELS,
+  BAYESIAN_NUMBER_FIELDS,
+  BayesianConfigFormState,
+  BayesianNumberField,
+  bayesianConfigProblems,
+  buildBayesianConfig,
+  ExperimentFormAction,
+  MUST_BE_BETWEEN_0_AND_1,
+  MUST_BE_POSITIVE,
+  PRIOR_FAMILIES,
+  PriorFamily,
+} from './formState';
 import { wizardInputClass } from './fieldStyles';
 
 export const ANALYSIS_LEGEND = 'How results will be judged';
@@ -40,8 +52,26 @@ function confidenceOptionLabel(level: number): string {
 export const BAYESIAN_LABEL = 'Also analyse the primary metric with Bayesian statistics';
 export const BAYESIAN_HELP =
   'The results then also give, for the primary metric, the probability that each variant is the ' +
-  'best, using default priors. The frequentist results and the recommendation are unchanged. ' +
-  'Priors can be changed through the API.';
+  'best, using the priors under Advanced Bayesian settings (the defaults unless you change them). ' +
+  'The frequentist results and the recommendation are unchanged.';
+
+/** Advanced Bayesian settings (#442): the disclosure's name and each field's help. */
+export const BAYESIAN_CONFIG_TOGGLE = 'Advanced Bayesian settings';
+export const PRIOR_FAMILY_HELP = 'Default: beta.';
+export const BAYESIAN_FIELD_HELPS: Record<BayesianNumberField, string> = {
+  alpha: `Default 1.0. ${MUST_BE_POSITIVE}`,
+  beta: `Default 1.0. ${MUST_BE_POSITIVE}`,
+  lossThreshold: `Default 0.001. ${MUST_BE_POSITIVE}`,
+  credibleLevel: `Default 0.95. ${MUST_BE_BETWEEN_0_AND_1}`,
+};
+
+/** Each number field's element id (and test id); its help and error add `-help` and `-error`. */
+const BAYESIAN_FIELD_IDS: Record<BayesianNumberField, string> = {
+  alpha: 'bayesian-alpha',
+  beta: 'bayesian-beta',
+  lossThreshold: 'bayesian-loss-threshold',
+  credibleLevel: 'bayesian-credible-level',
+};
 
 export const SEQUENTIAL_LABEL = 'Also test the primary metric sequentially (beta)';
 export const SEQUENTIAL_HELP =
@@ -64,7 +94,14 @@ interface AnalysisSettingsFieldsProps {
   dispatch: React.Dispatch<ExperimentFormAction>;
   variantCount: number;
   bayesianEnabled: boolean;
+  bayesianConfig: BayesianConfigFormState;
   sequentialEnabled: boolean;
+  /**
+   * Changed by the caller each time Next or Create was refused for an Advanced
+   * Bayesian setting. The section then opens and its first field with a
+   * problem takes focus, so a problem never sits in a closed section.
+   */
+  revealProblems?: number;
 }
 
 /**
@@ -74,6 +111,8 @@ interface AnalysisSettingsFieldsProps {
  *
  * The sequential switch (#1454) is its own block after the Bayesian one, which
  * is left exactly as it was: video 9 frames `div:has(> #analysis-bayesian)`.
+ * Advanced Bayesian settings (#442) is a block of its own between the two,
+ * shown only while the Bayesian box is ticked, for the same reason.
  */
 export function AnalysisSettingsFields({
   confidenceLevel,
@@ -81,7 +120,9 @@ export function AnalysisSettingsFields({
   dispatch,
   variantCount,
   bayesianEnabled,
+  bayesianConfig,
   sequentialEnabled,
+  revealProblems = 0,
 }: AnalysisSettingsFieldsProps) {
   const showHint = correctionMethod === 'none' && variantCount >= 3;
   return (
@@ -176,6 +217,9 @@ export function AnalysisSettingsFields({
           </p>
         </div>
       </div>
+      {bayesianEnabled && (
+        <BayesianConfigFields config={bayesianConfig} dispatch={dispatch} revealProblems={revealProblems} />
+      )}
       <div className="flex items-start gap-2">
         <input
           id="analysis-sequential"
@@ -204,5 +248,128 @@ export function AnalysisSettingsFields({
         </div>
       </div>
     </fieldset>
+  );
+}
+
+interface BayesianConfigFieldsProps {
+  config: BayesianConfigFormState;
+  dispatch: React.Dispatch<ExperimentFormAction>;
+  revealProblems: number;
+}
+
+/**
+ * Advanced Bayesian settings (#442): a button that shows or hides the prior
+ * family, the prior's alpha and beta, the loss threshold and the credible
+ * level. Closed by default; a section whose fields have left their defaults
+ * starts open, so switching between guided setup and the single-page form
+ * shows them. Each number is checked as it is typed, and a problem is shown
+ * under its field and blocks Next and Create.
+ */
+function BayesianConfigFields({ config, dispatch, revealProblems }: BayesianConfigFieldsProps) {
+  const problems = bayesianConfigProblems(config);
+  // Left its defaults (a field with a problem never holds its default): starts open.
+  const [open, setOpen] = useState(() => buildBayesianConfig(config) !== undefined);
+  const [focusField, setFocusField] = useState<BayesianNumberField | null>(null);
+  // The count this section was shown with: only a later refusal opens it.
+  const revealedRef = useRef(revealProblems);
+
+  useEffect(() => {
+    if (revealProblems === revealedRef.current) return;
+    revealedRef.current = revealProblems;
+    const first = BAYESIAN_NUMBER_FIELDS.find((f) => problems[f] !== null);
+    if (!first) return;
+    setOpen(true);
+    setFocusField(first);
+    // Runs when the caller asks; the fields are read as they stand.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealProblems]);
+
+  useEffect(() => {
+    if (focusField === null) return;
+    const field = document.getElementById(BAYESIAN_FIELD_IDS[focusField]);
+    // The single-page form keeps this inside its collapsed Analysis settings: open that too.
+    const section = field?.closest('details');
+    if (section && !section.open) section.open = true;
+    field?.focus();
+    setFocusField(null);
+  }, [focusField, open]);
+
+  return (
+    <div className="pl-6">
+      <button
+        type="button"
+        id="bayesian-config-toggle"
+        onClick={() => setOpen((was) => !was)}
+        aria-expanded={open}
+        aria-controls="bayesian-config-fields"
+        className="text-sm font-medium text-blue-700 hover:text-blue-900 underline focus:outline-none focus:ring-2 focus:ring-blue-600 rounded"
+        data-testid="bayesian-config-toggle"
+      >
+        {BAYESIAN_CONFIG_TOGGLE}
+      </button>
+      {open && (
+        <div
+          id="bayesian-config-fields"
+          role="group"
+          aria-labelledby="bayesian-config-toggle"
+          className="mt-3 grid gap-4 sm:grid-cols-2"
+          data-testid="bayesian-config-fields"
+        >
+          <div>
+            <label htmlFor="bayesian-prior-family" className="block text-sm font-medium text-slate-700 mb-1">
+              {BAYESIAN_FIELD_LABELS.priorFamily}
+            </label>
+            <select
+              id="bayesian-prior-family"
+              value={config.priorFamily}
+              onChange={(e) => dispatch({ type: 'setPriorFamily', priorFamily: e.target.value as PriorFamily })}
+              aria-describedby="bayesian-prior-family-help"
+              className={wizardInputClass}
+              data-testid="bayesian-prior-family"
+            >
+              {PRIOR_FAMILIES.map((family) => (
+                <option key={family} value={family}>
+                  {family}
+                </option>
+              ))}
+            </select>
+            <p id="bayesian-prior-family-help" className="text-xs text-slate-600 mt-1">
+              {PRIOR_FAMILY_HELP}
+            </p>
+          </div>
+          {BAYESIAN_NUMBER_FIELDS.map((field) => {
+            const id = BAYESIAN_FIELD_IDS[field];
+            const problem = problems[field];
+            return (
+              <div key={field}>
+                <label htmlFor={id} className="block text-sm font-medium text-slate-700 mb-1">
+                  {BAYESIAN_FIELD_LABELS[field]}
+                </label>
+                <input
+                  id={id}
+                  type="number"
+                  step="any"
+                  inputMode="decimal"
+                  value={config[field]}
+                  onChange={(e) => dispatch({ type: 'setBayesianField', field, value: e.target.value })}
+                  aria-invalid={problem ? true : undefined}
+                  aria-describedby={problem ? `${id}-help ${id}-error` : `${id}-help`}
+                  className={`${wizardInputClass} ${problem ? 'border-red-600' : ''}`}
+                  data-testid={id}
+                />
+                <p id={`${id}-help`} className="text-xs text-slate-600 mt-1">
+                  {BAYESIAN_FIELD_HELPS[field]}
+                </p>
+                {problem && (
+                  <p id={`${id}-error`} className="text-xs text-red-700 mt-1" data-testid={`${id}-error`}>
+                    {problem}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
