@@ -196,7 +196,7 @@ text = "The interaction scan and the pair test (beta) | API only | Interaction d
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Download results as CSV | API only | Data export"
+text = "Download results as CSV | Dashboard | Exporting results"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]

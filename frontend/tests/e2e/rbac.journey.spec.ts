@@ -1,3 +1,4 @@
+import { readFileSync } from "fs";
 import { test, expect, TEST_USERS, type UserRole } from "./fixtures/auth.fixture";
 import { API_URL, TOKEN_STORAGE_KEY } from "./env";
 import { ExperimentsPage } from "./pages/experiments.page";
@@ -525,6 +526,45 @@ test.describe("Journey: RBAC", () => {
       await page.getByTestId("manage-delete-yes").click();
       await page.waitForURL(/\/experiments$/, { timeout: 15_000 });
       await expect(page.getByTestId("manage-error")).toHaveCount(0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  // #442: a VIEWER downloads a seeded experiment's results as CSV. Every export
+  // path shares one 10-a-minute counter per address, so this makes exactly one
+  // export request per attempt (a CI retry makes at most two), and the 429
+  // copy stays in jest. The file's first line is the /variants column row that
+  // docs/api/data-export.md documents.
+  test("viewer downloads an experiment's results as CSV with one export request", async ({ sessions }) => {
+    const page = await (await sessions("viewer")).newPage();
+    const experiments = new ExperimentsPage(page);
+    const exportRequests: string[] = [];
+    page.on("request", (request) => {
+      const { pathname, search } = new URL(request.url());
+      if (/^\/api\/v1\/export\//.test(pathname)) exportRequests.push(`${request.method()} ${pathname}${search}`);
+    });
+    try {
+      await experiments.goto();
+      await expect(experiments.experimentList).toBeVisible({ timeout: 15_000 });
+      // Seeded ACTIVE by seed_demo_data.py; the journeys only read it.
+      await experiments.clickExperiment("Checkout Button Color");
+      const id = new URL(page.url()).pathname.split("/").pop();
+      expect(id).toMatch(/^[0-9a-f-]{36}$/);
+
+      await page.goto(`/results/${id}`);
+      const button = page.getByTestId("results-export-csv");
+      await expect(button).toBeVisible({ timeout: 15_000 });
+      expect(exportRequests).toEqual([]);
+
+      const [download] = await Promise.all([page.waitForEvent("download"), button.click()]);
+      expect(download.suggestedFilename()).toBe(`results-${id}.csv`);
+      const text = readFileSync(await download.path(), "utf8");
+      expect(text.split(/\r?\n/)[0]).toBe(
+        "experiment_id,experiment_name,variant_id,variant_name,is_control,assignments,conversions,conversion_rate,p_value,is_significant,relative_improvement_pct",
+      );
+      await expect(page.getByTestId("results-export-csv-error")).toHaveCount(0);
+      expect(exportRequests).toEqual([`GET /api/v1/export/reports/experiments/${id}?format=csv`]);
     } finally {
       await page.close();
     }
