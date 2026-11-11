@@ -274,8 +274,21 @@ def test_the_walk_finds_every_error_shape():
 
 _PROBE = """
 import json, sys
-import backend.app.main as main
-assert main._monitoring_imports_ok is True, "main.py skipped configure_logging"
+import logging
+import backend.app.main  # noqa: F401
+import structlog
+from backend.app.core.query_redaction import QUERY_VALUE_REDACTOR
+# What configure_logging leaves behind: one root handler rendering through
+# structlog's ProcessorFormatter, and its redaction filter on uvicorn's access
+# log. Only configure_logging installs either, so a main.py that skipped it
+# fails here with this message, not further down on the line's level.
+handlers = logging.getLogger().handlers
+assert len(handlers) == 1 and isinstance(
+    handlers[0].formatter, structlog.stdlib.ProcessorFormatter
+), "main.py skipped configure_logging"
+assert QUERY_VALUE_REDACTOR in logging.getLogger("uvicorn.access").filters, (
+    "main.py skipped configure_logging"
+)
 import backend.app.core.logging  # noqa: F401  (imported again after startup)
 from backend.app.services.audit_service import AuditService
 AuditService._log_failure("toggle_disable", "feature_flag", "1234", RuntimeError("x"))
@@ -287,9 +300,11 @@ def test_the_api_writes_the_line_as_json_after_startup():
 
     ``backend.app.core.logging`` sets up an upper-case "ERROR" JSON formatter
     when it is first imported; main.py imports it before configure_logging
-    replaces every root handler. If that order flipped, or main.py's guarded
-    import skipped configure_logging, the line would carry "ERROR" and neither
-    log alarm would count it.
+    replaces every root handler. If that order flipped, or main.py stopped
+    calling configure_logging, the line would carry "ERROR" and neither log
+    alarm would count it. (main.py's monitoring imports are plain since #1041,
+    so there is no flag to read; the probe checks the handler and filter
+    configure_logging installs.)
     """
     env = dict(os.environ, ENVIRONMENT="test", LOG_FORMAT="json")
     result = subprocess.run(
