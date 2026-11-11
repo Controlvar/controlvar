@@ -1,0 +1,201 @@
+# Video 11, Find the flags you can remove (#1889): the flag list marking the
+# flags that look ready to remove (#1808), each with its reason in the page's
+# own words, then the Stale filter and its hint. On the `demo` seed, with four
+# flags the setup makes off camera and dates back (S1 of the V11-V13 plan):
+# a flag is stale only once it is 30 days old, so a fresh stack has none.
+#
+# * The departures are the sign-in and the setup, both off camera and both
+#   said in the first caption: "Four flags made off camera, dated weeks back".
+#   The demo seed's two flags and its counts are unchanged.
+# * The setup (run.make_flags): each flag made through the API in its state
+#   and with its tags, one API key named showcase-setup made with the run's
+#   token, Legacy signup form, Holiday banner and Payments kill switch each
+#   asked for once with it as an app asks (user showcase-setup), then all
+#   four dated back in one transaction in the stack's own Postgres, read back
+#   through the API, and `?stale=true` read before the first frame. The key
+#   and its name are needles.
+# * Three flags are stale, each for one reason, and the end state is the
+#   docs' table applied to the setup's fields, refused at load otherwise:
+#   Legacy signup form (on at 100%, unchanged: on_for_everyone), Holiday
+#   banner (off, unchanged: off_for_everyone), Old search ranking (on at 30%,
+#   never asked for: not_evaluated). Payments kill switch is tagged permanent
+#   through the API, so it is never stale.
+# * The kill switch's own beat is CUT (EMV11-6, PE 5): the opening caption
+#   that would have said it was tagged permanent through the API is refused
+#   on length (test_showcase_stale_flags.py holds the refusal), and the list
+#   draws no tags. The flag is still made, listed without a pill, and held
+#   not stale by gate 10. The hint's words about permanent are said only
+#   with the hint on screen.
+# * The headline card "Remove it from code, then archive it" is CUT (check
+#   fix 6): the dashboard has no archive action
+#   (frontend/src/tests/pages/feature-flag-key-and-archive.test.tsx). The
+#   word archived is said only with the hint on screen, which draws it.
+# * The narration quotes the merged page (PE 6): the reason lines
+#   (staleReasonText, N the API's 30) and the hint, split at its semicolon
+#   into two sentences (a sentence is at most 12 words).
+# * The Updated column is drawn by toLocaleDateString, so the browser's
+#   time_zone and locale are pinned (PE 6).
+# * The Stale filter is pressed in beat 5's exit; beat 6's cut waits for the
+#   hint and for the table without the kill switch, so the list read is the
+#   filtered one, never the one still on screen as the filter changes.
+# * Gate 10 ("stale", S2) reads the list and `?stale=true` back after the
+#   last frame: exactly these three, each with its one reason; every other
+#   flag not stale; stale_days 30 and evaluations seen; each setup flag's
+#   updated_at as the setup left it (listing changes no flag); and what the
+#   page drew: each setup flag's row before the filter, each stale row with
+#   it, the pill and the reason lines exactly when the API says so, the hint
+#   in the page's words, the pills 3 and 3, the rows the API's total each
+#   time, and no notice.
+# * Every sentence has its row of CLAIMS_11 in test_showcase_quoted_docs.py.
+slug: 11-stale-flags
+title: Find the flags you can remove
+seed: demo
+seed_counts: {experiments: 3, feature_flags: 2, users: 4}
+time_zone: America/Los_Angeles
+locale: en-US
+setup:
+  flags:
+    - name: Payments kill switch
+      key: payments-kill-switch
+      status: active
+      rollout: 100
+      tags: [permanent]
+      evaluate: true
+      created_days_ago: 120
+      updated_days_ago: 120
+    - name: Legacy signup form
+      key: legacy-signup-form
+      status: active
+      rollout: 100
+      evaluate: true
+      created_days_ago: 90
+      updated_days_ago: 60
+    - name: Holiday banner
+      key: holiday-banner
+      status: inactive
+      rollout: 0
+      evaluate: true
+      created_days_ago: 75
+      updated_days_ago: 50
+    - name: Old search ranking
+      key: old-search-ranking
+      status: active
+      rollout: 30
+      evaluate: false
+      created_days_ago: 60
+      updated_days_ago: 50
+end_state:
+  signed_in_as: admin@demo.com
+  stale:
+    days: 30
+    evaluations_seen: true
+    stale:
+      legacy-signup-form: [on_for_everyone]
+      holiday-banner: [off_for_everyone]
+      old-search-ranking: [not_evaluated]
+    not_stale: [payments-kill-switch]
+    listed:
+      payments-kill-switch: listed-kill-switch
+      legacy-signup-form: listed-legacy-signup
+      holiday-banner: listed-holiday-banner
+      old-search-ranking: listed-old-search
+    filtered:
+      legacy-signup-form: stale-legacy-signup
+      holiday-banner: stale-holiday-banner
+      old-search-ranking: stale-old-search
+    hint: stale-hint
+    pills_listed: pills-listed
+    rows_listed: rows-listed
+    pills_filtered: pills-stale
+    rows_filtered: rows-stale
+    notices: [notice-listed, notice-stale]
+
+scenes:
+  - id: flags
+    open: /feature-flags
+    signed_in: true
+    departures:
+      - kind: off-camera setup
+        says: Signed in off camera
+      - kind: off-camera setup
+        says: Four flags made off camera, dated weeks back
+    beats:
+      - cue: Signed in off camera. Four flags made off camera, dated weeks back.
+        focus: {testid: flags-table}
+        say:
+          - The flag list marks flags that look ready to remove.
+          - A flag must be at least 30 days old to be stale.
+          - The demo's own flags are new, so they are not stale.
+          - Each stale flag says why, under its Stale pill.
+        record:
+          listed-kill-switch: {css: "[data-testid=flag-row][data-flag-key=payments-kill-switch]"}
+          listed-legacy-signup: {css: "[data-testid=flag-row][data-flag-key=legacy-signup-form]"}
+          listed-holiday-banner: {css: "[data-testid=flag-row][data-flag-key=holiday-banner]"}
+          listed-old-search: {css: "[data-testid=flag-row][data-flag-key=old-search-ranking]"}
+        count:
+          pills-listed: "[data-testid=flag-stale-pill]"
+          rows-listed: "[data-testid=flag-row]"
+          notice-listed: "[data-testid=flag-stale-notice]"
+        steps:
+          - look: {testid: flags-table}
+            ms: 2000
+
+      - cue: "Stale: on for everyone, unchanged for 30 days."
+        focus: {css: "[data-testid=flag-row][data-flag-key=legacy-signup-form]"}
+        say:
+          - Legacy signup form is on for everyone, unchanged for 30 days.
+          - Everyone gets one answer, so it's usually ready to come out.
+        steps:
+          - look: {css: "[data-flag-key=legacy-signup-form] [data-testid=flag-stale-reasons]"}
+            ms: 1500
+
+      - cue: An off flag nobody changed is stale too.
+        focus: {css: "[data-testid=flag-row][data-flag-key=holiday-banner]"}
+        say:
+          - Holiday banner is off for everyone, unchanged for 30 days.
+          - The count starts at its last change, its Updated date.
+        steps:
+          - look: {css: "[data-flag-key=holiday-banner] [data-testid=flag-stale-reasons]"}
+            ms: 1500
+
+      - cue: "Stale: not evaluated in 30 days."
+        focus: {css: "[data-testid=flag-row][data-flag-key=old-search-ranking]"}
+        say:
+          - "Old search ranking: not evaluated in 30 days, while others were."
+          - That means no evaluation was recorded, not that no code uses it.
+        steps:
+          - look: {css: "[data-flag-key=old-search-ranking] [data-testid=flag-stale-reasons]"}
+            ms: 1500
+
+      - cue: Press Stale to list only the stale flags.
+        focus: {testid: flag-stale-filter}
+        say:
+          - Press Stale to list only the flags marked stale.
+        steps:
+          - move: {role: button, name: Stale, exact: true}
+        exit:
+          - click: {role: button, name: Stale, exact: true}
+
+      - before:
+          - wait_for: {testid: flag-stale-hint}
+          - wait_for: {css: "[data-testid=flags-table]:not(:has([data-flag-key=payments-kill-switch]))"}
+        cue: "Stale is a suggestion: nothing is changed or archived for you."
+        focus: {testid: flags-table}
+        payoff: true
+        say:
+          - "Stale is a suggestion: nothing is changed or archived for you."
+          - A flag tagged permanent is never stale.
+          - Tags are set through the API.
+          - Listing them changes no flag.
+        record:
+          stale-legacy-signup: {css: "[data-testid=flag-row][data-flag-key=legacy-signup-form]"}
+          stale-holiday-banner: {css: "[data-testid=flag-row][data-flag-key=holiday-banner]"}
+          stale-old-search: {css: "[data-testid=flag-row][data-flag-key=old-search-ranking]"}
+          stale-hint: {testid: flag-stale-hint}
+        count:
+          pills-stale: "[data-testid=flag-stale-pill]"
+          rows-stale: "[data-testid=flag-row]"
+          notice-stale: "[data-testid=flag-stale-notice]"
+        steps:
+          - look: {testid: flag-stale-hint}
+            ms: 2000

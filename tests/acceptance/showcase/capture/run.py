@@ -27,7 +27,9 @@ Order, and what must be true before each step:
    camera between them), gate 10 (the end state), and the capture directory
    (``write_capture``). The stack comes down in a ``finally``, and nothing
    labelled may be left. A storyboard's exclusion group (video 9's) is made
-   in the setup through ``offcamera.send``, with exact statuses.
+   in the setup through ``offcamera.send``, with exact statuses, and so are
+   video 11's flags, then dated back in the stack's own Postgres
+   (``make_flags``; S1 of the V11-V13 plan) and judged before the first frame.
 5. Video 4: a setting the video states on screen (overrides.yaml
    ``statement``, Quick Start stack only) is read back from the API's own log
    after the stack is up (C6, ``interval_read_back``); B9's fit is refused in
@@ -49,6 +51,7 @@ a narrated one adds ``voice.json`` and ``voice/NNN.wav`` (``voiced.write_voice``
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import os
 import secrets
@@ -217,6 +220,10 @@ def seed_counts(api_url: str, token: str) -> Dict[str, int]:
     }
 
 
+def utc_now() -> dt.datetime:
+    return dt.datetime.now(dt.timezone.utc)
+
+
 def make_setup(
     board: storyboard.Storyboard,
     api_url: str,
@@ -225,6 +232,9 @@ def make_setup(
     call: Optional[Callable[..., Any]] = None,
     send: Optional[Callable[..., Tuple[int, Any]]] = None,
     answers: Optional[List[Any]] = None,
+    needles: Optional[List[str]] = None,
+    date_flags: Optional[Callable[[Sequence[Tuple[str, int, int]]], List[str]]] = None,
+    clock: Callable[[], dt.datetime] = utc_now,
 ) -> Dict[str, Any]:
     """The storyboard's ``setup``, made through the API off camera after gate 14.
 
@@ -233,7 +243,9 @@ def make_setup(
     ``offcamera.send`` (exactly 201, no redirect), then each of its
     experiments, by name (exactly one), added to it (exactly 200); every answer
     goes to *answers* for the run's redactor, and is never recorded whole.
-    Nothing for a storyboard without a setup.
+    Video 11's flags are made last (``make_flags``), dated back by the stack's
+    *date_flags*, with the key they are evaluated with and its name put in
+    *needles*. Nothing for a storyboard without a setup.
     """
     if board.setup is None:
         return {}
@@ -316,9 +328,187 @@ def make_setup(
                 f"setup: segment {segment.name!r} was answered with {got!r}"
             )
         made.append({"segment": segment.name, "id": str(answer["id"])})
+    result: Dict[str, Any] = {"segments": made}
     if groups:
-        return {"segments": made, "exclusion_groups": groups}
-    return {"segments": made}
+        result["exclusion_groups"] = groups
+    if board.setup.flags:
+        result["flags"] = make_flags(
+            board,
+            api_url,
+            token,
+            send=send,
+            kept=kept,
+            needles=needles if needles is not None else [],
+            date_flags=date_flags,
+            clock=clock,
+        )
+    return result
+
+
+#: The name of the API key video 11's setup makes, and the user each of its
+#: evaluations is asked for (check fix 5): a needle from then on, with the key.
+SETUP_KEY_NAME = "showcase-setup"
+#: How far, in seconds, a dated flag's ``created_at`` and ``updated_at`` read
+#: back through the API may be from what the dating step set (S1).
+DATED_SLACK_S = 600
+
+
+def make_flags(
+    board: storyboard.Storyboard,
+    api_url: str,
+    token: str,
+    *,
+    send: Callable[..., Tuple[int, Any]],
+    kept: List[Any],
+    needles: List[str],
+    date_flags: Optional[Callable[[Sequence[Tuple[str, int, int]]], List[str]]],
+    clock: Callable[[], dt.datetime] = utc_now,
+) -> List[Dict[str, Any]]:
+    """Video 11's setup flags (S1 of the V11-V13 plan), off camera after gate
+    14, in this order, every call through *send* with its exact status:
+
+    1. each flag made (``POST /api/v1/feature-flags/``, 201) in its declared
+       state: on or off, its rollout and its tags; an answer that is not that
+       flag refuses;
+    2. one API key made with the token (``POST /api/v1/api-keys``, 201, no
+       scope: the evaluate route takes any valid key, ``deps.get_api_key``),
+       named ``SETUP_KEY_NAME``; the key and the name go to *needles*;
+    3. each flag the storyboard evaluates asked for once, as an app does
+       (``GET /api/v1/feature-flags/evaluate/{key}?user_id=showcase-setup``,
+       200, the key as ``X-API-Key``); an answer for another flag, or for a
+       reason its state cannot give, refuses;
+    4. every flag dated back in one transaction (*date_flags*): refused unless
+       each statement returned its one row;
+    5. each flag read back (``GET /api/v1/feature-flags/{id}``, 200): its
+       ``created_at`` and ``updated_at`` within ``DATED_SLACK_S`` of what the
+       dating step set, or refused (a key matching no row, a time zone slip);
+    6. before the first frame, the list and ``?stale=true`` judged by
+       ``gates.stale_api`` against the end state: an evaluation the API
+       failed to record (it swallows that failure) shows only here.
+
+    What is returned is recorded in gate 14: each flag's key and id, whether
+    it was evaluated, and its two times as read back, which gate 10 holds the
+    flag's ``updated_at`` to after the last frame."""
+    from urllib.parse import quote, urlencode
+
+    from showcase.capture import gates as judge
+    from showcase.capture import offcamera
+
+    end = board.end_state.stale
+    if board.setup is None or end is None:
+        raise StackError("setup: flags are made only for a stale end state")
+    flags = board.setup.flags
+    if date_flags is None:
+        raise StackError("setup: the stack cannot date flags back")
+
+    def call(method: str, path: str, body: Any, status: int, **kw: Any) -> Any:
+        try:
+            _status, answer = send(api_url, token, method, path, body, status, **kw)
+        except offcamera.CallRefused as error:
+            raise StackError(f"setup: {error}") from None
+        return answer
+
+    ids: Dict[str, str] = {}
+    for flag in flags:
+        answer = call(
+            "POST",
+            "/api/v1/feature-flags/",
+            {
+                "key": flag.key,
+                "name": flag.name,
+                "is_active": flag.status == "active",
+                "rollout_percentage": flag.rollout,
+                "tags": list(flag.tags),
+            },
+            201,
+        )
+        kept.append(answer)
+        answered = isinstance(answer, dict) and bool(answer.get("id"))
+        if not answered or (
+            answer.get("key"),
+            answer.get("name"),
+            answer.get("status"),
+            answer.get("rollout_percentage"),
+            list(answer.get("tags") or []),
+        ) != (flag.key, flag.name, flag.status, flag.rollout, list(flag.tags)):
+            got = (
+                {k: answer.get(k) for k in ("key", "status", "rollout_percentage")}
+                if isinstance(answer, dict)
+                else answer
+            )
+            raise StackError(f"setup: flag {flag.key} was answered with {got!r}")
+        ids[flag.key] = str(answer["id"])
+    minted = call("POST", "/api/v1/api-keys", {"name": SETUP_KEY_NAME}, 201)
+    key = minted.get("key") if isinstance(minted, dict) else None
+    if (
+        not isinstance(key, str)
+        or not key
+        or any(ch.isspace() for ch in key)
+        or minted.get("name") != SETUP_KEY_NAME
+    ):
+        raise StackError("setup: the API key was not answered as one key, so named")
+    needles.extend([key, SETUP_KEY_NAME])
+    for flag in flags:
+        if not flag.evaluate:
+            continue
+        path = f"/api/v1/feature-flags/evaluate/{quote(flag.key, safe='')}?" + (
+            urlencode({"user_id": SETUP_KEY_NAME})
+        )
+        answer = call("GET", path, None, 200, api_key=key)
+        wanted = "inactive" if flag.status == "inactive" else "rollout"
+        got = answer.get("reason") if isinstance(answer, dict) else None
+        if (
+            not isinstance(answer, dict)
+            or answer.get("key") != flag.key
+            or got != wanted
+        ):
+            raise StackError(
+                f"setup: {flag.key} was evaluated as {got!r}, not {wanted!r}"
+            )
+    keys = [flag.key for flag in flags]
+    returned = date_flags(
+        [(flag.key, flag.created_days_ago, flag.updated_days_ago) for flag in flags]
+    )
+    dated_at = clock()
+    if returned != keys:
+        raise StackError(
+            f"setup: the dating step returned {returned}, not one row for each of"
+            f" {keys}"
+        )
+    after: List[Dict[str, Any]] = []
+    for flag in flags:
+        read = call("GET", f"/api/v1/feature-flags/{ids[flag.key]}", None, 200)
+        read = read if isinstance(read, dict) else {}
+        for field, days in (
+            ("created_at", flag.created_days_ago),
+            ("updated_at", flag.updated_days_ago),
+        ):
+            when = judge.as_instant(read.get(field))
+            wanted_at = dated_at - dt.timedelta(days=days)
+            if when is None or abs((when - wanted_at).total_seconds()) > DATED_SLACK_S:
+                raise StackError(
+                    f"setup: {flag.key}'s {field} reads {read.get(field)!r} through"
+                    f" the API, more than {DATED_SLACK_S // 60} minutes from the"
+                    f" {days} days back the dating step set"
+                )
+        after.append(
+            {
+                "key": flag.key,
+                "id": ids[flag.key],
+                "evaluated": flag.evaluate,
+                "created_at": read["created_at"],
+                "updated_at": read["updated_at"],
+            }
+        )
+    ok, _numbers, why = judge.stale_api(
+        end,
+        listed=call("GET", "/api/v1/feature-flags/?limit=100", None, 200),
+        filtered=call("GET", "/api/v1/feature-flags/?stale=true&limit=100", None, 200),
+        after_setup={item["key"]: item["updated_at"] for item in after},
+    )
+    if not ok:
+        raise StackError(f"setup: before the first frame, {why}")
+    return after
 
 
 #: The name of the API key gate 10 makes after the last frame, to read a flag's
@@ -506,6 +696,34 @@ def design_state(
         if not ok:
             return False, numbers, why
     return True, numbers, ""
+
+
+def stale_state(
+    end: storyboard.StaleEnd,
+    api_url: str,
+    token: str,
+    readings: Mapping[str, str],
+    counts: Mapping[str, int],
+    setup: Optional[Mapping[str, Any]],
+) -> Tuple[bool, Dict[str, Any], str]:
+    """Gate 10's half for video 11's stale flags (S2), after the last frame:
+    the list, and the list with ``?stale=true``, read again off camera and
+    judged by ``gates.stale_end`` with each setup flag's ``updated_at`` as
+    ``make_flags`` read it back, and the rows, the hint and the counts the
+    page drew."""
+    from showcase.capture import gates as judge
+
+    return judge.stale_end(
+        end,
+        listed=_api(f"{api_url}/api/v1/feature-flags/?limit=100", token),
+        filtered=_api(f"{api_url}/api/v1/feature-flags/?stale=true&limit=100", token),
+        after_setup={
+            str(flag["key"]): flag["updated_at"]
+            for flag in (setup or {}).get("flags") or []
+        },
+        readings=readings,
+        counts=counts,
+    )
 
 
 def write_private(path: Path, text: str) -> None:
@@ -887,7 +1105,17 @@ def capture_video(
                 gates["B9"] = gate(True, fit_ms=b9_fit)
             # After gate 14's count: the setup is the video's, not the seed's.
             setup_answers: List[Any] = []
-            setup = make_setup(board, stack.api_url, token, answers=setup_answers)
+            # Video 11's: the key its flags are evaluated with, and its name.
+            setup_needles: List[str] = []
+            setup = make_setup(
+                board,
+                stack.api_url,
+                token,
+                answers=setup_answers,
+                needles=setup_needles,
+                # Both stacks date flags; a setup without flags never asks.
+                date_flags=getattr(stack, "date_flags", None),
+            )
             if setup:
                 gates["14"]["numbers"]["setup"] = setup
                 log(
@@ -895,6 +1123,7 @@ def capture_video(
                     + ", ".join(
                         [s["segment"] for s in setup["segments"]]
                         + [g["group"] for g in setup.get("exclusion_groups", [])]
+                        + [f["key"] for f in setup.get("flags", [])]
                     )
                 )
             try:
@@ -910,6 +1139,7 @@ def capture_video(
                     pacing=voiced.Pacing(clips),
                     setup=setup,
                     setup_answers=setup_answers,
+                    setup_needles=setup_needles,
                 )
             except directing.CaptureFailed as error:
                 drop_recording(error, frames_dir, work)
@@ -1078,6 +1308,7 @@ def record(
     pacing: Optional[voiced.Pacing] = None,
     setup: Optional[Mapping[str, Any]] = None,
     setup_answers: Sequence[Any] = (),
+    setup_needles: Sequence[str] = (),
 ) -> Dict[str, Any]:
     """The browser part of a capture: self-test, scenes, end state, recorded-data gates."""
     from docs_runner import redaction
@@ -1092,11 +1323,15 @@ def record(
     # is a needle from now on, as every page answer's is.
     for answer in setup_answers:
         redaction.register_credentials(answer, redactor)
+    # Video 11's setup key and its name (PE 3): needles from now on.
+    for value in setup_needles:
+        redactor.add(value)
     ports = options.ports
     forbidden = forbidden_text(board, ports)
-    #: Keys the run read from a file (the StreamPulse server key): gate 6 must
+    #: Keys the run read from a file (the StreamPulse server key), and the
+    #: values video 11's setup made (its key and the key's name): gate 6 must
     #: be looking for each, as read (PE 5).
-    read_keys: List[str] = []
+    read_keys: List[str] = list(setup_needles)
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(env=guard.tool_env())
         try:
@@ -1288,6 +1523,20 @@ def record(
                     dated=director.dates,
                 )
                 numbers["design"] = made
+                if not ok:
+                    why.append(reason)
+            if end.stale is not None:
+                # S2: after the last frame, the list read again, judged with
+                # the setup's updated_at and what the page drew.
+                ok, made, reason = stale_state(
+                    end.stale,
+                    stack.api_url,
+                    token,
+                    director.readings,
+                    director.counts,
+                    setup,
+                )
+                numbers["stale"] = made
                 if not ok:
                     why.append(reason)
             for made_end in end.calculations:
