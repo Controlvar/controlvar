@@ -1579,6 +1579,7 @@ def _plant_docs(world: World, suite: str, change: Callable[[Dict[str, Any]], Non
             world.shard_reports[leg.shard_report] = json.dumps(doc)
 
 
+@pytest.mark.regression
 def test_unit_and_integration_run_in_four_shards_and_the_rest_whole():
     sharded = {
         name: (leg.suite, leg.shard, leg.of)
