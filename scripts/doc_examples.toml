@@ -12,7 +12,7 @@
 # scripts/doc_examples.py), and each page's residual counts can only fall.
 
 [meta]
-documents = 58
+documents = 59
 exec = 334
 universe = [
     ".github/pull_request_template.md",
@@ -34,6 +34,7 @@ universe = [
     "demo/streampulse/README.md",
     "demo/streampulse/simulator/README.md",
     "deploy/compose/README.md",
+    "deploy/demo/README.md",
     "docs/Enhanced_Rules_Engine_Reference.md",
     "docs/README.md",
     "docs/api/README.md",
@@ -430,6 +431,14 @@ path = "demo/streampulse/simulator/README.md"
 environment = "bare"
 exec = 0
 skip = 6
+expects = 0
+
+# The demo box's runbook: every block runs on the box itself.
+[[document]]
+path = "deploy/demo/README.md"
+environment = "bare"
+exec = 0
+skip = 3
 expects = 0
 
 [[document]]
