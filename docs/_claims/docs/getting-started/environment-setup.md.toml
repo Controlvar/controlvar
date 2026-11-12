@@ -383,3 +383,103 @@ by = [
 [[unit]]
 text = "See Users' addresses behind a proxy."
 by = ["exempt:navigation"]
+
+[[unit]]
+text = "Demo mode"
+by = ["exempt:label"]
+
+[[unit]]
+text = "DEMO_MODE=true makes the API read-only, for a public demo install."
+by = [
+    "test:backend/tests/smoke/test_demo_mode_routes.py::test_every_mutating_route_is_refused_for_a_signed_in_viewer",
+    "test:backend/tests/integration/demo/test_demo_mode_db_diff.py::test_a_visitor_writes_only_the_enumerated_tables",
+]
+
+[[unit]]
+text = "It is off by default."
+by = [
+    "test:backend/tests/unit/core/test_demo_mode_settings.py::test_demo_mode_is_off_by_default",
+    "test:backend/tests/unit/middleware/test_demo_mode_middleware.py::test_off_every_request_passes_untouched",
+]
+
+[[unit]]
+text = "The API then answers every request that would create or change something with 403 and the code demo_read_only."
+by = [
+    "test:backend/tests/smoke/test_demo_mode_routes.py::test_every_mutating_route_is_refused_for_a_signed_in_viewer",
+    "test:backend/tests/unit/middleware/test_demo_mode_middleware.py::test_a_refused_write_never_reaches_the_application",
+    "test:backend/tests/unit/middleware/test_demo_mode_middleware.py::test_every_method_but_the_safe_three_is_refused",
+]
+
+[[unit]]
+text = "Only these pass: POST /api/v1/auth/login, /auth/token and /auth/logout, and the SDK calls POST /api/v1/tracking/assign, /tracking/track, /tracking/batch, /tracking/errors and /tracking/errors/batch."
+by = [
+    "test:backend/tests/smoke/test_demo_mode_routes.py::test_the_allow_list_is_exact",
+    "test:backend/tests/smoke/test_demo_mode_routes.py::test_each_allowed_post_reaches_its_route",
+]
+
+[[unit]]
+text = "It refuses every websocket, so the live results stream does not open."
+by = [
+    "test:backend/tests/unit/middleware/test_demo_mode_middleware.py::test_in_demo_mode_a_real_websocket_handshake_is_refused",
+    "test:backend/tests/unit/middleware/test_demo_mode_middleware.py::test_a_websocket_never_reaches_the_application",
+]
+
+[[unit]]
+text = "DEMO_MODE=true needs AUTH_PROVIDER=local: the API refuses to start with any other provider, since no other sign-in route is on the list."
+by = [
+    "test:backend/tests/unit/core/test_demo_mode_settings.py::test_demo_mode_with_another_sign_in_provider_refuses_to_start",
+    "test:backend/tests/smoke/test_demo_mode_routes.py::test_the_allow_list_is_exact",
+]
+
+[[unit]]
+text = "Only an active viewer who is not a superuser can sign in with a password."
+by = [
+    "test:backend/tests/integration/demo/test_demo_mode_sign_in.py::test_only_a_non_superuser_viewer_signs_in",
+    "test:backend/tests/integration/demo/test_demo_mode_sign_in.py::test_an_inactive_viewer_cannot_sign_in",
+    "test:backend/tests/integration/demo/test_demo_mode_sign_in.py::test_the_demo_viewer_made_an_administrator_cannot_sign_in",
+]
+
+[[unit]]
+text = "DEMO_ACCOUNT_EMAIL and DEMO_ACCOUNT_PASSWORD name the shared account visitors sign in with."
+by = ["test:backend/tests/unit/core/test_demo_mode_settings.py::test_a_public_demo_configuration_starts"]
+
+[[unit]]
+text = "GET /api/v1/auth/config then answers with \"demo_mode\": true and the account, so its password is public: use a viewer account that exists only for the demo."
+by = [
+    "test:backend/tests/unit/api/test_auth_config_demo_mode.py::test_on_with_an_account_it_publishes_the_account",
+    "test:backend/tests/unit/api/test_auth_config_demo_mode.py::test_on_without_an_account_it_says_only_demo_mode",
+]
+
+[[unit]]
+text = "While the account is set, failed sign-ins are not counted."
+by = [
+    "test:backend/tests/integration/demo/test_demo_mode_sign_in.py::test_wrong_passwords_never_stop_the_published_account_signing_in",
+    "test:backend/tests/integration/demo/test_demo_mode_sign_in.py::test_with_an_account_published_wrong_passwords_never_stop_any_address",
+    "test:backend/tests/integration/demo/test_demo_mode_sign_in.py::test_without_a_published_account_wrong_passwords_count_as_usual",
+]
+
+[[unit]]
+text = "The API refuses to start when only one of the two is set, when they are set without DEMO_MODE=true (so a misspelt DEMO_MODE stops the API instead of being ignored), with AUTH_PROVIDER other than local, or when the address is FIRST_SUPERUSER."
+by = [
+    "test:backend/tests/unit/core/test_demo_mode_settings.py::test_half_of_the_account_refuses_to_start",
+    "test:backend/tests/unit/core/test_demo_mode_settings.py::test_the_account_without_demo_mode_refuses_to_start",
+    "test:backend/tests/unit/core/test_demo_mode_settings.py::test_a_misspelt_switch_with_the_account_refuses_to_start",
+    "test:backend/tests/unit/core/test_demo_mode_settings.py::test_the_account_with_another_sign_in_provider_refuses_to_start",
+    "test:backend/tests/unit/core/test_demo_mode_settings.py::test_the_account_may_not_be_the_first_superuser",
+]
+
+[[unit]]
+text = "It also refuses an address without an @ or longer than 254 characters, and a password longer than 256 characters."
+by = [
+    "test:backend/tests/unit/core/test_demo_mode_settings.py::test_an_account_address_a_client_would_not_accept_refuses_to_start",
+    "test:backend/tests/unit/core/test_demo_mode_settings.py::test_a_254_character_address_starts",
+    "test:backend/tests/unit/core/test_demo_mode_settings.py::test_a_password_over_256_characters_refuses_to_start",
+    "test:backend/tests/unit/core/test_demo_mode_settings.py::test_a_password_of_1_to_256_characters_starts",
+]
+
+[[unit]]
+text = "With DEMO_MODE=true the API also refuses to start while a setting that calls a service outside the install is set: NOTIFICATION_WEBHOOK_URL, SLACK_ENABLED, SLACK_BOT_TOKEN, EMAIL_ENABLED, SENDGRID_API_KEY, SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, OPENAI_API_KEY or GEMINI_API_KEY."
+by = [
+    "test:backend/tests/unit/core/test_demo_mode_settings.py::test_each_outbound_setting_refuses_to_start_in_demo_mode",
+    "test:backend/tests/unit/core/test_demo_mode_settings.py::test_each_outbound_variable_refuses_to_start_in_demo_mode",
+]

@@ -29,6 +29,7 @@ from backend.app.core.safety_scheduler import safety_scheduler
 from backend.app.core.scheduler import experiment_scheduler
 from backend.app.core.settings_rules import ENVIRONMENT_NOT_SET_MESSAGE
 from backend.app.core.validation_errors import request_validation_error_handler
+from backend.app.middleware.demo_mode_middleware import DemoModeMiddleware
 from backend.app.middleware.prometheus_metrics_middleware import (
     PrometheusMetricsMiddleware,
 )
@@ -252,6 +253,17 @@ app.add_middleware(RelativeSlashRedirectMiddleware)
 # Rate limiter — disabled during tests to avoid interfering with test assertions
 _rate_limit_enabled = not settings.is_test
 app.add_middleware(RateLimitMiddleware, enabled=_rate_limit_enabled)
+
+# Demo mode (DEMO_MODE=true): every write except an exact allow-list of eight
+# POSTs is answered 403 `demo_read_only`, and every websocket is refused, before
+# routing, the body, authentication or a database session
+# (backend/app/core/demo_mode.py). Off, it passes everything through.
+# Registered after the rate limiter and before the trusted-host check: outside
+# the limiter, so a refusal costs no bucket; inside TrustedHost, so a forged
+# `Host` still gets its 400 first; and inside CORS, the request id and the
+# security headers, so the 403 carries them and a dashboard can read it.
+# test_demo_mode_middleware.py pins the order.
+app.add_middleware(DemoModeMiddleware)
 
 # Trusted Host — refuse a request whose `Host` is not one of ours (#220).
 # `Host` is attacker-controlled on any path that reaches the app, and absolute

@@ -110,6 +110,38 @@ and networks, separated by commas. The container's entrypoint reads it from the
 environment, not from `.env.prod`. See
 [Users' addresses behind a proxy](../self-hosting/proxies.md).
 
+#### Demo mode
+
+```dotenv
+DEMO_MODE=true
+DEMO_ACCOUNT_EMAIL=viewer@demo.com
+DEMO_ACCOUNT_PASSWORD=Demo1234!
+```
+
+- `DEMO_MODE=true` makes the API read-only, for a public demo install. It is off by default.
+- The API then answers every request that would create or change something with 403 and
+  the code `demo_read_only`. Only these pass: `POST /api/v1/auth/login`, `/auth/token` and
+  `/auth/logout`, and the SDK calls `POST /api/v1/tracking/assign`, `/tracking/track`,
+  `/tracking/batch`, `/tracking/errors` and `/tracking/errors/batch`.
+- It refuses every websocket, so the live results stream does not open.
+- `DEMO_MODE=true` needs `AUTH_PROVIDER=local`: the API refuses to start with any other
+  provider, since no other sign-in route is on the list.
+- Only an active viewer who is not a superuser can sign in with a password.
+- `DEMO_ACCOUNT_EMAIL` and `DEMO_ACCOUNT_PASSWORD` name the shared account visitors sign in
+  with. `GET /api/v1/auth/config` then answers with `"demo_mode": true` and the account, so
+  its password is public: use a viewer account that exists only for the demo. While the
+  account is set, failed sign-ins are not counted.
+- The API refuses to start when only one of the two is set, when they are set without
+  `DEMO_MODE=true` (so a misspelt `DEMO_MODE` stops the API instead of being ignored), with
+  `AUTH_PROVIDER` other than `local`, or when the address is `FIRST_SUPERUSER`.
+- It also refuses an address without an `@` or longer than 254 characters, and a password
+  longer than 256 characters.
+- With `DEMO_MODE=true` the API also refuses to start while a setting that calls a service
+  outside the install is set: `NOTIFICATION_WEBHOOK_URL`, `SLACK_ENABLED`,
+  `SLACK_BOT_TOKEN`, `EMAIL_ENABLED`, `SENDGRID_API_KEY`, `SMTP_HOST`, `SMTP_USERNAME`,
+  `SMTP_PASSWORD`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `OPENAI_API_KEY` or
+  `GEMINI_API_KEY`.
+
 #### Background Jobs
 ```dotenv
 BANDIT_UPDATE_INTERVAL_MINUTES=5
