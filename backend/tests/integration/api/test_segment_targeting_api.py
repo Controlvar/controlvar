@@ -894,8 +894,9 @@ def test_statement_counts(admin_client, world, db_session):
 
 
 def test_membership_is_not_stored(admin_client, world, monkeypatch):
-    """What the evaluation records and the view event carry is the request's
-    context exactly: the resolved membership is never written into it."""
+    """The evaluation records no context at all, and the view event carries
+    the request's context exactly: the resolved membership is never written
+    into either."""
     from backend.app.services.event_service import EventService
     from backend.app.services.metrics_service import MetricsService
 
@@ -904,7 +905,7 @@ def test_membership_is_not_stored(admin_client, world, monkeypatch):
     real_view = EventService.track_exposure
 
     def spy_record(*args, **kwargs):
-        recorded.append(("metric", json.loads(json.dumps(kwargs["metadata"]))))
+        recorded.append(("metric", kwargs.get("metadata")))
         return real_record(*args, **kwargs)
 
     def spy_view(self, *args, **kwargs):
@@ -919,4 +920,4 @@ def test_membership_is_not_stored(admin_client, world, monkeypatch):
     context = {"country": "US", "plan": "pro"}
     assert evaluate(admin_client, flag, MEMBER, context) == ON
     assert assign(admin_client, experiment, MEMBER, context) == ASSIGNED
-    assert recorded == [("metric", {"context": context}), ("event", context)]
+    assert recorded == [("metric", None), ("event", context)]

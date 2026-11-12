@@ -699,12 +699,8 @@ class FeatureFlagService:
                     db=self.db,
                     feature_flag_id=flag.id,
                     user_id=user_id,
-                    value=result,
                     targeting_rule_id=targeting_rule_id,
                     latency_ms=latency_ms,
-                    metadata={
-                        "context": context,
-                    },
                 )
 
                 # If there was an error, log it separately
