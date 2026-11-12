@@ -569,4 +569,83 @@ test.describe("Journey: RBAC", () => {
       await page.close();
     }
   });
+
+  // #442: a DEVELOPER (not a superuser) archives a flag from its page, in the
+  // Dialog, and unarchives it; an ANALYST opens the same flag and is offered
+  // neither. The flag is this attempt's own, made through the API under a key
+  // no other attempt uses (one worker, one CI retry), and deleted at the end:
+  // no seeded flag is archived.
+  test("developer archives and unarchives its own flag; an analyst is offered neither", async ({ sessions }) => {
+    const page = await (await sessions("developer")).newPage();
+    const flags = new FeatureFlagsPage(page);
+    const key = `j442-archive-${Date.now()}`;
+    let headers: Record<string, string> = {};
+    let flagId: string | null = null;
+    try {
+      await flags.goto();
+      await expect(flags.flagList).toBeVisible({ timeout: 15_000 });
+      const token = await page.evaluate((storageKey) => window.localStorage.getItem(storageKey), TOKEN_STORAGE_KEY);
+      expect(token, "the developer session has a token").toBeTruthy();
+      headers = { Authorization: `Bearer ${token}` };
+      const created = await page.request.post(`${API_URL}/api/v1/feature-flags/`, {
+        headers: { ...headers, "content-type": "application/json" },
+        data: { key, name: key },
+      });
+      expect(created.status(), await created.text()).toBe(201);
+      flagId = ((await created.json()) as { id: string }).id;
+
+      await flags.gotoFlag(flagId);
+      await expect(flags.detailKey).toHaveText(key, { timeout: 15_000 });
+      await expect(flags.statusBadge).toHaveText("Off");
+      await expect(flags.detailToggle).toBeVisible();
+
+      // Archive asks first, with focus on Cancel.
+      const control = page.getByTestId("flag-archive");
+      await control.getByRole("button", { name: "Archive" }).click();
+      const dialog = page.getByRole("dialog", { name: `Archive ${key}?` });
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+      await dialog.getByRole("button", { name: "Archive" }).click();
+      await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+
+      await expect(flags.statusBadge).toHaveText("Archived");
+      await expect(flags.detailToggle).toHaveCount(0);
+      await expect(page.getByTestId("flag-archived-note")).toContainText(
+        "This flag is archived. Unarchive it before turning it on.",
+      );
+      const stored = await page.request.get(`${API_URL}/api/v1/feature-flags/${flagId}`, { headers });
+      expect(stored.status()).toBe(200);
+      expect(String(((await stored.json()) as { status: string }).status).toLowerCase()).toBe("archived");
+
+      // The ANALYST reads the same archived flag and gets no control, only the note why.
+      const analyst = await (await sessions("analyst")).newPage();
+      try {
+        const analystFlags = new FeatureFlagsPage(analyst);
+        await analystFlags.gotoFlag(flagId);
+        await expect(analystFlags.detailKey).toHaveText(key, { timeout: 15_000 });
+        await expect(analystFlags.statusBadge).toHaveText("Archived");
+        await expect(analyst.getByTestId("flag-role-note")).toBeVisible();
+        await expect(analyst.getByTestId("flag-archive")).toHaveCount(0);
+        await expect(analyst.getByRole("button", { name: /archive/i })).toHaveCount(0);
+      } finally {
+        await analyst.close();
+      }
+
+      // Unarchive asks nothing; the flag comes back off, with its switch.
+      await control.getByRole("button", { name: "Unarchive" }).click();
+      await expect(page.getByTestId("flag-manage-status")).toHaveText(
+        "Unarchived. The flag is off; turn it on when you are ready.",
+        { timeout: 15_000 },
+      );
+      await expect(flags.statusBadge).toHaveText("Off");
+      await expect(flags.detailToggle).toHaveAttribute("aria-checked", "false");
+    } finally {
+      // Its own flag only, deleted even when a step above failed.
+      if (flagId) {
+        const removed = await page.request.delete(`${API_URL}/api/v1/feature-flags/${flagId}`, { headers });
+        expect.soft(removed.status(), `DELETE the journey's flag ${flagId}`).toBe(204);
+      }
+      await page.close();
+    }
+  });
 });

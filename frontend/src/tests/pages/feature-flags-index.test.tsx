@@ -614,4 +614,37 @@ describe('who may change flags (#917)', () => {
     const empty = await screen.findByTestId('flags-empty');
     expect(within(empty).getByRole('link', { name: /create your first flag/i })).toHaveAttribute('href', '/feature-flags/new');
   });
+
+  // #442: an archived row never has a switch, for any role. ADMIN and
+  // DEVELOPER, who may unarchive it on its page, read where the switch would
+  // be that it has to be unarchived first; the list itself offers no archive
+  // action and sends no archive request.
+  it.each([
+    ['ADMIN', true],
+    ['DEVELOPER', true],
+    ['ANALYST', false],
+    ['VIEWER', false],
+  ])('%s sees an archived row with no switch (the unarchive note: %s)', async (role, note) => {
+    signIn(role);
+    serve([
+      flag({ key: 'old_banner', status: 'archived', is_active: false }),
+      flag({ id: 'flag-2', key: 'dark_mode', name: 'Dark mode', status: 'inactive', is_active: false }),
+    ]);
+    render(<FeatureFlagsPage />);
+    const table = await screen.findByTestId('flags-table');
+    const [archived, off] = within(table).getAllByTestId('flag-row');
+    expect(within(archived).getByTestId('flag-status-pill')).toHaveTextContent(/^Archived$/);
+    expect(within(archived).queryByRole('switch')).toBeNull();
+    expect(within(table).queryAllByRole('button', { name: /archive/i })).toEqual([]);
+    if (note) {
+      expect((within(archived).getByTestId('flag-archived-help-old_banner').textContent ?? '').trim()).toBe(
+        'This flag is archived. Unarchive it before turning it on.',
+      );
+      expect(within(off).getByRole('switch')).toHaveAttribute('aria-checked', 'false');
+    } else {
+      expect(within(archived).queryByTestId('flag-archived-help-old_banner')).toBeNull();
+      expect(within(off).queryByRole('switch')).toBeNull();
+    }
+    expect(mockedApiFetch.mock.calls.filter(([p]) => /archive|bulk-toggle/.test(String(p)))).toEqual([]);
+  });
 });

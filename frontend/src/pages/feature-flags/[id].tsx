@@ -35,6 +35,7 @@ import {
   ArchivedFlagNote,
   isFlagArchived,
 } from '@/components/feature-flags/ArchivedFlag';
+import { FlagManageSection, FlagStatusChange } from '@/components/feature-flags/FlagManageSection';
 import { RolloutScheduleManager } from '@/components/feature-flags/RolloutScheduleManager';
 import {
   FlagValueFields,
@@ -157,8 +158,9 @@ export default function FeatureFlagDetailPage() {
   const { effective, loading: permissionsLoading } = useEffectivePermissions();
   // A user without FEATURE_FLAG UPDATE (by role, custom role or direct grant)
   // reads a flag and changes none of it (#917, #891): no switch, the rule
-  // builder read-only, the slider disabled, no Save, and a note why -- the
-  // note only once the effective map has answered.
+  // builder read-only, the slider disabled, no Save, no Archive or Unarchive
+  // (#442), and a note why -- the note only once the effective map has
+  // answered.
   const canChange = canChangeFeatureFlags(auth?.user, effective);
   const changePending = !canChange && permissionsLoading;
 
@@ -450,8 +452,14 @@ export default function FeatureFlagDetailPage() {
 
   const on = isFlagOn(flag);
   // The API refuses to turn an archived flag on (400), so the page offers no
-  // switch for one: it says how to unarchive it instead (#1748).
+  // switch for one: it says to unarchive it first (#1748), and Unarchive is
+  // in "Manage this flag" below (#442).
   const archived = isFlagArchived(flag);
+  /** An archive or unarchive has landed: the pill, the switch and the note follow it. */
+  const handleStatusChange = (change: FlagStatusChange) => {
+    setToggleError(null);
+    setFlag((current) => (current ? { ...current, ...change } : current));
+  };
   const schedule = schedules ? pickSchedule(schedules) : null;
   // A boolean flag (or one from a server without values) keeps the page it
   // had: no type, no Values section, "Serving" / "Not serving".
@@ -534,6 +542,8 @@ export default function FeatureFlagDetailPage() {
               {FLAG_ROLE_NOTE}
             </p>
           )}
+          {/* Archive and Unarchive (#442), for a user who may change flags; the role note above otherwise. */}
+          <FlagManageSection flag={flag} canChange={canChange} onChanged={handleStatusChange} />
           {toggleError && (
             <div
               role="alert"

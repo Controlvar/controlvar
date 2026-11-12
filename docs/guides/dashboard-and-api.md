@@ -42,7 +42,7 @@ The table lists each capability and where you do it today:
 | Activate, pause, resume or cancel a rollout schedule, and advance a manual stage | Dashboard | [Gradual rollouts](../feature-flags/rollouts.md#in-the-dashboard) |
 | Set a rollout schedule's own start and end dates, maximum percentage and minimum stage duration | Dashboard | [Gradual rollouts](../feature-flags/rollouts.md#in-the-dashboard) |
 | Delete a feature flag | API only | [Deleting a flag](../feature-flags/create.md#deleting-a-flag) |
-| Archive and unarchive a feature flag | API only | [Running experiments](user-guide.md) |
+| Archive and unarchive a feature flag | Dashboard | [Archived flags](user-guide.md#archived-flags) |
 | Create a bandit experiment | API only | [Multi-armed bandits](../api/multi-armed-bandit.md) |
 | Set a bandit's weights by hand | API only | [Multi-armed bandits](../api/multi-armed-bandit.md) |
 | Global holdouts: create and activate; read their results (beta) | Dashboard | [Mutual exclusion groups and global holdout](../api/mutual-exclusion-groups.md) |

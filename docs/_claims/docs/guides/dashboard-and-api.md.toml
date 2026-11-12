@@ -164,7 +164,7 @@ text = "Delete a feature flag | API only | Deleting a flag"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
-text = "Archive and unarchive a feature flag | API only | Running experiments"
+text = "Archive and unarchive a feature flag | Dashboard | Archived flags"
 by = ["mechanism:dashboard-and-api"]
 
 [[unit]]
