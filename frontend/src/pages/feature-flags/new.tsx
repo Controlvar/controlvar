@@ -17,6 +17,9 @@ import { PageTitle } from '@/components/PageTitle';
 import { FlagTypeChoice, FlagValueFields, useFlagValueFields } from '@/components/feature-flags/FlagValueFields';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
+import { useDemoMode } from '@/contexts/AuthConfigContext';
+import { DemoNote } from '@/components/DemoNote';
+import { DEMO_FLAGS_ACTION } from '@/utils/demoMode';
 import { FLAG_ROLE_NOTE, canCreateFeatureFlags } from '@/utils/experimentPermissions';
 import {
   FlagValueType,
@@ -40,6 +43,7 @@ export default function NewFeatureFlagPage() {
   const auth = useOptionalAuth();
   const { effective, loading: permissionsLoading } = useEffectivePermissions();
   const canCreate = canCreateFeatureFlags(auth?.user, effective);
+  const demo = useDemoMode();
   const [name, setName] = useState('');
   const [key, setKey] = useState('');
   const [keyEdited, setKeyEdited] = useState(false);
@@ -149,7 +153,22 @@ export default function NewFeatureFlagPage() {
   // The page asks the API's own create question (#917): a user without
   // FEATURE_FLAG CREATE (by role, custom role or direct grant) sees a notice
   // instead of a form that could only earn a 403, and no request can be sent
-  // from it. While the effective map is on its way, neither (#891).
+  // from it. While the effective map is on its way, neither (#891). A
+  // read-only demo shows the demo note instead, whatever the role.
+  if (demo) {
+    return (
+      <div className="flex-1 bg-slate-50">
+        <PageTitle title="New Feature Flag" />
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <h1 className="text-2xl font-bold text-slate-900">New Feature Flag</h1>
+          <DemoNote action={DEMO_FLAGS_ACTION} className="mt-4 text-sm text-slate-700" />
+          <Link href="/feature-flags" className="mt-4 inline-block text-sm text-blue-700 underline">
+            Back to feature flags
+          </Link>
+        </div>
+      </div>
+    );
+  }
   if (!canCreate && permissionsLoading) {
     return (
       <div className="flex-1 bg-slate-50">

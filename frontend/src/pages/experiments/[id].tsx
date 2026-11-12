@@ -29,6 +29,9 @@ import {
 } from '@/types/experiments';
 import { canChangeExperiment } from '@/utils/experimentPermissions';
 import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
+import { useDemoMode } from '@/contexts/AuthConfigContext';
+import { DemoNote } from '@/components/DemoNote';
+import { DEMO_EXPERIMENTS_ACTION } from '@/utils/demoMode';
 import { correctionName, formatConfidence } from '@/components/results/shared/analysisSettings';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
 
@@ -280,6 +283,8 @@ export default function ExperimentDetailPage() {
   const router = useRouter();
   const { user } = useAuth();
   const { effective, loading: permissionsLoading } = useEffectivePermissions();
+  // A read-only demo shows the demo note in place of the role note.
+  const demo = useDemoMode();
   const rawId = router.query.id;
   const id = typeof rawId === 'string' ? rawId : undefined;
 
@@ -607,7 +612,8 @@ export default function ExperimentDetailPage() {
             </div>
           </div>
 
-          {showRoleNote && (
+          {demo && <DemoNote action={DEMO_EXPERIMENTS_ACTION} className="mt-4 text-sm text-slate-700" />}
+          {showRoleNote && !demo && (
             <p className="mt-4 text-sm text-slate-700" data-testid="experiment-role-note">
               {isOwner
                 ? 'You own this experiment, but starting, pausing, completing and archiving it needs permission to change experiments, which the ADMIN and DEVELOPER roles have; '

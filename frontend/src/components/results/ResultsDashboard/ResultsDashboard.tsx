@@ -30,6 +30,7 @@ import { SegmentComparisonTable } from '@/components/results/Breakdowns/SegmentC
 // EP-058: Real-time WebSocket Streaming Results
 import { LiveResultsPanel } from '@/components/experiments/LiveResultsPanel';
 import { ApiError } from '@/services/api';
+import { useAuthConfig } from '@/contexts/AuthConfigContext';
 
 interface ResultsDashboardProps {
   experimentId: string;
@@ -233,6 +234,10 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('overview');
+  // A read-only demo opens no live results stream (its API refuses the
+  // socket), so the Live tab waits until `/auth/config` says this is not one.
+  const { loading: configLoading, demo } = useAuthConfig();
+  const live = !configLoading && !demo;
   // Issue #28: Breakdown state
   const [selectedBreakdown, setSelectedBreakdown] = useState<string | null>(null);
   const [breakdown, setBreakdown] = useState<DimensionalBreakdownResponse | null>(null);
@@ -386,7 +391,7 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
 
   const TABS: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
-    { id: 'live', label: '⚡ Live' },
+    ...(live ? [{ id: 'live' as Tab, label: '⚡ Live' }] : []),
     { id: 'trends', label: 'Trends' },
     { id: 'sample-size', label: 'Sample Size' },
     ...(sequential ? [{ id: 'sequential' as Tab, label: 'Sequential' }] : []),
@@ -431,7 +436,7 @@ export function ResultsDashboard({ experimentId }: ResultsDashboardProps) {
       {/* Tab panels */}
       <div id={`panel-${activeTab}`} role="tabpanel">
         {/* EP-058: Live streaming results panel */}
-        {activeTab === 'live' && (
+        {activeTab === 'live' && live && (
           <section aria-label="Live streaming results" data-testid="live-tab-panel">
             <LiveResultsPanel experimentId={experimentId} />
           </section>

@@ -1,0 +1,10 @@
+{
+  "about": "The API's answer to a write it refuses in demo mode: `status` and `body` exactly as sent, `body.detail.code` being the contract the dashboard reads. frontend/src/tests/services/demo-refusal-contract.test.ts feeds `body` through apiFetch and ApiError and checks that every page whose failures are fixed copy shows `body.detail.message`. The API side should compare its own refusal to this file, so that the two cannot drift.",
+  "status": 403,
+  "body": {
+    "detail": {
+      "code": "demo_read_only",
+      "message": "This is a read-only demo: creating and changing things is turned off."
+    }
+  }
+}

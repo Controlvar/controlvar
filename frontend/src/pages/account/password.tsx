@@ -1,6 +1,8 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { PageTitle } from '@/components/PageTitle';
 import { useOptionalAuth } from '@/contexts/AuthContext';
+import { useDemoMode } from '@/contexts/AuthConfigContext';
+import { DemoNote } from '@/components/DemoNote';
 import {
   NOT_LOCAL_SENTENCE,
   PASSWORD_RULES,
@@ -22,6 +24,8 @@ const inputClass =
  */
 export default function ChangePasswordPage() {
   const auth = useOptionalAuth();
+  // A read-only demo refuses the change: the page says so instead of the form.
+  const demo = useDemoMode();
   const currentId = useId();
   const newId = useId();
   const confirmId = useId();
@@ -82,7 +86,9 @@ export default function ChangePasswordPage() {
       <div className="max-w-md mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold text-slate-900">{TITLE}</h1>
 
-        {!isLocal ? (
+        {demo ? (
+          <DemoNote action="Changing your password" walkthroughs={false} className="mt-4 text-sm text-slate-700" />
+        ) : !isLocal ? (
           <p className="mt-4 text-sm text-slate-700" data-testid="change-password-not-local">
             {NOT_LOCAL_SENTENCE}
           </p>

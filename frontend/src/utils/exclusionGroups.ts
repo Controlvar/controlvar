@@ -1,6 +1,7 @@
 import { isApiError } from '@/services/api';
 import { ExclusionGroupChanges, ExclusionGroupDetail } from '@/types/eligibility';
 import { UNREACHABLE } from '@/components/experiments/ExperimentManageSection';
+import { demoRefusalMessage } from '@/utils/demoMode';
 
 /**
  * The exclusion-group pages' fixed copy and rules (#1455; UX SCREEN 3a, the
@@ -139,6 +140,8 @@ export function groupErrorCopy(action: GroupAction, err: unknown): string {
   if (!isApiError(err)) return ACTION_COPY[action].fallback;
   if (err.timedOut) return err.message;
   if (err.status === 0) return UNREACHABLE;
+  const demo = demoRefusalMessage(err);
+  if (demo) return demo;
   return ACTION_COPY[action][err.status] ?? ACTION_COPY[action].fallback;
 }
 

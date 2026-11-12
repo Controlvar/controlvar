@@ -6,6 +6,9 @@ import { SEGMENT_PAGE_SIZE, Segment, SegmentStatus, SegmentsService } from '@/se
 import { ROLE_NOTE, segmentErrorCopy } from '@/utils/segmentErrors';
 import { canCreateSegments } from '@/utils/segmentPermissions';
 import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
+import { useDemoMode } from '@/contexts/AuthConfigContext';
+import { DemoNote } from '@/components/DemoNote';
+import { DEMO_SEGMENTS_ACTION } from '@/utils/demoMode';
 import { segmentRulesAreValid } from '@/utils/segmentRules';
 import { KIND_LABELS, STATUS_COLORS, STATUS_LABELS } from '@/components/segments/segmentLabels';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
@@ -31,6 +34,8 @@ export default function SegmentsPage() {
   // map (#891); the note in its place waits until the map has answered.
   const canCreate = canCreateSegments(auth?.user, effective);
   const createPending = !canCreate && permissionsLoading;
+  // A read-only demo puts the demo note where "+ New segment" or the role note would be.
+  const demo = useDemoMode();
   const [filter, setFilter] = useState<Filter>('active');
   const [page, setPage] = useState(0);
   const [segments, setSegments] = useState<Segment[]>([]);
@@ -82,7 +87,9 @@ export default function SegmentsPage() {
               Name an audience once and target flags and experiments at it.
             </p>
           </div>
-          {canCreate ? (
+          {demo ? (
+            <DemoNote action={DEMO_SEGMENTS_ACTION} className="text-sm text-slate-600 max-w-md" />
+          ) : canCreate ? (
             <Link
               href="/segments/new"
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
@@ -143,7 +150,7 @@ export default function SegmentsPage() {
             {filter === 'all' && page === 0 ? (
               <>
                 <p className="text-slate-600 mb-4">No segments yet.</p>
-                {canCreate ? (
+                {demo ? null : canCreate ? (
                   <Link
                     href="/segments/new"
                     className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"

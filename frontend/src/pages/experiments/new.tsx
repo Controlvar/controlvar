@@ -18,6 +18,9 @@ import {
 } from '@/components/experiments/new/formState';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
+import { useDemoMode } from '@/contexts/AuthConfigContext';
+import { DemoNote } from '@/components/DemoNote';
+import { DEMO_EXPERIMENTS_ACTION } from '@/utils/demoMode';
 import { canCreateExperiment } from '@/utils/experimentPermissions';
 import {
   CreateError,
@@ -44,6 +47,8 @@ export default function NewExperimentPage() {
   const router = useRouter();
   const auth = useOptionalAuth();
   const { effective, loading: permissionsLoading } = useEffectivePermissions();
+  // A read-only demo shows the demo note instead of the form, whatever the role.
+  const demo = useDemoMode();
   const [state, dispatch] = useReducer(experimentFormReducer, undefined, createInitialFormState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<CreateError | null>(null);
@@ -174,7 +179,7 @@ export default function NewExperimentPage() {
 
   return (
     <div className="flex-1 bg-slate-50">
-      {(advanced || !allowed) && <PageTitle title="New Experiment" />}
+      {(advanced || !allowed || demo) && <PageTitle title="New Experiment" />}
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
@@ -184,13 +189,13 @@ export default function NewExperimentPage() {
           <h1 className="text-2xl font-bold text-slate-900">New Experiment</h1>
         </div>
 
-        {!allowed ? (
+        {!allowed || demo ? (
           <div
             role="status"
             className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-700 space-y-3"
             data-testid="create-not-allowed"
           >
-            <p>{ROLE_CANNOT_CREATE}</p>
+            {demo ? <DemoNote action={DEMO_EXPERIMENTS_ACTION} className="" /> : <p>{ROLE_CANNOT_CREATE}</p>}
             <p>
               <Link href="/experiments" className="text-blue-700 underline hover:text-blue-900">
                 Back to experiments

@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { UNREACHABLE } from '@/components/experiments/ExperimentManageSection';
 import { isApiError } from '@/services/api';
+import { demoRefusalMessage } from '@/utils/demoMode';
 import type { RolloutSchedule, RolloutStage } from '@/services/featureFlags';
 import {
   DashboardTrigger,
@@ -86,6 +87,8 @@ export function rolloutErrorCopy(err: unknown): string {
   if (!isApiError(err)) return ROLLOUT_ERROR_COPY.fallback;
   if (err.timedOut) return err.message;
   if (err.status === 0) return UNREACHABLE;
+  const demo = demoRefusalMessage(err);
+  if (demo) return demo;
   return ROLLOUT_ERROR_COPY[err.status] ?? ROLLOUT_ERROR_COPY.fallback;
 }
 

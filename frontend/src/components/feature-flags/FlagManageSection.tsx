@@ -3,11 +3,13 @@ import { UNREACHABLE } from '@/components/experiments/ExperimentManageSection';
 import { isFlagArchived } from '@/components/feature-flags/ArchivedFlag';
 import { Dialog, useDeferredAnnouncement } from '@/components/ui/Dialog';
 import { isApiError } from '@/services/api';
+import { demoRefusalMessage } from '@/utils/demoMode';
 import { FeatureFlag, FeatureFlagsService } from '@/services/featureFlags';
 
 // ---------------------------------------------------------------------------
 // Copy. Fixed sentences only: nothing the server sends, in an error or in a
-// refused bulk-toggle result, is shown.
+// refused bulk-toggle result, is shown -- except a read-only demo's refusal,
+// told apart by its code (`utils/demoMode.ts`).
 // ---------------------------------------------------------------------------
 
 export const MANAGE_LABEL = 'Manage this flag';
@@ -52,6 +54,8 @@ export function flagManageErrorCopy(action: FlagManageAction, err: unknown): str
   if (!isApiError(err)) return FLAG_MANAGE_ERROR_COPY[action].fallback;
   if (err.timedOut) return err.message;
   if (err.status === 0) return UNREACHABLE;
+  const demo = demoRefusalMessage(err);
+  if (demo) return demo;
   return FLAG_MANAGE_ERROR_COPY[action][err.status] ?? FLAG_MANAGE_ERROR_COPY[action].fallback;
 }
 

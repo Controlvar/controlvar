@@ -44,6 +44,9 @@ import {
 } from '@/components/feature-flags/FlagValueFields';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { useEffectivePermissions } from '@/contexts/EffectivePermissionsContext';
+import { useDemoMode } from '@/contexts/AuthConfigContext';
+import { DemoNote } from '@/components/DemoNote';
+import { DEMO_FLAGS_ACTION } from '@/utils/demoMode';
 import { FLAG_ROLE_NOTE, canChangeFeatureFlags } from '@/utils/experimentPermissions';
 import { parseApiTimestamp } from '@/utils/apiTimestamp';
 import {
@@ -163,6 +166,8 @@ export default function FeatureFlagDetailPage() {
   // answered.
   const canChange = canChangeFeatureFlags(auth?.user, effective);
   const changePending = !canChange && permissionsLoading;
+  // A read-only demo shows the demo note in place of the role note.
+  const demo = useDemoMode();
 
   const [flag, setFlag] = useState<FeatureFlag | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -537,10 +542,15 @@ export default function FeatureFlagDetailPage() {
             </div>
           </div>
           {archived && <ArchivedFlagNote />}
-          {!canChange && !changePending && (
-            <p className="mt-4 text-sm text-slate-600" data-testid="flag-role-note">
-              {FLAG_ROLE_NOTE}
-            </p>
+          {demo ? (
+            <DemoNote action={DEMO_FLAGS_ACTION} className="mt-4 text-sm text-slate-600" />
+          ) : (
+            !canChange &&
+            !changePending && (
+              <p className="mt-4 text-sm text-slate-600" data-testid="flag-role-note">
+                {FLAG_ROLE_NOTE}
+              </p>
+            )
           )}
           {/* Archive and Unarchive (#442), for a user who may change flags; the role note above otherwise. */}
           <FlagManageSection flag={flag} canChange={canChange} onChanged={handleStatusChange} />
